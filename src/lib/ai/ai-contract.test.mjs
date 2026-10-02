@@ -118,8 +118,14 @@ test("AI knowledge rebuild checks job ownership around provider and database wor
 
   assert.ok(checkpoints.length >= 8, "rebuild should checkpoint throughout each source");
   assert.match(rebuild, /await checkpoint\(\);\s*const embeddings =[\s\S]*?await embedAiTexts/);
-  assert.match(rebuild, /await checkpoint\(\);\s*const sourceRows = await queryRows/);
-  assert.match(rebuild, /await checkpoint\(\);\s*await replaceKnowledgeChunks/);
+  assert.match(
+    rebuild,
+    /await checkpoint\(\);\s*const publishedChunks = await replaceKnowledgeChunks/,
+  );
+  const publication = functionSource(source, "replaceKnowledgeChunks");
+  assert.match(publication, /sql\.transaction/);
+  assert.match(publication, /pg_advisory_xact_lock/);
+  assert.match(publication, /current_source\.source_revision=\$3/);
   assert.match(operation, /rebuild\(\{ checkpoint: deps\.checkpoint \}\)/);
 });
 

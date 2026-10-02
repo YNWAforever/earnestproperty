@@ -93,7 +93,6 @@ export async function rebuildAiKnowledgeIndex(
   const checkpoint = options.checkpoint ?? (async () => {});
   await checkpoint();
   const sources = await fetchPublicKnowledgeSources();
-  const observedSources = new Map<string, ObservedKnowledgeSource>();
   const embeddingModel = getAiServerConfig().embeddingModel;
   let indexedSources = 0;
   let indexedChunks = 0;
@@ -147,54 +146,20 @@ export async function rebuildAiKnowledgeIndex(
       content_hash: chunk.content_hash,
     }));
 
-    observedSources.set(sourceKey(normalized), {
-      source_type: normalized.source_type,
-      source_id: normalized.source_id,
-    });
-
     await checkpoint();
-    const sourceRows = await queryRows(
-      `INSERT INTO ai_knowledge_sources (
-        source_type, source_id, title, url_path, public_visibility, published,
-        last_indexed_at, content_hash, updated_at
-      )
-      VALUES ($1::ai_knowledge_source_type,$2,$3,$4,$5::ai_visibility,$6,now(),$7,now())
-      ON CONFLICT (source_type, source_id) DO UPDATE SET
-        title = EXCLUDED.title,
-        url_path = EXCLUDED.url_path,
-        public_visibility = EXCLUDED.public_visibility,
-        published = EXCLUDED.published,
-        last_indexed_at = now(),
-        content_hash = EXCLUDED.content_hash,
-        updated_at = now()
-      RETURNING id`,
-      [
-        normalized.source_type,
-        normalized.source_id,
-        normalized.title,
-        normalized.url_path,
-        normalized.visibility,
-        normalized.published,
-        contentHash,
-      ],
+    const publishedChunks = await replaceKnowledgeChunks(
+      normalized,
+      source.source_revision ?? "",
+      contentHash,
+      preparedChunks,
     );
-
-    const sourceId = stringOrEmpty(sourceRows[0]?.id);
-    if (!sourceId) continue;
-
     await checkpoint();
-    await replaceKnowledgeChunks(sourceId, preparedChunks);
-    await checkpoint();
-    indexedChunks += preparedChunks.length;
-
-    indexedSources += 1;
+    indexedChunks += publishedChunks;
+    if (publishedChunks) indexedSources += 1;
   }
 
   await checkpoint();
-  await reconcileUnobservedKnowledgeSources(
-    Array.from(observedSources.values()),
-    options.sourceKeys,
-  );
+  await reconcileUnobservedKnowledgeSources(options.sourceKeys);
   await checkpoint();
 
   if (embeddingDimensionFailures > 0) {
@@ -428,17 +393,53 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
   ];
 }
 
-async function replaceKnowledgeChunks(sourceId: string, chunks: PreparedKnowledgeChunk[]) {
+async function replaceKnowledgeChunks(
+  source: ReturnType<typeof normalizeKnowledgeSource>,
+  revision: string,
+  contentHash: string,
+  chunks: PreparedKnowledgeChunk[],
+) {
   const sql = getSql();
-  await sql.transaction((tx) => [
-    tx.query("DELETE FROM ai_knowledge_chunks WHERE source_id = $1", [sourceId]),
+  const currentGate = `EXISTS(SELECT 1 FROM current_public_sources current_source
+    WHERE current_source.source_type=$1::text AND current_source.source_id=$2
+      AND current_source.source_revision=$3)`;
+  const keyParams = [source.source_type, source.source_id, revision];
+  // Lock publication before reading current revisions. An older worker must
+  // never overwrite a newer worker that has already acknowledged the ledger.
+  const results = await sql.transaction((tx) => [
+    tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `knowledge:${sourceKey(source)}`,
+    ]),
     tx.query(
-      `INSERT INTO ai_knowledge_chunks (
+      `${publicKnowledgeCurrentSourcesCte()}
+      INSERT INTO ai_knowledge_sources(source_type,source_id,title,url_path,public_visibility,published,last_indexed_at,content_hash,updated_at)
+      SELECT $1::text::ai_knowledge_source_type,$2,$4,$5,$6::ai_visibility,$7,now(),$8,now()
+      WHERE ${currentGate}
+      ON CONFLICT(source_type,source_id) DO UPDATE SET title=EXCLUDED.title,url_path=EXCLUDED.url_path,
+        public_visibility=EXCLUDED.public_visibility,published=EXCLUDED.published,
+        last_indexed_at=now(),content_hash=EXCLUDED.content_hash,updated_at=now()`,
+      [
+        ...keyParams,
+        source.title,
+        source.url_path,
+        source.visibility,
+        source.published,
+        contentHash,
+      ],
+    ),
+    tx.query(
+      `${publicKnowledgeCurrentSourcesCte()}
+      DELETE FROM ai_knowledge_chunks WHERE source_id IN(SELECT id FROM ai_knowledge_sources WHERE source_type::text=$1 AND source_id=$2)
+      AND ${currentGate}`,
+      keyParams,
+    ),
+    tx.query(
+      `${publicKnowledgeCurrentSourcesCte()} INSERT INTO ai_knowledge_chunks (
         source_id, sort_order, chunk_text, summary, metadata, estate_slug, district_slug,
         listing_id, visibility, freshness_score, embedding, content_hash, stale, updated_at
       )
       SELECT
-        $1::uuid,
+        s.id,
         chunk.sort_order,
         chunk.chunk_text,
         chunk.summary,
@@ -452,7 +453,7 @@ async function replaceKnowledgeChunks(sourceId: string, chunks: PreparedKnowledg
         chunk.content_hash,
         false,
         now()
-      FROM jsonb_to_recordset($2::jsonb) AS chunk(
+      FROM ai_knowledge_sources s CROSS JOIN jsonb_to_recordset($4::jsonb) AS chunk(
         sort_order integer,
         chunk_text text,
         summary text,
@@ -464,69 +465,32 @@ async function replaceKnowledgeChunks(sourceId: string, chunks: PreparedKnowledg
         freshness_score numeric,
         embedding text,
         content_hash text
-      )`,
-      [sourceId, JSON.stringify(chunks)],
+      ) WHERE s.source_type::text=$1 AND s.source_id=$2 AND ${currentGate}
+      RETURNING id`,
+      [...keyParams, JSON.stringify(chunks)],
     ),
   ]);
+  return results[3].length;
 }
 
-async function reconcileUnobservedKnowledgeSources(
-  observedSources: ObservedKnowledgeSource[],
-  sourceKeys?: ObservedKnowledgeSource[],
-) {
-  if (sourceKeys) {
-    await queryRows(
-      `WITH obsolete AS (
-      UPDATE ai_knowledge_sources s SET published=false,public_visibility='staff',updated_at=now()
-      WHERE EXISTS(SELECT 1 FROM jsonb_to_recordset($1::jsonb) AS target(source_type text,source_id text)
-        WHERE target.source_type=s.source_type::text AND target.source_id=s.source_id)
-      AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($2::jsonb) AS observed(source_type text,source_id text)
-        WHERE observed.source_type=s.source_type::text AND observed.source_id=s.source_id)
-      RETURNING id)
-      UPDATE ai_knowledge_chunks SET stale=true,updated_at=now() WHERE source_id IN(SELECT id FROM obsolete)`,
-      [JSON.stringify(sourceKeys), JSON.stringify(observedSources)],
-    );
-    return;
-  }
-  if (observedSources.length === 0) {
-    await queryRows(
-      `WITH obsolete AS (
-         UPDATE ai_knowledge_sources
-         SET published = false, public_visibility = 'staff', updated_at = now()
-         WHERE source_type::text = ANY($1::text[])
-         RETURNING id
-       )
-       UPDATE ai_knowledge_chunks c
-       SET stale = true, updated_at = now()
-       WHERE c.source_id IN (SELECT id FROM obsolete)`,
-      [MANAGED_REBUILD_SOURCE_TYPES],
-    );
-    return;
-  }
-
+async function reconcileUnobservedKnowledgeSources(sourceKeys?: ObservedKnowledgeSource[]) {
+  // Absence belongs to the current authoritative view, never to an older
+  // worker's captured list. A concurrent reactivation must remain published.
   await queryRows(
-    `WITH observed AS (
-       SELECT
-         source_type::ai_knowledge_source_type AS source_type,
-         source_id
-       FROM jsonb_to_recordset($1::jsonb) AS source(source_type text, source_id text)
-     ),
-     obsolete AS (
+    `${publicKnowledgeCurrentSourcesCte()}, obsolete AS (
        UPDATE ai_knowledge_sources s
        SET published = false, public_visibility = 'staff', updated_at = now()
        WHERE s.source_type::text = ANY($2::text[])
-         AND NOT EXISTS (
-         SELECT 1
-         FROM observed o
-         WHERE o.source_type = s.source_type
-           AND o.source_id = s.source_id
-       )
+         AND ($1::jsonb IS NULL OR EXISTS(SELECT 1 FROM jsonb_to_recordset($1::jsonb)
+           AS target(source_type text,source_id text) WHERE target.source_type=s.source_type::text AND target.source_id=s.source_id))
+         AND NOT EXISTS (SELECT 1 FROM current_public_sources current_source
+           WHERE current_source.source_type=s.source_type::text AND current_source.source_id=s.source_id)
        RETURNING s.id
      )
      UPDATE ai_knowledge_chunks c
      SET stale = true, updated_at = now()
      WHERE c.source_id IN (SELECT id FROM obsolete)`,
-    [JSON.stringify(observedSources), MANAGED_REBUILD_SOURCE_TYPES],
+    [sourceKeys ? JSON.stringify(sourceKeys) : null, MANAGED_REBUILD_SOURCE_TYPES],
   );
 }
 

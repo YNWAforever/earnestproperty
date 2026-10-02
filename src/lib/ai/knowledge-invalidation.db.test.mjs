@@ -150,6 +150,29 @@ test(
           /14000000/,
         );
       });
+      await t.test("older worker cannot overwrite a newer completed repair", async () => {
+        await query("UPDATE properties SET price=15000000 WHERE id=$1", [property.id]);
+        let checkpoints = 0;
+        await knowledge.repairPublicKnowledgeIndex({
+          checkpoint: async () => {
+            if (++checkpoints === 2) {
+              // A already read 15m; B publishes and acknowledges 16m before A resumes.
+              await query("UPDATE properties SET price=16000000 WHERE id=$1", [property.id]);
+              await knowledge.repairPublicKnowledgeIndex();
+            }
+          },
+        });
+        const [ledger] = await query(
+          "SELECT revision=completed_revision complete FROM ai_knowledge_repair_requests WHERE source_type='listing' AND source_id=$1",
+          [property.id],
+        );
+        assert.equal(ledger.complete, true);
+        const chunks = (await knowledge.searchPublicKnowledge({ query: "修復海景" })).filter(
+          (c) => c.listing_id === property.id,
+        );
+        assert.ok(chunks.length, "Completed ledger must retain the newer readable publication");
+        assert.match(chunks[0].chunk_text, /16000000/);
+      });
       await t.test("withdrawal repairs only affected sources and retains history", async () => {
         const [other] = await query(
           "INSERT INTO properties(listing_no,canonical_property_no,title_zh,deal_type,district_slug,status,price) VALUES('QA-OTHER','QA-OTHER','另一有效盤','sale','sham-tseng','active',9000000) RETURNING id",
@@ -172,6 +195,23 @@ test(
             (chunk) => chunk.source_type === "listing" && chunk.listing_id === property.id,
           ).length,
           0,
+        );
+      });
+      await t.test("older absence snapshot cannot hide a newer reactivated listing", async () => {
+        let checkpoints = 0;
+        await knowledge.rebuildAiKnowledgeIndex({
+          allowEmbeddings: false,
+          checkpoint: async () => {
+            if (++checkpoints === 2) {
+              await query("UPDATE properties SET status='active' WHERE id=$1", [property.id]);
+              await knowledge.repairPublicKnowledgeIndex();
+            }
+          },
+        });
+        assert.ok(
+          (await knowledge.searchPublicKnowledge({ query: "修復海景" })).some(
+            (c) => c.listing_id === property.id,
+          ),
         );
       });
     });
