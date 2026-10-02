@@ -79,3 +79,27 @@ PR208初次deployment `dpl_2Phc1PmcsLMj7nF2tzt53HuUHik9`因TanStack vulnerabilit
 | 10額外schema / public cleanup / PR209 deployment | 本文件及schema/cleanup紀錄 | 正式operator readback，未發訊息、撤盤或同步 | PASS81/81、public0/private50、deploymentREADY；不需再次批准已完成操作 |
 
 依使用者single-agent限制，追加diff由同一agent獨立再讀self-review；沒有聲稱fresh reviewer、live角色或provider全鏈驗收。用現有raw SQL/worker/ops體系，未加入writer、schema、policy activation或無關cron。
+
+## Heartbeat — 2026-10-02T01:01:44Z（香港09:01）
+
+- **MONITORING 0/3，PAUSED**。GitHub `PROPERTY_SYNC_DAILY_ENABLED=false`；沒有新的shadow/canary通過證據。PR210仍OPEN、head168c1a0，未收到其新增合併授權；GitHub evidence-token secret仍未出現。本輪不重複索取已知待處理事項。
+- 新native scheduled run [36943339534](https://github.com/YNWAforever/earnestproperty/actions/runs/36943339534)，created_at 2026-10-01T23:55:23Z，SHA `2e98167a6545198ffc3fda2f1470affd1fbd2911`；結論SKIPPED。preflight/collect/ingest/publish/verify/record六stage全部SKIPPED、各0步，符合暫停開關，**不計cycle PASS**。
+- 本run沒有新的scraped_at、receipt、source/canonical/publication counts或public_verified proof；以上屬未執行，不能冒充成功或空inventory。沒有執行recovery/replay或公網發佈驗收。
+- 正式alias仍為READY `dpl_9JtrJVJ4ncSqumDvEFFxExfTookC`；GitHub Production deployment6791886838對應SHA2e98167，未把PR210 preview當正式部署。
+- 正式DB唯讀target guard及read-sync-authority均exit0：source28hse_agent_540／agent:540／no-hermes-v2／python-v2.2，accepted receipt仍`60895ce3-6a1d-4225-84f1-455d6e47f181`、full_count279、scraped_at2026-09-24T21:45:54.421920Z、accepted_at2026-09-24T21:45:58.940806Z。Payload hash仍`6c6db71ab58c1ec009559f4678087d88c24e5a80db4ee97d8b50b14306cc6a1e`；既有publish_enabled=true不是本輪publication證據。
+- Private release仍50assets，原accepted/request/unresolved三件size及GitHub digest與本報告原pins一致。本輪為metadata/hash比對，沒有宣稱重新下載50檔bytes。
+- 全輪remote唯讀；僅本機追加此紀錄。沒有dispatch、merge/push、secret/config/DB修改、migration、deploy、訊息、撤盤或portal請求。狀態與已知阻塞不變，無新警報；heartbeat繼續保留，待啟用門檻滿足才計三輪。
+
+## Homepage recovery — 2026-10-02（香港10:30後）
+
+以上Sep24/heartbeat狀態是當時歷史；本次fresh canary更新如下，[完整byte/receipt/public browser證據](2026-10-02-homepage-stale-recovery.md)。
+
+- PR210已由human合併至3432af370e75c0f378d7dd8b74ba02510f1b1107，正式deployment dpl_GBkJ6ZN8SVH3ZyUtJ2fM62FprmZu READY，未重複merge/deploy。
+- 使用者已授權shadow/canary：original279 baseline的私有hash及正式server branch/endpoint核對後，當日collector fd5cb539-8d7f-4854-a801-0329d16e5f87於2026-10-02T01:44:32.218276Z收集281ads（sale222/rent59），fullgate PASS；request/raw/handoff私有upload/download exact PASS。
+- 单次正式canary fullreceipt7e1cb08f-5ac9-486a-9b27-0439bb44f4e6：22created／6changed／10fields_changed，full281，reject/duplicate0；canonicalrequestSHA9592455f1be804631be0083d5fdfa71604081aedab1f9ad8b1c81f00304644c1及原scraped_at readback PASS。47absent只候選，撤盤0。
+- 合資格publication15attempts內published14offers／13aliases，alreadyPublic192、held75、unknown0；eligibleBacklog1為A057717 blob_upload_failed，先reconcile。原cap20/36h不變。
+- **公開首頁READY（人工恢復）**：HTTP homepage＋13unique詳情PASS；真Chromiumdesktop/mobile各6新卡/6ownedcovers，14售租詳情目標photo tabs所有圖片載入PASS；當日幾分鐘前更新，不改假日期。三指定盤正確mapping，但依當前review/inactive/media資格held，沒有強制reactivate。
+- **保護readbackPASS**：1185原UUID/盤號、648aliases、1185memberships及原active保留；總properties1207／publicgroups665／members1207；overrides0、withdrawal0、messages68、outboundintents1未變。
+- [PR211](https://github.com/YNWAforever/earnestproperty/pull/211) 520fd38修既有operator baseline UUID/原時間綁定與retention保守保留；RED3casesFAIL後Python119/119、focused26/26、daily38/38 PASS，CI36952698557 PASS（browser-staging SKIPPED），previewSUCCESS。待reviewed merge，無新schema/writer。
+- **A每日VERIFICATION_BLOCKED／MONITORING0/3／daily PAUSED**：GitHub evidence secret仍缺，PR211新operator baseline須先進reviewed main及hosted shadow驗managedprivatepin；本次無native run，不計scheduledcycle。C workflowtoken/live角色仍blocked；B Property.hk detail403/fullscope gate仍blocked，正式apply0。
+- 本輪正式只做獲准fresh shadow/privatefreeze→guardedcanary ingestion→eligiblepublication→read-onlypublic/DB verification；沒有新migration、secret/config更改、daily啟用、bulk撤盤、真訊息或無關cron改動。22件驗收proof另已私有freeze/upload/download/hash PASS，assetverification-operator-fd5cb539-8d7f-4854-a801-0329d16e5f87.tar.gz／1119332bytes／SHA d327b0c00d7269ae3f1e22097b8d1c65572e4b7a34fd0a0e883b16936e0db4e6。

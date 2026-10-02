@@ -187,7 +187,7 @@
 - [x] 先加有資料的排序測試：新廣告在舊廣告之前；每日 last_seen refresh 不 bump；proposed/rejected source link 不参与排序；同一盤重複廣告不吃掉所有6張卡；下架盤不可見。
 - [x] 保留 newest 與 promotion 兩個模式；只有首頁最新放盤用 newest。confirmed active source links＋active source states 的 first_seen 排序；fallback created_at＋stable ID；canonical 去重與地域限制先於 LIMIT。
 - [x] 若有 cache，沿既有 cache mechanism 實作發佈／下架後失效；不全站關cache或單純把「更新日期」換成現在。
-- [ ] 離線三樣本必須有mapping；live sample仍active且合資格則在listing/detail可查；首頁只要求在正確排序及展示數量下可見，不強制三者永久佔位。
+- [x] 離線三樣本必須有mapping；live sample仍active且合資格則在listing/detail可查；首頁只要求在正確排序及展示數量下可見，不強制三者永久佔位。2026-10-02 fresh三樣本mapping核對；當前staff review/inactive/media held有實證原因，未強制公開。
 - [ ] 跑 relevant listing-priority/search tests及typecheck；登入/preview受阻寫BLOCKED，不當UI pass。桌面＋手機核對照片、價錢、link與active filter；提交。
 
 ## T6. Property.hk 正式存取決策及分行登記
@@ -281,7 +281,7 @@
 **Consumes:** 各task通過的程式和source evidence。**Produces:** per-source live acceptance及操作手冊。
 
 - [x] T11-A：review PR #207與後續依賴、CI、DB migrations target、private evidence、managed secrets與現有production baseline；先完成必要read-only及rehearsal。merge/deploy/正式啟用依當時使用者授權與平台門檻執行，不以此文件假裝已獲所有production權限。
-- [ ] 同一fresh28Hse run走 collect→freeze→ingest→publish→public verification；記錄exactcommit、runURL、hash、receipt、actualcounts及首頁screen evidence。不拿過期ZIP改scraped_at作新live資料。
+- [x] 同一fresh28Hse run走 collect→freeze→ingest→publish→public verification；記錄exactcommit、runURL、hash、receipt、actualcounts及首頁screen evidence。不拿過期ZIP改scraped_at作新live資料。2026-10-02授權本機operator UUID fd5cb539-8d7f-4854-a801-0329d16e5f87，native runURL無；281ads→22created/6changed→14published offers/13aliases，desktop/mobile及14detail photo tabs PASS。Managed hosted/scheduled gate另仍未通過。
 - [ ] T11-B：三分行存取與parser已verified後，disposable rehearsal→firstfullapply（absenceoff）→publication→publiccheck→schedule；外部未ready則此段BLOCKED_EXTERNAL，28Hse可先LIVE。
 - [ ] T11-C：dashboard可讀live receipts／backlog；admin可受控retry；withdrawal先人工review模式；至少兩次fullfresh觀察及policy驗收後才考慮自動source absence。
 - [ ] 證明至少一次manual end-to-end及其後3個實際scheduled daily cycles；失敗應有可見狀態及恢復結果。3日未走完報MONITORING，不提前寫「穩定每日同步」。
@@ -371,3 +371,7 @@ npm run test:property-sync:publication:db
 ### 2026-10-01 execution gate notes
 
 T5 offline three-mapping/query tests PASS; its live detail/mobile-photo checks remain unchecked. T7 synthetic/Neon parser/gate suites PASS; real source HTML/contract/fresh3branch dryrun remains BLOCKED_EXTERNAL. T11 checked items denote read-only/rehearsal and prepared reviewable code/runbooks only; fresh production E2E, live dashboard, Property.hk firstapply and3scheduledcycles remain unchecked. See19case acceptance report, with blocked cases retained in denominator.
+
+### 2026-10-02 fresh manual recovery evidence
+
+See docs/reports/2026-10-02-homepage-stale-recovery.md: T5/A06 fresh mapping and current held decisions verified; T11-A manual same-request full chain PASS. Native daily remains PAUSED/MONITORING0/3; managed token, PR211 reviewed merge and hosted shadow remain gates. T11-B/C and authenticated role checks remain BLOCKED; no production withdrawal/messages or new migration.

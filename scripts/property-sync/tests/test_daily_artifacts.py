@@ -176,3 +176,43 @@ def test_pin_readback_verifies_bytes_before_manifest_ready(tmp_path):
     with pytest.raises(ValueError,match='evidence_upload_readback_mismatch'):
         m.pin_manifest(tmp_path/'handoff.json',tmp_path,upload=upload,download=download)
     assert 'handoff.json' not in uploaded
+
+
+def test_operator_baseline_can_be_selected_and_safely_restored(tmp_path):
+    import tarfile
+    run = 'fd5cb539-8d7f-4854-a801-0329d16e5f87'
+    data = payload(); data['meta']['run_id'] = run
+    request = tmp_path / 'request.json'; request.write_text(json.dumps(data))
+    receipt = tmp_path / 'receipt.json'
+    receipt.write_text(json.dumps({'success': True, 'status': 'success', 'full_snapshot': True, 'receipt_id': 'verified-receipt'}))
+    baseline = tmp_path / 'baseline'; m.make_baseline(request, receipt, baseline)
+    asset = tmp_path / ('accepted-20260907T000000000000Z-operator-' + run + '.tar.gz')
+    with tarfile.open(asset, 'w:gz') as out: out.add(baseline, arcname='baseline')
+    assert m.latest_accepted([asset.name, 'accepted-20260906T000000000000Z-999-1.tar.gz']) == asset.name
+    m.unpack_baseline(asset, tmp_path / 'unpacked')
+    m.restore_baseline(tmp_path / 'unpacked/baseline', tmp_path / 'restored')
+    assert (tmp_path / 'restored/baselines/28hse/agent-540/baseline.json').read_bytes() == request.read_bytes()
+
+
+def test_operator_baseline_identity_is_bound_to_collector_run(tmp_path):
+    import tarfile
+    run = 'fd5cb539-8d7f-4854-a801-0329d16e5f87'
+    data = payload(); data['meta']['run_id'] = '11111111-1111-4111-8111-111111111111'
+    request = tmp_path / 'request.json'; request.write_text(json.dumps(data))
+    receipt = tmp_path / 'receipt.json'
+    receipt.write_text(json.dumps({'success': True, 'status': 'success', 'full_snapshot': True, 'receipt_id': 'r'}))
+    baseline = tmp_path / 'baseline'; m.make_baseline(request, receipt, baseline)
+    asset = tmp_path / ('accepted-20260907T000000000000Z-operator-' + run + '.tar.gz')
+    with tarfile.open(asset, 'w:gz') as out: out.add(baseline, arcname='baseline')
+    with pytest.raises(ValueError, match='collector run'):
+        m.unpack_baseline(asset, tmp_path / 'unpacked')
+    assert not (tmp_path / 'unpacked/baseline/request.json').exists()
+
+
+def test_operator_baseline_remains_pinned_and_invalid_names_fail_closed(tmp_path):
+    from datetime import datetime, timezone
+    name = 'accepted-20260907T000000000000Z-operator-fd5cb539-8d7f-4854-a801-0329d16e5f87.tar.gz'
+    assert m.latest_accepted([name]) == name
+    assert m.retention_candidates([{'name': name, 'created_at': '2026-01-01T00:00:00Z'}], datetime(2026, 10, 2, tzinfo=timezone.utc), pinned=set(), unresolved_runs=set()) == []
+    for bad in [name.replace('fd5cb539', 'not-uuid'), name.replace('operator-', '../'), name.replace('20260907', '20261307')]:
+        with pytest.raises(ValueError): m.latest_accepted([bad])

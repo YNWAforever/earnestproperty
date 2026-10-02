@@ -53,3 +53,16 @@ def test_apply_persists_unknown_before_delete_stops_on_timeout_and_requires_expl
     result=m.apply_selected([a,asset(2,"raw-2-1.tar.gz")],delete,persist,approved=True)
     assert calls==[1] and states[0][0]["status"]=="unknown"
     assert result["results"][0]["status"]=="unknown" and result["results"][1]["status"]=="not_attempted"
+
+
+def test_operator_baseline_and_supporting_assets_are_retained_without_native_run_claim():
+    m = module()
+    run = 'fd5cb539-8d7f-4854-a801-0329d16e5f87'
+    names = ['accepted-20261002T010000000000Z-operator-' + run + '.tar.gz', 'request-operator-' + run + '.json', 'raw-operator-' + run + '.tar.gz', 'handoff-operator-' + run + '.json']
+    rows = [asset(i + 1, name) for i, name in enumerate(names)]
+    preview = m.build_preview(REPO, RELEASE, rows, NOW)
+    assert preview['candidates'] == []
+    assert preview['protectedRuns'] == []
+    assert preview['pinned'] == [names[0]]
+    with pytest.raises(ValueError, match='evidence_selection_outside_preview'):
+        m.verify_review(preview, REPO, RELEASE, rows, [1], NOW)
