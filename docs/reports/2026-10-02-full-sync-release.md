@@ -103,3 +103,13 @@ PR208初次deployment `dpl_2Phc1PmcsLMj7nF2tzt53HuUHik9`因TanStack vulnerabilit
 - [PR211](https://github.com/YNWAforever/earnestproperty/pull/211) 520fd38修既有operator baseline UUID/原時間綁定與retention保守保留；RED3casesFAIL後Python119/119、focused26/26、daily38/38 PASS，CI36952698557 PASS（browser-staging SKIPPED），previewSUCCESS。待reviewed merge，無新schema/writer。
 - **A每日VERIFICATION_BLOCKED／MONITORING0/3／daily PAUSED**：GitHub evidence secret仍缺，PR211新operator baseline須先進reviewed main及hosted shadow驗managedprivatepin；本次無native run，不計scheduledcycle。C workflowtoken/live角色仍blocked；B Property.hk detail403/fullscope gate仍blocked，正式apply0。
 - 本輪正式只做獲准fresh shadow/privatefreeze→guardedcanary ingestion→eligiblepublication→read-onlypublic/DB verification；沒有新migration、secret/config更改、daily啟用、bulk撤盤、真訊息或無關cron改動。22件驗收proof另已私有freeze/upload/download/hash PASS，assetverification-operator-fd5cb539-8d7f-4854-a801-0329d16e5f87.tar.gz／1119332bytes／SHA d327b0c00d7269ae3f1e22097b8d1c65572e4b7a34fd0a0e883b16936e0db4e6。
+
+## PR211 合併後 readback — 2026-10-02T02:42Z
+
+使用者另授權CI成功後合併PR211；exacthead7b67aea的CI36956056478 SUCCESS（staging SKIPPED）後已MERGED，main96f2ba88e59152751d9e1c3a5b8da8ebffbc52de。正式Vercel dpl_DLqFju38UgL6PzNQ3N5bbTUR2iiu READY，同SHA，www/apex aliases核對；GitHubProduction6799998254。部署後HTTP homepage＋13details PASS，六卡30–33分鐘前更新。Recovery code merge gate解除；mainCI36956576544於此snapshot仍IN_PROGRESS，不誤報PASS。GitHub evidence-token仍缺、daily=false，managed hosted shadow未跑，scheduled MONITORING0/3。沒有擴大migration、withdrawal、messages或無關cron權限。完整細節見homepage recovery報告末段。
+
+## Managed token／hosted shadow — 2026-10-02T05:34Z（香港13:34）
+
+使用者回覆「已設定」後，GitHub metadata確認PROPERTY_SYNC_EVIDENCE_TOKEN updated05:18:20Z。Main96f2ba8的CI36956576544 SUCCESS；singlehostedshadow36968501981 SUCCESS：preflightprivatecurrentbaseline/DBhostPASS、collectsale222/rent59/281ads第一頁到terminal16/5/fullgatePASS、managedprivateupload/downloadexactPASS、shadowbridge281offers/dryrunwrites0。Publish與record按mode/flagSKIPPED；verify只summary，沒有publicproof，不能算正式全鏈PASS。Request407708bytes/SHA768c6dfe2ee6c9873a659dbb5a05c127fcd16575136f83716ffc0a02378ea8f2、raw44504833bytes/SHA c73e5bfe22dbcccae0d129bd49598fdf5f30faa63f4ac3f24576f6d51690286b；獨立privatefetch/hash/safeinspectPASS，originalscraped05:34:07.123821Z。Currentacceptedreceipt7e1cb...及morningoriginalscraped/hash保持。
+
+檢查apply路徑發現wrapper對OUTCOME_UNKNOWN/timeout盲重送；[PR212](https://github.com/YNWAforever/earnestproperty/pull/212)7b42817已RED3FAIL→Python122/122、daily38/38、CI36969007889SUCCESS（stagingSKIPPED）。未知apply現在保存原request/attempt後即停，要求receipt對帳；沒有生產注入timeout。新PRmerge精確授權待回覆；dailyfalse、manualoff、MONITORING0/3。正式沒有新增migration/apply/publication/撤盤/真訊息。詳細逐stage/count/skip/rollback見[hostedshadow驗收](2026-10-02-hosted-shadow-token-acceptance.md)。
