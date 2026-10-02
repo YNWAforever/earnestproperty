@@ -1,6 +1,8 @@
 # 每日同步 T3：推廣證據批次寫入驗證
 
-日期：2026-10-02（香港）；程式 commit `21c7cc96b083c887ef0517efde59a3f55cd86940`，基於已合併 main `a494782ea7ae8529b7dad4e7169a82c45377ff79`。狀態：**READY_FOR_REVIEW／NOT_DEPLOYED**。
+日期：2026-10-02（香港）；程式 commit `21c7cc96b083c887ef0517efde59a3f55cd86940`，基於已合併 main `a494782ea7ae8529b7dad4e7169a82c45377ff79`。狀態：**DEPLOYED／SCHEDULED_VERIFICATION_PENDING**。
+
+以下本機測量及原「正式 readback」保留為合併前紀錄；最新部署 checkpoint 見文末。
 
 ## Finding 與修復
 
@@ -52,3 +54,12 @@ RED 證據：原 DB budget subtest 在 282 requests 失敗（exit 1）；unit bu
 本輪沒有 migration、production data/config mutation、deploy、workflow dispatch、批量撤盤或真實WhatsApp/email。原120／20／45／10分鐘各 job budgets、20次 publication attempts、36小時 freshness、canonical writer／locks、staff overrides／source priority及absence-off不變；不啟用舊writer。
 
 若日後此 PR獲准合併部署而需回退，透過reviewed revert本次程式commit並部署上一已驗版本；保留receipt、current baseline、IDs、media及私有證據。未知commit結果按既有recovery runbook先read-only reconcile，不盲重送、不再次爬取。局部SQL加速不取代三次實際 scheduled及public verification。
+
+
+## 2026-10-02T11:46Z 正式 checkpoint
+
+[PR214](https://github.com/YNWAforever/earnestproperty/pull/214) 已由使用者合併至 main `be7710b24920952195ee9e71d115907ebecbdf32`，與測試通過的 PR head tree 相同。Exact main CI [37001281583](https://github.com/YNWAforever/earnestproperty/actions/runs/37001281583) 的四個必需 jobs PASS；browser-staging SKIPPED。Production 同 SHA READY、兩正式 aliases 核對；真 Chromium 正式 desktop／mobile 各 6 張首頁卡與 cover、7 個詳情頁及 49 個已載入 gallery image nodes PASS。
+
+Guarded SQL 唯讀核實 accepted full 原時間／receipt／request hash 及三指定盤狀態保持；沒有新 ingestion／publication。本次 batching 已部署，但整段正式 ingestion 耗時仍等待真正 scheduled cycle，不能以局部 3 requests 測量代替。Daily 啟用、manual apply 關閉，**MONITORING 0/3**；Property.hk detail/scope 及後台 workflow token／真角色仍獨立 blocked。最新 credentials metadata 是 87 個可見變數、hidden Production count 0，未見 PROPERTY_SYNC_WORKFLOW_TOKEN。
+
+完整逐層結果、保持不變的限制及 rollback 見 [release checkpoint](2026-10-02-full-sync-release.md)。原尚未部署／待合併句子只適用於上方歷史 snapshot；本輪沒有新增 migration、資料 apply 或 operator deploy。

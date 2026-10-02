@@ -128,3 +128,34 @@ PR208初次deployment `dpl_2Phc1PmcsLMj7nF2tzt53HuUHik9`因TanStack vulnerabilit
 程式commit `21c7cc9` 將推廣證據逐筆寫入改為有界SQL批次，保留duplicate schema checks、售租隔離及caller transaction rollback；另修partial duplicate gold→pinned降級。合成281 offers的disposable Neon測量：282 requests／27333ms → 3 requests／初次601ms、完整回歸161ms。此為局部測量，整段正式匯入仍需live耗時證據。
 
 MLS643、sync75、daily38、priority38、Python122、disposable DB47全部PASS／零skip；typecheck、格式及cleanup PASS。見 `docs/reports/2026-10-02-sync-promotion-batching.md` 的commands、RED→GREEN及rollback。本輪production只有read-only核對，無migration/config mutation；新fix未部署。現有正式main CI／部署通過，首頁約8小時前更新；daily仍MONITORING0/3，Property.hk及後台token／真角色仍blocked。
+
+
+## PR214 正式部署 checkpoint — 2026-10-02T11:46Z（香港19:46）
+
+以上尚未部署／pending 段落保留為當時歷史；目前 [PR214](https://github.com/YNWAforever/earnestproperty/pull/214) 已由使用者於 11:29:23Z 合併。Main `be7710b24920952195ee9e71d115907ebecbdf32` 的 tree 與完整測試通過的 PR head 相同；agent 沒有重複合併或另行部署。
+
+| Verification / environment | Result / remaining gate |
+|---|---|
+| Exact main CI [37001281583](https://github.com/YNWAforever/earnestproperty/actions/runs/37001281583) | PASS：ci、no-link-local-postgres、browser-no-link、browser-handoff；browser-staging SKIPPED，不能當作正式登入證據 |
+| Vercel production / 同一 main SHA | READY：dpl_HMJxyi4HDYkkGUJYD86R4DtTK85H；www/apex aliases 核實 |
+| 真 Chromium / 正式唯讀 | PASS：desktop 1440、mobile 390 各 6 張卡／6 張已載入自有 cover，約 9 小時前更新；7 個既有已公開售租詳情頁 HTTP200、每頁 7 個 gallery image nodes，合計 49 個已載入節點，並非 49 張獨有照片 |
+| Production SQL / guarded READ ONLY | PASS：migrations 81；accepted full 原採集時間、receipt／私有 request hash 保持一致；281 ads／281 offers，canonical created 0／changed 0／unchanged 165、reject／duplicate 0。A072390 draft、B059410 inactive、A057717 active，未強制改狀態 |
+| 指定盤源 workflow native schedule readback | 啟用後 actual schedule 候選 0；**MONITORING 0/3**。舊 skipped run／manual／replay 不計 PASS |
+| T3 batching 的正式全程耗時 | **VERIFICATION_PENDING**：程式已部署，disposable component benchmark 通過；尚未有新版本 actual scheduled ingestion 的完整耗時證據 |
+| Vercel Production workflow token metadata | **VERIFICATION_BLOCKED**：response schema 已核實、87 個可見變數／hidden Production count 0，未見 PROPERTY_SYNC_WORKFLOW_TOKEN；沒有讀取／輸出 secret 值。正式 authenticated roles 亦未驗收 |
+| Property.hk EPS／EPT／EPW | **BLOCKED_EXTERNAL**：detail 403、完整 branch／ID scope 及 detail/media authority 未解除；正式 apply 0 |
+
+Daily 仍啟用、manual apply 關閉；維持既有完整 shadow／canary 證據。本輪沒有新 crawl、ingestion、publication、migration、production config mutation、workflow dispatch、撤盤或真實訊息；部署由已合併 main 的既有 CI/CD 完成。完整 CI、browser、DB、私有 hash metadata 證據保留 ignored 私有目錄，不公開 raw 或 binding 清單。
+
+既有每日香港 09:00 heartbeat 已更新及 readback ACTIVE：用盤源 workflow 專屬 runs endpoint 找 native schedule，避免被其他 cron 最新 runs 擠走；accepted full receipt／原 scraped_at 為 freshness 依據。來源沒有變更時卡片更新日期可保持較舊，不補假日期或強制 publication。三次完整 scheduled acceptance 仍未完成。
+
+回退沿用既有 recovery runbook：若新版本失敗，先暫停每日同步及 manual apply，再 reviewed revert T3 程式 commit並部署上一安全版本；保留 accepted receipt、canonical UUID／public number、私有證據與已套用 schema。未知結果先 read-only reconcile，不盲重送或重新爬取下游。
+
+
+## T5 公開價錢／連結驗收續作
+
+同一正式程式版本的有限唯讀 HTTP 檢查通過：首頁 6 張卡及對應 6 個詳情頁共 7 requests，售租類型、顯示金額與圖片／標題連結全部一致。此層不代替上方真 Chromium 載入證據，也沒有取得任何 portal 原件或觸發查詢／通知。
+
+本機 source tree 未變；本輪 `npm.cmd run test:listing-search` PASS 91 Node＋12 Bun、零 skip，listing-priority 相同四檔 Node command PASS 38/38、零 skip，`node node_modules/typescript/bin/tsc --noEmit` PASS exit0。排序／active／canonical filters 保留既有正向 SQL 回歸。T5 最後 checkbox 已按實際證據完成；T11 三次 scheduled及後台角色未升級。
+
+最後 metadata readback：main 及每日開關一致、managed GitHub evidence secret 存在，啟用後 native schedule 候選仍 0，**MONITORING 0/3**。Vercel workflow token metadata 未見、Property.hk detail/scope 仍 blocked。嘗試讀取既有瀏覽器時 Windows sandbox ACL 阻止控制 runtime 啟動，正式 authenticated role 驗收為 **BLOCKED_ENVIRONMENT**；沒有據此判定網站登入失敗。
