@@ -5,7 +5,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from contextlib import contextmanager
-from urllib.parse import urlsplit, urljoin
+from urllib.parse import urlsplit, urljoin, parse_qs, urlencode
 from urllib.request import Request, build_opener, HTTPRedirectHandler
 from urllib.error import HTTPError, URLError
 from email.utils import parsedate_to_datetime
@@ -558,6 +558,118 @@ def validate_config(source, cfg):
             checked_url(url.format(page=1), cfg.get("origin", ""), cfg["allowed_paths"])
     if not 1 <= cfg.get("max_pages", 100) <= 1000:
         raise WorkerError("configuration_page_limit")
+
+
+
+def inspect_property_agent_index(html, expected_url, *, expected_license):
+    """Inspect the observed agent.php table; this is never an ingestion snapshot.
+
+    Detail access, full branch/district scope, ID scope and media rights are
+    separate gates. Even a verified last index page cannot promote a baseline.
+    """
+    origin = "https://www.property.hk"
+    checked_url(expected_url, origin, [r"/agent\.php"])
+    query = parse_qs(urlsplit(expected_url).query, keep_blank_values=True)
+    if any(len(values) != 1 for values in query.values()):
+        raise WorkerError("pagination_identity")
+    identity = {key: query.get(key, [""])[0] for key in ("agent", "dt", "sid")}
+    if identity["agent"] not in BRANCHES or not identity["dt"] or not identity["sid"]:
+        raise WorkerError("pagination_identity")
+    requested_page = query.get("p", ["1"])[0]
+    if not re.fullmatch(r"[1-9]\d{0,2}", requested_page):
+        raise WorkerError("pagination_identity")
+    soup = soup_checked(html)
+    company = soup.select("table.bd_table")
+    if len(company) != 1:
+        raise WorkerError("company_identity")
+    company_text = text(company[0].get_text(" "))
+    licenses = set(re.findall(r"C-\d{6}(?:-A\d{3})?", company_text))
+    if "晉誠地產代理有限公司" not in company_text or licenses != {expected_license}:
+        raise WorkerError("company_identity")
+    forms = soup.select('form[name="jumpForm"]')
+    if len(forms) != 1 or forms[0].get("action") != "/agent.php" or forms[0].get("method", "").lower() != "get":
+        raise WorkerError("pagination_identity")
+    form = forms[0]
+    inputs = form.select("input[name]")
+    if len({node["name"] for node in inputs}) != len(inputs):
+        raise WorkerError("pagination_identity")
+    fields = {node["name"]: node.get("value", "") for node in inputs}
+    if any(fields.get(key) != value for key, value in identity.items()):
+        raise WorkerError("pagination_identity")
+    # Only the published form is used to construct pagination, never a guessed SID.
+    if set(fields) - {"p", "hqid", "val", "prop", "dt", "agent", "sid", "select"}:
+        raise WorkerError("pagination_identity")
+    page_input = form.select('input[name="p"]')
+    totals = re.findall(r"共\s*(\d+)\s*頁", text(form.get_text(" ")))
+    if len(totals) != 1 or len(page_input) != 1 or page_input[0].get("placeholder") != requested_page:
+        raise WorkerError("pagination_identity")
+    page, pages = int(requested_page), int(totals[0])
+    if not 1 <= page <= pages <= 100:
+        raise WorkerError("pagination_identity")
+    tables = soup.select("table.hidden-xs.table.table-hover")
+    if len(tables) != 1:
+        raise WorkerError("index_template")
+    table = tables[0]
+    columns = [text(node.get_text(" ")) for node in table.select("thead th")]
+    if columns != ["全選", "相片", "地區", "物業資料", "樓層", "建築(呎)", "實用(呎)", "售價(萬)", "租金(HK$)", ""]:
+        raise WorkerError("index_columns")
+    listings, ids = [], set()
+    for node in table.select('input[type="checkbox"][name^="cbox["]'):
+        ident = node.get("value", "")
+        row = node.find_parent("tr")
+        cells = row.find_all("td", recursive=False) if row else []
+        if not re.fullmatch(r"[0-9]+", ident) or ident in ids or len(cells) != 10 or row.find_parent("table") is not table:
+            raise WorkerError("index_identity")
+        detail_path = "/asking_detail/" + ident + ".html"
+        links = {anchor["href"] for anchor in row.select('a[href*="asking_detail"]')}
+        if links != {detail_path}:
+            raise WorkerError("index_identity")
+        ids.add(ident)
+        heading = cells[3].select_one(".bname")
+        dates = set(re.findall(r"更新日期\s*[:：]\s*(\d{4}-\d{2}-\d{2})", text(cells[3].get_text(" "))))
+        if not heading or not text(heading.get_text()) or len(dates) != 1:
+            raise WorkerError("index_fields")
+        updated = next(iter(dates))
+        try:
+            datetime.strptime(updated, "%Y-%m-%d")
+        except ValueError:
+            raise WorkerError("source_updated_date")
+        base = {
+            "property_id": ident, "raw_property_id": ident,
+            "source_url": origin + detail_path, "branch_code": identity["agent"],
+            "district_filter": identity["dt"], "title": text(heading.get_text()),
+            "district": text(cells[2].get_text()), "floor": text(cells[4].get_text()) or None,
+            "source_updated_date": updated, "observation_kind": "index_only",
+        }
+        for index, key in [(5, "gross_area"), (6, "saleable_area")]:
+            value = text(cells[index].get_text())
+            base[key] = None if value == "--" else number(value, "area")
+        offers = []
+        for index, selector, key, deal in [(7, ".saleprice", "price", "sale"), (8, ".rentprice", "rent", "rent")]:
+            price_nodes = cells[index].select(selector)
+            if len(price_nodes) != 1:
+                raise WorkerError("index_fields")
+            value = text(price_nodes[0].get_text(" "))
+            if not value:
+                raise WorkerError("index_fields")
+            base[key] = None if value == "--" else number(value, "money")
+            if value != "--":
+                offers.append(deal)
+        if not offers:
+            raise WorkerError("index_fields")
+        listings.extend({**base, "deal_type": deal} for deal in offers)
+    if not ids:
+        # No approved true-empty sample exists: never infer absence from empty DOM.
+        raise WorkerError("unknown_empty")
+    fields["p"] = str(page + 1)
+    return {
+        "branch": identity["agent"], "district_filter": identity["dt"],
+        "page": page, "listed_pages": pages, "is_last_listed_page": page == pages,
+        "next_url": None if page == pages else origin + form["action"] + "?" + urlencode(fields),
+        "advertisement_count": len(ids), "listings": listings,
+        "full_snapshot": False, "details_verified": False,
+        "eligible_for_absence": False, "id_scope_verified": False,
+    }
 
 
 def parse_property_index(html, branch, cfg):

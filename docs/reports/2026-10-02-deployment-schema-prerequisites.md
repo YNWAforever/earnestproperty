@@ -1,4 +1,12 @@
-# PR208/209 部署前：未授權 WhatsApp schema prerequisite
+# PR208/209 WhatsApp schema prerequisite：已完成授權及正式套用
+
+## 最新結果（2026-10-02 香港時間）
+
+使用者明確要求解除 PR209＋以下10個 migration 阻塞後，先 `--check` 再 `--apply`（exit0）。執行器只讀取已審清單 a5c844bad239da9ffda58368be1741939b89204f 的 Git blob，逐檔驗以下 SHA 與 manifest；核對正式 neondb／br-polished-sea-aom4i1ct／ep-divine-frost-aokzrg7f，以同 transaction、advisory lock、10s lock timeout／180s statement timeout 套用精確10檔及 migration 紀錄。未執行其他缺漏 migration。
+
+正式 readback：`node scripts/neon/check-migration-drift.mjs` exit0，81/81 recorded；[GitHub read-only drift 36906658363](https://github.com/YNWAforever/earnestproperty/actions/runs/36906658363) SUCCESS。前後 properties1185、messages68、outbound_intents1、inquiries6、withdrawal_batches0，property/status fingerprint 同為 f4c1ecb02c388de66ed1b5f4eb504e5a。未發真實訊息或下架。部署及 remaining gates 見 [release](2026-10-02-full-sync-release.md)。
+
+## 原部署前檢查及隔離演練（歷史）
 
 2026-10-02 正式唯讀核對：whatsapp_inbound_receipts 不存在。main 的 handleWoztellWebhook 在有效signature/scope後先呼叫storeInboundReceipt；缺schema會回503 WA_RECEIPT_STORE_UNAVAILABLE，與off/observe/active無關。不能安全把已合併main部署後才忽略這項缺口。
 

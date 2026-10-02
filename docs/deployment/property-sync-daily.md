@@ -83,3 +83,10 @@ Code repo GitHub token remains contents-read. Configure PROPERTY_SYNC_EVIDENCE_T
 This conservative initial policy pins supporting raw/compact/request objects for ALL accepted baseline archives, ready handoffs and unresolved runs, plus explicit `--pin NAME` exceptions.7-day raw and90-day compact/request ages apply only to unpinned orphan/abandoned objects. Accepted history therefore can grow; review storage separately. No automatic cron cleanup or accepted-history purge is enabled. Pause new source dispatch while reviewing cleanup, then use one approved operator. Each selected object is checked again against current private inventory/pins immediately before deletion. A failed request stops remaining deletes, persists UNKNOWN first, and requires read-only `--reconcile-report PRIVATE/retention-result.json --out PRIVATE/reconciled.json`. Use a new output file; no blind repeat with the old preview. Remote DELETE acknowledgement is separate from confirmed absence readback.
 
 See `../runbooks/property-source-daily-recovery.md` for current stage recovery, exact migration/activation gates, manual withdrawal and rollback; historical dates above are retained as audit context.
+
+
+## 2026-10-02 manual canary 與每日開關
+
+`PROPERTY_SYNC_MANUAL_APPLY_ENABLED`是新增off-default GitHub variable。修復合併後，workflow_dispatch的apply/replay-apply/publication-only只接受此開關=true；schedule仍只接受PROPERTY_SYNC_DAILY_ENABLED=true。兩種apply都保留branch、scope、private evidence、DB host及python-v2.2 policy gates。Shadow仍不需要apply開關。
+
+依序：daily=false → managed evidence token/private baseline readback → manual shadow → manual apply=true且daily=false的canary → accepted receipt/private readback/public驗證 → daily=true → 三次scheduled cycles。Rollback同時設兩個apply開關false。Token存在不等於已核對權限，manual成功不計入scheduled cycle。

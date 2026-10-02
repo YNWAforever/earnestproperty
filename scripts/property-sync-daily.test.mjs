@@ -227,3 +227,64 @@ test("actual verification shell never exports proof on a skipped or failed check
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test("manual canary and scheduled apply require their own operator gates", async () => {
+  const w = await workflow();
+  const gate = w.jobs.preflight.steps.find((s) => s.id === "evidence-gate");
+  const directory = mkdtempSync(join(tmpdir(), "property-sync-apply-gate-"));
+  const bash =
+    [process.env.PROPERTY_SYNC_TEST_BASH, "C:/Program Files/Git/bin/bash.exe"]
+      .filter(Boolean)
+      .find((candidate) => existsSync(candidate)) ?? "bash";
+  try {
+    for (const [event, mode, daily, manual, policy, allowed] of [
+      ["workflow_dispatch", "apply", "false", "true", "python-v2.2", true],
+      ["workflow_dispatch", "replay-apply", "false", "true", "python-v2.2", true],
+      ["workflow_dispatch", "publication-only", "false", "true", "python-v2.2", true],
+      ["schedule", "apply", "false", "true", "python-v2.2", false],
+      ["workflow_dispatch", "apply", "true", "false", "python-v2.2", false],
+      ["workflow_dispatch", "apply", "false", "", "python-v2.2", false],
+      ["schedule", "apply", "true", "false", "python-v2.2", true],
+      ["workflow_dispatch", "apply", "false", "true", "unapproved", false],
+      ["pull_request", "apply", "true", "true", "python-v2.2", false],
+      ["workflow_dispatch", "shadow", "false", "false", "", true],
+    ]) {
+      const result = spawnSync(
+        bash,
+        ["-c", "python() { return 0; }; gh() { return 0; };\n" + gate.run],
+        {
+          cwd: directory,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            BASH_ENV: "",
+            GITHUB_EVENT_NAME: event,
+            MODE: mode,
+            APPLY_ENABLED: daily,
+            MANUAL_APPLY_ENABLED: manual,
+            POLICY_APPROVED: policy,
+            SCOPE: "agent:540",
+            GITHUB_REF: "refs/heads/main",
+            EXPECTED_BRANCH: "main",
+            GH_REPO: "private-evidence",
+          },
+        },
+      );
+      assert.ifError(result.error);
+      assert.equal(
+        result.status === 0,
+        allowed,
+        `${event}/${mode} daily=${daily} manual=${manual}: ${result.stderr}`,
+      );
+    }
+    assert.equal(w.env.MANUAL_APPLY_ENABLED, "${{ vars.PROPERTY_SYNC_MANUAL_APPLY_ENABLED }}");
+    assert.equal(w.env.APPLY_ENABLED, "${{ vars.PROPERTY_SYNC_DAILY_ENABLED }}");
+    assert.equal(
+      w.jobs.preflight.if,
+      "github.event_name == 'workflow_dispatch' || vars.PROPERTY_SYNC_DAILY_ENABLED == 'true'",
+    );
+  } finally {
+    assert.ok(directory.startsWith(join(tmpdir(), "property-sync-apply-gate-")));
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
