@@ -71,12 +71,24 @@ export function WhatsappLinkWizard({
   const [source, setSource] = useState<Source>("website");
   const [sources, setSources] = useState<ImportSource[]>(["website"]);
   const [importedRows, setImportedRows] = useState<BatchRowDraft[] | null>(null);
-  const [importSummary, setImportSummary] = useState<{
-    offerCount: number;
-    saleCount: number;
-    rentCount: number;
-    sourceCount: number;
-  } | null>(null);
+  const importSummary = useMemo(() => {
+    const offers = (importedRows ?? []).filter((row) => row.input.entryPointType === "sales");
+    return {
+      offerCount: new Set(offers.map((row) => `${row.input.publicListingNo}:${row.input.dealType}`))
+        .size,
+      saleCount: new Set(
+        offers
+          .filter((row) => row.input.dealType === "sale")
+          .map((row) => row.input.publicListingNo),
+      ).size,
+      rentCount: new Set(
+        offers
+          .filter((row) => row.input.dealType === "rent")
+          .map((row) => row.input.publicListingNo),
+      ).size,
+      sourceCount: new Set((importedRows ?? []).map((row) => row.input.placementSource)).size,
+    };
+  }, [importedRows]);
   const [placement, setPlacement] = useState<Record<string, string>>({});
   const [verified, setVerified] = useState(false);
   const [routing, setRouting] = useState<Routing>("reception");
@@ -424,7 +436,6 @@ export function WhatsappLinkWizard({
   }
   const toggle = (offer: LinkOfferSelection) => {
     setImportedRows(null);
-    setImportSummary(null);
     setSelected((current) =>
       current.some((item) => item.propertyId === offer.propertyId)
         ? current.filter((item) => item.propertyId !== offer.propertyId)
@@ -449,7 +460,6 @@ export function WhatsappLinkWizard({
     setPlacement({});
     setPerRowStaff({});
     setImportedRows(null);
-    setImportSummary(null);
     setError("");
     setStep(1);
   }
@@ -516,7 +526,6 @@ export function WhatsappLinkWizard({
               disabled={busy || !canReplace}
               onImported={(result) => {
                 setImportedRows(result.rows);
-                setImportSummary(result);
                 setSelected(result.offers);
                 setMode("sales");
                 setRouting("reception");
@@ -607,10 +616,8 @@ export function WhatsappLinkWizard({
                 variant="outline"
                 onClick={() => {
                   setImportedRows(null);
-                  setImportSummary(null);
                   setSelected([]);
                   setImportedRows(null);
-                  setImportSummary(null);
                   setStep(1);
                 }}
               >
