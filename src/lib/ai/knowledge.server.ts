@@ -12,6 +12,10 @@ import {
   normalizeKnowledgeSource,
 } from "./knowledge.ts";
 import { embedAiTexts, generateAiText } from "./provider.server.ts";
+import {
+  publicKnowledgeCurrentSourcesCte,
+  publicKnowledgeRevisionGate,
+} from "./knowledge-freshness.server";
 
 // Must match the embedding column dimension in the ai_knowledge_chunks migration
 // (vector(1536)). A returned embedding of any other length cannot be stored, so we
@@ -49,6 +53,7 @@ type KnowledgeChunkRow = {
   freshness_score: unknown;
   stale: unknown;
   published: unknown;
+  source_revision: unknown;
 };
 
 type ObservedKnowledgeSource = {
@@ -213,7 +218,7 @@ export async function searchPublicKnowledge(input: { query: string; limit?: numb
     ? Math.min(Math.max(Math.floor(requestedLimit), 1), 12)
     : 6;
   const rows = await queryRows<KnowledgeChunkRow>(
-    `SELECT
+    `${publicKnowledgeCurrentSourcesCte()} SELECT
        c.id,
        c.source_id,
        s.source_type,
@@ -229,13 +234,16 @@ export async function searchPublicKnowledge(input: { query: string; limit?: numb
        c.visibility,
        c.freshness_score::float AS freshness_score,
        c.stale,
-       s.published
+       s.published,
+       current_source.source_revision
      FROM ai_knowledge_chunks c
      JOIN ai_knowledge_sources s ON s.id = c.source_id
+     LEFT JOIN current_public_sources current_source ON current_source.source_type=s.source_type::text AND current_source.source_id=s.source_id
      WHERE c.visibility = 'public'
        AND s.public_visibility = 'public'
        AND s.published = true
        AND c.stale = false
+       ${publicKnowledgeRevisionGate}
        AND (
          c.chunk_text ILIKE '%' || $1 || '%' ESCAPE '\\'
          OR s.title ILIKE '%' || $1 || '%' ESCAPE '\\'
@@ -276,6 +284,11 @@ export async function answerFromPublicKnowledge(input: { question: string }) {
       prompt,
       maxOutputTokens: 450,
     });
+
+    // Discard the entire answer, including the fallback excerpt, if any source
+    // changed while the provider was in flight. Removing citations alone leaves
+    // stale facts in the generated text.
+    if (!(await revalidatePublicKnowledgeChunks(chunks))) return publicFallbackAnswer();
 
     return {
       answer: result.ok ? result.text : fallbackAnswer,
@@ -377,6 +390,7 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
       url_path: `/blog/${stringOrEmpty(row.slug)}`,
       text: joinText([row.title, row.excerpt, row.content, row.seo_title, row.seo_description]),
       published: row.published === true,
+      source_revision: stringOrNull(row.source_revision),
       metadata: { category: stringOrNull(row.category) },
     })),
     ...listings.map((row) => ({
@@ -599,7 +613,7 @@ async function fallbackSearchPublicKnowledge(input: { query: string; limit: numb
   if (!tokens.length) return [] as AiKnowledgeChunk[];
 
   const rows = await queryRows<KnowledgeChunkRow>(
-    `SELECT
+    `${publicKnowledgeCurrentSourcesCte()} SELECT
        c.id,
        c.source_id,
        s.source_type,
@@ -615,13 +629,16 @@ async function fallbackSearchPublicKnowledge(input: { query: string; limit: numb
        c.visibility,
        c.freshness_score::float AS freshness_score,
        c.stale,
-       s.published
+       s.published,
+       current_source.source_revision
      FROM ai_knowledge_chunks c
      JOIN ai_knowledge_sources s ON s.id = c.source_id
+     LEFT JOIN current_public_sources current_source ON current_source.source_type=s.source_type::text AND current_source.source_id=s.source_id
      WHERE c.visibility = 'public'
        AND s.public_visibility = 'public'
        AND s.published = true
        AND c.stale = false
+       ${publicKnowledgeRevisionGate}
      ORDER BY c.freshness_score DESC, c.created_at DESC
      LIMIT 800`,
   );
@@ -634,6 +651,22 @@ async function fallbackSearchPublicKnowledge(input: { query: string; limit: numb
     .map((item) => item.chunk);
 
   return scored;
+}
+
+export async function revalidatePublicKnowledgeChunks(chunks: AiKnowledgeChunk[]) {
+  if (!chunks.length) return true;
+  const rows = await queryRows<{ id: string; source_revision: string }>(
+    `${publicKnowledgeCurrentSourcesCte()} SELECT c.id,current_source.source_revision
+     FROM ai_knowledge_chunks c JOIN ai_knowledge_sources s ON s.id=c.source_id
+     LEFT JOIN current_public_sources current_source ON current_source.source_type=s.source_type::text AND current_source.source_id=s.source_id
+     WHERE c.id=ANY($1::uuid[]) AND c.visibility='public' AND s.public_visibility='public'
+       AND s.published=true AND c.stale=false ${publicKnowledgeRevisionGate}`,
+    [chunks.map((chunk) => chunk.id)],
+  );
+  const revisions = new Map(rows.map((row) => [row.id, row.source_revision]));
+  return chunks.every(
+    (chunk) => Boolean(chunk.source_revision) && revisions.get(chunk.id) === chunk.source_revision,
+  );
 }
 
 function knowledgeSearchTokens(query: string) {
