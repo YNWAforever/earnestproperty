@@ -16,6 +16,7 @@ export const stageOptions: { value: LeadStage; label: string }[] = [
 export const stageLabels: Record<string, string> = Object.fromEntries(
   stageOptions.map(({ value, label }) => [value, label]),
 );
+stageLabels.open = "開放查詢";
 export const intentLabels: Record<string, string> = {
   unknown: "待確認",
   buyer: "買樓",

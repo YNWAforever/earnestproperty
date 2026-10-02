@@ -98,7 +98,9 @@ export function buildAdminPageQuery(
   const equal = (key: string, value: unknown) => {
     if (value && value !== "all") filters.push(`row->>'${key}'=${param(value)}`);
   };
-  equal("stage", input.stage);
+  if (input.resource === "leads" && input.stage === "open")
+    filters.push("row->>'stage' NOT IN ('closed_won','closed_lost')");
+  else equal("stage", input.stage);
   equal("intent", input.intent);
   equal("source", input.source);
   equal("scope", input.scope);

@@ -954,26 +954,30 @@ async function assertAudienceFilterChoices(filters: AudienceFilters) {
   }
 }
 
-export async function getAdminOverview() {
+export async function getAdminOverview(actor: StaffAccess) {
+  if (!actor) throw new Response("Forbidden", { status: 403 });
+  const { readAdminPage } = await import("./admin-pagination.server");
   const [inventory, leads, contacts, conversations, campaigns] = await Promise.all([
     getPublicInventoryCounts(),
-    queryRows(
-      "SELECT count(*)::int AS total FROM crm_leads WHERE stage NOT IN ('closed_won', 'closed_lost')",
-    ),
-    queryRows("SELECT count(*)::int AS total FROM crm_contacts"),
-    queryRows("SELECT count(*)::int AS total FROM whatsapp_conversations WHERE status = 'open'"),
-    queryRows(
-      "SELECT count(*)::int AS total FROM whatsapp_campaigns WHERE status IN ('draft', 'review', 'queued', 'sending')",
-    ),
+    readAdminPage({ resource: "leads", stage: "open", limit: 1 }, actor),
+    readAdminPage({ resource: "contacts", limit: 1 }, actor),
+    readAdminPage({ resource: "conversations", status: "open", limit: 1 }, actor),
+    actor.roles.some((role) => role === "admin" || role === "manager")
+      ? queryRows(
+          "SELECT count(*)::int AS total FROM whatsapp_campaigns WHERE status IN ('draft', 'review', 'queued', 'sending')",
+        )
+      : Promise.resolve(null),
   ]);
   return {
     publicProperties: inventory.publicProperties,
     publicOffers: inventory.publicOffers,
     inventoryCheckedAt: inventory.checkedAt,
-    openLeads: Number(leads[0]?.total ?? 0),
-    contacts: Number(contacts[0]?.total ?? 0),
-    openConversations: Number(conversations[0]?.total ?? 0),
-    activeCampaigns: Number(campaigns[0]?.total ?? 0),
+    openLeads: leads.total,
+    contacts: contacts.total,
+    openConversations: conversations.total,
+    activeCampaigns: campaigns ? Number(campaigns[0]?.total ?? 0) : null,
+    scope: agentScope(actor) ? ("own" as const) : ("all" as const),
+    checkedAt: new Date().toISOString(),
   };
 }
 

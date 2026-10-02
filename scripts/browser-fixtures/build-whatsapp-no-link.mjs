@@ -27,6 +27,10 @@ await build({
         replacement: api,
       },
       { find: /^@\/(auth|hooks\/use-neon-auth)$/, replacement: auth },
+      {
+        find: /^@\/lib\/(neon\/admin-team|admin\/operations\/operations-client)$/,
+        replacement: api,
+      },
       { find: "@", replacement: resolve("src") },
     ],
   },

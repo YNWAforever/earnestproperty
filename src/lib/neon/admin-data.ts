@@ -392,9 +392,9 @@ async function callStaffServerFn<T>(call: () => Promise<T>) {
 }
 
 const fetchAdminOverviewServer = createServerFn({ method: "GET" }).handler(async () => {
-  await requireStaff(["admin", "manager", "agent"]);
+  const staff = await requireStaff(["admin", "manager", "agent"]);
   const data = await import("./admin-data.server");
-  return data.getAdminOverview();
+  return data.getAdminOverview(staff);
 });
 
 export async function fetchAdminOverview() {
