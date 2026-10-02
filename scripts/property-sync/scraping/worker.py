@@ -1462,7 +1462,7 @@ def advance_baseline(path, payload, receipt):
 
 
 def replay_bridge(payload_path, evidence_path, apply=False, sleep=time.sleep):
-    """Retry the exact frozen artifact, including outcome-unknown commits."""
+    """Retry known transient failures; stop unknown applies for receipt reconciliation."""
     repo = Path(__file__).resolve().parents[3]
     original = payload_path.read_bytes()
     attempts = evidence_path / "attempts"
@@ -1482,10 +1482,14 @@ def replay_bridge(payload_path, evidence_path, apply=False, sleep=time.sleep):
             except (ValueError, UnicodeError):
                 receipt = {"success": False, "status": "invalid_bridge_receipt"}
         except subprocess.TimeoutExpired:
-            receipt = {"success": False, "error": "OUTCOME_UNKNOWN", "status": 503}
+            receipt = {"success": False, "error": "OUTCOME_UNKNOWN" if apply else "bridge_timeout", "status": 503}
         except OSError:
             receipt = {"success": False, "error": "bridge_unavailable", "status": 503}
         (attempts / f"{attempt + 1}.json").write_bytes(frozen(receipt))
+        if receipt.get("error") == "OUTCOME_UNKNOWN":
+            # A timeout or lost COMMIT response is not a rejected write. Preserve
+            # this exact request/attempt and reconcile the receipt before replay.
+            return receipt
         status = receipt.get("status")
         if receipt.get("success") is True or status not in (408, 429, 500, 502, 503, 504) or attempt == 2:
             return receipt

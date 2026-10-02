@@ -511,9 +511,9 @@ class FrozenReplayTests(unittest.TestCase):
             self.assertEqual(len(list((Path(result["snapshot"])/"attempts").glob("*.json"))),len(calls))
             return result,calls,sleeps
 
-    def test_replay_commit_unknown_exact_bytes_and_full_baseline(self):
+    def test_replay_known_transient_exact_bytes_and_full_baseline(self):
         full={"success":True,"status":"success","full_snapshot":True,"receipt_id":"receipt"}
-        result,calls,sleeps=self.replay([{"success":False,"error":"OUTCOME_UNKNOWN","status":503,"retryAfter":5},full])
+        result,calls,sleeps=self.replay([{"success":False,"error":"bridge_unavailable","status":503,"retryAfter":5},full])
         self.assertTrue(result["baseline_advanced"])
         self.assertEqual(len(calls),2); self.assertEqual(sleeps,[5])
 
@@ -527,7 +527,38 @@ class FrozenReplayTests(unittest.TestCase):
         result,calls,sleeps=self.replay([{"success":True,"status":"dry_run"}],False)
         self.assertFalse(result["baseline_advanced"])
         result,calls,sleeps=self.replay([w.subprocess.TimeoutExpired("node",180)])
-        self.assertFalse(result["baseline_advanced"]);self.assertEqual(len(calls),3)
+        self.assertFalse(result["baseline_advanced"]);self.assertEqual(len(calls),1)
+
+class UnknownApplyOutcomeTests(unittest.TestCase):
+    replay = FrozenReplayTests.replay
+
+    def test_unknown_commit_stops_before_second_apply_and_preserves_identity(self):
+        unknown={"success":False,"error":"OUTCOME_UNKNOWN","status":503,"retryAfter":5}
+        full={"success":True,"status":"success","full_snapshot":True,"receipt_id":"receipt"}
+        result,calls,sleeps=self.replay([unknown,full])
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"],"OUTCOME_UNKNOWN")
+        self.assertFalse(result["baseline_advanced"])
+        self.assertEqual(len(calls),1)
+        self.assertEqual(sleeps,[])
+
+    def test_apply_timeout_stops_without_recollection_or_baseline_advance(self):
+        full={"success":True,"status":"success","full_snapshot":True,"receipt_id":"receipt"}
+        result,calls,sleeps=self.replay([w.subprocess.TimeoutExpired("node",900),full])
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"],"OUTCOME_UNKNOWN")
+        self.assertFalse(result["baseline_advanced"])
+        self.assertEqual(len(calls),1)
+        self.assertEqual(sleeps,[])
+
+    def test_readonly_timeout_keeps_bounded_retry_without_writes(self):
+        result,calls,sleeps=self.replay([w.subprocess.TimeoutExpired("node",180)],False)
+        self.assertFalse(result["success"])
+        self.assertEqual(result["error"],"bridge_timeout")
+        self.assertFalse(result["baseline_advanced"])
+        self.assertEqual(len(calls),3)
+        self.assertEqual(sleeps,[2,4])
+
 
 class DailyGuardRegressionTests(unittest.TestCase):
     def test_explicit_unknown_status_row_rejects(self):

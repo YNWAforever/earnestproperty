@@ -119,3 +119,12 @@ node .task-logs/final-preservation.mjs
 本輪没有merge/deploy、新migration、managedsecret/config修改、daily啟用、bulk撤盤、真WhatsApp/email或無關cron改動。PR210先前human merge後的正式app承接既有canary ingestion/publication。
 
 若後續有異常，按source停止新daily/manual/dispatch/publication/absence；對已開始transaction及receipt做read-only reconcile；保留accepted原request、media、UUID/aliases/override/history。禁止reset到Sep24、改scraped_at、啟舊writer或刪history。錯誤盤只經reviewed compensating action修正。[Rollback runbook](../runbooks/property-source-daily-recovery.md#rollback需operator正式變更授權)。
+
+## PR211 授權合併及正式部署 — 2026-10-02T02:42Z
+
+- 使用者於本chat另明確授權「CI通過後合併PR211」。Approved head7b67aead24e62d5aefae848a8f597b31c7f1a325的CI36956056478 COMPLETED/SUCCESS；ci、localPostgreSQL、handoff及no-link browsers SUCCESS，browser-staging SKIPPED。
+- Exact-head guard squash merge exit0；PR211 MERGED at2026-10-02T02:38:38Z，main96f2ba88e59152751d9e1c3a5b8da8ebffbc52de。原reviewed code520fd38及docs7b67aea已進main；本報告上方「PR211待merge」為較早gate歷史，該gate現已解除。
+- Vercel production dpl_DLqFju38UgL6PzNQ3N5bbTUR2iiu READY，同96f2ba8；actualalias包含www.earnestproperty.com及earnestproperty.com。GitHubProduction deployment6799998254同SHA。Windows CLI只讀metadata首次有cp950／batch query解析失敗；改用UTF-8及已安裝NodeCLI直接參數後readback PASS，未觸發額外deploy。
+- Post-deployment public HTTP回讀2026-10-02T02:42:14.436Z：homepageVerified=true、detailsVerified13；www/apex200、Age0/MISS，六卡30–33分鐘前更新。先前14detailphoto tabs＋desktop/mobile真Chromium PASS仍獨立保留；沒有宣稱登入browser PASS。
+- Main CI36956576544仍IN_PROGRESS（此時snapshot），不宣稱main完整CI已PASS。合併條件是上述exactPRhead CI成功，已滿足。
+- Secret names唯讀仍只有BLOB_READ_WRITE_TOKEN及DATABASE_URL_UNPOOLED；PROPERTY_SYNC_EVIDENCE_TOKEN尚未配置，daily=false。Managed hosted shadow/privatepin驗收尚未執行，0/3；未啟用blocked daily。PROPERTY_SYNC_WORKFLOW_TOKEN/live角色與Property.hk gates仍獨立待完成。
