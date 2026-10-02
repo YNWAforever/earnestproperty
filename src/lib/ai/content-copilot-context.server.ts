@@ -16,8 +16,16 @@ type SearchPublicKnowledge = (input: { query: string; limit?: number }) => Promi
 
 export type LoadedContentContext = {
   resource: Record<string, unknown>;
+  sourceDbRevision: string;
+  knowledgeDependencies: ContentKnowledgeDependency[];
   internalEvidence: ContentCopilotEvidence[];
   query: string;
+};
+
+export type ContentKnowledgeDependency = {
+  chunkId: string;
+  sourceId: string;
+  sourceRevision: string;
 };
 
 export type ContentCopilotContextDeps = {
@@ -39,6 +47,9 @@ export function createContentCopilotContextLoader(deps: ContentCopilotContextDep
       if (!row) throw copilotError("COPILOT_RESOURCE_NOT_FOUND");
 
       const resource = mapResource(parsed.data.resourceType, row);
+      const sourceDbRevision = stringValue(row.source_db_revision);
+      if (!/^[0-9a-f]{32}$/.test(sourceDbRevision)) throw copilotError("COPILOT_STALE_PROPOSAL");
+      const knowledgeDependencies: ContentKnowledgeDependency[] = [];
       const query = buildSearchQuery(parsed.data.resourceType, resource);
       // The allowlisted saved record is itself an internal source. Keep it citable
       // even when the optional knowledge search has no matching documents.
@@ -53,12 +64,12 @@ export function createContentCopilotContextLoader(deps: ContentCopilotContextDep
       ];
       try {
         const chunks = await searchPublicKnowledge({ query, limit: 6 });
-        internalEvidence.push(...mapKnowledgeEvidence(chunks));
+        internalEvidence.push(...mapKnowledgeEvidence(chunks, knowledgeDependencies));
       } catch {
         // Saved-record evidence remains available when search fails.
       }
 
-      return { resource, internalEvidence, query };
+      return { resource, internalEvidence, query, sourceDbRevision, knowledgeDependencies };
     },
   };
 }
@@ -82,7 +93,7 @@ async function fetchResource(
       queryRows(
         `SELECT id, slug, name_zh, name_en, district_slug, developer, year_completed,
         phases, total_units, area_min, area_max, description, facilities,
-        seo_title, seo_description, updated_at
+        seo_title, seo_description, updated_at, ep_content_source_revision('estate',id) AS source_db_revision
        FROM estates
        WHERE id = $1
        LIMIT 1`,
@@ -94,7 +105,7 @@ async function fetchResource(
     return first(
       queryRows(
         `SELECT id, slug, title, excerpt, content, category, reading_minutes,
-        published, published_at, seo_title, seo_description, updated_at
+        published, published_at, seo_title, seo_description, updated_at, ep_content_source_revision('article',id) AS source_db_revision
        FROM articles
        WHERE id = $1
        LIMIT 1`,
@@ -105,7 +116,7 @@ async function fetchResource(
   if (request.resourceType === "faq") {
     return first(
       queryRows(
-        `SELECT id, scope, question, answer, sort_order, created_at
+        `SELECT id, scope, question, answer, sort_order, created_at, ep_content_source_revision('faq',id) AS source_db_revision
        FROM faqs
        WHERE id = $1
        LIMIT 1`,
@@ -116,7 +127,7 @@ async function fetchResource(
   if (request.resourceType === "video") {
     return first(
       queryRows(
-        `SELECT id, title, video_url, description, sort_order, published, created_at, updated_at
+        `SELECT id, title, video_url, description, sort_order, published, created_at, updated_at, ep_content_source_revision('video',id) AS source_db_revision
        FROM cms_videos
        WHERE id = $1
        LIMIT 1`,
@@ -136,7 +147,8 @@ async function fetchResource(
        p.features, p.status, p.district_slug, p.estate_id, p.seo_title,
        p.seo_description, p.updated_at, e.slug AS estate_slug,
        e.name_zh AS estate_name_zh, e.district_slug AS estate_district_slug,
-       s.name_zh AS agent_name_zh, s.name_en AS agent_name_en
+       s.name_zh AS agent_name_zh, s.name_en AS agent_name_en,
+       ep_content_source_revision('listing',p.id) AS source_db_revision
      FROM properties p
      LEFT JOIN estates e ON e.id = p.estate_id
      LEFT JOIN staff_users s ON s.id = p.agent_id\n       AND s.active = true\n       AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true
@@ -229,15 +241,22 @@ function buildSearchQuery(type: ContentCopilotResourceType, resource: Record<str
   return `${type} ${values.join(" ")}`.trim().slice(0, 500);
 }
 
-function mapKnowledgeEvidence(chunks: unknown[]) {
+function mapKnowledgeEvidence(chunks: unknown[], dependencies: ContentKnowledgeDependency[]) {
   if (!Array.isArray(chunks)) return [];
   const evidence: ContentCopilotEvidence[] = [];
   for (const chunk of chunks.slice(0, 6)) {
     if (!chunk || typeof chunk !== "object") continue;
     const row = chunk as Row;
+    const sourceId = stringValue(row.source_id);
+    const sourceRevision = stringValue(row.source_revision);
+    const chunkId = stringValue(row.id);
+    // Unversioned search results cannot supply factual generation evidence.
+    if (!/^[0-9a-f-]{36}$/i.test(sourceId) || !/^[0-9a-f]{32,64}$/.test(sourceRevision) || !chunkId)
+      continue;
     const title = stringValue(row.title).slice(0, 300);
     const excerpt = stringValue(row.excerpt ?? row.chunk_text ?? row.summary).slice(0, 1000);
     if (!title || !excerpt) continue;
+    dependencies.push({ chunkId, sourceId, sourceRevision });
     const rawUrl =
       typeof row.url === "string"
         ? row.url

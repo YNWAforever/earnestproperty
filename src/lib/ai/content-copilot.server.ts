@@ -110,6 +110,9 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
       try {
         proposalRecord = await startProposal({
           staffId: actor.staffId,
+          authUserId: actor.authUserId,
+          sourceDbRevision: context.sourceDbRevision,
+          knowledgeDependencies: context.knowledgeDependencies,
           request: normalized,
           sourceFingerprint,
           promptVersion: "content-copilot-v1",
@@ -175,6 +178,7 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
         };
         const completed = await completeProposal({
           staffId: actor.staffId,
+          authUserId: actor.authUserId,
           proposalId: proposalRecord.id,
           resourceType: normalized.resourceType,
           resourceId: normalized.resourceId,
@@ -287,6 +291,7 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
       try {
         const decided = await decideProposal({
           staffId: actor.staffId,
+          authUserId: actor.authUserId,
           proposalId: record.id,
           acceptedFields,
         });

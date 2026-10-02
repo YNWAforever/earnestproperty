@@ -46,7 +46,13 @@ async function makeArticleContext() {
     description: "",
     district_slug: "sham-tseng",
   };
-  return { resource, internalEvidence: [], query: resource.title };
+  return {
+    resource,
+    internalEvidence: [],
+    query: resource.title,
+    sourceDbRevision: "ab".repeat(16),
+    knowledgeDependencies: [],
+  };
 }
 
 async function makeProposal(resource) {
@@ -89,6 +95,7 @@ test("context loader uses explicit projections, public knowledge limit, and no C
       return [
         {
           id: listingRequest.resourceId,
+          source_db_revision: "ab".repeat(16),
           title_zh: "Sham Tseng listing",
           description: "",
           district_slug: "sham-tseng",
@@ -101,6 +108,8 @@ test("context loader uses explicit projections, public knowledge limit, and no C
       return [
         {
           id: "chunk-1",
+          source_id: "11111111-1111-4111-8111-111111111111",
+          source_revision: "cd".repeat(16),
           title: "Sham Tseng",
           chunk_text: "public facts",
           url_path: "/estate/sham-tseng",
@@ -111,6 +120,14 @@ test("context loader uses explicit projections, public knowledge limit, and no C
   const context = await loader.load(listingRequest, managerActor);
   assert.equal(context.resource.id, listingRequest.resourceId);
   assert.equal(context.internalEvidence[0].type, "internal");
+  assert.equal(context.sourceDbRevision, "ab".repeat(16));
+  assert.deepEqual(context.knowledgeDependencies, [
+    {
+      chunkId: "chunk-1",
+      sourceId: "11111111-1111-4111-8111-111111111111",
+      sourceRevision: "cd".repeat(16),
+    },
+  ]);
   assert.equal(calls.length, 1);
   assert.doesNotMatch(calls[0][0], /SELECT\s+\*/i);
   assert.doesNotMatch(calls[0][0], /crm|lead|contact|whatsapp|campaign|staff.?note/i);
@@ -363,6 +380,7 @@ for (const unavailable of [false, true]) {
       queryRows: async () => [
         {
           id: articleRequest.resourceId,
+          source_db_revision: "ab".repeat(16),
           title: "Sham Tseng guide",
           content: "Saved public estate information",
           private_note: "must not enter evidence",
