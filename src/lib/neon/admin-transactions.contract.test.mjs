@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import test, { after } from "node:test";
 import { pathToFileURL } from "node:url";
@@ -14,9 +15,10 @@ import { PGlite } from "@electric-sql/pglite";
 // data: URL module has no directory of its own, so it can neither walk "../"
 // above itself nor resolve bare npm specifiers (both were tried and both throw
 // under plain `node --test`). Instead: transpile the whole reachable graph to
-// real .mjs files inside a throwaway directory under src/lib/neon/ (so
-// node_modules resolution still finds the project's real node_modules by
-// walking up), rewriting every relative specifier -- static and dynamic -- to
+// real .mjs files in an owned OS temporary directory, outside product sources.
+// Bare packages resolve from this original module, preserving node_modules
+// resolution without exposing compiled server copies to client secret scans.
+// Rewrite every relative specifier -- static and dynamic -- to
 // point at its sibling's compiled copy. Only db.server.ts is special-cased: a
 // stub replaces it everywhere so every real SQL call in the graph is captured,
 // with no live Neon connection required. Nothing here changes the exported
@@ -27,7 +29,7 @@ const root = process.cwd();
 const NEON_DIR = join(root, "src/lib/neon");
 const DB_SERVER_PATH = join(NEON_DIR, "db.server.ts");
 const ENTRY_PATH = join(NEON_DIR, "admin-data.server.ts");
-const TMP_DIR = join(NEON_DIR, ".admin-transactions-contract-tmp");
+const TMP_DIR = mkdtempSync(join(tmpdir(), "earnest-admin-transactions-contract-"));
 
 const EXTS = [".ts", ".tsx", ".js", ".jsx", ".mjs"];
 const SRC_DIR = join(root, "src");
@@ -110,16 +112,44 @@ const tempPathFor = (absPath) =>
 const processed = new Map(); // absPath -> tempPath, memoized so shared deps are only written once
 
 function rewriteSpecifiers(source, fromDir) {
-  const rewriteOne = (whole, spec) => {
+  const rewriteOne = (spec) => {
+    if (!spec.startsWith(".") && !spec.startsWith("@/")) {
+      return import.meta.resolve(spec);
+    }
     const target = resolveModuleSpecifier(fromDir, spec);
-    if (!target) return whole; // best-effort: leave anything we can't resolve untouched
+    if (!target) return spec;
     const targetTemp = ensureProcessed(target);
-    const rel = `./${relative(TMP_DIR, targetTemp).replace(/\\/g, "/")}`;
-    return whole.replace(spec, rel);
+    return "./" + relative(TMP_DIR, targetTemp).replace(/\\/g, "/");
   };
-  return source
-    .replace(/import\(\s*"(\.\.?\/[^"]+|@\/[^"]+)"\s*\)/g, rewriteOne)
-    .replace(/from\s+"(\.\.?\/[^"]+|@\/[^"]+)"/g, rewriteOne);
+  const parsed = ts.createSourceFile(
+    "fixture.mjs",
+    source,
+    ts.ScriptTarget.ES2022,
+    true,
+    ts.ScriptKind.JS,
+  );
+  const replacements = [];
+  function visit(node) {
+    const specifier =
+      ts.isImportDeclaration(node) || ts.isExportDeclaration(node)
+        ? node.moduleSpecifier
+        : ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword
+          ? node.arguments[0]
+          : null;
+    if (specifier && ts.isStringLiteral(specifier)) {
+      replacements.push({
+        start: specifier.getStart(parsed),
+        end: specifier.end,
+        value: JSON.stringify(rewriteOne(specifier.text)),
+      });
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(parsed);
+  for (const replacement of replacements.sort((a, b) => b.start - a.start)) {
+    source = source.slice(0, replacement.start) + replacement.value + source.slice(replacement.end);
+  }
+  return source;
 }
 
 function ensureProcessed(absPath) {
@@ -159,13 +189,18 @@ function recorder() {
 
 async function loadAdminDataServerWithInjectedQuery(query) {
   globalThis.__adminTransactionsContractQuery = query;
-  mkdirSync(TMP_DIR, { recursive: true });
   const entryTempPath = ensureProcessed(ENTRY_PATH);
   return import(pathToFileURL(entryTempPath).href);
 }
 
 const AGENT_ACTOR = { staffId: "agent-1", roles: ["agent"] };
 const ADMIN_ACTOR = { staffId: "admin-1", roles: ["admin"] };
+
+test("compiled server fixtures stay outside product source scanned for client secrets", async () => {
+  await loadAdminDataServerWithInjectedQuery(recorder().query);
+  const location = relative(SRC_DIR, TMP_DIR);
+  assert.ok(location.startsWith(".."), "Compiled server graph must not be created inside src");
+});
 
 test("listAdminTransactions scopes an agent to their own rows, admin sees all", async () => {
   const { calls, query } = recorder();
