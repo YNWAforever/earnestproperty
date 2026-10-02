@@ -354,6 +354,14 @@ function AdminAnalytics() {
             </Button>
           </div>
         ) : null}
+        {!finalFixUiFlags.salesPerformanceReporting ? (
+          <section aria-label="銷售及代理績效狀態" className="rounded border p-4">
+            <h2 className="font-semibold">銷售及代理績效暫未啟用</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              此功能尚未在目前環境開放，並非沒有查詢或成交資料。請聯絡管理員核實啟用狀態；現有營運統計仍可查看。
+            </p>
+          </section>
+        ) : null}
         {finalFixUiFlags.salesPerformanceReporting ? (
           <>
             <PerformanceDashboard

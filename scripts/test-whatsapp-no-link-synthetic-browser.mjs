@@ -2384,6 +2384,72 @@ try {
     },
   );
   for (const width of [390, 768, 1280, 1440]) {
+    const analyticsUrl = `${origin}/admin/analytics?start=2026-09-30&end=2026-09-30&cohortWindowDays=30`;
+    await check(
+      "analytics disabled capability is explicit and obtains no performance report",
+      width,
+      async (page) => {
+        await page.addInitScript(() =>
+          sessionStorage.setItem("analytics-fixture-enabled", "false"),
+        );
+        await open(page, analyticsUrl);
+        await expect(page.getByText("銷售及代理績效暫未啟用", { exact: true })).toBeVisible();
+        await expect(page.getByRole("form", { name: "績效篩選" })).toHaveCount(0);
+        expect(await page.evaluate(() => window.analyticsFixture.reads.length)).toBe(0);
+      },
+      "manager",
+    );
+    await check(
+      "analytics KPI drilldown and visible CSV match scoped Hong Kong cohort",
+      width,
+      async (page) => {
+        await open(page, analyticsUrl);
+        const dashboard = page.getByRole("region", { name: "銷售及代理績效" });
+        const card = (label) =>
+          dashboard
+            .locator("div.rounded-lg.border.bg-card")
+            .filter({ has: page.getByRole("heading", { name: label, exact: true }) });
+        await expect(card("有效查詢").locator("p").first()).toHaveText("3");
+        await card("有效查詢").getByRole("button", { name: "可查看記錄" }).click();
+        const records = page.getByRole("region", { name: "對應記錄" });
+        await expect(records.locator("tbody tr")).toHaveCount(3);
+        const visibleIds = await records
+          .locator("tbody tr")
+          .evaluateAll((rows) => rows.map((row) => row.textContent));
+        const downloadReady = page.waitForEvent("download");
+        await records.getByRole("button", { name: /匯出/ }).click();
+        const csv = await readFile(await (await downloadReady).path(), "utf8");
+        expect(csv.trim().split("\r\n")).toHaveLength(4);
+        for (const n of [1, 2, 3])
+          expect(csv).toContain(`80000000-0000-4000-8000-${String(n).padStart(12, "0")}`);
+        for (const n of [4, 5, 6, 7, 8])
+          expect(csv).not.toContain(`80000000-0000-4000-8000-${String(n).padStart(12, "0")}`);
+        expect(visibleIds).toHaveLength(3);
+        await dashboard.getByRole("tab", { name: "來源證據" }).click();
+        await expect(card("點擊至查詢比率")).toContainText("未有足夠資料");
+        await expect(card("點擊至查詢比率")).not.toContainText("0%");
+        await expect(card("點擊至查詢比率")).not.toContainText("100%");
+        for (const label of ["28Hse 訊息來源", "有追蹤開啟證據的查詢", "來源未核實"])
+          await expect(card(label).locator("p").first()).toHaveText("1");
+        await dashboard.getByRole("tab", { name: "回覆及跟進" }).click();
+        await expect(card("已確認分配").locator("p").first()).toHaveText("1");
+        await expect(card("未回覆").locator("p").first()).toHaveText("2");
+        await expect(card("首回覆中位數").locator("p").first()).toHaveText("15 分鐘");
+        await dashboard.getByRole("tab", { name: "成交及佣金" }).click();
+        await expect(card("已核實成交").locator("p").first()).toHaveText("2");
+        await expect(card("買賣成交額").locator("p").first()).toHaveText("HK$10,000,000.00");
+        await page.reload();
+        await expect(card("有效查詢").locator("p").first()).toHaveText("3");
+        await page.locator("#performance-source").selectOption("28hse");
+        await page.getByRole("button", { name: "套用篩選" }).click();
+        await expect(card("有效查詢").locator("p").first()).toHaveText("1");
+        await card("有效查詢").getByRole("button", { name: "可查看記錄" }).click();
+        await expect(records.locator("tbody tr")).toHaveCount(1);
+      },
+      "manager",
+    );
+  }
+  for (const width of [390, 768, 1280, 1440]) {
     await check(
       "overview permission loss clears previous restricted counts",
       width,
