@@ -46,6 +46,7 @@ export type AiKnowledgeChunk = {
   freshness_score: number;
   stale: boolean;
   published?: boolean;
+  source_revision?: string | null;
 };
 
 export type CrmAiProfile = {
