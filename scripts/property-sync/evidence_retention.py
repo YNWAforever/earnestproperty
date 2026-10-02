@@ -45,7 +45,12 @@ def build_preview(repository,release,assets,now,*,pinned=()):
         name=r["name"]
         if name.startswith("accepted-"):
             _,run,attempt=accepted_parts(name,"propertyhk" if name.startswith("accepted-propertyhk-") else "28hse")
-            runs.add(f"{run}-{attempt}")
+            if '-operator-' in name:
+                # Operator supporting objects are outside numeric-run retention;
+                # retain them and the accepted marker without inventing run 0.
+                pins.add(name)
+            else:
+                runs.add(f"{run}-{attempt}")
         marker=re.fullmatch(r"(?:unresolved-([0-9]+-[0-9]+)\.tar\.gz|handoff-([0-9]+-[0-9]+)\.json)",name)
         if marker:runs.add(marker[1] or marker[2])
     names=set(retention_candidates(rows,now,pinned=pins,unresolved_runs=runs))

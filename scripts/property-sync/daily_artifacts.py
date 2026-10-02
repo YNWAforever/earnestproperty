@@ -83,10 +83,17 @@ def snapshot_stamp(data):
 def accepted_parts(name, source="28hse"):
     prefix = "accepted" if source=="28hse" else "accepted-propertyhk"
     match = re.fullmatch(rf'{prefix}-(\d{{8}}T\d{{12}}Z)-([0-9]+)-([0-9]+)\.tar\.gz', name)
-    if not match:
+    if match:
+        datetime.strptime(match[1], '%Y%m%dT%H%M%S%fZ')
+        return match[1], int(match[2]), int(match[3])
+    # Local operator recovery has a real collector UUID, never a fabricated
+    # native Actions run. Snapshot chronology still determines selection.
+    operator = re.fullmatch(rf'{prefix}-(\d{{8}}T\d{{12}}Z)-operator-([0-9a-f]{{8}}-[0-9a-f]{{4}}-4[0-9a-f]{{3}}-[89ab][0-9a-f]{{3}}-[0-9a-f]{{12}})\.tar\.gz', name)
+    if not operator:
         raise ValueError('Unversioned or invalid accepted asset requires operator reconciliation')
-    datetime.strptime(match[1], '%Y%m%dT%H%M%S%fZ')
-    return match[1], int(match[2]), int(match[3])
+    datetime.strptime(operator[1], '%Y%m%dT%H%M%S%fZ')
+    # Native run/attempt tie breakers take precedence at the same timestamp.
+    return operator[1], 0, 0
 
 
 def accepted_name(request, run_id, attempt):
@@ -122,6 +129,10 @@ def unpack_baseline(path, destination):
             data=json.loads(content.read())
             if validate_request(data)!=source_kind or snapshot_stamp(data) != expected_stamp:
                 raise ValueError('Accepted asset timestamp does not match its snapshot')
+            if '-operator-' in path.name:
+                run_id = path.name.split('-operator-', 1)[1].removesuffix('.tar.gz')
+                if data.get('meta', {}).get('run_id') != run_id:
+                    raise ValueError('Accepted operator asset does not match its collector run')
         for item in files:
             target = destination / item.name
             target.parent.mkdir(parents=True, exist_ok=True)

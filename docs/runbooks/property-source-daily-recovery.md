@@ -149,3 +149,11 @@ gh variable set PROPERTY_SYNC_MANUAL_APPLY_ENABLED --body false --repo YNWAforev
 ### 可選private regression CI gate
 
 `property-sync-acceptance.yml`的private_regression job在disposable四組先通過後，只有managed PROPERTY_SYNC_PRIVATE_REGRESSION_ENABLED=true才執行。Operator先在private property-sync-evidence release準備 exact原request asset `regression-28hse-20261001-request.json`（414631bytes／b458d085... SHA），另配置只讀該private repository contents的PROPERTY_SYNC_PRIVATE_REGRESSION_READ_TOKEN。此session沒有上傳asset、配置token或dispatch該workflow。Job驗repositoryprivate、asset完整/size、localbytes SHA及actualdisposabletarget，然後跑原ZIPreplay；不公開artifact，不用production/Blob/providercredential。缺資料時failclosed或gateSKIPPED，不能報PASS；本機exactZIPNeonPASS另有證據。這是可選CI回歸配置，不增加正式28Hse daily token權限。
+
+### Operator 本機 canary baseline（2026-10-02）
+
+當 managed evidence automation token 尚未接通，獲本 session 明確 shadow/canary 授權的 operator 可用既有本機 collector、私有庫及 guarded raw SQL bridge執行一次人工恢復。使用現有 authenticated CLI 存取私有庫，不將其登入 token 複製為 Actions secret。正常 daily 仍要獨立 managed credential 及 hosted acceptance；人工 run 不計 scheduled cycles。
+
+人工採集以原 `meta.run_id` UUID v4標識：`accepted-<原UTC採集stamp>-operator-<collectorUUID>.tar.gz`。Archive仍只能包含 baseline/request、receipt、manifest三件；safe unpack核對原時間及 UUID，restore核對 bytes SHA，正式 preflight再核對 authoritative current full receipt/source/scope/parser/canonical hash。以原採集時間選最新 baseline；相同時間仍保留原 native run/attempt排序。所有 operator supporting objects使用 `request/raw/handoff-operator-<UUID>`，retention preview保守保留，不套用 numeric native run刪除。
+
+操作順序：原 baseline/private hash及正式 DB host/branch核對 → fresh完整 shadow → original request/raw/hash私有 upload/download回讀 → bridge shadow → 單次 guarded apply及 read-only receipt核對 → accepted operator archive私有回讀及 restore演練 → 既有20次/36h publication → 真實公開頁、照片及首頁 readback。未知 apply先 reconcile，不使用會盲重試 timeout的本機 replay wrapper。後續 publication直接重用該 exact request；不 recrawl或改時間。只在完整 canary、managed token及 reviewed recovery code都通過後啟用 daily。
