@@ -113,3 +113,11 @@ PR208初次deployment `dpl_2Phc1PmcsLMj7nF2tzt53HuUHik9`因TanStack vulnerabilit
 使用者回覆「已設定」後，GitHub metadata確認PROPERTY_SYNC_EVIDENCE_TOKEN updated05:18:20Z。Main96f2ba8的CI36956576544 SUCCESS；singlehostedshadow36968501981 SUCCESS：preflightprivatecurrentbaseline/DBhostPASS、collectsale222/rent59/281ads第一頁到terminal16/5/fullgatePASS、managedprivateupload/downloadexactPASS、shadowbridge281offers/dryrunwrites0。Publish與record按mode/flagSKIPPED；verify只summary，沒有publicproof，不能算正式全鏈PASS。Request407708bytes/SHA768c6dfe2ee6c9873a659dbb5a05c127fcd16575136f83716ffc0a02378ea8f2、raw44504833bytes/SHA c73e5bfe22dbcccae0d129bd49598fdf5f30faa63f4ac3f24576f6d51690286b；獨立privatefetch/hash/safeinspectPASS，originalscraped05:34:07.123821Z。Currentacceptedreceipt7e1cb...及morningoriginalscraped/hash保持。
 
 檢查apply路徑發現wrapper對OUTCOME_UNKNOWN/timeout盲重送；[PR212](https://github.com/YNWAforever/earnestproperty/pull/212)7b42817已RED3FAIL→Python122/122、daily38/38、CI36969007889SUCCESS（stagingSKIPPED）。未知apply現在保存原request/attempt後即停，要求receipt對帳；沒有生產注入timeout。新PRmerge精確授權待回覆；dailyfalse、manualoff、MONITORING0/3。正式沒有新增migration/apply/publication/撤盤/真訊息。詳細逐stage/count/skip/rollback見[hostedshadow驗收](2026-10-02-hosted-shadow-token-acceptance.md)。
+
+## Hosted canary／每日啟用 — 2026-10-02
+
+以上PAUSED／pending的段落保留為歷史snapshot；最新狀態見[刪敏公開摘要](2026-10-02-hosted-canary-daily-activation.md)。明確授權PR212合併後，同版本deployment及main CI通過，replay-shadow與single hosted canary的完整私有／receipt／publisher／public／preservation／metadata驗收PASS。公開桌面／手機及十五個指定售租詳情gallery通過；A057717已正常公開。
+
+每日同步已啟用、manualapply已關閉。**MONITORING0/3**，尚無啟用後actual native scheduled驗收；manual/replay不計。Property.hk與後台憑證／真角色仍獨立BLOCKED，absence及撤盤保持off；沒有新migration、bulk撤盤、真訊息或無關cron變更。
+
+完整敏感DB身份、receipt、private asset/hash及逐筆保護結果留在operator私有release紀錄。公開PR僅新增刪敏摘要，既有main歷史內容保持；原完整push被auto-review拒絕，未執行。既有09:00香港heartbeat已更新並持續唯讀驗收三個真實每日cycles。
