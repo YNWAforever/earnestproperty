@@ -1,0 +1,17 @@
+# EP-04 actor/source gates and recoverable analysis runs
+
+The real PostgreSQL red tests reproduced saving obsolete CRM results after contact/consent/ownership/role/price changes, plus spending again for a repeated request. Separate content repository probes reproduced accepting source changes at save and inactive/out-of-scope actors at apply. Original audit evidence is unchanged.
+
+CRM request/save/tag-apply now check current persisted active actor, session identity, roles, ownership and the complete source revision. Short transactions lock source rows and verify the captured revision; provider work holds no database lock. The revision includes the lead/contact, contact identity peers, activities, conversation service-window state, referenced property, estate, canonical membership/offers, protected edits and source identities. Profile and tags save atomically. Existing human-approved/rejected tags keep their reason and origin run.
+
+Additive analysis runs retain actor/source/prompt/schema, method, validation/error, times and observed provider/model/usage. Unobserved model or cost values remain NULL. Exact request retries read the same stored result. Cancellation before start creates a tombstone; cancellation or a newer run blocks late writes. After a crashed/expired run, unknown provider outcome remains recorded and a retry does not silently call the provider again. Historical profiles/tags are not labelled as validated; origin-less historical tag approval fails closed.
+
+Content proposals retain their existing client fingerprint, field allowlist, protected fields and draft isolation. A second database revision now guards request/save/decision with current actor and scope in each transaction. A repeated identical decision retains its original decision time. Applying a proposal remains a draft decision; it does not update published content or send a message.
+
+Candidate migrations `20261003030000_crm_analysis_runs.sql` and `20261003040000_content_proposal_source_guard.sql` applied on owned loopback PostgreSQL 17 with the full 85-migration inventory. Formal migration and history recalculation were not run. Existing proposal rows receive NULL DB revision and remain preview-only until explicitly regenerated/verified.
+
+Verification: `test:crm-analysis:db` 22 PASS, zero skip; `test:crm-analysis` six PASS; existing content-copilot, command-center (82 Node + eight Bun), control-plane (105) pass. Typecheck and lint have zero errors (three existing refresh warnings). Provider ports and HTTP are mocked, never real model/provider calls. Evidence `.audit/remediation-20261003/ep04-*`; committed tests reproduce database probes. Browser/multi-role/8-session/restore acceptance is recorded separately under EP-20 and is not implied by these tests.
+
+Separate `npm run build` completed successfully with no production environment loaded. Existing Vite/Nitro version and TanStack input-validator deprecation warnings remain; these warnings were not broadened into a dependency upgrade.
+
+Rollback: keep run/provenance tables, additive columns, current action/read/source gates and all old receipts/intents. Stop new generation at the UI/API rather than restoring permissive old save/apply paths. Review the candidate migrations together with code; old code may display previous verified profiles but cannot be used to approve origin-less or stale results. No database snapshot rollback over later customer activity.
