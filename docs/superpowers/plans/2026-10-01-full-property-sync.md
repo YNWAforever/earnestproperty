@@ -188,7 +188,7 @@
 - [x] 保留 newest 與 promotion 兩個模式；只有首頁最新放盤用 newest。confirmed active source links＋active source states 的 first_seen 排序；fallback created_at＋stable ID；canonical 去重與地域限制先於 LIMIT。
 - [x] 若有 cache，沿既有 cache mechanism 實作發佈／下架後失效；不全站關cache或單純把「更新日期」換成現在。
 - [x] 離線三樣本必須有mapping；live sample仍active且合資格則在listing/detail可查；首頁只要求在正確排序及展示數量下可見，不強制三者永久佔位。2026-10-02 fresh三樣本mapping核對；當前staff review/inactive/media held有實證原因，未強制公開。
-- [ ] 跑 relevant listing-priority/search tests及typecheck；登入/preview受阻寫BLOCKED，不當UI pass。桌面＋手機核對照片、價錢、link與active filter；提交。
+- [x] 跑 relevant listing-priority/search tests及typecheck；登入/preview受阻寫BLOCKED，不當UI pass。桌面＋手機核對照片、價錢、link與active filter；提交。2026-10-02 PR214正式Chromium兩viewport照片／連結PASS；續作public HTTP六卡價錢／售租／cover-title links一致，listing-search91 Node＋12 Bun、listing-priority38及typecheck PASS。active／canonical filters由既有SQL回歸驗證；正式職員登入仍獨立BLOCKED，未計入此公開頁面PASS。
 
 ## T6. Property.hk 正式存取決策及分行登記
 

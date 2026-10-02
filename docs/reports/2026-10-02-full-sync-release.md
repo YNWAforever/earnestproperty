@@ -150,3 +150,12 @@ Daily 仍啟用、manual apply 關閉；維持既有完整 shadow／canary 證�
 既有每日香港 09:00 heartbeat 已更新及 readback ACTIVE：用盤源 workflow 專屬 runs endpoint 找 native schedule，避免被其他 cron 最新 runs 擠走；accepted full receipt／原 scraped_at 為 freshness 依據。來源沒有變更時卡片更新日期可保持較舊，不補假日期或強制 publication。三次完整 scheduled acceptance 仍未完成。
 
 回退沿用既有 recovery runbook：若新版本失敗，先暫停每日同步及 manual apply，再 reviewed revert T3 程式 commit並部署上一安全版本；保留 accepted receipt、canonical UUID／public number、私有證據與已套用 schema。未知結果先 read-only reconcile，不盲重送或重新爬取下游。
+
+
+## T5 公開價錢／連結驗收續作
+
+同一正式程式版本的有限唯讀 HTTP 檢查通過：首頁 6 張卡及對應 6 個詳情頁共 7 requests，售租類型、顯示金額與圖片／標題連結全部一致。此層不代替上方真 Chromium 載入證據，也沒有取得任何 portal 原件或觸發查詢／通知。
+
+本機 source tree 未變；本輪 `npm.cmd run test:listing-search` PASS 91 Node＋12 Bun、零 skip，listing-priority 相同四檔 Node command PASS 38/38、零 skip，`node node_modules/typescript/bin/tsc --noEmit` PASS exit0。排序／active／canonical filters 保留既有正向 SQL 回歸。T5 最後 checkbox 已按實際證據完成；T11 三次 scheduled及後台角色未升級。
+
+最後 metadata readback：main 及每日開關一致、managed GitHub evidence secret 存在，啟用後 native schedule 候選仍 0，**MONITORING 0/3**。Vercel workflow token metadata 未見、Property.hk detail/scope 仍 blocked。嘗試讀取既有瀏覽器時 Windows sandbox ACL 阻止控制 runtime 啟動，正式 authenticated role 驗收為 **BLOCKED_ENVIRONMENT**；沒有據此判定網站登入失敗。
