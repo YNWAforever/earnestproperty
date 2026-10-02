@@ -117,7 +117,7 @@ test("AI knowledge rebuild checks job ownership around provider and database wor
   const checkpoints = rebuild.match(/await checkpoint\(\)/g) ?? [];
 
   assert.ok(checkpoints.length >= 8, "rebuild should checkpoint throughout each source");
-  assert.match(rebuild, /await checkpoint\(\);\s*const embeddings = await embedAiTexts/);
+  assert.match(rebuild, /await checkpoint\(\);\s*const embeddings =[\s\S]*?await embedAiTexts/);
   assert.match(rebuild, /await checkpoint\(\);\s*const sourceRows = await queryRows/);
   assert.match(rebuild, /await checkpoint\(\);\s*await replaceKnowledgeChunks/);
   assert.match(operation, /rebuild\(\{ checkpoint: deps\.checkpoint \}\)/);

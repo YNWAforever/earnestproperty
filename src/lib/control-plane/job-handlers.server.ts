@@ -147,6 +147,34 @@ export function createAiKnowledgeRebuildHandler(
 
 export const aiKnowledgeRebuildHandler = registerJobHandler(createAiKnowledgeRebuildHandler());
 
+export const aiKnowledgeRepairHandler = registerJobHandler({
+  jobType: "ai.knowledge.repair",
+  payloadVersion: 1,
+  parsePayload(input: unknown) {
+    if (
+      !input ||
+      typeof input !== "object" ||
+      Array.isArray(input) ||
+      Object.keys(input).length !== 1 ||
+      !("batchId" in input) ||
+      typeof input.batchId !== "string" ||
+      !/^[0-9]{1,30}$/.test(input.batchId)
+    ) {
+      throw Object.assign(new Error("Knowledge repair payload is invalid."), {
+        code: "VALIDATION_ERROR",
+      });
+    }
+    return { batchId: input.batchId };
+  },
+  async run(_payload: { batchId: string }, context: { checkpoint: () => Promise<void> }) {
+    await context.checkpoint();
+    const { repairPublicKnowledgeIndex } = await import("../ai/knowledge.server.ts");
+    const summary = await repairPublicKnowledgeIndex({ checkpoint: context.checkpoint });
+    await context.checkpoint();
+    return { summary };
+  },
+});
+
 type WoztellCampaignDeliveryPayload = { campaignId: string };
 type WoztellCampaignDeliveryResult = {
   sent: number;

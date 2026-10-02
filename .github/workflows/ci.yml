@@ -132,6 +132,7 @@ jobs:
       # fake provider ports. No DATABASE_URL or provider secret is supplied.
       - run: docker pull pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
       - run: npm run test:no-link:local-postgres
+      - run: npm run test:ai-knowledge:db
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:

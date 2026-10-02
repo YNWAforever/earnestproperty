@@ -34,6 +34,7 @@ type RawSource = {
   district_slug?: string | null;
   listing_id?: string | null;
   metadata?: Record<string, unknown>;
+  source_revision?: string;
 };
 
 type KnowledgeChunkRow = {
@@ -82,7 +83,13 @@ const MANAGED_REBUILD_SOURCE_TYPES: AiKnowledgeSourceType[] = [
   "listing",
 ];
 
-export async function rebuildAiKnowledgeIndex(options: { checkpoint?: () => Promise<void> } = {}) {
+export async function rebuildAiKnowledgeIndex(
+  options: {
+    checkpoint?: () => Promise<void>;
+    sourceKeys?: ObservedKnowledgeSource[];
+    allowEmbeddings?: boolean;
+  } = {},
+) {
   const checkpoint = options.checkpoint ?? (async () => {});
   await checkpoint();
   const sources = await fetchPublicKnowledgeSources();
@@ -92,7 +99,9 @@ export async function rebuildAiKnowledgeIndex(options: { checkpoint?: () => Prom
   let indexedChunks = 0;
   let embeddingDimensionFailures = 0;
 
+  const sourceKeys = options.sourceKeys ? new Set(options.sourceKeys.map(sourceKey)) : null;
   for (const source of sources) {
+    if (sourceKeys && !sourceKeys.has(sourceKey(source))) continue;
     await checkpoint();
     const normalizedText = normalizeSourceText(source.text);
     if (!normalizedText) continue;
@@ -109,7 +118,10 @@ export async function rebuildAiKnowledgeIndex(options: { checkpoint?: () => Prom
     if (chunks.length === 0) continue;
 
     await checkpoint();
-    const embeddings = await embedAiTexts(chunks.map((chunk) => chunk.text));
+    const embeddings =
+      options.allowEmbeddings === false
+        ? { ok: false as const, embeddings: [] as number[][] }
+        : await embedAiTexts(chunks.map((chunk) => chunk.text));
     await checkpoint();
     const preparedChunks = chunks.map<PreparedKnowledgeChunk>((chunk, index) => ({
       sort_order: chunk.sort_order,
@@ -119,6 +131,7 @@ export async function rebuildAiKnowledgeIndex(options: { checkpoint?: () => Prom
         url_path: source.url_path,
         source_type: source.source_type,
         ...(source.metadata ?? {}),
+        source_revision: source.source_revision,
       },
       estate_slug: source.estate_slug ?? null,
       district_slug: source.district_slug ?? null,
@@ -178,7 +191,10 @@ export async function rebuildAiKnowledgeIndex(options: { checkpoint?: () => Prom
   }
 
   await checkpoint();
-  await reconcileUnobservedKnowledgeSources(Array.from(observedSources.values()));
+  await reconcileUnobservedKnowledgeSources(
+    Array.from(observedSources.values()),
+    options.sourceKeys,
+  );
   await checkpoint();
 
   if (embeddingDimensionFailures > 0) {
@@ -307,44 +323,24 @@ export async function answerFromPublicKnowledge(input: { question: string }) {
 async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
   const [faqs, estates, articles, listings] = await Promise.all([
     queryRows(
-      "SELECT id, scope, question, answer FROM faqs ORDER BY scope, sort_order, created_at",
+      "SELECT id, scope, question, answer, md5(to_jsonb(f)::text) AS source_revision FROM faqs f ORDER BY scope, sort_order, created_at",
     ),
     queryRows(
       `SELECT id, slug, name_zh, name_en, district_slug, developer, year_completed,
-        phases, total_units, area_min, area_max, description, facilities, seo_title, seo_description
-       FROM estates
+        phases, total_units, area_min, area_max, description, facilities, seo_title, seo_description,
+        md5(to_jsonb(e)::text) AS source_revision
+       FROM estates e
        ORDER BY name_zh`,
     ),
     queryRows(
-      `SELECT id, slug, title, excerpt, content, published, category, seo_title, seo_description
-       FROM articles
+      `SELECT id, slug, title, excerpt, content, published, category, seo_title, seo_description,
+        md5(to_jsonb(a)::text) AS source_revision
+       FROM articles a
        WHERE published = true
        ORDER BY published_at DESC NULLS LAST, updated_at DESC`,
     ),
     queryRows(
-      `SELECT
-        p.id,
-        p.listing_no,
-        p.title_zh,
-        p.deal_type,
-        p.price,
-        p.rent,
-        p.saleable_area,
-        p.bedrooms,
-        p.bathrooms,
-        p.description,
-        p.status,
-        p.district_slug,
-        p.estate_id,
-        p.seo_title,
-        p.seo_description,
-        e.slug AS estate_slug,
-        e.name_zh AS estate_name_zh
-       FROM properties p
-       LEFT JOIN estates e ON e.id = p.estate_id
-       WHERE p.status = 'active'
-       ORDER BY p.updated_at DESC
-       LIMIT 500`,
+      `${publicKnowledgeCurrentSourcesCte()} SELECT * FROM current_public_listings ORDER BY updated_at DESC`,
     ),
   ]);
 
@@ -352,6 +348,7 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
     ...faqs.map((row) => ({
       source_type: "faq" as const,
       source_id: stringOrEmpty(row.id),
+      source_revision: stringOrEmpty(row.source_revision),
       title: stringOrEmpty(row.question),
       url_path: null,
       text: joinText([row.question, row.answer]),
@@ -361,6 +358,7 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
     ...estates.map((row) => ({
       source_type: "estate" as const,
       source_id: stringOrEmpty(row.id),
+      source_revision: stringOrEmpty(row.source_revision),
       title: stringOrEmpty(row.name_zh),
       url_path: `/estate/${stringOrEmpty(row.slug)}`,
       text: joinText([
@@ -386,18 +384,19 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
     ...articles.map((row) => ({
       source_type: "article" as const,
       source_id: stringOrEmpty(row.id),
+      source_revision: stringOrEmpty(row.source_revision),
       title: stringOrEmpty(row.title),
       url_path: `/blog/${stringOrEmpty(row.slug)}`,
       text: joinText([row.title, row.excerpt, row.content, row.seo_title, row.seo_description]),
       published: row.published === true,
-      source_revision: stringOrNull(row.source_revision),
       metadata: { category: stringOrNull(row.category) },
     })),
     ...listings.map((row) => ({
       source_type: "listing" as const,
       source_id: stringOrEmpty(row.id),
+      source_revision: stringOrEmpty(row.source_revision),
       title: stringOrEmpty(row.title_zh),
-      url_path: `/property/${stringOrEmpty(row.listing_no)}`,
+      url_path: `/property/${stringOrEmpty(row.public_listing_no)}`,
       text: joinText([
         row.title_zh,
         row.estate_name_zh,
@@ -413,6 +412,8 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
       listing_id: stringOrEmpty(row.id),
       metadata: {
         listing_no: stringOrNull(row.listing_no),
+        public_listing_no: stringOrNull(row.public_listing_no),
+        offerings: row.offerings,
         deal_type: stringOrNull(row.deal_type),
         estate_id: stringOrNull(row.estate_id),
         price: row.price ?? null,
@@ -467,7 +468,24 @@ async function replaceKnowledgeChunks(sourceId: string, chunks: PreparedKnowledg
   ]);
 }
 
-async function reconcileUnobservedKnowledgeSources(observedSources: ObservedKnowledgeSource[]) {
+async function reconcileUnobservedKnowledgeSources(
+  observedSources: ObservedKnowledgeSource[],
+  sourceKeys?: ObservedKnowledgeSource[],
+) {
+  if (sourceKeys) {
+    await queryRows(
+      `WITH obsolete AS (
+      UPDATE ai_knowledge_sources s SET published=false,public_visibility='staff',updated_at=now()
+      WHERE EXISTS(SELECT 1 FROM jsonb_to_recordset($1::jsonb) AS target(source_type text,source_id text)
+        WHERE target.source_type=s.source_type::text AND target.source_id=s.source_id)
+      AND NOT EXISTS(SELECT 1 FROM jsonb_to_recordset($2::jsonb) AS observed(source_type text,source_id text)
+        WHERE observed.source_type=s.source_type::text AND observed.source_id=s.source_id)
+      RETURNING id)
+      UPDATE ai_knowledge_chunks SET stale=true,updated_at=now() WHERE source_id IN(SELECT id FROM obsolete)`,
+      [JSON.stringify(sourceKeys), JSON.stringify(observedSources)],
+    );
+    return;
+  }
   if (observedSources.length === 0) {
     await queryRows(
       `WITH obsolete AS (
@@ -532,16 +550,54 @@ function joinText(values: unknown[]) {
 }
 
 function listingFacts(row: Record<string, unknown>) {
+  const offerings = Array.isArray(row.offerings)
+    ? (row.offerings as Array<Record<string, unknown>>)
+    : [];
   const facts = [
-    row.deal_type ? `類型：${row.deal_type}` : null,
-    row.price ? `售價：${row.price}` : null,
-    row.rent ? `租金：${row.rent}` : null,
+    ...offerings.map((offer) =>
+      offer.deal_type === "sale"
+        ? `出售：${offer.price ?? "待核實"}`
+        : `出租：${offer.rent ?? "待核實"}`,
+    ),
     row.saleable_area ? `實用面積：${row.saleable_area}` : null,
     row.bedrooms ? `睡房：${row.bedrooms}` : null,
     row.bathrooms ? `浴室：${row.bathrooms}` : null,
     row.district_slug ? `地區：${row.district_slug}` : null,
   ].filter(Boolean);
   return facts.length ? facts.join("\n") : null;
+}
+
+export async function repairPublicKnowledgeIndex(
+  options: { checkpoint?: () => Promise<void> } = {},
+) {
+  const requests = await queryRows<{
+    source_type: AiKnowledgeSourceType;
+    source_id: string;
+    revision: string;
+  }>(
+    "SELECT source_type,source_id,revision::text FROM ai_knowledge_repair_requests WHERE revision>completed_revision ORDER BY requested_at,source_type,source_id LIMIT 200",
+  );
+  if (!requests.length)
+    return { indexedSources: 0, indexedChunks: 0, embeddingDimensionFailures: 0 };
+  const result = await rebuildAiKnowledgeIndex({
+    ...options,
+    sourceKeys: requests,
+    allowEmbeddings: false,
+  });
+  await (options.checkpoint ?? (async () => {}))();
+  await queryRows(
+    `UPDATE ai_knowledge_repair_requests r SET completed_revision=r.revision,completed_at=now()
+    FROM jsonb_to_recordset($1::jsonb) AS completed(source_type text,source_id text,revision text)
+    WHERE r.source_type::text=completed.source_type AND r.source_id=completed.source_id AND r.revision=completed.revision::bigint`,
+    [JSON.stringify(requests)],
+  );
+  // A batch may exceed the bounded work limit, or change during provider/DB
+  // work. Keep a new durable job for whatever has not been acknowledged by CAS.
+  await queryRows(`INSERT INTO ops_jobs(job_type,payload_version,payload,status,max_attempts,idempotency_key)
+    SELECT 'ai.knowledge.repair',1,jsonb_build_object('batchId',txid_current()::text),'queued',5,'ai.knowledge.repair:'||txid_current()::text
+    WHERE EXISTS(SELECT 1 FROM ai_knowledge_repair_requests WHERE revision>completed_revision)
+    ON CONFLICT(idempotency_key) DO NOTHING`);
+  return result;
 }
 
 function freshnessScore(sourceType: AiKnowledgeSourceType) {
@@ -604,6 +660,7 @@ function mapKnowledgeChunkRows(rows: KnowledgeChunkRow[]) {
       freshness_score: Number(row.freshness_score ?? 0),
       stale: row.stale === true,
       published: row.published === true,
+      source_revision: stringOrNull(row.source_revision),
     })),
   ) as AiKnowledgeChunk[];
 }

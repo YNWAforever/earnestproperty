@@ -57,6 +57,16 @@ test(
       });
       await indexCurrent();
       await t.test(
+        "unchanged source retains its revision and can produce a cited answer",
+        async () => {
+          const [current] = await knowledge.searchPublicKnowledge({ query: "測試海景" });
+          assert.match(current.source_revision ?? "", /^[a-f0-9]{32}$/);
+          const answer = await knowledge.answerFromPublicKnowledge({ question: "測試海景" });
+          assert.equal(answer.answer, "OLD_PRICE_UNSAFE");
+          assert.equal(answer.citations.length, 1);
+        },
+      );
+      await t.test(
         "provider fallback also discards excerpt if price changes in flight",
         async () => {
           providerOk = false;
