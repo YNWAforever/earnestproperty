@@ -1,0 +1,62 @@
+# EarnestProperty — 分批 PR 與營運交接
+
+本回合完成可獨立的安全修復及本地驗證，沒有 merge、部署、production migration、正式 scope/config mutation、真客戶發送或模型 spend。正式 alias 唯讀仍是 baseline51cb0e9；修復版本尚未正式啟用。完整實作包的首回合目標已覆蓋，EP-06–21 的外部及完整產品驗收仍逐項列明，不能視為22任務全結案。
+
+## Review 分批
+
+1. EP-00：compiled fixture race、完整 secret scan及 owned full-schema harness。
+2. EP-01/02：canonical/full revision read gate、回答輸出前重新驗證、transactional durable repair。
+3. EP-03/04：嚴格 CRM eligibility/schema、actor/scope/source request/save/apply、run/provenance及未知結果。
+4. EP-18/05及後續本地修復：SQL最近10則、方法/成本/分數/草稿如實呈現；canonical撤盤、scoped overview/card filters、44×44 close、owned setup/publication/maintenance、Golden/restore及後續 readiness 證據。各task保留聚焦commit。
+
+每批跟前一批 base，不平行套同檔的 admin-data/EP-05/18。各批只 review 該範圍；第4批中的 Property.hk 真存取未解除，不阻塞前3批。最後 code review 與 exact source test evidence 見本輪驗證報告及執行 CSV。
+
+## Migration / config dry-run
+
+從 registry取得新增4個版本：20261003010000_ai_knowledge_durable_repair.sql、20261003020000_crm_analysis_contract.sql、20261003030000_crm_analysis_runs.sql、20261003040000_content_proposal_source_guard.sql。schema 從原81至85，在多個新建 owned PostgreSQL17 真執行並做 rollback/replay/CAS/FK/readback；沒有 production apply。
+
+10000：持久 dirty requests＋同交易 ops job enqueue，既有8類來源 mutation invalidate；不做 embeddings spend。20000：nullable result metadata，歷史結果不改稱新模型成功。30000：CRM runs、actor/source guards與 provenance，舊 profile 保留。40000：proposal captured source revision、authenticated account binding及全部internal evidence dependency snapshots，legacy unversioned proposal 只供 preview。都是 additive；正式 rollout 前由 DB owner核 production registry/checksum及 locks，先 owned/approved preview dry-run，再另行審批正式 apply。舊 worker未知新 job handler可能先保留/失敗；新 worker可用原 request恢復，不刪 dirty ledger。
+
+預期 production configuration 差異本輪為**零**。28Hse daily=true、manual apply=false 保持；無新來源 scope/flag、phone endpoint 或model設定。WhatsApp每個已核實 account/branch/channel/folder/user 的新 review version才可成具體配置差異；Property.hk branch/dt manifest仍未核實。runtime/provider/model IDs未知就列UNKNOWN，不以fixture或預設值代替。
+
+## Gates
+
+| gate | 本地／唯讀證據 | 正式／完整能力 |
+|---|---|---|
+| G00 baseline | app alias/SHA已讀回；owned85 migrations | BLOCKED：worker/schema/flags/tenant readback未知 |
+| G01 static/build | typecheck/lint/local build PASS；EP00 race修正 | local READY；正式deploy另驗 |
+| G02 deterministic AI | strict/schema/eligibility/current revision/in-flight PASS | local READY；真模型品質另列 |
+| G03 Golden A | same-schema owned链／zero EPWA PASS | local READY；真canary不替代 |
+| G04 provider canary | mock ports契約、replay/unknown PASS | BLOCKED：指定真test目標與租戶能力 |
+| G05 Golden B | authorised request→review/apply→DB/run讀回 PASS | local READY；真model品質/usage budget BLOCKED |
+| G06 Golden C | save→canonical→public SQL→repair→fresh retrieval PASS | local READY；正式同盤/public browser待驗 |
+| G07 Property.hk | owned full gate/positive publication/media/replay PASS | BLOCKED_EXTERNAL：branch/dt/detail/media approval |
+| G08 28Hse schedule | config與manual jobs已核，native0/3 | NOT_READY：啟用後3次完整真schedule |
+| G09 roles/devices | 107 browser/四尺寸＋8 DB actor identities | NOT_READY：8真login sessions、完整route/actions |
+| G10 concurrency/restore | owned CAS/unknown/restart／clone restore/readback PASS | local鏈READY；部署worker/正式恢復能力仍待驗 |
+| G11 coverage | original60/68/1332 IDs及357 rendered observations保留 | NOT_READY：逐動作/flag/route reconciliation未完成 |
+
+## 具體 canary preview（未執行）
+
+WhatsApp：最多1個 test inbound event、1個 confirmed assignment、1個 internal acknowledgement、1個 designated staff phone test、1個 human test reply；零普通 portal EPWA。Customer/staff recipient 必須為整合 owner 指定的測試身份，目前**未提供**，公開網站公司 CTA 號碼不能當本次 test recipient。channel/account/branch/Folder/provider user均從tenant readback取得。先看consent/window/approved template；所有 outbound沿原 intents，unknown只 reconcile。不做 bulk/customer campaign。
+
+AI：EV04/05/09/11/12 各3次，共最多15個 generation；每run最多1次，無自動retry，固定source revision與schema。actual provider/model從server runtime讀回，目前UNKNOWN；沒有現成usage/cost證據所以不填虛構單價或已核實budget。proposal的總spend上限為USD5，需實際provider計價/usage可量化及具體授權才可執行；未知成本即停、不以NULL當0。deterministic regression不需要此budget，已完成。
+
+正式變更：僅在上述preview與code review完成、指定owned/staging target及DB owner確認後，提出4 additive migrations＋該批app/worker的確切SHA/checksum差異。本回合沒有這些目標身份/新正式權限，不作production mutation；發布後須重新登入真roles讀回，不由Vercel READY推論schema/capability。
+
+## Owner 與安全恢復
+
+| owner（角色；未捏造人名） | 下次讀回 | 安全行動 |
+|---|---|---|
+| 技術/release owner | PR base/order、app alias、worker revision、flags | 逐capability啟用；維持AI read gate |
+| DB owner | 現有registry/checksums、preview drift及locks | additive migration；未知apply查receipt；不還原整個正式庫 |
+| 盤源 owner | 28Hse full hash/stages/private scope及3次native schedule | frozen evidence/同run恢復；403/漏頁不撤盤 |
+| Property.hk整合 owner | EPS/EPT/EPW所有approved dt、真detail/media | 完整證據後才enable；不绕過驗證 |
+| WhatsApp整合 owner | 指定test recipients、directory/membership/consent/window/receipt | capture保留；unknown查原intent、不可換ID重送 |
+| QA/主管 | 8 roles/sessions、全route/flag、剩餘ACT reconciliation | card/filter/export獨立读回；blocked不刪除 |
+
+回退：停對應scope新effects、保留raw receipt/enquiries/profiles/human review/dirty jobs/outbound ledger；回上一兼容app/config，migration additions保留。canonical保護與stale read gate不撤回；合法資料修正按operation/revision逐筆確認，保留期間新查詢。owned restore是在新clone演練，不能套production。
+
+Ruling：Windows下以.audit ledger＋tracked reports保存任務進度，因skill shell scripts不支援本包EP-00編號；風險是人工 bookkeeping，已以immutable CSV IDs、SHA及回歸核對減低。按計劃復用已修main的nav/parser/receipt/CAS/Inbox picker/bulk/segmented sync，避免另造身份/狀態機。部分指定新e2e入口改用既有受控real-route harness及owned test入口；缺少的正式roles/全route/50-row UI驗收仍明示，未冒稱同等覆蓋。
+
+本地可review修復READY；F01/F03/F04/F08的production啟用BLOCKED，F02/F07真接駁BLOCKED，F05整體UX驗收NOT_READY，F06按28Hse NOT_READY／Property.hk BLOCKED分開。本回合結束後沒有自動監看或三日驗收承諾。

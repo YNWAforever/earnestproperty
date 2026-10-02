@@ -1,0 +1,504 @@
+rendered_id,route,actor,role,name,widths,evidence_level,scenario_count,action_execution_status
+RID-b4556568b3ba2687,/admin/whatsapp,agent-a,button,開啟後台選單,360;390;768,rendered_observation_only,33,NOT_INFERRED_FROM_VISIBILITY
+RID-d2dfbe89c27e6aa1,/admin/whatsapp,agent-a,link,核對本人登入姓名及帳戶資料,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-c6343f8dd8137551,/admin/whatsapp,agent-a,button,我已核對,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-c92a69c48a3bb0ff,/admin/whatsapp,agent-a,combobox,接手工作狀態,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-4ad7a187aa7f8b57,/admin/whatsapp,agent-a,button,更新接手工作,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-e88666b79b340a81,/admin/whatsapp,agent-a,button,接手工作第一頁,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-4ff1f335e5fdd477,/admin/whatsapp,agent-a,button,接手工作下一頁,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-e5471364541a484c,/admin/whatsapp,agent-a,input,搜尋 WhatsApp 對話,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-b40b9d2c80415f8b,/admin/whatsapp,agent-a,combobox,按對話狀態篩選,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-39015c2defce9c20,/admin/whatsapp,agent-a,button,重新整理,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-60cc8644781e4bec,/admin/whatsapp,agent-a,button,第一頁,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-7483ef2a73f0622e,/admin/whatsapp,agent-a,button,下一頁,360;390;768;1280;1440,rendered_observation_only,50,NOT_INFERRED_FROM_VISIBILITY
+RID-65813c3e15e0dd8f,/admin/whatsapp,agent-a,button,"本頁 2 個對話待回覆
+只看待回覆",360;390;768;1280;1440,rendered_observation_only,47,NOT_INFERRED_FROM_VISIBILITY
+RID-d7a969e7d3ebe609,/admin/whatsapp,agent-a,button,"合成客戶甲
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074714 · 平台編號 4033349
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 少於 1 分鐘
+03/10 上午06:52",360;390;768;1280;1440,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-8864ae7dffed6ebe,/admin/whatsapp,agent-a,button,"合成客戶乙
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074715 · 平台編號 4033350
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 少於 1 分鐘
+03/10 上午06:52",360;390;768;1280;1440,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-e6b152b558f9a4b7,/admin/whatsapp,agent-a,button,關閉,360;390;768,rendered_observation_only,25,NOT_INFERRED_FROM_VISIBILITY
+RID-9768e467f039e135,/admin/whatsapp,agent-a,combobox,WhatsApp 對話狀態,360;390;768;1280;1440,rendered_observation_only,38,NOT_INFERRED_FROM_VISIBILITY
+RID-4e279291b97c8da1,/admin/whatsapp,agent-a,combobox,負責代理,360;390;768;1280;1440,rendered_observation_only,38,NOT_INFERRED_FROM_VISIBILITY
+RID-b5aaa08f1a4496d2,/admin/whatsapp,agent-a,combobox,本次回覆對應查詢自動對應唯一查詢A074714 · 售 · 28Hse,360;390;768;1280;1440,rendered_observation_only,37,NOT_INFERRED_FROM_VISIBILITY
+RID-8616b99cf5b84e8a,/admin/whatsapp,agent-a,textbox,WhatsApp 回覆,360;390;768;1280;1440,rendered_observation_only,38,NOT_INFERRED_FROM_VISIBILITY
+RID-c9f239dc625fe063,/admin/whatsapp,agent-a,button,傳送回覆,360;390;768;1280;1440,rendered_observation_only,38,NOT_INFERRED_FROM_VISIBILITY
+RID-8cf67de9401727b2,/admin/whatsapp,agent-a,link,查看公開網站,1280;1440,rendered_observation_only,17,NOT_INFERRED_FROM_VISIBILITY
+RID-a9af9809db2596b4,/admin/whatsapp,agent-a,link,總覽,1280;1440,rendered_observation_only,17,NOT_INFERRED_FROM_VISIBILITY
+RID-d058716240461b83,/admin/whatsapp,agent-a,link,客戶查詢,1280;1440,rendered_observation_only,17,NOT_INFERRED_FROM_VISIBILITY
+RID-20dd5c3bcfd2d2c5,/admin/whatsapp,agent-a,link,WhatsApp 收件匣,1280;1440,rendered_observation_only,17,NOT_INFERRED_FROM_VISIBILITY
+RID-46b3619cb7c14bb0,/admin/whatsapp,agent-a,link,樓盤管理,1280;1440,rendered_observation_only,17,NOT_INFERRED_FROM_VISIBILITY
+RID-b81e80a67f5be1a6,/admin/whatsapp,agent-a,link,成交管理,1280;1440,rendered_observation_only,17,NOT_INFERRED_FROM_VISIBILITY
+RID-cef35499152c41f8,/admin/whatsapp,agent-a,link,系統營運,1280;1440,rendered_observation_only,17,NOT_INFERRED_FROM_VISIBILITY
+RID-7bcf7c0defc4f304,/admin/whatsapp,agent-a,button,登出,1280;1440,rendered_observation_only,17,NOT_INFERRED_FROM_VISIBILITY
+RID-47eb36a46e25bd31,/admin/whatsapp,agent-a,combobox,本次回覆對應查詢自動對應唯一查詢A074715 · 售 · 28Hse,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-b1760c9b8feaceb3,/admin/whatsapp,agent-a,button,"合成客戶甲
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074714 · 平台編號 4033349
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 少於 1 分鐘
+03/10 上午06:53",390;1280,rendered_observation_only,13,NOT_INFERRED_FROM_VISIBILITY
+RID-5c7a2d6e4251b44d,/admin/whatsapp,agent-a,button,"合成客戶乙
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074715 · 平台編號 4033350
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 少於 1 分鐘
+03/10 上午06:53",390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-41f3fff642471fef,/admin/whatsapp,agent-a,button,"本頁 1 個對話待回覆
+只看待回覆",390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-a58bd850663faa62,/admin/whatsapp,agent-a,button,"合成客戶甲
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074714 · 平台編號 4033349
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 1 日
+已過 24 小時回覆窗口
+03/10 上午06:53",1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-69e6bcfd5eb6aa2c,/admin/whatsapp,agent-a,button,"合成客戶乙
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074715 · 平台編號 4033350
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 1 日
+已過 24 小時回覆窗口
+03/10 上午06:53",1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-8fbb611438fecc98,/admin/whatsapp,agent-b,link,查看公開網站,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-f1b94e230618e63a,/admin/whatsapp,agent-b,link,總覽,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-e6e5e0ceaeee6a4c,/admin/whatsapp,agent-b,link,客戶查詢,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-ed30f8986aed6c3d,/admin/whatsapp,agent-b,link,WhatsApp 收件匣,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-6dd7020c7bb689e3,/admin/whatsapp,agent-b,link,樓盤管理,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-81731668efe3e4d7,/admin/whatsapp,agent-b,link,成交管理,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-f1d4b2bebcb6de97,/admin/whatsapp,agent-b,link,系統營運,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-477df171e1004c02,/admin/whatsapp,agent-b,button,登出,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-d27d5502f5e275ce,/admin/whatsapp,agent-b,link,核對本人登入姓名及帳戶資料,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-66ee8ffa1fb037ff,/admin/whatsapp,agent-b,button,我已核對,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-8c23e06463c42626,/admin/whatsapp,agent-b,combobox,接手工作狀態,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-bd46a56ca4f00b76,/admin/whatsapp,agent-b,button,更新接手工作,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-15f89dbc3f5211dc,/admin/whatsapp,agent-b,button,接手工作第一頁,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-7e45ccb6d3987161,/admin/whatsapp,agent-b,button,接手工作下一頁,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-705903cc2093fd23,/admin/whatsapp,agent-b,input,搜尋 WhatsApp 對話,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-9309a982e2d1d369,/admin/whatsapp,agent-b,combobox,按對話狀態篩選,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-868d4dba4e0aa1e9,/admin/whatsapp,agent-b,button,重新整理,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-651865075581bcb5,/admin/whatsapp,agent-b,button,第一頁,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-bbff8c49891cc36a,/admin/whatsapp,agent-b,button,下一頁,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-6f27b0d16214ff43,/admin/whatsapp,viewer,link,查看公開網站,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-4eeb36ca512ce57a,/admin/whatsapp,viewer,link,總覽,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-93f0f3fe46e135c5,/admin/whatsapp,viewer,link,客戶查詢,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-9bb539f5e1c6d0ef,/admin/whatsapp,viewer,link,WhatsApp 收件匣,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-8804ae0c95da8f9c,/admin/whatsapp,viewer,link,跟進工作台,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-595377937e6424ed,/admin/whatsapp,viewer,link,樓盤管理,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-06f0d62ab214e771,/admin/whatsapp,viewer,link,盤源同步,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-c1633e6cc8b2ed83,/admin/whatsapp,viewer,link,成交管理,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-0e4151196c6a9e86,/admin/whatsapp,viewer,link,內容中心,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-9d3225b770a87b74,/admin/whatsapp,viewer,link,屋苑管理,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-3a4243042bb62c85,/admin/whatsapp,viewer,link,客戶分群,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-c141869c65a0d035,/admin/whatsapp,viewer,link,WhatsApp 來源連結,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-eda0a402cfbb6712,/admin/whatsapp,viewer,link,WhatsApp 映射設定,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-271a029109ada234,/admin/whatsapp,viewer,link,推廣活動,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-0cfa5c39a494e68c,/admin/whatsapp,viewer,link,團隊成員,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-3fb292153b015769,/admin/whatsapp,viewer,link,經紀檔案,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-2c51986db71a0753,/admin/whatsapp,viewer,link,營運與轉換,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-5af0d3447f0e747b,/admin/whatsapp,viewer,link,系統營運,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-86c589ddc3345f87,/admin/whatsapp,viewer,button,登出,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-cf801165a8f7d9af,/admin/whatsapp,viewer,button,重新檢查,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-3ddd366ffadd30fc,/admin/whatsapp,guest,link,登入後台,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-a0365185fcaf0e6b,/admin/leads,agent-a,button,開啟後台選單,360;390,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-7b4f9f44c79596c1,/admin/leads,agent-a,link,核對本人登入姓名及帳戶資料,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-d56d100db88735ee,/admin/leads,agent-a,button,我已核對,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-6b774dac57a52871,/admin/leads,agent-a,input,搜尋客戶查詢,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-bd8831aa4a48a15f,/admin/leads,agent-a,combobox,階段,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-fafb0c576b46b376,/admin/leads,agent-a,combobox,負責代理,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-f018f0a5f6a013b7,/admin/leads,agent-a,button,重設,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-29ca6be9d29dea8c,/admin/leads,agent-a,button,記錄人工轉交,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-c73b570df8e6512c,/admin/leads,agent-a,link,前往跟進工作台,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-ce009eba7430e048,/admin/leads,agent-a,button,新查詢,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-b17e0b0f12dabb8f,/admin/leads,agent-a,button,未指派代理,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-9dbf8b44af2d156f,/admin/leads,agent-a,combobox,意圖篩選,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-05aba62c75897825,/admin/leads,agent-a,combobox,來源篩選,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-39de02755f1252ee,/admin/leads,agent-a,combobox,WhatsApp 推廣同意,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-0e7864d1795bbe0b,/admin/leads,agent-a,button,第一頁,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-558f6f875c062a00,/admin/leads,agent-a,button,下一頁,360;390;1280,rendered_observation_only,19,NOT_INFERRED_FROM_VISIBILITY
+RID-ffeb459ee2fa0d27,/admin/leads,agent-a,checkbox,全選本頁客戶查詢,360;390;1280,rendered_observation_only,13,NOT_INFERRED_FROM_VISIBILITY
+RID-ea9447e615f743f4,/admin/leads,agent-a,checkbox,選擇 未命名,360;390;1280,rendered_observation_only,6,NOT_INFERRED_FROM_VISIBILITY
+RID-72b08d0dbea3a88b,/admin/leads,agent-a,button,未命名,360;390;1280,rendered_observation_only,6,NOT_INFERRED_FROM_VISIBILITY
+RID-2f6f44274efef1e8,/admin/leads,agent-a,button,Close,390;1280,rendered_observation_only,8,NOT_INFERRED_FROM_VISIBILITY
+RID-ea8bfd081e7c6311,/admin/leads,agent-a,button,關閉,360;390;1280,rendered_observation_only,13,NOT_INFERRED_FROM_VISIBILITY
+RID-9fa6696920a9b657,/admin/leads,agent-a,combobox,查詢階段,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-4ab64c6b8ad7b9fb,/admin/leads,agent-a,combobox,意圖,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-f998f500012e9f43,/admin/leads,agent-a,input,最低預算,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-08bd2d743ff53c53,/admin/leads,agent-a,input,最高預算,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-1782bc8c1d7deab0,/admin/leads,agent-a,textbox,偏好屋苑,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-229f2f54dc318f4a,/admin/leads,agent-a,textbox,內部備註（不會傳送給客戶）,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-e764141c1a5c3c02,/admin/leads,agent-a,textbox,新增內部跟進紀錄,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-76f003539f25ec34,/admin/leads,agent-a,button,只儲存跟進紀錄,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-b45e089869df60af,/admin/leads,agent-a,button,AI 分析,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-65a8e5315cfc50a4,/admin/leads,agent-a,button,結束（未成交）,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-110da92379a6812d,/admin/leads,agent-a,button,標記已成交,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-031620fb3cc233fd,/admin/leads,agent-a,button,儲存,360;390;1280,rendered_observation_only,12,NOT_INFERRED_FROM_VISIBILITY
+RID-3e7fdbfed77189b7,/admin/leads,agent-a,link,查看公開網站,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-db44f01dcfea6f77,/admin/leads,agent-a,link,總覽,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-03feb47138442721,/admin/leads,agent-a,link,客戶查詢,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-58237b8e1a4a356e,/admin/leads,agent-a,link,WhatsApp 收件匣,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-332f8b53662440d8,/admin/leads,agent-a,link,樓盤管理,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-b5d822cd9520c8dd,/admin/leads,agent-a,link,成交管理,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-ed0b326624efe674,/admin/leads,agent-a,link,系統營運,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-aef7bebe35cac09c,/admin/leads,agent-a,button,登出,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-d9411a7bffea69f0,/admin/leads,agent-a,button,清除篩選,390;1280,rendered_observation_only,6,NOT_INFERRED_FROM_VISIBILITY
+RID-51a4141d68191bc8,/admin/leads,agent-a,textbox,原文／轉交內容合成原文：客戶想了解碧堤半島，聯絡方式待核實。,390;1280,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-6a8a1e2069e5ca43,/admin/leads,agent-a,input,業務來源,390;1280,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-5f3bf0dd2a279fd7,/admin/leads,agent-a,input,來源網址（選填）,390;1280,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-471307f6cad52bfc,/admin/leads,agent-a,input,原客戶聯絡線索（選填，未核實）,390;1280,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-221f7da5d719a819,/admin/leads,agent-a,input,原來收到時間（選填）,390;1280,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-52b0f3278df70961,/admin/leads,agent-a,textbox,內部備註（選填）,390;1280,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-e1fb9228b37937d8,/admin/leads,agent-a,input,事項,390;1280,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-0191d9f9768e4399,/admin/leads,agent-a,input,到期時間,390;1280,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-c107290aff0ef5f3,/admin/leads,agent-a,combobox,負責同事（留空為自己）由我跟進合成同事甲合成同事乙,390;1280,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-38d81ef2e9e0c555,/admin/leads,agent-a,button,保存人工轉交查詢,390;1280,rendered_observation_only,4,NOT_INFERRED_FROM_VISIBILITY
+RID-4f503362091afdaa,/admin/leads,agent-a,button,取消,390;1280,rendered_observation_only,6,NOT_INFERRED_FROM_VISIBILITY
+RID-5a57e167d0ec6806,/admin/leads,agent-a,textbox,原文／轉交內容,390,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-1ceffc17137ddcc6,/admin/leads,manager,button,開啟後台選單,390;768,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-a58d2278968410a7,/admin/leads,manager,link,核對本人登入姓名及帳戶資料,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-3d1a6edc4f7c4af6,/admin/leads,manager,button,我已核對,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-672ed2ce459ba3c3,/admin/leads,manager,input,搜尋客戶查詢,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-94b4513bb6670fd0,/admin/leads,manager,combobox,階段,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-3a8a79d66791941e,/admin/leads,manager,combobox,負責代理,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-7dd963294e18fced,/admin/leads,manager,button,重設,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-8fa440cb7cb5435b,/admin/leads,manager,button,記錄人工轉交,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-d6ce1f9ad62c3f69,/admin/leads,manager,link,前往跟進工作台,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-e47fbb5964ef5a99,/admin/leads,manager,button,新查詢,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-7fa4543252a01226,/admin/leads,manager,button,未指派代理,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-dc2746b68d239c4a,/admin/leads,manager,combobox,意圖篩選,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-3c84e7888f053892,/admin/leads,manager,combobox,來源篩選,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-af621e7460fa213e,/admin/leads,manager,combobox,WhatsApp 推廣同意,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-2d6427fdf5ff21e4,/admin/leads,manager,button,第一頁,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-8811d77c67083c67,/admin/leads,manager,button,下一頁,390;768;1280;1440,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-54e60b4f95258059,/admin/leads,manager,checkbox,全選本頁客戶查詢,390;768;1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-1aa47fe10dee167e,/admin/leads,manager,checkbox,選擇 未命名,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-1a96e303e3837304,/admin/leads,manager,button,未命名,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-90d7444b28518a68,/admin/leads,manager,textbox,原文／轉交內容,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-8015f240be9754b4,/admin/leads,manager,input,業務來源,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-733d5f520b11e1cf,/admin/leads,manager,input,來源網址（選填）,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-25bca58ef862e2ca,/admin/leads,manager,input,原客戶聯絡線索（選填，未核實）,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-77f77f8ba4e42493,/admin/leads,manager,input,原來收到時間（選填）,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-cb1dffd14f157665,/admin/leads,manager,textbox,內部備註（選填）,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-adc15806e5dde6d6,/admin/leads,manager,input,事項,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-d168919537ee7004,/admin/leads,manager,input,到期時間,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-e5b684b52a7b7074,/admin/leads,manager,combobox,負責同事（留空為自己）由我跟進合成同事甲合成同事乙,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-3ecb631d7bf73537,/admin/leads,manager,button,保存人工轉交查詢,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-eeffee272890221e,/admin/leads,manager,button,取消,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-8b86ed9352603865,/admin/leads,manager,button,Close,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-ef70e6c85ff8baf4,/admin/leads,agent-a,button,請先核對草稿,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-bf2a41df6e159d62,/admin/leads,agent-a,button,關閉，稍後核對,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-125ae0383687d229,/admin/leads,agent-a,checkbox,選擇 更新合成客戶,360;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-8af78378666f6842,/admin/leads,agent-a,button,更新合成客戶,360;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-e76cd906588a56ea,/admin/leads,agent-a,button,編輯姓名／電郵,360;390;1280,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-fd0b558840903676,/admin/leads,agent-a,link,查看已授權的 WhatsApp 對話,360;390;1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-288257a3f9434057,/admin/leads,agent-a,checkbox,選擇 既有合成客戶,390,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-8b1c3659b1481332,/admin/leads,agent-a,button,既有合成客戶,390,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-84d6c00284b54836,/admin/leads,agent-a,input,姓名,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-77fe3e0307a8e327,/admin/leads,agent-a,input,電郵,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-0bc6eb72dbec9dff,/admin/leads,agent-a,button,儲存聯絡資料,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-b42bec6418eb56aa,/admin/leads,agent-a,checkbox,選擇 等待中的修改,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-ae43075a4ed1e5b8,/admin/leads,agent-a,button,等待中的修改,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-f72396d10c53912b,/admin/leads,agent-a,checkbox,選擇 另一同事新修改,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-12da26fe4ae2e289,/admin/leads,agent-a,button,另一同事新修改,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-ac97c354b893b243,/admin/leads,agent-a,checkbox,選擇 結果待核對,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-46319f2d6f0464e3,/admin/leads,agent-a,button,結果待核對,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-c100a567085fd8b1,/admin/whatsapp,manager,button,開啟後台選單,360;390,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-bd703a404679e2c4,/admin/whatsapp,manager,link,核對本人登入姓名及帳戶資料,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-9bc12ed26791f124,/admin/whatsapp,manager,button,我已核對,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-c5aadecea8ef9c4e,/admin/whatsapp,manager,combobox,接手工作狀態,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-08d7e658fc09cba6,/admin/whatsapp,manager,button,更新接手工作,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-0a8d4e3d05163bf3,/admin/whatsapp,manager,button,接手工作第一頁,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-c5879f24357252fc,/admin/whatsapp,manager,button,接手工作下一頁,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-02507aae080e9219,/admin/whatsapp,manager,input,搜尋 WhatsApp 對話,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-32b5447f628c8655,/admin/whatsapp,manager,combobox,按對話狀態篩選,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-de8799370568a3a3,/admin/whatsapp,manager,button,重新整理,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-2fbadcf1b2aaa524,/admin/whatsapp,manager,button,第一頁,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-4b86044f98667c51,/admin/whatsapp,manager,button,下一頁,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-2e6beaeeb2bc3875,/admin/whatsapp,manager,button,"本頁 2 個對話待回覆
+只看待回覆",360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-9256a5bb9a120987,/admin/whatsapp,manager,button,"合成客戶甲
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074714 · 平台編號 4033349
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 少於 1 分鐘
+03/10 上午06:53",360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-3d247ff78b8a63c3,/admin/whatsapp,manager,button,"合成客戶乙
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074715 · 平台編號 4033350
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 少於 1 分鐘
+03/10 上午06:53",360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-c5a903482ea19522,/admin/whatsapp,manager,button,關閉,360;390,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-b695fecac54a9246,/admin/whatsapp,manager,combobox,WhatsApp 對話狀態,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-a33909fcfaa66ac4,/admin/whatsapp,manager,combobox,負責代理,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-6548c7c398d4cc7e,/admin/whatsapp,manager,combobox,本次回覆對應查詢自動對應唯一查詢A074714 · 售 · 28Hse,360;390;1280,rendered_observation_only,8,NOT_INFERRED_FROM_VISIBILITY
+RID-b19511e1e3dacf1c,/admin/whatsapp,manager,button,查看及修正本次查詢,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-e49bf238eb73105d,/admin/whatsapp,manager,textbox,WhatsApp 回覆,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-98c71fde3c5367ba,/admin/whatsapp,manager,button,傳送回覆,360;390;1280,rendered_observation_only,9,NOT_INFERRED_FROM_VISIBILITY
+RID-3070c7b2ef0ae8cb,/admin/whatsapp,manager,button,取消／關閉,360;390;1280,rendered_observation_only,8,NOT_INFERRED_FROM_VISIBILITY
+RID-bff418ed9c799b91,/admin/whatsapp,manager,combobox,MLS 樓盤,390;1280,rendered_observation_only,6,NOT_INFERRED_FROM_VISIBILITY
+RID-6c07357d70e12f2b,/admin/whatsapp,manager,combobox,指定同事（已核實外部映射）,390;1280,rendered_observation_only,6,NOT_INFERRED_FROM_VISIBILITY
+RID-6b90bc5f1f2b5b4b,/admin/whatsapp,manager,combobox,本次查詢負責同事,390;1280,rendered_observation_only,6,NOT_INFERRED_FROM_VISIBILITY
+RID-d54ced90e2755e58,/admin/whatsapp,manager,textbox,修正原因,390;1280,rendered_observation_only,6,NOT_INFERRED_FROM_VISIBILITY
+RID-31240e80ecb4884b,/admin/whatsapp,manager,button,儲存本次查詢修正,390;1280,rendered_observation_only,6,NOT_INFERRED_FROM_VISIBILITY
+RID-3536d04c56561832,/admin/whatsapp,manager,button,Close,360;390;1280,rendered_observation_only,8,NOT_INFERRED_FROM_VISIBILITY
+RID-4c7c8c5f25e5c67b,/admin/whatsapp,manager,link,查看公開網站,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-60609ec2046d4ff7,/admin/whatsapp,manager,link,總覽,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-de3997cf25529ab3,/admin/whatsapp,manager,link,客戶查詢,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-d0a9fbb9c2c1c408,/admin/whatsapp,manager,link,WhatsApp 收件匣,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-7ba053abfb8db392,/admin/whatsapp,manager,link,跟進工作台,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-738de0fc85eeb1e3,/admin/whatsapp,manager,link,樓盤管理,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-5ded8fc28cb60078,/admin/whatsapp,manager,link,盤源同步,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-a6c0cbc11fdc3e26,/admin/whatsapp,manager,link,成交管理,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-61c720cf814e2439,/admin/whatsapp,manager,link,內容中心,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-76474c4c6fea6ca1,/admin/whatsapp,manager,link,屋苑管理,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-3a538df885512706,/admin/whatsapp,manager,link,客戶分群,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-16602a0b126643c5,/admin/whatsapp,manager,link,WhatsApp 來源連結,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-7d56ac748ca9b02d,/admin/whatsapp,manager,link,WhatsApp 映射設定,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-4c28b20c11dac526,/admin/whatsapp,manager,link,推廣活動,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-0c460d5393b386e6,/admin/whatsapp,manager,link,團隊成員,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-bb310793ff4b6528,/admin/whatsapp,manager,link,經紀檔案,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-4d97aed50840c1db,/admin/whatsapp,manager,link,營運與轉換,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-900ff7a677d13a51,/admin/whatsapp,manager,link,系統營運,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-37f18ee684533f75,/admin/whatsapp,manager,button,登出,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-abc735f1996d85fe,/admin/whatsapp,agent-a,button,查看及修正本次查詢,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-43dc6d59137a8cd8,/admin/whatsapp,agent-a,button,取消／關閉,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-a5803bb469e8e3c5,/admin/whatsapp,agent-a,button,Close,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-e38aae9e723b3b8b,/admin/whatsapp,manager,button,重新載入版本（保留草稿）,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-4f2159e485e15ab2,/admin/leads,manager,link,查看公開網站,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-7d38c44c022f94e7,/admin/leads,manager,link,總覽,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-976ec71e5ce45724,/admin/leads,manager,link,客戶查詢,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-b3cdcb830c5b7612,/admin/leads,manager,link,WhatsApp 收件匣,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-e5cc2b7b1c0eb23d,/admin/leads,manager,link,跟進工作台,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-f01c38a630e1412e,/admin/leads,manager,link,樓盤管理,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-4affa576614ee7c1,/admin/leads,manager,link,盤源同步,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-7a7fcee0bded1a97,/admin/leads,manager,link,成交管理,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-1dae41e13369f876,/admin/leads,manager,link,內容中心,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-122aab744e807cbc,/admin/leads,manager,link,屋苑管理,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-ccac76e51f1dd05d,/admin/leads,manager,link,客戶分群,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-5820f3c3635701cf,/admin/leads,manager,link,WhatsApp 來源連結,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-6166859d359be778,/admin/leads,manager,link,WhatsApp 映射設定,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-bf9c8f28f6b07c3d,/admin/leads,manager,link,推廣活動,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-9d6a9c5050adc394,/admin/leads,manager,link,團隊成員,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-adf9a4955da0d518,/admin/leads,manager,link,經紀檔案,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-9015de64b79d07f6,/admin/leads,manager,link,營運與轉換,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-e47d1d3e9c5d0f60,/admin/leads,manager,link,系統營運,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-8f44373e9c615137,/admin/leads,manager,button,登出,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-1909454170e1d1be,/admin/leads,manager,button,清除篩選,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-7cbc3b2cacf3ecbf,/admin/whatsapp,manager,combobox,本次回覆對應查詢自動對應唯一查詢A074715 · 售 · 28Hse,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-fb928aa7f9c2d86a,/admin/blasts,manager,link,查看公開網站,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-a933aca45401d083,/admin/blasts,manager,link,總覽,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-0d8646bdcc45b83c,/admin/blasts,manager,link,客戶查詢,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-1e19122cf223a092,/admin/blasts,manager,link,WhatsApp 收件匣,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-9b73bf995c8c7ca8,/admin/blasts,manager,link,跟進工作台,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-6d7440f589f83d61,/admin/blasts,manager,link,樓盤管理,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-365568c6130deaea,/admin/blasts,manager,link,盤源同步,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-349f91b6540753e9,/admin/blasts,manager,link,成交管理,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-f1e22da128e5e737,/admin/blasts,manager,link,內容中心,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-218e663d1ce3f542,/admin/blasts,manager,link,屋苑管理,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-82830ba5f6adf6fb,/admin/blasts,manager,link,客戶分群,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-c3012fd51b8a9c14,/admin/blasts,manager,link,WhatsApp 來源連結,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-b008e4a5eae7f525,/admin/blasts,manager,link,WhatsApp 映射設定,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-09a1966bd7bce3eb,/admin/blasts,manager,link,推廣活動,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-c48825e2bc79cbce,/admin/blasts,manager,link,團隊成員,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-e201402346aecd0e,/admin/blasts,manager,link,經紀檔案,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-db926a0e1d7ecab8,/admin/blasts,manager,link,營運與轉換,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-74ad18c55cc4f227,/admin/blasts,manager,link,系統營運,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-0f8f33a05d38bba2,/admin/blasts,manager,button,登出,1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-6f203ecb428adbea,/admin/blasts,manager,link,核對本人登入姓名及帳戶資料,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-69e65b6fa6f3f384,/admin/blasts,manager,button,我已核對,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-7a0981f24391d73c,/admin/blasts,manager,combobox,選擇收件群組預覽,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-7007a80cf0e1a5a0,/admin/blasts,manager,link,建立 AI 客戶分群,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-e100e67b463a26e7,/admin/blasts,manager,button,重新整理,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-727e449d68583acf,/admin/blasts,manager,button,新增收件群組,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-ee9f61e53feb9b1e,/admin/blasts,manager,button,新增 Campaign,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-ab2312f69bc9b400,/admin/blasts,manager,button,預覽收件人,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-85c7adfe834426ab,/admin/blasts,manager,button,發送…,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-9519bb15de3548fd,/admin/blasts,manager,button,取消 Campaign,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-de651d59f27120eb,/admin/blasts,manager,button,編輯,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-7827a3a08e6db3be,/admin/blasts,manager,button,刪除,360;390;1280,rendered_observation_only,11,NOT_INFERRED_FROM_VISIBILITY
+RID-1c2aa15e7562a6b6,/admin/blasts,manager,button,開啟後台選單,360;390,rendered_observation_only,4,NOT_INFERRED_FROM_VISIBILITY
+RID-bb7bf2b82a093c6f,/admin/blasts,manager,button,取消,1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-ff466ad89b0f359e,/admin/blasts,manager,button,確認發送給 0 人,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-73e733321e81fd13,/admin/blasts,manager,checkbox,我已在 Woztell 核對此範本的完整已批准內容、語言、媒體、按鈕及連結目的地，並確認收件人及排除人數。,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-4fc21a03b2737ae3,/admin/blasts,manager,button,確認發送給 2 人,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-9e062976a6326412,/admin/blasts,agent-b,button,開啟後台選單,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-0d6f444819f3860f,/admin/blasts,agent-b,link,核對本人登入姓名及帳戶資料,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-6e4a140b2fa4dc20,/admin/blasts,agent-b,button,我已核對,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-5f4ebd9603920029,/admin/blasts,agent-b,combobox,選擇收件群組預覽,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-0c2dd90871f888b1,/admin/blasts,agent-b,link,建立 AI 客戶分群,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-547729e07a1215e9,/admin/blasts,agent-b,button,重新整理,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-06035a197f40f369,/admin/blasts,agent-b,button,新增收件群組,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-481fcbbc21df5dc5,/admin/blasts,agent-b,button,新增 Campaign,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-3f39cb5cc997df75,/admin/blasts,manager,input,Campaign 名稱,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-edf1cf1c2627868b,/admin/blasts,manager,combobox,Campaign template,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-8894c7f218b17656,/admin/blasts,manager,combobox,"未選擇範本
+synthetic_rental（zh_HK）· 已審批",1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-8c64994a3e92145a,/admin/blasts,manager,combobox,Campaign audience,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-47ddd48060da0b74,/admin/blasts,manager,combobox,"未選擇收件群組
+合成群組 · 深井租客 · 更新 2026年9月29日 下午6:00 · 人數待預覽
+合成群組 · 荃灣買家 · 更新 2026年9月28日 下午6:00 · 人數待預覽",390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-39e8a31d53cd2432,/admin/blasts,manager,combobox,Campaign status,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-552ab55fe5e051a5,/admin/blasts,manager,combobox,"草稿（不可發送）
+待審核
+已排期",390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-2c66f4c7d5efc08c,/admin/blasts,manager,input,計劃發送時間（需人手確認）,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-3c30a64f0f21795c,/admin/blasts,manager,button,取消整個 Campaign,1280,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-6cdc5ec2c119223c,/admin/blasts,manager,button,關閉,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-864d5723a4feda9f,/admin/blasts,manager,button,儲存,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-b1ff77f5d95f41f5,/admin/blasts,manager,button,Close,390;1280,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-666e51d9b677c0a5,/admin/blasts,manager,combobox,未選擇範本,390,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-141366c899eb2bc7,/admin/whatsapp,agent-a,button,查看查詢,360;390;768;1280,rendered_observation_only,8,NOT_INFERRED_FROM_VISIBILITY
+RID-c1b54c90b23e223b,/admin/whatsapp,agent-a,textbox,需要協助原因,360;390;768;1280,rendered_observation_only,7,NOT_INFERRED_FROM_VISIBILITY
+RID-76f932d305589942,/admin/whatsapp,agent-a,button,需要協助,390;768,rendered_observation_only,4,NOT_INFERRED_FROM_VISIBILITY
+RID-8a629866e491ebdd,/admin/whatsapp,agent-a,button,"合成客戶甲
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074714 · 平台編號 4033349
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 少於 1 分鐘
+03/10 上午06:54",360;390;768;1280,rendered_observation_only,21,NOT_INFERRED_FROM_VISIBILITY
+RID-1beec481ba02d43f,/admin/whatsapp,agent-a,button,"合成客戶乙
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074715 · 平台編號 4033350
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 少於 1 分鐘
+03/10 上午06:54",360;390;768;1280,rendered_observation_only,21,NOT_INFERRED_FROM_VISIBILITY
+RID-ed3b224dfa78d104,/admin/whatsapp,agent-a,button,確認接手,360;390;768;1280,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-39134a95fafc1cfe,/admin/whatsapp,agent-a,button,已記錄協助要求,360;390;1280,rendered_observation_only,3,NOT_INFERRED_FROM_VISIBILITY
+RID-e554cebcabda42ae,/admin/whatsapp,agent-a,button,核對傳送狀態,390;768,rendered_observation_only,5,NOT_INFERRED_FROM_VISIBILITY
+RID-2b766176276fe0d0,/admin/whatsapp,agent-a,button,"合成客戶甲
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074714 · 平台編號 4033349
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 1 日
+已過 24 小時回覆窗口
+03/10 上午06:54",390,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-58d6397b9ba12b66,/admin/whatsapp,agent-a,button,"合成客戶乙
+未有電話
+開啟
+合成樓盤查詢
+28Hse · 樓盤 A074715 · 平台編號 4033350
+指定：合成同事甲 · 查詢跟進：合成同事甲
+待回覆客戶
+待回覆 · 已等 1 日
+已過 24 小時回覆窗口
+03/10 上午06:54",390,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-f7b0e2d691b44730,/admin/whatsapp,agent-a,combobox,選擇範本,390,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-118e15281035c3ec,/admin/whatsapp,agent-a,button,傳送範本,390,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-57f86bdcafe58f08,/admin,manager,button,開啟後台選單,390;768,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-005beb18fa7b048d,/admin,manager,link,核對本人登入姓名及帳戶資料,390;768;1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-9fdf7b560f3e112d,/admin,manager,button,我已核對,390;768;1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-a83cc60f404f6aef,/admin,manager,button,重新整理,390;768;1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-55cfc04dc1e9712a,/admin,manager,link,"啟用團隊
+
+0",390;768;1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-f56db68cbfe2d47e,/admin,manager,link,"待處理邀請
+
+0",390;768;1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-307099c98467df30,/admin,manager,link,"開放查詢
+
+—
+
+暫時無法載入此營運資料，請稍後再試。",390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-0cb80c12ea690067,/admin,manager,link,"系統健康
+
+正常",390;768;1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-cf523371f323531c,/admin,manager,link,"目前公開物業
+
+—
+
+暫時無法載入此營運資料，請稍後再試。",390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-43c4d1febf186c58,/admin,manager,link,"公開租售盤
+
+—
+
+暫時無法載入此營運資料，請稍後再試。",390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-8deadb3a3533a05d,/admin,manager,link,"待處理對話
+
+—
+
+暫時無法載入此營運資料，請稍後再試。",390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-4f6657ab86750864,/admin/leads,manager,checkbox,選擇 總覽合成查詢0,390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-98af8482d3817fd2,/admin/leads,manager,button,總覽合成查詢0,390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-037e966437e1a596,/admin/leads,manager,checkbox,選擇 總覽合成查詢1,390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-cb813787f6fb761d,/admin/leads,manager,button,總覽合成查詢1,390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-4e83bc594a1184c6,/admin,manager,link,"開放查詢
+
+2
+
+暫時無法載入此營運資料，請稍後再試。",390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-552c65d7050151c8,/admin,manager,link,"目前公開物業
+
+2
+
+暫時無法載入此營運資料，請稍後再試。",390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-64dd099b60b8a4ee,/admin,manager,link,"公開租售盤
+
+3
+
+暫時無法載入此營運資料，請稍後再試。",390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-1b746b7135d5ef49,/admin,manager,link,"待處理對話
+
+2
+
+暫時無法載入此營運資料，請稍後再試。",390;768;1280;1440,rendered_observation_only,1,NOT_INFERRED_FROM_VISIBILITY
+RID-7fd31702079be2c4,/admin,manager,link,查看公開網站,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-7fb5c85f9022e4a8,/admin,manager,link,總覽,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-0cc1b5bdab6eddc5,/admin,manager,link,客戶查詢,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-439eeb04acb97c3d,/admin,manager,link,WhatsApp 收件匣,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-4def4b4842c321bf,/admin,manager,link,跟進工作台,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-546b601dfb3f1c67,/admin,manager,link,樓盤管理,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-9a7a81d3bcfff7bb,/admin,manager,link,盤源同步,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-b83482ea12299137,/admin,manager,link,成交管理,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-245348d23ca9a0ba,/admin,manager,link,內容中心,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-95da9361d0f95dca,/admin,manager,link,屋苑管理,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-6d5a1cfded730990,/admin,manager,link,客戶分群,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-d40b6ad15c4306c2,/admin,manager,link,WhatsApp 來源連結,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-aa1acb178165b2b6,/admin,manager,link,WhatsApp 映射設定,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-2068083b9c38a6c6,/admin,manager,link,推廣活動,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-ea302c82f130aee0,/admin,manager,link,團隊成員,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-1eb33ec39fe058c5,/admin,manager,link,經紀檔案,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-109418034c80998f,/admin,manager,link,營運與轉換,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-95e7fadccbad6af9,/admin,manager,link,系統營運,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY
+RID-de3f1fe128ef3a90,/admin,manager,button,登出,1280;1440,rendered_observation_only,2,NOT_INFERRED_FROM_VISIBILITY

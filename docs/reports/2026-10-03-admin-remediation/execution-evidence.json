@@ -1,0 +1,132 @@
+{
+  "baselineSha": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+  "verifiedCodeSha": "c8710def5cc74bef3833e7f3f0b1c695590a701b",
+  "ownedTests": {
+    "knowledge": {
+      "runner": "package.json owned DB script",
+      "codeSha": "c8710def5cc74bef3833e7f3f0b1c695590a701b",
+      "tests": 21,
+      "pass": 21,
+      "fail": 0,
+      "skipped": 0,
+      "log": ".audit/remediation-20261003/exact-knowledge.log",
+      "layer": "owned full85 migrations; synthetic data/provider; no production equivalence"
+    },
+    "crm_content": {
+      "runner": "package.json owned DB script",
+      "codeSha": "c8710def5cc74bef3833e7f3f0b1c695590a701b",
+      "tests": 34,
+      "pass": 34,
+      "fail": 0,
+      "skipped": 0,
+      "log": ".audit/remediation-20261003/exact-crm.log",
+      "layer": "owned full85 migrations; synthetic data/provider; no production equivalence"
+    },
+    "golden_restore": {
+      "runner": "package.json owned DB script",
+      "codeSha": "c8710def5cc74bef3833e7f3f0b1c695590a701b",
+      "tests": 23,
+      "pass": 23,
+      "fail": 0,
+      "skipped": 0,
+      "log": ".audit/remediation-20261003/exact-golden.log",
+      "layer": "owned full85 migrations; synthetic data/provider; no production equivalence"
+    },
+    "assist": {
+      "runner": "package.json owned DB script",
+      "codeSha": "c8710def5cc74bef3833e7f3f0b1c695590a701b",
+      "tests": 8,
+      "pass": 8,
+      "fail": 0,
+      "skipped": 0,
+      "log": ".audit/remediation-20261003/exact-assist.log",
+      "layer": "owned full85 migrations; synthetic data/provider; no production equivalence"
+    },
+    "overview": {
+      "runner": "package.json owned DB script",
+      "codeSha": "c8710def5cc74bef3833e7f3f0b1c695590a701b",
+      "tests": 4,
+      "pass": 4,
+      "fail": 0,
+      "skipped": 0,
+      "log": ".audit/remediation-20261003/exact-overview.log",
+      "layer": "owned full85 migrations; synthetic data/provider; no production equivalence"
+    },
+    "setup": {
+      "runner": "package.json owned DB script",
+      "codeSha": "4c5863ce00ed883cc2ff4a8109e211d2043aff1b",
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "skipped": 0,
+      "log": ".audit/remediation-20261003/exact-test-whatsapp-setup-db.log",
+      "layer": "owned full85 migrations; synthetic data/provider; no production equivalence"
+    },
+    "propertyhk": {
+      "runner": "package.json owned DB script",
+      "codeSha": "4c5863ce00ed883cc2ff4a8109e211d2043aff1b",
+      "tests": 4,
+      "pass": 4,
+      "fail": 0,
+      "skipped": 0,
+      "log": ".audit/remediation-20261003/exact-test-propertyhk-reconciliation-owned-db.log",
+      "layer": "owned full85 migrations; synthetic data/provider; no production equivalence"
+    },
+    "withdrawal": {
+      "runner": "package.json owned DB script",
+      "codeSha": "4c5863ce00ed883cc2ff4a8109e211d2043aff1b",
+      "tests": 2,
+      "pass": 2,
+      "fail": 0,
+      "skipped": 0,
+      "log": ".audit/remediation-20261003/exact-test-property-withdrawal-owned-db.log",
+      "layer": "owned full85 migrations; synthetic data/provider; no production equivalence"
+    },
+    "maintenance": {
+      "runner": "package.json owned DB script",
+      "codeSha": "4c5863ce00ed883cc2ff4a8109e211d2043aff1b",
+      "tests": 5,
+      "pass": 5,
+      "fail": 0,
+      "skipped": 0,
+      "log": ".audit/remediation-20261003/exact-test-property-maintenance-owned-db.log",
+      "layer": "owned full85 migrations; synthetic data/provider; no production equivalence"
+    }
+  },
+  "ownedTotal": 102,
+  "browser": {
+    "passed": 107,
+    "failed": 0,
+    "skipped": 0,
+    "codeSha": "c8710def5cc74bef3833e7f3f0b1c695590a701b",
+    "layer": "actual routes/CSS, synthetic Auth/API",
+    "viewports": [
+      360,
+      390,
+      768,
+      1280,
+      1440
+    ]
+  },
+  "static": {
+    "typecheckExit": 0,
+    "lintExit": 0,
+    "lintBaselineWarnings": 3,
+    "localBuildExit": 0
+  },
+  "providers": {
+    "realSends": 0,
+    "paidModelCalls": 0,
+    "productionChanges": 0
+  },
+  "review": {
+    "critical": 0,
+    "important": 4,
+    "minor": 1,
+    "fixedImportant": 4,
+    "fixedMinor": 1,
+    "reviewedSourceSha": "4c5863ce00ed883cc2ff4a8109e211d2043aff1b",
+    "resolution": "independent-review-resolution.md",
+    "newOverviewSliceIndependentRereview": false
+  }
+}

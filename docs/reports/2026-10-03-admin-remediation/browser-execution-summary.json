@@ -1,0 +1,783 @@
+{
+  "environment": "real-route-synthetic-auth-api",
+  "providerSend": false,
+  "database": false,
+  "collected": 107,
+  "passed": 107,
+  "failed": 0,
+  "skipped": 0,
+  "codeShaAtBrowserRun": "c8710def5cc74bef3833e7f3f0b1c695590a701b",
+  "sourceWorktreeWasModified": true,
+  "actorCounts": {
+    "agent-a": 69,
+    "agent-b": 2,
+    "viewer": 1,
+    "guest": 1,
+    "manager": 34
+  },
+  "viewportCounts": {
+    "390": 48,
+    "1280": 39,
+    "360": 8,
+    "768": 8,
+    "1440": 4
+  },
+  "renderedObservationCount": 357,
+  "actionCount": 1400,
+  "businessActions": 68,
+  "sourceCandidates": 1332,
+  "exactLabelCandidates": 2,
+  "actionPassCountFromObservation": 0,
+  "G11": "NOT_READY",
+  "results": [
+    {
+      "name": "site Inter and Chinese variable fonts load locally",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "verified staff names replace ordinary UUIDs",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "360px long timeline and composer",
+      "width": 360,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "390px long timeline and composer",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "768px long timeline and composer",
+      "width": 768,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "1280px long timeline and composer",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "1440px long timeline and composer",
+      "width": 1440,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "second conversation keeps distinct drafts",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "pane resize preserves reading older messages",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "late detail response cannot replace next conversation",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "missing staff names stay unverified",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "unknown assignment is not labelled confirmed",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "agent inbox navigation and external ID search retain admin boundary",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "mobile navigation closes on inbox entry",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "mobile detail escape retains filter and draft",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "short mobile viewport keeps send reachable",
+      "width": 390,
+      "height": 500,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "expired window shows empty template state and disables free reply",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "template error retry recovers without changing draft",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "other actor sees neither private thread nor composer",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-b",
+      "status": "PASS"
+    },
+    {
+      "name": "viewer shell denies staff UI",
+      "width": 1280,
+      "height": 844,
+      "actor": "viewer",
+      "status": "PASS"
+    },
+    {
+      "name": "invalid JSON query does not crash: true",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "invalid JSON query does not crash: {\"bad\":\"shape\"}",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "invalid JSON query does not crash: 9007199254740993",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "synthetic composing Enter never invokes send",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "guest sees sign-in gate instead of staff inbox",
+      "width": 1280,
+      "height": 844,
+      "actor": "guest",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward unknown result survives refresh and reconciles same request",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward pending submit locks fields and Escape close",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward incomplete follow-up validates before sending",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward 360px save and refresh retain provenance without contact or reply",
+      "width": 360,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward 1280px save and refresh retain provenance without contact or reply",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward draft Escape refresh preserves fields and explicit cancel clears",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward unresolved close reopens frozen same payload",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward next assigned actor reads follow-up and cannot see other actor draft",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward unsafe URL validation retains editable form without API call",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward unavailable storage refuses submit before API",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward late save after route leave does not reopen old lead",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "manual forward corrupt unresolved journal blocks a fresh request",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "contact 360px save and refresh preserves lead drafts and identity",
+      "width": 360,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "contact 1280px save and refresh preserves lead drafts and identity",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "contact cancel and invalid email perform no write",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "contact pending save disables edits and duplicate submit",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "contact stale snapshot requires readback before a new edit",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "contact lost response and failed readback never resends",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "contact next model actor reads change and unassigned actor sees no edit",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "contact late completion after leaving route cannot reopen CRM",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "related authorized source opens existing WhatsApp route",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "related source read failure retries without granting access",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution pending save freezes fields and Escape close",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution lost response requires readback and never repeats revision",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution scoped original text is available for review",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution 360px clear readback survives evidence outage refresh and next actor",
+      "width": 360,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution cancel unchanged and invalid reason make no API call",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution agent reads only scoped evidence without mutation controls",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution initial read failure and permission rejection require fresh scope read",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution stale reload failure cannot reuse old version or erase draft",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution retired candidate remains explicit and blocks save until reselected",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution completion after route leave cannot read back into another page",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "resolution uncertain close and next enquiry keep identities and drafts separate",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign queue success is not represented as delivery",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign pending queue freezes review and same-tick duplicate",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign lost queue response requires readback and forbids resend",
+      "width": 360,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign pristine close cancel and same-name audiences remain explicit",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign stale preview blocks direct confirmation",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign preview failure and unapproved template cannot queue",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign denied actor cannot obtain campaigns or queue",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-b",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign unknown close retains readback gate",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign rejected queue needs new read preview and confirmation",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign saved draft cannot queue again after queued readback",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign missing templates displays unavailable and makes no write",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "campaign desktop recipient statistics are visible with distinct exclusion total",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "staff work same-tick duplicate acknowledgement is one request",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "staff work pending help freezes reason and duplicate",
+      "width": 360,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "staff work failed readback keeps stale card locked",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "staff work ordinary view uses names with UUID diagnostics closed",
+      "width": 768,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "staff work lost help response reads existing result without acknowledgement",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "staff work stale assignment removes old actions after scoped readback",
+      "width": 768,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "staff work invalid reason and 500 character boundary",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "staff work open enquiry carries selected query and conversation",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "staff work next actor sees only their own work",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "staff work completion after route leave cannot reload another actor view",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound same-tick reply duplicate is one queue request",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound unknown reply preserves journal and draft without fake queue success",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound lost reply response requires readonly recovery across reload",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound unknown template keeps original request reserved",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound resolved acceptance is still not delivery",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound corrupt journal stays blocked after reload and read",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound known failure allows only a new deliberate send after readback",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound late reply cannot erase next conversation draft",
+      "width": 1280,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound template cancel pending choice and duplicate stay explicit",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound empty reply and 1000 character boundary",
+      "width": 360,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound cold tab reads unresolved reservation before any new send",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound another tab reservation rejects new request without journalling a nonexistent send",
+      "width": 768,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound reservation read failure locks composer and retry is readonly",
+      "width": 360,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound unknown provider result requires reconciliation without retry advice",
+      "width": 390,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "outbound cancelled reservation explains no send with visible alert",
+      "width": 768,
+      "height": 844,
+      "actor": "agent-a",
+      "status": "PASS"
+    },
+    {
+      "name": "overview permission loss clears previous restricted counts",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview card opens the same two open leads with scope and as-of",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview failed refresh retains last success with visible error, not false zero",
+      "width": 390,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview permission loss clears previous restricted counts",
+      "width": 768,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview card opens the same two open leads with scope and as-of",
+      "width": 768,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview failed refresh retains last success with visible error, not false zero",
+      "width": 768,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview permission loss clears previous restricted counts",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview card opens the same two open leads with scope and as-of",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview failed refresh retains last success with visible error, not false zero",
+      "width": 1280,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview permission loss clears previous restricted counts",
+      "width": 1440,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview card opens the same two open leads with scope and as-of",
+      "width": 1440,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    },
+    {
+      "name": "overview failed refresh retains last success with visible error, not false zero",
+      "width": 1440,
+      "height": 844,
+      "actor": "manager",
+      "status": "PASS"
+    }
+  ]
+}
