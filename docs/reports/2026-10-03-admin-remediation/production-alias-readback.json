@@ -1,0 +1,22 @@
+{
+  "checkedAt": "2026-10-02 21:50:43 UTC",
+  "id": "dpl_E97EZatvQ3Uuz2i9i7Cfx8HYxP6e",
+  "url": "earnestproperty-iwm5ufndo-ynwaforevers-projects.vercel.app",
+  "alias": [
+    "www.earnestproperty.com",
+    "earnestproperty.vercel.app",
+    "earnestproperty.com",
+    "earnestproperty-ynwaforevers-projects.vercel.app",
+    "earnestproperty-git-main-ynwaforevers-projects.vercel.app"
+  ],
+  "appSha": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+  "appRef": "main",
+  "framework": "tanstack-start",
+  "projectId": "prj_hNaDYmYGeJhBY00vxsC2A0E5Fon5",
+  "state": "READY",
+  "target": "production",
+  "workerRevision": "UNKNOWN",
+  "schemaRevision": "UNKNOWN",
+  "flagBehavior": "UNKNOWN",
+  "staffSession": "NOT_VERIFIED"
+}
