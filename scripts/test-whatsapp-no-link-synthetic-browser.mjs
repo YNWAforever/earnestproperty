@@ -44,6 +44,7 @@ await new Promise((done) => server.listen(0, "127.0.0.1", done));
 const origin = `http://127.0.0.1:${server.address().port}`;
 let browser;
 const results = [];
+const renderedControls = new Map();
 let collected = 0;
 const ids = {
   a: "10000000-0000-4000-8000-000000000001",
@@ -108,9 +109,58 @@ async function check(name, width, run, actor = "agent-a", height = 844) {
       0,
       "No mutation adapter calls",
     );
+    // Observed controls are inventory candidates. A passed scenario does not
+    // assert that every visible control was operated or is production-ready.
+    const controls = await page
+      .locator("button,a,input,textarea,select,[role='tab'],[role='combobox']")
+      .evaluateAll((elements) =>
+        elements
+          .filter(
+            (element) =>
+              element.getClientRects().length && getComputedStyle(element).visibility !== "hidden",
+          )
+          .map((element) => ({
+            role:
+              element.getAttribute("role") ||
+              ({
+                BUTTON: "button",
+                A: "link",
+                INPUT: "input",
+                TEXTAREA: "textbox",
+                SELECT: "combobox",
+              }[element.tagName] ??
+                element.tagName.toLowerCase()),
+            name: (
+              element.getAttribute("aria-label") ||
+              element.labels?.[0]?.textContent ||
+              element.innerText ||
+              element.getAttribute("placeholder") ||
+              element.getAttribute("title") ||
+              ""
+            )
+              .trim()
+              .slice(0, 160),
+            disabled: Boolean(element.disabled || element.getAttribute("aria-disabled") === "true"),
+          })),
+      );
+    const path = new URL(page.url()).pathname;
+    for (const control of controls) {
+      const key = JSON.stringify([path, actor, control.role, control.name]);
+      const record = renderedControls.get(key) ?? {
+        path,
+        actor,
+        ...control,
+        widths: [],
+        observedInScenarios: [],
+        evidenceLevel: "rendered_observation_only",
+      };
+      if (!record.widths.includes(width)) record.widths.push(width);
+      if (!record.observedInScenarios.includes(name)) record.observedInScenarios.push(name);
+      renderedControls.set(key, record);
+    }
     results.push({ name, width, height, actor, status: "PASS" });
-    if (name === "390px long timeline and composer")
-      await page.screenshot({ path: ".audit/no-link-browser-390.png" });
+    if ([390, 768, 1280, 1440].includes(width) && name === `${width}px long timeline and composer`)
+      await page.screenshot({ path: `.audit/no-link-browser-${width}.png`, fullPage: true });
     console.log(`PASS ${name}`);
   } catch (error) {
     if (await page.getByRole("button", { name: "Show Error" }).count()) {
@@ -155,11 +205,23 @@ try {
       page.getByText(ids.staff, { exact: false }).filter({ visible: true }).first(),
     ).toBeVisible();
   });
-  for (const width of [360, 390, 768, 1280]) {
+  for (const width of [360, 390, 768, 1280, 1440]) {
     await check(`${width}px long timeline and composer`, width, async (page) => {
       await open(page, url(ids.a));
       const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
       await expect(input).toBeVisible();
+      if (width < 1024) {
+        const close = page
+          .getByRole("button", { name: "關閉", exact: true })
+          .filter({ visible: true })
+          .first();
+        await expect(close).toBeInViewport();
+        const closeBox = await close.boundingBox();
+        assert.ok(
+          closeBox && closeBox.width >= 44 && closeBox.height >= 44,
+          `Mobile close target: ${JSON.stringify(closeBox)}`,
+        );
+      }
       const last = await page.evaluate(() => window.noLinkFixture.lastMessage);
       await expect(page.getByText(last, { exact: true }).filter({ visible: true })).toBeVisible();
       if (width < 1024)
@@ -2342,6 +2404,7 @@ try {
         syntheticCampaignModel: true,
         syntheticStaffWorkModel: true,
         syntheticOutboundModel: true,
+        renderedControls: [...renderedControls.values()],
         results,
       },
       null,
