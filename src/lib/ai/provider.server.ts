@@ -50,6 +50,18 @@ export type AiJsonResult<T> = {
   ok: boolean;
   value: T | null;
   error: string | null;
+  metadata?: AiProviderMetadata;
+};
+
+export type AiProviderMetadata = {
+  provider: string | null;
+  resolvedModel: string | null;
+  usage: {
+    inputTokens: number | null;
+    outputTokens: number | null;
+    costAmount: string | null;
+    costCurrency: string | null;
+  } | null;
 };
 
 export async function generateAiText(input: {
@@ -81,11 +93,27 @@ export async function generateAiText(input: {
     if (!response.ok) throw new Error(`AI Gateway text failed: ${response.status}`);
     const result = (await response.json()) as {
       choices?: Array<{ message?: { content?: unknown } }>;
+      model?: unknown;
+      usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
     };
     const text = result.choices?.[0]?.message?.content;
     if (typeof text !== "string") throw new Error("AI Gateway text response missing content");
 
-    return { ok: true as const, text, error: null };
+    const tokenCount = (value: unknown) =>
+      typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+    const metadata: AiProviderMetadata = {
+      provider: response.url ? new URL(response.url).hostname : null,
+      resolvedModel: typeof result.model === "string" ? result.model : null,
+      usage: result.usage
+        ? {
+            inputTokens: tokenCount(result.usage.prompt_tokens),
+            outputTokens: tokenCount(result.usage.completion_tokens),
+            costAmount: null,
+            costCurrency: null,
+          }
+        : null,
+    };
+    return { ok: true as const, text, error: null, metadata };
   } catch {
     return { ok: false as const, text: "", error: "AI_GENERATION_FAILED" };
   }
@@ -106,13 +134,22 @@ export async function generateAiJson<T>(input: {
   if (!result.ok) return { ok: false, value: input.fallback, error: result.error };
 
   try {
-    return { ok: true, value: JSON.parse(stripJsonFence(result.text)) as T, error: null };
+    return {
+      ok: true,
+      value: JSON.parse(stripJsonFence(result.text)) as T,
+      error: null,
+      metadata: result.metadata,
+    };
   } catch (error) {
     console.error("[ai] failed to parse JSON response", {
       error: error instanceof Error ? error.message : error,
-      sample: result.text.slice(0, 200),
     });
-    return { ok: false, value: input.fallback, error: "AI_JSON_PARSE_FAILED" };
+    return {
+      ok: false,
+      value: input.fallback,
+      error: "AI_JSON_PARSE_FAILED",
+      metadata: result.metadata,
+    };
   }
 }
 

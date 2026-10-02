@@ -60,6 +60,7 @@ import type {
 } from "./admin-data.types";
 import { getAiServerConfig } from "../ai/config.server.ts";
 import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-enrichment.server.ts";
+import { cancelCrmAnalysisRun } from "../ai/crm-analysis-runs.server";
 import { rebuildAiKnowledgeIndex } from "../ai/knowledge.server.ts";
 import type { CrmSegmentFilters } from "../ai/ai-types";
 import { isYouTubeVideoUrl } from "../youtube-video-url.js";
@@ -2501,33 +2502,53 @@ export async function fetchAdminLeadAiProfile(
 }
 
 export async function analyzeAdminLeadAiProfile(
-  input: { leadId: string },
+  input: { leadId: string; requestId?: string },
   actor: StaffAccess,
 ): Promise<AdminLeadAiProfile> {
   await assertLeadInScope(input.leadId, actor);
-  const result = await analyzeCrmLead(input.leadId);
-  await writeAudit(actor.staffId, "ai.lead.analyze", "lead", input.leadId);
+  const result = await analyzeCrmLead(input.leadId, actor, { requestId: input.requestId });
+  await writeAudit(
+    actor.staffId,
+    result.analysis?.status === "completed"
+      ? "ai.lead.analyze"
+      : "ai.lead." + (result.analysis?.status ?? "failed"),
+    "lead",
+    input.leadId,
+  );
   return result;
 }
 
 export async function approveAdminAiTag(input: { tagId: string }, actor: StaffAccess) {
   await assertAiTagInScope(input.tagId, actor);
-  const result = await approveCrmAiTag({
-    tagId: input.tagId,
-    staffId: actor.staffId,
-    approve: true,
-  });
+  const result = await approveCrmAiTag(
+    {
+      tagId: input.tagId,
+      staffId: actor.staffId,
+      approve: true,
+    },
+    actor,
+  );
   await writeAudit(actor.staffId, "ai.tag.approve", "ai_tag", input.tagId);
   return result;
 }
 
+export async function cancelAdminLeadAiAnalysis(
+  input: { leadId: string; runId: string },
+  actor: StaffAccess,
+) {
+  return cancelCrmAnalysisRun(input.leadId, input.runId, actor);
+}
+
 export async function rejectAdminAiTag(input: { tagId: string }, actor: StaffAccess) {
   await assertAiTagInScope(input.tagId, actor);
-  const result = await approveCrmAiTag({
-    tagId: input.tagId,
-    staffId: actor.staffId,
-    approve: false,
-  });
+  const result = await approveCrmAiTag(
+    {
+      tagId: input.tagId,
+      staffId: actor.staffId,
+      approve: false,
+    },
+    actor,
+  );
   await writeAudit(actor.staffId, "ai.tag.reject", "ai_tag", input.tagId);
   return result;
 }

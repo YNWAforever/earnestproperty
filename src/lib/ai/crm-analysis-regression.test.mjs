@@ -10,12 +10,32 @@ let fixture;
 mock.module(dbUrl, {
   exports: {
     ...actual,
-    queryRows: async (sql) =>
-      sql.includes("FROM crm_leads l")
-        ? [fixture]
-        : sql.includes("FROM crm_ai_profiles") && saved
-          ? [saved]
-          : [],
+    queryRows: async (sql, params = []) =>
+      sql.includes("ep_begin_crm_analysis_run")
+        ? [
+            {
+              run: {
+                id: params[0],
+                source_fingerprint: "synthetic-revision",
+                status: "running",
+                started: true,
+              },
+            },
+          ]
+        : sql.includes("FROM crm_ai_analysis_runs") && saved
+          ? [
+              {
+                id: "55555555-5555-4555-8555-555555555555",
+                status: "completed",
+                result_kind: saved.result_kind,
+                output: { profile: saved, tags: [] },
+              },
+            ]
+          : sql.includes("FROM crm_leads l")
+            ? [fixture]
+            : sql.includes("FROM crm_ai_profiles") && saved
+              ? [saved]
+              : [],
     getSql: () => ({
       transaction: async (build) => {
         const statements = build({ query: (sql, params = []) => ({ sql, params }) });
@@ -39,6 +59,14 @@ mock.module(dbUrl, {
   },
 });
 const { analyzeCrmLead } = await import("./crm-enrichment.server.ts");
+const actor = {
+  staffId: "44444444-4444-4444-8444-444444444444",
+  authUserId: "synthetic-agent",
+  email: null,
+  name: null,
+  roles: ["agent"],
+  bootstrap: false,
+};
 const envKeys = ["AI_GATEWAY_API_KEY", "AI_GATEWAY_MODEL"];
 const previous = envKeys.map((k) => process.env[k]);
 test.after(() =>
@@ -81,7 +109,7 @@ async function analyzeModel(value) {
       }),
   );
   try {
-    await analyzeCrmLead(fixture.id);
+    await analyzeCrmLead(fixture.id, actor);
     assert.equal(f.mock.callCount(), 1);
   } finally {
     f.mock.restore();
@@ -93,7 +121,7 @@ test("AI01 disabled model cannot suggest contact for a test record without conta
     throw Error("External network forbidden");
   });
   try {
-    await analyzeCrmLead(fixture.id);
+    await analyzeCrmLead(fixture.id, actor);
     assert.equal(saved.generated_by, "fallback");
     assert.doesNotMatch(saved.next_best_action, /WhatsApp|電話|即時聯絡|推廣/);
     assert.equal(saved.action_type, "mark_test");
