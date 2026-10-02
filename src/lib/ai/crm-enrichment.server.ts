@@ -1,4 +1,12 @@
 import "@tanstack/react-start/server-only";
+import type { StaffAccess } from "../neon/auth.server";
+import {
+  beginCrmAnalysisRun,
+  crmAnalysisGuard,
+  crmAnalysisError,
+  mapCrmAnalysisRun,
+  type CrmAnalysisRunRow,
+} from "./crm-analysis-runs.server";
 
 import {
   dateOrNull,
@@ -65,7 +73,31 @@ type TagValues = {
   status: "suggested" | "auto_applied";
 };
 
-export async function analyzeCrmLead(leadId: string) {
+export async function analyzeCrmLead(
+  leadId: string,
+  actor: StaffAccess,
+  options: { requestId?: string } = {},
+) {
+  let run: CrmAnalysisRunRow;
+  try {
+    run = await beginCrmAnalysisRun(leadId, actor, options.requestId);
+  } catch (error) {
+    if (crmAnalysisError(error) === "CRM_AI_DENIED")
+      return { profile: null, tags: [], analysis: { status: "denied" as const } };
+    throw error;
+  }
+  if (!run.started) {
+    const status = run.current_source_fingerprint !== run.source_fingerprint ? "stale" : undefined;
+    const output = run.output as {
+      profile?: Record<string, unknown>;
+      tags?: Record<string, unknown>[];
+    } | null;
+    return {
+      profile: output?.profile ? mapProfile(output.profile) : null,
+      tags: (output?.tags ?? []).map(mapTag),
+      analysis: mapCrmAnalysisRun(run, status),
+    };
+  }
   const lead = await fetchLeadInput(leadId);
   if (!lead) throw new Error("Lead not found");
 
@@ -153,36 +185,72 @@ export async function analyzeCrmLead(leadId: string) {
     });
   }
 
-  await writeLeadAnalysis(
-    lead,
-    {
-      summary: value.summary,
-      urgency: value.urgency,
-      timeline: value.timeline,
-      next_best_action: crmActionLabel(value.action.type),
-      lead_score: lead.action_context.isTest ? 0 : leadScore,
-      generated_by: generatedBy,
-      result_kind: eligible ? "model_validated" : "fallback",
-      action_type: value.action.type,
-      validation_code: validationCode,
-    },
-    mergeTagInputs(tags),
+  try {
+    await writeLeadAnalysis(
+      lead,
+      {
+        summary: value.summary,
+        urgency: value.urgency,
+        timeline: value.timeline,
+        next_best_action: crmActionLabel(value.action.type),
+        lead_score: lead.action_context.isTest ? 0 : leadScore,
+        generated_by: generatedBy,
+        result_kind: eligible ? "model_validated" : "fallback",
+        action_type: value.action.type,
+        validation_code: validationCode,
+      },
+      mergeTagInputs(tags),
+      run,
+      actor,
+      ai.metadata,
+    );
+  } catch (error) {
+    const code = crmAnalysisError(error);
+    if (!code) throw error;
+    const status =
+      code === "CRM_AI_DENIED" ? "denied" : code === "CRM_AI_CANCELLED" ? "cancelled" : "stale";
+    const [failed] = await queryRows(
+      "UPDATE crm_ai_analysis_runs SET status=$1,completed_at=now(),validation_code=$2,provider=$3,resolved_model=$4,usage=$5::jsonb WHERE id=$6 AND actor_staff_id=$7 AND status='running' RETURNING *",
+      [
+        status,
+        code,
+        ai.metadata?.provider ?? null,
+        ai.metadata?.resolvedModel ?? null,
+        JSON.stringify(ai.metadata?.usage ?? null),
+        run.id,
+        actor.staffId,
+      ],
+    );
+    return { profile: null, tags: [], analysis: mapCrmAnalysisRun(failed ?? run, status) };
+  }
+  const [completed] = await queryRows(
+    "SELECT * FROM crm_ai_analysis_runs WHERE id=$1 AND actor_staff_id=$2",
+    [run.id, actor.staffId],
   );
-
-  return fetchCrmAiProfile({ leadId });
+  if (!completed) throw new Error("CRM_AI_RESULT_UNAVAILABLE");
+  const output = completed.output as {
+    profile: Record<string, unknown>;
+    tags: Record<string, unknown>[];
+  };
+  return {
+    profile: mapProfile(output.profile),
+    tags: output.tags.map(mapTag),
+    analysis: mapCrmAnalysisRun(completed),
+  };
 }
 
 export async function fetchCrmAiProfile(input: { leadId?: string; contactId?: string }) {
   if (!input.leadId && !input.contactId) return { profile: null, tags: [] };
 
   const profiles = await queryRows(
-    `SELECT *
-     FROM crm_ai_profiles
-     WHERE ($1::uuid IS NULL OR lead_id = $1::uuid)
-       AND ($2::uuid IS NULL OR contact_id = $2::uuid)
-     ORDER BY updated_at DESC, created_at DESC
+    `SELECT p.*,to_jsonb(r) AS analysis_run,
+       CASE WHEN r.id IS NOT NULL THEN ep_crm_analysis_source_revision(p.lead_id,$3) END AS current_source_fingerprint
+     FROM crm_ai_profiles p LEFT JOIN crm_ai_analysis_runs r ON r.id=p.analysis_run_id
+     WHERE ($1::uuid IS NULL OR p.lead_id = $1::uuid)
+       AND ($2::uuid IS NULL OR p.contact_id = $2::uuid)
+     ORDER BY p.updated_at DESC, p.created_at DESC
      LIMIT 1`,
-    [input.leadId ?? null, input.contactId ?? null],
+    [input.leadId ?? null, input.contactId ?? null, process.env.WOZTELL_CHANNEL_ID || null],
   );
   const tags = await queryRows(
     `WITH ranked AS (
@@ -202,24 +270,74 @@ export async function fetchCrmAiProfile(input: { leadId?: string; contactId?: st
      ORDER BY status ASC, confidence DESC, created_at DESC`,
     [input.leadId ?? null, input.contactId ?? null],
   );
+  const [latestRun] = input.leadId
+    ? await queryRows(
+        "SELECT r.*,ep_crm_analysis_source_revision(r.lead_id,$2) AS current_source_fingerprint FROM crm_ai_analysis_runs r WHERE lead_id=$1 ORDER BY started_at DESC,id DESC LIMIT 1",
+        [input.leadId, process.env.WOZTELL_CHANNEL_ID || null],
+      )
+    : [];
 
   return {
     profile: profiles[0] ? mapProfile(profiles[0]) : null,
     tags: tags.map(mapTag),
+    analysis: latestRun
+      ? mapCrmAnalysisRun(
+          latestRun,
+          latestRun.status === "completed" &&
+            latestRun.current_source_fingerprint !== latestRun.source_fingerprint
+            ? "stale"
+            : undefined,
+        )
+      : profiles[0]?.analysis_run
+        ? mapCrmAnalysisRun(
+            profiles[0].analysis_run as Record<string, unknown>,
+            profiles[0].current_source_fingerprint !==
+              (profiles[0].analysis_run as Record<string, unknown>).source_fingerprint
+              ? "stale"
+              : undefined,
+          )
+        : undefined,
   };
 }
 
-export async function approveCrmAiTag(input: { tagId: string; staffId: string; approve: boolean }) {
+export async function approveCrmAiTag(
+  input: { tagId: string; staffId: string; approve: boolean },
+  actor: StaffAccess,
+) {
   const status = input.approve ? "approved" : "rejected";
-  const rows = await queryRows(
-    `UPDATE crm_ai_tags
+  let rows: Record<string, unknown>[];
+  try {
+    const [, updated] = await getSql().transaction((tx) => [
+      tx.query("SELECT ep_assert_crm_tag($1::uuid,$2::uuid,$3,$4,$5)", [
+        input.tagId,
+        actor.staffId,
+        actor.authUserId,
+        process.env.WOZTELL_CHANNEL_ID || null,
+        input.approve,
+      ]),
+      tx.query(
+        `UPDATE crm_ai_tags
      SET status = $1::crm_ai_tag_status,
          approved_by = $2,
          approved_at = CASE WHEN $1 = 'approved' THEN now() ELSE NULL END
      WHERE id = $3
      RETURNING *`,
-    [status, input.staffId, input.tagId],
-  );
+        [status, actor.staffId, input.tagId],
+      ),
+    ]);
+    rows = updated;
+  } catch (error) {
+    const code = crmAnalysisError(error);
+    if (!code) throw error;
+    throw Object.assign(
+      new Error(
+        code === "CRM_AI_STALE"
+          ? "資料已更新，請重新分析後再確認標籤。"
+          : "目前沒有權限處理此標籤。",
+      ),
+      { code },
+    );
+  }
   return rows[0] ? mapTag(rows[0]) : null;
 }
 
@@ -279,10 +397,20 @@ async function fetchLeadInput(leadId: string): Promise<LeadInput | null> {
   };
 }
 
-async function writeLeadAnalysis(lead: LeadInput, values: ProfileValues, tags: TagValues[]) {
+async function writeLeadAnalysis(
+  lead: LeadInput,
+  values: ProfileValues,
+  tags: TagValues[],
+  run: CrmAnalysisRunRow,
+  actor: StaffAccess,
+  metadata?: { provider: string | null; resolvedModel: string | null; usage: unknown },
+) {
   const sql = getSql();
   await sql.transaction((tx) => [
-    tx.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`crm-ai-lead:${lead.id}`]),
+    tx.query(
+      crmAnalysisGuard(run, lead.id, actor).statement,
+      crmAnalysisGuard(run, lead.id, actor).params,
+    ),
     tx.query(
       `DELETE FROM crm_ai_profiles profile
        USING (
@@ -326,8 +454,22 @@ async function writeLeadAnalysis(lead: LeadInput, values: ProfileValues, tags: T
        WHERE lead_id = $1::uuid`,
       [lead.id],
     ),
-    tx.query(profileUpsertSql(), profileParams(lead, values)),
-    tx.query(tagUpsertSql(), [lead.id, JSON.stringify(tags.map(tagRecord))]),
+    tx.query(profileUpsertSql(), [...profileParams(lead, values), run.id]),
+    tx.query(tagUpsertSql(), [lead.id, JSON.stringify(tags.map(tagRecord)), run.id]),
+    tx.query(
+      `UPDATE crm_ai_analysis_runs SET status='completed',result_kind=$1,validation_code=$2,provider=$3,resolved_model=$4,usage=$5::jsonb,completed_at=now(),
+      output=jsonb_build_object('profile',(SELECT to_jsonb(p) FROM crm_ai_profiles p WHERE p.analysis_run_id=$6),
+        'tags',COALESCE((SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id) FROM crm_ai_tags t WHERE t.lead_id=$7),'[]'::jsonb)) WHERE id=$6 AND status='running'`,
+      [
+        values.result_kind,
+        values.validation_code,
+        metadata?.provider ?? null,
+        metadata?.resolvedModel ?? null,
+        JSON.stringify(metadata?.usage ?? null),
+        run.id,
+        lead.id,
+      ],
+    ),
   ]);
 }
 
@@ -375,6 +517,7 @@ function profileUpsertSql() {
         action_type = $14,
         validation_code = $15,
         analysis_version = 'crm-analysis-v2',
+        analysis_run_id = $16::uuid,
         last_analyzed_at = now(),
         updated_at = now()
     WHERE lead_id = $1::uuid
@@ -384,7 +527,7 @@ function profileUpsertSql() {
     INSERT INTO crm_ai_profiles (
       contact_id, lead_id, intent, intent_confidence, budget_band, preferred_estates, urgency,
       timeline, language, lead_score, next_best_action, summary, generated_by, last_analyzed_at,
-      updated_at, result_kind, action_type, validation_code, analysis_version
+      updated_at, result_kind, action_type, validation_code, analysis_version, analysis_run_id
     )
     SELECT
       current_lead.contact_id,
@@ -401,7 +544,7 @@ function profileUpsertSql() {
       $11,
       $12,
       now(),
-      now(), $13, $14, $15, 'crm-analysis-v2'
+      now(), $13, $14, $15, 'crm-analysis-v2', $16::uuid
     FROM current_lead
     WHERE NOT EXISTS (SELECT 1 FROM updated)
     RETURNING *
@@ -448,15 +591,17 @@ function tagUpsertSql() {
           ELSE input.status::crm_ai_tag_status
         END,
         confidence = GREATEST(existing.confidence, input.confidence),
-        reason = input.reason
+        reason = input.reason,
+        analysis_run_id = $3::uuid
     FROM input
     WHERE existing.lead_id = input.lead_id
       AND existing.tag = input.tag
+      AND existing.status NOT IN ('approved','rejected')
     RETURNING existing.*
   ),
   inserted AS (
     INSERT INTO crm_ai_tags (
-      contact_id, lead_id, tag, category, safety_level, status, confidence, reason, created_by_ai
+      contact_id, lead_id, tag, category, safety_level, status, confidence, reason, created_by_ai, analysis_run_id
     )
     SELECT
       input.contact_id,
@@ -467,13 +612,13 @@ function tagUpsertSql() {
       input.status::crm_ai_tag_status,
       input.confidence,
       input.reason,
-      true
+      true, $3::uuid
     FROM input
     WHERE NOT EXISTS (
       SELECT 1
-      FROM updated
-      WHERE updated.lead_id = input.lead_id
-        AND updated.tag = input.tag
+      FROM crm_ai_tags existing
+      WHERE existing.lead_id = input.lead_id
+        AND existing.tag = input.tag
     )
     RETURNING *
   )
@@ -550,6 +695,7 @@ function mapProfile(row: Record<string, unknown>): CrmAiProfile {
     summary: stringOrNull(row.summary),
     last_analyzed_at: dateOrNull(row.last_analyzed_at),
     analysis_version: stringOrEmpty(row.analysis_version) || "v1",
+    analysis_run_id: stringOrNull(row.analysis_run_id),
     generated_by: stringOrNull(row.generated_by),
     result_kind: stringOrNull(row.result_kind),
     action_type: stringOrNull(row.action_type),
