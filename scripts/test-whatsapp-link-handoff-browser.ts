@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 /** Real React component in Chromium; synthetic API only, no auth or DB claims. */
 import { chromium, expect } from "@playwright/test";
@@ -8,6 +8,7 @@ const build = spawnSync("bun", ["scripts/browser-fixtures/build-whatsapp-link-ha
   stdio: "inherit",
 });
 if (build.status !== 0) throw Error("Fixture bundle failed");
+const codeSha = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim();
 const bundle = readFileSync(".audit/whatsapp-link-handoff-bundle.js", "utf8");
 const httpServer = createServer((request, response) => {
   response.setHeader(
@@ -62,12 +63,14 @@ const previous = {
 };
 let passed = 0,
   failed = 0;
+const results: { name: string; width: number; status: string; error?: string }[] = [];
 async function check(
   name: string,
   saved: unknown,
   run: (page: import("@playwright/test").Page) => Promise<void>,
+  width = 1280,
 ) {
-  const page = await browser.newPage();
+  const page = await browser.newPage({ viewport: { width, height: 844 } });
   try {
     await page.route("**/*", (route) =>
       new URL(route.request().url()).origin === server.url.origin
@@ -76,7 +79,8 @@ async function check(
     );
     await page.addInitScript(
       ({ key, value }) => {
-        if (value) sessionStorage.setItem(key, JSON.stringify(value));
+        if (value && !sessionStorage.getItem(key))
+          sessionStorage.setItem(key, JSON.stringify(value));
       },
       { key: linkBatchProgressKey("fixture-admin"), value: saved },
     );
@@ -86,9 +90,16 @@ async function check(
     );
     await run(page);
     passed++;
+    results.push({ name, width, status: "PASS" });
     console.log(`PASS ${name}`);
   } catch (error) {
     failed++;
+    results.push({
+      name,
+      width,
+      status: "FAIL",
+      error: error instanceof Error ? error.message : String(error),
+    });
     console.error(`FAIL ${name}: ${error instanceof Error ? error.message : error}`);
   } finally {
     await page.close();
@@ -231,9 +242,164 @@ try {
     );
     expect(after).not.toBe(before);
   });
+  const csv50 =
+    "public_listing_no,deal_type,source,placement_url_or_id,staff_reference\n" +
+    Array.from(
+      { length: 50 },
+      (_, index) =>
+        `A${String(index + 1).padStart(6, "0")},${index % 2 ? "rent" : "sale"},website,website:primary,website/synthetic|001-A`,
+    ).join("\n");
+  for (const width of [390, 768, 1280, 1440]) {
+    await check(
+      "fifty-row CSV validates, commits once, reloads and exports each outcome",
+      null,
+      async (page) => {
+        await page.evaluate(() => Object.assign(window, { bulkImport: true, bulkCommit: true }));
+        const input = page.getByLabel("CSV 或貼表格資料");
+        // Duplicate and invalid input stay editable and never reach the lookup/commit.
+        await input.fill(
+          csv50.replace("A000002,rent", "A000001,sale").replace("A000003,sale", "A000003,invalid"),
+        );
+        await expect(page.getByRole("button", { name: /核對並匯入 \d+ 行/ })).toBeDisabled();
+        await expect(page.getByRole("alert")).toContainText("重複行");
+        await expect(page.getByRole("alert")).toContainText("租售類型只接受");
+        await input.fill(csv50);
+        await page.evaluate(() => Object.assign(window, { missingOffer: "A000048" }));
+        await page.getByRole("button", { name: "核對並匯入 50 行" }).click();
+        await expect(page.getByRole("alert")).toContainText("找不到現時公開");
+        await expect(input).toHaveValue(csv50);
+        await page.evaluate(() =>
+          Object.assign(window, { missingOffer: null, bulkImportDenied: true }),
+        );
+        await page.getByRole("button", { name: "核對並匯入 50 行" }).click();
+        await expect(page.getByRole("alert")).toContainText("無法查對目前公開租售盤");
+        await page.evaluate(() => Object.assign(window, { bulkImportDenied: false }));
+        await page.getByRole("button", { name: "核對並匯入 50 行" }).click();
+        await page.getByLabel("已人工核對刊登位置").check();
+        await page.getByRole("button", { name: "下一步：跟進" }).click();
+        await page.getByRole("button", { name: "預覽核對", exact: true }).click();
+        await page.getByRole("button", { name: "確認建立 50 筆" }).click();
+        const result = page.getByRole("region", { name: "批次結果" });
+        await expect(result).toContainText("已建立 40 · 重用 7 · 被阻止 1 · 失敗 2 · 未提交 0");
+        await expect(result.locator("li")).toHaveCount(50);
+        const successDownload = page.waitForEvent("download");
+        await result.getByRole("button", { name: "匯出 website CSV", exact: true }).click();
+        const successCsv = readFileSync((await (await successDownload).path())!, "utf8");
+        expect(successCsv.trim().split("\r\n")).toHaveLength(48);
+        expect(successCsv).toContain("A000001");
+        expect(successCsv).toContain('"sale"');
+        expect(successCsv).toContain('"rent"');
+        const failureDownload = page.waitForEvent("download");
+        await result
+          .getByRole("button", { name: "匯出 website 已確認失敗 CSV", exact: true })
+          .click();
+        const failureCsv = readFileSync((await (await failureDownload).path())!, "utf8");
+        expect(failureCsv.trim().split("\r\n")).toHaveLength(4);
+        for (const value of [
+          "A000048",
+          "A000049",
+          "A000050",
+          "WA_LINK_VERSION_STALE",
+          "WA_LINK_SCOPE_DENIED",
+          "WA_LINK_STAFF_NOT_READY",
+        ])
+          expect(failureCsv).toContain(value);
+        expect(failureCsv).not.toContain("/w/");
+        const before = await page.evaluate(() =>
+          JSON.parse(localStorage.getItem("fixture-batch-ops")!),
+        );
+        await page.reload();
+        await expect(result.locator("li")).toHaveCount(50);
+        await page.getByRole("button", { name: "查回伺服器結果" }).click();
+        await expect(result).toContainText("已建立 40 · 重用 7 · 被阻止 1 · 失敗 2 · 未提交 0");
+        expect(
+          await page.evaluate(() => JSON.parse(localStorage.getItem("fixture-batch-ops")!)),
+        ).toEqual(before);
+        expect(
+          await page.evaluate(
+            () => (window as unknown as { commitCalls?: number }).commitCalls ?? 0,
+          ),
+        ).toBe(0);
+        await page.getByRole("button", { name: "只修正已知失敗的 3 行" }).click();
+        await expect(page.getByText(/已匯入 3 行 · 3 筆租售/)).toBeVisible();
+      },
+      width,
+    );
+  }
+  const fiftyRows = Array.from({ length: 50 }, (_, index) => ({
+    rowKey: id(3000 + index),
+    placementId: "website:primary",
+    input: {
+      entryPointType: "sales",
+      placementSource: "website",
+      enabled: true,
+      placementVerified: true,
+      propertyId: id(1000 + index),
+      publicListingNo: `A${String(index + 1).padStart(6, "0")}`,
+      dealType: index % 2 ? "rent" : "sale",
+    },
+  }));
+  const fiftyPreview = {
+    ...previous,
+    rows: fiftyRows,
+    preview: {
+      ...previous.preview,
+      rows: fiftyRows.map((row) => ({ rowKey: row.rowKey, decision: "create", reasons: [] })),
+      counts: { create: 50, reuse: 0, blocked: 0 },
+    },
+  };
+  await check(
+    "fifty-row unknown commit reload reconciles original operation without replaying successes",
+    fiftyPreview,
+    async (page) => {
+      await page.evaluate(() =>
+        Object.assign(window, { bulkCommit: true, bulkLoseResponseOnce: true, bulkReadFail: true }),
+      );
+      await page.getByRole("button", { name: "確認建立 50 筆" }).click();
+      await expect(page.getByRole("region", { name: "批次結果" })).toContainText("未提交 50");
+      await expect(page.getByRole("region", { name: "批次結果" })).toContainText("結果未確認");
+      expect(
+        await page.evaluate(() => JSON.parse(localStorage.getItem("fixture-batch-ops")!).length),
+      ).toBe(1);
+      await page.reload();
+      await page.getByRole("button", { name: "查回伺服器結果" }).click();
+      await expect(page.getByRole("region", { name: "批次結果" })).toContainText(
+        "已建立 40 · 重用 7 · 被阻止 1 · 失敗 2 · 未提交 0",
+      );
+      expect(
+        await page.evaluate(() => (window as unknown as { commitCalls?: number }).commitCalls ?? 0),
+      ).toBe(0);
+      expect(
+        await page.evaluate(() => JSON.parse(localStorage.getItem("fixture-batch-ops")!).length),
+      ).toBe(1);
+    },
+    390,
+  );
 } finally {
   await browser.close();
   server.stop();
 }
+writeFileSync(
+  ".audit/whatsapp-link-handoff-results.json",
+  JSON.stringify(
+    {
+      environment: {
+        ownedLoopback: true,
+        realComponent: true,
+        syntheticAPI: true,
+        realAuth: false,
+        database: false,
+        providerSend: false,
+      },
+      codeSha,
+      results,
+      passed,
+      failed,
+      skipped: 0,
+    },
+    null,
+    2,
+  ),
+);
 console.log(JSON.stringify({ passed, failed, skipped: 0 }));
 if (failed) process.exitCode = 1;

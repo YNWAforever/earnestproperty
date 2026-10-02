@@ -17,6 +17,16 @@ export function WhatsappBatchResult({ progress }: { progress: LinkBatchProgress 
         .filter((source): source is NonNullable<typeof source> => Boolean(source)),
     ),
   ];
+  const failureSources = [
+    ...new Set(
+      results
+        .filter((row) => row.outcome === "blocked" || row.outcome === "failed")
+        .flatMap((row) => {
+          const source = byKey.get(row.rowKey)?.input.placementSource;
+          return source ? [source] : [];
+        }),
+    ),
+  ];
   async function copyAll() {
     try {
       await navigator.clipboard.writeText(
@@ -27,12 +37,14 @@ export function WhatsappBatchResult({ progress }: { progress: LinkBatchProgress 
       setCopyStatus("複製失敗，請逐行選取連結。");
     }
   }
-  function download(source: (typeof sources)[number]) {
-    const blob = new Blob([batchResultCsv(progress, source)], { type: "text/csv;charset=utf-8" });
+  function download(source: (typeof sources)[number], category: "success" | "failure" = "success") {
+    const blob = new Blob([batchResultCsv(progress, source, category)], {
+      type: "text/csv;charset=utf-8",
+    });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `whatsapp-links-${source}-${progress.batchId}.csv`;
+    anchor.download = `whatsapp-links-${source}-${category === "failure" ? "failures-" : ""}${progress.batchId}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   }
@@ -68,6 +80,18 @@ export function WhatsappBatchResult({ progress }: { progress: LinkBatchProgress 
               匯出 {source} CSV
             </Button>
           ))}
+        </div>
+      ) : null}
+      {failureSources.length ? (
+        <div className="flex flex-wrap gap-2">
+          {failureSources.map((source) => (
+            <Button key={source} variant="outline" onClick={() => download(source, "failure")}>
+              匯出 {source} 已確認失敗 CSV
+            </Button>
+          ))}
+          <p className="w-full text-xs text-muted-foreground">
+            只包含已確認被阻止或失敗的行；未提交及結果待核對的行不列作失敗。
+          </p>
         </div>
       ) : null}
       {copyStatus ? (
