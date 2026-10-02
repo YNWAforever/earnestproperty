@@ -121,3 +121,10 @@ PR208初次deployment `dpl_2Phc1PmcsLMj7nF2tzt53HuUHik9`因TanStack vulnerabilit
 每日同步已啟用、manualapply已關閉。**MONITORING0/3**，尚無啟用後actual native scheduled驗收；manual/replay不計。Property.hk與後台憑證／真角色仍獨立BLOCKED，absence及撤盤保持off；沒有新migration、bulk撤盤、真訊息或無關cron變更。
 
 完整敏感DB身份、receipt、private asset/hash及逐筆保護結果留在operator私有release紀錄。公開PR僅新增刪敏摘要，既有main歷史內容保持；原完整push被auto-review拒絕，未執行。既有09:00香港heartbeat已更新並持續唯讀驗收三個真實每日cycles。
+
+
+## T3 performance follow-up（本機／隔離驗證；尚未部署）
+
+程式commit `21c7cc9` 將推廣證據逐筆寫入改為有界SQL批次，保留duplicate schema checks、售租隔離及caller transaction rollback；另修partial duplicate gold→pinned降級。合成281 offers的disposable Neon測量：282 requests／27333ms → 3 requests／初次601ms、完整回歸161ms。此為局部測量，整段正式匯入仍需live耗時證據。
+
+MLS643、sync75、daily38、priority38、Python122、disposable DB47全部PASS／零skip；typecheck、格式及cleanup PASS。見 `docs/reports/2026-10-02-sync-promotion-batching.md` 的commands、RED→GREEN及rollback。本輪production只有read-only核對，無migration/config mutation；新fix未部署。現有正式main CI／部署通過，首頁約8小時前更新；daily仍MONITORING0/3，Property.hk及後台token／真角色仍blocked。

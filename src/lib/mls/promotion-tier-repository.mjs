@@ -53,6 +53,43 @@ export async function savePromotionTiers(query, observations, { snapshotComplete
 
   let written = 0;
   let skipped = 0;
+  let pending = [];
+  const queuedKeys = new Set();
+  const flush = async () => {
+    if (pending.length === 0) return;
+    await query(
+      `INSERT INTO mls_source_promotion_tiers
+         (source, external_listing_id, deal_type, promotion_tier, promotion_tier_raw,
+          observed_at, snapshot_complete, observation_id)
+       SELECT k.source, k.external_listing_id, k.deal_type::deal_type,
+              k.promotion_tier, k.promotion_tier_raw, k.observed_at,
+              k.snapshot_complete, k.observation_id
+         FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
+                     $6::timestamptz[], $7::boolean[], $8::uuid[])
+           AS k(source, external_listing_id, deal_type, promotion_tier, promotion_tier_raw,
+                observed_at, snapshot_complete, observation_id)
+       ON CONFLICT (source, external_listing_id, deal_type) DO UPDATE SET
+         promotion_tier = EXCLUDED.promotion_tier,
+         promotion_tier_raw = EXCLUDED.promotion_tier_raw,
+         observed_at = EXCLUDED.observed_at,
+         snapshot_complete = EXCLUDED.snapshot_complete,
+         observation_id = EXCLUDED.observation_id,
+         updated_at = now()`,
+      [
+        pending.map((o) => o.source),
+        pending.map((o) => String(o.externalId)),
+        pending.map((o) => o.dealType),
+        pending.map((o) => o.promotionTier),
+        pending.map((o) => o.promotionTierRaw ?? null),
+        pending.map((o) => o.fetchedAt),
+        pending.map(() => snapshotComplete),
+        pending.map((o) => o.observationId ?? null),
+      ],
+      "write promotion tiers",
+    );
+    pending = [];
+    queuedKeys.clear();
+  };
   for (const observation of candidates) {
     const key = `${observation.source} ${observation.externalId} ${observation.dealType}`;
     const storedTier = stored.get(key) ?? PROMOTION_TIERS.UNKNOWN;
@@ -66,31 +103,16 @@ export async function savePromotionTiers(query, observations, { snapshotComplete
       skipped += 1;
       continue;
     }
-    await query(
-      `INSERT INTO mls_source_promotion_tiers
-         (source, external_listing_id, deal_type, promotion_tier, promotion_tier_raw,
-          observed_at, snapshot_complete, observation_id)
-       VALUES ($1, $2, $3::deal_type, $4, $5, $6::timestamptz, $7, $8::uuid)
-       ON CONFLICT (source, external_listing_id, deal_type) DO UPDATE SET
-         promotion_tier = EXCLUDED.promotion_tier,
-         promotion_tier_raw = EXCLUDED.promotion_tier_raw,
-         observed_at = EXCLUDED.observed_at,
-         snapshot_complete = EXCLUDED.snapshot_complete,
-         observation_id = EXCLUDED.observation_id,
-         updated_at = now()`,
-      [
-        observation.source,
-        String(observation.externalId),
-        observation.dealType,
-        observation.promotionTier,
-        observation.promotionTierRaw ?? null,
-        observation.fetchedAt,
-        snapshotComplete,
-        observation.observationId ?? null,
-      ],
-      "write promotion tier",
-    );
+    // A SQL upsert cannot affect one identity twice. Flush rather than discarding
+    // earlier duplicates, so every accepted observation still hits schema checks.
+    if (queuedKeys.has(key)) await flush();
+    pending.push(observation);
+    queuedKeys.add(key);
+    // A later partial observation cannot downgrade an earlier upgrade in this batch.
+    stored.set(key, observation.promotionTier);
     written += 1;
+    if (pending.length === 250) await flush();
   }
+  await flush();
   return { written, skipped };
 }
