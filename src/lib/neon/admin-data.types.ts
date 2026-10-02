@@ -406,6 +406,9 @@ export type AdminConversationUpdateInput = {
 };
 
 export type AdminConversationAiAssist = {
+  method?: "deterministic_rules";
+  checkedAt?: string;
+  urgencyEvidence?: string | null;
   summary: string;
   detectedIntent: string | null;
   urgency: string | null;

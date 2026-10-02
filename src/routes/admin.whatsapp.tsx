@@ -1723,6 +1723,8 @@ function AiAssistPanel({
     <WhatsappAiSuggestions
       loading={loading}
       summary={aiAssist?.summary}
+      method={aiAssist?.method}
+      checkedAt={aiAssist?.checkedAt}
       suggestedReply={aiAssist?.suggestedReply}
       intentLabel={aiAssist ? intentLabel(aiAssist.detectedIntent) : undefined}
       urgencyLabel={aiAssist ? urgencyLabel(aiAssist.urgency) : undefined}
