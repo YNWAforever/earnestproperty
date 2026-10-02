@@ -170,3 +170,9 @@ gh variable set PROPERTY_SYNC_MANUAL_APPLY_ENABLED --body false --repo YNWAforev
 [Evidence token 建立頁](https://github.com/settings/personal-access-tokens/new?name=PROPERTY_SYNC_EVIDENCE_TOKEN&target_name=YNWAforever&expires_in=90&contents=write)仍須手動確認 Only select repositories只選private evidence repo；按Generate token後將值直接貼入[code repo Actions secret頁](https://github.com/YNWAforever/earnestproperty/settings/secrets/actions)，名稱必須完全一致。不要貼入chat、commit或普通repo variable。[GitHub secrets程序](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets)。
 
 Operator只用metadata核對secret存在；實際權限由受控hosted shadow的private upload/download hash回讀證明。存在不等於可用，也不等於daily已啟用。現有本機CLI登入不作為這兩個managed token。
+
+### Unknown apply outcome 停止重送（2026-10-02追加修復）
+
+`replay_bridge`遇正式apply subprocess timeout或bridge回覆OUTCOME_UNKNOWN時，只保存該exact request、attempt及unknown receipt，立即返回失敗；不自動第二次apply、不advance baseline、不重新採集。由既有execution recorder／operator先read-only查同source/scope/request hash/scraped_at的receipt及current authority：已commit則恢復同bytes的accepted archive；仍無可確認結果時保持UNKNOWN，待完成reconciliation後才批准exactasset replay。
+
+明確bridge尚未啟動的失敗、受控429/Retry-After仍保留最多3次bounded retry；read-only shadow timeout以bridge_timeout標記，沒有DB寫入，可沿既有上限重試。此修復需要reviewed merge後才用於hostedcanary/daily；不以immutable bytes合理化unknown COMMIT盲重送。
