@@ -1,4 +1,6 @@
 ALTER TABLE ai_content_proposals ADD COLUMN source_db_revision text;
+ALTER TABLE ai_content_proposals ADD COLUMN requested_auth_user_id text;
+ALTER TABLE ai_content_proposals ADD COLUMN knowledge_dependencies jsonb;
 
 CREATE FUNCTION ep_content_source_revision(p_type text,p_id uuid)
 RETURNS text LANGUAGE plpgsql STABLE AS $$
@@ -26,11 +28,11 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION ep_assert_content_snapshot(p_type text,p_id uuid,p_actor uuid,p_expected text DEFAULT NULL)
+CREATE FUNCTION ep_assert_content_snapshot(p_type text,p_id uuid,p_actor uuid,p_auth text,p_expected text DEFAULT NULL)
 RETURNS text LANGUAGE plpgsql AS $$
 DECLARE source_row jsonb; allowed_all boolean; current_revision text; group_no text;
 BEGIN
-  PERFORM 1 FROM staff_users WHERE id=p_actor AND active FOR SHARE;
+  PERFORM 1 FROM staff_users WHERE id=p_actor AND active AND auth_user_id=p_auth FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'COPILOT_FORBIDDEN'; END IF;
   PERFORM 1 FROM staff_roles WHERE staff_user_id=p_actor AND role IN('admin','manager','agent') FOR SHARE;
   IF NOT FOUND THEN RAISE EXCEPTION 'COPILOT_FORBIDDEN'; END IF;
@@ -61,13 +63,21 @@ BEGIN
 END;
 $$;
 
-CREATE FUNCTION ep_assert_content_proposal(p_proposal uuid,p_actor uuid)
+CREATE FUNCTION ep_assert_content_proposal(p_proposal uuid,p_actor uuid,p_auth text)
 RETURNS void LANGUAGE plpgsql AS $$
 DECLARE proposal_row ai_content_proposals;
 BEGIN
   SELECT * INTO proposal_row FROM ai_content_proposals WHERE id=p_proposal AND requested_by=p_actor FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'COPILOT_FORBIDDEN'; END IF;
-  IF proposal_row.source_db_revision IS NULL THEN RAISE EXCEPTION 'COPILOT_STALE_PROPOSAL'; END IF;
-  PERFORM ep_assert_content_snapshot(proposal_row.resource_type,proposal_row.resource_id,p_actor,proposal_row.source_db_revision);
+  IF proposal_row.source_db_revision IS NULL OR proposal_row.knowledge_dependencies IS NULL THEN RAISE EXCEPTION 'COPILOT_STALE_PROPOSAL'; END IF;
+  IF proposal_row.requested_auth_user_id IS DISTINCT FROM p_auth THEN RAISE EXCEPTION 'COPILOT_FORBIDDEN'; END IF;
+  PERFORM ep_assert_content_snapshot(proposal_row.resource_type,proposal_row.resource_id,p_actor,p_auth,proposal_row.source_db_revision);
+END;
+$$;
+
+CREATE FUNCTION ep_assert_content_dependencies_valid(p_valid boolean)
+RETURNS void LANGUAGE plpgsql AS $$
+BEGIN
+  IF p_valid IS DISTINCT FROM true THEN RAISE EXCEPTION 'COPILOT_STALE_PROPOSAL'; END IF;
 END;
 $$;
