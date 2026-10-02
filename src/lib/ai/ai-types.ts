@@ -50,6 +50,10 @@ export type AiKnowledgeChunk = {
 };
 
 export type CrmAiProfile = {
+  generated_by?: string | null;
+  result_kind?: string | null;
+  action_type?: string | null;
+  validation_code?: string | null;
   id: string;
   contact_id: string | null;
   lead_id: string | null;

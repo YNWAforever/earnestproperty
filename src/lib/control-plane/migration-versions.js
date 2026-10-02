@@ -117,6 +117,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20261001120000_property_sync_operations.sql",
   "20261001130000_property_withdrawal_review.sql",
   "20261003010000_ai_knowledge_durable_repair.sql",
+  "20261003020000_crm_analysis_contract.sql",
 ]);
 
 /**
