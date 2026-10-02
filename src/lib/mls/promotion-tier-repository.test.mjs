@@ -21,18 +21,24 @@ function observation(over) {
 function fakeQuery(storedRows = []) {
   const writes = [];
   const reads = [];
+  const requests = [];
   const query = async (text, params) => {
+    requests.push({ text, params });
     if (text.includes("SELECT source, external_listing_id, deal_type, promotion_tier")) {
       reads.push(params);
       return storedRows;
     }
     if (text.includes("INSERT INTO mls_source_promotion_tiers")) {
-      writes.push(params);
+      if (Array.isArray(params[0])) {
+        for (let i = 0; i < params[0].length; i += 1) {
+          writes.push(params.map((column) => column[i]));
+        }
+      } else writes.push(params);
       return [];
     }
     throw new Error(`unexpected query: ${text.slice(0, 60)}`);
   };
-  return { query, writes, reads };
+  return { query, writes, reads, requests };
 }
 
 test("an observed grade is persisted with its raw text and observation time", async () => {
@@ -158,4 +164,38 @@ test("Property.hk and old-site records are not given a 28Hse paid tier", async (
     { snapshotComplete: true },
   );
   assert.equal(writes.length, 0);
+});
+
+test("daily promotion evidence uses bounded database round trips", async () => {
+  const { query, writes, requests } = fakeQuery();
+  const rows = Array.from({ length: 281 }, (_, index) =>
+    observation({ externalId: String(4000000 + index) }),
+  );
+  assert.deepEqual(await savePromotionTiers(query, rows, { snapshotComplete: true }), {
+    written: 281,
+    skipped: 0,
+  });
+  assert.equal(writes.length, 281);
+  assert.ok(requests.length <= 4, `daily grades required ${requests.length} database requests`);
+});
+
+test("partial duplicate evidence cannot undo a promotion seen earlier in the same snapshot", async () => {
+  const { query, writes } = fakeQuery([
+    {
+      source: "28hse_agent_540",
+      external_listing_id: "3998335",
+      deal_type: "rent",
+      promotion_tier: "normal",
+    },
+  ]);
+  assert.deepEqual(
+    await savePromotionTiers(
+      query,
+      [observation({}), observation({ promotionTier: "pinned", promotionTierRaw: "置頂" })],
+      { snapshotComplete: false },
+    ),
+    { written: 1, skipped: 1 },
+  );
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0][3], "gold");
 });
