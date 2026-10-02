@@ -1693,7 +1693,7 @@ function ConversationWorkspace({
           </div>
         </div>
         <details className="mt-3 text-sm">
-          <summary className="cursor-pointer">AI 回覆建議（只作草稿）</summary>
+          <summary className="cursor-pointer">規則回覆建議（只作草稿）</summary>
           <AiAssistPanel
             aiAssist={aiAssist}
             loading={aiAssistLoading}
