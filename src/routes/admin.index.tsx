@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -32,35 +32,65 @@ type MetricTarget =
   | "/admin/listings"
   | "/admin/whatsapp"
   | "/admin/operations";
-type ReadState<T> = { data: T | null; error: string | null; loading: boolean };
+type ReadState<T> = {
+  data: T | null;
+  error: string | null;
+  loading: boolean;
+  identity?: string;
+  checkedAt?: string;
+};
 
 const initialReadState = <T,>(): ReadState<T> => ({ data: null, error: null, loading: true });
 
-function useOverviewRead<T>(enabled: boolean, read: () => Promise<T>) {
+function useOverviewRead<T>(identity: string | undefined, read: () => Promise<T>) {
   const [state, setState] = useState<ReadState<T>>(initialReadState);
+  const epoch = useRef(0);
+  const invalidateReads = useCallback(() => {
+    epoch.current += 1;
+  }, []);
   const refresh = useCallback(async () => {
-    if (!enabled) return;
-    setState((current) => ({ ...current, error: null, loading: current.data === null }));
+    if (!identity) return;
+    const request = ++epoch.current;
+    setState((current) => ({ ...current, identity, error: null, loading: current.data === null }));
     try {
-      setState({ data: await read(), error: null, loading: false });
-    } catch {
+      const data = await read();
+      if (request !== epoch.current) return;
+      setState({
+        data,
+        error: null,
+        loading: false,
+        identity,
+        checkedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      if (request !== epoch.current) return;
+      const status =
+        error instanceof Response
+          ? error.status
+          : error && typeof error === "object" && "status" in error
+            ? error.status
+            : null;
+      const denied = status === 401 || status === 403;
       setState((current) => ({
         ...current,
+        ...(denied ? { data: null, checkedAt: undefined } : {}),
         error: "暫時無法載入此營運資料，請稍後再試。",
         loading: false,
       }));
     }
-  }, [enabled, read]);
+  }, [identity, read]);
 
   useEffect(() => {
-    if (!enabled) {
-      setState(initialReadState());
-      return;
-    }
-    void refresh();
-  }, [enabled, refresh]);
+    invalidateReads();
+    setState(initialReadState());
+    if (identity) void refresh();
+    return invalidateReads;
+  }, [identity, refresh, invalidateReads]);
 
-  return [state, refresh] as const;
+  return [
+    state.identity === identity && identity ? state : initialReadState<T>(),
+    refresh,
+  ] as const;
 }
 
 export const Route = createFileRoute("/admin/")({
@@ -72,15 +102,15 @@ export const Route = createFileRoute("/admin/")({
 
 function AdminHome() {
   const { user } = useNeonAuth();
-  const enabled = Boolean(user);
+  const identity = user?.id;
   const readOverview = useCallback(() => fetchAdminOverview(), []);
   const readTeam = useCallback(() => listAdminTeam({ data: { limit: 50 } }), []);
   const readHealth = useCallback(async () => (await fetchOperationsHealth()).data, []);
   const readActivity = useCallback(async () => (await fetchOperationsAudit({ limit: 5 })).data, []);
-  const [overview, refreshOverview] = useOverviewRead<Overview>(enabled, readOverview);
-  const [team, refreshTeam] = useOverviewRead<AdminTeamList>(enabled, readTeam);
-  const [health, refreshHealth] = useOverviewRead<HealthData>(enabled, readHealth);
-  const [activity, refreshActivity] = useOverviewRead<AuditPage>(enabled, readActivity);
+  const [overview, refreshOverview] = useOverviewRead<Overview>(identity, readOverview);
+  const [team, refreshTeam] = useOverviewRead<AdminTeamList>(identity, readTeam);
+  const [health, refreshHealth] = useOverviewRead<HealthData>(identity, readHealth);
+  const [activity, refreshActivity] = useOverviewRead<AuditPage>(identity, readActivity);
   const attention = team.data?.members.filter((member) => member.needsAttention) ?? [];
   const staffActivity =
     activity.data?.rows.filter((entry) => entry.action.startsWith("staff.")) ?? [];
@@ -98,7 +128,16 @@ function AdminHome() {
               營運概況
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              重新進入頁面或手動整理時讀取最新資料。
+              客戶資料範圍：
+              {overview.data?.scope === "own"
+                ? "我負責的查詢與對話"
+                : overview.data?.scope === "all"
+                  ? "全公司"
+                  : "待讀取"}
+              ；公開樓盤為全站資料。
+              {overview.checkedAt
+                ? ` 資料截至 ${new Date(overview.checkedAt).toLocaleString("zh-HK", { timeZone: "Asia/Hong_Kong" })}（香港時間）。`
+                : ""}
             </p>
           </div>
           <Button onClick={refreshAll} size="sm" type="button" variant="outline">
@@ -129,6 +168,7 @@ function AdminHome() {
             loading={overview.loading}
             error={overview.error}
             to="/admin/leads"
+            search={{ stage: "open" }}
             value={overview.data?.openLeads}
           />
           <OverviewMetricCard
@@ -163,6 +203,7 @@ function AdminHome() {
             loading={overview.loading}
             error={overview.error}
             to="/admin/whatsapp"
+            search={{ status: "open" }}
             value={overview.data?.openConversations}
           />
         </div>
@@ -261,7 +302,7 @@ function OverviewMetricCard({
   label: string;
   value: number | string | undefined;
   to: MetricTarget;
-  search?: { publication: "public"; status: "active" };
+  search?: { publication?: "public"; status?: "active" | "open"; stage?: "open" };
   loading: boolean;
   error: string | null;
 }) {

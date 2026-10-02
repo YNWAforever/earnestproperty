@@ -67,6 +67,8 @@ const state = {
   templateFailure: false,
   assignmentFailure: false,
   delayDetail: false,
+  failOverview: false,
+  failOverviewDenied: false,
   releaseLateDetail: null as null | (() => void),
   forwardMode: "ok",
   releaseForward: null as null | (() => void),
@@ -128,10 +130,28 @@ export async function fetchAdminWhatsappTemplates() {
 export async function fetchAdminPage({
   data,
 }: {
-  data: { resource: string; conversationId?: string; q?: string; cursor?: string };
+  data: { resource: string; conversationId?: string; q?: string; cursor?: string; stage?: string };
 }) {
   call("page", data);
   if (data.resource === "leads") {
+    if (sessionStorage.getItem("no-link-fixture-overview")) {
+      const items = ["new", "contacted", "closed_won"].map((stage, n) => ({
+        id: `40000000-0000-4000-8000-${String(n + 1).padStart(12, "0")}`,
+        name: "總覽合成查詢" + n,
+        stage,
+        intent: "buyer",
+        source: "website",
+        created_at: now,
+        assigned_agent_id: ids.staff,
+        phone: null,
+        email: null,
+        opt_in_whatsapp: false,
+      }));
+      const filtered = items.filter(
+        (r) => data.stage !== "open" || !["closed_won", "closed_lost"].includes(r.stage),
+      );
+      return { rows: filtered, total: filtered.length, nextCursor: null };
+    }
     const leads = forwardedRecords().filter(canReadForward).map(forwardLead);
     return { rows: leads, total: leads.length, nextCursor: null };
   }
@@ -496,6 +516,35 @@ export const rejectAdminAiTag = () => noMutation("rejectTag");
 export const createAdminLeadActivity = () => noMutation("leadActivity");
 export const bulkUpdateAdminLeads = () => noMutation("bulkLeads");
 export const updateAdminLead = () => noMutation("updateLead");
+export async function fetchAdminOverview() {
+  call("overview", {});
+  if (fixture().failOverviewDenied) throw new Response("Forbidden", { status: 403 });
+  if (fixture().failOverview) throw Error("Synthetic overview read failure");
+  return {
+    publicProperties: 2,
+    publicOffers: 3,
+    inventoryCheckedAt: now,
+    openLeads: 2,
+    openConversations: 2,
+    contacts: 3,
+    activeCampaigns: null,
+    scope: actor === "manager" ? "all" : "own",
+    checkedAt: now,
+  };
+}
+export async function listAdminTeam() {
+  return {
+    members: [],
+    counts: { active: 0, invited: 0, suspended: 0, attention: 0 },
+    nextCursor: null,
+  };
+}
+export async function fetchOperationsHealth() {
+  return { data: { status: "healthy", checks: [], checkedAt: now }, requestId: "synthetic-read" };
+}
+export async function fetchOperationsAudit() {
+  return { data: { rows: [], nextCursor: null }, requestId: "synthetic-read" };
+}
 export {
   fetchAdminCampaigns,
   fetchAdminBlastOptions,

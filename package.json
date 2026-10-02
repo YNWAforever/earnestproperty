@@ -109,7 +109,8 @@
     "test:propertyhk-reconciliation:owned:db": "node --test src/lib/mls/propertyhk-branch-reconciliation.db.test.mjs",
     "test:property-withdrawal:owned:db": "node --test --test-concurrency=1 src/lib/mls/withdrawal-owned.db.test.mjs src/lib/mls/historical-withdrawal.db.test.mjs",
     "test:property-maintenance:owned:db": "node --experimental-test-module-mocks --test src/lib/neon/admin-property-maintenance-owned.db.test.mjs",
-    "test:admin-golden:db": "node --experimental-test-module-mocks --test scripts/acceptance/admin-golden-journeys.test.mjs"
+    "test:admin-golden:db": "node --experimental-test-module-mocks --test scripts/acceptance/admin-golden-journeys.test.mjs",
+    "test:admin-overview:db": "node --experimental-test-module-mocks --test src/lib/neon/admin-overview-owned.db.test.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1115.0",

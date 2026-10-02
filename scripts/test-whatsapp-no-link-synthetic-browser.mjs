@@ -2383,6 +2383,68 @@ try {
       expect(await page.evaluate(() => window.noLinkOutboundFixture.calls.length)).toBe(0);
     },
   );
+  for (const width of [390, 768, 1280, 1440]) {
+    await check(
+      "overview permission loss clears previous restricted counts",
+      width,
+      async (page) => {
+        await open(page, origin + "/admin");
+        const card = page.getByRole("link").filter({ hasText: "開放查詢" });
+        await expect(card).toContainText("2");
+        await page.evaluate(() => {
+          window.noLinkFixture.failOverviewDenied = true;
+        });
+        await page.getByRole("button", { name: "重新整理", exact: true }).click();
+        await expect(card.getByRole("alert")).toBeVisible();
+        await expect(card).toContainText("—");
+        await expect(card).not.toContainText("2");
+      },
+      "manager",
+    );
+    await check(
+      "overview card opens the same two open leads with scope and as-of",
+      width,
+      async (page) => {
+        await page.addInitScript(() => sessionStorage.setItem("no-link-fixture-overview", "true"));
+        await open(page, origin + "/admin");
+        await expect(page.getByText(/客戶資料範圍：全公司/)).toBeVisible();
+        await expect(page.getByText(/資料截至.*香港時間/)).toBeVisible();
+        const card = page.getByRole("link").filter({ hasText: "開放查詢" });
+        await expect(card).toContainText("2");
+        await card.click();
+        await expect(page).toHaveURL(/stage=open/);
+        await expect(page.getByText("顯示 2 筆 / 共 2 筆")).toBeVisible();
+        expect(
+          await page.evaluate(
+            () =>
+              window.noLinkFixture.calls
+                .filter((c) => c.name === "page" && c.input.resource === "leads")
+                .at(-1).input.stage,
+          ),
+        ).toBe("open");
+        await page.reload();
+        await expect(page.getByText("顯示 2 筆 / 共 2 筆")).toBeVisible();
+      },
+      "manager",
+    );
+    await check(
+      "overview failed refresh retains last success with visible error, not false zero",
+      width,
+      async (page) => {
+        await open(page, origin + "/admin");
+        const card = page.getByRole("link").filter({ hasText: "開放查詢" });
+        await expect(card).toContainText("2");
+        await page.evaluate(() => {
+          window.noLinkFixture.failOverview = true;
+        });
+        await page.getByRole("button", { name: "重新整理", exact: true }).click();
+        await expect(card.getByRole("alert")).toBeVisible();
+        await expect(card).toContainText("2");
+        await expect(page.getByText(/資料截至.*香港時間/)).toBeVisible();
+      },
+      "manager",
+    );
+  }
 } finally {
   await browser?.close();
   await new Promise((done) => server.close(done));
