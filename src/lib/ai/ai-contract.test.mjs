@@ -1,16 +1,25 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
-const sourceFiles = (dir) => {
-  const entries = readdirSync(join(root, dir));
+const sourceFiles = (dir, scanRoot = root) => {
+  const entries = readdirSync(join(scanRoot, dir));
   return entries.flatMap((entry) => {
     const path = `${dir}/${entry}`;
-    const stat = statSync(join(root, path));
-    if (stat.isDirectory()) return sourceFiles(path);
+    const stat = statSync(join(scanRoot, path));
+    if (stat.isDirectory()) return sourceFiles(path, scanRoot);
     return /\.(?:ts|tsx|mjs|js|jsx)$/.test(entry) ? [path] : [];
   });
 };
@@ -131,11 +140,11 @@ test("server-only AI secrets stay out of browser-safe modules", () => {
   }
 });
 
-test("AI, Neon, Woztell, and Blob secret names stay out of browser-safe source", () => {
+function assertBrowserSafeSource(scanRoot = root) {
   const secretPattern =
     /\b(?:AI_GATEWAY_API_KEY|AI_GATEWAY_MODEL|AI_GATEWAY_EMBEDDING_MODEL|DATABASE_URL|DATABASE_URL_UNPOOLED|BLOB_READ_WRITE_TOKEN|WOZTELL_BOT_ACCESS_TOKEN|WOZTELL_CHANNEL_SECRET|WOZTELL_CHANNEL_ID)\b/;
   const allowedPattern = /(?:^|\/)(?:docs|scripts)\//;
-  const browserSafeFiles = sourceFiles("src").filter(
+  const browserSafeFiles = sourceFiles("src", scanRoot).filter(
     (file) =>
       !allowedPattern.test(file) &&
       !file.includes(".server.") &&
@@ -148,7 +157,44 @@ test("AI, Neon, Woztell, and Blob secret names stay out of browser-safe source",
   );
 
   for (const file of browserSafeFiles) {
-    assert.doesNotMatch(read(file), secretPattern, `${file} should not reference server secrets`);
+    assert.doesNotMatch(
+      readFileSync(join(scanRoot, file), "utf8"),
+      secretPattern,
+      `${file} should not reference server secrets`,
+    );
+  }
+}
+
+test("AI, Neon, Woztell, and Blob secret names stay out of browser-safe source", () => {
+  assertBrowserSafeSource();
+});
+
+test("client secret scan rejects a real source sentinel for every protected secret", () => {
+  const fixtureRoot = mkdtempSync(join(tmpdir(), "earnest-secret-boundary-"));
+  try {
+    mkdirSync(join(fixtureRoot, "src"));
+    const fixtureFile = join(fixtureRoot, "src", "client-sentinel.ts");
+    for (const secret of [
+      "AI_GATEWAY_API_KEY",
+      "AI_GATEWAY_MODEL",
+      "AI_GATEWAY_EMBEDDING_MODEL",
+      "DATABASE_URL",
+      "DATABASE_URL_UNPOOLED",
+      "BLOB_READ_WRITE_TOKEN",
+      "WOZTELL_BOT_ACCESS_TOKEN",
+      "WOZTELL_CHANNEL_SECRET",
+      "WOZTELL_CHANNEL_ID",
+    ]) {
+      writeFileSync(fixtureFile, "export const unsafe = process.env." + secret + ";");
+      assert.throws(
+        () => assertBrowserSafeSource(fixtureRoot),
+        /client-sentinel\.ts should not reference server secrets/,
+      );
+    }
+    writeFileSync(fixtureFile, "export const publicTitle = '公開資料';");
+    assert.doesNotThrow(() => assertBrowserSafeSource(fixtureRoot));
+  } finally {
+    rmSync(fixtureRoot, { recursive: true, force: true });
   }
 });
 
