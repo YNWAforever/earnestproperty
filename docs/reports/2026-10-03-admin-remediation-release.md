@@ -1,13 +1,15 @@
 # EarnestProperty — 分批 PR 與營運交接
 
-本回合完成可獨立的安全修復及本地驗證，沒有 merge、部署、production migration、正式 scope/config mutation、真客戶發送或模型 spend。正式 alias 唯讀仍是 baseline51cb0e9；修復版本尚未正式啟用。完整實作包的首回合目標已覆蓋，EP-06–21 的外部及完整產品驗收仍逐項列明，不能視為22任務全結案。
+本回合完成可獨立的安全修復及本地驗證，沒有 merge、正式部署、production migration、正式 scope/config mutation、真客戶發送或模型 spend。GitHub PR自動Preview已成功。正式 alias 唯讀仍是 baseline51cb0e9；修復版本尚未正式啟用。完整實作包的首回合目標已覆蓋，EP-06–21 的外部及完整產品驗收仍逐項列明，不能視為22任務全結案。
 
 ## Review 分批
 
 1. EP-00：compiled fixture race、完整 secret scan及 owned full-schema harness。
 2. EP-01/02：canonical/full revision read gate、回答輸出前重新驗證、transactional durable repair。
 3. EP-03/04：嚴格 CRM eligibility/schema、actor/scope/source request/save/apply、run/provenance及未知結果。
-4. EP-18/05及後續本地修復：SQL最近10則、方法/成本/分數/草稿如實呈現；canonical撤盤、scoped overview/card filters、44×44 close、owned setup/publication/maintenance、Golden/restore及後續 readiness 證據。各task保留聚焦commit。
+4. EP-18/05及後續本地修復：SQL最近10則、方法/成本/分數/草稿如實呈現；canonical撤盤、scoped overview/card filters、44×44 close、owned setup/publication/maintenance、Golden/restore、50列batch failure CSV／subset counts、report unavailable status及後續 readiness 證據。各task保留聚焦commit。
+
+Draft PR按base依序：[216 EP-00](https://github.com/YNWAforever/earnestproperty/pull/216) → [217 EP-01/02](https://github.com/YNWAforever/earnestproperty/pull/217) → [218 EP-03/04](https://github.com/YNWAforever/earnestproperty/pull/218) → [219 後續本地修復及owned驗收](https://github.com/YNWAforever/earnestproperty/pull/219)。初版四批CI及Preview均success；late EP-16/17附加至219後重新核CI，具體head/status讀回另記，沒有自動merge。
 
 每批跟前一批 base，不平行套同檔的 admin-data/EP-05/18。各批只 review 該範圍；第4批中的 Property.hk 真存取未解除，不阻塞前3批。最後 code review 與 exact source test evidence 見本輪驗證報告及執行 CSV。
 
@@ -32,9 +34,9 @@
 | G06 Golden C | save→canonical→public SQL→repair→fresh retrieval PASS | local READY；正式同盤/public browser待驗 |
 | G07 Property.hk | owned full gate/positive publication/media/replay PASS | BLOCKED_EXTERNAL：branch/dt/detail/media approval |
 | G08 28Hse schedule | config與manual jobs已核，native0/3 | NOT_READY：啟用後3次完整真schedule |
-| G09 roles/devices | 107 browser/四尺寸＋8 DB actor identities | NOT_READY：8真login sessions、完整route/actions |
+| G09 roles/devices | 115 real-route＋14 wizard browser/四尺寸＋8 DB actor identities | NOT_READY：8真login sessions、完整route/actions |
 | G10 concurrency/restore | owned CAS/unknown/restart／clone restore/readback PASS | local鏈READY；部署worker/正式恢復能力仍待驗 |
-| G11 coverage | original60/68/1332 IDs及357 rendered observations保留 | NOT_READY：逐動作/flag/route reconciliation未完成 |
+| G11 coverage | original60/68/1332 IDs及408 rendered observations保留 | NOT_READY：逐動作/flag/route reconciliation未完成 |
 
 ## 具體 canary preview（未執行）
 
@@ -57,6 +59,6 @@ AI：EV04/05/09/11/12 各3次，共最多15個 generation；每run最多1次，�
 
 回退：停對應scope新effects、保留raw receipt/enquiries/profiles/human review/dirty jobs/outbound ledger；回上一兼容app/config，migration additions保留。canonical保護與stale read gate不撤回；合法資料修正按operation/revision逐筆確認，保留期間新查詢。owned restore是在新clone演練，不能套production。
 
-Ruling：Windows下以.audit ledger＋tracked reports保存任務進度，因skill shell scripts不支援本包EP-00編號；風險是人工 bookkeeping，已以immutable CSV IDs、SHA及回歸核對減低。按計劃復用已修main的nav/parser/receipt/CAS/Inbox picker/bulk/segmented sync，避免另造身份/狀態機。部分指定新e2e入口改用既有受控real-route harness及owned test入口；缺少的正式roles/全route/50-row UI驗收仍明示，未冒稱同等覆蓋。
+Ruling：Windows下以.audit ledger＋tracked reports保存任務進度，因skill shell scripts不支援本包EP-00編號；風險是人工 bookkeeping，已以immutable CSV IDs、SHA及回歸核對減低。按計劃復用已修main的nav/parser/receipt/CAS/Inbox picker/bulk/segmented sync，避免另造身份/狀態機。部分指定新e2e入口改用既有受控real-route harness及owned test入口；50-row batch UI已補驗，完整50-row property editor仍待正確隔離Auth/SQL/media目標；缺少的正式roles/全route驗收仍明示，未冒稱同等覆蓋。
 
 本地可review修復READY；F01/F03/F04/F08的production啟用BLOCKED，F02/F07真接駁BLOCKED，F05整體UX驗收NOT_READY，F06按28Hse NOT_READY／Property.hk BLOCKED分開。本回合結束後沒有自動監看或三日驗收承諾。
