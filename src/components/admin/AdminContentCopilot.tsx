@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { aiResultPresentation } from "@/lib/admin/ai-result-presentation";
 import {
   Check,
   ExternalLink,
@@ -51,6 +52,9 @@ type PanelState =
 type ReviewProposal = ContentCopilotProposal & {
   id: string;
   selectedFields: string[];
+  createdAt?: string;
+  promptVersion?: string;
+  usageMetadata?: { costAmount?: string | null; costCurrency?: string | null };
 };
 
 const actionOptions: Array<{ value: ContentCopilotAction; label: string }> = [
@@ -632,6 +636,21 @@ function Review({
           <Badge variant="outline">請先覆核</Badge>
         </div>
       </div>
+      <p className="text-xs text-muted-foreground">
+        模型建議 · 來源時間：{proposal.createdAt ?? "未提供"} · 版本：
+        {proposal.promptVersion ?? "未提供"} · 費用：
+        {
+          aiResultPresentation({
+            costAmount: proposal.usageMetadata?.costAmount,
+            costCurrency: proposal.usageMetadata?.costCurrency,
+          }).cost
+        }
+      </p>
+      <p className="text-xs text-muted-foreground">
+        可套用欄位：
+        {acceptableFields.map((field) => fieldLabels[field] ?? field).join("、") || "無"}
+        。只修改目前草稿，仍需手動儲存；放棄不會發佈或傳送。
+      </p>
 
       {/* proposal.warnings was fetched and never rendered. A staff member who
           chose 內部資料及網頁研究 specifically for externally-sourced facts would
@@ -689,7 +708,7 @@ function Review({
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <strong className="text-sm">{fieldLabels[patch.field] ?? patch.field}</strong>
                       <Badge variant={patch.confidence === "high" ? "default" : "secondary"}>
-                        信心：{confidenceLabels[patch.confidence] ?? patch.confidence}
+                        模型自評（未校準）：{confidenceLabels[patch.confidence] ?? patch.confidence}
                       </Badge>
                     </div>
                     {/* Both sides, always: staff could not previously see what

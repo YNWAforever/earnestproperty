@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { conversationDeadline } from "@/lib/admin/ai-result-presentation";
 
 import {
   addParam,
@@ -3082,17 +3083,21 @@ export async function fetchAdminConversationAiAssist(
     ? "tenant"
     : /估價|放盤|sell|valuation/i.test(latestInboundText)
       ? "seller"
-      : latestInboundText
+      : /買樓|買盤|睇樓|buy|purchase/i.test(latestInboundText)
         ? "buyer"
         : null;
   const optedOut = row.opted_out_whatsapp === true;
+  const urgencyEvidence = conversationDeadline(latestInboundText);
 
   return {
+    method: "deterministic_rules",
+    checkedAt: new Date().toISOString(),
+    urgencyEvidence,
     summary: messages.length
       ? `最近 ${messages.length} 則 WhatsApp 訊息，客戶需要跟進。`
       : "未有足夠訊息。",
     detectedIntent,
-    urgency: messages.length >= 3 ? "high" : "normal",
+    urgency: urgencyEvidence ? "high" : "normal",
     suggestedReply: optedOut ? null : "你好，多謝查詢。請問你想了解買樓、租樓，還是放盤估價？",
     handoffNote: stringOrNull(row.name)
       ? `${stringOrNull(row.name)} 由 WhatsApp 查詢，請查看最近訊息。`

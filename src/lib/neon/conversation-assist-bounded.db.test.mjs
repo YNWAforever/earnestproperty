@@ -49,6 +49,36 @@ test(
         samples: [],
       };
       let fixture = 0;
+      await t.test(
+        "three greetings do not establish intent or urgency; only an explicit deadline is evidence",
+        async () => {
+          const [conversation] = await query(
+            "INSERT INTO whatsapp_conversations(assigned_agent_id) VALUES($1) RETURNING id",
+            [staff.id],
+          );
+          await query(
+            "INSERT INTO whatsapp_messages(conversation_id,direction,message_type,text) SELECT $1,'inbound','text',v FROM unnest(ARRAY['你好','多謝','早晨']) v",
+            [conversation.id],
+          );
+          const ordinary = await fetchAdminConversationAiAssist(
+            { conversationId: conversation.id },
+            actor,
+          );
+          assert.equal(ordinary.urgency, "normal");
+          assert.equal(ordinary.detectedIntent, null);
+          assert.equal(ordinary.method, "deterministic_rules");
+          await query(
+            "INSERT INTO whatsapp_messages(conversation_id,direction,message_type,text,created_at) VALUES($1,'inbound','text','請今日五點前回覆買樓資料',now()+interval '1 second')",
+            [conversation.id],
+          );
+          const deadline = await fetchAdminConversationAiAssist(
+            { conversationId: conversation.id },
+            actor,
+          );
+          assert.equal(deadline.urgency, "high");
+          assert.equal(deadline.urgencyEvidence, "請今日五點前回覆買樓資料");
+        },
+      );
       for (const n of [0, 10, 1000, 10000, 100000]) {
         await t.test(n + " messages remain bounded with a stable timestamp tie-break", async () => {
           const [conversation] = await query(

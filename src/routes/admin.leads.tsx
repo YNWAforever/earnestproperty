@@ -1,4 +1,5 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { aiResultPresentation } from "@/lib/admin/ai-result-presentation";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CheckCircle2,
@@ -310,6 +311,8 @@ function AdminLeads() {
       try {
         const profile = await fetchAdminLeadAiProfile({ data: { leadId: id } });
         if (requestId !== aiRequestRef.current || !canApplyLeadDetail(id)) return null;
+        if (profile.analysis?.status === "pending" && profile.analysis.runId)
+          aiRunRequestsRef.current.set(id, profile.analysis.runId);
         setAiProfile(profile as AdminLeadAiProfile);
         setAiError(null);
         return profile as AdminLeadAiProfile;
@@ -1560,8 +1563,36 @@ function LeadDetailEditor({
 
         {aiProfile?.profile ? (
           <div className="mt-4 grid gap-3 text-sm">
+            <p>
+              {
+                aiResultPresentation({
+                  method: aiProfile.analysis?.resultKind,
+                  status: aiProfile.analysis?.status,
+                }).label
+              }
+            </p>
+            <p className="text-xs text-muted-foreground">
+              來源時間：
+              {aiProfile.analysis?.startedAt
+                ? formatDate(aiProfile.analysis.startedAt)
+                : "未提供"}{" "}
+              · 版本：{aiProfile.analysis?.schemaVersion ?? "未提供"} · 費用：
+              {
+                aiResultPresentation({
+                  costAmount: aiProfile.analysis?.usage?.costAmount,
+                  costCurrency: aiProfile.analysis?.usage?.costCurrency,
+                }).cost
+              }
+            </p>
+            {aiResultPresentation({ status: aiProfile.analysis?.status }).blocker && (
+              <p role="status" className="text-destructive">
+                {aiResultPresentation({ status: aiProfile.analysis?.status }).blocker}
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="default">AI 分數 {aiScoreLabel(aiProfile.profile.lead_score)}</Badge>
+              <Badge variant="default">
+                跟進排序參考 {aiScoreLabel(aiProfile.profile.lead_score)}
+              </Badge>
               {aiProfile.profile.urgency ? (
                 <Badge variant="outline">{formatAiUrgency(aiProfile.profile.urgency)}</Badge>
               ) : null}
@@ -1569,6 +1600,9 @@ function LeadDetailEditor({
                 <Badge variant="outline">{formatAiTimeline(aiProfile.profile.timeline)}</Badge>
               ) : null}
             </div>
+            <p className="text-xs text-muted-foreground">
+              按查詢完整度、跟進狀態及規則排序，並非成交率。過時內容只供歷史參考。
+            </p>
             {aiProfile.profile.summary ? (
               <p className="whitespace-pre-wrap">{aiProfile.profile.summary}</p>
             ) : null}
@@ -1580,7 +1614,7 @@ function LeadDetailEditor({
           </div>
         ) : aiError ? (
           <p className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-            載入 AI 分析 失敗，請重試。
+            {aiError}
           </p>
         ) : !aiLoading ? (
           <p className="mt-4 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
@@ -1599,7 +1633,7 @@ function LeadDetailEditor({
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={aiTagVariant(tag.status)}>{tag.tag}</Badge>
                     <span className="text-xs text-muted-foreground">
-                      {formatAiTagStatus(tag.status)} · {Math.round(tag.confidence * 100)}%
+                      {formatAiTagStatus(tag.status)} · 模型自評（未校準）
                     </span>
                   </div>
                   {tag.reason ? (
@@ -1617,7 +1651,14 @@ function LeadDetailEditor({
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={disabled || aiMutatingTagId === tag.id}
+                      disabled={
+                        disabled ||
+                        aiMutatingTagId === tag.id ||
+                        !aiResultPresentation({
+                          method: aiProfile.analysis?.resultKind,
+                          status: aiProfile.analysis?.status,
+                        }).canApply
+                      }
                       onClick={() => onAiTagDecision(tag.id, true)}
                     >
                       <CheckCircle2 className="h-4 w-4" />

@@ -113,6 +113,7 @@ export async function answerLiveAgentMessage(input: {
   const answer = await answerFromPublicKnowledge({ question: visitorMessage });
   const handoffSuggested = shouldOfferHumanHandoff({
     confidence: answer.confidence,
+    answerAvailable: answer.citations.length > 0,
     userAskedForHuman: /真人|人工|代理|whatsapp|聯絡|联系|call|電話|电话|agent|human/i.test(
       visitorMessage,
     ),
