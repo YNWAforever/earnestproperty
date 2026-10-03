@@ -1,0 +1,429 @@
+{
+  "codeSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+  "evidenceLayer": "actual-analytics-route-dashboard-table-shell-staff-store-synthetic-auth-api-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realProvider": false,
+  "results": [
+    {
+      "name": "quality committed correction refreshes the same denominator records and CSV",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "quality pending completion preserves the later manual reason in another row",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "quality concurrent row submission waits for the pending correction without losing its draft",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "quality newer draft stays visible and submits unchanged after delayed records readback",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "quality late completion cannot reopen an old filter or restore old CSV rows",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "quality refused write retains original manual evidence for explicit retry",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "quality delayed refusal cannot attach an old row error to the newer editor",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "quality response event correction restores a known response without changing assignment or inquiries",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "quality admin response after actor change starts no new read for the old workspace",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "actor switch clears old report records and export before new scoped read",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "same-user staff binding change refetches report and options",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "late old-actor report cannot restore old company metrics",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "late old-actor record reply cannot restore old rows or export",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "same-user role downgrade clears report and makes no denied performance reads",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "invalid URL filters block report reads until explicit reset",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "totals drilldown and visible CSV reconcile quality duplicate and HK day",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "unknown click denominator stays unknown and assignments do not count as human replies",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "source and rent filters retain same scope across reload and sales stay distinct",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "failed filtered report and drilldown never export previous rows or invent zero",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "explicit branch staff dates and cohort scope survive reload and match exported row",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "disabled flag explains unavailable report and makes no performance reads",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "quality committed correction refreshes the same denominator records and CSV",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "quality pending completion preserves the later manual reason in another row",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "quality concurrent row submission waits for the pending correction without losing its draft",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "quality newer draft stays visible and submits unchanged after delayed records readback",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "quality late completion cannot reopen an old filter or restore old CSV rows",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "quality refused write retains original manual evidence for explicit retry",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "quality delayed refusal cannot attach an old row error to the newer editor",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "quality response event correction restores a known response without changing assignment or inquiries",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "quality admin response after actor change starts no new read for the old workspace",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "actor switch clears old report records and export before new scoped read",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "same-user staff binding change refetches report and options",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "late old-actor report cannot restore old company metrics",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "late old-actor record reply cannot restore old rows or export",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "same-user role downgrade clears report and makes no denied performance reads",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "invalid URL filters block report reads until explicit reset",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "totals drilldown and visible CSV reconcile quality duplicate and HK day",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "unknown click denominator stays unknown and assignments do not count as human replies",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "source and rent filters retain same scope across reload and sales stay distinct",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "failed filtered report and drilldown never export previous rows or invent zero",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "explicit branch staff dates and cohort scope survive reload and match exported row",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "disabled flag explains unavailable report and makes no performance reads",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "quality committed correction refreshes the same denominator records and CSV",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "quality pending completion preserves the later manual reason in another row",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "quality concurrent row submission waits for the pending correction without losing its draft",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "quality newer draft stays visible and submits unchanged after delayed records readback",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "quality late completion cannot reopen an old filter or restore old CSV rows",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "quality refused write retains original manual evidence for explicit retry",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "quality delayed refusal cannot attach an old row error to the newer editor",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "quality response event correction restores a known response without changing assignment or inquiries",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "quality admin response after actor change starts no new read for the old workspace",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "actor switch clears old report records and export before new scoped read",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "same-user staff binding change refetches report and options",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "late old-actor report cannot restore old company metrics",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "late old-actor record reply cannot restore old rows or export",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "same-user role downgrade clears report and makes no denied performance reads",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "invalid URL filters block report reads until explicit reset",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "totals drilldown and visible CSV reconcile quality duplicate and HK day",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "unknown click denominator stays unknown and assignments do not count as human replies",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "source and rent filters retain same scope across reload and sales stay distinct",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "failed filtered report and drilldown never export previous rows or invent zero",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "explicit branch staff dates and cohort scope survive reload and match exported row",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "disabled flag explains unavailable report and makes no performance reads",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "quality committed correction refreshes the same denominator records and CSV",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "quality pending completion preserves the later manual reason in another row",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "quality concurrent row submission waits for the pending correction without losing its draft",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "quality newer draft stays visible and submits unchanged after delayed records readback",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "quality late completion cannot reopen an old filter or restore old CSV rows",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "quality refused write retains original manual evidence for explicit retry",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "quality delayed refusal cannot attach an old row error to the newer editor",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "quality response event correction restores a known response without changing assignment or inquiries",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "quality admin response after actor change starts no new read for the old workspace",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "actor switch clears old report records and export before new scoped read",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "same-user staff binding change refetches report and options",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "late old-actor report cannot restore old company metrics",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "late old-actor record reply cannot restore old rows or export",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "same-user role downgrade clears report and makes no denied performance reads",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "invalid URL filters block report reads until explicit reset",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "totals drilldown and visible CSV reconcile quality duplicate and HK day",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "unknown click denominator stays unknown and assignments do not count as human replies",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "source and rent filters retain same scope across reload and sales stay distinct",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "failed filtered report and drilldown never export previous rows or invent zero",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "explicit branch staff dates and cohort scope survive reload and match exported row",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "disabled flag explains unavailable report and makes no performance reads",
+      "status": "passed",
+      "width": 390
+    }
+  ]
+}
