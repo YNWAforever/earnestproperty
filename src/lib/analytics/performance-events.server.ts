@@ -119,18 +119,29 @@ export async function revisePerformanceEventQuality(
   ) {
     throw new Response("Invalid quality correction", { status: 400 });
   }
-  const rows = await queryRows<{ event_key: string; affected_hk_day: string }>(
-    `WITH selected AS (
+  const rows = await queryRows<{
+    event_key: string | null;
+    affected_hk_day: string | null;
+    actor_allowed: boolean;
+  }>(
+    `WITH actor_row AS MATERIALIZED (
+       SELECT id FROM staff_users WHERE id=$4::uuid AND auth_user_id=$5 AND active FOR SHARE
+     ), actor_grant AS MATERIALIZED (
+       SELECT r.staff_user_id FROM staff_roles r JOIN actor_row a ON a.id=r.staff_user_id
+       WHERE r.role='admin' FOR SHARE OF r
+     ), selected AS MATERIALIZED (
        SELECT event_key,occurred_at FROM performance_event_records WHERE event_key=$1
      ), written AS (
        INSERT INTO performance_event_quality_revisions(event_key,quality,reason,changed_by)
-       SELECT event_key,$2,$3,$4::uuid FROM selected
+       SELECT s.event_key,$2,$3,a.staff_user_id FROM selected s CROSS JOIN actor_grant a
        RETURNING event_key
-     )
-     SELECT written.event_key,(selected.occurred_at AT TIME ZONE 'Asia/Hong_Kong')::date::text AS affected_hk_day
-     FROM written JOIN selected USING(event_key)`,
-    [input.eventKey, input.quality, input.reason.trim(), actor.staffId],
+     ) SELECT (SELECT event_key FROM written) AS event_key,
+       (SELECT (occurred_at AT TIME ZONE 'Asia/Hong_Kong')::date::text FROM selected) AS affected_hk_day,
+       EXISTS(SELECT 1 FROM actor_grant) AS actor_allowed`,
+    [input.eventKey, input.quality, input.reason.trim(), actor.staffId, actor.authUserId],
   );
-  if (!rows[0]) throw new Response("Performance event not found", { status: 404 });
+  if (!rows[0]?.actor_allowed) throw new Response("Forbidden", { status: 403 });
+  if (!rows[0].event_key || !rows[0].affected_hk_day)
+    throw new Response("Performance event not found", { status: 404 });
   return { eventKey: rows[0].event_key, affectedHkDay: rows[0].affected_hk_day };
 }
