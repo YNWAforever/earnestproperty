@@ -3018,5 +3018,342 @@
         "layer": "named evidence;read report for source/failure layer"
       }
     ]
+  },
+  "performanceQualificationReplayFollowup": {
+    "verifiedCodeSha": "4c1141a7d140ef095b24a08cece6489f181419b3",
+    "verifiedAt": "2026-10-03T19:32:16.628436+00:00",
+    "baseline": "9d800d954639c4c4c841ff2d2b6be800bf4b6553",
+    "red": {
+      "ownedSQL": {
+        "tests": 28,
+        "pass": 24,
+        "fail": 4,
+        "skipped": 0
+      },
+      "directDefects": 3,
+      "parentFailures": 1,
+      "ownedBrowserFocused": {
+        "failed": 3,
+        "width": 1280,
+        "rawLogAuthoritative": true,
+        "redAfterAllSummary": "last failed worker1case only;preserved,not represented as all3"
+      }
+    },
+    "ownedSQL": {
+      "pass": 28,
+      "fail": 0,
+      "skipped": 0,
+      "migrations": 85,
+      "exactCommittedSource": true,
+      "independentRawReadback": "original qualification and projection fullarrays unchanged after replay/denial;two concurrent identical requests return same eventKey with one source"
+    },
+    "ownedBrowser": {
+      "pass": 128,
+      "fail": 0,
+      "skipped": 0,
+      "widths": [
+        390,
+        768,
+        1280,
+        1440
+      ],
+      "casesPerWidth": 32,
+      "newCasesPerWidth": 5,
+      "layer": "actual-analytics-route-dashboard-table-shell-staff-store-synthetic-auth-api-owned-loopback",
+      "realAuth": false,
+      "realDatabase": false,
+      "realProvider": false,
+      "precommitSource": "128PASS exact final committed authorfix;first128run preserved raw log,summary replaced by focused copy run before hashing;latest128summary exactSHA;exacthead remote pending",
+      "operations": "existing qualification submit/evidence/filter/table controls;repeated loss,changed evidence refusal,remount replay;no new control promoted"
+    },
+    "unit": {
+      "analyticsNode": 65,
+      "analyticsBun": 3,
+      "noLinkNode": 99,
+      "noLinkBun": 9,
+      "fail": 0,
+      "skipped": 0
+    },
+    "static": {
+      "typecheck": "exit0",
+      "lint": "exit0;3baselinewarnings",
+      "build": "exit0"
+    },
+    "review": {
+      "model": "Astra",
+      "reviewedSha": "3dd989f1d92f84b0797d5872c94904232266074d",
+      "critical": 0,
+      "importantReported": 2,
+      "minor": 0,
+      "authorFixes": 2,
+      "remainingImportant": 0,
+      "authorFixSha": "4c1141a7d140ef095b24a08cece6489f181419b3",
+      "fixFocusedRed": 4,
+      "fixFocusedGreen": 4,
+      "finalUI": 128,
+      "freshContext": true,
+      "coverage": "all6focused files/cumulative199sampled;independent2owned browserprobes+whitespace;authorSQLlogs inspected;not exhaustive",
+      "secondReview": false
+    },
+    "configurationDryRun": {
+      "baseline": "9d800d954639c4c4c841ff2d2b6be800bf4b6553",
+      "code": "4c1141a7d140ef095b24a08cece6489f181419b3",
+      "configurationSchemaMigrationPackageWorkflowDiff": [],
+      "newDTOs": false,
+      "newRuntimeProviderIds": false,
+      "productionApplied": false,
+      "migrationDryRun": "all85 existing migrations in fresh owned PG17;28PASS precommit and28PASS exact committed source;no production migration",
+      "rollback": "restrict qualification entry before compatible server revert;read original immutable actor/time/evidence/source/event and retain quality/receipt/outbound/run/provenance;do not repeat uncertain write without original-source readback or restore wholeDB"
+    },
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidApplicationModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3",
+      "repairProduction": "0/3",
+      "newAgentCollectionRuns": 0,
+      "manualReplaySkipNotCounted": true
+    },
+    "capability": {
+      "ownedExactQualificationReplayAndCurrentActorWorkspace": "READY",
+      "hardReloadSessionRestartQualityUnknown": "NOT_READY",
+      "combinedTrueAuthProvider": "BLOCKED",
+      "fullActionsRolesNativeSchedule": "NOT_READY"
+    },
+    "logs": [
+      {
+        "file": "ep17-qualification-replay-red.log",
+        "sha256": "31e74c94324476951d6eeb492ade9fad742c6f9fe4b9a9c0da8f53bf89f120c9",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-green.log",
+        "sha256": "db26581e78fb705e3810305afa6951476bcce1a72219c10a7073ee2b70993a87",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-exact-sql.log",
+        "sha256": "0a3c67e79811f9187f873cc77bf85875b2e57e29f727d860bd58d7c61123314a",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-ui-red.log",
+        "sha256": "74c51ce24b7a047ce537d44df6fa4c112028198601c578a08dad79571a917aab",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-ui-green-focused.log",
+        "sha256": "e99792a4ecd9449f8a6d5d02cec38998b7c454dc45811601023b3106596e29d6",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-ui-green-full.log",
+        "sha256": "010f401847faf5317df26be57f1ab0d26d011da70d2f860a4e522409ec7bb459",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-analytics.log",
+        "sha256": "caf2cf4fe1449bb4c9983db67b3a821ef48b0e35d1233a5bcae43b109a36ad7f",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-no-link.log",
+        "sha256": "acb41f929722429922c49c9839f038474753bdf98e435f43800c7161a1ac4ae0",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-build.log",
+        "sha256": "ccb36418f0c67abbac82ea3f9d7ab8849785039d96db16551325546c162317f4",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-ui-red-summary.json",
+        "sha256": "d6b4a7868485ccaad9a4f6c549b67c0c6da10e7317dbfcab034dcaa432563e1d",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-ui-green-focused-summary.json",
+        "sha256": "d1f2210be8484cb4f56b763418c64ba43e152ddcd8ab712b26a413ee1f44282a",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-qualification-replay-browser-summary.json",
+        "sha256": "1c10872cdb5d83a18133a3d8734e5dfb3f35ba9343b331c2ddfb59efcd47e0e6",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-config-dry-run.json",
+        "sha256": "f6380b2bf9eb975ed4ceb798b3cafb0f9fa09d34797209a47b82ff7b39fac9a7",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-native-readonly.json",
+        "sha256": "565eddc99f0a754799f33ec56649231006b646c4ae83291614d068334efa806f",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-formal-readonly.json",
+        "sha256": "417d78ade23bdd8da79e1de359ee407234a30e08c531172ac055823947bb4ee7",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "review-qualification-replay-package.md",
+        "sha256": "c20f7595455cb8ff1b74e71d535080c4892afe3db8323e66119f8fe58039b85c",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "review-qualification-replay-result.md",
+        "sha256": "51b322af33ad7af18be7c7ce75868a58e685cc5b6ea903499be6aa9ac7547926",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-pre-review-summary.json",
+        "sha256": "c54e2d676a9b8a9f8b610ac207f5b6e1340ff2f1e193871bca4dfb9b57c18000",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-red-summary.json",
+        "sha256": "4b2ec9168589402945f1b755142a6e0484aa15f7892c0c468ea073a0c529505d",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-green-focused-summary.json",
+        "sha256": "3716915373e35931021bfad4e7dfba9ed0950dda81d842dd3c7005cfc84312aa",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-copy-green-summary.json",
+        "sha256": "3716915373e35931021bfad4e7dfba9ed0950dda81d842dd3c7005cfc84312aa",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-red.log",
+        "sha256": "250e852e68e5e2b06711de1854ef888fd2ca1875880ec303738626d2acbd916e",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-green-focused.log",
+        "sha256": "ec7b4ea4fb406ff6cfec52df9aefc1d3d86665cdab21e4a018060b9c6f2edc8c",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-green-full.log",
+        "sha256": "48f636f6ffd1ca2cb8e3dd5c180ab391fc380352662dc062696897affd1e4161",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-analytics.log",
+        "sha256": "28dda3e1ca2b61ec249ca9e085d982a4a96fa5bdd3184884a0391b63a741e978",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-build.log",
+        "sha256": "c26b8443091f404366563440a3fa2d3984bc316f423b3e742f5185bb172a373c",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-exact-sql-final.log",
+        "sha256": "ca1e4da1abc6fde39e85c9546164fcb9985fd7e9eda629be2fe1d8ec7d1b3f50",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-ui-exact-final.log",
+        "sha256": "f26c237d33a5576a243ea1a03fdec5d79777e47ec5cba207b5077d553cfbf8c9",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-copy-green.log",
+        "sha256": "5621c879ddfae1b442ad2552d4fd8ede553b8aaa1d70b3ebf8a4657a7e95b117",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "ep17-qualification-replay-review-build-final.log",
+        "sha256": "6eecc7d9adc66516d4e7643da1c696a0967d01f7a87fb418376f6202e24bd319",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-confirmed-1280.png",
+        "sha256": "fa4b65bb2f82f8eaccf536ffad7cb8bd93576b7fbe46dafdb41e4ac12cbfb5bc",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-confirmed-1440.png",
+        "sha256": "fbfa93b593dfa07cdf01d2af0eb95bdd3a2e5ff5d77d94da6784e3f5d48c9ab3",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-confirmed-390.png",
+        "sha256": "16ad608c0bc744f78dbcd8547ea686a3703b6a2d726706141f50288c22ade3a3",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-confirmed-768.png",
+        "sha256": "8dab0070e91012d371d42618eca91e0e2b51d2bc52e63ffdc50d6a6cb4aa0cb2",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-quality-confirmed-1280.png",
+        "sha256": "757efbde7f1228cc62270cf63e51fce28bc36f825b357be2e6d63ffbe8010714",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-quality-confirmed-1440.png",
+        "sha256": "762cf97fbd7d5e4d12a5fc6f967604c85b8f7763acc82a675fb9d2bdfe80bc7c",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-quality-confirmed-390.png",
+        "sha256": "5ae94f013d1c51bb7f66ae2a52f733f8c747fb47ced4dace2af62f7d9c033d77",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-quality-confirmed-768.png",
+        "sha256": "e0e479b339de4f72fd366bbc931f4c28d3caf753379636c15329e5790912ea2b",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-totals-1280.png",
+        "sha256": "2bd94c85f6ea983dd6d4f162991925f102e5a3dceb421b204b7eb188f3ad7e7b",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-totals-1440.png",
+        "sha256": "688a9f2de4879dca506d1541a8f7943d3f256155e6264ffae0f82ed07c6fe92f",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-totals-390.png",
+        "sha256": "f8993bef8a41785e6a4671adebdc43c983edb8be9870b42238b844c482f1550a",
+        "layer": "read report for source and test isolation"
+      },
+      {
+        "file": "performance-replay-totals-768.png",
+        "sha256": "6bf0174a6eee718b495d35b475cb19a61b8a5bbb63283c74911d439f9dc20926",
+        "layer": "read report for source and test isolation"
+      }
+    ]
   }
 }
