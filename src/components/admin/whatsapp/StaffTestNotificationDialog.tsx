@@ -22,17 +22,23 @@ export function StaffTestNotificationDialog({
   transport: Transport;
   endpointVersion: number | null;
 }) {
+  const storageKey = `staff-test:${staffId}:${transport}`;
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [status, setStatus] = useState<Status | null>(null);
-  const [requestId, setRequestId] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string | null>(() =>
+    typeof window === "undefined" ? null : window.sessionStorage.getItem(storageKey),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [evidenceRef, setEvidenceRef] = useState("");
-  const storageKey = `staff-test:${staffId}:${transport}`;
+  const unresolved =
+    !!requestId && (!status || ["queued", "dispatching", "unknown"].includes(status.state));
+  const previewVersionChanged = !!preview && preview.endpointVersion !== endpointVersion;
   useEffect(() => {
     const id = window.sessionStorage.getItem(storageKey);
     if (!id) return;
+    setRequestId(id);
     let active = true;
     findStaffTestNotificationByRequest(id)
       .then((saved) => {
@@ -52,8 +58,23 @@ export function StaffTestNotificationDialog({
       active = false;
     };
   }, [storageKey]);
+  async function reconcile() {
+    if (!requestId || busy) return;
+    setBusy(true);
+    setError("");
+    setOpen(true);
+    try {
+      const saved = await findStaffTestNotificationByRequest(requestId);
+      if (saved) setStatus(saved);
+      else setError("先前提交的試送尚無紀錄；請保留原請求並稍後查閱，不會重新發送。");
+    } catch {
+      setError("未能查閱原試送結果；請保留原請求並稍後再試，不會重新發送。");
+    } finally {
+      setBusy(false);
+    }
+  }
   async function showPreview() {
-    if (!endpointVersion) return;
+    if (!endpointVersion || unresolved || busy) return;
     setBusy(true);
     setError("");
     setStatus(null);
@@ -69,7 +90,15 @@ export function StaffTestNotificationDialog({
     }
   }
   async function send() {
-    if (!preview?.ready || !preview.previewToken || !endpointVersion) return;
+    if (
+      !preview?.ready ||
+      !preview.previewToken ||
+      !endpointVersion ||
+      previewVersionChanged ||
+      unresolved ||
+      busy
+    )
+      return;
     const id = requestId ?? crypto.randomUUID();
     setRequestId(id);
     window.sessionStorage.setItem(storageKey, id);
@@ -79,13 +108,13 @@ export function StaffTestNotificationDialog({
       const queued = await enqueueStaffTestNotification({
         staffId,
         transport,
-        endpointVersion,
+        endpointVersion: preview.endpointVersion,
         previewToken: preview.previewToken,
         requestId: id,
       });
       setStatus(await getStaffTestNotification(queued.attemptId));
     } catch {
-      setError("試送未能提交；如頁面曾中斷，請保留此視窗並用同一請求編號重試。");
+      setError("試送結果尚未核實；請查閱原試送結果，不會建立新請求或重新發送。");
     } finally {
       setBusy(false);
     }
@@ -95,12 +124,18 @@ export function StaffTestNotificationDialog({
       <Button
         type="button"
         variant="outline"
-        disabled={!endpointVersion || busy}
+        disabled={!endpointVersion || busy || unresolved}
         onClick={showPreview}
       >
         {transport === "staff_whatsapp" ? "測試同事 WhatsApp" : "測試 Inbox 私有備註"}
       </Button>
-      {open && (preview || status) ? (
+      {requestId ? (
+        <Button type="button" variant="outline" disabled={busy} onClick={() => void reconcile()}>
+          查閱原試送結果
+        </Button>
+      ) : null}
+      {!open && error ? <p role="alert">{error}</p> : null}
+      {open && (preview || status || requestId) ? (
         <section role="dialog" aria-label="同事通知試送" className="space-y-3 rounded border p-4">
           <h4 className="font-semibold">[測試] 同事通知</h4>
           {preview ? (
@@ -121,7 +156,7 @@ export function StaffTestNotificationDialog({
               </div>
               <div>
                 <dt className="inline">端點版本：</dt>
-                <dd className="inline">v{endpointVersion}</dd>
+                <dd className="inline">v{preview.endpointVersion}</dd>
               </div>
               <div>
                 <dt className="inline">Inbox 映射版本：</dt>
@@ -137,6 +172,7 @@ export function StaffTestNotificationDialog({
           {preview?.reasons.length ? (
             <p role="alert">未可試送：{preview.reasons.join("、")}</p>
           ) : null}
+          {previewVersionChanged ? <p role="alert">端點版本已變更；請重新建立試送預覽。</p> : null}
           {error ? <p role="alert">{error}</p> : null}
           {status ? (
             <div role="status" className="text-sm">
@@ -197,7 +233,8 @@ export function StaffTestNotificationDialog({
               <Button
                 type="button"
                 variant="outline"
-                onClick={async () => setStatus(await getStaffTestNotification(status.attemptId))}
+                disabled={busy}
+                onClick={() => void reconcile()}
               >
                 重新查閱結果
               </Button>
@@ -206,7 +243,9 @@ export function StaffTestNotificationDialog({
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
-              disabled={busy || !preview?.ready || Boolean(status)}
+              disabled={
+                busy || !preview?.ready || Boolean(status) || unresolved || previewVersionChanged
+              }
               onClick={send}
             >
               明確提交試送
