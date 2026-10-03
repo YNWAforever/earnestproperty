@@ -1561,5 +1561,219 @@
       "declinedToJudge": "nativeclipboard,trueAuth/expiry/fullroles/flags/combined,provider/send/model,production/native/currentCI,Propertyhkfull/livewithdrawal,exhaustiveoriginalactions/archive,unrelatedbunlock/changingevidence/generatedrouteTree",
       "ruling": "formal gates retain BLOCKED/NOT_READY;primary separately verifies CI and immutable evidence;no live actions"
     }
+  },
+  "campaignCancellationFollowup": {
+    "verifiedCodeSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+    "verifiedAt": "2026-10-03T12:20:22.949471+00:00",
+    "tasks": [
+      "EP-16"
+    ],
+    "red": {
+      "defects": 2,
+      "failingAssertions": 4,
+      "passingAssertions": 2,
+      "runtimeSource": "ff213714888ef902942b373d227e2220df12d823",
+      "tests": "new uncommitted acceptance tests;old actor success feedback and absent durable original cancellation read gate;lost response/inflight reload/storage refusal are manifestations"
+    },
+    "browser": {
+      "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+      "pass": 60,
+      "fail": 0,
+      "skipped": 0,
+      "perWidth": 15,
+      "evidence": "campaign-cancel-browser-execution-summary.json",
+      "layer": "actual-campaign-route-shell-staff-store-synthetic-auth-api-owned-loopback",
+      "newCases": 28,
+      "retainedQueueCases": 32,
+      "acceptedBoundary": "synthetic fixture counter/history only;not provider acceptance",
+      "inflightReload": "destroyed unresolved synthetic promise;not real server worker restart"
+    },
+    "independentOwnedSql": {
+      "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+      "pass": 5,
+      "fail": 0,
+      "skipped": 0,
+      "migrations": 85,
+      "layer": "fresh loopback PG17/full85 actual handlers/raw SQL;trusted manager actor port;parent+4 subtests",
+      "readback": "repeat cancellation false;original in-flight sending row unchanged;undispatched recipient cancelled;original job identity/payload retained;queue audit1/cancel audit1;zero outbound intents;zero fetch",
+      "notClaimed": "no real Auth/provider delivery or seeded historical outbound-intent cancellation"
+    },
+    "moduleRegression": {
+      "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+      "woztellNode": 159,
+      "woztellBun": 9,
+      "enquiriesNode": 103,
+      "sharedSyntheticBrowser": 115,
+      "fail": 0,
+      "skipped": 0
+    },
+    "static": {
+      "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "baselineWarnings": 3,
+      "buildExit": 0
+    },
+    "actionReconciliation": {
+      "businessActions": [
+        "ACT-46",
+        "ACT-48",
+        "ACT-49"
+      ],
+      "overlappingSourceControls": 6,
+      "status": "LOCAL_PARTIAL;0713 row cancel actually operated;draft cancel0733 not operated;new original-cancel read control has no invented baseline ID",
+      "evidence": "campaign-cancel-action-execution.csv"
+    },
+    "configurationOrSchemaChange": false,
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3",
+      "repairedBranchProduction": "0/3",
+      "newNativeRuns": 0
+    },
+    "capability": "owned original campaign cancellation recovery READY;trueAuth/provider/combinedSQL/fullroles/flags BLOCKED;full action/native schedule NOT_READY",
+    "logs": [
+      {
+        "file": "ep16-cancel-red.log",
+        "sha256": "315c19f8fdd872d2b04322598063474a2cd29a45fb1344eb51a84483c73c84c0",
+        "sourceSha": "see layer",
+        "layer": "ff213714888ef902942b373d227e2220df12d823 runtime;new uncommitted acceptance tests;four failing manifestations of two defects"
+      },
+      {
+        "file": "ep16-cancel-green-focused.log",
+        "sha256": "739b05d293ff455334d588d2270ce446d68c668df21790f3b7bd136f2d3a0e56",
+        "sourceSha": "see layer",
+        "layer": "focused precommit cancellation regression GREEN"
+      },
+      {
+        "file": "ep16-cancel-journal-focused.log",
+        "sha256": "994529f709dfc5b1640ba462cc40ca6852321bdd1cbccf07a4b4b13877266ca7",
+        "sourceSha": "see layer",
+        "layer": "supplemental corrupt/unknown version journal acceptance;not new defect RED"
+      },
+      {
+        "file": "ep16-cancel-final-browser.log",
+        "sha256": "d2a4bba2124d8572983c288a5939dc4ab7dd52a2957a76a752333eaa747a2983",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "committed source;actual route/shell/store;synthetic Auth/API"
+      },
+      {
+        "file": "ep16-cancel-final-sql.log",
+        "sha256": "bb7722c112c391d82df5c6319ef274e7475ae8bc4aba8d25902a7f9d9febdb54",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "committed source;fresh owned full85 actual handlers/raw SQL;trusted actor;zero fetch guard"
+      },
+      {
+        "file": "ep16-cancel-final-woztell.log",
+        "sha256": "842565a1c991ba42e28fff078d0ea140df338c536c7f5dd96cfcfddf9c5a814f",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "committed source;Node159+Bun9 regression"
+      },
+      {
+        "file": "ep16-cancel-final-enquiries.log",
+        "sha256": "8512698228b95a05969bcd125668f301a90c99dc95e3b31cf0d279d3c9c1579e",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "committed source;Node103 regression"
+      },
+      {
+        "file": "ep16-cancel-final-shared.log",
+        "sha256": "3919b724562d3c7bc98ee1288604cb56fb03910d7cf9d97d0334a4a75df53a5e",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "committed source;shared115 synthetic browser"
+      },
+      {
+        "file": "ep16-cancel-final-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "committed source;typecheck exit0"
+      },
+      {
+        "file": "ep16-cancel-final-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "committed source;lint exit0;three baseline warnings"
+      },
+      {
+        "file": "ep16-cancel-final-build.log",
+        "sha256": "81ac3f4ffc267035af518907ac3c1aea2d8c97593e4fabaadd1eabcc36500fb2",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "committed source;build exit0"
+      },
+      {
+        "file": "campaign-cancel-confirmed-390.png",
+        "sha256": "b297f36c58634c770e9ef3a39703b7d60cc016a467312b450e4b5fc530f901b2",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "actual cancellation success screen;synthetic accepted history;four widths;overflow asserted"
+      },
+      {
+        "file": "campaign-cancel-green-390.png",
+        "sha256": "1483c838db25fca8f106b505378675c30f07b0656292b10b9fbf68b4a4c31ed2",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "existing lost QUEUE response screenshot;filename does not establish cancellation recovery"
+      },
+      {
+        "file": "campaign-cancel-confirmed-768.png",
+        "sha256": "f689e26e80c735b80f8e2e940654a271cbbe5836d3f3a539e210af58f1a4f66a",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "actual cancellation success screen;synthetic accepted history;four widths;overflow asserted"
+      },
+      {
+        "file": "campaign-cancel-green-768.png",
+        "sha256": "3b7e85679d81dcf83d61d9376c3922e9d0ba5ee771c4d9845d86b19c93f1c225",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "existing lost QUEUE response screenshot;filename does not establish cancellation recovery"
+      },
+      {
+        "file": "campaign-cancel-confirmed-1280.png",
+        "sha256": "b400af52aee1eb58f8c21770f631c24daf9b16be84010819b828cf24c7179cf5",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "actual cancellation success screen;synthetic accepted history;four widths;overflow asserted"
+      },
+      {
+        "file": "campaign-cancel-green-1280.png",
+        "sha256": "608c12e18ac733c7d38606891b7d8278dda535bb62b2a6deb84f00eddac0f1ae",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "existing lost QUEUE response screenshot;filename does not establish cancellation recovery"
+      },
+      {
+        "file": "campaign-cancel-confirmed-1440.png",
+        "sha256": "71713b829f5f3a47b93060c4926fbe8800b7d3565933f26944a77b2730667aaf",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "actual cancellation success screen;synthetic accepted history;four widths;overflow asserted"
+      },
+      {
+        "file": "campaign-cancel-green-1440.png",
+        "sha256": "bbd7178c261ef40c9ac72d66f8b8adbcbde2ad7a79b259f8d5b3c6a56c305952",
+        "sourceSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+        "layer": "existing lost QUEUE response screenshot;filename does not establish cancellation recovery"
+      }
+    ],
+    "report": "ep-16-campaign-cancel-readback.md",
+    "independentReview": {
+      "reviewedSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+      "base": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+      "verdict": "no concrete Critical/Important in inspected paths;not exhaustive",
+      "actualIndependentChecks": {
+        "aiContracts": 13,
+        "crmRegression": 6,
+        "diffCheck": true
+      },
+      "invocationFailure": "reviewer initial CRM command lacked module-mocks flag;failed before tests;corrected6PASS",
+      "notRerun": [
+        "browser",
+        "ownedSQL",
+        "typecheck",
+        "lint",
+        "build"
+      ],
+      "minorRuling": "campaign-cancel-green screenshots explicitly labelled QUEUE recovery;cancel-confirmed separate;resolved in evidence",
+      "declined": "trueAuth/API/provider/recall/nativeclipboard/IME/productionflags/schema/worker/fullroles/scopes/routes/actions/combinedSQL/Propertyhkdt/detail/three schedules;retain BLOCKED/NOT_READY",
+      "rawSummarySha256": "11aceaf377a5d960cef16cdc0cd2fe695aa53d477d6bab1d06588d65ed45e32d"
+    }
   }
 }
