@@ -114,6 +114,7 @@
     "test:staff-setup:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-staff-setup.spec.ts",
     "test:whatsapp-mobile:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-whatsapp-mobile.spec.ts",
     "test:property-sync:recovery:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-property-sync-recovery.spec.ts",
+    "test:admin-daily-work:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-daily-work.spec.ts",
     "test:operations:owned:db": "node --experimental-test-module-mocks --test src/lib/control-plane/operations-recovery-owned.db.test.mjs",
     "test:admin-golden:db": "node --experimental-test-module-mocks --test scripts/acceptance/admin-golden-journeys.test.mjs",
     "test:admin-overview:db": "node --experimental-test-module-mocks --test src/lib/neon/admin-overview-owned.db.test.mjs"

@@ -11,6 +11,7 @@ export default defineConfig({
     "**/admin-staff-setup.spec.ts",
     "**/admin-whatsapp-mobile.spec.ts",
     "**/admin-property-sync-recovery.spec.ts",
+    "**/admin-daily-work.spec.ts",
   ],
   fullyParallel: true,
   retries: 0,
