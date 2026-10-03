@@ -205,6 +205,9 @@ for (const width of [1440, 1280, 768, 390])
       await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue(
         "Owned newer replacement draft must not overwrite original request",
       );
+      await expect(row(page, 1).getByRole("note", { name: "上次待確認的核實依據" })).toHaveText(
+        "Owned accepted original qualification contact evidence",
+      );
     });
     test("qualification original request survives filter and record table remount before replay", async ({
       page,
@@ -233,12 +236,107 @@ for (const width of [1440, 1280, 768, 390])
       await page.evaluate(() => {
         window.performanceReadbackFixture.qualificationMode = "ok";
       });
-      await editQualification(page, 1, evidence);
+      await row(page, 1).getByText("核實合格線索", { exact: true }).click();
+      const retained = row(page, 1).getByRole("note", { name: "上次待確認的核實依據" });
+      await expect(retained).toHaveText(evidence);
+      // Restore from what the user can read, not a hidden fixture/test variable.
+      await row(page, 1)
+        .getByLabel("核實依據", { exact: true })
+        .fill((await retained.textContent())!);
       await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
       await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue("");
       const attempts = await qualificationCalls(page);
       expect(attempts).toHaveLength(2);
       expect(attempts[1].input).toEqual(attempts[0].input);
+      expect(await page.evaluate(() => window.performanceReadbackFixture.qualifications)).toEqual(
+        before,
+      );
+    });
+    test("qualification definite initial refusal permits revised evidence and fresh time after eligibility repair", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.leadStages["80000000-0000-4000-8000-000000000101"] =
+          "new";
+      });
+      await editQualification(page, 1, "Owned initial refused requirements before actual contact");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualifications),
+      ).toHaveLength(0);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.leadStages["80000000-0000-4000-8000-000000000101"] =
+          "contacted";
+      });
+      await page.clock.setFixedTime(new Date("2026-09-30T01:00:00Z"));
+      const revised = "Owned updated requirements after actual contact and eligibility repair";
+      await row(page, 1).getByLabel("核實依據", { exact: true }).fill(revised);
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue("");
+      const attempts = await qualificationCalls(page);
+      expect(attempts).toHaveLength(2);
+      expect(attempts[1].input).toMatchObject({
+        qualifiedAt: "2026-09-30T01:00:00.000Z",
+        evidence: revised,
+      });
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualifications),
+      ).toHaveLength(1);
+    });
+    test("qualification later authority denial retains earlier uncertain original request for recovery", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "commit-unknown";
+      });
+      await editQualification(
+        page,
+        1,
+        "Owned uncertain accepted qualification before later authority denial",
+      );
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      const before = await page.evaluate(() =>
+        JSON.parse(JSON.stringify(window.performanceReadbackFixture.qualifications)),
+      );
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "replay-denied";
+      });
+      await page.clock.setFixedTime(new Date("2026-09-30T00:45:00Z"));
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect.poll(async () => (await qualificationCalls(page)).length).toBe(2);
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      await row(page, 1)
+        .getByLabel("核實依據", { exact: true })
+        .fill("Owned newer draft must remain after denial during recovery");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("原核實依據");
+      expect(await qualificationCalls(page)).toHaveLength(2);
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue(
+        "Owned newer draft must remain after denial during recovery",
+      );
+      const retained = row(page, 1).getByRole("note", { name: "上次待確認的核實依據" });
+      await expect(retained).toHaveText(before[0].evidence);
+      await row(page, 1)
+        .getByLabel("核實依據", { exact: true })
+        .fill((await retained.textContent())!);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "ok";
+      });
+      await page.clock.setFixedTime(new Date("2026-09-30T01:00:00Z"));
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue("");
+      const final = await qualificationCalls(page);
+      expect(final).toHaveLength(3);
+      expect(final[1].input).toEqual(final[0].input);
+      expect(final[2].input).toEqual(final[0].input);
       expect(await page.evaluate(() => window.performanceReadbackFixture.qualifications)).toEqual(
         before,
       );

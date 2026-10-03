@@ -4,6 +4,7 @@ import {
   parsePerformanceFilters,
 } from "../../../src/lib/analytics/sales-performance.mjs";
 import { selectPerformanceRecords } from "../../../src/lib/analytics/sales-performance-drilldown.mjs";
+import { ServerFnResponseError } from "../../../src/lib/neon/server-fn-response";
 const id = (n: number) => `80000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 export const state = {
   actor: sessionStorage.getItem("performance-readback-actor") ?? "actor-a",
@@ -280,15 +281,17 @@ export async function qualifyPerformanceLead(value: {
     which = scope(),
     mode = state.qualificationMode;
   state.calls.push({ name: "qualification", actor, binding: state.binding, input: value });
+  if (mode === "replay-denied")
+    throw new ServerFnResponseError("Owned current authority denied", 403);
   const snapshot = input({ start: "2026-09-30", end: "2026-09-30", cohortWindowDays: 90 });
   if (
     !value.evidence ||
     value.evidence.trim().length < 8 ||
     !Number.isFinite(Date.parse(value.qualifiedAt))
   )
-    throw new Response("Owned invalid qualification", { status: 400 });
+    throw new ServerFnResponseError("Owned invalid qualification", 400);
   if (!snapshot.inquiries.some((i) => i.crmLeadId === value.leadId))
-    throw new Response("Owned source outside current scope", { status: 409 });
+    throw new ServerFnResponseError("Owned source outside current scope", 409);
   const existing = state.qualifications.find((q) => q.leadId === value.leadId);
   if (existing) {
     if (
@@ -296,7 +299,7 @@ export async function qualifyPerformanceLead(value: {
       existing.evidence !== value.evidence.trim() ||
       new Date(existing.qualifiedAt).getTime() !== new Date(value.qualifiedAt).getTime()
     )
-      throw new Response("Owned different qualification request", { status: 409 });
+      throw new ServerFnResponseError("Owned different qualification request", 409);
     if (mode === "commit-unknown") throw Error("Owned response lost after retained qualification");
     return { eventKey: `lead_qualified:${value.leadId}` };
   }
@@ -305,7 +308,7 @@ export async function qualifyPerformanceLead(value: {
       state.leadStages[value.leadId] ?? "contacted",
     )
   )
-    throw new Response("Owned ineligible source", { status: 409 });
+    throw new ServerFnResponseError("Owned ineligible source", 409);
   if (mode.startsWith("delayed"))
     await new Promise<void>((release) => state.pending.push({ release }));
   if (mode.endsWith("failure")) throw Error("Owned qualification refused before write");
