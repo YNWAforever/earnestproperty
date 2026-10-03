@@ -764,5 +764,211 @@
       }
     ],
     "report": "ep-16-campaign-recovery-readback.md"
+  },
+  "performanceReadbackFollowup": {
+    "verifiedCodeSha": "ddd9318464c09c0eb32d19dcd5a16f04ec5d0f2e",
+    "testFixtureSha": "fa379ea97ed906155a27e29d3f9cf44325481fda",
+    "verifiedAt": "2026-10-03T08:14:45.230582+00:00",
+    "tasks": [
+      "EP-17"
+    ],
+    "runtimeTree": "IDENTICAL between code and test follow-up;only e2e/static-render test files differ",
+    "red": {
+      "distinctScenarios": 3,
+      "actorExport": "old CSV stayed available",
+      "staffBinding": "old4 vs new1",
+      "lateActor": "released old response restored4 vs new1",
+      "initialLateReadFailureRetained": true
+    },
+    "browser": {
+      "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda",
+      "pass": 48,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "actual-analytics-route-dashboard-table-shell-staff-store-synthetic-auth-api-owned-loopback",
+      "evidence": "performance-readback-browser-execution-summary.json"
+    },
+    "independentOwnedSql": {
+      "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda",
+      "pass": 4,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "fresh loopback PostgreSQL17/full85;actual report/drilldown handlers+raw SQL facts;trusted actor port;not real Auth"
+    },
+    "moduleRegression": {
+      "analytics": {
+        "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda",
+        "Node": 65,
+        "Bun": 3,
+        "fail": 0,
+        "skipped": 0
+      },
+      "noLink": {
+        "sourceSha": "ddd9318464c09c0eb32d19dcd5a16f04ec5d0f2e",
+        "Node": 99,
+        "Bun": 9,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    "sharedBrowser": {
+      "sourceSha": "ddd9318464c09c0eb32d19dcd5a16f04ec5d0f2e",
+      "pass": 115,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "actual routes/synthetic Auth/API;separate from new48"
+    },
+    "static": {
+      "typecheckSha": "fa379ea97ed906155a27e29d3f9cf44325481fda",
+      "typecheckExit": 0,
+      "lintSha": "fa379ea97ed906155a27e29d3f9cf44325481fda",
+      "lintExit": 0,
+      "lintBaselineWarnings": 3,
+      "buildSha": "ddd9318464c09c0eb32d19dcd5a16f04ec5d0f2e",
+      "buildExit": 0
+    },
+    "fixtureFailures": "24PASS/8FAIL wrong unique-customer assumption/card label;wrong title column;invalid responses key;missing global fixture type;legacy static-render missing new Auth/staff ports64PASS/1FAIL. All retained and corrected;not product RED or PASS.",
+    "metrics": "production inquiries4;duplicate inquiry keeps cohort denominator4 but one sale numerator1=25%;unique customers unavailable;click denominator unknown;assignment1/human response1/unanswered3;SQL sale10m+rent18k,company deals2,credit60/40 not duplicate,known commission100k/sample1",
+    "actionReconciliation": {
+      "businessActions": [
+        "ACT-55",
+        "ACT-56",
+        "ACT-57"
+      ],
+      "overlappingSourceControls": 15,
+      "status": "LOCAL_PARTIAL;ACT56 drilldown only,quality correction Button not claimed;component occurrences not Button PASS",
+      "evidence": "performance-readback-action-execution.csv"
+    },
+    "runtimeConfigMigrationProviderChanges": false,
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3 previously verified",
+      "repairedBranchProduction": "0/3",
+      "newNativeRuns": 0
+    },
+    "capability": "local report actor/staff/role isolation,filter/drilldown/CSV READY;combined real Auth/SQL and full role/actions/quality edits BLOCKED or NOT_READY",
+    "review": "focused self review;previous independent review not claimed for this slice",
+    "logs": [
+      {
+        "file": "ep17-performance-red.log",
+        "sha256": "1b2ccfea28bea1f8fe60528b37164be1267025dc36edaabb4ffd9cf11440c90c",
+        "layer": "pre-fix actor/export and staff binding RED;initial late test lacked new read;canonical late proof separate",
+        "sourceSha": null
+      },
+      {
+        "file": "ep17-performance-red-late.log",
+        "sha256": "e8eaa75285185456d6a8e01b4a2e132f5c77a43d5cd7df6a4e6b7aa180d72875",
+        "layer": "pre-fix released old-actor reply RED;same late scenario,not a fourth distinct defect",
+        "sourceSha": null
+      },
+      {
+        "file": "ep17-performance-green-initial.log",
+        "sha256": "c619942d9ceedfec4fa0d62fdc549aaa3db489e1497ebcaaea7cb720259deec9",
+        "layer": "new fixture assumptions/labels wrong;not product RED/PASS",
+        "sourceSha": null
+      },
+      {
+        "file": "ep17-performance-owned-db-initial.log",
+        "sha256": "413c4e4c4139248bdcdf7e823acaabc1ed1aa8639f5109094946720b0264e431",
+        "layer": "new fixture wrong column;corrected from real migration;not product RED/PASS",
+        "sourceSha": null
+      },
+      {
+        "file": "ep17-performance-owned-db-corrected.log",
+        "sha256": "697b51376f6d6f0c2a803bed3abbce0f299d78cdf4ac40c1083973de3f011914",
+        "layer": "new fixture invalid responses drilldown key;corrected;not product RED/PASS",
+        "sourceSha": null
+      },
+      {
+        "file": "ep17-performance-typecheck.log",
+        "sha256": "0cb525244a8d9879470d9a1660ff714326f72727a22353562437ee18ee691cfe",
+        "layer": "new fixture global type not in compiler scope;corrected;not product RED/PASS",
+        "sourceSha": null
+      },
+      {
+        "file": "ep17-performance-exact-analytics.log",
+        "sha256": "b031a9a1a716d8b14a9e0423eb9225e3731b1a6085927b1729d08878cbd0b5cf",
+        "layer": "existing static-render fixture missing added Auth/staff ports;corrected without weakening assertions",
+        "sourceSha": "ddd9318464c09c0eb32d19dcd5a16f04ec5d0f2e"
+      },
+      {
+        "file": "ep17-performance-exact-shared-ui.log",
+        "sha256": "37786e48266c6b7607f257d651d5acc2ce4237a80bbff0b1ae636dcef51f1521",
+        "layer": "shared actual routes/synthetic API regression",
+        "sourceSha": "ddd9318464c09c0eb32d19dcd5a16f04ec5d0f2e"
+      },
+      {
+        "file": "ep17-performance-exact-no-link.log",
+        "sha256": "a93b1e9359c86c569c5e5dd0f9eeb19beedcc568249554367d4104a2447144e3",
+        "layer": "Node99+Bun9 including source attribution and CSV",
+        "sourceSha": "ddd9318464c09c0eb32d19dcd5a16f04ec5d0f2e"
+      },
+      {
+        "file": "ep17-performance-exact-build.log",
+        "sha256": "b97444f0ea75f6307b47ebb57280fb6431b020fee5c9ab684292e2d19d5539e2",
+        "layer": "product build before test-only follow-up;runtime tree identical",
+        "sourceSha": "ddd9318464c09c0eb32d19dcd5a16f04ec5d0f2e"
+      },
+      {
+        "file": "ep17-performance-followup-browser.log",
+        "sha256": "aeedf4ce61a20d5888d90ec06b8978e9908911b7fc125b4a6e8ee2f49ac43037",
+        "layer": "committed follow-up actual-route browser",
+        "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda"
+      },
+      {
+        "file": "ep17-performance-followup-owned-db.log",
+        "sha256": "c97ae70bb15f84489a35c02f7cbb8df11d781e4fb075c9298840e6de936a8962",
+        "layer": "actual handlers and independent owned full85 SQL",
+        "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda"
+      },
+      {
+        "file": "ep17-performance-followup-analytics.log",
+        "sha256": "b9aac005531c4bff9fffcfe18e5bff8bd2b596d3a2ae0bbef057772886d2c3e8",
+        "layer": "corrected static fixture plus analytics Node65+Bun3",
+        "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda"
+      },
+      {
+        "file": "ep17-performance-followup-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "typecheck",
+        "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda"
+      },
+      {
+        "file": "ep17-performance-followup-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "lint;3 baseline warnings;new cleanup warning resolved",
+        "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda"
+      },
+      {
+        "file": "performance-green-390.png",
+        "sha256": "f8993bef8a41785e6a4671adebdc43c983edb8be9870b42238b844c482f1550a",
+        "layer": "owned screenshot;390 inspected;table scrolls inside page",
+        "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda"
+      },
+      {
+        "file": "performance-green-768.png",
+        "sha256": "7d8bb174affa0c5f811cfd4e47e7fc5407b067fc046556b2221faed76f458c0e",
+        "layer": "owned screenshot;390 inspected;table scrolls inside page",
+        "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda"
+      },
+      {
+        "file": "performance-green-1280.png",
+        "sha256": "2bd94c85f6ea983dd6d4f162991925f102e5a3dceb421b204b7eb188f3ad7e7b",
+        "layer": "owned screenshot;390 inspected;table scrolls inside page",
+        "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda"
+      },
+      {
+        "file": "performance-green-1440.png",
+        "sha256": "688a9f2de4879dca506d1541a8f7943d3f256155e6264ffae0f82ed07c6fe92f",
+        "layer": "owned screenshot;390 inspected;table scrolls inside page",
+        "sourceSha": "fa379ea97ed906155a27e29d3f9cf44325481fda"
+      }
+    ],
+    "report": "ep-17-performance-readback.md"
   }
 }
