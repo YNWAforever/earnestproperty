@@ -6,6 +6,7 @@ export default defineConfig({
     "admin-operations-recovery.spec.ts",
     "admin-staff-setup.spec.ts",
     "admin-whatsapp-mobile.spec.ts",
+    "admin-property-sync-recovery.spec.ts",
   ],
   workers: 1,
   fullyParallel: false,
