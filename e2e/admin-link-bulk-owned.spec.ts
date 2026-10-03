@@ -388,6 +388,70 @@ for (const width of [1440, 1280, 768, 390]) {
       ),
     ).toBe(2);
   });
+  for (const legacy of [false, true]) {
+    test(`original batch receipt cleans its own draft after another tab changes the pointer ${legacy ? "legacy" : "current"} ${width}`, async ({
+      page,
+    }) => {
+      await setup(page, width);
+      await previewFifty(page);
+      await page.evaluate(() =>
+        Object.assign(window.ownedLinkBulk, { commitMode: "lost", readFailure: true }),
+      );
+      await page.getByRole("button", { name: "確認建立 50 筆" }).click();
+      await expect(page.getByRole("region", { name: "批次結果" })).toContainText("未提交 50");
+      const originalKey = await page.evaluate(
+        () =>
+          Object.keys(localStorage).find((k) => k.startsWith("earnest:whatsapp-link-draft:v1:"))!,
+      );
+      if (legacy)
+        await page.evaluate(() => {
+          const key = Object.keys(sessionStorage).find((k) =>
+            k.startsWith("earnest:whatsapp-link-batch:v2:"),
+          )!;
+          const value = JSON.parse(sessionStorage.getItem(key)!);
+          delete value.draftId;
+          sessionStorage.setItem(key, JSON.stringify(value));
+        });
+      const otherTab = await page.context().newPage();
+      await setup(otherTab, width);
+      const other = await otherTab.evaluate((key) => {
+        const original = JSON.parse(localStorage.getItem(key)!);
+        const draftId = crypto.randomUUID();
+        const rows = original.rows
+          .slice(0, 5)
+          .map((row: { rowKey: string; placementId: string }) => ({
+            ...row,
+            rowKey: crypto.randomUUID(),
+            placementId: "other-tab-edited",
+          }));
+        const value = { ...original, draftId, rows };
+        const otherKey = key.slice(0, key.lastIndexOf(":") + 1) + draftId;
+        localStorage.setItem(otherKey, JSON.stringify(value));
+        const pointer = Object.keys(localStorage).find((k) =>
+          k.startsWith("earnest:whatsapp-link-draft-active:v1:"),
+        )!;
+        localStorage.setItem(pointer, draftId);
+        return { otherKey, value };
+      }, originalKey);
+      await page.reload();
+      await page.evaluate(() => {
+        window.ownedLinkBulk.readFailure = false;
+      });
+      await page.getByRole("button", { name: "查回伺服器結果", exact: true }).click();
+      await expect(page.getByRole("region", { name: "批次結果" })).toContainText("已建立 50");
+      expect(await page.evaluate((key) => localStorage.getItem(key), originalKey)).toBeNull();
+      expect(
+        await page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), other.otherKey),
+      ).toEqual(other.value);
+      expect(await draftRows(page)).toHaveLength(5);
+      expect(
+        await page.evaluate(
+          () => window.ownedLinkBulk.calls.filter((c) => c.name === "commit").length,
+        ),
+      ).toBe(1);
+      await otherTab.close();
+    });
+  }
   test(`duplicate and invalid fifty-line CSV never reach lookup or preview ${width}`, async ({
     page,
   }) => {

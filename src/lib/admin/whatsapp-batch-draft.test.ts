@@ -1,5 +1,11 @@
 import { expect, test } from "bun:test";
-import { listDrafts, loadDraft, prepareEligibleSubset, saveDraft } from "./whatsapp-batch-draft.ts";
+import {
+  listDrafts,
+  loadDraft,
+  prepareEligibleSubset,
+  resolveBatchDraftId,
+  saveDraft,
+} from "./whatsapp-batch-draft.ts";
 import type { BatchRowDraft } from "../whatsapp-enquiries/link-batch-policy.ts";
 import type { BatchPreview } from "../neon/whatsapp-link-batches.types.ts";
 
@@ -100,4 +106,10 @@ test("draft chooser lists only validated nonempty drafts for the exact actor", (
   ]);
   expect(listDrafts("actor:a:other", storage).map((d) => d.draftId)).toEqual([id(301)]);
   expect(listDrafts("", storage)).toEqual([]);
+  expect(resolveBatchDraftId("actor:a", rows.slice(0, 5), undefined, storage)).toBe(id(300));
+  expect(resolveBatchDraftId("actor:a", rows.slice(0, 5), id(300), storage)).toBe(id(300));
+  expect(resolveBatchDraftId("actor:a", rows.slice(0, 6), undefined, storage)).toBeNull();
+  saveDraft("actor:a", { draftId: id(304), rows: rows.slice(0, 5) }, storage);
+  expect(resolveBatchDraftId("actor:a", rows.slice(0, 5), undefined, storage)).toBeNull();
+  expect(resolveBatchDraftId("actor:a", [], undefined, storage)).toBeNull();
 });

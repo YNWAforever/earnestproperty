@@ -8,6 +8,7 @@ import type {
 
 export type LinkBatchProgress = {
   batchId: string;
+  draftId?: string;
   rows: BatchRowDraft[];
   chunkIds: string[];
   completed: CommitChunkResult[];
