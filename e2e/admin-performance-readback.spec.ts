@@ -85,7 +85,7 @@ test.afterEach(async ({ page }, info) => {
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("totals"))
     await page.screenshot({
-      path: `.audit/remediation-20261003/performance-quality-totals-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/performance-qualification-totals-${page.viewportSize()!.width}.png`,
     });
 });
 const id = (n: number) => `80000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -130,9 +130,233 @@ async function editQuality(page: Page, n: number, quality: string, reason: strin
 }
 const qualityCalls = (page: Page) =>
   page.evaluate(() => window.performanceReadbackFixture.calls.filter((c) => c.name === "quality"));
+async function editQualification(page: Page, n: number, evidence: string) {
+  await row(page, n).getByText("核實合格線索", { exact: true }).click();
+  await row(page, n).getByLabel("核實依據", { exact: true }).fill(evidence);
+}
+const qualificationCalls = (page: Page) =>
+  page.evaluate(() =>
+    window.performanceReadbackFixture.calls.filter((c) => c.name === "qualification"),
+  );
 for (const width of [1440, 1280, 768, 390])
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("qualification creates unknown evidence before explicit quality review and reconciles unique lead CSV", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await admin(page);
+      await editQualification(page, 1, "        ");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toHaveText("請提供至少 8 個字的核實依據。");
+      expect(await qualificationCalls(page)).toHaveLength(0);
+      await row(page, 1)
+        .getByLabel("核實依據", { exact: true })
+        .fill("  Owned verified requirements and actual contact  ");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(page.getByRole("button", { name: "未知跟進事件 1", exact: true })).toBeVisible();
+      await expect(metric(page, "合格線索").locator("p").first()).toHaveText("0");
+      expect(await qualificationCalls(page)).toHaveLength(1);
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualifications),
+      ).toMatchObject([
+        {
+          leadId: id(101),
+          evidence: "Owned verified requirements and actual contact",
+          actor: "actor-a",
+        },
+      ]);
+      await page.getByRole("button", { name: "未知跟進事件 1", exact: true }).click();
+      const key = `lead_qualified:${id(101)}`;
+      const eventRow = records(page)
+        .getByRole("row")
+        .filter({ has: page.getByRole("rowheader", { name: key, exact: true }) });
+      await eventRow.getByText("修正品質", { exact: true }).click();
+      await eventRow.getByLabel("品質狀態", { exact: true }).selectOption("production");
+      await eventRow
+        .getByLabel("修正原因", { exact: true })
+        .fill("Owned explicit review of genuine qualification evidence");
+      await eventRow.getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect(metric(page, "合格線索").locator("p").first()).toHaveText("1");
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("4");
+      await drill(page, "合格線索");
+      await expect(records(page).getByRole("row")).toHaveCount(2);
+      const downloading = page.waitForEvent("download");
+      await records(page).getByRole("button", { name: "匯出本頁 CSV", exact: true }).click();
+      const csv = await readFile((await (await downloading).path())!, "utf8");
+      expect(csv).toContain(key);
+      expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(2);
+      expect(csv).not.toContain(id(4));
+      await page.screenshot({
+        path: `.audit/remediation-20261003/performance-qualification-confirmed-${width}.png`,
+      });
+      await page.reload();
+      await expect(metric(page, "合格線索").locator("p").first()).toHaveText("1");
+      await drill(page, "合格線索");
+      await expect(records(page).getByRole("row")).toHaveCount(2);
+      expect(await qualificationCalls(page)).toHaveLength(0);
+      await page.getByRole("tab", { name: "回覆及跟進", exact: true }).click();
+      await expect(metric(page, "已確認分配").locator("p").first()).toHaveText("1");
+      await expect(metric(page, "首回覆中位數").locator("p").first()).toHaveText("15 分鐘");
+      await expect(metric(page, "未回覆").locator("p").first()).toHaveText("3");
+    });
+    test("qualification duplicate explicit submission preserves the original evidence and one event", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await editQualification(page, 1, "Owned original immutable qualification evidence");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(page.getByRole("button", { name: "未知跟進事件 1", exact: true })).toBeVisible();
+      await row(page, 1)
+        .getByLabel("核實依據", { exact: true })
+        .fill("Owned later reason cannot overwrite original evidence");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue(
+        "Owned later reason cannot overwrite original evidence",
+      );
+      expect(await qualificationCalls(page)).toHaveLength(2);
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualifications),
+      ).toMatchObject([{ evidence: "Owned original immutable qualification evidence" }]);
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualifications.length),
+      ).toBe(1);
+      await expect(metric(page, "合格線索").locator("p").first()).toHaveText("0");
+      await expect(records(page).getByText("修正品質", { exact: true })).toHaveCount(0);
+    });
+    test("qualification pending write preserves a newer quality editor and serializes submission", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await admin(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "delayed";
+      });
+      await editQualification(page, 1, "Owned pending genuine qualification evidence");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      const reason = "Owned newer quality editor stays visible and unchanged";
+      await editQuality(page, 2, "spam", reason);
+      await expect(
+        row(page, 2).getByRole("button", { name: "儲存修正", exact: true }),
+      ).toBeDisabled();
+      await row(page, 2).getByLabel("修正原因", { exact: true }).press("Enter");
+      expect(await qualityCalls(page)).toHaveLength(0);
+      await page.evaluate(() => window.performanceReadbackFixture.pending.shift()!.release());
+      await expect(
+        row(page, 2).getByRole("button", { name: "儲存修正", exact: true }),
+      ).toBeEnabled();
+      await expect(row(page, 2).getByLabel("修正原因", { exact: true })).toBeVisible();
+      await expect(row(page, 2).getByLabel("修正原因", { exact: true })).toHaveValue(reason);
+      await row(page, 2).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("3");
+      expect(await qualityCalls(page)).toHaveLength(1);
+      expect(await qualificationCalls(page)).toHaveLength(1);
+    });
+    test("qualification late completion refreshes the currently selected rent scope", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "delayed";
+      });
+      await editQualification(page, 1, "Owned original sale lead qualification evidence");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      await page.locator("#performance-deal").selectOption("rent");
+      await page.getByRole("button", { name: "套用篩選", exact: true }).click();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("1");
+      await drill(page);
+      await page.evaluate(() => window.performanceReadbackFixture.pending.shift()!.release());
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.qualifications.length))
+        .toBe(1);
+      await expect(records(page).getByRole("row")).toHaveCount(2);
+      await expect(records(page)).toContainText(id(2));
+      await expect(records(page)).not.toContainText(id(1));
+      await expect(metric(page, "合格線索").locator("p").first()).toHaveText("0");
+      expect(
+        await page.evaluate(
+          () =>
+            window.performanceReadbackFixture.calls.filter((c) => c.name === "records").at(-1)!
+              .input,
+        ),
+      ).toMatchObject({ dealType: "rent" });
+    });
+    test("qualification definite refusal retains evidence and explicit retry uses the same lead", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "failure";
+      });
+      const evidence = "Owned retained manual requirements and contact evidence";
+      await editQualification(page, 1, evidence);
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue(evidence);
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualifications.length),
+      ).toBe(0);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "ok";
+      });
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.qualifications.length))
+        .toBe(1);
+      expect(await qualificationCalls(page)).toHaveLength(2);
+    });
+    test("qualification completion after actor change never reads or displays the previous workspace", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "delayed";
+      });
+      await editQualification(page, 1, "Owned previous actor qualification evidence");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      await page.evaluate(() => window.performanceReadbackFixture.changeContext("actor-b"));
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("1");
+      await drill(page);
+      const count = await page.evaluate(
+        () =>
+          window.performanceReadbackFixture.calls.filter((c) =>
+            ["report", "records", "options"].includes(c.name),
+          ).length,
+      );
+      await page.evaluate(() => window.performanceReadbackFixture.pending.shift()!.release());
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.qualifications.length))
+        .toBe(1);
+      expect(
+        await page.evaluate(
+          () =>
+            window.performanceReadbackFixture.calls.filter((c) =>
+              ["report", "records", "options"].includes(c.name),
+            ).length,
+        ),
+      ).toBe(count);
+      await expect(records(page)).toContainText(id(91));
+      await expect(records(page)).not.toContainText(id(1));
+      await expect(metric(page, "合格線索").locator("p").first()).toHaveText("0");
+    });
     test("quality committed correction refreshes the same denominator records and CSV", async ({
       page,
     }) => {
@@ -156,7 +380,7 @@ for (const width of [1440, 1280, 768, 390])
       for (const n of [2, 3, 4]) expect(csv).toContain(id(n));
       expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(4);
       await page.screenshot({
-        path: `.audit/remediation-20261003/performance-quality-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/performance-qualification-quality-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("3");

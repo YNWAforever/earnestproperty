@@ -13,6 +13,16 @@ export const state = {
   reportMode: sessionStorage.getItem("performance-delayed-initial") === "true" ? "delayed" : "ok",
   recordsMode: "ok",
   qualityMode: "ok",
+  qualificationMode: "ok",
+  leadStages: {} as Record<string, string>,
+  qualifications: JSON.parse(sessionStorage.getItem("performance-qualifications") ?? "[]") as {
+    leadId: string;
+    qualifiedAt: string;
+    evidence: string;
+    actor: string;
+    staffId: string;
+    branchId: string;
+  }[],
   qualityRevisions: JSON.parse(sessionStorage.getItem("performance-quality-revisions") ?? "[]") as {
     kind: string;
     key: string;
@@ -106,11 +116,31 @@ function input(value: unknown) {
     eventKey: `${type}:${id(n)}`,
     occurredAt: "2026-09-30T00:15:00Z",
   });
-  const events = (
-    which
+  const qualifications = state.qualifications.map((q) => {
+    const key = `lead_qualified:${q.leadId}`;
+    return {
+      type: "lead_qualified",
+      quality:
+        state.qualityRevisions.filter((r) => r.kind === "event" && r.key === key).at(-1)?.quality ??
+        "unknown",
+      leadId: q.leadId,
+      inquiryId: null,
+      staffId: q.staffId,
+      branchIdAtEvent: q.branchId,
+      eventKey: key,
+      occurredAt: q.qualifiedAt,
+    };
+  });
+  const events = [
+    ...(which
       ? []
-      : [event("assignment_confirmed", 1), event("internal_ack", 2), event("human_response", 2)]
-  ).filter((e) => visible.has(e.inquiryId));
+      : [event("assignment_confirmed", 1), event("internal_ack", 2), event("human_response", 2)]),
+    ...qualifications,
+  ].filter((e) =>
+    e.type === "lead_qualified"
+      ? inquiries.some((i) => i.crmLeadId === e.leadId)
+      : e.inquiryId !== null && visible.has(e.inquiryId),
+  );
   const deals = (which ? [] : ["sale", "rent"])
     .map((dealType, index) => ({
       transactionId: id(700 + index),
@@ -241,6 +271,41 @@ export async function correctPerformanceEventQuality(input: {
   await correct("event", input.eventKey, input.quality, input.reason);
   return { eventKey: input.eventKey, affectedHkDay: "2026-09-30" };
 }
-export async function qualifyPerformanceLead() {
-  throw Error("Read-only fixture;lead mutation not accepted");
+export async function qualifyPerformanceLead(value: {
+  leadId: string;
+  qualifiedAt: string;
+  evidence: string;
+}) {
+  const actor = state.actor,
+    which = scope(),
+    mode = state.qualificationMode;
+  state.calls.push({ name: "qualification", actor, binding: state.binding, input: value });
+  const snapshot = input({ start: "2026-09-30", end: "2026-09-30", cohortWindowDays: 90 });
+  if (
+    !value.evidence ||
+    value.evidence.trim().length < 8 ||
+    !Number.isFinite(Date.parse(value.qualifiedAt))
+  )
+    throw new Response("Owned invalid qualification", { status: 400 });
+  if (
+    !snapshot.inquiries.some((i) => i.crmLeadId === value.leadId) ||
+    !["contacted", "viewing", "negotiating", "closed_won"].includes(
+      state.leadStages[value.leadId] ?? "contacted",
+    )
+  )
+    throw new Response("Owned ineligible source", { status: 409 });
+  if (mode.startsWith("delayed"))
+    await new Promise<void>((release) => state.pending.push({ release }));
+  if (mode.endsWith("failure")) throw Error("Owned qualification refused before write");
+  if (state.qualifications.some((q) => q.leadId === value.leadId))
+    throw new Response("Owned already qualified", { status: 409 });
+  state.qualifications.push({
+    ...value,
+    evidence: value.evidence.trim(),
+    actor,
+    staffId: id(600 + which),
+    branchId: id(500 + which),
+  });
+  sessionStorage.setItem("performance-qualifications", JSON.stringify(state.qualifications));
+  return { eventKey: `lead_qualified:${value.leadId}` };
 }
