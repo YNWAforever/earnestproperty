@@ -112,6 +112,13 @@ export function WithdrawalReviewWorkspace({
       const token = ++generation.current;
       setBusy(true);
       setError(null);
+      if (!cursor) {
+        // Candidates and selections belong to the source that produced them.
+        setData(null);
+        setReview(null);
+        setSelected(new Set());
+        setChosen(new Set());
+      }
       try {
         const next = await loadRef.current({ source, cursor });
         if (token === generation.current) {
@@ -263,7 +270,10 @@ export function WithdrawalReviewWorkspace({
             aria-label="撤盤來源"
             value={source}
             disabled={busy || Boolean(review) || blocked}
-            onChange={(e) => setSource(e.target.value as typeof source)}
+            onChange={(e) => {
+              setResult(null);
+              setSource(e.target.value as typeof source);
+            }}
           >
             <option value="28hse_agent_540">28Hse</option>
             <option value="propertyhk">Property.hk 三分行</option>
