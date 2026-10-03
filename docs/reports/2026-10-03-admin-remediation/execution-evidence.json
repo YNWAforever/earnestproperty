@@ -467,5 +467,130 @@
       }
     ],
     "report": "ep-11-source-recovery-readback.md"
+  },
+  "dailyWorkFollowup": {
+    "verifiedCodeSha": "266f8c75c2917a476436ffb54f32c0c91ce3a454",
+    "verifiedAt": "2026-10-03T06:23:38.136486+00:00",
+    "tasks": [
+      "EP-12"
+    ],
+    "red": [
+      "same-user manager to agent kept company count7 instead of own2",
+      "same-user agent staff relink kept count2 instead of new binding3",
+      "team refresh failure omitted its last successful read time09:00HKT"
+    ],
+    "browser": {
+      "pass": 32,
+      "fail": 0,
+      "skipped": 0,
+      "evidence": "daily-work-browser-execution-summary.json",
+      "layer": "actual-overview-leads-shell-staff-store-synthetic-auth-api-owned-loopback"
+    },
+    "independentOwnedSql": {
+      "pass": 4,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "new owned loopback PostgreSQL17/full85 migrations;actual scoped handlers and independent SQL;separate from browser/Auth"
+    },
+    "sharedBrowser": {
+      "pass": 115,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "actual routes/components/synthetic Auth/API;existing12 overview assertions included,not extra12"
+    },
+    "moduleRegression": {
+      "commandCenter": "Node82+Bun8 PASS",
+      "team": "Node95+Bun31 PASS"
+    },
+    "static": {
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "lintBaselineWarnings": 3,
+      "buildExit": 0
+    },
+    "actionReconciliation": {
+      "businessActions": [
+        "ACT-03"
+      ],
+      "sourceCandidates": [
+        "ACT-S-0905",
+        "ACT-S-0906"
+      ],
+      "status": "LOCAL_PARTIAL;overlapping controls not additional business actions;only open-leads variant of metric Link exercised",
+      "evidence": "daily-work-action-execution.csv"
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3 previously verified",
+      "repairedBranchProduction": "0/3",
+      "newNativeRunsInThisSlice": 0
+    },
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "paidModelCalls": 0,
+      "providerRequests": 0
+    },
+    "runtimeConfigMigrationProviderChanges": false,
+    "ciChange": "add owned32-case daily-work browser script only",
+    "review": "Focused self review;earlier independent review not claimed for this late slice",
+    "capability": "local staff-scope daily overview recovery READY;formal Auth/roles/deep-link/expiry/full action coverage NOT_READY or BLOCKED",
+    "logs": [
+      {
+        "file": "ep12-daily-red-role.log",
+        "sha256": "3c00e7c9192703469eefea4cffe323947f6f6b2068fee4974641620a674302be",
+        "layer": "valid pre-fix RED in this slice"
+      },
+      {
+        "file": "ep12-daily-red-binding.log",
+        "sha256": "dba5d6751e61e6fdfb432bb09897df1b258d71ab06e5130242aaf70c333d621a",
+        "layer": "valid pre-fix RED in this slice"
+      },
+      {
+        "file": "ep12-daily-red-time.log",
+        "sha256": "b6f3c9012cadba02e83629cac22e806376a20750084014cc38e28f292ca2fc66",
+        "layer": "valid pre-fix RED in this slice"
+      },
+      {
+        "file": "ep12-daily-exact-browser.log",
+        "sha256": "76b79ad1e499749572d3a3063d244a51c792c9ae75a07069124ba6a73b3c56f7",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep12-daily-exact-owned-db.log",
+        "sha256": "3ca0d5952e174888dce5620c993de1f9bfd3950110db9bb724da394d19c02a51",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep12-daily-exact-command-center.log",
+        "sha256": "d7d2920e242bfda2570e31e928341b6bbfba1869103d3b90871427aa47be33f9",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep12-daily-exact-team.log",
+        "sha256": "ea3aac1908a1abeb72158cd6fcc7197f4108ad1f5e1c14eff6bc5b29b60e5261",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep12-daily-exact-shared-ui.log",
+        "sha256": "875f9880fb2edb159c08e4808b84b58b82085fc91b887321c91e51cfce34955b",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep12-daily-exact-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep12-daily-exact-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep12-daily-exact-build.log",
+        "sha256": "df4b50faea79ef353ff41ccf1270107958e9514e7610052bdd853899ec8e167a",
+        "layer": "committed source local acceptance"
+      }
+    ],
+    "report": "ep-12-daily-work-readback.md"
   }
 }
