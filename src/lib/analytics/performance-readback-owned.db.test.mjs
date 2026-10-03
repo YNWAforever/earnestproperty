@@ -21,7 +21,8 @@ test(
         getPerformanceFilterOptions,
         reviseInquiryQuality,
       } = await import("./sales-performance.server.ts");
-      const { revisePerformanceEventQuality } = await import("./performance-events.server.ts");
+      const { revisePerformanceEventQuality, qualifyLeadForPerformance } =
+        await import("./performance-events.server.ts");
       for (const n of [0, 1])
         await query("INSERT INTO branches(id,slug,name) VALUES($1,$2,$3)", [
           id(500 + n),
@@ -412,6 +413,238 @@ test(
             bad(404),
           );
           assert.deepEqual(await counts(), before);
+        },
+      );
+      for (const [index, role, change] of [
+        [0, "manager", "inactive"],
+        [1, "manager", "role-revoked"],
+        [2, "manager", "account-rebound"],
+        [3, "admin", "inactive"],
+        [4, "admin", "role-revoked"],
+        [5, "admin", "account-rebound"],
+      ]) {
+        await t.test(
+          `qualification rechecks ${role} after ${change} before immutable write`,
+          async () => {
+            const staff = id(630 + index),
+              lead = id(1100 + index),
+              auth = `owned-qualification-${index}`;
+            await query(
+              "INSERT INTO staff_users(id,auth_user_id,email,branch_id) VALUES($1,$2,$3,$4)",
+              [staff, auth, `${auth}@example.invalid`, id(500)],
+            );
+            await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,$2)", [staff, role]);
+            await query(
+              "INSERT INTO crm_leads(id,source,stage,assigned_agent_id) VALUES($1,'whatsapp','contacted',$2)",
+              [lead, id(600)],
+            );
+            const cached = { staffId: staff, authUserId: auth, roles: [role] };
+            if (change === "inactive")
+              await query("UPDATE staff_users SET active=false WHERE id=$1", [staff]);
+            if (change === "role-revoked")
+              await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [staff]);
+            if (change === "account-rebound")
+              await query("UPDATE staff_users SET auth_user_id=$2 WHERE id=$1", [
+                staff,
+                auth + "-new",
+              ]);
+            await assert.rejects(
+              qualifyLeadForPerformance(
+                {
+                  leadId: lead,
+                  qualifiedAt: "2026-09-30T02:00:00Z",
+                  evidence: "Owned real qualification evidence in isolated fixture",
+                },
+                cached,
+              ),
+              (e) => e instanceof Response && e.status === 403,
+            );
+            assert.deepEqual(
+              await query("SELECT lead_id FROM crm_lead_qualifications WHERE lead_id=$1", [lead]),
+              [],
+            );
+            assert.deepEqual(
+              await query("SELECT event_key FROM performance_events WHERE lead_id=$1", [lead]),
+              [],
+            );
+          },
+        );
+      }
+      await t.test(
+        "qualification cached admin downgrade cannot authorize a foreign branch",
+        async () => {
+          const staff = id(640),
+            lead = id(1110),
+            auth = "owned-qualification-downgrade";
+          await query(
+            "INSERT INTO staff_users(id,auth_user_id,email,branch_id) VALUES($1,$2,$3,$4)",
+            [staff, auth, auth + "@example.invalid", id(501)],
+          );
+          await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [staff]);
+          await query(
+            "INSERT INTO crm_leads(id,source,stage,assigned_agent_id) VALUES($1,'whatsapp','contacted',$2)",
+            [lead, id(600)],
+          );
+          await assert.rejects(
+            qualifyLeadForPerformance(
+              {
+                leadId: lead,
+                qualifiedAt: "2026-09-30T02:00:00Z",
+                evidence: "Owned foreign branch evidence must be refused",
+              },
+              { staffId: staff, authUserId: auth, roles: ["admin"] },
+            ),
+            (e) => e instanceof Response && [403, 409].includes(e.status),
+          );
+          assert.deepEqual(
+            await query("SELECT lead_id FROM crm_lead_qualifications WHERE lead_id=$1", [lead]),
+            [],
+          );
+          assert.deepEqual(
+            await query("SELECT event_key FROM performance_events WHERE lead_id=$1", [lead]),
+            [],
+          );
+        },
+      );
+      await t.test(
+        "qualification keeps one authoritative source and unknown quality until explicit review",
+        async () => {
+          const lead = id(103),
+            qualifiedAt = "2026-09-30T16:10:00Z";
+          await query(
+            "INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager') ON CONFLICT DO NOTHING",
+            [id(600)],
+          );
+          await query("UPDATE crm_leads SET stage='contacted',assigned_agent_id=$2 WHERE id=$1", [
+            lead,
+            id(600),
+          ]);
+          const before = await query("SELECT * FROM crm_leads WHERE id=$1", [lead]);
+          const input = {
+            leadId: lead,
+            qualifiedAt,
+            evidence: "  Owned independently verified requirements and contact  ",
+          };
+          const outcomes = await Promise.allSettled([
+            qualifyLeadForPerformance(input, actor(0)),
+            qualifyLeadForPerformance(input, actor(0)),
+          ]);
+          assert.equal(outcomes.filter((r) => r.status === "fulfilled").length, 1);
+          assert.equal(
+            outcomes.filter(
+              (r) =>
+                r.status === "rejected" && r.reason instanceof Response && r.reason.status === 409,
+            ).length,
+            1,
+          );
+          const key = `lead_qualified:${lead}`;
+          const raw = await query(
+            "SELECT lead_id::text,qualified_at,evidence,qualified_by::text FROM crm_lead_qualifications WHERE lead_id=$1",
+            [lead],
+          );
+          assert.equal(raw.length, 1);
+          assert.equal(raw[0].qualified_by, id(600));
+          assert.equal(raw[0].evidence, input.evidence.trim());
+          assert.equal(
+            new Date(raw[0].qualified_at).toISOString(),
+            new Date(qualifiedAt).toISOString(),
+          );
+          const projected = await query(
+            "SELECT event_key,source_id,lead_id::text,staff_id::text,branch_id_at_event::text,source,quality FROM performance_event_records WHERE event_key=$1",
+            [key],
+          );
+          assert.deepEqual(projected, [
+            {
+              event_key: key,
+              source_id: lead,
+              lead_id: lead,
+              staff_id: id(600),
+              branch_id_at_event: id(500),
+              source: `crm_lead:${lead}`,
+              quality: "unknown",
+            },
+          ]);
+          assert.equal(
+            (await getSalesPerformance(filters, actor(0))).acquisition.qualifiedLeads.value,
+            0,
+          );
+          const unknown = await listPerformanceRecords(
+            { filters, drilldownKey: "quality_unknown_events" },
+            actor(0),
+          );
+          assert.ok(unknown.records.some((r) => r.eventKey === key));
+          await revisePerformanceEventQuality(
+            {
+              eventKey: key,
+              quality: "production",
+              reason: "Owned explicit quality review of qualification evidence",
+            },
+            admin,
+          );
+          const report = await getSalesPerformance(filters, actor(0));
+          assert.equal(report.acquisition.qualifiedLeads.value, 1);
+          assert.equal(report.acquisition.qualifiedLeads.denominator, 4);
+          assert.equal(report.followup.confirmedAssignments.value, 1);
+          assert.equal(report.followup.responseMedianMinutes.value, 15);
+          assert.equal(report.followup.unanswered.value, 3);
+          const page = await listPerformanceRecords(
+            { filters, drilldownKey: "qualified" },
+            actor(0),
+          );
+          assert.equal(page.records.length, 1);
+          assert.equal(page.records[0].eventKey, key);
+          assert.deepEqual(await query("SELECT * FROM crm_leads WHERE id=$1", [lead]), before);
+          await assert.rejects(
+            query("DELETE FROM crm_lead_qualifications WHERE lead_id=$1", [lead]),
+            /append-only/,
+          );
+        },
+      );
+      await t.test(
+        "qualification rejects malformed UUID and ineligible sources before projection",
+        async () => {
+          const valid = {
+            leadId: id(103),
+            qualifiedAt: "2026-09-30T02:00:00Z",
+            evidence: "Owned invalid source must never add evidence",
+          };
+          const bad = (status) => (e) => e instanceof Response && e.status === status;
+          await assert.rejects(
+            qualifyLeadForPerformance({ ...valid, leadId: valid.leadId + "a" }, actor(0)),
+            bad(400),
+          );
+          await assert.rejects(
+            qualifyLeadForPerformance({ ...valid, leadId: id(1199) }, actor(0)),
+            bad(409),
+          );
+          await assert.rejects(
+            qualifyLeadForPerformance({ ...valid, evidence: "short" }, actor(0)),
+            bad(400),
+          );
+          await assert.rejects(
+            qualifyLeadForPerformance({ ...valid, qualifiedAt: "bad-date" }, actor(0)),
+            bad(400),
+          );
+          await assert.rejects(
+            qualifyLeadForPerformance(valid, { ...actor(0), roles: ["agent"] }),
+            bad(403),
+          );
+          const lead = id(1198);
+          await query(
+            "INSERT INTO crm_leads(id,source,stage,assigned_agent_id) VALUES($1,'whatsapp','new',$2)",
+            [lead, id(600)],
+          );
+          await assert.rejects(
+            qualifyLeadForPerformance({ ...valid, leadId: lead }, actor(0)),
+            bad(409),
+          );
+          assert.deepEqual(
+            await query(
+              "SELECT lead_id FROM crm_lead_qualifications WHERE lead_id=ANY($1::uuid[])",
+              [[lead, id(1199)]],
+            ),
+            [],
+          );
         },
       );
     });
