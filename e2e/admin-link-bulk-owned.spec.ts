@@ -322,6 +322,71 @@ for (const width of [1440, 1280, 768, 390]) {
     // A new draft must not overwrite the preserved five-row deferred draft.
     expect((await draftRows(page)).filter((n) => n === "A000046")).toHaveLength(2);
     expect(await draftRows(page)).toHaveLength(55);
+    await page.evaluate(() => {
+      window.ownedLinkBulk.commitMode = "ok";
+    });
+    await page.getByLabel("已人工核對刊登位置").check();
+    await page.getByRole("button", { name: "下一步：跟進" }).click();
+    await page.getByRole("button", { name: "預覽核對", exact: true }).click();
+    await page.getByRole("button", { name: "確認建立 50 筆" }).click();
+    await expect(page.getByRole("region", { name: "批次結果" })).toContainText("已建立 50");
+    await page.getByRole("button", { name: "開始新批次", exact: true }).click();
+    await page.reload();
+    await page.getByRole("button", { name: "開啟未完成草稿（5 行）", exact: true }).click();
+    await page.getByLabel("已人工核對刊登位置").check();
+    await page.getByRole("button", { name: "下一步：跟進" }).click();
+    await page.getByRole("button", { name: "預覽核對", exact: true }).click();
+    const numbers = await page.getByRole("listitem").allTextContents();
+    expect(numbers.join(" ")).toContain("A000046");
+    expect(numbers.join(" ")).toContain("A000050");
+    expect(numbers.join(" ")).not.toContain("A000001");
+    await page.getByRole("button", { name: "確認建立 5 筆" }).click();
+    await expect(page.getByRole("region", { name: "批次結果" })).toContainText("已建立 5");
+    expect(await draftRows(page)).toEqual([]);
+    expect(
+      await page.evaluate(
+        () => window.ownedLinkBulk.calls.filter((c) => c.name === "commit").length,
+      ),
+    ).toBe(3);
+  });
+  test(`terminal rejected draft preserves the latest inline repair through reload ${width}`, async ({
+    page,
+  }) => {
+    await setup(page, width);
+    await previewFifty(page);
+    await editFormulaPlacement(page);
+    await page.evaluate(() => {
+      window.ownedLinkBulk.commitMode = "atomic-reject";
+    });
+    await page.getByRole("button", { name: "確認建立 50 筆" }).click();
+    await expect(page.getByRole("region", { name: "批次結果" })).toContainText("失敗 45");
+    const repaired = await page.evaluate(() =>
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("earnest:whatsapp-link-draft:v1:"))
+        .flatMap((k) => JSON.parse(localStorage.getItem(k)!).rows)
+        .find((r) => r.input.publicListingNo === "A000001"),
+    );
+    expect(repaired.placementId).toBe('=中文,"測試"');
+    expect(repaired.input.placementSource).toBe("other");
+    await page.reload();
+    await page.getByRole("button", { name: "只修正已知失敗的 50 行", exact: true }).click();
+    await page.getByLabel("已人工核對刊登位置").check();
+    await page.getByRole("button", { name: "下一步：跟進" }).click();
+    await page.getByRole("button", { name: "預覽核對", exact: true }).click();
+    await expect(
+      page.getByRole("listitem").filter({ hasText: "A000001" }).getByLabel("投放 ID"),
+    ).toHaveValue('=中文,"測試"');
+    await page.evaluate(() => {
+      window.ownedLinkBulk.commitMode = "ok";
+    });
+    await page.getByRole("button", { name: "確認建立 50 筆" }).click();
+    await expect(page.getByRole("region", { name: "批次結果" })).toContainText("已建立 50");
+    expect(await draftRows(page)).toEqual([]);
+    expect(
+      await page.evaluate(
+        () => window.ownedLinkBulk.calls.filter((c) => c.name === "commit").length,
+      ),
+    ).toBe(2);
   });
   test(`duplicate and invalid fifty-line CSV never reach lookup or preview ${width}`, async ({
     page,
