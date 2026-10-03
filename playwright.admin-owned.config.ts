@@ -5,6 +5,7 @@ export default defineConfig({
     "admin-property-maintenance.spec.ts",
     "admin-operations-recovery.spec.ts",
     "admin-staff-setup.spec.ts",
+    "admin-whatsapp-mobile.spec.ts",
   ],
   workers: 1,
   fullyParallel: false,
