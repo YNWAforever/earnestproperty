@@ -25,6 +25,7 @@ import {
   listDrafts,
   loadDraft,
   prepareEligibleSubset,
+  resolveBatchDraftId,
   saveDraft,
   type WhatsappBatchDraft,
 } from "@/lib/admin/whatsapp-batch-draft";
@@ -115,7 +116,11 @@ export function WhatsappLinkWizard({
       if (!raw) return;
       const stored = JSON.parse(raw) as LinkBatchProgress;
       if (stored.batchId && Array.isArray(stored.rows) && Array.isArray(stored.chunkIds)) {
-        setProgress(stored);
+        const owningDraftId = resolveBatchDraftId(actorScope, stored.rows, stored.draftId);
+        const restored = { ...stored, draftId: owningDraftId ?? undefined };
+        sessionStorage.setItem(linkBatchProgressKey(actorScope), JSON.stringify(restored));
+        setProgress(restored);
+        if (owningDraftId) setDraftId(owningDraftId);
         setRepairRows(stored.rows);
         setSelectedEligible(
           stored.preview.rows.filter((row) => row.decision !== "blocked").map((row) => row.rowKey),
@@ -133,6 +138,7 @@ export function WhatsappLinkWizard({
       const pointerKey = `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`;
       const pointer = localStorage.getItem(pointerKey);
       setSavedDrafts(listDrafts(actorScope));
+      if (sessionStorage.getItem(linkBatchProgressKey(actorScope))) return;
       if (pointer) {
         const stored = loadDraft(actorScope, pointer);
         if (stored?.rows.length) {
@@ -258,6 +264,7 @@ export function WhatsappLinkWizard({
     const preview = await api.preview({ batchId, rows });
     const next: LinkBatchProgress = {
       batchId,
+      draftId,
       rows,
       preview,
       chunkIds: Array.from({ length: Math.ceil(rows.length / 50) }, () => crypto.randomUUID()),
@@ -282,6 +289,7 @@ export function WhatsappLinkWizard({
     const preview = await api.preview({ batchId, rows: nextRows });
     const next: LinkBatchProgress = {
       batchId,
+      draftId,
       rows: nextRows,
       preview,
       chunkIds: Array.from({ length: Math.ceil(nextRows.length / 50) }, () => crypto.randomUUID()),
@@ -408,6 +416,9 @@ export function WhatsappLinkWizard({
     retainUnfinishedDraft(result);
   }
   function retainUnfinishedDraft(result: LinkBatchProgress) {
+    const owningDraftId = result.draftId;
+    // Never attach an unresolved legacy lineage to another tab's active draft.
+    if (!owningDraftId) return;
     if (
       !result.uncertain &&
       (result.nextChunk >= result.chunkIds.length ||
@@ -420,7 +431,7 @@ export function WhatsappLinkWizard({
             .map((row) => row.rowKey),
         ),
       );
-      const existing = loadDraft(actorScope, draftId)?.rows ?? [];
+      const existing = loadDraft(actorScope, owningDraftId)?.rows ?? [];
       const unfinished = new Map(
         existing.filter((row) => !successful.has(row.rowKey)).map((row) => [row.rowKey, row]),
       );
@@ -428,11 +439,12 @@ export function WhatsappLinkWizard({
       for (const row of result.rows) {
         if (!successful.has(row.rowKey)) unfinished.set(row.rowKey, row);
       }
-      if (unfinished.size) saveDraft(actorScope, { draftId, rows: [...unfinished.values()] });
+      if (unfinished.size)
+        saveDraft(actorScope, { draftId: owningDraftId, rows: [...unfinished.values()] });
       else {
-        clearDraft(actorScope, draftId);
+        clearDraft(actorScope, owningDraftId);
         const pointerKey = `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`;
-        if (localStorage.getItem(pointerKey) === draftId) localStorage.removeItem(pointerKey);
+        if (localStorage.getItem(pointerKey) === owningDraftId) localStorage.removeItem(pointerKey);
       }
       setSavedDrafts(listDrafts(actorScope));
     }
