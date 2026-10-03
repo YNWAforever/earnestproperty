@@ -79,6 +79,7 @@ jobs:
       - run: npm run test:property-sync:recovery:ui
       - run: npm run test:admin-daily-work:ui
       - run: npm run test:admin-campaign-review:ui
+      - run: npm run test:admin-performance:ui
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
@@ -150,6 +151,7 @@ jobs:
       - run: npm run test:property-maintenance:owned:db
       - run: npm run test:admin-overview:db
       - run: npm run test:admin-campaign:db
+      - run: npm run test:admin-performance:db
       - run: npm run test:operations:owned:db
   browser-handoff:
     runs-on: ubuntu-latest
