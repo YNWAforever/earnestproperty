@@ -1,0 +1,309 @@
+{
+  "codeSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+  "evidenceLayer": "actual-link-route-wizard-import-results-shell-staff-store-synthetic-auth-api-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realProvider": false,
+  "results": [
+    {
+      "name": "new batch reload excludes fifty completed import rows 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "recovered fifty-row success is removed from durable draft 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "fifty actual imported rows reconcile scoped CSV and verified aliases 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "pending confirmation stays single while results are unavailable 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "empty original-batch lookup after reload cannot authorize resubmission 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "recovered forty-five successes retain exactly five deferred draft rows 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "terminal rejected draft preserves the latest inline repair through reload 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "original batch receipt cleans its own draft after another tab changes the pointer current 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "original batch receipt cleans its own draft after another tab changes the pointer legacy 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "storage write failure on reload preserves uncertain original batch recovery 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "duplicate and invalid fifty-line CSV never reach lookup or preview 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "denied exact staff aliases block fifty-row import without guessing names 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "atomic rejected fifty-row chunk exports failures without invented successful links 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "another actor cannot restore the first actor's fifty-row pending draft 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "disabled import flag performs no CSV lookup or batch mutation 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "new batch reload excludes fifty completed import rows 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "recovered fifty-row success is removed from durable draft 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "fifty actual imported rows reconcile scoped CSV and verified aliases 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "pending confirmation stays single while results are unavailable 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "empty original-batch lookup after reload cannot authorize resubmission 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "recovered forty-five successes retain exactly five deferred draft rows 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "terminal rejected draft preserves the latest inline repair through reload 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "original batch receipt cleans its own draft after another tab changes the pointer current 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "original batch receipt cleans its own draft after another tab changes the pointer legacy 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "storage write failure on reload preserves uncertain original batch recovery 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "duplicate and invalid fifty-line CSV never reach lookup or preview 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "denied exact staff aliases block fifty-row import without guessing names 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "atomic rejected fifty-row chunk exports failures without invented successful links 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "another actor cannot restore the first actor's fifty-row pending draft 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "disabled import flag performs no CSV lookup or batch mutation 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "new batch reload excludes fifty completed import rows 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "recovered fifty-row success is removed from durable draft 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "fifty actual imported rows reconcile scoped CSV and verified aliases 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "pending confirmation stays single while results are unavailable 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "empty original-batch lookup after reload cannot authorize resubmission 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "recovered forty-five successes retain exactly five deferred draft rows 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "terminal rejected draft preserves the latest inline repair through reload 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "original batch receipt cleans its own draft after another tab changes the pointer current 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "original batch receipt cleans its own draft after another tab changes the pointer legacy 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "storage write failure on reload preserves uncertain original batch recovery 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "duplicate and invalid fifty-line CSV never reach lookup or preview 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "denied exact staff aliases block fifty-row import without guessing names 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "atomic rejected fifty-row chunk exports failures without invented successful links 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "another actor cannot restore the first actor's fifty-row pending draft 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "disabled import flag performs no CSV lookup or batch mutation 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "new batch reload excludes fifty completed import rows 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "recovered fifty-row success is removed from durable draft 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "fifty actual imported rows reconcile scoped CSV and verified aliases 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "pending confirmation stays single while results are unavailable 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "empty original-batch lookup after reload cannot authorize resubmission 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "recovered forty-five successes retain exactly five deferred draft rows 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "terminal rejected draft preserves the latest inline repair through reload 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "original batch receipt cleans its own draft after another tab changes the pointer current 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "original batch receipt cleans its own draft after another tab changes the pointer legacy 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "storage write failure on reload preserves uncertain original batch recovery 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "duplicate and invalid fifty-line CSV never reach lookup or preview 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "denied exact staff aliases block fifty-row import without guessing names 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "atomic rejected fifty-row chunk exports failures without invented successful links 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "another actor cannot restore the first actor's fifty-row pending draft 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "disabled import flag performs no CSV lookup or batch mutation 390",
+      "status": "passed",
+      "width": 390
+    }
+  ]
+}
