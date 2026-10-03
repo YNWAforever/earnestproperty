@@ -1375,5 +1375,191 @@
       }
     ],
     "report": "ep-16-bulk-draft-readback.md"
+  },
+  "linkBulkClipboardContinuationFollowup": {
+    "verifiedCodeSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+    "verifiedAt": "2026-10-03T11:08:31.386011+00:00",
+    "tasks": [
+      "EP-16"
+    ],
+    "red": {
+      "defects": 2,
+      "runtimeSource": "f9a30b6e3e2d9cab3a0f8eb90a5e9577b95459e2",
+      "tests": "new uncommitted acceptance tests;two stale-success assertions failed",
+      "wiringFailure": "ep16-copy-continuation-red.log shell forwarded unquoted pipe;zero tests;not defect RED"
+    },
+    "browser": {
+      "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+      "pass": 72,
+      "fail": 0,
+      "skipped": 0,
+      "perWidth": 18,
+      "evidence": "link-bulk-copy-continuation-browser-execution-summary.json",
+      "layer": "actual-link-route-wizard-import-results-shell-staff-store-synthetic-auth-api-owned-loopback",
+      "clipboard": "owned synthetic writeText port;no OS clipboard acceptance"
+    },
+    "independentOwnedSql": {
+      "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+      "pass": 8,
+      "fail": 0,
+      "skipped": 0,
+      "migrations": 85,
+      "layer": "fresh loopback PG17/full85 actual handlers/raw SQL;trusted actor port;parent+7 subtests",
+      "continuation": "read original50;fresh60 preview reuse50/create10;actual client submits only original second chunk10;two receipts;60 distinct stored ids/codes/source/property/deal/placement;zero sends"
+    },
+    "moduleRegression": {
+      "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+      "propertiesNode": 29,
+      "propertiesBun": 28,
+      "fail": 0,
+      "skipped": 0
+    },
+    "static": {
+      "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "baselineWarnings": 3,
+      "buildExit": 0
+    },
+    "actionReconciliation": {
+      "businessActions": [
+        "ACT-59",
+        "ACT-60",
+        "ACT-61",
+        "ACT-62"
+      ],
+      "overlappingSourceControls": 19,
+      "status": "LOCAL_PARTIAL;0388 copy button actually operated with synthetic denied/success/pending ports;0433 healthy original50 to remaining10 continuation operated;full Auth/role/flags/combined and native clipboard not accepted",
+      "evidence": "link-bulk-copy-continuation-action-execution.csv"
+    },
+    "configurationOrSchemaChange": false,
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3",
+      "repairedBranchProduction": "0/3",
+      "newNativeRuns": 0
+    },
+    "capability": "owned bulk clipboard feedback/original50-plus10 continuation READY;trueAuth/fullrole/flags/combined/native clipboard BLOCKED;full action/native schedule NOT_READY",
+    "logs": [
+      {
+        "file": "ep16-copy-continuation-red-corrected.log",
+        "sha256": "2e07fe07022b4f44ad94bc039f02e55cfdc4d3ba7dd5ef6021d818d5777723d6",
+        "sourceSha": "f9a30b6e3e2d9cab3a0f8eb90a5e9577b95459e2 runtime with new uncommitted acceptance tests",
+        "layer": "two reproduced stale clipboard confirmations"
+      },
+      {
+        "file": "ep16-copy-continuation-green-focused.log",
+        "sha256": "f0ae2ad63c7168f1c3f5288967d42d87a2154e2ae324ff9b3fe5e42cdd6b56f9",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "focused RED to GREEN before commit"
+      },
+      {
+        "file": "ep16-copy-continuation-final-browser.log",
+        "sha256": "8ab22c9fbb01da1ad5558836c207af73c3a21cbfb41e8c5f20683883c6860a70",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "actual route/wizard/client/result;synthetic Auth/API and clipboard port"
+      },
+      {
+        "file": "ep16-copy-continuation-final-database.log",
+        "sha256": "bad9d31d55ba9937f7f377041b4391854c60ff04733f28fe9f03eaa0977fa3ff",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "fresh owned full85 SQL;actual handlers plus raw facts;trusted actor port"
+      },
+      {
+        "file": "ep16-copy-continuation-final-properties.log",
+        "sha256": "5548c03b7f71a69972eadb36d78240d54510fdb664636c8e30257e28f5e6f0a5",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "module regressions"
+      },
+      {
+        "file": "ep16-copy-continuation-final-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "typecheck exit0"
+      },
+      {
+        "file": "ep16-copy-continuation-final-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "lint exit0/three baseline warnings"
+      },
+      {
+        "file": "ep16-copy-continuation-final-build.log",
+        "sha256": "0401d3722fdb85e69baa6a76522842ead069d5da6b7e9b850fa8419686505a61",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "build exit0"
+      },
+      {
+        "file": "bulk-continuation-green-390.png",
+        "sha256": "40a31593976a6ae58c25b7fdebdda310cac3aac82229dcc857ce458d6b61ac8e",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "four-width layout screenshot;overflow asserted"
+      },
+      {
+        "file": "bulk-continuation-import-green-390.png",
+        "sha256": "da7156d8479144d6d9bb60cf7be65132ec0516d10c658bc45841fb1e817a95c2",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "four-width layout screenshot;overflow asserted"
+      },
+      {
+        "file": "bulk-continuation-green-768.png",
+        "sha256": "a9fbbf5cc13c265394fbbfeec27bc7093971dc95dbe960bd1ccc3c067c60b136",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "four-width layout screenshot;overflow asserted"
+      },
+      {
+        "file": "bulk-continuation-import-green-768.png",
+        "sha256": "856c8f3c65776dc5bc4393bc378070f862754830a69176201c34b04a836b38d3",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "four-width layout screenshot;overflow asserted"
+      },
+      {
+        "file": "bulk-continuation-green-1280.png",
+        "sha256": "37656de855727fcf188fb72d95fc5e2cf363039c4adffee615da60451103b8ed",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "four-width layout screenshot;overflow asserted"
+      },
+      {
+        "file": "bulk-continuation-import-green-1280.png",
+        "sha256": "8a20a180fe306b79943b5314625043d2fa2b96e179f59720ebcfe3c57c8894b1",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "four-width layout screenshot;overflow asserted"
+      },
+      {
+        "file": "bulk-continuation-green-1440.png",
+        "sha256": "5a288f9820a651e1125d99650fcfd12392f7a78d26a2840f444a2acb71dcd922",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "four-width layout screenshot;overflow asserted"
+      },
+      {
+        "file": "bulk-continuation-import-green-1440.png",
+        "sha256": "b7a6eb9f0f74bc5d89b607253027dd1b8acdd831ad3d7bdd846211ebbf4feaa2",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "four-width layout screenshot;overflow asserted"
+      },
+      {
+        "file": "review-copy-continuation-result.md",
+        "sha256": "5426f5496ce0cc751dbabb8da9f15ba141579a4a532b6cb22a89e8183ad7512a",
+        "sourceSha": "0927bd498d776f50b9430fa9a3009500545a1100",
+        "layer": "fresh-context whole-branch reviewer result and primary rulings;no independent browser/SQL rerun"
+      }
+    ],
+    "report": "ep-16-copy-continuation-readback.md",
+    "formalReadonlyAttempt": "Web reader homepage crawled2days ago;/admin reader Internal Error;not live deployment or admin failure proof",
+    "independentReview": {
+      "range": "51cb0e9..0927bd4",
+      "latestFocus": "f9a30b6..0927bd4",
+      "verdict": "no concrete Critical/Important in inspected paths;not exhaustive181files/production readiness",
+      "independentChecks": "actual component transpiled in memory clipboard/hook ports;pure batch/draft/AI-presentation16PASS;wholebranch diffcheck",
+      "authorLogsRead": "72browser/8SQL inspected,not independently rerun",
+      "minor": "new ACT62 inherited wording contradiction removed;old653 history unchanged;immutable evidence verify PASS",
+      "declinedToJudge": "nativeclipboard,trueAuth/expiry/fullroles/flags/combined,provider/send/model,production/native/currentCI,Propertyhkfull/livewithdrawal,exhaustiveoriginalactions/archive,unrelatedbunlock/changingevidence/generatedrouteTree",
+      "ruling": "formal gates retain BLOCKED/NOT_READY;primary separately verifies CI and immutable evidence;no live actions"
+    }
   }
 }
