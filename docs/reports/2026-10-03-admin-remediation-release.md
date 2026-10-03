@@ -34,9 +34,9 @@ Draft PR按base依序：[216 EP-00](https://github.com/YNWAforever/earnestproper
 | G06 Golden C | save→canonical→public SQL→repair→fresh retrieval PASS | local READY；正式同盤/public browser待驗 |
 | G07 Property.hk | owned full gate/positive publication/media/replay PASS | BLOCKED_EXTERNAL：branch/dt/detail/media approval |
 | G08 28Hse schedule | config/private full receipt已核；既有main native1/3，修復分支正式0/3 | NOT_READY：餘下2次native及逐盤/public讀回；首次published0 |
-| G09 roles/devices | 115 real-route＋14 wizard＋28 property＋20 Ops保留原SHA；EP-15另40 staff四尺寸與分開owned SQL2，source f596c9a；8 DB identities | NOT_READY：8真login sessions、完整route/actions；synthetic API不當真Auth |
+| G09 roles/devices | 115 real-route＋14 wizard＋28 property＋20 Ops保留原SHA；EP-15 staff40／owned SQL2 source f596c9a；EP-14 mobile AI28／shared115 source a13e918；8 DB identities | NOT_READY：8真login sessions、native IME、完整route/actions；synthetic API不當真Auth |
 | G10 concurrency/restore | owned CAS/unknown/restart／clone restore/readback PASS | local鏈READY；部署worker/正式恢復能力仍待驗 |
-| G11 coverage | original60/68/1332 IDs及408 rendered observations保留 | NOT_READY：逐動作/flag/route reconciliation未完成 |
+| G11 coverage | original60/68/1332 IDs及408 rendered observations保留；ACT-27新增local action PARTIAL，source Button候選對回同一操作，component occurrence不當button PASS | NOT_READY：逐動作/角色/flag/route reconciliation未完成 |
 
 ## 具體 canary preview（未執行）
 
@@ -66,3 +66,5 @@ Ruling：Windows下以.audit ledger＋tracked reports保存任務進度，因ski
 後續EP-13／19來源 `a3f24df`：樓盤修改凍結preview、validation focus及Ops persistent error／unknown原job新讀回guard，48 browser＋7分開owned SQL PASS；affected modules與typecheck/lint/build分開通過。原audit CSV environment/blocker從原包恢復，新增execution欄保存新證據；29／9／22不變。配置／migration／provider差異零。詳見[兩項補驗](2026-10-03-admin-remediation/ep-13-19-local-readback.md)及[native1/3界限](2026-10-03-property-sync-readiness.md)。本批不冒稱舊independent review覆蓋新source。
 
 後續EP-15來源 `f596c9a`：試送回應遺失／unknown後保留原request journal，只讀原結果；queued／dispatching／unknown禁止新preview，端點版本變更須明確重新預覽。四尺寸staff40、共享owned UI88、獨立full85 setup SQL2及通知Node21＋Bun14 PASS，typecheck／lint／build各exit0；歷史102／104保留原SHA。配置／migration／provider差異零；focused self review不當另一輪獨立review。真phone／provider／Auth仍BLOCKED，全產品NOT_READY。詳見[EP-15補驗及回退](2026-10-03-admin-remediation/ep-15-local-readback.md)。
+
+後續EP-05／14來源 `a13e918`：AI read outage不再畫成正常空結果；安全錯誤與只讀重試，沿原request/conversation guard，保留manual draft及overwrite choice。四尺寸mobile28、shared115、no-link99＋Bun9、woztell159＋Bun9 PASS；typecheck／lint／build各exit0。新browser suite使用固定獨立編譯目錄。ACT-27只有synthetic agent-a的局部操作證據，原baseline／source候選／1400分母不改；native IME／true Auth及full coverage仍待驗。配置／migration／provider差異零，focused self review。詳見[EP-14補驗及回退](2026-10-03-admin-remediation/ep-14-ai-recovery-readback.md)。

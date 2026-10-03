@@ -297,5 +297,53 @@
     "review": "Focused self review; prior independent review does not cover this late slice",
     "capability": "LOCAL_PARTIAL; no true tenant/readback/phone notification or combined Auth/SQL browser claim",
     "report": "ep-15-local-readback.md"
+  },
+  "mobileAiRecoveryFollowup": {
+    "verifiedCodeSha": "a13e9187a76b0d3c379a43130a5ccc1975a00085",
+    "verifiedAt": "2026-10-03T04:46:02.423518+00:00",
+    "tasks": [
+      "EP-05",
+      "EP-14",
+      "EP-20"
+    ],
+    "browser": {
+      "pass": 28,
+      "fail": 0,
+      "skipped": 0,
+      "evidence": "mobile-ai-browser-execution-summary.json",
+      "layer": "actual-whatsapp-route-synthetic-auth-api-owned-loopback"
+    },
+    "sharedBrowser": {
+      "sourceSha": "a13e9187a76b0d3c379a43130a5ccc1975a00085",
+      "pass": 115,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "actual routes/synthetic API and Auth; historical408 observations not replaced"
+    },
+    "moduleRegression": {
+      "noLink": "Node99+Bun9 PASS",
+      "woztellAndSuggestions": "Node159+Bun9 PASS"
+    },
+    "static": {
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "lintBaselineWarnings": 3,
+      "buildExit": 0
+    },
+    "actionReconciliation": {
+      "businessAction": "ACT-27 LOCAL_PARTIAL",
+      "sourceButtonCandidate": "ACT-S-0148 LOCAL_PARTIAL",
+      "componentOccurrence": "ACT-S-1079 CALLER_ONLY_NOT_BUTTON_PASS",
+      "evidence": "mobile-ai-action-execution.csv"
+    },
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "paidModelCalls": 0
+    },
+    "schemaConfigProviderChanges": false,
+    "review": "Focused self review; prior independent review does not cover this late slice",
+    "capability": "LOCAL_PARTIAL; real Auth/IME/provider/full role/route/flag acceptance remains pending",
+    "report": "ep-14-ai-recovery-readback.md"
   }
 }
