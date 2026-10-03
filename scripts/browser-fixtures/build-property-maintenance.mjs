@@ -17,6 +17,10 @@ await build({
   resolve: {
     alias: [
       {
+        find: /^@\/lib\/(admin\/operations\/operations-client|neon\/whatsapp-service-health)$/,
+        replacement: resolve(root, "synthetic-operations.ts"),
+      },
+      {
         find: /^@\/(auth|hooks\/use-neon-auth|lib\/admin\/media-upload|lib\/neon\/(admin-data|admin-properties|admin-property-bulk|whatsapp-link-selection))$/,
         replacement: api,
       },
