@@ -99,6 +99,7 @@ export function WhatsappLinkWizard({
   const [staffId, setStaffId] = useState("");
   const [perRowStaff, setPerRowStaff] = useState<Record<string, string>>({});
   const [progress, setProgress] = useState<LinkBatchProgress | null>(null);
+  const [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
   const [incomingPending, setIncomingPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -115,10 +116,20 @@ export function WhatsappLinkWizard({
       const raw = sessionStorage.getItem(linkBatchProgressKey(actorScope));
       if (!raw) return;
       const stored = JSON.parse(raw) as LinkBatchProgress;
-      if (stored.batchId && Array.isArray(stored.rows) && Array.isArray(stored.chunkIds)) {
-        const owningDraftId = resolveBatchDraftId(actorScope, stored.rows, stored.draftId);
+      if (
+        stored.batchId &&
+        Array.isArray(stored.rows) &&
+        Array.isArray(stored.chunkIds) &&
+        Array.isArray(stored.completed) &&
+        Array.isArray(stored.preview?.rows)
+      ) {
+        let owningDraftId: string | null = null;
+        try {
+          owningDraftId = resolveBatchDraftId(actorScope, stored.rows, stored.draftId);
+        } catch {
+          setError("草稿讀取未完成；原批次仍保留，請先查回結果。");
+        }
         const restored = { ...stored, draftId: owningDraftId ?? undefined };
-        sessionStorage.setItem(linkBatchProgressKey(actorScope), JSON.stringify(restored));
         setProgress(restored);
         if (owningDraftId) setDraftId(owningDraftId);
         setRepairRows(stored.rows);
@@ -128,9 +139,20 @@ export function WhatsappLinkWizard({
         setStep(
           stored.nextChunk === 0 && !stored.uncertain && stored.completed.length === 0 ? 4 : 5,
         );
+        if (owningDraftId && owningDraftId !== stored.draftId) {
+          try {
+            sessionStorage.setItem(linkBatchProgressKey(actorScope), JSON.stringify(restored));
+          } catch {
+            setError("恢復記錄未能更新；原批次仍保留，請先查回結果。");
+          }
+        }
+      } else {
+        setRecoveryUnavailable(true);
+        setError("恢復記錄需要核對；請保留記錄，暫停建立新批次。");
       }
     } catch {
-      sessionStorage.removeItem(linkBatchProgressKey(actorScope));
+      setRecoveryUnavailable(true);
+      setError("恢復記錄讀取未完成；請保留記錄，暫停建立新批次。");
     }
   }, [actorScope]);
   useEffect(() => {
@@ -247,6 +269,7 @@ export function WhatsappLinkWizard({
     }
   }
   async function dryRun() {
+    if (recoveryUnavailable) throw new Error("請先核對原批次恢復記錄。");
     if (mode === "sales" && !selected.length && !importedRows)
       throw new Error("請先選擇至少一筆樓盤租售。");
     if (rows.length > 1000 || (expansion?.rowCount ?? 0) > 1000)
@@ -465,11 +488,12 @@ export function WhatsappLinkWizard({
   };
   const hasActiveBatch = progress && progress.nextChunk < progress.chunkIds.length;
   const canReplace =
-    !progress ||
-    (!progress.uncertain &&
-      (progress.nextChunk === 0 ||
-        !hasActiveBatch ||
-        progress.completed.some((chunk) => chunk.state === "rejected")));
+    !recoveryUnavailable &&
+    (!progress ||
+      (!progress.uncertain &&
+        (progress.nextChunk === 0 ||
+          !hasActiveBatch ||
+          progress.completed.some((chunk) => chunk.state === "rejected"))));
   const conflict = incomingPending && seed.length > 0 && progress !== null;
   function useIncoming() {
     if (!canReplace || busy) return;
@@ -537,7 +561,7 @@ export function WhatsappLinkWizard({
                     <Button
                       key={draft.draftId}
                       variant="outline"
-                      disabled={busy}
+                      disabled={busy || recoveryUnavailable}
                       onClick={() => {
                         const stored = loadDraft(actorScope, draft.draftId);
                         if (!stored?.rows.length) {
