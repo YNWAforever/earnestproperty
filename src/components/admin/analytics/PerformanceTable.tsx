@@ -56,17 +56,37 @@ export function PerformanceTable({
   onQualify,
 }: Props) {
   const [quality, setQuality] = useState<"production" | "test" | "spam" | "unknown">("unknown");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editorType, setEditorType] = useState<"quality" | "qualification" | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [qualificationEvidence, setQualificationEvidence] = useState("");
   const editingRevision = useRef(0);
   const submitting = useRef(false);
+  function isEditor(record: PerformanceRecord, type: typeof editorType) {
+    return editorOpen && editingKey === record.kind + ":" + record.id && editorType === type;
+  }
+  function toggleEditor(record: PerformanceRecord, type: "quality" | "qualification") {
+    editingRevision.current++;
+    setSaveError(null);
+    const key = record.kind + ":" + record.id;
+    if (editingKey === key && editorType === type) {
+      setEditorOpen((open) => !open);
+      return;
+    }
+    setEditingKey(key);
+    setEditorType(type);
+    setEditorOpen(true);
+    setQuality(record.quality as typeof quality);
+    setReason("");
+    setQualificationEvidence("");
+  }
   async function save(event: FormEvent, record: PerformanceRecord) {
     event.preventDefault();
     if (submitting.current) return;
-    if (editingId !== record.id) {
+    if (!isEditor(record, "quality")) {
       setSaveError("請重新開啟此記錄的修正表單。");
       return;
     }
@@ -91,7 +111,11 @@ export function PerformanceTable({
   async function qualify(event: FormEvent, record: PerformanceRecord) {
     event.preventDefault();
     if (submitting.current) return;
-    if (!record.leadId || editingId !== record.id || qualificationEvidence.trim().length < 8) {
+    if (
+      !record.leadId ||
+      !isEditor(record, "qualification") ||
+      qualificationEvidence.trim().length < 8
+    ) {
       setSaveError("請提供至少 8 個字的核實依據。");
       return;
     }
@@ -207,16 +231,12 @@ export function PerformanceTable({
                   {canCorrect || canQualify ? (
                     <td className="p-2">
                       {canCorrect && (record.kind === "inquiry" || record.eventKey) ? (
-                        <details>
+                        <details open={isEditor(record, "quality")}>
                           <summary
                             className="cursor-pointer"
-                            onClick={() => {
-                              editingRevision.current++;
-                              setSaveError(null);
-                              setEditingId(record.id);
-                              setQuality(record.quality as typeof quality);
-                              setReason("");
-                              setQualificationEvidence("");
+                            onClick={(event) => {
+                              event.preventDefault();
+                              toggleEditor(record, "quality");
                             }}
                           >
                             修正品質
@@ -255,7 +275,7 @@ export function PerformanceTable({
                             <Button
                               type="submit"
                               size="sm"
-                              disabled={saving !== null || editingId !== record.id}
+                              disabled={saving !== null || !isEditor(record, "quality")}
                             >
                               儲存修正
                             </Button>
@@ -265,14 +285,12 @@ export function PerformanceTable({
                         <span className="text-muted-foreground">缺少來源事件，需先核對證據</span>
                       ) : null}
                       {canQualify && record.leadId && record.kind === "inquiry" ? (
-                        <details className="mt-2">
+                        <details className="mt-2" open={isEditor(record, "qualification")}>
                           <summary
                             className="cursor-pointer"
-                            onClick={() => {
-                              editingRevision.current++;
-                              setSaveError(null);
-                              setEditingId(record.id);
-                              setQualificationEvidence("");
+                            onClick={(event) => {
+                              event.preventDefault();
+                              toggleEditor(record, "qualification");
                             }}
                           >
                             核實合格線索
@@ -296,7 +314,7 @@ export function PerformanceTable({
                             <Button
                               type="submit"
                               size="sm"
-                              disabled={saving !== null || editingId !== record.id}
+                              disabled={saving !== null || !isEditor(record, "qualification")}
                             >
                               記錄合格線索
                             </Button>

@@ -211,6 +211,56 @@ for (const width of [1440, 1280, 768, 390])
         "Owned later draft remains editable",
       );
     });
+    test("quality newer draft stays visible and submits unchanged after delayed records readback", async ({
+      page,
+    }) => {
+      await admin(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualityMode = "delayed";
+      });
+      await editQuality(page, 1, "test", "Owned original correction before readback");
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      const evidence = "Later visible draft must be submitted unchanged";
+      await editQuality(page, 2, "spam", evidence);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.recordsMode = "delayed";
+        window.performanceReadbackFixture.pending.shift()!.release();
+      });
+      await expect(records(page).getByRole("status")).toBeVisible();
+      await expect(row(page, 2)).toHaveCount(0);
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.recordsMode = "ok";
+        window.performanceReadbackFixture.pending.shift()!.release();
+        window.performanceReadbackFixture.qualityMode = "ok";
+      });
+      const reason = row(page, 2).getByLabel("修正原因", { exact: true });
+      await expect(reason).toBeVisible();
+      await expect(reason).toHaveValue(evidence);
+      await expect(row(page, 2).getByLabel("品質狀態", { exact: true })).toHaveValue("spam");
+      await row(page, 2).getByText("修正品質", { exact: true }).click();
+      await expect(reason).not.toBeVisible();
+      await row(page, 2).getByText("修正品質", { exact: true }).click();
+      await expect(reason).toBeVisible();
+      await expect(reason).toHaveValue(evidence);
+      await expect(row(page, 2).getByLabel("品質狀態", { exact: true })).toHaveValue("spam");
+      await row(page, 2).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("2");
+      await expect(records(page).getByRole("row")).toHaveCount(3);
+      const calls = await qualityCalls(page);
+      expect(calls).toHaveLength(2);
+      expect(calls[1].input).toEqual({
+        kind: "inquiry",
+        key: id(2),
+        quality: "spam",
+        reason: evidence,
+      });
+    });
     test("quality late completion cannot reopen an old filter or restore old CSV rows", async ({
       page,
     }) => {
