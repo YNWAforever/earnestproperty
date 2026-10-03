@@ -72,6 +72,7 @@ jobs:
       - name: Install Chromium for isolated source-sync UI
         run: npx playwright install --with-deps chromium
       - run: npm run test:property-sync:ui
+      - run: npm run test:property-maintenance:ui
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"

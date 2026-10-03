@@ -114,6 +114,87 @@ test("EP-13 owned saved shared media order, independent sale/rent, CAS and revok
         assert.equal((await read()).offerings.rent.rent, 26000);
       },
     );
+    await t.test(
+      "50-row sale-only bulk keeps rent and protected text; stale and revoked rows fail independently",
+      async () => {
+        const { runAdminPropertyBulk } = await import("./admin-property-bulk.server.ts");
+        const { runPropertyBulkChunks } = await import("../admin/property-bulk-client.ts");
+        await query(
+          `INSERT INTO properties(listing_no,title_zh,deal_type,district_slug,status,price,rent,agent_id,description)
+        SELECT 'QA-BULK-' || n || '-' || deal, '合成批量盤', deal::deal_type, 'sham-tseng', 'active',
+          CASE WHEN deal='sale' THEN 6000000 ELSE NULL END,
+          CASE WHEN deal='rent' THEN 18000 ELSE NULL END, $1, '人工保護批量文字'
+        FROM generate_series(1,50) n CROSS JOIN (VALUES ('sale'),('rent')) v(deal)`,
+          [staff.id],
+        );
+        await query(`UPDATE property_public_members rm SET public_listing_no=sm.public_listing_no
+        FROM properties r, properties s, property_public_members sm
+        WHERE rm.property_id=r.id AND sm.property_id=s.id AND r.deal_type='rent'
+          AND s.listing_no LIKE 'QA-BULK-%-sale'
+          AND r.listing_no=replace(s.listing_no,'-sale','-rent')`);
+        const members = await query(`SELECT m.public_listing_no, p.id, p.listing_no
+        FROM properties p JOIN property_public_members m ON m.property_id=p.id
+        WHERE p.listing_no LIKE 'QA-BULK-%-sale'
+        ORDER BY substring(p.listing_no FROM 'QA-BULK-([0-9]+)')::int`);
+        const items = [];
+        for (const member of members) {
+          const row = await getAdminManagedProperty(member.public_listing_no, actor);
+          items.push({ propertyNo: row.propertyNo, expectedVersion: row.version });
+        }
+        await saveAdminPropertyManagement(
+          {
+            ...items[48],
+            scope: "shared",
+            payload: { floor: "新版" },
+          },
+          actor,
+        );
+        let chunks = 0;
+        const results = await runPropertyBulkChunks(
+          { items, scope: "sale", action: { type: "status", status: "offline" } },
+          async (input) => {
+            chunks++;
+            return runAdminPropertyBulk(input, actor, {
+              read: getAdminManagedProperty,
+              save: async (input, actor) => {
+                if (input.propertyNo === members[49].public_listing_no)
+                  await query("UPDATE staff_users SET active=false WHERE id=$1", [staff.id]);
+                return saveAdminPropertyManagement(input, actor);
+              },
+            });
+          },
+        );
+        assert.equal(chunks, 10);
+        assert.equal(results.length, 50);
+        assert.equal(results.filter((row) => row.ok).length, 48);
+        assert.match(results[48].error, /已被更新/);
+        assert.match(results[49].error, /沒有權限/);
+        assert.ok(results.every((row) => !row.uncertain));
+        const saved = await query(
+          "SELECT deal_type,status,description FROM properties WHERE listing_no LIKE 'QA-BULK-%'",
+        );
+        assert.equal(
+          saved.filter((row) => row.deal_type === "sale" && row.status === "offline").length,
+          48,
+        );
+        assert.equal(
+          saved.filter((row) => row.deal_type === "rent" && row.status === "active").length,
+          50,
+        );
+        assert.ok(saved.every((row) => row.description === "人工保護批量文字"));
+        await query("UPDATE staff_users SET active=true WHERE id=$1", [staff.id]);
+        assert.equal(
+          (await getAdminManagedProperty(members[0].public_listing_no, actor)).offerings.sale
+            .status,
+          "offline",
+        );
+        assert.equal(
+          (await getAdminManagedProperty(members[0].public_listing_no, actor)).offerings.rent
+            .status,
+          "active",
+        );
+      },
+    );
     await t.test("deactivated actor cannot use a cached manager capability to write", async () => {
       const before = await read();
       await query("UPDATE staff_users SET active=false WHERE id=$1", [staff.id]);
