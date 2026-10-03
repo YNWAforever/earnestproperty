@@ -1,0 +1,169 @@
+{
+  "codeSha": "266f8c75c2917a476436ffb54f32c0c91ce3a454",
+  "evidenceLayer": "actual-overview-leads-shell-staff-store-synthetic-auth-api-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realProvider": false,
+  "results": [
+    {
+      "name": "same-user role downgrade clears whole-company values and restricted team history",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "same-user staff relink refreshes scope even when role is unchanged",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "late manager success cannot replace fresh agent scope",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "late denied old read cannot erase the new actor's result",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "partial directory failure preserves other success and current count",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "true empty differs from read failure and denied data is cleared",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "revoked membership stops reads and restored same-user scope starts fresh",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "keyboard card opens the same filtered list and reload retains filter",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "same-user role downgrade clears whole-company values and restricted team history",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "same-user staff relink refreshes scope even when role is unchanged",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "late manager success cannot replace fresh agent scope",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "late denied old read cannot erase the new actor's result",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "partial directory failure preserves other success and current count",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "true empty differs from read failure and denied data is cleared",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "revoked membership stops reads and restored same-user scope starts fresh",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "keyboard card opens the same filtered list and reload retains filter",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "same-user role downgrade clears whole-company values and restricted team history",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "same-user staff relink refreshes scope even when role is unchanged",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "late manager success cannot replace fresh agent scope",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "late denied old read cannot erase the new actor's result",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "partial directory failure preserves other success and current count",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "true empty differs from read failure and denied data is cleared",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "revoked membership stops reads and restored same-user scope starts fresh",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "keyboard card opens the same filtered list and reload retains filter",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "same-user role downgrade clears whole-company values and restricted team history",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "same-user staff relink refreshes scope even when role is unchanged",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "late manager success cannot replace fresh agent scope",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "late denied old read cannot erase the new actor's result",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "partial directory failure preserves other success and current count",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "true empty differs from read failure and denied data is cleared",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "revoked membership stops reads and restored same-user scope starts fresh",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "keyboard card opens the same filtered list and reload retains filter",
+      "status": "passed",
+      "width": 390
+    }
+  ]
+}
