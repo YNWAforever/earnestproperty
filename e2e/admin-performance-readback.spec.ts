@@ -49,7 +49,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/performance-readback-browser-summary.json",
+    ".audit/remediation-20261003/performance-qualification-replay-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -85,7 +85,7 @@ test.afterEach(async ({ page }, info) => {
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("totals"))
     await page.screenshot({
-      path: `.audit/remediation-20261003/performance-qualification-totals-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/performance-replay-totals-${page.viewportSize()!.width}.png`,
     });
 });
 const id = (n: number) => `80000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -141,6 +141,108 @@ const qualificationCalls = (page: Page) =>
 for (const width of [1440, 1280, 768, 390])
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("qualification lost commit response retries identical original input and repeated uncertainty preserves one source", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "commit-unknown";
+      });
+      const evidence = "Owned original contact and requirements after lost response";
+      await editQualification(page, 1, evidence);
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      const original = await page.evaluate(() =>
+        JSON.parse(JSON.stringify(window.performanceReadbackFixture.qualifications)),
+      );
+      expect(original).toHaveLength(1);
+      await page.clock.setFixedTime(new Date("2026-09-30T00:45:00Z"));
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect.poll(async () => (await qualificationCalls(page)).length).toBe(2);
+      const attempts = await qualificationCalls(page);
+      expect(attempts[1].input).toEqual(attempts[0].input);
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "ok";
+      });
+      await page.clock.setFixedTime(new Date("2026-09-30T01:00:00Z"));
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue("");
+      const final = await qualificationCalls(page);
+      expect(final).toHaveLength(3);
+      expect(final[2].input).toEqual(final[0].input);
+      expect(await page.evaluate(() => window.performanceReadbackFixture.qualifications)).toEqual(
+        original,
+      );
+      await expect(metric(page, "合格線索").locator("p").first()).toHaveText("0");
+    });
+    test("qualification lost response refuses changed evidence before another mutation", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "commit-unknown";
+      });
+      await editQualification(page, 1, "Owned accepted original qualification contact evidence");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      const before = await page.evaluate(() =>
+        JSON.parse(JSON.stringify(window.performanceReadbackFixture.qualifications)),
+      );
+      await row(page, 1)
+        .getByLabel("核實依據", { exact: true })
+        .fill("Owned newer replacement draft must not overwrite original request");
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("原核實依據");
+      expect(await qualificationCalls(page)).toHaveLength(1);
+      expect(await page.evaluate(() => window.performanceReadbackFixture.qualifications)).toEqual(
+        before,
+      );
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue(
+        "Owned newer replacement draft must not overwrite original request",
+      );
+    });
+    test("qualification original request survives filter and record table remount before replay", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "commit-unknown";
+      });
+      const evidence = "Owned preserved original qualification after table remount";
+      await editQualification(page, 1, evidence);
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      const before = await page.evaluate(() =>
+        JSON.parse(JSON.stringify(window.performanceReadbackFixture.qualifications)),
+      );
+      await page.locator("#performance-deal").selectOption("rent");
+      await page.getByRole("button", { name: "套用篩選", exact: true }).click();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("1");
+      await page.locator("#performance-deal").selectOption("");
+      await page.getByRole("button", { name: "套用篩選", exact: true }).click();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("4");
+      await drill(page);
+      await page.clock.setFixedTime(new Date("2026-09-30T01:00:00Z"));
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "ok";
+      });
+      await editQualification(page, 1, evidence);
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue("");
+      const attempts = await qualificationCalls(page);
+      expect(attempts).toHaveLength(2);
+      expect(attempts[1].input).toEqual(attempts[0].input);
+      expect(await page.evaluate(() => window.performanceReadbackFixture.qualifications)).toEqual(
+        before,
+      );
+    });
     test("qualification creates unknown evidence before explicit quality review and reconciles unique lead CSV", async ({
       page,
     }) => {
@@ -188,7 +290,7 @@ for (const width of [1440, 1280, 768, 390])
       expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(2);
       expect(csv).not.toContain(id(4));
       await page.screenshot({
-        path: `.audit/remediation-20261003/performance-qualification-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/performance-replay-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(metric(page, "合格線索").locator("p").first()).toHaveText("1");
@@ -380,7 +482,7 @@ for (const width of [1440, 1280, 768, 390])
       for (const n of [2, 3, 4]) expect(csv).toContain(id(n));
       expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(4);
       await page.screenshot({
-        path: `.audit/remediation-20261003/performance-qualification-quality-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/performance-replay-quality-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("3");

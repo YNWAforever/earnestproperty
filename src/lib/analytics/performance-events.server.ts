@@ -99,9 +99,45 @@ export async function qualifyLeadForPerformance(
     ],
   );
   if (!rows[0]?.actor_allowed) throw new Response("Forbidden", { status: 403 });
-  if (!rows[0].lead_id)
-    throw new Response("Lead is outside scope or already qualified", { status: 409 });
-  return { eventKey: "lead_qualified:" + rows[0].lead_id };
+  if (rows[0].lead_id) return { eventKey: "lead_qualified:" + rows[0].lead_id };
+  // A conflict can become visible only after the insert's statement snapshot.
+  // Read the original immutable request using a fresh snapshot and current scope.
+  const replay = await queryRows<{ lead_id: string | null; actor_allowed: boolean }>(
+    `WITH actor_row AS MATERIALIZED (
+       SELECT id,branch_id FROM staff_users
+       WHERE id=$4::uuid AND auth_user_id=$6 AND active FOR SHARE
+     ), actor_roles AS MATERIALIZED (
+       SELECT r.role FROM staff_roles r JOIN actor_row a ON a.id=r.staff_user_id
+       WHERE r.role IN ('admin','manager') FOR SHARE OF r
+     ), source_lead AS MATERIALIZED (
+       SELECT id,assigned_agent_id FROM crm_leads WHERE id=$1::uuid FOR SHARE
+     ), source_owner AS MATERIALIZED (
+       SELECT branch_id FROM staff_users
+       WHERE id=(SELECT assigned_agent_id FROM source_lead) FOR SHARE
+     ), original AS (
+       SELECT q.lead_id FROM crm_lead_qualifications q
+       JOIN source_lead l ON l.id=q.lead_id CROSS JOIN actor_row a
+       JOIN performance_events e ON e.lead_id=l.id
+         AND e.event_key='lead_qualified:'||l.id::text AND e.source='crm_lead:'||l.id::text
+       WHERE q.qualified_by=a.id AND q.qualified_at=$2::timestamptz AND q.evidence=$3
+         AND EXISTS(SELECT 1 FROM actor_roles)
+         AND (($5::boolean AND EXISTS(SELECT 1 FROM actor_roles WHERE role='admin'))
+           OR (a.branch_id IS NOT NULL AND a.branch_id=(SELECT branch_id FROM source_owner)))
+     ) SELECT (SELECT lead_id::text FROM original) AS lead_id,
+       EXISTS(SELECT 1 FROM actor_roles) AS actor_allowed`,
+    [
+      input.leadId,
+      input.qualifiedAt,
+      input.evidence.trim(),
+      actor.staffId,
+      actor.roles.includes("admin"),
+      actor.authUserId,
+    ],
+  );
+  if (!replay[0]?.actor_allowed) throw new Response("Forbidden", { status: 403 });
+  if (!replay[0].lead_id)
+    throw new Response("Lead is outside scope or has a different qualification", { status: 409 });
+  return { eventKey: "lead_qualified:" + replay[0].lead_id };
 }
 
 /** Append a reasoned quality decision. The report view reads the latest revision. */
