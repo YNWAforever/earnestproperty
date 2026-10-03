@@ -166,5 +166,85 @@
     },
     "review": "Focused self review; prior independent review evidence unchanged; no new independent review claim",
     "realAuthProviderModel": "BLOCKED as separate layer"
+  },
+  "propertyOperationsFollowup": {
+    "verifiedCodeSha": "a3f24df9921a573e1aa429262bc62cb0b3eb9074",
+    "verifiedAt": "2026-10-03T02:51:39.214961+00:00",
+    "tasks": [
+      "EP-13",
+      "EP-19"
+    ],
+    "sourceCommits": [
+      "3f364427ce0b67e263981ad8d4be09c47700f7e4",
+      "a3f24df9921a573e1aa429262bc62cb0b3eb9074"
+    ],
+    "browser": {
+      "property": {
+        "pass": 28,
+        "fail": 0,
+        "skipped": 0,
+        "sourceSha": "a3f24df9921a573e1aa429262bc62cb0b3eb9074",
+        "evidence": "property-browser-execution-summary.json",
+        "layer": "real-routes-synthetic-api-owned-loopback"
+      },
+      "operations": {
+        "pass": 20,
+        "fail": 0,
+        "skipped": 0,
+        "sourceSha": "a3f24df9921a573e1aa429262bc62cb0b3eb9074",
+        "evidence": "operations-browser-execution-summary.json",
+        "layer": "real-route-synthetic-control-plane-owned-loopback"
+      }
+    },
+    "ownedDatabase": {
+      "propertyMaintenance": {
+        "pass": 6,
+        "skipped": 0,
+        "fail": 0
+      },
+      "operationsRecovery": {
+        "pass": 1,
+        "skipped": 0,
+        "fail": 0
+      },
+      "schemaMigrations": 85,
+      "sourceSha": "a3f24df9921a573e1aa429262bc62cb0b3eb9074",
+      "realAuth": false,
+      "realBlobWorkerProvider": false
+    },
+    "controlPlane": {
+      "pass": 105,
+      "fail": 0,
+      "skipped": 0,
+      "sourceSha": "a3f24df9921a573e1aa429262bc62cb0b3eb9074"
+    },
+    "affectedModules": {
+      "operations": "Node17+Bun8 PASS",
+      "adminProperties": "Node29+Bun27 PASS",
+      "sourceSha": "a3f24df9921a573e1aa429262bc62cb0b3eb9074"
+    },
+    "static": {
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "lintBaselineWarnings": 3,
+      "buildExit": 0,
+      "sourceSha": "a3f24df9921a573e1aa429262bc62cb0b3eb9074"
+    },
+    "schemaConfigProviderChanges": false,
+    "effects": {
+      "productionWrites": 0,
+      "realSends": 0,
+      "paidModelCalls": 0
+    },
+    "review": "Focused self review and separate regression evidence; earlier independent review not extended to these slices",
+    "evidence": "ep-13-19-local-readback.md",
+    "fullAcceptance": "PARTIAL; combined real Auth/SQL/Blob and worker/runtime capabilities still blocked"
+  },
+  "latestNativeReadback": {
+    "evidence": "native-schedule-readback.json",
+    "eligibleBaselineCycles": 1,
+    "requiredCycles": 3,
+    "remediationProductionCycles": 0,
+    "gate": "NOT_READY"
   }
 }

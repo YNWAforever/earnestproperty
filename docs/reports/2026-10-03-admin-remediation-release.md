@@ -33,8 +33,8 @@ Draft PR按base依序：[216 EP-00](https://github.com/YNWAforever/earnestproper
 | G05 Golden B | authorised request→review/apply→DB/run讀回 PASS | local READY；真model品質/usage budget BLOCKED |
 | G06 Golden C | save→canonical→public SQL→repair→fresh retrieval PASS | local READY；正式同盤/public browser待驗 |
 | G07 Property.hk | owned full gate/positive publication/media/replay PASS | BLOCKED_EXTERNAL：branch/dt/detail/media approval |
-| G08 28Hse schedule | config與manual jobs已核，native0/3 | NOT_READY：啟用後3次完整真schedule |
-| G09 roles/devices | 115 real-route＋14 wizard browser/四尺寸＋8 DB actor identities | NOT_READY：8真login sessions、完整route/actions |
+| G08 28Hse schedule | config/private full receipt已核；既有main native1/3，修復分支正式0/3 | NOT_READY：餘下2次native及逐盤/public讀回；首次published0 |
+| G09 roles/devices | 115 real-route＋14 wizard＋28 property＋20 Ops，各記原SHA/四尺寸；8 DB identities | NOT_READY：8真login sessions、完整route/actions；synthetic API不當真Auth |
 | G10 concurrency/restore | owned CAS/unknown/restart／clone restore/readback PASS | local鏈READY；部署worker/正式恢復能力仍待驗 |
 | G11 coverage | original60/68/1332 IDs及408 rendered observations保留 | NOT_READY：逐動作/flag/route reconciliation未完成 |
 
@@ -59,6 +59,8 @@ AI：EV04/05/09/11/12 各3次，共最多15個 generation；每run最多1次，�
 
 回退：停對應scope新effects、保留raw receipt/enquiries/profiles/human review/dirty jobs/outbound ledger；回上一兼容app/config，migration additions保留。canonical保護與stale read gate不撤回；合法資料修正按operation/revision逐筆確認，保留期間新查詢。owned restore是在新clone演練，不能套production。
 
-Ruling：Windows下以.audit ledger＋tracked reports保存任務進度，因skill shell scripts不支援本包EP-00編號；風險是人工 bookkeeping，已以immutable CSV IDs、SHA及回歸核對減低。按計劃復用已修main的nav/parser/receipt/CAS/Inbox picker/bulk/segmented sync，避免另造身份/狀態機。部分指定新e2e入口改用既有受控real-route harness及owned test入口；50-row batch UI已補驗，完整50-row property editor仍待正確隔離Auth/SQL/media目標；缺少的正式roles/全route驗收仍明示，未冒稱同等覆蓋。
+Ruling：Windows下以.audit ledger＋tracked reports保存任務進度，因skill shell scripts不支援本包EP-00編號；風險是人工 bookkeeping，已以immutable CSV IDs、SHA及回歸核對減低。按計劃復用已修main的nav/parser/receipt/CAS/Inbox picker/bulk/segmented sync，避免另造身份/狀態機。部分指定新e2e入口改用既有受控real-route harness及owned test入口；50-row batch、property UI及分開owned SQL已補驗，完整同一browser/Auth/SQL/Blob integration仍待正確隔離目標；缺少的正式roles/全route驗收仍明示，未冒稱同等覆蓋。
 
 本地可review修復READY；F01/F03/F04/F08的production啟用BLOCKED，F02/F07真接駁BLOCKED，F05整體UX驗收NOT_READY，F06按28Hse NOT_READY／Property.hk BLOCKED分開。本回合結束後沒有自動監看或三日驗收承諾。
+
+後續EP-13／19來源 `a3f24df`：樓盤修改凍結preview、validation focus及Ops persistent error／unknown原job新讀回guard，48 browser＋7分開owned SQL PASS；affected modules與typecheck/lint/build分開通過。原audit CSV environment/blocker從原包恢復，新增execution欄保存新證據；29／9／22不變。配置／migration／provider差異零。詳見[兩項補驗](2026-10-03-admin-remediation/ep-13-19-local-readback.md)及[native1/3界限](2026-10-03-property-sync-readiness.md)。本批不冒稱舊independent review覆蓋新source。
