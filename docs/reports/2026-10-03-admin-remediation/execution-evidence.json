@@ -592,5 +592,177 @@
       }
     ],
     "report": "ep-12-daily-work-readback.md"
+  },
+  "campaignRecoveryFollowup": {
+    "verifiedCodeSha": "d89b94d4fbfe3f6401f8e02e47c7e0ea15fcb07e",
+    "verifiedAt": "2026-10-03T07:15:19.255822+00:00",
+    "tasks": [
+      "EP-16"
+    ],
+    "red": {
+      "originalSourceRecoveryFailures": 3,
+      "lateActorSuccessFailure": 1,
+      "storageFailClosedFailure": 1,
+      "layoutFailure": 1,
+      "mobilePageWidthBeforeFix": 1396
+    },
+    "intermediateFailures": {
+      "preLayoutBrowser": "18 PASS/14 FAIL;all14 layout assertions at768/390;retained",
+      "typecheck": "new fixture TS2717 duplicate global declaration;corrected;not a product RED",
+      "ownedSqlStartup": "exact-source parallel run connection terminated before migrations;0PASS/1FAIL;standalone fresh container4PASS;cause remains unproven;not product RED or PASS"
+    },
+    "browser": {
+      "pass": 32,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "actual-campaign-route-shell-staff-store-synthetic-auth-api-owned-loopback",
+      "evidence": "campaign-review-browser-execution-summary.json"
+    },
+    "independentOwnedSql": {
+      "pass": 4,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "new loopback PostgreSQL17/full85;actual queue CAS/consent/cancel SQL;fake wake port;existing guards proved,not new SQL repairs"
+    },
+    "sharedBrowser": {
+      "pass": 115,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "existing actual-route/synthetic Auth/API;separate from new32 and ownedSQL"
+    },
+    "moduleRegression": {
+      "woztell": "Node159+Bun9 PASS/0 SKIP",
+      "whatsappEnquiries": "Node103 PASS/0 SKIP"
+    },
+    "static": {
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "lintBaselineWarnings": 3,
+      "buildExit": 0
+    },
+    "actionReconciliation": {
+      "businessActions": [
+        "ACT-46",
+        "ACT-48",
+        "ACT-49"
+      ],
+      "overlappingSourceControls": 5,
+      "status": "LOCAL_PARTIAL;ACT49 UI outcome read + SQL cancel only;cancel button not claimed",
+      "evidence": "campaign-recovery-action-execution.csv"
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3 previously verified",
+      "repairedBranchProduction": "0/3",
+      "newNativeRuns": 0
+    },
+    "runtimeConfigMigrationProviderChanges": false,
+    "ciChange": "add owned campaign browser32 and separate ownedSQL4 scripts",
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidModelCalls": 0
+    },
+    "journalLimit": "same browser tab sessionStorage;user-id scoped;retains only version/campaignId;not new server intent or cross-tab durability",
+    "review": "Focused self review;prior independent review not claimed for this late slice",
+    "capability": "local campaign reload/actor recovery READY;true Auth/provider/template-content/canary/full roles/action coverage BLOCKED or NOT_READY",
+    "logs": [
+      {
+        "file": "ep16-campaign-red.log",
+        "sha256": "8fa772dffd96062c758572d554fabfe135a9cdde94c4bf266e7c45f1ba14dad0",
+        "layer": "valid pre-fix RED"
+      },
+      {
+        "file": "ep16-campaign-red-late.log",
+        "sha256": "bc084d9645706038cfc39b3cbcb824503a2b3cf8da0b8f16d11babdfd8121be5",
+        "layer": "valid pre-fix RED"
+      },
+      {
+        "file": "ep16-campaign-red-storage.log",
+        "sha256": "eba690f4920a5e29c691b641caad2514740e42f0d5fc1c322ecfd321f7236610",
+        "layer": "valid pre-fix RED"
+      },
+      {
+        "file": "ep16-campaign-red-layout.log",
+        "sha256": "ace4603ab3345bbccc53c280a468dc6d6ee6e950bb2b9d883af4f021d5556195",
+        "layer": "valid pre-fix RED"
+      },
+      {
+        "file": "ep16-campaign-green.log",
+        "sha256": "c8be38433b9f0cc2403d3c774b095e82ec73ec5d46f8f4b8cf807084bc021c64",
+        "layer": "intermediate failure retained;not PASS"
+      },
+      {
+        "file": "ep16-campaign-typecheck.log",
+        "sha256": "982ac7141e33ff2a79e737504409f33665e8316d7ecd246002c5ecce9ac9c908",
+        "layer": "intermediate failure retained;not PASS"
+      },
+      {
+        "file": "ep16-campaign-exact-owned-db-startup-failed.log",
+        "sha256": "299e27abc1bfc9b0b673ab976dc463849285100a9fe2a5d241329cc6f712bc31",
+        "layer": "owned test startup failure before migrations;standalone rerun passed;cause unproven;not product RED or PASS"
+      },
+      {
+        "file": "ep16-campaign-exact-browser.log",
+        "sha256": "02f69493e148ea39c751fd3550e2d066c89fdfdc9c3f3b47fd87700f4bbcc841",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep16-campaign-exact-owned-db.log",
+        "sha256": "eb4818bd51e6925964529aca1a78d17233044522f60a76312ffff5f34ef7c2aa",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep16-campaign-exact-woztell.log",
+        "sha256": "38be7f03171e7290265dd106ad24dcad4a4e402d37229301e96663a4e1776c7e",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep16-campaign-exact-enquiries.log",
+        "sha256": "de58c416aed814cf8721a528792c46d860ed2437fb88feef21b2ae48fa8588d5",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep16-campaign-exact-shared-ui.log",
+        "sha256": "3f4af26e257d714b7956e9bde3b57cedc75e32dbb78a28f1730033fd2b47dcd3",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep16-campaign-exact-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep16-campaign-exact-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep16-campaign-exact-build.log",
+        "sha256": "d3bbc01159b98a25f09b0bb1dc9d9519573dc3f960f680f5835c5245701a8167",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "campaign-green-390.png",
+        "sha256": "93f292cdee153fc9604b6cb5205b74bbdc8d939f764c62854761719f890dd493",
+        "layer": "committed source owned screenshot"
+      },
+      {
+        "file": "campaign-green-768.png",
+        "sha256": "ee54962df2c7f83e199934b840475fd57520767142d2a45a5b50c29524efce3a",
+        "layer": "committed source owned screenshot"
+      },
+      {
+        "file": "campaign-green-1280.png",
+        "sha256": "c7c9b98f99c4a3f5c7cf541cb37cda8a4c9ea0c1e85a567cfafcc0f151aebab7",
+        "layer": "committed source owned screenshot"
+      },
+      {
+        "file": "campaign-green-1440.png",
+        "sha256": "353c5b852358218f93399e93652eae9d8a0f8f0ba70f3af57bfe12a9b38fb55d",
+        "layer": "committed source owned screenshot"
+      }
+    ],
+    "report": "ep-16-campaign-recovery-readback.md"
   }
 }
