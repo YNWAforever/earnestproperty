@@ -400,6 +400,9 @@ export function WhatsappLinkWizard({
     save(result);
     setStep(5);
     if (result.completed.some((chunk) => chunk.state === "committed")) onCreated();
+    retainUnfinishedDraft(result);
+  }
+  function retainUnfinishedDraft(result: LinkBatchProgress) {
     if (
       !result.uncertain &&
       (result.nextChunk >= result.chunkIds.length ||
@@ -433,6 +436,7 @@ export function WhatsappLinkWizard({
     if (!progress) return;
     const result = reconcileLinkBatch(progress, (await api.read(progress.batchId)).operations);
     save(result);
+    retainUnfinishedDraft(result);
   }
   const toggle = (offer: LinkOfferSelection) => {
     setImportedRows(null);
@@ -1046,6 +1050,15 @@ export function WhatsappLinkWizard({
                   sessionStorage.removeItem(linkBatchProgressKey(actorScope));
                   setProgress(null);
                   setSelected([]);
+                  setImportedRows(null);
+                  setRepairRows(null);
+                  setDraftId(crypto.randomUUID());
+                  setMode("sales");
+                  setVerified(false);
+                  setPreviewDirty(false);
+                  setSelectedEligible([]);
+                  setConfirmSubset(false);
+                  setDeferredCount(0);
                   setStep(1);
                 }}
               >
