@@ -118,3 +118,19 @@ export function clearDraft(
   if (actorScope.trim() && z.string().uuid().safeParse(draftId).success)
     storage.removeItem(keyOf(actorScope, draftId));
 }
+
+export function listDrafts(
+  actorScope: string,
+  storage: DraftStore & Pick<Storage, "length" | "key"> = localStorage,
+): WhatsappBatchDraft[] {
+  if (!actorScope.trim()) return [];
+  const prefix = `earnest:whatsapp-link-draft:v${draftVersion}:${encodeURIComponent(actorScope)}:`;
+  const drafts: WhatsappBatchDraft[] = [];
+  for (let index = 0; index < storage.length; index++) {
+    const key = storage.key(index);
+    if (!key?.startsWith(prefix)) continue;
+    const draft = loadDraft(actorScope, key.slice(prefix.length), storage);
+    if (draft?.rows.length) drafts.push(draft);
+  }
+  return drafts.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+}

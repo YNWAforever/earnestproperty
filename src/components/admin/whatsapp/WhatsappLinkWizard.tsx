@@ -22,9 +22,11 @@ import { WhatsappBatchResult } from "./WhatsappBatchResult";
 import { WhatsappBatchImport } from "./WhatsappBatchImport";
 import {
   clearDraft,
+  listDrafts,
   loadDraft,
   prepareEligibleSubset,
   saveDraft,
+  type WhatsappBatchDraft,
 } from "@/lib/admin/whatsapp-batch-draft";
 
 type Staff = { id: string; name: string | null; email: string | null; active?: boolean };
@@ -59,6 +61,7 @@ export function WhatsappLinkWizard({
   const [step, setStep] = useState(1);
   const [draftId, setDraftId] = useState<string>(() => crypto.randomUUID());
   const [draftReady, setDraftReady] = useState(false);
+  const [savedDrafts, setSavedDrafts] = useState<WhatsappBatchDraft[]>([]);
   const [repairRows, setRepairRows] = useState<BatchRowDraft[] | null>(null);
   const [previewDirty, setPreviewDirty] = useState(false);
   const [selectedEligible, setSelectedEligible] = useState<string[]>([]);
@@ -129,6 +132,7 @@ export function WhatsappLinkWizard({
     try {
       const pointerKey = `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`;
       const pointer = localStorage.getItem(pointerKey);
+      setSavedDrafts(listDrafts(actorScope));
       if (pointer) {
         const stored = loadDraft(actorScope, pointer);
         if (stored?.rows.length) {
@@ -219,6 +223,7 @@ export function WhatsappLinkWizard({
         `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`,
         draftId,
       );
+      setSavedDrafts(listDrafts(actorScope));
     } catch {
       // The browser may disallow local storage; preview/commit still require server validation.
     }
@@ -416,20 +421,20 @@ export function WhatsappLinkWizard({
         ),
       );
       const existing = loadDraft(actorScope, draftId)?.rows ?? [];
-      const unfinished = [
-        ...existing.filter((row) => !successful.has(row.rowKey)),
-        ...result.rows.filter(
-          (row) =>
-            !successful.has(row.rowKey) && !existing.some((item) => item.rowKey === row.rowKey),
-        ),
-      ];
-      if (unfinished.length) saveDraft(actorScope, { draftId, rows: unfinished });
+      const unfinished = new Map(
+        existing.filter((row) => !successful.has(row.rowKey)).map((row) => [row.rowKey, row]),
+      );
+      // Signed preview rows contain the latest edits; deferred rows remain from the draft.
+      for (const row of result.rows) {
+        if (!successful.has(row.rowKey)) unfinished.set(row.rowKey, row);
+      }
+      if (unfinished.size) saveDraft(actorScope, { draftId, rows: [...unfinished.values()] });
       else {
         clearDraft(actorScope, draftId);
-        localStorage.removeItem(
-          `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`,
-        );
+        const pointerKey = `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`;
+        if (localStorage.getItem(pointerKey) === draftId) localStorage.removeItem(pointerKey);
       }
+      setSavedDrafts(listDrafts(actorScope));
     }
   }
   async function recover() {
@@ -510,6 +515,46 @@ export function WhatsappLinkWizard({
       ) : null}
       {step === 1 ? (
         <div className="space-y-3">
+          {!progress && savedDrafts.some((draft) => draft.draftId !== draftId) ? (
+            <section aria-label="未完成草稿" className="space-y-2 rounded border p-3">
+              <p className="text-sm">未完成的行仍已儲存。開啟後需重新核對及預覽。</p>
+              <div className="flex flex-wrap gap-2">
+                {savedDrafts
+                  .filter((draft) => draft.draftId !== draftId)
+                  .map((draft) => (
+                    <Button
+                      key={draft.draftId}
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        const stored = loadDraft(actorScope, draft.draftId);
+                        if (!stored?.rows.length) {
+                          setSavedDrafts(listDrafts(actorScope));
+                          return;
+                        }
+                        setDraftId(stored.draftId);
+                        setImportedRows(stored.rows);
+                        setRepairRows(null);
+                        setSelected([]);
+                        setMode("sales");
+                        setRouting("reception");
+                        setVerified(false);
+                        setPreviewDirty(false);
+                        setSelectedEligible([]);
+                        setConfirmSubset(false);
+                        setDeferredCount(0);
+                        setError("");
+                        setIncomingPending(false);
+                        onSeedConsumed?.();
+                        setStep(2);
+                      }}
+                    >
+                      開啟未完成草稿（{draft.rows.length} 行）
+                    </Button>
+                  ))}
+              </div>
+            </section>
+          ) : null}
           <fieldset className="flex flex-wrap gap-4">
             <legend className="font-medium">查詢入口</legend>
             <label>

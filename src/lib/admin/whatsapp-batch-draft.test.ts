@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { loadDraft, prepareEligibleSubset, saveDraft } from "./whatsapp-batch-draft.ts";
+import { listDrafts, loadDraft, prepareEligibleSubset, saveDraft } from "./whatsapp-batch-draft.ts";
 import type { BatchRowDraft } from "../whatsapp-enquiries/link-batch-policy.ts";
 import type { BatchPreview } from "../neon/whatsapp-link-batches.types.ts";
 
@@ -71,4 +71,33 @@ test("local draft is versioned, actor scoped, and strips unexpected recipient an
   const [key] = data.keys();
   data.set(key, JSON.stringify({ version: 0, rows }));
   expect(loadDraft("actor-a", id(200), storage)).toBeNull();
+});
+
+test("draft chooser lists only validated nonempty drafts for the exact actor", () => {
+  const data = new Map<string, string>();
+  const storage = {
+    get length() {
+      return data.size;
+    },
+    key: (index: number) => [...data.keys()][index] ?? null,
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      data.set(key, value);
+    },
+    removeItem: (key: string) => {
+      data.delete(key);
+    },
+  };
+  saveDraft("actor:a", { draftId: id(300), rows: rows.slice(0, 5) }, storage);
+  saveDraft("actor:a:other", { draftId: id(301), rows: rows.slice(0, 50) }, storage);
+  saveDraft("actor:a", { draftId: id(302), rows: [] }, storage);
+  saveDraft("actor:a", { draftId: id(303), rows: rows.slice(0, 3) }, storage);
+  const corruptKey = [...data.keys()].find((key) => key.endsWith(id(303)))!;
+  data.set(corruptKey, '{"version":1,"rows":"not-rows"}');
+  data.set("earnest:whatsapp-link-draft:v1:actor%3Aa:not-a-uuid", "{}");
+  expect(listDrafts("actor:a", storage).map((d) => [d.draftId, d.rows.length])).toEqual([
+    [id(300), 5],
+  ]);
+  expect(listDrafts("actor:a:other", storage).map((d) => d.draftId)).toEqual([id(301)]);
+  expect(listDrafts("", storage)).toEqual([]);
 });
