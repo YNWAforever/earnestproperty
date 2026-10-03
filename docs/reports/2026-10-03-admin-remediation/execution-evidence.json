@@ -2151,5 +2151,711 @@
       "newDTOs": false,
       "productionApplied": false
     }
+  },
+  "performanceQualificationFollowup": {
+    "verifiedCodeSha": "94dc4799fb8c1c81a36c4d0680a76ac7ad41e760",
+    "verifiedAt": "2026-10-03T16:55:40.642689+00:00",
+    "independentReview": {
+      "reviewedSha": "af2bd3599605c6e48acf16b3fdbd2b9b1e640809",
+      "critical": 0,
+      "important": 1,
+      "minor": 0,
+      "fixedSha": "94dc4799fb8c1c81a36c4d0680a76ac7ad41e760",
+      "passes": 1,
+      "secondReviewer": false,
+      "independentTests": "analytic13PASS and actual full85 citedFAQ applied stale reproduction;not fullsuite",
+      "limits": "sampled193changedfiles,not exhaustive;private setup termination and content_hash fixture error retained in review report"
+    },
+    "configurationDryRun": {
+      "baseline": "a45ed6d8e4b3eb8771d56c76f2e34e3c298ef439",
+      "code": "94dc4799fb8c1c81a36c4d0680a76ac7ad41e760",
+      "configurationSchemaMigrationPackageWorkflowDiff": [],
+      "newRuntimeProviderIds": false,
+      "newDTOs": false,
+      "productionApplied": false,
+      "migrationDryRun": "full85 fresh owned PG17 only; final independent readback pending",
+      "rollback": "restrict qualification/content transition entry;read original qualification/proposal/source/event/quality facts then compatible UI/server rollback;preserve immutable source/run/actor/reason/qualification/event/revision/receipt/outbound history;never delete accepted evidence or repeat an uncertain write before source/history readback"
+    },
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3",
+      "repairedProduction": "0/3",
+      "newAgentTriggeredRuns": 0,
+      "metadata": [
+        {
+          "conclusion": "success",
+          "createdAt": "2026-10-03T05:22:43Z",
+          "databaseId": 37099627650,
+          "event": "schedule",
+          "headSha": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37099627650",
+          "workflowName": "Property sync read-only watchdog"
+        },
+        {
+          "conclusion": "success",
+          "createdAt": "2026-10-02T23:49:46Z",
+          "databaseId": 37079390201,
+          "event": "schedule",
+          "headSha": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37079390201",
+          "workflowName": "Daily property collection"
+        },
+        {
+          "conclusion": "skipped",
+          "createdAt": "2026-10-02T05:43:55Z",
+          "databaseId": 36970253646,
+          "event": "schedule",
+          "headSha": "96f2ba88e59152751d9e1c3a5b8da8ebffbc52de",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36970253646",
+          "workflowName": "Property sync read-only watchdog"
+        },
+        {
+          "conclusion": "skipped",
+          "createdAt": "2026-10-01T23:55:23Z",
+          "databaseId": 36943339534,
+          "event": "schedule",
+          "headSha": "2e98167a6545198ffc3fda2f1470affd1fbd2911",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36943339534",
+          "workflowName": "Daily property collection"
+        },
+        {
+          "conclusion": "success",
+          "createdAt": "2026-09-25T05:54:59Z",
+          "databaseId": 36100569732,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36100569732",
+          "workflowName": "Migration drift"
+        },
+        {
+          "conclusion": "failure",
+          "createdAt": "2026-09-24T21:32:41Z",
+          "databaseId": 36062151356,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36062151356",
+          "workflowName": "Daily property collection"
+        },
+        {
+          "conclusion": "success",
+          "createdAt": "2026-09-24T05:54:23Z",
+          "databaseId": 35962017724,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/35962017724",
+          "workflowName": "Migration drift"
+        },
+        {
+          "conclusion": "failure",
+          "createdAt": "2026-09-23T21:31:28Z",
+          "databaseId": 35922964463,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/35922964463",
+          "workflowName": "Daily property collection"
+        }
+      ],
+      "interpretation": "watchdog notdaily;latestdaily37079390201;not new accepted repairedcycle"
+    },
+    "logs": [
+      {
+        "file": "ep17-qualification-red.log",
+        "sha256": "fb856228e070c9ff67f47b8f46afa5026b05dea09e4b2e5bc658306ce3cbf031",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-green.log",
+        "sha256": "02c9a43e1007c895b2fc8544e3cb9aeb79b35d0dd478d72d5f19b842e29ea1ce",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-browser-focused.log",
+        "sha256": "92d80f0c054347da09f0232bd06ba1a44b3d5a44c485206ac70b5a5fad3efe07",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-prior-browser-summary.json",
+        "sha256": "4248b56f0a1a2de84266369e0d12679830b8816d01715640814177e7dc6fee71",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-first-browser-summary.json",
+        "sha256": "5676e43f4f1be1c1fce4c971eac6324661942270b9d7283c5faf0ff09a7412e6",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "review-qualification-result.md",
+        "sha256": "72c2e57e8c7fa58b7bedd3a7bc7f3eedfbe827c0f341f0287db663f3122367f8",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep04-cited-source-review-red.log",
+        "sha256": "93cd5fb4f9bb571ee226545cd031511bdeacc8bce8e3e3b50a8bc29682e46115",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep04-cited-source-review-green.log",
+        "sha256": "f7d4cab178d0510a3defef66c8ddf51663fbdbe08f53d9ea358b9771577b9143",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-sql.log",
+        "sha256": "1d97bf768fddf8d480c1d9c7ff1eef642661488c205023be371d891e5c8ea761",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep04-cited-source-review-final-db.log",
+        "sha256": "01479a4f3a81e10e582bf81b8b0b06a8da46896b189c7cce7032937fcd84e8d6",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-config-dry-run.json",
+        "sha256": "b8896f6d5c9d2b8333a429474a3207ea209ebdb01d829f2f2d52502f52f3568f",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-native-schedule-readonly.json",
+        "sha256": "7b4771df4337de10df4321371dcd780d396692d6e3faabd38a1526b68850213d",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-formal-http-readback.json",
+        "sha256": "5d91b4d6670896380fc66b95a5f1900a5b85b2df0891f119b75f97947b128eab",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-sql-retry.log",
+        "sha256": "1abfdb46d17b5991a06eeebcf785d473af7787477c507801623aa6234611f5b5",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-browser.log",
+        "sha256": "5eda1d237c1cbfad92324f641f69cb4e92461ae3230f7568602eac9428faa731",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-analytics.log",
+        "sha256": "5bb949d35e1093055fdc1fb4e9c1714cf1adb14065d504bf77f4dec36c589165",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-no-link.log",
+        "sha256": "88d7b731f1b85def481ee1642f2769df85772c5ae38fb8af134714c6d512455c",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-shared-browser.log",
+        "sha256": "aa1652274af7473fcffcc934033f69162c27a78b2e82357e5ea6885c0daa2c22",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-build.log",
+        "sha256": "3a27526ea44586c00cfa01139d0209e3b3690ffbbf22de9e53722c9da38847fc",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep04-cited-source-review-final-content.log",
+        "sha256": "9ebe448abb55c3f39c3bb1da23e9424c512097bed50692ec60148b489e26c879",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-final-sql.log",
+        "sha256": "083ef3779d170f516ea005d234e9f51af8ba35255ca9c5a37eb44a7fab2ea111",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-final-browser.log",
+        "sha256": "3b07a663b41ffe83f4e9e51dbacdd6bad451600034f1f1361da80adbd5d4fb27",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-sql-retry.log",
+        "sha256": "1abfdb46d17b5991a06eeebcf785d473af7787477c507801623aa6234611f5b5",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-totals-390.png",
+        "sha256": "f8993bef8a41785e6a4671adebdc43c983edb8be9870b42238b844c482f1550a",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-totals-768.png",
+        "sha256": "7d8bb174affa0c5f811cfd4e47e7fc5407b067fc046556b2221faed76f458c0e",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-totals-1280.png",
+        "sha256": "2bd94c85f6ea983dd6d4f162991925f102e5a3dceb421b204b7eb188f3ad7e7b",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-totals-1440.png",
+        "sha256": "688a9f2de4879dca506d1541a8f7943d3f256155e6264ffae0f82ed07c6fe92f",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-quality-confirmed-390.png",
+        "sha256": "5ae94f013d1c51bb7f66ae2a52f733f8c747fb47ced4dace2af62f7d9c033d77",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-quality-confirmed-768.png",
+        "sha256": "e0e479b339de4f72fd366bbc931f4c28d3caf753379636c15329e5790912ea2b",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-quality-confirmed-1280.png",
+        "sha256": "757efbde7f1228cc62270cf63e51fce28bc36f825b357be2e6d63ffbe8010714",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-quality-confirmed-1440.png",
+        "sha256": "762cf97fbd7d5e4d12a5fc6f967604c85b8f7763acc82a675fb9d2bdfe80bc7c",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-confirmed-390.png",
+        "sha256": "5ea1903744c467655f14a4f7695b0cc1410339e0896a2ba0918f41e8940a27ac",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-confirmed-768.png",
+        "sha256": "8dab0070e91012d371d42618eca91e0e2b51d2bc52e63ffdc50d6a6cb4aa0cb2",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-confirmed-1280.png",
+        "sha256": "fa4b65bb2f82f8eaccf536ffad7cb8bd93576b7fbe46dafdb41e4ac12cbfb5bc",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-confirmed-1440.png",
+        "sha256": "fbfa93b593dfa07cdf01d2af0eb95bdd3a2e5ff5d77d94da6784e3f5d48c9ab3",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      }
+    ],
+    "tasks": [
+      "EP-17"
+    ],
+    "initialCodeSha": "af2bd3599605c6e48acf16b3fdbd2b9b1e640809",
+    "red": {
+      "runtimeBase": "a45ed6d8e4b3eb8771d56c76f2e34e3c298ef439",
+      "pass": 7,
+      "failIncludingParent": 9,
+      "failingLeaf": 8,
+      "reason": "inactive/revoked/rebound admin-manager,current downgradedadmin foreignbranch,malformedUUID"
+    },
+    "browser": {
+      "sourceSha": "94dc4799fb8c1c81a36c4d0680a76ac7ad41e760",
+      "pass": 108,
+      "fail": 0,
+      "skipped": 0,
+      "perWidth": 27,
+      "retainedQualityCases": 84,
+      "newQualificationCases": 24,
+      "layer": "actual-analytics-route-dashboard-table-shell-staff-store-synthetic-auth-api-owned-loopback",
+      "evidence": "performance-qualification-browser-execution-summary.json"
+    },
+    "ownedSql": {
+      "sourceSha": "af2bd3599605c6e48acf16b3fdbd2b9b1e640809",
+      "codeContentIdenticalAtFinalSha": "94dc4799fb8c1c81a36c4d0680a76ac7ad41e760",
+      "pass": 16,
+      "fail": 0,
+      "skipped": 0,
+      "migrations": 85,
+      "layer": "actual qualify/report/quality writers and independent raw facts;trusted actor;zero-fetch;separatefrombrowser",
+      "readback": "currentactor/binding/role/scope/source;oneconcurrentqualification/event;unknownuntilreview;crossHKday samecohort;firstactor/time/evidence;immutable source/history"
+    },
+    "moduleRegression": {
+      "analyticsNode": 65,
+      "analyticsBun": 3,
+      "noLinkNode": 99,
+      "noLinkBun": 9,
+      "sharedSyntheticBrowser": 115
+    },
+    "static": {
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "lintBaselineWarnings": 3,
+      "buildExit": 0
+    },
+    "setupFailures": {
+      "committedFirstSql": "0PASS1FAIL Docker run spawnSyncETIMEDOUT beforemigrations/tests;causeUNPROVEN",
+      "secondCommittedSql": "0PASS1FAIL sameDocker startup beforemigrations;causeUNPROVEN",
+      "recovery": "PENDING exact-head owned CI;no helper timeout change;prior af2 productfiles identical94,16PASS retained;notproductRED"
+    },
+    "actions": {
+      "business": 3,
+      "overlappingSourceControls": 24,
+      "records": 27,
+      "status": "LOCAL_PARTIAL",
+      "evidence": "performance-qualification-action-execution.csv"
+    },
+    "capability": "ownedqualification READY;realAuth/combined/unknowncommittedoutcome BLOCKED;fullroles/actions/native NOT_READY",
+    "report": "ep-17-qualification-readback.md"
+  },
+  "contentCitationTransitionFollowup": {
+    "verifiedCodeSha": "94dc4799fb8c1c81a36c4d0680a76ac7ad41e760",
+    "verifiedAt": "2026-10-03T16:55:40.642689+00:00",
+    "independentReview": {
+      "reviewedSha": "af2bd3599605c6e48acf16b3fdbd2b9b1e640809",
+      "critical": 0,
+      "important": 1,
+      "minor": 0,
+      "fixedSha": "94dc4799fb8c1c81a36c4d0680a76ac7ad41e760",
+      "passes": 1,
+      "secondReviewer": false,
+      "independentTests": "analytic13PASS and actual full85 citedFAQ applied stale reproduction;not fullsuite",
+      "limits": "sampled193changedfiles,not exhaustive;private setup termination and content_hash fixture error retained in review report"
+    },
+    "configurationDryRun": {
+      "baseline": "a45ed6d8e4b3eb8771d56c76f2e34e3c298ef439",
+      "code": "94dc4799fb8c1c81a36c4d0680a76ac7ad41e760",
+      "configurationSchemaMigrationPackageWorkflowDiff": [],
+      "newRuntimeProviderIds": false,
+      "newDTOs": false,
+      "productionApplied": false,
+      "migrationDryRun": "full85 fresh owned PG17 only; final independent readback pending",
+      "rollback": "restrict qualification/content transition entry;read original qualification/proposal/source/event/quality facts then compatible UI/server rollback;preserve immutable source/run/actor/reason/qualification/event/revision/receipt/outbound history;never delete accepted evidence or repeat an uncertain write before source/history readback"
+    },
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3",
+      "repairedProduction": "0/3",
+      "newAgentTriggeredRuns": 0,
+      "metadata": [
+        {
+          "conclusion": "success",
+          "createdAt": "2026-10-03T05:22:43Z",
+          "databaseId": 37099627650,
+          "event": "schedule",
+          "headSha": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37099627650",
+          "workflowName": "Property sync read-only watchdog"
+        },
+        {
+          "conclusion": "success",
+          "createdAt": "2026-10-02T23:49:46Z",
+          "databaseId": 37079390201,
+          "event": "schedule",
+          "headSha": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37079390201",
+          "workflowName": "Daily property collection"
+        },
+        {
+          "conclusion": "skipped",
+          "createdAt": "2026-10-02T05:43:55Z",
+          "databaseId": 36970253646,
+          "event": "schedule",
+          "headSha": "96f2ba88e59152751d9e1c3a5b8da8ebffbc52de",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36970253646",
+          "workflowName": "Property sync read-only watchdog"
+        },
+        {
+          "conclusion": "skipped",
+          "createdAt": "2026-10-01T23:55:23Z",
+          "databaseId": 36943339534,
+          "event": "schedule",
+          "headSha": "2e98167a6545198ffc3fda2f1470affd1fbd2911",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36943339534",
+          "workflowName": "Daily property collection"
+        },
+        {
+          "conclusion": "success",
+          "createdAt": "2026-09-25T05:54:59Z",
+          "databaseId": 36100569732,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36100569732",
+          "workflowName": "Migration drift"
+        },
+        {
+          "conclusion": "failure",
+          "createdAt": "2026-09-24T21:32:41Z",
+          "databaseId": 36062151356,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36062151356",
+          "workflowName": "Daily property collection"
+        },
+        {
+          "conclusion": "success",
+          "createdAt": "2026-09-24T05:54:23Z",
+          "databaseId": 35962017724,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/35962017724",
+          "workflowName": "Migration drift"
+        },
+        {
+          "conclusion": "failure",
+          "createdAt": "2026-09-23T21:31:28Z",
+          "databaseId": 35922964463,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/35922964463",
+          "workflowName": "Daily property collection"
+        }
+      ],
+      "interpretation": "watchdog notdaily;latestdaily37079390201;not new accepted repairedcycle"
+    },
+    "logs": [
+      {
+        "file": "ep17-qualification-red.log",
+        "sha256": "fb856228e070c9ff67f47b8f46afa5026b05dea09e4b2e5bc658306ce3cbf031",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-green.log",
+        "sha256": "02c9a43e1007c895b2fc8544e3cb9aeb79b35d0dd478d72d5f19b842e29ea1ce",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-browser-focused.log",
+        "sha256": "92d80f0c054347da09f0232bd06ba1a44b3d5a44c485206ac70b5a5fad3efe07",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-prior-browser-summary.json",
+        "sha256": "4248b56f0a1a2de84266369e0d12679830b8816d01715640814177e7dc6fee71",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-first-browser-summary.json",
+        "sha256": "5676e43f4f1be1c1fce4c971eac6324661942270b9d7283c5faf0ff09a7412e6",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "review-qualification-result.md",
+        "sha256": "72c2e57e8c7fa58b7bedd3a7bc7f3eedfbe827c0f341f0287db663f3122367f8",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep04-cited-source-review-red.log",
+        "sha256": "93cd5fb4f9bb571ee226545cd031511bdeacc8bce8e3e3b50a8bc29682e46115",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep04-cited-source-review-green.log",
+        "sha256": "f7d4cab178d0510a3defef66c8ddf51663fbdbe08f53d9ea358b9771577b9143",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-sql.log",
+        "sha256": "1d97bf768fddf8d480c1d9c7ff1eef642661488c205023be371d891e5c8ea761",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep04-cited-source-review-final-db.log",
+        "sha256": "01479a4f3a81e10e582bf81b8b0b06a8da46896b189c7cce7032937fcd84e8d6",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-config-dry-run.json",
+        "sha256": "b8896f6d5c9d2b8333a429474a3207ea209ebdb01d829f2f2d52502f52f3568f",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-native-schedule-readonly.json",
+        "sha256": "7b4771df4337de10df4321371dcd780d396692d6e3faabd38a1526b68850213d",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-formal-http-readback.json",
+        "sha256": "5d91b4d6670896380fc66b95a5f1900a5b85b2df0891f119b75f97947b128eab",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-sql-retry.log",
+        "sha256": "1abfdb46d17b5991a06eeebcf785d473af7787477c507801623aa6234611f5b5",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-browser.log",
+        "sha256": "5eda1d237c1cbfad92324f641f69cb4e92461ae3230f7568602eac9428faa731",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-analytics.log",
+        "sha256": "5bb949d35e1093055fdc1fb4e9c1714cf1adb14065d504bf77f4dec36c589165",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-no-link.log",
+        "sha256": "88d7b731f1b85def481ee1642f2769df85772c5ae38fb8af134714c6d512455c",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-shared-browser.log",
+        "sha256": "aa1652274af7473fcffcc934033f69162c27a78b2e82357e5ea6885c0daa2c22",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-build.log",
+        "sha256": "3a27526ea44586c00cfa01139d0209e3b3690ffbbf22de9e53722c9da38847fc",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep04-cited-source-review-final-content.log",
+        "sha256": "9ebe448abb55c3f39c3bb1da23e9424c512097bed50692ec60148b489e26c879",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-final-sql.log",
+        "sha256": "083ef3779d170f516ea005d234e9f51af8ba35255ca9c5a37eb44a7fab2ea111",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-final-browser.log",
+        "sha256": "3b07a663b41ffe83f4e9e51dbacdd6bad451600034f1f1361da80adbd5d4fb27",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "ep17-qualification-review-final-sql-retry.log",
+        "sha256": "1abfdb46d17b5991a06eeebcf785d473af7787477c507801623aa6234611f5b5",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-totals-390.png",
+        "sha256": "f8993bef8a41785e6a4671adebdc43c983edb8be9870b42238b844c482f1550a",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-totals-768.png",
+        "sha256": "7d8bb174affa0c5f811cfd4e47e7fc5407b067fc046556b2221faed76f458c0e",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-totals-1280.png",
+        "sha256": "2bd94c85f6ea983dd6d4f162991925f102e5a3dceb421b204b7eb188f3ad7e7b",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-totals-1440.png",
+        "sha256": "688a9f2de4879dca506d1541a8f7943d3f256155e6264ffae0f82ed07c6fe92f",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-quality-confirmed-390.png",
+        "sha256": "5ae94f013d1c51bb7f66ae2a52f733f8c747fb47ced4dace2af62f7d9c033d77",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-quality-confirmed-768.png",
+        "sha256": "e0e479b339de4f72fd366bbc931f4c28d3caf753379636c15329e5790912ea2b",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-quality-confirmed-1280.png",
+        "sha256": "757efbde7f1228cc62270cf63e51fce28bc36f825b357be2e6d63ffbe8010714",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-quality-confirmed-1440.png",
+        "sha256": "762cf97fbd7d5e4d12a5fc6f967604c85b8f7763acc82a675fb9d2bdfe80bc7c",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-confirmed-390.png",
+        "sha256": "5ea1903744c467655f14a4f7695b0cc1410339e0896a2ba0918f41e8940a27ac",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-confirmed-768.png",
+        "sha256": "8dab0070e91012d371d42618eca91e0e2b51d2bc52e63ffdc50d6a6cb4aa0cb2",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-confirmed-1280.png",
+        "sha256": "fa4b65bb2f82f8eaccf536ffad7cb8bd93576b7fbe46dafdb41e4ac12cbfb5bc",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      },
+      {
+        "file": "performance-qualification-confirmed-1440.png",
+        "sha256": "fbfa93b593dfa07cdf01d2af0eb95bdd3a2e5ff5d77d94da6784e3f5d48c9ab3",
+        "layer": "named local evidence;see report for exact source and failure layer"
+      }
+    ],
+    "tasks": [
+      "EP-04"
+    ],
+    "red": {
+      "runtimeBase": "af2bd3599605c6e48acf16b3fdbd2b9b1e640809",
+      "pass": 33,
+      "failIncludingParent": 4,
+      "failingLeaf": 3,
+      "reason": "actualFAQ commits after dependencyguard before start/save/apply transition"
+    },
+    "ownedSql": {
+      "codeSnapshotSha": "94dc4799fb8c1c81a36c4d0680a76ac7ad41e760",
+      "runtimeSource": "af2 plus uncommitted final fix staged unchanged into94",
+      "pass": 37,
+      "fail": 0,
+      "skipped": 0,
+      "migrations": 85,
+      "layer": "actualcontent24+CRM13 tests inclparents;trustedactors;syntheticmodels;independent rawSQL",
+      "readback": "controlledFAQ source edit waits on lock thencommits after originalprotectedtransition;storedcitation/actor/run/mainarticle preserved;prior sourcechange denial maintained",
+      "notClaimed": "all supportedtype concurrent/phantom/worker variants or trueAuth/provider"
+    },
+    "knowledgeSql": {
+      "status": "final local Docker startup BLOCKED;exact-head owned CI pending",
+      "pass": null
+    },
+    "moduleRegression": {
+      "contentNode": 77,
+      "contentBun": 34
+    },
+    "setupFailures": {
+      "committedFirstDb": "0PASS2FAIL Docker run spawnSyncETIMEDOUT before migrations/tests;causeUNPROVEN",
+      "recovery": "PENDING exact-head owned CI;precommit fix snapshot37PASS retained;no helper timeout change;notproductRED"
+    },
+    "capability": "ownedcitedFAQ transition lock READY;realAuth/model/provider/allconcurrency BLOCKED",
+    "report": "ep-04-cited-source-transition-readback.md"
   }
 }
