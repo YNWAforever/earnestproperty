@@ -287,8 +287,20 @@ export async function qualifyPerformanceLead(value: {
     !Number.isFinite(Date.parse(value.qualifiedAt))
   )
     throw new Response("Owned invalid qualification", { status: 400 });
+  if (!snapshot.inquiries.some((i) => i.crmLeadId === value.leadId))
+    throw new Response("Owned source outside current scope", { status: 409 });
+  const existing = state.qualifications.find((q) => q.leadId === value.leadId);
+  if (existing) {
+    if (
+      existing.actor !== actor ||
+      existing.evidence !== value.evidence.trim() ||
+      new Date(existing.qualifiedAt).getTime() !== new Date(value.qualifiedAt).getTime()
+    )
+      throw new Response("Owned different qualification request", { status: 409 });
+    if (mode === "commit-unknown") throw Error("Owned response lost after retained qualification");
+    return { eventKey: `lead_qualified:${value.leadId}` };
+  }
   if (
-    !snapshot.inquiries.some((i) => i.crmLeadId === value.leadId) ||
     !["contacted", "viewing", "negotiating", "closed_won"].includes(
       state.leadStages[value.leadId] ?? "contacted",
     )
@@ -297,8 +309,7 @@ export async function qualifyPerformanceLead(value: {
   if (mode.startsWith("delayed"))
     await new Promise<void>((release) => state.pending.push({ release }));
   if (mode.endsWith("failure")) throw Error("Owned qualification refused before write");
-  if (state.qualifications.some((q) => q.leadId === value.leadId))
-    throw new Response("Owned already qualified", { status: 409 });
+
   state.qualifications.push({
     ...value,
     evidence: value.evidence.trim(),
@@ -307,5 +318,6 @@ export async function qualifyPerformanceLead(value: {
     branchId: id(500 + which),
   });
   sessionStorage.setItem("performance-qualifications", JSON.stringify(state.qualifications));
+  if (mode === "commit-unknown") throw Error("Owned response lost after committed qualification");
   return { eventKey: `lead_qualified:${value.leadId}` };
 }

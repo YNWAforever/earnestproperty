@@ -105,6 +105,9 @@ function AdminAnalyticsWorkspace() {
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const recordRequest = useRef(0);
   const currentRecordsReadback = useRef<(() => Promise<void>) | null>(null);
+  const qualificationRequests = useRef(
+    new Map<string, { leadId: string; qualifiedAt: string; evidence: string }>(),
+  );
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -217,7 +220,20 @@ function AdminAnalyticsWorkspace() {
     await refreshAfterMutation();
   }
   async function qualifyLead(input: { leadId: string; qualifiedAt: string; evidence: string }) {
-    await qualifyPerformanceLead(input);
+    const evidence = input.evidence.trim();
+    const previous = qualificationRequests.current.get(input.leadId);
+    if (previous && previous.evidence !== evidence) {
+      const error = new Error("Restore the original qualification evidence before retrying");
+      error.name = "QualificationRequestChanged";
+      throw error;
+    }
+    // Keep the original request through uncertainty and table/filter remounts.
+    // The actor-keyed workspace discards this journal when identity changes.
+    const request = previous ?? { ...input, evidence };
+    qualificationRequests.current.set(input.leadId, request);
+    await qualifyPerformanceLead(request);
+    if (qualificationRequests.current.get(input.leadId) === request)
+      qualificationRequests.current.delete(input.leadId);
     await refreshAfterMutation();
   }
   function applyPerformanceFilters(next: PerformanceFilters) {

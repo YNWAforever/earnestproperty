@@ -130,9 +130,13 @@ export function PerformanceTable({
         evidence: qualificationEvidence.trim(),
       });
       if (revision === editingRevision.current) setQualificationEvidence("");
-    } catch {
+    } catch (error) {
       if (revision === editingRevision.current)
-        setSaveError("未能核實線索；請確認狀態、權限及是否已完成核實。");
+        setSaveError(
+          error instanceof Error && error.name === "QualificationRequestChanged"
+            ? "上次核實請求尚未確認，請還原原核實依據再重試。"
+            : "未能核實線索；重試會沿用原依據及時間，請核對狀態、權限及既有紀錄。",
+        );
     } finally {
       submitting.current = false;
       setSaving(null);

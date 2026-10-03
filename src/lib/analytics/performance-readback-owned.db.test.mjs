@@ -599,13 +599,11 @@ test(
             qualifyLeadForPerformance(input, actor(0)),
             qualifyLeadForPerformance(input, actor(0)),
           ]);
-          assert.equal(outcomes.filter((r) => r.status === "fulfilled").length, 1);
-          assert.equal(
-            outcomes.filter(
-              (r) =>
-                r.status === "rejected" && r.reason instanceof Response && r.reason.status === 409,
-            ).length,
-            1,
+          assert.equal(outcomes.filter((r) => r.status === "fulfilled").length, 2);
+          assert.ok(
+            outcomes.every(
+              (r) => r.status === "fulfilled" && r.value.eventKey === `lead_qualified:${lead}`,
+            ),
           );
           const key = `lead_qualified:${lead}`;
           const raw = await query(
@@ -715,6 +713,131 @@ test(
             ),
             [],
           );
+        },
+      );
+      const retryInput = (lead) => ({
+        leadId: lead,
+        qualifiedAt: "2026-09-30T02:00:00Z",
+        evidence: "Owned original qualification evidence after lost response",
+      });
+      const seedRetryLead = (lead, staff = id(600)) =>
+        query(
+          "INSERT INTO crm_leads(id,source,stage,assigned_agent_id) VALUES($1,'whatsapp','contacted',$2)",
+          [lead, staff],
+        );
+      const retryFacts = async (lead) => ({
+        qualification: await query("SELECT * FROM crm_lead_qualifications WHERE lead_id=$1", [
+          lead,
+        ]),
+        projection: await query(
+          "SELECT * FROM performance_events WHERE lead_id=$1 ORDER BY event_key",
+          [lead],
+        ),
+      });
+      await t.test(
+        "committed qualification with lost response replays the original actor time evidence without another write",
+        async () => {
+          const lead = id(1220),
+            original = retryInput(lead);
+          await seedRetryLead(lead);
+          await assert.rejects(async () => {
+            await qualifyLeadForPerformance(original, actor(0));
+            throw Error("Owned transport lost after actual commit");
+          }, /Owned transport lost/);
+          const before = await retryFacts(lead);
+          assert.equal(before.qualification.length, 1);
+          assert.equal(before.projection.length, 1);
+          assert.deepEqual(await qualifyLeadForPerformance(original, actor(0)), {
+            eventKey: `lead_qualified:${lead}`,
+          });
+          assert.deepEqual(await retryFacts(lead), before);
+        },
+      );
+      await t.test(
+        "qualification replay is a current scoped read after stage changes and loses access after reassignment",
+        async () => {
+          const lead = id(1221),
+            original = retryInput(lead);
+          await seedRetryLead(lead);
+          await qualifyLeadForPerformance(original, actor(0));
+          await query("UPDATE crm_leads SET stage='closed_lost' WHERE id=$1", [lead]);
+          const before = await retryFacts(lead);
+          assert.deepEqual(await qualifyLeadForPerformance(original, actor(0)), {
+            eventKey: `lead_qualified:${lead}`,
+          });
+          await query("UPDATE crm_leads SET assigned_agent_id=$2 WHERE id=$1", [lead, id(601)]);
+          await assert.rejects(
+            qualifyLeadForPerformance(original, actor(0)),
+            (e) => e instanceof Response && e.status === 409,
+          );
+          assert.deepEqual(await retryFacts(lead), before);
+        },
+      );
+      await t.test(
+        "qualification replay rejects different evidence time and actor and retains the accepted source",
+        async () => {
+          const lead = id(1222),
+            original = retryInput(lead);
+          await seedRetryLead(lead);
+          await qualifyLeadForPerformance(original, actor(0));
+          await query(
+            "INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager') ON CONFLICT DO NOTHING",
+            [id(602)],
+          );
+          const before = await retryFacts(lead);
+          for (const [input, access] of [
+            [
+              { ...original, evidence: "Owned conflicting replacement qualification evidence" },
+              actor(0),
+            ],
+            [{ ...original, qualifiedAt: "2026-09-30T03:00:00Z" }, actor(0)],
+            [original, actor(2)],
+          ])
+            await assert.rejects(
+              qualifyLeadForPerformance(input, access),
+              (e) => e instanceof Response && e.status === 409,
+            );
+          assert.deepEqual(await retryFacts(lead), before);
+        },
+      );
+      await t.test(
+        "qualification replay rechecks current account active grant and Auth binding",
+        async () => {
+          for (const [index, change] of [
+            [0, "inactive"],
+            [1, "role-revoked"],
+            [2, "account-rebound"],
+          ]) {
+            const staff = id(680 + index),
+              auth = `owned-replay-actor-${index}`,
+              lead = id(1230 + index),
+              original = retryInput(lead),
+              access = { staffId: staff, authUserId: auth, roles: ["manager"] };
+            await query(
+              "INSERT INTO staff_users(id,auth_user_id,email,branch_id) VALUES($1,$2,$3,$4)",
+              [staff, auth, auth + "@example.invalid", id(500)],
+            );
+            await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [
+              staff,
+            ]);
+            await seedRetryLead(lead, staff);
+            await qualifyLeadForPerformance(original, access);
+            const before = await retryFacts(lead);
+            if (change === "inactive")
+              await query("UPDATE staff_users SET active=false WHERE id=$1", [staff]);
+            if (change === "role-revoked")
+              await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [staff]);
+            if (change === "account-rebound")
+              await query("UPDATE staff_users SET auth_user_id=$2 WHERE id=$1", [
+                staff,
+                auth + "-new",
+              ]);
+            await assert.rejects(
+              qualifyLeadForPerformance(original, access),
+              (e) => e instanceof Response && e.status === 403,
+            );
+            assert.deepEqual(await retryFacts(lead), before);
+          }
         },
       );
     });
