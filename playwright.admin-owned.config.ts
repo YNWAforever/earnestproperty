@@ -10,6 +10,7 @@ export default defineConfig({
     "admin-daily-work.spec.ts",
     "admin-campaign-review.spec.ts",
     "admin-performance-readback.spec.ts",
+    "admin-link-bulk-owned.spec.ts",
   ],
   workers: 1,
   fullyParallel: false,
