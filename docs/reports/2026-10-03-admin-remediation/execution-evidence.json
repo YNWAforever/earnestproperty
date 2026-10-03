@@ -345,5 +345,127 @@
     "review": "Focused self review; prior independent review does not cover this late slice",
     "capability": "LOCAL_PARTIAL; real Auth/IME/provider/full role/route/flag acceptance remains pending",
     "report": "ep-14-ai-recovery-readback.md"
+  },
+  "sourceSyncRecoveryFollowup": {
+    "verifiedCodeSha": "bf585c0adec25ec3d82c4eafb26b39f748802d77",
+    "verifiedAt": "2026-10-03T05:28:55.556236+00:00",
+    "tasks": [
+      "EP-08 local read model only",
+      "EP-11",
+      "EP-19",
+      "EP-20"
+    ],
+    "red": [
+      "1280 source failure retained one old source candidate",
+      "1280 source change retained one old source result"
+    ],
+    "browser": {
+      "pass": 36,
+      "fail": 0,
+      "skipped": 0,
+      "evidence": "sync-recovery-browser-execution-summary.json",
+      "layer": "actual-property-sync-route-shell-staff-store-synthetic-auth-api-owned-loopback"
+    },
+    "legacySyncUi": {
+      "pass": 46,
+      "viewports": [
+        1440,
+        390
+      ],
+      "layer": "actual components/synthetic API;not additional SQL"
+    },
+    "ownedWithdrawal": {
+      "pass": 2,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "new loopback Postgres/full85 migrations;132 held and canonical sibling guard"
+    },
+    "moduleRegression": {
+      "withdrawal": "12 PASS/0 SKIP",
+      "segmentedDaily": "38 PASS/0 SKIP"
+    },
+    "static": {
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "lintBaselineWarnings": 3,
+      "buildExit": 0
+    },
+    "actionReconciliation": {
+      "businessActions": [
+        "ACT-13",
+        "ACT-14",
+        "ACT-15"
+      ],
+      "sourceCandidates": 14,
+      "status": "LOCAL_PARTIAL;overlapping actions not counted twice",
+      "evidence": "sync-recovery-action-execution.csv"
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3 previously verified",
+      "repairedBranchProduction": "0/3",
+      "newNativeRunsInThisSlice": 0
+    },
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "paidModelCalls": 0,
+      "providerRequests": 0
+    },
+    "schemaConfigProviderChanges": false,
+    "review": "Focused self review;prior independent review not claimed for this late slice",
+    "capability": "local source-boundary recovery READY;formal roles/provider/source completeness/3 native schedules remain NOT_READY or BLOCKED",
+    "logs": [
+      {
+        "file": "ep11-sync-red-source.log",
+        "sha256": "7385f5a8853e64f8027a92a7ff37ab7c5f9e7510249d6c3c1b3f37993b5910e9",
+        "layer": "valid baseline red"
+      },
+      {
+        "file": "ep11-sync-red-result.log",
+        "sha256": "2ecd271316d76cda51746c743a4a87d254aeffc532dbfe76fd982b17dc2cdeaa",
+        "layer": "valid baseline red"
+      },
+      {
+        "file": "ep11-sync-exact-browser.log",
+        "sha256": "6009500e089313fd691b7ebb0d8710c28df287de3a025f44140d9cc9f54c64fb",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep11-sync-exact-legacy-ui.log",
+        "sha256": "f5cf52dd9d80e8c820f3aec49def7016582ec78ac3ea0a52e20e0bce2d89ded7",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep11-sync-exact-owned-withdrawal.log",
+        "sha256": "f419f91613cf430f26ab2b95c2548481890fd957bfe5debdf99975cad95dc44c",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep11-sync-exact-withdrawal.log",
+        "sha256": "677481ba2a379c75bc2aef94af30d4788bf97b9a456ace7d9cfb93111de74f71",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep11-sync-exact-daily.log",
+        "sha256": "6695996da8ac5fc6262645f9124f34a2b38be9ff989bacf1bcf674189361cdcb",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep11-sync-exact-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep11-sync-exact-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "committed source local acceptance"
+      },
+      {
+        "file": "ep11-sync-exact-build.log",
+        "sha256": "9a195ec1ed0bc0fdcf8d7a5f896171ead2aa739d09c0080bde60115dcf8bf3aa",
+        "layer": "committed source local acceptance"
+      }
+    ],
+    "report": "ep-11-source-recovery-readback.md"
   }
 }
