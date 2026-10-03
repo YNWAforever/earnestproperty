@@ -9,6 +9,7 @@ export default defineConfig({
     "admin-property-sync-recovery.spec.ts",
     "admin-daily-work.spec.ts",
     "admin-campaign-review.spec.ts",
+    "admin-performance-readback.spec.ts",
   ],
   workers: 1,
   fullyParallel: false,

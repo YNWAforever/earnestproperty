@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AdminShell, AdminError } from "@/components/admin/AdminShell";
+import { useStaffSession } from "@/components/admin/staff-session";
+import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { PerformanceDashboard } from "@/components/admin/analytics/PerformanceDashboard";
 import { finalFixUiFlags } from "@/lib/admin/final-fix-rollout";
 import { PerformanceTable } from "@/components/admin/analytics/PerformanceTable";
@@ -43,6 +45,32 @@ export const Route = createFileRoute("/admin/analytics")({
   component: AdminAnalytics,
 });
 function AdminAnalytics() {
+  const { user } = useNeonAuth();
+  const { session, loading } = useStaffSession(user?.id ?? null);
+  const identity =
+    user && !loading && session?.status === "ok"
+      ? JSON.stringify([user.id, session.staffId, [...session.roles].sort()])
+      : null;
+  if (
+    !identity ||
+    session?.status !== "ok" ||
+    !session.roles.some((role) => role === "admin" || role === "manager")
+  )
+    return (
+      <AdminShell
+        title="營運及轉換統計"
+        description="香港時間每日匯總，只顯示數量，不載入客戶明細。"
+      >
+        {identity ? (
+          <AdminError message="需要管理員或主管權限，請聯絡管理員。" />
+        ) : (
+          <Skeleton className="h-56 w-full" />
+        )}
+      </AdminShell>
+    );
+  return <AdminAnalyticsWorkspace key={identity} />;
+}
+function AdminAnalyticsWorkspace() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const performanceFilters: PerformanceFilters = useMemo(
@@ -76,6 +104,15 @@ function AdminAnalytics() {
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const recordRequest = useRef(0);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    const requests = recordRequest;
+    return () => {
+      active.current = false;
+      requests.current++;
+    };
+  }, []);
   const [performanceRevision, setPerformanceRevision] = useState(0);
   useEffect(() => {
     if (!finalFixUiFlags.salesPerformanceReporting) return;
@@ -126,7 +163,8 @@ function AdminAnalytics() {
     };
   }, [performanceFilters, performanceRevision, search.invalidFilter]);
   async function openRecords(key: string, cursor: string | null = null, append = false) {
-    if (!finalFixUiFlags.salesPerformanceReporting || search.invalidFilter) return;
+    if (!active.current || !finalFixUiFlags.salesPerformanceReporting || search.invalidFilter)
+      return;
     const requestId = ++recordRequest.current;
     setDrilldownKey(key);
     setRecordsLoading(true);
@@ -168,11 +206,13 @@ function AdminAnalytics() {
         reason: input.reason,
       });
     else throw new Error("Missing event evidence");
+    if (!active.current) return;
     setPerformanceRevision((v) => v + 1);
     if (drilldownKey) await openRecords(drilldownKey);
   }
   async function qualifyLead(input: { leadId: string; qualifiedAt: string; evidence: string }) {
     await qualifyPerformanceLead(input);
+    if (!active.current) return;
     setPerformanceRevision((value) => value + 1);
     if (drilldownKey) await openRecords(drilldownKey);
   }
