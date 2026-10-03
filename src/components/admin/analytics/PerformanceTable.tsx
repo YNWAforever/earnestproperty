@@ -19,6 +19,7 @@ type Props = {
   onClose: () => void;
   onMore: () => void;
   onQualify: (input: { leadId: string; qualifiedAt: string; evidence: string }) => Promise<void>;
+  getPendingQualificationEvidence?: (leadId: string) => string | undefined;
   onCorrect: (input: {
     record: PerformanceRecord;
     quality: "production" | "test" | "spam" | "unknown";
@@ -54,6 +55,7 @@ export function PerformanceTable({
   onMore,
   onCorrect,
   onQualify,
+  getPendingQualificationEvidence,
 }: Props) {
   const [quality, setQuality] = useState<"production" | "test" | "spam" | "unknown">("unknown");
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -135,7 +137,7 @@ export function PerformanceTable({
         setSaveError(
           error instanceof Error && error.name === "QualificationRequestChanged"
             ? "上次核實請求尚未確認，請還原原核實依據再重試。"
-            : "未能核實線索；重試會沿用原依據及時間，請核對狀態、權限及既有紀錄。",
+            : "未能核實線索；請核對狀態、權限及既有紀錄後重試。",
         );
     } finally {
       submitting.current = false;
@@ -303,6 +305,19 @@ export function PerformanceTable({
                             onSubmit={(event) => void qualify(event, record)}
                             className="mt-2 space-y-2"
                           >
+                            {isEditor(record, "qualification") &&
+                            getPendingQualificationEvidence?.(record.leadId) ? (
+                              <div className="text-xs text-muted-foreground">
+                                <p>上次待確認的核實依據（重試沿用原時間）：</p>
+                                <p
+                                  role="note"
+                                  aria-label="上次待確認的核實依據"
+                                  className="break-words"
+                                >
+                                  {getPendingQualificationEvidence(record.leadId)}
+                                </p>
+                              </div>
+                            ) : null}
                             <Label htmlFor={"qualification-" + record.id}>核實依據</Label>
                             <Input
                               id={"qualification-" + record.id}

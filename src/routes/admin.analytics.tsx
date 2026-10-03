@@ -15,6 +15,7 @@ import {
   fetchSalesPerformanceRecords,
   qualifyPerformanceLead,
 } from "@/lib/analytics/sales-performance-client";
+import { ServerFnResponseError } from "@/lib/neon/server-fn-response";
 import { parsePerformanceFilters } from "@/lib/analytics/sales-performance.mjs";
 import { parsePerformanceSearch as parsePerformanceSearchInput } from "@/lib/analytics/performance-route-search.mjs";
 import type {
@@ -231,7 +232,20 @@ function AdminAnalyticsWorkspace() {
     // The actor-keyed workspace discards this journal when identity changes.
     const request = previous ?? { ...input, evidence };
     qualificationRequests.current.set(input.leadId, request);
-    await qualifyPerformanceLead(request);
+    try {
+      await qualifyPerformanceLead(request);
+    } catch (error) {
+      // A first definite refusal did not accept this request. A later refusal
+      // cannot disprove an earlier uncertain commit, so retain that journal.
+      if (
+        !previous &&
+        error instanceof ServerFnResponseError &&
+        [400, 403, 409].includes(error.status) &&
+        qualificationRequests.current.get(input.leadId) === request
+      )
+        qualificationRequests.current.delete(input.leadId);
+      throw error;
+    }
     if (qualificationRequests.current.get(input.leadId) === request)
       qualificationRequests.current.delete(input.leadId);
     await refreshAfterMutation();
@@ -451,6 +465,9 @@ function AdminAnalyticsWorkspace() {
                 onMore={() => void openRecords(drilldownKey, recordPage?.nextCursor ?? null, true)}
                 onCorrect={correctQuality}
                 onQualify={qualifyLead}
+                getPendingQualificationEvidence={(leadId) =>
+                  qualificationRequests.current.get(leadId)?.evidence
+                }
               />
             ) : null}
           </>
