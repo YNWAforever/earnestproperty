@@ -246,5 +246,56 @@
     "requiredCycles": 3,
     "remediationProductionCycles": 0,
     "gate": "NOT_READY"
+  },
+  "staffSetupFollowup": {
+    "verifiedCodeSha": "f596c9a45f530dfae91924538d241aa9c6e24733",
+    "verifiedAt": "2026-10-03T04:00:04.503001+00:00",
+    "tasks": [
+      "EP-06",
+      "EP-15"
+    ],
+    "browser": {
+      "pass": 40,
+      "fail": 0,
+      "skipped": 0,
+      "evidence": "staff-browser-execution-summary.json",
+      "layer": "actual-staff-settings-route-synthetic-auth-api-owned-loopback"
+    },
+    "sharedOwnedUiRegression": {
+      "pass": 88,
+      "fail": 0,
+      "skipped": 0,
+      "sourceSha": "f596c9a45f530dfae91924538d241aa9c6e24733",
+      "parts": {
+        "property": 28,
+        "operations": 20,
+        "staff": 40
+      }
+    },
+    "ownedSqlSetup": {
+      "pass": 2,
+      "fail": 0,
+      "skipped": 0,
+      "migrations": 85,
+      "realAuth": false,
+      "realWorkerWake": false,
+      "realSend": false
+    },
+    "notificationModules": "Node21+Bun14 PASS",
+    "static": {
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "lintBaselineWarnings": 3,
+      "buildExit": 0
+    },
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "paidModelCalls": 0
+    },
+    "schemaConfigProviderChanges": false,
+    "review": "Focused self review; prior independent review does not cover this late slice",
+    "capability": "LOCAL_PARTIAL; no true tenant/readback/phone notification or combined Auth/SQL browser claim",
+    "report": "ep-15-local-readback.md"
   }
 }

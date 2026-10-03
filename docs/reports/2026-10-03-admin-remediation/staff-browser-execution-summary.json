@@ -1,0 +1,210 @@
+{
+  "codeSha": "f596c9a45f530dfae91924538d241aa9c6e24733",
+  "evidenceLayer": "actual-staff-settings-route-synthetic-auth-api-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realProvider": false,
+  "realWorker": false,
+  "results": [
+    {
+      "name": "duplicate names pagination denied and expired review cannot save",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "folder empty remains distinct and recoverable",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "folder denied remains distinct and recoverable",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "folder outage remains distinct and recoverable",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "four steps save no send and fresh mapping readback keeps phone separate",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "unknown submission retains request and blocks new preview until original readback",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "reload recovery and accepted status never imply delivery or acknowledgement",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "failed original lookup after reload retains journal and can recover without enqueue",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "worker unknown result stays read-only after fresh lookup",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "endpoint changed after preview requires new version and no implicit send",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "duplicate names pagination denied and expired review cannot save",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "folder empty remains distinct and recoverable",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "folder denied remains distinct and recoverable",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "folder outage remains distinct and recoverable",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "four steps save no send and fresh mapping readback keeps phone separate",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "unknown submission retains request and blocks new preview until original readback",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "reload recovery and accepted status never imply delivery or acknowledgement",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "failed original lookup after reload retains journal and can recover without enqueue",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "worker unknown result stays read-only after fresh lookup",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "endpoint changed after preview requires new version and no implicit send",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "duplicate names pagination denied and expired review cannot save",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "folder empty remains distinct and recoverable",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "folder denied remains distinct and recoverable",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "folder outage remains distinct and recoverable",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "four steps save no send and fresh mapping readback keeps phone separate",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "unknown submission retains request and blocks new preview until original readback",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "reload recovery and accepted status never imply delivery or acknowledgement",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "failed original lookup after reload retains journal and can recover without enqueue",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "worker unknown result stays read-only after fresh lookup",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "endpoint changed after preview requires new version and no implicit send",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "duplicate names pagination denied and expired review cannot save",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "folder empty remains distinct and recoverable",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "folder denied remains distinct and recoverable",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "folder outage remains distinct and recoverable",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "four steps save no send and fresh mapping readback keeps phone separate",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "unknown submission retains request and blocks new preview until original readback",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "reload recovery and accepted status never imply delivery or acknowledgement",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "failed original lookup after reload retains journal and can recover without enqueue",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "worker unknown result stays read-only after fresh lookup",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "endpoint changed after preview requires new version and no implicit send",
+      "status": "passed",
+      "width": 390
+    }
+  ]
+}
