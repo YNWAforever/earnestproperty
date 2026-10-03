@@ -1775,5 +1775,381 @@
       "declined": "trueAuth/API/provider/recall/nativeclipboard/IME/productionflags/schema/worker/fullroles/scopes/routes/actions/combinedSQL/Propertyhkdt/detail/three schedules;retain BLOCKED/NOT_READY",
       "rawSummarySha256": "11aceaf377a5d960cef16cdc0cd2fe695aa53d477d6bab1d06588d65ed45e32d"
     }
+  },
+  "performanceQualityCorrectionFollowup": {
+    "verifiedCodeSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+    "initialCodeSha": "3cc1e1027a06f1195d1f97f9fbd4e10eb51d083e",
+    "verifiedAt": "2026-10-03T15:19:32.163718+00:00",
+    "tasks": [
+      "EP-17"
+    ],
+    "red": {
+      "runtimeSource": "6e970b07660a016d2ea838bf6392a84f9171cd0e",
+      "initialCanonicalFailures": 2,
+      "sharedConcurrentFailure": 1,
+      "reviewerRuntimeSource": "3cc1e1027a06f1195d1f97f9fbd4e10eb51d083e",
+      "reviewerVisibilityFailure": 1,
+      "tests": "new uncommitted owned acceptance tests;fixture mistakes explicitly retained separately;not counted as product defects"
+    },
+    "browser": {
+      "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+      "pass": 84,
+      "fail": 0,
+      "skipped": 0,
+      "perWidth": 21,
+      "retainedCases": 48,
+      "newQualityCases": 36,
+      "evidence": "performance-quality-browser-execution-summary.json",
+      "layer": "actual-analytics-route-dashboard-table-shell-staff-store-synthetic-auth-api-owned-loopback",
+      "readback": "delayed original write->fresh current rows;newer draft stays visible;close/reopen preserves quality/reason;subsequent unchanged submit;current-filter CSV;refused-before-write retry;actor switch;response event restoration",
+      "notClaimed": "unknown committed quality-write outcome recovery,full qualification journey,true Auth,real SQL/provider"
+    },
+    "independentOwnedSql": {
+      "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+      "pass": 7,
+      "fail": 0,
+      "skipped": 0,
+      "migrations": 85,
+      "layer": "fresh loopback PG17 full85 actual handlers/raw facts;trusted admin/manager actor port;parent+6 subtests;zero fetch",
+      "readback": "inquiry production4->test3->production4;scoped IDs and raw inquiry unchanged;response test medianunknown/unanswered4 then restored15/unanswered3;assignment1 unchanged;immutable actor/reason revision prefix retained;denied/invalid/missing writes add0 revisions",
+      "notClaimed": "no server product fix,no true Auth or combined UI-SQL journey"
+    },
+    "failedSetup": {
+      "sourceSha": "3cc1e1027a06f1195d1f97f9fbd4e10eb51d083e",
+      "pass": 0,
+      "fail": 1,
+      "location": "withOwnedPostgres SELECT1 readiness before migration/testcases",
+      "error": "Connection terminated unexpectedly",
+      "cause": "UNPROVEN",
+      "resolution": "unchanged helper;separate fresh owned committed19105d2 rerun7PASS;original failure retained"
+    },
+    "moduleRegression": {
+      "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+      "analyticsNode": 65,
+      "analyticsBun": 3,
+      "noLinkNode": 99,
+      "noLinkBun": 9,
+      "sharedSyntheticBrowser": 115,
+      "fail": 0,
+      "skipped": 0
+    },
+    "static": {
+      "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "baselineWarnings": 3,
+      "buildExit": 0
+    },
+    "independentReview": {
+      "reviewedSha": "3cc1e1027a06f1195d1f97f9fbd4e10eb51d083e",
+      "base": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+      "critical": 0,
+      "important": 1,
+      "minor": 0,
+      "verdict": "one important hidden newer editor;accepted and fixed in one TDD pass19105d2;no second independent review",
+      "actualIndependentChecks": [
+        "owned loopback delayed-readback browser probe",
+        "cumulative diff check",
+        "targeted current and cumulative path inspection;not exhaustive"
+      ],
+      "notRerun": [
+        "full browser",
+        "ownedSQL",
+        "shared",
+        "typecheck",
+        "lint",
+        "build"
+      ],
+      "declined": "trueAuth/fullroles/flags/provider/model/transport/unknown quality-write outcome/full qualification/combinedSQL/nativeIMEclipboard/productionappworkerschema/Propertyhkdt/detail/native schedules",
+      "wrongAssumptionCosts": "false permissions/delivery/model budget;duplicate uncertain writes;false source withdrawal/full actions/schedules"
+    },
+    "actionReconciliation": {
+      "businessActions": [
+        "ACT-55",
+        "ACT-56",
+        "ACT-57"
+      ],
+      "overlappingSourceControls": 19,
+      "status": "LOCAL_PARTIAL;quality event Button/form/reason Input/save Button actually operated;unoperated variants and qualification not promoted",
+      "evidence": "performance-quality-action-execution.csv"
+    },
+    "configurationOrSchemaChange": false,
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3",
+      "repairedBranchProduction": "0/3",
+      "newNativeRuns": 0
+    },
+    "capability": "owned quality draft/current scope correction readback READY;trueAuth/provider/combined/unknown quality-outcome/full qualification BLOCKED;full action/native schedule NOT_READY",
+    "logs": [
+      {
+        "file": "ep17-quality-red-valid.log",
+        "sha256": "05aea32791a2b820b597c39a6c1c1d2f78abb8e5a93188059a955f6ffaf65045",
+        "sourceSha": "see layer",
+        "layer": "6e970b0 runtime; two canonical regression failures; corrected synthetic event entry"
+      },
+      {
+        "file": "ep17-quality-concurrent-red.log",
+        "sha256": "6e06d838d132e89a18fab0bd402def7266a65c65e59b3a5c581ff844b36ffee2",
+        "sourceSha": "see layer",
+        "layer": "6e970b0 runtime; concurrent other row submit was enabled"
+      },
+      {
+        "file": "ep17-quality-review-red.log",
+        "sha256": "43e9e5fb467c8e2bd2e6ad41f3604df971cda6f2b4e17733b8d99538e0f84f0c",
+        "sourceSha": "see layer",
+        "layer": "3cc1e10 runtime; reviewer finding reproduced before fix; delayed readback hides newer draft"
+      },
+      {
+        "file": "ep17-quality-review-green.log",
+        "sha256": "a8e32f59a4d339afad78e21dc5a0eed9fe5c1e0e919edaeda7c29a88446b8fad",
+        "sourceSha": "see layer",
+        "layer": "precommit reviewer fix focused GREEN; includes unchanged subsequent submission"
+      },
+      {
+        "file": "ep17-quality-final-fixed-browser.log",
+        "sha256": "49dcc6840fab8b7e7a23de8e8e70fa0544b59aaf6e630fc315d573a045b45752",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "19105d2 exact committed runtime; four widths21 each; actual route/dashboard/table/shell/store synthetic Auth/API"
+      },
+      {
+        "file": "ep17-quality-final-fixed-sql.log",
+        "sha256": "8299081b1f0f6ad5d4d1248ad492ab2df5f8958f050d87e33bc0fc5c854bb80f",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "19105d2 standalone actual handlers and independent raw SQL; fresh owned PG17/full85; trusted actor; zero fetch"
+      },
+      {
+        "file": "ep17-quality-final-fixed-analytics.log",
+        "sha256": "6bf312f216f5a5960f7eea6400782e7d21e3763a7d490c383719f8c6f5d0fa84",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "19105d2 Node65/Bun3 analytics regression"
+      },
+      {
+        "file": "ep17-quality-final-fixed-no-link.log",
+        "sha256": "2c3916b8017e611683c3c75659436876a15b4cfc307dad2ca4b397ac0b510e8a",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "19105d2 Node99/Bun9 no-link regression"
+      },
+      {
+        "file": "ep17-quality-final-fixed-shared.log",
+        "sha256": "9fabe9f94f647c87eb8641c523241e3841dfc326f27888571a2367b1398bc9c8",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "19105d2 shared actual-route synthetic browser115; separate from84"
+      },
+      {
+        "file": "ep17-quality-final-fixed-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "19105d2 separate typecheck exit0"
+      },
+      {
+        "file": "ep17-quality-final-fixed-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "19105d2 lint exit0;three baseline warnings"
+      },
+      {
+        "file": "ep17-quality-final-fixed-build.log",
+        "sha256": "683261b32d868b6dc6ec1ffdd75627a3d3b16df9289206a01ac817ee847453a4",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "19105d2 separate build exit0"
+      },
+      {
+        "file": "ep17-quality-red.log",
+        "sha256": "f4c7b1e8d07a0593728b11d69444b537535b84e7f56a20b78bc9ae14f761644a",
+        "sourceSha": "see layer",
+        "layer": "initial two valid failures plus mistaken synthetic event entry;not three product defects"
+      },
+      {
+        "file": "ep17-quality-red-corrected.log",
+        "sha256": "69ec6da5ca415c007b4c61bd1ca8066af5b90e86507c2b62a532e3216d4cd411",
+        "sourceSha": "see layer",
+        "layer": "two valid failures plus wrong synthetic tab label;fixture failure retained"
+      },
+      {
+        "file": "ep17-quality-owned-focused.log",
+        "sha256": "f08d16577b52c877ac4371e046280363b353e128e58972e933b25068316844c1",
+        "sourceSha": "see layer",
+        "layer": "5PASS2FAIL including parent;retained original production event revision misexpected;fixture error,not server RED"
+      },
+      {
+        "file": "ep17-quality-owned-green.log",
+        "sha256": "a7587dfe54c19ce0e86b1fdd330863072e7dd7d87e6a6056171b28a4d60511f4",
+        "sourceSha": "see layer",
+        "layer": "precommit corrected prefix-history expectation;7PASS"
+      },
+      {
+        "file": "ep17-quality-final-browser.log",
+        "sha256": "8ecaf55f110a7d7bab59a78b9feb84dd919cc9640365242015f630071f599d5b",
+        "sourceSha": "see layer",
+        "layer": "3cc pre-review80PASS;visibility and subsequent submission not adequately asserted;not final acceptance"
+      },
+      {
+        "file": "ep17-quality-pre-review-browser-summary.json",
+        "sha256": "9d3d7b74dc54fda3337dbc08fed1494bb9caf7116ead93b19489851c7b6dd2ed",
+        "sourceSha": "see layer",
+        "layer": "immutable copy of3cc80PASS before reviewer fix;not final acceptance"
+      },
+      {
+        "file": "ep17-quality-final-sql.log",
+        "sha256": "d08b9aff084ebab1d2aadec7793f34670270fb45cdd8ba6df449cc80851d67d8",
+        "sourceSha": "see layer",
+        "layer": "3cc setup0PASS1FAIL Connection terminated unexpectedly at SELECT1 readiness before migrations/tests;cause unproven;no product RED"
+      },
+      {
+        "file": "review-quality-result.md",
+        "sha256": "a93f89262e2d06582924661b3519c3d0ea89bb9f4d61f332963f20ad517037b3",
+        "sourceSha": "see layer",
+        "layer": "fresh-context independent review finding,ruling,declined scope and costs;reviewer did not rerun full suites"
+      },
+      {
+        "file": "performance-quality-totals-390.png",
+        "sha256": "f8993bef8a41785e6a4671adebdc43c983edb8be9870b42238b844c482f1550a",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "retained totals reconciliation screen;actual synthetic UI,not true Auth/provider"
+      },
+      {
+        "file": "performance-quality-confirmed-390.png",
+        "sha256": "5ae94f013d1c51bb7f66ae2a52f733f8c747fb47ced4dace2af62f7d9c033d77",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "committed inquiry test correction;current denominator3 and visible scoped records;actual synthetic UI,not true Auth/provider"
+      },
+      {
+        "file": "performance-quality-totals-768.png",
+        "sha256": "7d8bb174affa0c5f811cfd4e47e7fc5407b067fc046556b2221faed76f458c0e",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "retained totals reconciliation screen;actual synthetic UI,not true Auth/provider"
+      },
+      {
+        "file": "performance-quality-confirmed-768.png",
+        "sha256": "e0e479b339de4f72fd366bbc931f4c28d3caf753379636c15329e5790912ea2b",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "committed inquiry test correction;current denominator3 and visible scoped records;actual synthetic UI,not true Auth/provider"
+      },
+      {
+        "file": "performance-quality-totals-1280.png",
+        "sha256": "2bd94c85f6ea983dd6d4f162991925f102e5a3dceb421b204b7eb188f3ad7e7b",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "retained totals reconciliation screen;actual synthetic UI,not true Auth/provider"
+      },
+      {
+        "file": "performance-quality-confirmed-1280.png",
+        "sha256": "757efbde7f1228cc62270cf63e51fce28bc36f825b357be2e6d63ffbe8010714",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "committed inquiry test correction;current denominator3 and visible scoped records;actual synthetic UI,not true Auth/provider"
+      },
+      {
+        "file": "performance-quality-totals-1440.png",
+        "sha256": "688a9f2de4879dca506d1541a8f7943d3f256155e6264ffae0f82ed07c6fe92f",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "retained totals reconciliation screen;actual synthetic UI,not true Auth/provider"
+      },
+      {
+        "file": "performance-quality-confirmed-1440.png",
+        "sha256": "a8a7f1a780a2182a5ba914be101504017d7dcc6c92bb7458cb8aa122cb37cdee",
+        "sourceSha": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+        "layer": "committed inquiry test correction;current denominator3 and visible scoped records;actual synthetic UI,not true Auth/provider"
+      }
+    ],
+    "report": "ep-17-quality-correction-readback.md",
+    "nativeReadonly": {
+      "metadata": [
+        {
+          "conclusion": "success",
+          "createdAt": "2026-10-03T05:22:43Z",
+          "databaseId": 37099627650,
+          "event": "schedule",
+          "headSha": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37099627650",
+          "workflowName": "Property sync read-only watchdog"
+        },
+        {
+          "conclusion": "success",
+          "createdAt": "2026-10-02T23:49:46Z",
+          "databaseId": 37079390201,
+          "event": "schedule",
+          "headSha": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37079390201",
+          "workflowName": "Daily property collection"
+        },
+        {
+          "conclusion": "skipped",
+          "createdAt": "2026-10-02T05:43:55Z",
+          "databaseId": 36970253646,
+          "event": "schedule",
+          "headSha": "96f2ba88e59152751d9e1c3a5b8da8ebffbc52de",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36970253646",
+          "workflowName": "Property sync read-only watchdog"
+        },
+        {
+          "conclusion": "skipped",
+          "createdAt": "2026-10-01T23:55:23Z",
+          "databaseId": 36943339534,
+          "event": "schedule",
+          "headSha": "2e98167a6545198ffc3fda2f1470affd1fbd2911",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36943339534",
+          "workflowName": "Daily property collection"
+        },
+        {
+          "conclusion": "success",
+          "createdAt": "2026-09-25T05:54:59Z",
+          "databaseId": 36100569732,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36100569732",
+          "workflowName": "Migration drift"
+        },
+        {
+          "conclusion": "failure",
+          "createdAt": "2026-09-24T21:32:41Z",
+          "databaseId": 36062151356,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/36062151356",
+          "workflowName": "Daily property collection"
+        },
+        {
+          "conclusion": "success",
+          "createdAt": "2026-09-24T05:54:23Z",
+          "databaseId": 35962017724,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/35962017724",
+          "workflowName": "Migration drift"
+        },
+        {
+          "conclusion": "failure",
+          "createdAt": "2026-09-23T21:31:28Z",
+          "databaseId": 35922964463,
+          "event": "schedule",
+          "headSha": "e2598d133eff596108818f5195a64062dca95d85",
+          "status": "completed",
+          "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/35922964463",
+          "workflowName": "Daily property collection"
+        }
+      ],
+      "interpretation": "watchdog37099627650 success is not Daily property collection acceptance;latest daily37079390201 baseline1/3;repair0/3;agent-triggered0",
+      "sha256": "7b4771df4337de10df4321371dcd780d396692d6e3faabd38a1526b68850213d"
+    },
+    "configurationDryRun": {
+      "baseline": "6e970b07660a016d2ea838bf6392a84f9171cd0e",
+      "code": "19105d2c07448a5eedb8d158de3e229e04c04b84",
+      "configurationSchemaMigrationPackageWorkflowDiff": [],
+      "newRuntimeProviderIds": false,
+      "newDTOs": false,
+      "productionApplied": false
+    }
   }
 }
