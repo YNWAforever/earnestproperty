@@ -9,6 +9,8 @@ const state = {
   previewFailure: false,
   queueMode: "ok",
   releaseQueue: null as null | (() => void),
+  cancelMode: "ok",
+  releaseCancel: null as null | (() => void),
   templateStatus: "active",
   noTemplates: false,
 };
@@ -44,6 +46,8 @@ function records() {
         unknown: 0,
         dispatching: 0,
         queueWrites: 0,
+        cancelWrites: 0,
+        cancelled: 0,
       },
     ]
   );
@@ -152,6 +156,23 @@ export const saveAdminAudience = () => {
 export const deleteAdminAudience = () => {
   throw Error("Synthetic audience delete not enabled");
 };
-export const cancelAdminCampaign = () => {
-  throw Error("Synthetic campaign cancel not enabled");
-};
+export async function cancelAdminCampaign({ data }: { data: { id: string } }) {
+  call("syntheticCampaignCancel", data);
+  requireManager();
+  if (state.cancelMode === "delay")
+    await new Promise<void>((done) => {
+      state.releaseCancel = done;
+    });
+  if (state.cancelMode === "refused") return { ok: false, error: "CAMPAIGN_CANCEL_NOT_ELIGIBLE" };
+  const rows = records(),
+    row = rows.find((item: { id: string }) => item.id === data.id);
+  if (!row || !["draft", "review", "scheduled", "queued", "sending"].includes(row.status))
+    return { ok: false, error: "CAMPAIGN_CANCEL_NOT_ELIGIBLE" };
+  row.status = "cancelled";
+  row.cancelWrites = (row.cancelWrites ?? 0) + 1;
+  row.cancelled = (row.cancelled ?? 0) + row.pending;
+  row.pending = 0;
+  sessionStorage.setItem(storage, JSON.stringify(rows));
+  if (state.cancelMode === "timeout") throw Error("Owned cancel commit response lost");
+  return { ok: true };
+}
