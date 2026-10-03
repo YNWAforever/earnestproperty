@@ -1,0 +1,229 @@
+{
+  "codeSha": "051119d33af62d11165443e04943aa525ba89869",
+  "evidenceLayer": "actual-link-route-wizard-import-results-shell-staff-store-synthetic-auth-api-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realProvider": false,
+  "results": [
+    {
+      "name": "new batch reload excludes fifty completed import rows 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "recovered fifty-row success is removed from durable draft 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "fifty actual imported rows reconcile scoped CSV and verified aliases 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "pending confirmation stays single while results are unavailable 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "empty original-batch lookup after reload cannot authorize resubmission 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "recovered forty-five successes retain exactly five deferred draft rows 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "duplicate and invalid fifty-line CSV never reach lookup or preview 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "denied exact staff aliases block fifty-row import without guessing names 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "atomic rejected fifty-row chunk exports failures without invented successful links 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "another actor cannot restore the first actor's fifty-row pending draft 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "disabled import flag performs no CSV lookup or batch mutation 1440",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "new batch reload excludes fifty completed import rows 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "recovered fifty-row success is removed from durable draft 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "fifty actual imported rows reconcile scoped CSV and verified aliases 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "pending confirmation stays single while results are unavailable 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "empty original-batch lookup after reload cannot authorize resubmission 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "recovered forty-five successes retain exactly five deferred draft rows 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "duplicate and invalid fifty-line CSV never reach lookup or preview 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "denied exact staff aliases block fifty-row import without guessing names 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "atomic rejected fifty-row chunk exports failures without invented successful links 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "another actor cannot restore the first actor's fifty-row pending draft 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "disabled import flag performs no CSV lookup or batch mutation 1280",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "new batch reload excludes fifty completed import rows 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "recovered fifty-row success is removed from durable draft 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "fifty actual imported rows reconcile scoped CSV and verified aliases 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "pending confirmation stays single while results are unavailable 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "empty original-batch lookup after reload cannot authorize resubmission 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "recovered forty-five successes retain exactly five deferred draft rows 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "duplicate and invalid fifty-line CSV never reach lookup or preview 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "denied exact staff aliases block fifty-row import without guessing names 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "atomic rejected fifty-row chunk exports failures without invented successful links 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "another actor cannot restore the first actor's fifty-row pending draft 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "disabled import flag performs no CSV lookup or batch mutation 768",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "new batch reload excludes fifty completed import rows 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "recovered fifty-row success is removed from durable draft 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "fifty actual imported rows reconcile scoped CSV and verified aliases 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "pending confirmation stays single while results are unavailable 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "empty original-batch lookup after reload cannot authorize resubmission 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "recovered forty-five successes retain exactly five deferred draft rows 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "duplicate and invalid fifty-line CSV never reach lookup or preview 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "denied exact staff aliases block fifty-row import without guessing names 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "atomic rejected fifty-row chunk exports failures without invented successful links 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "another actor cannot restore the first actor's fifty-row pending draft 390",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "disabled import flag performs no CSV lookup or batch mutation 390",
+      "status": "passed",
+      "width": 390
+    }
+  ]
+}

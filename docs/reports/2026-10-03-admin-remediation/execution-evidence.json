@@ -970,5 +970,410 @@
       }
     ],
     "report": "ep-17-performance-readback.md"
+  },
+  "linkBulkRecoveryFollowup": {
+    "verifiedCodeSha": "051119d33af62d11165443e04943aa525ba89869",
+    "verifiedAt": "2026-10-03T09:39:37.669151+00:00",
+    "tasks": [
+      "EP-16"
+    ],
+    "red": {
+      "distinctDefects": 3,
+      "drafts": "two valid1280 failures:completed import restored on new batch reload;recovered success left50 durable rows",
+      "layout": "one390 fixed-column template overflow520;four failed scenarios,not four defects",
+      "layoutSource": "uncommitted draft-fix working tree;captured product hashes retained"
+    },
+    "browser": {
+      "sourceSha": "051119d33af62d11165443e04943aa525ba89869",
+      "pass": 44,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "actual-link-route-wizard-import-results-shell-staff-store-synthetic-auth-api-owned-loopback",
+      "evidence": "link-bulk-readback-browser-execution-summary.json"
+    },
+    "independentOwnedSql": {
+      "sourceSha": "051119d33af62d11165443e04943aa525ba89869",
+      "pass": 7,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "fresh owned PostgreSQL17/full85;actual batch handlers plus independent raw facts;trusted actor port,not real Auth"
+    },
+    "moduleRegression": {
+      "sourceSha": "051119d33af62d11165443e04943aa525ba89869",
+      "properties": {
+        "Node": 29,
+        "Bun": 27
+      },
+      "enquiries": {
+        "Node": 103
+      },
+      "fail": 0,
+      "skipped": 0
+    },
+    "sharedBrowser": {
+      "pass": 115,
+      "fail": 0,
+      "skipped": 0,
+      "sourceSha": null,
+      "layer": "precommit actual-route/synthetic Auth/API working tree;separate from new44"
+    },
+    "static": {
+      "sourceSha": "051119d33af62d11165443e04943aa525ba89869",
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "baselineWarnings": 3,
+      "buildExit": 0
+    },
+    "fixtures": {
+      "ep16-bulk-red.log": "flag implicitly false;CSV textarea absent;not product RED",
+      "ep16-bulk-red-corrected.log": "fake alias resolution returned duplicate identical references;not product RED",
+      "ep16-bulk-full-ui-initial.log": "interrupted fixture run;formula-like syntax incorrectly placed in CSV parser input;not complete44",
+      "ep16-bulk-complete-1280.log": "9PASS2FAIL;exact label locator included nested option text;test wiring",
+      "ep16-bulk-owned-db-initial.log": "0PASS1FAIL;wrong generated public-code assumption",
+      "ep16-bulk-owned-db-corrected.log": "4PASS2FAIL;fixture status withdrawn invalid actual enum;corrected to offline",
+      "ep16-bulk-owned-db-formula.log": "0PASS1FAIL;test block incorrectly inserted in mocked fetch callback;corrected test wiring",
+      "ep16-bulk-pre-layout-product-hashes.json": "exact working-tree product hashes before CSV-header layout fix"
+    },
+    "draftReadback": "committed/reused rows removed only after definite terminal original receipt;unknown empty read preserves50;45 committed leaves literal last5;new50 draft does not overwrite retained5",
+    "sqlReadback": "preview zero writes;commit50 sale25/rent25 creates50 versions/one operation;replay exact;fresh batch reuse50;foreign404/agent403/forged role403;post-preview offline atomic reject1blocked49failed;mapping CAS409 and denied mapping fail closed;manual other Chinese/formula text persisted literally and CSV neutralized",
+    "actionReconciliation": {
+      "businessActions": [
+        "ACT-59",
+        "ACT-60",
+        "ACT-61",
+        "ACT-62"
+      ],
+      "overlappingSourceControls": 17,
+      "status": "LOCAL_PARTIAL;CSV export only;copy-all,known-failed repair and normal multichunk continuation Buttons not operated",
+      "evidence": "link-bulk-readback-action-execution.csv"
+    },
+    "runtimeConfigMigrationProviderChanges": false,
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3 previously verified",
+      "repairedBranchProduction": "0/3",
+      "newNativeRuns": 0
+    },
+    "capability": "initial44/7 local layer;independent review identified four P2 gaps before publication;superseded by linkBulkDraftReviewFollowup",
+    "review": "fresh-context whole-branch independent review requested;result recorded separately before publication",
+    "logs": [
+      {
+        "file": "ep16-bulk-product-red.log",
+        "sha256": "5daba2c939f1126354264191256f90de284f0b2a1099e48f890a95d53dd9e9ea",
+        "layer": "two valid draft recovery RED scenarios before product fix;test working tree on base",
+        "sourceSha": "b91319503aa691b3480996eadf90e21db31c84ab"
+      },
+      {
+        "file": "ep16-bulk-all-viewports.log",
+        "sha256": "007db9a47231bafa7bfb73110a0f4da51461f3a3397e040d3991591fba8f0214",
+        "layer": "working-tree layout RED after draft fix;four manifestations of one390 overflow",
+        "sourceSha": null
+      },
+      {
+        "file": "ep16-bulk-overflow-measured-red.log",
+        "sha256": "ae5be4e1a65b06caeb03922d378722c8e43534f01359855954502d5d5a5f433e",
+        "layer": "same390 overflow measured520;not an extra defect",
+        "sourceSha": null
+      },
+      {
+        "file": "ep16-bulk-exact-browser.log",
+        "sha256": "cf2d3780cb57ca688f755157efe2892c1fb17e5c865aa813880705f62095fbe9",
+        "layer": "actual link route/wizard/import/client/shell/store;synthetic Auth/API",
+        "sourceSha": "051119d33af62d11165443e04943aa525ba89869"
+      },
+      {
+        "file": "ep16-bulk-exact-owned-db.log",
+        "sha256": "f04e3b0506bce90562a8a02ed1dfe67f3ef245936eae57f1caa8982a6cc4d9c9",
+        "layer": "fresh loopback PostgreSQL17/full85;actual handlers and independent raw SQL;trusted actor port",
+        "sourceSha": "051119d33af62d11165443e04943aa525ba89869"
+      },
+      {
+        "file": "ep16-bulk-exact-properties.log",
+        "sha256": "0a39fecf9ac2ae4b4b970d76b1be5cd41cbab67f531e5329942e9c0c39019371",
+        "layer": "properties Node29+Bun27 including batch/draft/CSV contracts",
+        "sourceSha": "051119d33af62d11165443e04943aa525ba89869"
+      },
+      {
+        "file": "ep16-bulk-exact-enquiries.log",
+        "sha256": "295a4fb12ce2938eb46c6288f4da10bec288bcbdc27ddba6df11e0a71ac1c1a8",
+        "layer": "enquiries Node103 regression",
+        "sourceSha": "051119d33af62d11165443e04943aa525ba89869"
+      },
+      {
+        "file": "ep16-bulk-exact-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "typecheck exit0",
+        "sourceSha": "051119d33af62d11165443e04943aa525ba89869"
+      },
+      {
+        "file": "ep16-bulk-exact-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "lint exit0;three baseline warnings",
+        "sourceSha": "051119d33af62d11165443e04943aa525ba89869"
+      },
+      {
+        "file": "ep16-bulk-exact-build.log",
+        "sha256": "45177d2af413c2476101507d9074a0d4ca51528ce4e287fec7321bac2f3551f4",
+        "layer": "build exit0",
+        "sourceSha": "051119d33af62d11165443e04943aa525ba89869"
+      },
+      {
+        "file": "ep16-bulk-shared-ui.log",
+        "sha256": "7326c0630597b3cae0008b77d19573a2993bc5a70a1ec958948fe9be7ade043c",
+        "layer": "shared115 precommit regression;working-tree layer,not exact-commit evidence",
+        "sourceSha": null
+      },
+      {
+        "file": "ep16-bulk-red.log",
+        "sha256": "3e5b6f24c6e9829c6f083144b7dafbfa5965a7ffa8354888e42e3d5696c5e4f6",
+        "layer": "flag implicitly false;CSV textarea absent;not product RED",
+        "sourceSha": null
+      },
+      {
+        "file": "ep16-bulk-red-corrected.log",
+        "sha256": "e98c3eec1eeddc0961e00a0e4b3cf4b368e64121ab876f242bbd1de6f0410ea0",
+        "layer": "fake alias resolution returned duplicate identical references;not product RED",
+        "sourceSha": null
+      },
+      {
+        "file": "ep16-bulk-full-ui-initial.log",
+        "sha256": "33cbd181575e99d2cd0ec98ebc8a100fe8c4244d44b712087f65c496febb8c38",
+        "layer": "interrupted fixture run;formula-like syntax incorrectly placed in CSV parser input;not complete44",
+        "sourceSha": null
+      },
+      {
+        "file": "ep16-bulk-complete-1280.log",
+        "sha256": "7cfa2a9aa9945e96d94a229c947fe440119a0ede54c07e0ea54e58148d1a8101",
+        "layer": "9PASS2FAIL;exact label locator included nested option text;test wiring",
+        "sourceSha": null
+      },
+      {
+        "file": "ep16-bulk-owned-db-initial.log",
+        "sha256": "ea9f9bc231105bf8807ff53d62dbf55698ac771fb3f841ab76f9eadd73c6a398",
+        "layer": "0PASS1FAIL;wrong generated public-code assumption",
+        "sourceSha": null
+      },
+      {
+        "file": "ep16-bulk-owned-db-corrected.log",
+        "sha256": "d9ab31b8c08c23bee3f8802c9eca70b848b2736fd18015c1941f858b22187c14",
+        "layer": "4PASS2FAIL;fixture status withdrawn invalid actual enum;corrected to offline",
+        "sourceSha": null
+      },
+      {
+        "file": "ep16-bulk-owned-db-formula.log",
+        "sha256": "8c9aed9054ff19b8bef9a62e6cea3bfeaf5dd523b7daf12c19e7ffca97f3aae8",
+        "layer": "0PASS1FAIL;test block incorrectly inserted in mocked fetch callback;corrected test wiring",
+        "sourceSha": null
+      },
+      {
+        "file": "ep16-bulk-pre-layout-product-hashes.json",
+        "sha256": "d3bc6279935a730235089942b9f401d0292149e757b598cad887072b46096ea0",
+        "layer": "exact working-tree product hashes before CSV-header layout fix",
+        "sourceSha": null
+      }
+    ],
+    "report": "ep-16-bulk-draft-readback.md"
+  },
+  "linkBulkDraftReviewFollowup": {
+    "verifiedCodeSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+    "verifiedAt": "2026-10-03T10:02:02.865694+00:00",
+    "tasks": [
+      "EP-16"
+    ],
+    "reviewFixShas": [
+      "c8a8b2ef3ce9a2269354e7957244bbc19e9da023",
+      "ea97d69556b13f2353b2e45cd94119b0615fe79a",
+      "653695a0226b856876c9fb4d5dbd58613de79f39"
+    ],
+    "independentReview": "fresh-context whole branch final653695a;all four reported P2 resolved;no open concrete P1/P2 in reviewed scope;actual-functions RAM checks/diff check;browser/SQL suites not independently rerun;Auth/provider/production outside review",
+    "reviewRed": {
+      "deferredReachability": 1,
+      "latestInlineEdit": 1,
+      "crossTabLineage": {
+        "current": 1,
+        "legacy": 1,
+        "distinctDefects": 1
+      },
+      "storageQuota": 1,
+      "distinctP2": 4
+    },
+    "browser": {
+      "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+      "pass": 60,
+      "fail": 0,
+      "skipped": 0,
+      "evidence": "link-bulk-draft-review-browser-execution-summary.json",
+      "layer": "actual-link-route-wizard-import-results-shell-staff-store-synthetic-auth-api-owned-loopback"
+    },
+    "independentOwnedSql": {
+      "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+      "pass": 7,
+      "fail": 0,
+      "skipped": 0,
+      "layer": "fresh loopback PG17/full85 actual handlers/raw facts;trusted actor port"
+    },
+    "moduleRegression": {
+      "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+      "properties": {
+        "Node": 29,
+        "Bun": 28
+      },
+      "fail": 0,
+      "skipped": 0,
+      "earlierEnquiries": {
+        "sourceSha": "051119d33af62d11165443e04943aa525ba89869",
+        "Node": 103,
+        "productServerTree": "UNCHANGED"
+      }
+    },
+    "static": {
+      "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+      "typecheckExit": 0,
+      "lintExit": 0,
+      "baselineWarnings": 3,
+      "buildExit": 0
+    },
+    "recovery": "actual reopen/repreview/commit deferred5 after independent second50 completes/reload;latest repaired failure retained and known-failed repairButton operated;current/legacy cross-tab original receipt cleans own draft and leaves other5 byte-equivalent;quota failure retains original raw unknown journal/no newcommit/read gate",
+    "legacyBoundary": "only unique validated same-actor row-key containment infers missing lineage;ambiguous/missing owner never mutates latest global-pointer draft;corrupt/unreadable journals retained with create/preview blocked",
+    "actionReconciliation": {
+      "businessActions": [
+        "ACT-59",
+        "ACT-60",
+        "ACT-61",
+        "ACT-62"
+      ],
+      "overlappingSourceControls": 18,
+      "status": "LOCAL_PARTIAL;known-failed repair0434 now operated;copy-all and normal multichunk continuation not operated",
+      "evidence": "link-bulk-draft-review-action-execution.csv"
+    },
+    "runtimeConfigMigrationProviderChanges": false,
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3",
+      "repairedBranchProduction": "0/3",
+      "newNativeRuns": 0
+    },
+    "capability": "local bulk draft recovery/latest edits/original lineage/unknown quota gate/safeCSV READY;formal Auth/combined/fullrole/flags/copy-all/multichunk BLOCKED or NOT_READY",
+    "logs": [
+      {
+        "file": "ep16-bulk-review-red.log",
+        "sha256": "04a84db199dae968b06b30cf6541d14e425b8cdb5b2a3bee3fa489abf9353721",
+        "layer": "c8a8b2e fixes:deferred5 unreachable and latest inline edit reverted RED",
+        "sourceSha": "051119d33af62d11165443e04943aa525ba89869"
+      },
+      {
+        "file": "ep16-bulk-provenance-red.log",
+        "sha256": "1d76b711a9a589d4ac86c0f9eb534e997bbac687023328033fcb4425a7eaa366",
+        "layer": "same cross-tab lineage defect,current and legacy RED",
+        "sourceSha": "c8a8b2ef3ce9a2269354e7957244bbc19e9da023"
+      },
+      {
+        "file": "ep16-bulk-storage-red.log",
+        "sha256": "380e2be289fe86850b21cc2ef6ac652158816c6ce20cc89c8d722eda264f94aa",
+        "layer": "optional lineage write quota deletes valid unknown journal RED",
+        "sourceSha": "ea97d69556b13f2353b2e45cd94119b0615fe79a"
+      },
+      {
+        "file": "ep16-bulk-final-browser.log",
+        "sha256": "b6ce930d6223809b974588e26851fcfd83b2e6fbcacc238c0cc872fd050c226e",
+        "layer": "intermediate ea97d69 exact56;storage review subsequently found;not final readiness",
+        "sourceSha": "ea97d69556b13f2353b2e45cd94119b0615fe79a"
+      },
+      {
+        "file": "ep16-bulk-published-browser.log",
+        "sha256": "e6e7f678ad23b71c527f0e7cb41e4cf3617a3ab9aaae0a2ecc9682f3d338a6a8",
+        "layer": "final actual link route/client/import/shell/store with synthetic Auth/API",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39"
+      },
+      {
+        "file": "ep16-bulk-published-database.log",
+        "sha256": "646c05331cb5e13c003ebd333acbb5e2984190fe6082af9949bdb320a02a930f",
+        "layer": "independent actual handlers/raw owned full85 SQL;trusted actor port",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39"
+      },
+      {
+        "file": "ep16-bulk-published-properties.log",
+        "sha256": "7e631f69f377b3fef8599602ac42b2ea2d3ad77710824bd9dde11b0287218374",
+        "layer": "final properties Node29/Bun28 with exactactor/corrupt/ambiguouslegacy guards",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39"
+      },
+      {
+        "file": "ep16-bulk-published-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "typecheck exit0",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39"
+      },
+      {
+        "file": "ep16-bulk-published-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "lint exit0/3 baselinewarnings",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39"
+      },
+      {
+        "file": "ep16-bulk-published-build.log",
+        "sha256": "ad5dbc5f7c9bc1a16dcf64498794d37374c444e5d3de79bd989b4d688dab2a9c",
+        "layer": "build exit0",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39"
+      },
+      {
+        "file": "bulk-green-390.png",
+        "sha256": "1eda69a511151a7671ac6607bbff386be515937fa7cb8a9bd868d7c568b990d3",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+        "layer": "final screenshot;fourwidth overflow asserted;390 inspected"
+      },
+      {
+        "file": "bulk-import-green-390.png",
+        "sha256": "8a60916c452e29f8efc6efda6b8624e92cd7bf2882f41d77c3f95dccd13cab83",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+        "layer": "final screenshot;fourwidth overflow asserted;390 inspected"
+      },
+      {
+        "file": "bulk-green-768.png",
+        "sha256": "8434ea6941a724bff4e3255fae73452f9ea86d48bd47d598200e2606878ef9df",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+        "layer": "final screenshot;fourwidth overflow asserted;390 inspected"
+      },
+      {
+        "file": "bulk-import-green-768.png",
+        "sha256": "70a7fee4f369b72e9c161c4c91ac8da6faf5ceddff2047b29e58bbfab2b42749",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+        "layer": "final screenshot;fourwidth overflow asserted;390 inspected"
+      },
+      {
+        "file": "bulk-green-1280.png",
+        "sha256": "1371edc89b1239cb02767daaa5250c3b70a5e6c6846580760aa41992e73fdc48",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+        "layer": "final screenshot;fourwidth overflow asserted;390 inspected"
+      },
+      {
+        "file": "bulk-import-green-1280.png",
+        "sha256": "6734b54d3efa32771a59ae2cc1e62e58271d87fa7a9d915b6b647f10f1d4afb1",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+        "layer": "final screenshot;fourwidth overflow asserted;390 inspected"
+      },
+      {
+        "file": "bulk-green-1440.png",
+        "sha256": "aee572788122dab9560f4439e2ea11cdc918f22971fd25df2ec899cfbc10945e",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+        "layer": "final screenshot;fourwidth overflow asserted;390 inspected"
+      },
+      {
+        "file": "bulk-import-green-1440.png",
+        "sha256": "f7a686f6c1b3ef5a0226b7e07c544dbb5a9dcecf5d1edef77539ca9ba95691e2",
+        "sourceSha": "653695a0226b856876c9fb4d5dbd58613de79f39",
+        "layer": "final screenshot;fourwidth overflow asserted;390 inspected"
+      }
+    ],
+    "report": "ep-16-bulk-draft-readback.md"
   }
 }
