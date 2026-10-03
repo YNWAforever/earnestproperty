@@ -1,7 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: ["admin-property-maintenance.spec.ts", "admin-operations-recovery.spec.ts"],
+  testMatch: [
+    "admin-property-maintenance.spec.ts",
+    "admin-operations-recovery.spec.ts",
+    "admin-staff-setup.spec.ts",
+  ],
   workers: 1,
   fullyParallel: false,
   retries: 0,

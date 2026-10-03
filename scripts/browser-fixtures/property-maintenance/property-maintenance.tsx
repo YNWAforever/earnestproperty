@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { Route as Listings } from "../../../src/routes/admin.listings";
 import { Route as Detail } from "../../../src/routes/admin.listings_.$id";
 import { Route as Operations } from "../../../src/routes/admin.operations";
+import { Route as StaffSettings } from "../../../src/routes/admin.whatsapp-settings";
 import "../../../src/styles.css";
 
 const root = createRootRoute({
@@ -17,6 +18,11 @@ const root = createRootRoute({
 });
 const router = createRouter({
   routeTree: root.addChildren([
+    StaffSettings.update({
+      id: "/admin/whatsapp-settings",
+      path: "/admin/whatsapp-settings",
+      getParentRoute: () => root,
+    } as never),
     Operations.update({
       id: "/admin/operations",
       path: "/admin/operations",

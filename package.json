@@ -111,6 +111,7 @@
     "test:property-maintenance:owned:db": "node --experimental-test-module-mocks --test src/lib/neon/admin-property-maintenance-owned.db.test.mjs",
     "test:property-maintenance:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-property-maintenance.spec.ts",
     "test:operations:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-operations-recovery.spec.ts",
+    "test:staff-setup:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-staff-setup.spec.ts",
     "test:operations:owned:db": "node --experimental-test-module-mocks --test src/lib/control-plane/operations-recovery-owned.db.test.mjs",
     "test:admin-golden:db": "node --experimental-test-module-mocks --test scripts/acceptance/admin-golden-journeys.test.mjs",
     "test:admin-overview:db": "node --experimental-test-module-mocks --test src/lib/neon/admin-overview-owned.db.test.mjs"

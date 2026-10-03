@@ -17,6 +17,10 @@ await build({
   resolve: {
     alias: [
       {
+        find: /^@\/lib\/(admin\/final-fix-rollout|neon\/(admin-data|whatsapp-assignment|inbox-directory|whatsapp-readiness|staff-endpoints|staff-reference-admin|whatsapp-service-policy|whatsapp-test-notification))$/,
+        replacement: resolve(root, "synthetic-staff.ts"),
+      },
+      {
         find: /^@\/lib\/(admin\/operations\/operations-client|neon\/whatsapp-service-health)$/,
         replacement: resolve(root, "synthetic-operations.ts"),
       },
