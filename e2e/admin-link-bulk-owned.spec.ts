@@ -8,6 +8,7 @@ import type { state } from "../scripts/browser-fixtures/link-bulk-owned/syntheti
 declare global {
   interface Window {
     ownedLinkBulk: typeof state;
+    ownedClipboard: { texts: string[]; mode: string; release: null | (() => void) };
   }
 }
 let server: Server, origin: string;
@@ -104,13 +105,13 @@ test.afterEach(async ({ page }, info) => {
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("new batch reload"))
     await page.screenshot({
-      path: `.audit/remediation-20261003/bulk-import-green-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/bulk-continuation-import-green-${page.viewportSize()!.width}.png`,
     });
 });
-const csv = () =>
+const csv = (count = 50) =>
   "public_listing_no,deal_type,source,placement_url_or_id,staff_reference\n" +
   Array.from(
-    { length: 50 },
+    { length: count },
     (_, i) =>
       `A${String(i + 1).padStart(6, "0")},${i % 2 ? "rent" : "sale"},${i % 2 ? "28hse" : "website"},${i % 2 ? String(4000001 + i) : ""},${i % 2 ? "28hse" : "website"}/account540|001-A`,
   ).join("\n");
@@ -163,7 +164,136 @@ async function previewFifty(page: Page) {
   await page.getByRole("button", { name: "預覽核對", exact: true }).click();
   await expect(page.getByRole("button", { name: "確認建立 50 筆" })).toBeVisible();
 }
+async function clipboardSink(page: Page, mode = "ok") {
+  await page.evaluate((mode) => {
+    window.ownedClipboard = { texts: [], mode, release: null };
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (text: string) => {
+          window.ownedClipboard.texts.push(text);
+          if (window.ownedClipboard.mode === "denied")
+            throw new DOMException("Owned clipboard denied", "NotAllowedError");
+          if (window.ownedClipboard.mode === "pending")
+            await new Promise<void>((done) => {
+              window.ownedClipboard.release = done;
+            });
+        },
+      },
+    });
+  }, mode);
+}
+async function recoverFirstFifty(page: Page) {
+  await page.getByLabel("CSV 或貼表格資料").fill(csv(60));
+  await page.getByRole("button", { name: "核對並匯入 60 行" }).click();
+  await page.getByLabel("已人工核對刊登位置").check();
+  await page.getByRole("button", { name: "下一步：跟進" }).click();
+  await page.getByRole("button", { name: "預覽核對", exact: true }).click();
+  await page.evaluate(() =>
+    Object.assign(window.ownedLinkBulk, { commitMode: "lost", readFailure: true }),
+  );
+  await page.getByRole("button", { name: "確認建立 60 筆" }).click();
+  await expect(page.getByRole("region", { name: "批次結果" })).toContainText("未提交 60");
+  await page.reload();
+  await page.getByRole("button", { name: "查回伺服器結果", exact: true }).click();
+  await expect(page.getByRole("region", { name: "批次結果" })).toContainText("已建立 50");
+  await expect(page.getByRole("region", { name: "批次結果" })).toContainText("未提交 10");
+}
+async function continueFinalTen(page: Page) {
+  const stored = await page.evaluate(() =>
+    JSON.parse(
+      sessionStorage.getItem(
+        Object.keys(sessionStorage).find((k) => k.startsWith("earnest:whatsapp-link-batch:v2:"))!,
+      )!,
+    ),
+  );
+  await page.getByRole("button", { name: "繼續同一批次", exact: true }).click();
+  await expect(page.getByRole("region", { name: "批次結果" })).toContainText("已建立 60");
+  await expect(page.getByRole("region", { name: "批次結果" })).toContainText("已處理 2/2 批");
+  const commits = await page.evaluate(() =>
+    window.ownedLinkBulk.calls
+      .filter((c) => c.name === "commit")
+      .map((c) => c.input as { batchId: string; chunkId: string; rows: unknown[] }),
+  );
+  expect(commits.map((c) => c.rows.length)).toEqual([50, 10]);
+  expect(commits.map((c) => c.batchId)).toEqual([stored.batchId, stored.batchId]);
+  expect(commits.map((c) => c.chunkId)).toEqual(stored.chunkIds);
+  expect(await draftRows(page)).toEqual([]);
+}
 for (const width of [1440, 1280, 768, 390]) {
+  test(`copy-all failure reports refusal then copies exactly fifty confirmed codes ${width}`, async ({
+    page,
+  }) => {
+    await setup(page, width);
+    await previewFifty(page);
+    await page.getByRole("button", { name: "確認建立 50 筆" }).click();
+    await clipboardSink(page, "denied");
+    await page.getByRole("button", { name: "複製全部已確認連結", exact: true }).click();
+    await expect(page.getByText("複製失敗，請逐行選取連結。", { exact: true })).toBeVisible();
+    await page.evaluate(() => {
+      window.ownedClipboard.mode = "ok";
+    });
+    await page.getByRole("button", { name: "複製全部已確認連結", exact: true }).click();
+    await expect(page.getByText("已複製全部已確認連結。", { exact: true })).toBeVisible();
+    const text = await page.evaluate(() => window.ownedClipboard.texts.at(-1)!);
+    expect(text.split("\n")).toEqual(
+      Array.from({ length: 50 }, (_, i) => `${origin}/w/owned_${String(i + 1).padStart(26, "0")}`),
+    );
+    expect(
+      await page.evaluate(
+        () => window.ownedLinkBulk.calls.filter((c) => c.name === "commit").length,
+      ),
+    ).toBe(1);
+  });
+  test(`normal fifty-plus-ten continuation clears earlier clipboard success ${width}`, async ({
+    page,
+  }) => {
+    await setup(page, width);
+    await recoverFirstFifty(page);
+    await clipboardSink(page);
+    await page.getByRole("button", { name: "複製全部已確認連結", exact: true }).click();
+    await expect(page.getByText("已複製全部已確認連結。", { exact: true })).toBeVisible();
+    expect((await page.evaluate(() => window.ownedClipboard.texts[0])).split("\n")).toHaveLength(
+      50,
+    );
+    await continueFinalTen(page);
+    await expect(page.getByText("已複製全部已確認連結。", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "複製全部已確認連結", exact: true }).click();
+    await expect(page.getByText("已複製全部已確認連結。", { exact: true })).toBeVisible();
+    const text = await page.evaluate(() => window.ownedClipboard.texts.at(-1)!);
+    expect(text.split("\n")).toEqual(
+      Array.from({ length: 60 }, (_, i) => `${origin}/w/owned_${String(i + 1).padStart(26, "0")}`),
+    );
+    await page.reload();
+    await page.getByRole("button", { name: "查回伺服器結果", exact: true }).click();
+    await expect(page.getByRole("region", { name: "批次結果" })).toContainText("已建立 60");
+    expect(
+      await page.evaluate(
+        () => window.ownedLinkBulk.calls.filter((c) => c.name === "commit").length,
+      ),
+    ).toBe(2);
+  });
+  test(`late fifty-link clipboard completion cannot confirm the new sixty-link result ${width}`, async ({
+    page,
+  }) => {
+    await setup(page, width);
+    await recoverFirstFifty(page);
+    await clipboardSink(page, "pending");
+    await page.getByRole("button", { name: "複製全部已確認連結", exact: true }).click();
+    await expect.poll(() => page.evaluate(() => !!window.ownedClipboard.release)).toBe(true);
+    await expect(
+      page.getByRole("button", { name: "複製全部已確認連結", exact: true }),
+    ).toBeDisabled();
+    await continueFinalTen(page);
+    await page.evaluate(() => window.ownedClipboard.release!());
+    await expect(
+      page.getByRole("button", { name: "複製全部已確認連結", exact: true }),
+    ).toBeEnabled();
+    await expect(page.getByText("已複製全部已確認連結。", { exact: true })).toHaveCount(0);
+    expect((await page.evaluate(() => window.ownedClipboard.texts[0])).split("\n")).toHaveLength(
+      50,
+    );
+  });
   test(`new batch reload excludes fifty completed import rows ${width}`, async ({ page }) => {
     await setup(page, width);
     await previewFifty(page);
@@ -235,7 +365,9 @@ for (const width of [1440, 1280, 768, 390]) {
     expect(importRead.references).toHaveLength(50);
     expect(importRead.references.every((r) => r.externalReference === "001-A")).toBe(true);
     expect(await draftRows(page)).toEqual([]);
-    await page.screenshot({ path: `.audit/remediation-20261003/bulk-green-${width}.png` });
+    await page.screenshot({
+      path: `.audit/remediation-20261003/bulk-continuation-green-${width}.png`,
+    });
   });
   test(`pending confirmation stays single while results are unavailable ${width}`, async ({
     page,

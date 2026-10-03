@@ -5,7 +5,7 @@ import type {
 } from "../../../src/lib/neon/whatsapp-link-batches.types";
 export const id = (n: number) => `71000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 export const staff = id(100);
-export const offers = Array.from({ length: 50 }, (_, index) => ({
+export const offers = Array.from({ length: 60 }, (_, index) => ({
   propertyId: id(index + 1),
   publicListingNo: `A${String(index + 1).padStart(6, "0")}`,
   dealType: index % 2 ? ("rent" as const) : ("sale" as const),
@@ -85,8 +85,10 @@ export async function commitWhatsappLinkChunk(input: {
     rows: input.rows.map((row, index) => ({
       rowKey: row.rowKey,
       outcome: rejected ? (index >= input.rows.length - 5 ? "blocked" : "failed") : "created",
-      linkId: rejected ? null : id(index + 1000),
-      code: rejected ? null : `owned_${String(index + 1).padStart(26, "0")}`,
+      linkId: rejected ? null : id(Number(row.input.publicListingNo?.slice(1) ?? index + 1) + 1000),
+      code: rejected
+        ? null
+        : `owned_${String(Number(row.input.publicListingNo?.slice(1) ?? index + 1)).padStart(26, "0")}`,
       version: rejected ? null : 1,
       reasonCode: rejected
         ? index >= input.rows.length - 5

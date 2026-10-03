@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 import { randomUUID } from "node:crypto";
 import { withOwnedPostgres } from "../../../scripts/acceptance/owned-postgres-test.mjs";
-import { batchResultCsv } from "../admin/whatsapp-link-batch-client.ts";
+import {
+  batchResultCsv,
+  reconcileLinkBatch,
+  runWhatsappLinkBatch,
+} from "../admin/whatsapp-link-batch-client.ts";
 const id = (n) => `72000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 test(
@@ -302,6 +306,129 @@ test(
             assert.ok(text.includes(`/w/${raw.code}`));
             assert.equal(await count("whatsapp_tracking_links"), 51);
             assert.equal(await count("whatsapp_outbound_intents"), 0);
+            assert.equal(network.mock.calls.length, 0);
+          },
+        );
+        await t.test(
+          "original fifty-row receipt resumes only the final ten rows and independently reads sixty unique links",
+          async () => {
+            const nextRows = [];
+            for (let i = 0; i < 60; i++) {
+              const deal = i % 2 ? "rent" : "sale";
+              if (i >= 50)
+                await query(
+                  "INSERT INTO properties(id,listing_no,title_zh,deal_type,district_slug,status) VALUES($1,$2,$3,$4::deal_type,'owned','active')",
+                  [id(i + 1), `A${String(i + 1).padStart(6, "0")}`, `合成中文盤 ${i + 1}`, deal],
+                );
+              const [member] = await query(
+                "SELECT public_listing_no FROM property_public_members WHERE property_id=$1",
+                [id(i + 1)],
+              );
+              nextRows.push({
+                rowKey: id(i + 800),
+                placementId: `owned60:${i + 1}`,
+                input: {
+                  ...rows[0].input,
+                  placementSource: "other",
+                  publicListingNo: member.public_listing_no,
+                  propertyId: id(i + 1),
+                  dealType: deal,
+                  requestedStaffId: null,
+                  referenceMappingId: null,
+                  externalListingId: null,
+                },
+              });
+            }
+            const bid = randomUUID(),
+              cids = [randomUUID(), randomUUID()];
+            const baseline = await count("whatsapp_tracking_links");
+            const p = await preview({ batchId: bid, rows: nextRows }, actor, query);
+            assert.deepEqual(p.counts, { create: 60, reuse: 0, blocked: 0 });
+            assert.equal(await count("whatsapp_tracking_links"), baseline);
+            const firstFifty = await commit(
+              {
+                batchId: bid,
+                chunkId: cids[0],
+                previewToken: p.previewToken,
+                rows: nextRows.slice(0, 50),
+              },
+              actor,
+              query,
+            );
+            const readback = await read(bid, actor, query);
+            assert.equal(readback.operations.length, 1);
+            assert.deepEqual(readback.operations[0].rows, firstFifty.rows);
+            assert.equal(await count("whatsapp_tracking_links"), baseline + 50);
+            const reconciled = reconcileLinkBatch(
+              {
+                batchId: bid,
+                rows: nextRows,
+                chunkIds: cids,
+                completed: [],
+                nextChunk: 0,
+                uncertain: true,
+                preview: p,
+              },
+              readback.operations,
+            );
+            assert.equal(reconciled.nextChunk, 1);
+            assert.equal(reconciled.uncertain, false);
+            const refreshed = await preview({ batchId: bid, rows: nextRows }, actor, query);
+            assert.deepEqual(refreshed.counts, { create: 10, reuse: 50, blocked: 0 });
+            const requests = [],
+              journals = [];
+            const finished = await runWhatsappLinkBatch(
+              { ...reconciled, preview: refreshed },
+              {
+                preview: (input) => preview(input, actor, query),
+                read: (batch) => read(batch, actor, query),
+                commit: (input) => {
+                  requests.push(input);
+                  return commit(input, actor, query);
+                },
+              },
+              (value) => journals.push(structuredClone(value)),
+            );
+            assert.equal(requests.length, 1);
+            assert.equal(requests[0].batchId, bid);
+            assert.equal(requests[0].chunkId, cids[1]);
+            assert.deepEqual(requests[0].rows, nextRows.slice(50));
+            assert.equal(journals[0].uncertain, true);
+            assert.equal(journals[0].nextChunk, 1);
+            assert.equal(finished.nextChunk, 2);
+            assert.equal(finished.uncertain, false);
+            const finalRead = await read(bid, actor, query);
+            assert.deepEqual(
+              finalRead.operations.map((o) => o.chunkId),
+              cids,
+            );
+            assert.deepEqual(
+              finalRead.operations.map((o) => o.rows.length),
+              [50, 10],
+            );
+            const results = finalRead.operations.flatMap((o) => o.rows);
+            assert.equal(results.length, 60);
+            assert.ok(results.every((r) => r.outcome === "created" && r.version === 1));
+            assert.equal(new Set(results.map((r) => r.code)).size, 60);
+            const raw = await query(
+              "SELECT l.id,l.code,v.property_id,v.deal_type,v.placement_source,x.placement_id FROM whatsapp_tracking_links l JOIN whatsapp_tracking_link_versions v ON v.link_id=l.id AND v.version=l.current_version JOIN whatsapp_tracking_link_placements x ON x.link_id=l.id WHERE l.id=ANY($1::uuid[])",
+              [results.map((r) => r.linkId)],
+            );
+            assert.equal(raw.length, 60);
+            for (const row of nextRows) {
+              const result = results.find((r) => r.rowKey === row.rowKey);
+              const stored = raw.find((r) => r.id === result.linkId);
+              assert.equal(stored.code, result.code);
+              assert.equal(stored.property_id, row.input.propertyId);
+              assert.equal(stored.deal_type, row.input.dealType);
+              assert.equal(stored.placement_source, "other");
+              assert.equal(stored.placement_id, row.placementId);
+            }
+            assert.equal(batchResultCsv(finished, "other").trim().split("\r\n").length, 61);
+            assert.equal(await count("whatsapp_tracking_links"), baseline + 60);
+            assert.equal(await count("whatsapp_tracking_link_versions"), baseline + 60);
+            assert.equal(await count("whatsapp_outbound_intents"), 0);
+            assert.equal(await count("whatsapp_conversations"), 0);
             assert.equal(network.mock.calls.length, 0);
           },
         );

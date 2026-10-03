@@ -4,11 +4,14 @@ import type { LinkBatchProgress } from "@/lib/admin/whatsapp-link-batch-client";
 import { batchResultCsv, batchRowsOf } from "@/lib/admin/whatsapp-link-batch-client";
 
 export function WhatsappBatchResult({ progress }: { progress: LinkBatchProgress }) {
-  const [copyStatus, setCopyStatus] = useState("");
+  const [copyStatus, setCopyStatus] = useState<{ scope: string; message: string } | null>(null);
+  const [copying, setCopying] = useState(false);
   const results = batchRowsOf(progress);
   const successful = results.filter(
     (row) => (row.outcome === "created" || row.outcome === "reused") && row.code,
   );
+  const codes = successful.map((row) => row.code);
+  const copyScope = JSON.stringify([progress.batchId, codes]);
   const byKey = new Map(progress.rows.map((row) => [row.rowKey, row]));
   const sources = [
     ...new Set(
@@ -28,13 +31,18 @@ export function WhatsappBatchResult({ progress }: { progress: LinkBatchProgress 
     ),
   ];
   async function copyAll() {
+    const scope = copyScope;
+    setCopying(true);
+    setCopyStatus(null);
     try {
       await navigator.clipboard.writeText(
-        successful.map((row) => `${window.location.origin}/w/${row.code}`).join("\n"),
+        codes.map((code) => `${window.location.origin}/w/${code}`).join("\n"),
       );
-      setCopyStatus("已複製全部已確認連結。");
+      setCopyStatus({ scope, message: "已複製全部已確認連結。" });
     } catch {
-      setCopyStatus("複製失敗，請逐行選取連結。");
+      setCopyStatus({ scope, message: "複製失敗，請逐行選取連結。" });
+    } finally {
+      setCopying(false);
     }
   }
   function download(source: (typeof sources)[number], category: "success" | "failure" = "success") {
@@ -72,7 +80,7 @@ export function WhatsappBatchResult({ progress }: { progress: LinkBatchProgress 
       ) : null}
       {successful.length ? (
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => void copyAll()}>
+          <Button variant="outline" disabled={copying} onClick={() => void copyAll()}>
             複製全部已確認連結
           </Button>
           {sources.map((source) => (
@@ -94,9 +102,9 @@ export function WhatsappBatchResult({ progress }: { progress: LinkBatchProgress 
           </p>
         </div>
       ) : null}
-      {copyStatus ? (
+      {copyStatus?.scope === copyScope ? (
         <p role="status" className="text-sm">
-          {copyStatus}
+          {copyStatus.message}
         </p>
       ) : null}
       <ul className="max-h-80 space-y-2 overflow-auto text-sm">
