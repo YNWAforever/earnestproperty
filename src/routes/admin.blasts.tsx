@@ -128,6 +128,15 @@ export const Route = createFileRoute("/admin/blasts")({
 
 function AdminBlasts() {
   const { user } = useNeonAuth();
+  return <AdminBlastsWorkspace key={user?.id ?? "guest"} />;
+}
+
+function AdminBlastsWorkspace() {
+  const { user } = useNeonAuth();
+  const activeRef = useRef(true);
+  const queueJournalKey = user ? `earnest-campaign-queue:${encodeURIComponent(user.id)}` : null;
+  const [queueJournalReady, setQueueJournalReady] = useState(false);
+  const [queueJournalError, setQueueJournalError] = useState<string | null>(null);
   const [rows, setRows] = useState<AdminCampaignRow[] | null>(null);
   const [options, setOptions] = useState<AdminBlastOptions | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -165,6 +174,34 @@ function AdminBlasts() {
   const previewRequestRef = useRef(0);
   const hasRowPreviews = Object.keys(rowPreviews).length > 0;
 
+  useEffect(() => {
+    activeRef.current = true;
+    if (queueJournalKey) {
+      try {
+        const raw = sessionStorage.getItem(queueJournalKey);
+        if (raw) {
+          const journal = JSON.parse(raw);
+          if (
+            journal?.version !== 1 ||
+            typeof journal.campaignId !== "string" ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+              journal.campaignId,
+            )
+          )
+            throw Error("Invalid campaign queue journal");
+          queueReadbackRef.current = journal.campaignId;
+          setQueueNeedsReadback(journal.campaignId);
+        }
+        setQueueJournalReady(true);
+      } catch {
+        setQueueJournalError("未能讀取本機操作記錄，請聯絡支援核對；未有提交新的加入佇列要求。");
+      }
+    }
+    return () => {
+      activeRef.current = false;
+    };
+  }, [queueJournalKey]);
+
   const refreshAdminData = useCallback(
     async (settings: { clearRowPreviews?: boolean } = {}) => {
       if (!user) return;
@@ -174,6 +211,7 @@ function AdminBlasts() {
           fetchAdminCampaigns(),
           fetchAdminBlastOptions(),
         ]);
+        if (!activeRef.current) return null;
         setRows(campaignRows as AdminCampaignRow[]);
         setOptions(blastOptions as AdminBlastOptions);
         setSelectedPreviewAudienceId((current) => {
@@ -451,7 +489,8 @@ function AdminBlasts() {
    * interstitial that used to be missing entirely, so a mis-click on Queue sent
    * thousands of irreversible WhatsApp messages. */
   function requestSendCampaign(campaign: AdminCampaignRow, eligible: number, checkedAt: number) {
-    if (queueReadbackRef.current || !isQueueableStatus(campaign.status)) return;
+    if (!queueJournalReady || queueReadbackRef.current || !isQueueableStatus(campaign.status))
+      return;
     if (eligible <= 0 || Date.now() - checkedAt > PREVIEW_FRESHNESS_MS) {
       toast.error("收件人預覽已過期或沒有合資格收件人，請重新預覽");
       return;
@@ -479,8 +518,19 @@ function AdminBlasts() {
   async function handleConfirmSend() {
     if (!pendingSend || !providerReviewed || sendingRef.current) return;
     if (queueReadbackRef.current) return;
+    if (!queueJournalReady || !queueJournalKey) return;
     if (Date.now() - pendingSend.checkedAt > PREVIEW_FRESHNESS_MS) {
       setConfirmError("收件人預覽已過期，請關閉視窗並重新預覽");
+      return;
+    }
+    // Persist the original campaign before submitting: reload or a lost response
+    // must restore a read-only outcome check, not another queue request.
+    try {
+      const raw = JSON.stringify({ version: 1, campaignId: pendingSend.campaignId });
+      sessionStorage.setItem(queueJournalKey, raw);
+      if (sessionStorage.getItem(queueJournalKey) !== raw) throw Error("Journal not retained");
+    } catch {
+      setConfirmError("本機未能保留操作記錄，請檢查瀏覽器儲存或聯絡支援；未有提交加入佇列要求。");
       return;
     }
     sendingRef.current = true;
@@ -494,8 +544,11 @@ function AdminBlasts() {
         materialization?: Partial<AdminAudiencePreview>;
       };
       assertNoServerError(result);
+      if (!activeRef.current) return;
 
       await refreshAdminData({ clearRowPreviews: true });
+      if (!activeRef.current) return;
+      sessionStorage.removeItem(queueJournalKey);
       setCampaignDraft(null);
       setPendingSend(null);
       toast.success(
@@ -504,6 +557,7 @@ function AdminBlasts() {
     } catch (err) {
       // Kept inside the dialog rather than behind it: the operator needs the
       // reason next to the action they just authorised.
+      if (!activeRef.current) return;
       queueReadbackRef.current = pendingSend.campaignId;
       setQueueNeedsReadback(pendingSend.campaignId);
       setRowPreviews({});
@@ -523,16 +577,21 @@ function AdminBlasts() {
     setConfirmError(null);
     try {
       const current = await refreshAdminData({ clearRowPreviews: true });
+      if (!activeRef.current) return;
       if (!current?.some((row) => row.id === campaignId)) {
         setConfirmError("未能讀回此 Campaign，或權限已變更。未有重送加入佇列要求。");
         return;
       }
+      if (queueJournalKey) sessionStorage.removeItem(queueJournalKey);
       queueReadbackRef.current = null;
       setQueueNeedsReadback(null);
       setPendingSend(null);
       setProviderReviewed(false);
       setPreviewCheckedAt(0);
       toast.success("已讀回目前 Campaign 狀態。沒有重送；如需繼續，請重新預覽並確認。");
+    } catch {
+      if (activeRef.current)
+        setConfirmError("未能更新本機操作記錄，請聯絡支援；未有重送加入佇列要求。");
     } finally {
       sendingRef.current = false;
       setMutatingAction(null);
@@ -597,6 +656,7 @@ function AdminBlasts() {
         ? "草稿不可直接發送，請先將狀態改為「待審核」"
         : null;
   const canQueueDraft =
+    queueJournalReady &&
     canSubmitCampaign &&
     !hasUnsavedCampaignChanges &&
     !queueNeedsReadback &&
@@ -620,6 +680,7 @@ function AdminBlasts() {
       description="WhatsApp 群發：只用已審批範本、只發給已同意接收的客戶。"
     >
       {error ? <AdminError message={error} /> : null}
+      {queueJournalError ? <AdminError message={queueJournalError} /> : null}
       {queueNeedsReadback && !pendingSend ? (
         <div role="alert" className="space-y-2 rounded-md border p-3 text-sm">
           <p>加入佇列結果未能確認。請先讀回 Campaign 狀態；未有重送。</p>
@@ -703,7 +764,7 @@ function AdminBlasts() {
 
       {!rows && loading ? <Skeleton className="h-72 w-full" /> : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Campaign 一覽</CardTitle>
@@ -739,6 +800,7 @@ function AdminBlasts() {
                       // re-materialises the audience at queue time, so an old
                       // number describes an audience that may no longer exist.
                       const queueEnabled =
+                        queueJournalReady &&
                         isQueueableStatus(campaign.status) &&
                         !!stamped &&
                         !previewStale &&
