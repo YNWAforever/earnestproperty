@@ -80,6 +80,12 @@ const state = {
   releaseResolution: null as null | (() => void),
   resolutionReadFailure: sessionStorage.getItem("no-link-fixture-resolution-error") === "true",
   retiredCandidate: false,
+  aiMode: sessionStorage.getItem("no-link-fixture-ai") ?? "empty",
+  pendingAi: [] as {
+    conversationId: string;
+    ordinal: number;
+    finish: (outcome: string) => void;
+  }[],
 };
 Object.assign(window, {
   noLinkFixture: { ...state, ids, actor, lastMessage: rows[0].messages.at(-1)!.text },
@@ -191,9 +197,34 @@ export async function fetchAdminConversation({ data }: { data: { id: string } })
   }
   return readable(data.id) ? { ...rows.find((r) => r.id === data.id)!, messages: [] } : null;
 }
-export async function fetchAdminConversationAiAssist() {
-  call("ai-read");
-  return null;
+export async function fetchAdminConversationAiAssist({
+  data,
+}: {
+  data: { conversationId: string };
+}) {
+  call("ai-read", data);
+  const ordinal = fixture().calls.filter(
+    (c) => c.name === "ai-read" && (c.input as typeof data)?.conversationId === data.conversationId,
+  ).length;
+  let mode = fixture().aiMode;
+  if (mode === "delay") {
+    mode = await new Promise<string>((finish) => {
+      fixture().pendingAi.push({ conversationId: data.conversationId, ordinal, finish });
+    });
+  }
+  if (mode === "error") throw Error("Synthetic AI read unavailable; internal reference hidden");
+  if (!readable(data.conversationId)) deny();
+  if (mode === "empty") return null;
+  const label = data.conversationId === ids.a ? "甲" : "乙";
+  return {
+    method: "deterministic_rules",
+    checkedAt: now,
+    summary: `合成${label}規則摘要 ${ordinal}`,
+    detectedIntent: "buyer",
+    urgency: "normal",
+    suggestedReply: `合成${label}規則回覆 ${ordinal}\n請核對樓盤資料。Please verify the listing details.`,
+    handoffNote: "合成規則提示，只作草稿。",
+  };
 }
 export async function getWhatsappAssignment({ conversationId }: { conversationId: string }) {
   call("assignment", { conversationId });

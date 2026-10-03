@@ -7,7 +7,12 @@ import tailwind from "@tailwindcss/vite";
 const workspace = resolve(import.meta.dirname, "../..");
 assert.equal(resolve(process.cwd()), workspace, "Run fixture build from this checkout root");
 const root = resolve(workspace, "scripts/browser-fixtures/no-link");
-const output = resolve(workspace, ".audit/no-link-browser");
+const outputKind = process.argv[2];
+assert.ok(outputKind === undefined || outputKind === "mobile-ai", "Unknown owned fixture output");
+const output = resolve(
+  workspace,
+  outputKind === "mobile-ai" ? ".audit/no-link-browser-mobile-ai" : ".audit/no-link-browser",
+);
 assert.equal(
   dirname(output),
   resolve(workspace, ".audit"),
