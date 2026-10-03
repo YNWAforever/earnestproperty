@@ -10,8 +10,31 @@ test(
   "content proposals revalidate active actor, scope and DB revision at save and apply",
   { timeout: 120000 },
   async (t) => {
-    await withOwnedPostgres(async ({ query, transaction }) => {
-      await mockOwnedServerDb(mock, query, transaction);
+    await withOwnedPostgres(async ({ query, transaction, pool }) => {
+      let afterDependencyGuard = null;
+      const controlledTransaction = async (statements, options = {}) => {
+        if (!afterDependencyGuard) return transaction(statements, options);
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          if (options.isolationLevel === "Serializable")
+            await client.query("SET TRANSACTION ISOLATION LEVEL SERIALIZABLE");
+          const rows = [];
+          for (const { statement, params = [] } of statements) {
+            rows.push((await client.query(statement, params)).rows);
+            if (statement.includes("SELECT ep_assert_content_dependencies_valid"))
+              await afterDependencyGuard();
+          }
+          await client.query("COMMIT");
+          return rows;
+        } catch (error) {
+          await client.query("ROLLBACK");
+          throw error;
+        } finally {
+          client.release();
+        }
+      };
+      await mockOwnedServerDb(mock, query, controlledTransaction);
       const repo = await import("./content-copilot-repository.server.ts");
       const [staff] = await query(
         "INSERT INTO staff_users(auth_user_id,email) VALUES('synthetic-copilot','qa-copilot@example.invalid') RETURNING id",
@@ -326,6 +349,163 @@ test(
             },
           );
         }
+      for (const phase of ["start", "completion", "apply"]) {
+        await t.test(
+          "cited FAQ stays stable between dependency validation and " + phase,
+          async () => {
+            const authUserId = "owned-cited-race-" + phase;
+            const [actor] = await query(
+              "INSERT INTO staff_users(auth_user_id,email) VALUES($1,$2) RETURNING id",
+              [authUserId, authUserId + "@example.invalid"],
+            );
+            await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [
+              actor.id,
+            ]);
+            const [article] = await query(
+              "INSERT INTO articles(slug,title,content,published) VALUES($1,'Race article','Original content',true) RETURNING *",
+              [authUserId],
+            );
+            const [faq] = await query(
+              "INSERT INTO faqs(question,answer,scope) VALUES($1,'Original cited answer','general') RETURNING id",
+              [authUserId],
+            );
+            await knowledge.repairPublicKnowledgeIndex();
+            const [source] = await query(
+              "SELECT id FROM ai_knowledge_sources WHERE source_type='faq' AND source_id=$1",
+              [faq.id],
+            );
+            const [{ revision }] = await query(
+              "SELECT md5(to_jsonb(f)::text) revision FROM faqs f WHERE id=$1",
+              [faq.id],
+            );
+            const [{ article_revision }] = await query(
+              "SELECT ep_content_source_revision('article',$1::uuid) article_revision",
+              [article.id],
+            );
+            const dependencies = [
+              { sourceId: source.id, chunkId: "owned-cited-race", sourceRevision: revision },
+            ];
+            const fingerprint = await buildContentFingerprint(article);
+            const request = {
+              resourceType: "article",
+              resourceId: article.id,
+              action: "improve",
+              selectedFields: ["title"],
+              tone: "professional_property",
+              targetLanguage: "zh-HK",
+              researchMode: "internal",
+            };
+            const begin = () =>
+              repo.startContentProposal({
+                staffId: actor.id,
+                authUserId,
+                request,
+                sourceFingerprint: fingerprint,
+                sourceDbRevision: article_revision,
+                knowledgeDependencies: dependencies,
+                promptVersion: "content-copilot-v1",
+              });
+            let proposal = phase === "start" ? null : await begin();
+            const complete = () =>
+              repo.completeContentProposal({
+                staffId: actor.id,
+                authUserId,
+                proposalId: proposal.id,
+                resourceType: "article",
+                resourceId: article.id,
+                action: "improve",
+                proposal: {
+                  resourceType: "article",
+                  sourceFingerprint: fingerprint,
+                  patches: [],
+                  evidence: [],
+                  warnings: [],
+                },
+              });
+            if (phase === "apply") await complete();
+            const editor = await pool.connect();
+            const [{ pid }] = (await editor.query("SELECT pg_backend_pid() pid")).rows;
+            let edit;
+            let editCompleted = false;
+            let revisionAtTransition;
+            afterDependencyGuard = async () => {
+              edit = editor
+                .query("UPDATE faqs SET answer='New cited answer' WHERE id=$1", [faq.id])
+                .then(() => {
+                  editCompleted = true;
+                });
+              const deadline = Date.now() + 8000;
+              while (!editCompleted) {
+                const [activity] = await query(
+                  "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+                  [pid],
+                );
+                if (activity?.wait_event_type === "Lock") break;
+                assert.ok(
+                  Date.now() < deadline,
+                  "cited edit must either finish or wait on a source lock",
+                );
+                await new Promise((resolve) => setTimeout(resolve, 20));
+              }
+              revisionAtTransition = (
+                await query("SELECT md5(to_jsonb(f)::text) revision FROM faqs f WHERE id=$1", [
+                  faq.id,
+                ])
+              )[0].revision;
+            };
+            try {
+              if (phase === "start") proposal = await begin();
+              else if (phase === "completion") await complete();
+              else
+                await repo.decideContentProposal({
+                  staffId: actor.id,
+                  authUserId,
+                  proposalId: proposal.id,
+                  acceptedFields: ["title"],
+                });
+            } finally {
+              afterDependencyGuard = null;
+              await edit;
+              editor.release();
+            }
+            const [saved] = await query(
+              "SELECT status,knowledge_dependencies,requested_by,requested_auth_user_id FROM ai_content_proposals WHERE id=$1",
+              [proposal.id],
+            );
+            assert.equal(
+              saved.knowledge_dependencies[0].sourceRevision,
+              revisionAtTransition,
+              "immutable decision cannot accept a dependency already changed before its write",
+            );
+            assert.equal(
+              saved.status,
+              phase === "start" ? "generating" : phase === "completion" ? "generated" : "applied",
+            );
+            assert.equal(saved.requested_by, actor.id);
+            assert.equal(saved.requested_auth_user_id, authUserId);
+            const [currentFaq] = await query(
+              "SELECT answer,md5(to_jsonb(f)::text) revision FROM faqs f WHERE id=$1",
+              [faq.id],
+            );
+            assert.equal(currentFaq.answer, "New cited answer");
+            assert.notEqual(
+              currentFaq.revision,
+              revisionAtTransition,
+              "concurrent source edit commits after protected transition",
+            );
+            assert.equal(
+              (await query("SELECT title FROM articles WHERE id=$1", [article.id]))[0].title,
+              "Race article",
+            );
+            if (phase === "start")
+              await repo.failContentProposal({
+                staffId: actor.id,
+                proposalId: proposal.id,
+                errorCode: "OWNED_TEST_FINISHED",
+              });
+          },
+        );
+      }
       await t.test(
         "real context/service carries every evidence revision through start and rejects in-flight change",
         async () => {
