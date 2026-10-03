@@ -247,6 +247,8 @@ test(
           );
         },
       );
+      // A real current grant is required; a role label in the test actor is not authority.
+      await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'admin')", [id(600)]);
       const admin = { ...actor(0), roles: ["admin"] };
       const scoped = { ...filters, branchId: id(500) };
       await t.test(
@@ -415,6 +417,74 @@ test(
           assert.deepEqual(await counts(), before);
         },
       );
+      for (const [kind, revise, source, historySql, sourceSql] of [
+        [
+          "inquiry",
+          reviseInquiryQuality,
+          { inquiryId: id(1) },
+          "SELECT * FROM inquiry_quality_revisions WHERE inquiry_id=$1 ORDER BY id",
+          "SELECT * FROM inquiries WHERE id=$1",
+        ],
+        [
+          "event",
+          revisePerformanceEventQuality,
+          { eventKey: `human_response:${id(2)}` },
+          "SELECT * FROM performance_event_quality_revisions WHERE event_key=$1 ORDER BY id",
+          "SELECT * FROM performance_events WHERE event_key=$1",
+        ],
+      ]) {
+        for (const [index, change] of [
+          [0, "inactive"],
+          [1, "role-revoked"],
+          [2, "account-rebound"],
+          [3, "downgraded-manager"],
+        ]) {
+          await t.test(
+            `${kind} quality rechecks admin after ${change} before revision`,
+            async () => {
+              const staff = id((kind === "inquiry" ? 650 : 660) + index),
+                auth = `owned-quality-${kind}-${index}`,
+                key = source.inquiryId ?? source.eventKey;
+              await query(
+                "INSERT INTO staff_users(id,auth_user_id,email,branch_id) VALUES($1,$2,$3,$4)",
+                [staff, auth, `${auth}@example.invalid`, id(501)],
+              );
+              await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'admin')", [
+                staff,
+              ]);
+              const cached = { staffId: staff, authUserId: auth, roles: ["admin"] };
+              if (change === "inactive")
+                await query("UPDATE staff_users SET active=false WHERE id=$1", [staff]);
+              if (change === "role-revoked" || change === "downgraded-manager")
+                await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [staff]);
+              if (change === "downgraded-manager")
+                await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [
+                  staff,
+                ]);
+              if (change === "account-rebound")
+                await query("UPDATE staff_users SET auth_user_id=$2 WHERE id=$1", [
+                  staff,
+                  auth + "-new",
+                ]);
+              const history = await query(historySql, [key]),
+                original = await query(sourceSql, [key]);
+              await assert.rejects(
+                revise(
+                  {
+                    ...source,
+                    quality: "test",
+                    reason: "Owned revoked authority cannot revise quality",
+                  },
+                  cached,
+                ),
+                (e) => e instanceof Response && e.status === 403,
+              );
+              assert.deepEqual(await query(historySql, [key]), history);
+              assert.deepEqual(await query(sourceSql, [key]), original);
+            },
+          );
+        }
+      }
       for (const [index, role, change] of [
         [0, "manager", "inactive"],
         [1, "manager", "role-revoked"],

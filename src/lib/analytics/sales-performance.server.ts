@@ -150,18 +150,30 @@ export async function reviseInquiryQuality(
   ) {
     throw new Response("Invalid quality correction", { status: 400 });
   }
-  const rows = await queryRows<{ inquiry_id: string; affected_hk_day: string }>(
-    `WITH selected AS (
+  const rows = await queryRows<{
+    inquiry_id: string | null;
+    affected_hk_day: string | null;
+    actor_allowed: boolean;
+  }>(
+    `WITH actor_row AS MATERIALIZED (
+       SELECT id FROM staff_users WHERE id=$4::uuid AND auth_user_id=$5 AND active FOR SHARE
+     ), actor_grant AS MATERIALIZED (
+       SELECT r.staff_user_id FROM staff_roles r JOIN actor_row a ON a.id=r.staff_user_id
+       WHERE r.role='admin' FOR SHARE OF r
+     ), selected AS MATERIALIZED (
        SELECT id,created_at FROM inquiries WHERE id=$1::uuid
      ), written AS (
        INSERT INTO inquiry_quality_revisions(inquiry_id,quality,reason,changed_by)
-       SELECT id,$2,$3,$4::uuid FROM selected RETURNING inquiry_id
-     )
-     SELECT written.inquiry_id::text,(selected.created_at AT TIME ZONE 'Asia/Hong_Kong')::date::text AS affected_hk_day
-     FROM written JOIN selected ON selected.id=written.inquiry_id`,
-    [input.inquiryId, input.quality, input.reason.trim(), actor.staffId],
+       SELECT s.id,$2,$3,a.staff_user_id FROM selected s CROSS JOIN actor_grant a
+       RETURNING inquiry_id
+     ) SELECT (SELECT inquiry_id::text FROM written) AS inquiry_id,
+       (SELECT (created_at AT TIME ZONE 'Asia/Hong_Kong')::date::text FROM selected) AS affected_hk_day,
+       EXISTS(SELECT 1 FROM actor_grant) AS actor_allowed`,
+    [input.inquiryId, input.quality, input.reason.trim(), actor.staffId, actor.authUserId],
   );
-  if (!rows[0]) throw new Response("Inquiry not found", { status: 404 });
+  if (!rows[0]?.actor_allowed) throw new Response("Forbidden", { status: 403 });
+  if (!rows[0].inquiry_id || !rows[0].affected_hk_day)
+    throw new Response("Inquiry not found", { status: 404 });
   return { inquiryId: rows[0].inquiry_id, affectedHkDay: rows[0].affected_hk_day };
 }
 
