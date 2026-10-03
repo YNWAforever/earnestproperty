@@ -452,6 +452,49 @@ for (const width of [1440, 1280, 768, 390]) {
       await otherTab.close();
     });
   }
+  test(`storage write failure on reload preserves uncertain original batch recovery ${width}`, async ({
+    page,
+  }) => {
+    await setup(page, width);
+    await previewFifty(page);
+    await page.evaluate(() =>
+      Object.assign(window.ownedLinkBulk, { commitMode: "lost", readFailure: true }),
+    );
+    await page.getByRole("button", { name: "確認建立 50 筆" }).click();
+    await expect(page.getByRole("region", { name: "批次結果" })).toContainText("未提交 50");
+    const stored = await page.evaluate(() => {
+      const key = Object.keys(sessionStorage).find((k) =>
+        k.startsWith("earnest:whatsapp-link-batch:v2:"),
+      )!;
+      const value = JSON.parse(sessionStorage.getItem(key)!);
+      delete value.draftId;
+      const raw = JSON.stringify(value);
+      sessionStorage.setItem(key, raw);
+      return { key, raw };
+    });
+    await page.addInitScript(() => {
+      const write = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (key, value) {
+        if (key.startsWith("earnest:whatsapp-link-batch:v2:"))
+          throw new DOMException("owned quota proof", "QuotaExceededError");
+        write.call(this, key, value);
+      };
+    });
+    await page.reload();
+    await expect(page.getByRole("region", { name: "批次結果" })).toContainText("未提交 50");
+    expect(await page.evaluate((key) => sessionStorage.getItem(key), stored.key)).toBe(stored.raw);
+    await expect(page.getByRole("button", { name: "開始新批次", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "查回伺服器結果", exact: true }).click();
+    expect(
+      await page.evaluate(
+        () => window.ownedLinkBulk.calls.filter((c) => c.name === "commit").length,
+      ),
+    ).toBe(1);
+    expect(
+      await page.evaluate(() => window.ownedLinkBulk.calls.filter((c) => c.name === "read").length),
+    ).toBeGreaterThan(1);
+    expect(await page.evaluate((key) => sessionStorage.getItem(key), stored.key)).toBe(stored.raw);
+  });
   test(`duplicate and invalid fifty-line CSV never reach lookup or preview ${width}`, async ({
     page,
   }) => {
