@@ -104,6 +104,7 @@ function AdminAnalyticsWorkspace() {
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const recordRequest = useRef(0);
+  const currentRecordsReadback = useRef<(() => Promise<void>) | null>(null);
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -130,6 +131,7 @@ function AdminAnalyticsWorkspace() {
   }, []);
   useEffect(() => {
     recordRequest.current++;
+    currentRecordsReadback.current = null;
     setDrilldownKey(null);
     setRecordPage(null);
   }, [performanceFilters]);
@@ -165,6 +167,7 @@ function AdminAnalyticsWorkspace() {
   async function openRecords(key: string, cursor: string | null = null, append = false) {
     if (!active.current || !finalFixUiFlags.salesPerformanceReporting || search.invalidFilter)
       return;
+    currentRecordsReadback.current = () => openRecords(key);
     const requestId = ++recordRequest.current;
     setDrilldownKey(key);
     setRecordsLoading(true);
@@ -188,6 +191,11 @@ function AdminAnalyticsWorkspace() {
       if (requestId === recordRequest.current) setRecordsLoading(false);
     }
   }
+  async function refreshAfterMutation() {
+    if (!active.current) return;
+    setPerformanceRevision((v) => v + 1);
+    await currentRecordsReadback.current?.();
+  }
   async function correctQuality(input: {
     record: PerformanceRecord;
     quality: "production" | "test" | "spam" | "unknown";
@@ -206,18 +214,15 @@ function AdminAnalyticsWorkspace() {
         reason: input.reason,
       });
     else throw new Error("Missing event evidence");
-    if (!active.current) return;
-    setPerformanceRevision((v) => v + 1);
-    if (drilldownKey) await openRecords(drilldownKey);
+    await refreshAfterMutation();
   }
   async function qualifyLead(input: { leadId: string; qualifiedAt: string; evidence: string }) {
     await qualifyPerformanceLead(input);
-    if (!active.current) return;
-    setPerformanceRevision((value) => value + 1);
-    if (drilldownKey) await openRecords(drilldownKey);
+    await refreshAfterMutation();
   }
   function applyPerformanceFilters(next: PerformanceFilters) {
     recordRequest.current++;
+    currentRecordsReadback.current = null;
     setDrilldownKey(null);
     setRecordPage(null);
     void navigate({ search: parsePerformanceFilters(next) });
@@ -423,6 +428,7 @@ function AdminAnalyticsWorkspace() {
                 error={recordsError}
                 onClose={() => {
                   recordRequest.current++;
+                  currentRecordsReadback.current = null;
                   setDrilldownKey(null);
                   setRecordPage(null);
                 }}

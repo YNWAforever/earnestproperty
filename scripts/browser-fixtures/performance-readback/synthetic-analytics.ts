@@ -1,4 +1,4 @@
-// Actual calculation/drilldown; synthetic read-only Auth/API ports, not SQL/provider evidence.
+// Actual calculation/drilldown; synthetic Auth/API ports, not SQL/provider evidence.
 import {
   calculateSalesPerformance,
   parsePerformanceFilters,
@@ -8,10 +8,18 @@ const id = (n: number) => `80000000-0000-4000-8000-${String(n).padStart(12, "0")
 export const state = {
   actor: sessionStorage.getItem("performance-readback-actor") ?? "actor-a",
   binding: "staff-a",
-  role: "manager",
+  role: sessionStorage.getItem("performance-readback-role") ?? "manager",
   denied: false,
   reportMode: sessionStorage.getItem("performance-delayed-initial") === "true" ? "delayed" : "ok",
   recordsMode: "ok",
+  qualityMode: "ok",
+  qualityRevisions: JSON.parse(sessionStorage.getItem("performance-quality-revisions") ?? "[]") as {
+    kind: string;
+    key: string;
+    quality: string;
+    reason: string;
+    actor: string;
+  }[],
   calls: [] as { name: string; actor: string; binding: string; input: unknown }[],
   pending: [] as { release: () => void }[],
   changeContext: async (
@@ -46,7 +54,9 @@ function input(value: unknown) {
     at = "2026-09-30T00:00:00Z",
   ) => ({
     id: id(n),
-    quality,
+    quality:
+      state.qualityRevisions.filter((r) => r.kind === "inquiry" && r.key === id(n)).at(-1)
+        ?.quality ?? quality,
     sourceEvidence: evidence,
     currentSource: evidence === "message_28hse" ? "28hse" : "whatsapp",
     createdAt: at,
@@ -85,7 +95,10 @@ function input(value: unknown) {
   const visible = new Set(inquiries.map((i) => i.id));
   const event = (type: string, n: number) => ({
     type,
-    quality: "production",
+    quality:
+      state.qualityRevisions
+        .filter((r) => r.kind === "event" && r.key === `${type}:${id(n)}`)
+        .at(-1)?.quality ?? "production",
     leadId: id(100 + n),
     inquiryId: id(n),
     staffId: staff,
@@ -154,7 +167,7 @@ export async function fetchPerformanceFilterOptions() {
   state.calls.push({ name: "options", actor: state.actor, binding: state.binding, input: null });
   const which = scope();
   return {
-    canCorrect: false,
+    canCorrect: state.role === "admin" && !state.denied,
     branches: [{ id: id(500 + which), name: which ? "合成分行乙" : "合成分行甲" }],
     staff: [
       { id: id(600 + which), name: which ? "合成同事乙" : "合成同事甲", branchId: id(500 + which) },
@@ -193,11 +206,40 @@ export async function fetchOperationalAnalytics(range: { start: string; end: str
     ],
   };
 }
-export async function correctInquiryQuality() {
-  throw Error("Read-only fixture;quality mutation not accepted");
+async function correct(kind: string, key: string, quality: string, reason: string) {
+  const actor = state.actor;
+  state.calls.push({
+    name: "quality",
+    actor,
+    binding: state.binding,
+    input: { kind, key, quality, reason },
+  });
+  if (state.role !== "admin" || state.denied)
+    throw new Response("Owned correction forbidden", { status: 403 });
+  if (reason.trim().length < 8 || !["production", "test", "spam", "unknown"].includes(quality))
+    throw new Response("Owned invalid correction", { status: 400 });
+  const mode = state.qualityMode;
+  if (mode.startsWith("delayed"))
+    await new Promise<void>((release) => state.pending.push({ release }));
+  if (mode.endsWith("failure")) throw Error("Owned correction refused before write");
+  state.qualityRevisions.push({ kind, key, quality, reason: reason.trim(), actor });
+  sessionStorage.setItem("performance-quality-revisions", JSON.stringify(state.qualityRevisions));
 }
-export async function correctPerformanceEventQuality() {
-  throw Error("Read-only fixture;quality mutation not accepted");
+export async function correctInquiryQuality(input: {
+  inquiryId: string;
+  quality: string;
+  reason: string;
+}) {
+  await correct("inquiry", input.inquiryId, input.quality, input.reason);
+  return { inquiryId: input.inquiryId, affectedHkDay: "2026-09-30" };
+}
+export async function correctPerformanceEventQuality(input: {
+  eventKey: string;
+  quality: string;
+  reason: string;
+}) {
+  await correct("event", input.eventKey, input.quality, input.reason);
+  return { eventKey: input.eventKey, affectedHkDay: "2026-09-30" };
 }
 export async function qualifyPerformanceLead() {
   throw Error("Read-only fixture;lead mutation not accepted");

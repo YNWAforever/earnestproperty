@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { safePerformanceCsvCell } from "@/lib/analytics/performance-csv";
 import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
@@ -61,8 +61,11 @@ export function PerformanceTable({
   const [saving, setSaving] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [qualificationEvidence, setQualificationEvidence] = useState("");
+  const editingRevision = useRef(0);
+  const submitting = useRef(false);
   async function save(event: FormEvent, record: PerformanceRecord) {
     event.preventDefault();
+    if (submitting.current) return;
     if (editingId !== record.id) {
       setSaveError("請重新開啟此記錄的修正表單。");
       return;
@@ -71,23 +74,29 @@ export function PerformanceTable({
       setSaveError("修正原因最少 8 個字。");
       return;
     }
+    const revision = editingRevision.current;
+    submitting.current = true;
     setSaving(record.id);
     setSaveError(null);
     try {
       await onCorrect({ record, quality, reason: reason.trim() });
-      setReason("");
+      if (revision === editingRevision.current) setReason("");
     } catch {
-      setSaveError("未能儲存品質修正，請重試。");
+      if (revision === editingRevision.current) setSaveError("未能儲存品質修正，請重試。");
     } finally {
+      submitting.current = false;
       setSaving(null);
     }
   }
   async function qualify(event: FormEvent, record: PerformanceRecord) {
     event.preventDefault();
+    if (submitting.current) return;
     if (!record.leadId || editingId !== record.id || qualificationEvidence.trim().length < 8) {
       setSaveError("請提供至少 8 個字的核實依據。");
       return;
     }
+    const revision = editingRevision.current;
+    submitting.current = true;
     setSaving(record.id);
     setSaveError(null);
     try {
@@ -96,10 +105,12 @@ export function PerformanceTable({
         qualifiedAt: new Date().toISOString(),
         evidence: qualificationEvidence.trim(),
       });
-      setQualificationEvidence("");
+      if (revision === editingRevision.current) setQualificationEvidence("");
     } catch {
-      setSaveError("未能核實線索；請確認狀態、權限及是否已完成核實。");
+      if (revision === editingRevision.current)
+        setSaveError("未能核實線索；請確認狀態、權限及是否已完成核實。");
     } finally {
+      submitting.current = false;
       setSaving(null);
     }
   }
@@ -200,6 +211,8 @@ export function PerformanceTable({
                           <summary
                             className="cursor-pointer"
                             onClick={() => {
+                              editingRevision.current++;
+                              setSaveError(null);
                               setEditingId(record.id);
                               setQuality(record.quality as typeof quality);
                               setReason("");
@@ -217,7 +230,10 @@ export function PerformanceTable({
                               id={"quality-" + record.id}
                               className="h-9 w-full rounded border bg-background px-2"
                               value={quality}
-                              onChange={(e) => setQuality(e.target.value as typeof quality)}
+                              onChange={(e) => {
+                                editingRevision.current++;
+                                setQuality(e.target.value as typeof quality);
+                              }}
                             >
                               <option value="production">恢復有效</option>
                               <option value="test">標為測試</option>
@@ -230,13 +246,16 @@ export function PerformanceTable({
                               value={reason}
                               minLength={8}
                               required
-                              onChange={(e) => setReason(e.target.value)}
+                              onChange={(e) => {
+                                editingRevision.current++;
+                                setReason(e.target.value);
+                              }}
                               placeholder="記錄核實依據"
                             />
                             <Button
                               type="submit"
                               size="sm"
-                              disabled={saving === record.id || editingId !== record.id}
+                              disabled={saving !== null || editingId !== record.id}
                             >
                               儲存修正
                             </Button>
@@ -250,6 +269,8 @@ export function PerformanceTable({
                           <summary
                             className="cursor-pointer"
                             onClick={() => {
+                              editingRevision.current++;
+                              setSaveError(null);
                               setEditingId(record.id);
                               setQualificationEvidence("");
                             }}
@@ -266,13 +287,16 @@ export function PerformanceTable({
                               value={qualificationEvidence}
                               minLength={8}
                               required
-                              onChange={(event) => setQualificationEvidence(event.target.value)}
+                              onChange={(event) => {
+                                editingRevision.current++;
+                                setQualificationEvidence(event.target.value);
+                              }}
                               placeholder="記錄實際聯絡與需求證據"
                             />
                             <Button
                               type="submit"
                               size="sm"
-                              disabled={saving === record.id || editingId !== record.id}
+                              disabled={saving !== null || editingId !== record.id}
                             >
                               記錄合格線索
                             </Button>
