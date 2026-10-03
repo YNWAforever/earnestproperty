@@ -2857,5 +2857,166 @@
     },
     "capability": "ownedcitedFAQ transition lock READY;realAuth/model/provider/allconcurrency BLOCKED",
     "report": "ep-04-cited-source-transition-readback.md"
+  },
+  "performanceQualityActorFollowup": {
+    "verifiedCodeSha": "6b061aa546ad8b6044ebfdcf1907574c82e2d177",
+    "verifiedAt": "2026-10-03T18:04:39.281934+00:00",
+    "baseline": "2805a025687ed50bd8dad49d6909117db5de33ce",
+    "red": {
+      "directDenialFailures": 8,
+      "allCounts": {
+        "tests": 24,
+        "pass": 14,
+        "fail": 10,
+        "skipped": 0
+      },
+      "unrelatedQualificationDuplicateOutcome": "0fulfilled;causeUNPROVEN;unchanged fixture passes green and exact source;not counted as new quality defect"
+    },
+    "ownedSQL": {
+      "pass": 24,
+      "fail": 0,
+      "skipped": 0,
+      "migrations": 85,
+      "exactCommittedSource": true,
+      "independentRawReadback": "8denials source+revision arrays unchanged;current-admin positive first actor/reason/day/history and report preserved"
+    },
+    "localSetupFailure": {
+      "log": "ep17-quality-actor-green.log",
+      "pass": 0,
+      "fail": 1,
+      "layer": "Docker run startup before migrations/cases",
+      "cause": "UNPROVEN",
+      "helperChanged": false,
+      "supersededForCurrentSource": "unchanged retry and exact source each24PASS;historical failure retained"
+    },
+    "unit": {
+      "analyticsNode": 65,
+      "analyticsBun": 3,
+      "noLinkNode": 99,
+      "noLinkBun": 9,
+      "fail": 0,
+      "skipped": 0
+    },
+    "static": {
+      "typecheck": "exit0",
+      "lint": "exit0;3baselinewarnings",
+      "build": "exit0"
+    },
+    "review": {
+      "model": "Astra",
+      "reviewedSha": "6b061aa546ad8b6044ebfdcf1907574c82e2d177",
+      "critical": 0,
+      "important": 0,
+      "minor": 0,
+      "freshContext": true,
+      "coverage": "sampled cumulative branch;focused gates plus preservation;not exhaustive;no independent tests",
+      "secondReview": false
+    },
+    "ui": "no UI source changes;no local new UI operation or promotion;prior screenshots/action records retained;exact-head remote UI regression pending",
+    "configurationDryRun": {
+      "baseline": "2805a025687ed50bd8dad49d6909117db5de33ce",
+      "code": "6b061aa546ad8b6044ebfdcf1907574c82e2d177",
+      "configurationSchemaMigrationPackageWorkflowDiff": [],
+      "newDTOs": false,
+      "newRuntimeProviderIds": false,
+      "productionApplied": false,
+      "migrationDryRun": "all85 unchanged migrations in fresh owned PG17;24PASS precommit +24PASS exact committed source;no production migration",
+      "rollback": "disable affected quality write entries before compatible server revert;retain immutable original sources/quality revisions/actor/reason/event/source identities,qualifications/runs/receipts/outbound history;uncertain outcomes need original history readback;never delete accepted evidence or restore wholeDB"
+    },
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineEligible": "1/3",
+      "repairProduction": "0/3",
+      "newAgentCollectionRuns": 0,
+      "latestDaily": 37079390201,
+      "manualReplaySkipNotCounted": true
+    },
+    "capability": {
+      "ownedCurrentAdminQualityWrites": "READY",
+      "trueAuthCombinedUnknownCommittedOutcome": "BLOCKED",
+      "fullActionsRolesNativeSchedule": "NOT_READY"
+    },
+    "logs": [
+      {
+        "file": "ep17-quality-actor-baseline.log",
+        "sha256": "4cb5701045c1632015dfd979c66ce588c52cbf98811a8907a3337c0e0194d4f4",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-red.log",
+        "sha256": "f235e968dcf804b71f70890d1809e54ccfe4465ca87346ddab3d26027f2313ba",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-green.log",
+        "sha256": "9d4ef88f4532ae815fb7a022235739b75ed18241607572a063f09d1e86416928",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-green-retry.log",
+        "sha256": "03d64eaf5257219a5b14d93beab103e6932b3a8c81ef268b268450d164c8e094",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-exact-sql.log",
+        "sha256": "ad8a086c73b9014324937dbf71bdfa40fb8867cb5dde95ddaa16df2ac425725c",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-analytics.log",
+        "sha256": "774335a160f550f6d2282a56a37f23e493a5ac42a09443fa88e11caf5100e202",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-no-link.log",
+        "sha256": "04dec5112c8884a7f58add7e15c890f77c8b2ce60d3cace6c7977a68536d61ab",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-build.log",
+        "sha256": "af2452d8c066d4b4e043f20eed1b01e41b87db6dace50b757140252b1b468b99",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-config-dry-run.json",
+        "sha256": "06c79e3e7f9dceb2f63653226ac53fccb5d8eef3393d5fa5566fbfe33242a81a",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-native-readonly.json",
+        "sha256": "7ae0344ed2754a119a04fd05514092b1a21f96eb1373aba186519a5ef8568998",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "ep17-quality-actor-formal-readonly.json",
+        "sha256": "5a4c57aaeb380ae100d3a2ef0df4c5f5ecf2225e6a48c220ea136b2667e2bb74",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "review-quality-actor-package.md",
+        "sha256": "424ba4327167d2302d141364c39e168c4ea0fb2429217af2fb32cb01e1357fb3",
+        "layer": "named evidence;read report for source/failure layer"
+      },
+      {
+        "file": "review-quality-actor-result.md",
+        "sha256": "6cf1f825f72ff8c8b750699a155be956a810d1f528494653b1abf22255b7eb80",
+        "layer": "named evidence;read report for source/failure layer"
+      }
+    ]
   }
 }
