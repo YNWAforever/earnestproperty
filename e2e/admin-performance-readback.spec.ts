@@ -333,6 +333,56 @@ for (const width of [1440, 1280, 768, 390])
         records(page).getByRole("button", { name: "匯出本頁 CSV", exact: true }),
       ).toHaveCount(0);
     });
+    test("explicit branch staff dates and cohort scope survive reload and match exported row", async ({
+      page,
+    }) => {
+      await open(page);
+      await page.locator("#performance-start").fill("2026-09-30");
+      await page.locator("#performance-end").fill("2026-09-30");
+      await page.locator("#performance-branch").selectOption(id(500));
+      await page.locator("#performance-staff").selectOption(id(600));
+      await page.locator("#performance-source").selectOption("whatsapp");
+      await page.locator("#performance-deal").selectOption("rent");
+      await page.locator("#performance-window").selectOption("30");
+      await page.getByRole("button", { name: "套用篩選", exact: true }).click();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("1");
+      await page.reload();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("1");
+      for (const [field, value] of [
+        ["branch", id(500)],
+        ["staff", id(600)],
+        ["source", "whatsapp"],
+        ["deal", "rent"],
+        ["window", "30"],
+        ["start", "2026-09-30"],
+        ["end", "2026-09-30"],
+      ])
+        await expect(page.locator(`#performance-${field}`)).toHaveValue(value);
+      expect(
+        await page.evaluate(
+          () =>
+            window.performanceReadbackFixture.calls.filter((c) => c.name === "report").at(-1)!
+              .input,
+        ),
+      ).toEqual({
+        start: "2026-09-30",
+        end: "2026-09-30",
+        branchId: id(500),
+        staffId: id(600),
+        source: "whatsapp",
+        dealType: "rent",
+        cohortWindowDays: 30,
+      });
+      await drill(page);
+      await expect(records(page).getByRole("row")).toHaveCount(2);
+      await expect(records(page)).toContainText(id(2));
+      const downloading = page.waitForEvent("download");
+      await records(page).getByRole("button", { name: "匯出本頁 CSV", exact: true }).click();
+      const csv = await readFile((await (await downloading).path())!, "utf8");
+      expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(2);
+      expect(csv).toContain(id(2));
+      expect(csv).not.toContain(id(1));
+    });
     test("disabled flag explains unavailable report and makes no performance reads", async ({
       page,
     }) => {
