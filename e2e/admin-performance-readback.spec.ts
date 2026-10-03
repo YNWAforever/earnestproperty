@@ -85,7 +85,7 @@ test.afterEach(async ({ page }, info) => {
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("totals"))
     await page.screenshot({
-      path: `.audit/remediation-20261003/performance-green-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/performance-quality-totals-${page.viewportSize()!.width}.png`,
     });
 });
 const id = (n: number) => `80000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -114,9 +114,272 @@ async function drill(page: Page, label = "有效查詢") {
   await metric(page, label).getByRole("button", { name: "可查看記錄", exact: true }).click();
   await expect(records(page).getByRole("table")).toBeVisible();
 }
+const row = (page: Page, n: number) =>
+  records(page)
+    .getByRole("row")
+    .filter({ has: page.getByRole("rowheader", { name: id(n), exact: true }) });
+async function admin(page: Page) {
+  await page.addInitScript(() => sessionStorage.setItem("performance-readback-role", "admin"));
+  await open(page);
+  await drill(page);
+}
+async function editQuality(page: Page, n: number, quality: string, reason: string) {
+  await row(page, n).getByText("修正品質", { exact: true }).click();
+  await row(page, n).getByLabel("品質狀態", { exact: true }).selectOption(quality);
+  await row(page, n).getByLabel("修正原因", { exact: true }).fill(reason);
+}
+const qualityCalls = (page: Page) =>
+  page.evaluate(() => window.performanceReadbackFixture.calls.filter((c) => c.name === "quality"));
 for (const width of [1440, 1280, 768, 390])
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("quality committed correction refreshes the same denominator records and CSV", async ({
+      page,
+    }) => {
+      await admin(page);
+      await editQuality(page, 1, "test", "        ");
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toHaveText("修正原因最少 8 個字。");
+      expect(await qualityCalls(page)).toHaveLength(0);
+      await row(page, 1)
+        .getByLabel("修正原因", { exact: true })
+        .fill("Owned verified test inquiry");
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("3");
+      await expect(records(page).getByRole("row")).toHaveCount(4);
+      await expect(row(page, 1)).toHaveCount(0);
+      expect(await qualityCalls(page)).toHaveLength(1);
+      const download = page.waitForEvent("download");
+      await records(page).getByRole("button", { name: "匯出本頁 CSV", exact: true }).click();
+      const csv = await readFile((await (await download).path())!, "utf8");
+      expect(csv).not.toContain(id(1));
+      for (const n of [2, 3, 4]) expect(csv).toContain(id(n));
+      expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(4);
+      await page.screenshot({
+        path: `.audit/remediation-20261003/performance-quality-confirmed-${width}.png`,
+      });
+      await page.reload();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("3");
+      await drill(page);
+      await expect(records(page).getByRole("row")).toHaveCount(4);
+      expect(await qualityCalls(page)).toHaveLength(0);
+    });
+    test("quality pending completion preserves the later manual reason in another row", async ({
+      page,
+    }) => {
+      await admin(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualityMode = "delayed";
+      });
+      await editQuality(page, 1, "test", "Owned first correction evidence");
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      await editQuality(page, 2, "spam", "Later manual correction must survive");
+      await page.evaluate(() => window.performanceReadbackFixture.pending.shift()!.release());
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("3");
+      await expect(row(page, 2).getByLabel("修正原因", { exact: true })).toHaveValue(
+        "Later manual correction must survive",
+      );
+      await expect(row(page, 2).getByLabel("品質狀態", { exact: true })).toHaveValue("spam");
+      expect(await qualityCalls(page)).toHaveLength(1);
+    });
+    test("quality concurrent row submission waits for the pending correction without losing its draft", async ({
+      page,
+    }) => {
+      await admin(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualityMode = "delayed";
+      });
+      await editQuality(page, 1, "test", "Owned first in flight correction");
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      await editQuality(page, 2, "spam", "Owned later draft remains editable");
+      await expect(
+        row(page, 2).getByRole("button", { name: "儲存修正", exact: true }),
+      ).toBeDisabled();
+      await row(page, 2).getByLabel("修正原因", { exact: true }).press("Enter");
+      expect(await qualityCalls(page)).toHaveLength(1);
+      await page.evaluate(() => window.performanceReadbackFixture.pending.shift()!.release());
+      await expect(
+        row(page, 2).getByRole("button", { name: "儲存修正", exact: true }),
+      ).toBeEnabled();
+      await expect(row(page, 2).getByLabel("修正原因", { exact: true })).toHaveValue(
+        "Owned later draft remains editable",
+      );
+    });
+    test("quality late completion cannot reopen an old filter or restore old CSV rows", async ({
+      page,
+    }) => {
+      await admin(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualityMode = "delayed";
+      });
+      await editQuality(page, 1, "test", "Owned old filter correction evidence");
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      await page.locator("#performance-deal").selectOption("rent");
+      await page.getByRole("button", { name: "套用篩選", exact: true }).click();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("1");
+      await drill(page);
+      await expect(records(page).getByRole("row")).toHaveCount(2);
+      const callsBefore = await page.evaluate(
+        () => window.performanceReadbackFixture.calls.filter((c) => c.name === "records").length,
+      );
+      await page.evaluate(() => window.performanceReadbackFixture.pending.shift()!.release());
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.qualityRevisions.length))
+        .toBe(1);
+      await page.waitForTimeout(150);
+      expect(
+        await page.evaluate(
+          () =>
+            window.performanceReadbackFixture.calls.filter((c) => c.name === "records").slice(-1)[0]
+              .input,
+        ),
+      ).toMatchObject({ dealType: "rent" });
+      expect(
+        await page.evaluate(
+          () => window.performanceReadbackFixture.calls.filter((c) => c.name === "records").length,
+        ),
+      ).toBe(callsBefore + 1);
+      await expect(records(page).getByRole("row")).toHaveCount(2);
+      const download = page.waitForEvent("download");
+      await records(page).getByRole("button", { name: "匯出本頁 CSV", exact: true }).click();
+      const csv = await readFile((await (await download).path())!, "utf8");
+      expect(csv).toContain(id(2));
+      for (const n of [1, 3, 4]) expect(csv).not.toContain(id(n));
+    });
+    test("quality refused write retains original manual evidence for explicit retry", async ({
+      page,
+    }) => {
+      await admin(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualityMode = "failure";
+      });
+      await editQuality(page, 1, "test", "Owned retained correction evidence");
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toHaveText("未能儲存品質修正，請重試。");
+      await expect(row(page, 1).getByLabel("修正原因", { exact: true })).toHaveValue(
+        "Owned retained correction evidence",
+      );
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("4");
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualityRevisions.length),
+      ).toBe(0);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualityMode = "ok";
+      });
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("3");
+      expect(await qualityCalls(page)).toHaveLength(2);
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualityRevisions.length),
+      ).toBe(1);
+    });
+    test("quality delayed refusal cannot attach an old row error to the newer editor", async ({
+      page,
+    }) => {
+      await admin(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualityMode = "delayed-failure";
+      });
+      await editQuality(page, 1, "test", "Owned refused original row evidence");
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      await editQuality(page, 2, "spam", "Newer manual evidence remains valid");
+      await page.evaluate(() => window.performanceReadbackFixture.pending.shift()!.release());
+      await expect(
+        row(page, 2).getByRole("button", { name: "儲存修正", exact: true }),
+      ).toBeEnabled();
+      await expect(records(page).getByRole("alert")).toHaveCount(0);
+      await expect(row(page, 2).getByLabel("修正原因", { exact: true })).toHaveValue(
+        "Newer manual evidence remains valid",
+      );
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualityRevisions.length),
+      ).toBe(0);
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("4");
+    });
+    test("quality response event correction restores a known response without changing assignment or inquiries", async ({
+      page,
+    }) => {
+      const key = `human_response:${id(2)}`;
+      await page.addInitScript(
+        (key) =>
+          sessionStorage.setItem(
+            "performance-quality-revisions",
+            JSON.stringify([
+              {
+                kind: "event",
+                key,
+                quality: "test",
+                reason: "Owned seed test response",
+                actor: "actor-a",
+              },
+            ]),
+          ),
+        key,
+      );
+      await admin(page);
+      await page.getByRole("button", { name: "測試跟進 1", exact: true }).click();
+      const eventRow = records(page)
+        .getByRole("row")
+        .filter({ has: page.getByRole("rowheader", { name: key, exact: true }) });
+      await eventRow.getByText("修正品質", { exact: true }).click();
+      await eventRow.getByLabel("品質狀態", { exact: true }).selectOption("production");
+      await eventRow
+        .getByLabel("修正原因", { exact: true })
+        .fill("Owned verified actual response event");
+      await eventRow.getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect(records(page)).toContainText("這項指標目前沒有可顯示的記錄。");
+      const calls = await qualityCalls(page);
+      expect(calls).toHaveLength(1);
+      expect(calls[0].input).toMatchObject({
+        kind: "event",
+        key: `human_response:${id(2)}`,
+        quality: "production",
+      });
+      await page.getByRole("tab", { name: "回覆及跟進", exact: true }).click();
+      await expect(metric(page, "已確認分配").locator("p").first()).toHaveText("1");
+      await expect(metric(page, "首回覆中位數").locator("p").first()).toContainText("15");
+      await expect(metric(page, "未回覆").locator("p").first()).toHaveText("3");
+      await page.getByRole("tab", { name: "新增與轉換", exact: true }).click();
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("4");
+    });
+    test("quality admin response after actor change starts no new read for the old workspace", async ({
+      page,
+    }) => {
+      await admin(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualityMode = "delayed";
+      });
+      await editQuality(page, 1, "test", "Owned old actor correction evidence");
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      await page.evaluate(() =>
+        window.performanceReadbackFixture.changeContext("actor-b", "staff-b", "manager"),
+      );
+      await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("1");
+      const before = await page.evaluate(() => window.performanceReadbackFixture.calls.length);
+      await page.evaluate(() => window.performanceReadbackFixture.pending.shift()!.release());
+      await page.waitForTimeout(100);
+      expect(await page.evaluate(() => window.performanceReadbackFixture.calls.length)).toBe(
+        before,
+      );
+      await drill(page);
+      await expect(records(page).getByText("修正品質", { exact: true })).toHaveCount(0);
+      await expect(records(page)).toContainText(id(91));
+    });
     test("actor switch clears old report records and export before new scoped read", async ({
       page,
     }) => {

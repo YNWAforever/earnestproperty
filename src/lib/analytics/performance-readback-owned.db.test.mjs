@@ -9,11 +9,19 @@ test(
   "performance report and drilldown independently reconcile owned full-schema facts",
   { timeout: 120000 },
   async (t) => {
+    const networkGuard = t.mock.method(globalThis, "fetch", async () => {
+      throw new Error("Provider/network request forbidden in owned quality acceptance");
+    });
     await withOwnedPostgres(async ({ query, transaction, migrationCount }) => {
       assert.equal(migrationCount, 85);
       await mockOwnedServerDb(mock, query, transaction);
-      const { getSalesPerformance, listPerformanceRecords, getPerformanceFilterOptions } =
-        await import("./sales-performance.server.ts");
+      const {
+        getSalesPerformance,
+        listPerformanceRecords,
+        getPerformanceFilterOptions,
+        reviseInquiryQuality,
+      } = await import("./sales-performance.server.ts");
+      const { revisePerformanceEventQuality } = await import("./performance-events.server.ts");
       for (const n of [0, 1])
         await query("INSERT INTO branches(id,slug,name) VALUES($1,$2,$3)", [
           id(500 + n),
@@ -238,6 +246,175 @@ test(
           );
         },
       );
+      const admin = { ...actor(0), roles: ["admin"] };
+      const scoped = { ...filters, branchId: id(500) };
+      await t.test(
+        "actual inquiry corrections append retained actor reason and reconcile the same scoped denominator",
+        async () => {
+          const before = await query("SELECT * FROM inquiries WHERE id=$1", [id(1)]);
+          const result = await reviseInquiryQuality(
+            { inquiryId: id(1), quality: "test", reason: "Owned verified test correction" },
+            admin,
+          );
+          assert.deepEqual(result, { inquiryId: id(1), affectedHkDay: "2026-09-30" });
+          const report = await getSalesPerformance(scoped, admin);
+          const records = await listPerformanceRecords(
+            { filters: scoped, drilldownKey: "inquiries" },
+            admin,
+          );
+          assert.equal(report.acquisition.inquiries.value, 3);
+          assert.deepEqual(records.records.map((r) => r.id).sort(), [id(2), id(3), id(4)]);
+          const raw = await query(
+            "SELECT quality FROM inquiry_quality_records WHERE inquiry_id=$1",
+            [id(1)],
+          );
+          assert.equal(raw[0].quality, "test");
+          assert.deepEqual(await query("SELECT * FROM inquiries WHERE id=$1", [id(1)]), before);
+          await reviseInquiryQuality(
+            { inquiryId: id(1), quality: "production", reason: "Owned verified genuine inquiry" },
+            admin,
+          );
+          assert.equal((await getSalesPerformance(scoped, admin)).acquisition.inquiries.value, 4);
+          const history = await query(
+            "SELECT quality,reason,changed_by::text FROM inquiry_quality_revisions WHERE inquiry_id=$1 ORDER BY id",
+            [id(1)],
+          );
+          assert.deepEqual(
+            history.map((r) => r.quality),
+            ["production", "test", "production"],
+          );
+          assert.ok(history.every((r) => r.changed_by === id(600)));
+          assert.equal(history[1].reason, "Owned verified test correction");
+          await assert.rejects(
+            query("DELETE FROM inquiry_quality_revisions WHERE inquiry_id=$1", [id(1)]),
+            /append-only/,
+          );
+        },
+      );
+      await t.test(
+        "actual response event corrections retain authoritative event identity and never turn assignment into response",
+        async () => {
+          const original = await query(
+            "SELECT * FROM performance_events WHERE event_type='human_response' AND inquiry_id=$1",
+            [id(2)],
+          );
+          assert.equal(original.length, 1);
+          const key = original[0].event_key;
+          const originalRevisions = await query(
+            "SELECT quality,reason,changed_by::text FROM performance_event_quality_revisions WHERE event_key=$1 ORDER BY id",
+            [key],
+          );
+          const result = await revisePerformanceEventQuality(
+            { eventKey: key, quality: "test", reason: "Owned verified test response evidence" },
+            admin,
+          );
+          assert.deepEqual(result, { eventKey: key, affectedHkDay: "2026-09-30" });
+          const report = await getSalesPerformance(scoped, admin);
+          assert.equal(report.acquisition.inquiries.value, 4);
+          assert.equal(report.followup.responseMedianMinutes.value, null);
+          assert.equal(report.followup.unanswered.value, 4);
+          assert.equal(report.followup.confirmedAssignments.value, 1);
+          assert.equal(
+            (await listPerformanceRecords({ filters: scoped, drilldownKey: "responses" }, admin))
+              .records.length,
+            0,
+          );
+          assert.deepEqual(
+            await query(
+              "SELECT * FROM performance_events WHERE event_type='human_response' AND inquiry_id=$1",
+              [id(2)],
+            ),
+            original,
+          );
+          await revisePerformanceEventQuality(
+            {
+              eventKey: key,
+              quality: "production",
+              reason: "Owned verified genuine response evidence",
+            },
+            admin,
+          );
+          assert.equal(
+            (await getSalesPerformance(scoped, admin)).followup.responseMedianMinutes.value,
+            15,
+          );
+          const revisions = await query(
+            "SELECT quality,reason,changed_by::text FROM performance_event_quality_revisions WHERE event_key=$1 ORDER BY id",
+            [key],
+          );
+          assert.deepEqual(
+            revisions.map((r) => r.quality),
+            [...originalRevisions.map((r) => r.quality), "test", "production"],
+          );
+          assert.deepEqual(revisions.slice(0, originalRevisions.length), originalRevisions);
+          assert.ok(revisions.every((r) => r.changed_by === id(600)));
+          await assert.rejects(
+            query("DELETE FROM performance_event_quality_revisions WHERE event_key=$1", [key]),
+            /append-only/,
+          );
+        },
+      );
+      await t.test(
+        "manager and invalid unknown missing-source corrections produce no quality revision",
+        async () => {
+          const counts = () =>
+            query(
+              "SELECT (SELECT count(*)::int FROM inquiry_quality_revisions) AS inquiry,(SELECT count(*)::int FROM performance_event_quality_revisions) AS event",
+            );
+          const before = await counts();
+          const [response] = await query(
+            "SELECT event_key FROM performance_events WHERE event_type='human_response' AND inquiry_id=$1",
+            [id(2)],
+          );
+          const bad = (status) => (err) => err instanceof Response && err.status === status;
+          await assert.rejects(
+            reviseInquiryQuality(
+              { inquiryId: id(1), quality: "test", reason: "Manager cannot revise quality" },
+              actor(0),
+            ),
+            bad(403),
+          );
+          await assert.rejects(
+            revisePerformanceEventQuality(
+              {
+                eventKey: response.event_key,
+                quality: "test",
+                reason: "Manager cannot revise quality",
+              },
+              actor(0),
+            ),
+            bad(403),
+          );
+          await assert.rejects(reviseInquiryQuality({}, admin), bad(400));
+          await assert.rejects(
+            reviseInquiryQuality(
+              { inquiryId: id(1), quality: "mystery", reason: "Owned unknown quality refused" },
+              admin,
+            ),
+            bad(400),
+          );
+          await assert.rejects(
+            revisePerformanceEventQuality(
+              { eventKey: response.event_key, quality: "unknown", reason: "" },
+              admin,
+            ),
+            bad(400),
+          );
+          await assert.rejects(
+            revisePerformanceEventQuality(
+              {
+                eventKey: `human_response:${id(999)}`,
+                quality: "test",
+                reason: "Owned missing event refused",
+              },
+              admin,
+            ),
+            bad(404),
+          );
+          assert.deepEqual(await counts(), before);
+        },
+      );
     });
+    assert.equal(networkGuard.mock.calls.length, 0);
   },
 );
