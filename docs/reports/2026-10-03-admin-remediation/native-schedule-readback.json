@@ -1,0 +1,88 @@
+{
+  "readAt": "2026-10-03T02:51:39.214961+00:00",
+  "runId": "37079390201",
+  "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37079390201",
+  "event": "schedule",
+  "sourceSha": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+  "source": "28hse",
+  "scope": "agent:540",
+  "createdAt": "2026-10-02T23:49:46Z",
+  "completedAt": "2026-10-03T00:19:02Z",
+  "nominalStartHkt": "2026-10-03T04:17:00+08:00",
+  "actualCreatedHkt": "2026-10-03T07:49:46+08:00",
+  "startDelaySeconds": 12766,
+  "stageResults": {
+    "preflight": "success",
+    "collect": "success",
+    "ingest": "success",
+    "publish": "success",
+    "verify": "success",
+    "record": "success"
+  },
+  "fullGate": {
+    "allowed": true,
+    "full": true,
+    "reasons": []
+  },
+  "pages": {
+    "sale": {
+      "firstPage": 1,
+      "terminalPage": 16,
+      "distinctListings": 217,
+      "detailsComplete": true
+    },
+    "rent": {
+      "firstPage": 1,
+      "terminalPage": 5,
+      "distinctListings": 58,
+      "detailsComplete": true
+    }
+  },
+  "requestBytes": 399176,
+  "requestSha256": "51030d8714f8dc2cc8a66ed2d465a3ef19fe73afabf1be09583056bc09032884",
+  "acceptedBaselineRequestByteMatch": true,
+  "rawSha256FromVerifiedWorkflowHandoff": "8fd6e20dfce77ea66c4f90aa819ae32407aff5ace2e01bbb9f77724557bf50ac",
+  "rawDownloadedAndRehashedLocally": false,
+  "receiptId": "3192c13a-5568-4884-8e3b-2226dc1c7ea4",
+  "receiptSummary": {
+    "advertisement_count": 275,
+    "duplicate_count": 0,
+    "fields_changed": 0,
+    "offer_count": 275,
+    "properties_changed": 0,
+    "properties_created": 0,
+    "rejected_count": 0,
+    "unchanged_properties": 163
+  },
+  "publicationCounts": {
+    "published": 0,
+    "ready": 0,
+    "held": 74,
+    "unknown": 0,
+    "alreadyPublic": 201,
+    "duplicateCanonical": 0,
+    "attempted": 0,
+    "eligibleBacklog": 0,
+    "oldestWaitingAt": null
+  },
+  "heldReasonCounts": {
+    "not_imported_draft": 41,
+    "staff_or_source_review": 19,
+    "area_or_estate_missing": 13,
+    "content_missing": 1
+  },
+  "publicReadback": {
+    "workflowStepSuccess": true,
+    "homepageHttpVerified": true,
+    "newPublishedDetailCount": 0,
+    "alreadyPublicDetailsIndependentlyVerified": false,
+    "browserVerified": false,
+    "currentCanonicalPriceComparison": "BLOCKED"
+  },
+  "eligibleBaselineNativeCycles": 1,
+  "requiredCycles": 3,
+  "remediationBranchProductionCycles": 0,
+  "runtimeGate": "NOT_READY",
+  "currentProductionDatabaseAuthority": "not independently reread outside that run",
+  "productionMutationByThisAgent": false
+}

@@ -1,0 +1,110 @@
+{
+  "codeSha": "a3f24df9921a573e1aa429262bc62cb0b3eb9074",
+  "evidenceLayer": "real-route-synthetic-control-plane-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realWorker": false,
+  "realProvider": false,
+  "results": [
+    {
+      "name": "failed command remains inline with support reference",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "safe retry reads back same job and audit independently",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "unknown command reads original job before another attempt",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "a read started before an unknown command cannot unlock another command",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "read failure preserves visible jobs and restricted actor cannot retry",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "failed command remains inline with support reference",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "safe retry reads back same job and audit independently",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "unknown command reads original job before another attempt",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "a read started before an unknown command cannot unlock another command",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "read failure preserves visible jobs and restricted actor cannot retry",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "failed command remains inline with support reference",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "safe retry reads back same job and audit independently",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "unknown command reads original job before another attempt",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "a read started before an unknown command cannot unlock another command",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "read failure preserves visible jobs and restricted actor cannot retry",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "failed command remains inline with support reference",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "safe retry reads back same job and audit independently",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "unknown command reads original job before another attempt",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "a read started before an unknown command cannot unlock another command",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "read failure preserves visible jobs and restricted actor cannot retry",
+      "status": "passed",
+      "width": 390
+    }
+  ]
+}

@@ -51,3 +51,7 @@ F01/F03/F04/F08：local修復 READY，正式 runtime/canary BLOCKED；F02/F07：
 本地補驗程式 `523a636c3c68bbd262cd67d2c2a5904d43270b99`：EP-16 failed CSV／subset summary及EP-17 disabled reporting原因已各自RED→GREEN；115 real-route＋14 wizard browser在此SHA exact重跑PASS、0SKIP。詳見[EP-16／17補驗](2026-10-03-admin-remediation/ep-16-17-local-readback.md)。這批沒有SQL/schema/provider/config變更，owned102原SHA分項證據保留；新的遠端CI在PR head再跑owned套件，不以舊測試SHA冒稱新來源已重跑。全部四批draft PR initial CI＋Preview成功；正式browser-staging仍SKIPPED而保持blocked。
 
 新execution為40 PASS／28 PARTIAL／14 BLOCKED，僅表示各行註明的本地／唯讀層次，不能代替全部正式用例；原歷史29／9／22不改。
+
+後續程式 `a3f24df9921a573e1aa429262bc62cb0b3eb9074`：EP-13 preview／非法值focus、EP-19 persistent error／unknown command須原job新讀回，四viewport48 browser PASS／0 SKIP；full85 owned property6＋Ops1 PASS／0 SKIP，control-plane105、properties Node29＋Bun27、operations Node17＋Bun8 PASS。typecheck/lint/build各自exit0，lint3 baseline warnings。之前owned102及EP-16/17證據仍保留各SHA；遠端PR head結果另記，不混算。詳見[EP-13／19](2026-10-03-admin-remediation/ep-13-19-local-readback.md)。
+
+CSV直接與原實作包比對，trace原 `verification_environment`／`blocker`恢復planned值，新 `execution_environment`／`execution_blocker`另列實際環境及限制，baseline29/9/22不動。1400 action IDs保持，尚未按完整動作關G11。native37079390201既有main完整cycle1/3，修復分支正式0/3；published0／held74／unknown0，只有首頁HTTPverify，詳細公開同版本驗收仍NOT_READY。[排程證據及界限](2026-10-03-property-sync-readiness.md)。
