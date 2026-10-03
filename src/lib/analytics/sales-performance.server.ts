@@ -21,21 +21,46 @@ import {
 import type { PerformanceReport } from "./sales-performance.types.ts";
 
 async function resolveBranchScope(actor: StaffAccess, requested: string | null) {
-  const admin = actor.roles.includes("admin");
-  if (!admin && !actor.roles.includes("manager")) throw new Response("Forbidden", { status: 403 });
+  const cachedAdmin = actor.roles.includes("admin");
+  if (!cachedAdmin && !actor.roles.includes("manager"))
+    throw new Response("Forbidden", { status: 403 });
+  const rows = await queryRows<{
+    branch_id: string | null;
+    current_admin: boolean;
+    actor_allowed: boolean;
+  }>(
+    `WITH actor_row AS MATERIALIZED (
+       SELECT id,branch_id FROM staff_users
+       WHERE id=$1::uuid AND auth_user_id=$2 AND active FOR SHARE
+     ), actor_roles AS MATERIALIZED (
+       SELECT r.role FROM staff_roles r JOIN actor_row a ON a.id=r.staff_user_id
+       WHERE r.role IN ('admin','manager') FOR SHARE OF r
+     ) SELECT (SELECT branch_id::text FROM actor_row) AS branch_id,
+       EXISTS(SELECT 1 FROM actor_roles WHERE role='admin') AS current_admin,
+       EXISTS(SELECT 1 FROM actor_roles) AS actor_allowed`,
+    [actor.staffId, actor.authUserId],
+  );
+  const current = rows[0];
+  if (!current?.actor_allowed) throw new Response("Forbidden", { status: 403 });
+  // Current grants can restrict a cached role; promotion needs a fresh authenticated actor.
+  const canCorrect = cachedAdmin && current.current_admin;
   let branch = requested;
-  if (!admin) {
-    const rows = await queryRows(
-      "SELECT branch_id::text AS branch_id FROM staff_users WHERE id=$1::uuid",
-      [actor.staffId],
-    );
-    const ownBranch = rows[0]?.branch_id;
-    if (typeof ownBranch !== "string" || (requested && requested !== ownBranch)) {
+  if (!canCorrect) {
+    if (typeof current.branch_id !== "string" || (requested && requested !== current.branch_id))
       throw new Response("Branch outside scope", { status: 403 });
-    }
-    branch = ownBranch;
+    branch = current.branch_id;
   }
-  return branch;
+  return { branch, canCorrect };
+}
+
+async function revalidatePerformanceScope(
+  actor: StaffAccess,
+  requested: string | null,
+  original: Awaited<ReturnType<typeof resolveBranchScope>>,
+) {
+  const current = await resolveBranchScope(actor, requested);
+  if (current.branch !== original.branch || current.canCorrect !== original.canCorrect)
+    throw new Response("Performance scope changed", { status: 403 });
 }
 
 export async function getSalesPerformance(
@@ -48,7 +73,8 @@ export async function getSalesPerformance(
   } catch {
     throw new Response("Invalid performance filters", { status: 400 });
   }
-  const branch = await resolveBranchScope(actor, filters.branchId);
+  const scope = await resolveBranchScope(actor, filters.branchId);
+  const { branch } = scope;
   const params = reportParams(filters, branch);
   // Separate source reads avoid multiplying enquiries, activities and credits.
   const inquiryRows = await queryRows(INQUIRY_ROWS_SQL, params.slice(0, 6));
@@ -74,7 +100,7 @@ export async function getSalesPerformance(
     throw new Response("Invalid backlog aggregate", { status: 503 });
   }
   const evidenceById = new Map(sourceRows.map((row) => [String(row.inquiryId), row]));
-  return calculateSalesPerformance({
+  const report = calculateSalesPerformance({
     inquiries: inquiryRows.map((row) => ({ ...row, ...evidenceById.get(String(row.id)) })),
     events: eventRows,
     deals: dealRows,
@@ -87,6 +113,8 @@ export async function getSalesPerformance(
     filters,
     asOf: new Date().toISOString(),
   });
+  await revalidatePerformanceScope(actor, filters.branchId, scope);
+  return report;
 }
 
 export async function listPerformanceRecords(
@@ -100,7 +128,8 @@ export async function listPerformanceRecords(
   } catch {
     throw new Response("Invalid performance filters", { status: 400 });
   }
-  const branch = await resolveBranchScope(actor, filters.branchId);
+  const scope = await resolveBranchScope(actor, filters.branchId);
+  const { branch } = scope;
   const params = reportParams(filters, branch);
   const inquiries = await queryRows(INQUIRY_ROWS_SQL, params.slice(0, 6));
   const ids = inquiries.map((row) => String(row.id));
@@ -118,8 +147,9 @@ export async function listPerformanceRecords(
     ids.length ? queryRows(SOURCE_EVIDENCE_SQL, [ids]) : Promise.resolve([]),
   ]);
   const evidenceById = new Map(sourceRows.map((row) => [String(row.inquiryId), row]));
+  let records;
   try {
-    return selectPerformanceRecords(
+    records = selectPerformanceRecords(
       {
         inquiries: inquiries.map((row) => ({ ...row, ...evidenceById.get(String(row.id)) })),
         events,
@@ -134,6 +164,8 @@ export async function listPerformanceRecords(
   } catch {
     throw new Response("Invalid performance cursor", { status: 400 });
   }
+  await revalidatePerformanceScope(actor, filters.branchId, scope);
+  return records;
 }
 
 export async function reviseInquiryQuality(
@@ -178,7 +210,8 @@ export async function reviseInquiryQuality(
 }
 
 export async function getPerformanceFilterOptions(actor: StaffAccess) {
-  const branch = await resolveBranchScope(actor, null);
+  const scope = await resolveBranchScope(actor, null);
+  const { branch } = scope;
   const [branchRows, staffRows] = await Promise.all([
     queryRows(
       `SELECT id::text AS id,name FROM branches WHERE $1::uuid IS NULL OR id=$1::uuid ORDER BY name,id LIMIT 200`,
@@ -191,8 +224,8 @@ export async function getPerformanceFilterOptions(actor: StaffAccess) {
       [branch],
     ),
   ]);
-  return {
-    canCorrect: actor.roles.includes("admin"),
+  const options = {
+    canCorrect: scope.canCorrect,
     branches: branchRows.map((row) => ({ id: String(row.id), name: String(row.name) })),
     staff: staffRows.map((row) => ({
       id: String(row.id),
@@ -200,4 +233,6 @@ export async function getPerformanceFilterOptions(actor: StaffAccess) {
       branchId: row.branchId === null ? null : String(row.branchId),
     })),
   };
+  await revalidatePerformanceScope(actor, null, scope);
+  return options;
 }

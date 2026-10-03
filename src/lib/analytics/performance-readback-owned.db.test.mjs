@@ -14,7 +14,13 @@ test(
     });
     await withOwnedPostgres(async ({ query, transaction, migrationCount }) => {
       assert.equal(migrationCount, 85);
-      await mockOwnedServerDb(mock, query, transaction);
+      let beforeRead = null;
+      const readQuery = async (sql, params) => {
+        if (beforeRead) await beforeRead(sql, params);
+        return query(sql, params);
+      };
+      await mockOwnedServerDb(mock, readQuery, transaction);
+      const { INQUIRY_ROWS_SQL } = await import("./sales-performance.queries.mjs");
       const {
         getSalesPerformance,
         listPerformanceRecords,
@@ -39,6 +45,10 @@ test(
             id(n === 1 ? 501 : 500),
           ],
         );
+      for (const n of [0, 1, 2])
+        await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [
+          id(600 + n),
+        ]);
       const actor = (n) => ({
         staffId: id(600 + n),
         authUserId: `owned-performance-actor-${n}`,
@@ -840,6 +850,122 @@ test(
           }
         },
       );
+      const readers = [
+        ["report", (access) => getSalesPerformance(filters, access)],
+        [
+          "records",
+          (access) => listPerformanceRecords({ filters, drilldownKey: "inquiries" }, access),
+        ],
+        ["options", (access) => getPerformanceFilterOptions(access)],
+      ];
+      const createReadActor = async (n, role = "manager", cachedRole = role) => {
+        const staff = id(n),
+          auth = `owned-performance-read-${n}`;
+        await query(
+          "INSERT INTO staff_users(id,auth_user_id,email,branch_id) VALUES($1,$2,$3,$4)",
+          [staff, auth, `${auth}@example.invalid`, id(500)],
+        );
+        await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,$2)", [staff, role]);
+        return { staffId: staff, authUserId: auth, roles: [cachedRole] };
+      };
+      const readHistory = async () => ({
+        inquiryQuality: await query("SELECT * FROM inquiry_quality_revisions ORDER BY id"),
+        eventQuality: await query("SELECT * FROM performance_event_quality_revisions ORDER BY id"),
+        events: await query("SELECT * FROM performance_events ORDER BY event_key"),
+        qualifications: await query("SELECT * FROM crm_lead_qualifications ORDER BY lead_id"),
+      });
+      for (const [readerIndex, [name, read]] of readers.entries()) {
+        for (const [stateIndex, state] of ["inactive", "revoked", "rebound"].entries()) {
+          await t.test(
+            `performance ${name} refuses current ${state} account despite cached manager`,
+            async () => {
+              const access = await createReadActor(760 + readerIndex * 3 + stateIndex);
+              const before = await readHistory();
+              if (state === "inactive")
+                await query("UPDATE staff_users SET active=false WHERE id=$1", [access.staffId]);
+              else if (state === "revoked")
+                await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [access.staffId]);
+              else
+                await query("UPDATE staff_users SET auth_user_id=$2 WHERE id=$1", [
+                  access.staffId,
+                  access.authUserId + "-new",
+                ]);
+              await assert.rejects(read(access), (e) => e instanceof Response && e.status === 403);
+              assert.deepEqual(await readHistory(), before);
+            },
+          );
+        }
+        await t.test(
+          `performance ${name} restricts cached admin to current manager branch`,
+          async () => {
+            const access = await createReadActor(790 + readerIndex, "admin");
+            await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [access.staffId]);
+            await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [
+              access.staffId,
+            ]);
+            const before = await readHistory(),
+              result = await read(access);
+            const raw = await query(
+              "SELECT i.id::text AS id FROM inquiries i JOIN inquiry_quality_records q ON q.inquiry_id=i.id AND q.quality='production' JOIN staff_users owner ON owner.id=i.assigned_agent_id WHERE owner.branch_id=$1 AND (i.created_at AT TIME ZONE 'Asia/Hong_Kong')::date='2026-09-30' ORDER BY i.id",
+              [id(500)],
+            );
+            assert.ok(raw.length > 0);
+            if (name === "report") assert.equal(result.acquisition.inquiries.value, raw.length);
+            else if (name === "records") {
+              assert.deepEqual(
+                result.records.map((r) => r.id).sort(),
+                raw.map((r) => r.id),
+              );
+              assert.ok(!result.records.some((r) => r.id === id(91)));
+            } else {
+              assert.equal(result.canCorrect, false);
+              assert.deepEqual(
+                result.branches.map((r) => r.id),
+                [id(500)],
+              );
+              assert.ok(
+                result.staff.length > 0 && result.staff.every((r) => r.branchId === id(500)),
+              );
+            }
+            assert.deepEqual(await readHistory(), before);
+          },
+        );
+        await t.test(
+          `performance ${name} revalidates current authority before output`,
+          async () => {
+            const access = await createReadActor(810 + readerIndex),
+              before = await readHistory();
+            let changed = false;
+            beforeRead = async (sql) => {
+              if (
+                name === "options" ? sql.includes("FROM branches WHERE") : sql === INQUIRY_ROWS_SQL
+              ) {
+                beforeRead = null;
+                changed = true;
+                if (name === "report")
+                  await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [access.staffId]);
+                else if (name === "records")
+                  await query("UPDATE staff_users SET auth_user_id=$2 WHERE id=$1", [
+                    access.staffId,
+                    access.authUserId + "-new",
+                  ]);
+                else
+                  await query("UPDATE staff_users SET branch_id=$2 WHERE id=$1", [
+                    access.staffId,
+                    id(501),
+                  ]);
+              }
+            };
+            try {
+              await assert.rejects(read(access), (e) => e instanceof Response && e.status === 403);
+              assert.equal(changed, true);
+              assert.deepEqual(await readHistory(), before);
+            } finally {
+              beforeRead = null;
+            }
+          },
+        );
+      }
     });
     assert.equal(networkGuard.mock.calls.length, 0);
   },
