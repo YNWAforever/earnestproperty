@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { AdminShell } from "@/components/admin/AdminShell";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -102,7 +103,11 @@ export const Route = createFileRoute("/admin/")({
 
 function AdminHome() {
   const { user } = useNeonAuth();
-  const identity = user?.id;
+  const { session, loading } = useStaffSession(user?.id ?? null);
+  const identity =
+    user && !loading && session?.status === "ok"
+      ? JSON.stringify([user.id, session.staffId, [...session.roles].sort()])
+      : undefined;
   const readOverview = useCallback(() => fetchAdminOverview(), []);
   const readTeam = useCallback(() => listAdminTeam({ data: { limit: 50 } }), []);
   const readHealth = useCallback(async () => (await fetchOperationsHealth()).data, []);
@@ -151,6 +156,7 @@ function AdminHome() {
             label="啟用團隊"
             loading={team.loading}
             error={team.error}
+            checkedAt={team.checkedAt}
             to="/admin/team"
             value={team.data?.counts.active}
           />
@@ -159,6 +165,7 @@ function AdminHome() {
             label="待處理邀請"
             loading={team.loading}
             error={team.error}
+            checkedAt={team.checkedAt}
             to="/admin/team"
             value={team.data?.counts.invited}
           />
@@ -167,6 +174,7 @@ function AdminHome() {
             label="開放查詢"
             loading={overview.loading}
             error={overview.error}
+            checkedAt={overview.checkedAt}
             to="/admin/leads"
             search={{ stage: "open" }}
             value={overview.data?.openLeads}
@@ -176,6 +184,7 @@ function AdminHome() {
             label="系統健康"
             loading={health.loading}
             error={health.error}
+            checkedAt={health.checkedAt}
             to="/admin/operations"
             value={health.data ? healthLabel(health.data.status) : undefined}
           />
@@ -184,6 +193,7 @@ function AdminHome() {
             label="目前公開物業"
             loading={overview.loading}
             error={overview.error}
+            checkedAt={overview.checkedAt}
             to="/admin/listings"
             search={{ publication: "public", status: "active" }}
             value={overview.data?.publicProperties}
@@ -193,6 +203,7 @@ function AdminHome() {
             label="公開租售盤"
             loading={overview.loading}
             error={overview.error}
+            checkedAt={overview.checkedAt}
             to="/admin/listings"
             search={{ publication: "public", status: "active" }}
             value={overview.data?.publicOffers}
@@ -202,6 +213,7 @@ function AdminHome() {
             label="待處理對話"
             loading={overview.loading}
             error={overview.error}
+            checkedAt={overview.checkedAt}
             to="/admin/whatsapp"
             search={{ status: "open" }}
             value={overview.data?.openConversations}
@@ -217,6 +229,7 @@ function AdminHome() {
           icon={AlertTriangle}
           loading={team.loading}
           error={team.error}
+          checkedAt={team.checkedAt}
         >
           {attention.length ? (
             <ul className="space-y-2 text-sm">
@@ -243,6 +256,7 @@ function AdminHome() {
           icon={ShieldCheck}
           loading={activity.loading}
           error={activity.error}
+          checkedAt={activity.checkedAt}
         >
           {staffActivity.length ? (
             <ul className="space-y-2 text-sm">
@@ -296,6 +310,7 @@ function OverviewMetricCard({
   to,
   loading,
   error,
+  checkedAt,
   search,
 }: {
   icon: React.ComponentType<{ className?: string }>;
@@ -305,6 +320,7 @@ function OverviewMetricCard({
   search?: { publication?: "public"; status?: "active" | "open"; stage?: "open" };
   loading: boolean;
   error: string | null;
+  checkedAt?: string;
 }) {
   return (
     <Link to={to} search={search}>
@@ -322,6 +338,7 @@ function OverviewMetricCard({
             {error ? (
               <p className="mt-2 text-xs text-destructive" role="alert">
                 {error}
+                <LastSuccessfulRead checkedAt={checkedAt} />
               </p>
             ) : null}
           </div>
@@ -339,6 +356,7 @@ function OperationalCard({
   icon: Icon,
   loading,
   error,
+  checkedAt,
   children,
 }: {
   id: string;
@@ -347,6 +365,7 @@ function OperationalCard({
   icon: React.ComponentType<{ className?: string }>;
   loading: boolean;
   error: string | null;
+  checkedAt?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -363,10 +382,20 @@ function OperationalCard({
         {error ? (
           <p className="text-sm text-destructive" role="alert">
             {error}
+            <LastSuccessfulRead checkedAt={checkedAt} />
           </p>
         ) : null}
         {!loading && !error ? children : null}
       </CardContent>
     </Card>
   );
+}
+
+function LastSuccessfulRead({ checkedAt }: { checkedAt?: string }) {
+  return checkedAt ? (
+    <span className="mt-1 block">
+      最後成功讀取 {new Date(checkedAt).toLocaleString("zh-HK", { timeZone: "Asia/Hong_Kong" })}
+      （香港時間）。
+    </span>
+  ) : null;
 }
