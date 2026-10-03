@@ -9,6 +9,9 @@ test(
   "campaign recovery preserves one original queue job and existing dispatch boundaries",
   { timeout: 120000 },
   async (t) => {
+    const network = t.mock.method(globalThis, "fetch", () => {
+      throw Error("Provider/network request forbidden in owned cancellation acceptance");
+    });
     await withOwnedPostgres(async ({ query, transaction }) => {
       await mockOwnedServerDb(mock, query, transaction);
       const wakes = [];
@@ -168,6 +171,81 @@ test(
           );
         },
       );
+      await t.test(
+        "repeated cancellation preserves an in-flight unknown recipient and the original job and audit",
+        async () => {
+          const current = await seed();
+          assert.equal((await queueAdminCampaign(current.campaign, actor)).ok, true);
+          await query(
+            "UPDATE whatsapp_campaign_recipients SET status='sending',dispatch_started_at=now(),error='owned response pending' WHERE id=$1",
+            [current.recipient],
+          );
+          const [pendingContact] = await query(
+            "INSERT INTO crm_contacts(name) VALUES('Owned undispatched recipient') RETURNING id",
+          );
+          const [pendingRecipient] = await query(
+            "INSERT INTO whatsapp_campaign_recipients(campaign_id,contact_id) VALUES($1,$2) RETURNING id",
+            [current.campaign, pendingContact.id],
+          );
+          const [before] = await query(
+            "SELECT status,dispatch_started_at,sent_at,external_message_id,error FROM whatsapp_campaign_recipients WHERE id=$1",
+            [current.recipient],
+          );
+          const jobs = await query(
+            "SELECT id,idempotency_key,payload FROM ops_jobs WHERE payload->>'campaignId'=$1",
+            [current.campaign],
+          );
+          assert.equal((await cancelAdminCampaign(current.campaign, actor)).ok, true);
+          assert.equal((await cancelAdminCampaign(current.campaign, actor)).ok, false);
+          assert.deepEqual(
+            (
+              await query(
+                "SELECT status,dispatch_started_at,sent_at,external_message_id,error FROM whatsapp_campaign_recipients WHERE id=$1",
+                [current.recipient],
+              )
+            )[0],
+            before,
+          );
+          assert.equal(
+            (
+              await query("SELECT status FROM whatsapp_campaign_recipients WHERE id=$1", [
+                pendingRecipient.id,
+              ])
+            )[0].status,
+            "cancelled",
+          );
+          assert.deepEqual(
+            await query(
+              "SELECT id,idempotency_key,payload FROM ops_jobs WHERE payload->>'campaignId'=$1",
+              [current.campaign],
+            ),
+            jobs,
+          );
+          assert.equal(
+            (
+              await query(
+                "SELECT id FROM audit_logs WHERE action='campaign.cancel' AND subject_id=$1",
+                [current.campaign],
+              )
+            ).length,
+            1,
+          );
+          assert.equal(
+            (
+              await query(
+                "SELECT id FROM audit_logs WHERE action='campaign.queue' AND subject_id=$1",
+                [current.campaign],
+              )
+            ).length,
+            1,
+          );
+          assert.equal(
+            (await query("SELECT count(*)::int n FROM whatsapp_outbound_intents"))[0].n,
+            0,
+          );
+        },
+      );
     });
+    assert.equal(network.mock.calls.length, 0);
   },
 );

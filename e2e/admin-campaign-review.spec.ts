@@ -10,6 +10,8 @@ declare global {
       queueMode: string;
       readFailure: boolean;
       releaseQueue: null | (() => void);
+      cancelMode: string;
+      releaseCancel: null | (() => void);
     };
     campaignReviewFixture: { changeActor: (id: string) => Promise<void> };
   }
@@ -100,7 +102,7 @@ test.afterEach(async ({ page }, info) => {
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("lost queue response")) {
     await page.screenshot({
-      path: `.audit/remediation-20261003/campaign-green-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/campaign-cancel-green-${page.viewportSize()!.width}.png`,
     });
   }
 });
@@ -131,9 +133,247 @@ const queueCalls = (page: Page) =>
       window as unknown as { noLinkFixture: { calls: { name: string; input?: unknown }[] } }
     ).noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue"),
   );
+const cancelCalls = (page: Page) =>
+  page.evaluate(() =>
+    (
+      window as unknown as { noLinkFixture: { calls: { name: string; input?: unknown }[] } }
+    ).noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignCancel"),
+  );
+const cancelRecovery = (page: Page) =>
+  page.getByRole("alert").filter({ hasText: "取消結果待核對" });
+const cancelJournal = (page: Page) =>
+  page.evaluate(() =>
+    Object.entries(sessionStorage).filter(([k]) => k.startsWith("earnest-campaign-cancel:")),
+  );
+async function openCancel(page: Page) {
+  await row(page).getByRole("button", { name: "取消 Campaign", exact: true }).click();
+  return page.getByRole("alertdialog", { name: "取消整個 Campaign？" });
+}
 for (const width of [1440, 1280, 768, 390])
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("cancel confirmation preserves accepted history and submits once while pending", async ({
+      page,
+    }) => {
+      await open(page);
+      const sending = await confirm(page);
+      await sending.getByRole("button", { name: "確認發送給 2 人", exact: true }).click();
+      await expect(row(page)).toContainText("已排隊");
+      await page.evaluate(() => {
+        const rows = JSON.parse(sessionStorage.getItem("no-link-fixture-campaigns")!);
+        rows[0].sent = 1;
+        rows[0].pending = 1;
+        rows[0].acceptedHistory = ["owned-accepted-history"];
+        sessionStorage.setItem("no-link-fixture-campaigns", JSON.stringify(rows));
+      });
+      await page.getByRole("button", { name: "重新整理", exact: true }).click();
+      let dialog = await openCancel(page);
+      await expect(dialog).toContainText("已發出的訊息無法收回");
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      expect(await cancelCalls(page)).toHaveLength(0);
+      dialog = await openCancel(page);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.cancelMode = "delay";
+      });
+      await dialog.getByRole("button", { name: "確認取消 Campaign", exact: true }).click();
+      await expect.poll(() => cancelCalls(page)).toHaveLength(1);
+      await expect(dialog.getByRole("button", { name: "處理中…", exact: true })).toBeDisabled();
+      await expect(dialog.getByRole("button", { name: "取消", exact: true })).toBeDisabled();
+      await page.evaluate(() => window.noLinkBlastFixture.releaseCancel!());
+      await expect(dialog).not.toBeVisible();
+      await expect(row(page)).toContainText("已取消");
+      await expect(row(page)).toContainText("已發送 1");
+      const saved = await page.evaluate(
+        () => JSON.parse(sessionStorage.getItem("no-link-fixture-campaigns")!)[0],
+      );
+      expect(saved).toMatchObject({
+        sent: 1,
+        pending: 0,
+        cancelled: 1,
+        cancelWrites: 1,
+        queueWrites: 1,
+        acceptedHistory: ["owned-accepted-history"],
+      });
+      expect(await cancelJournal(page)).toHaveLength(0);
+      await page.screenshot({
+        path: `.audit/remediation-20261003/campaign-cancel-confirmed-${width}.png`,
+      });
+      await page.reload();
+      await expect(row(page)).toContainText("已發送 1");
+      await expect(
+        row(page).getByRole("button", { name: "取消 Campaign", exact: true }),
+      ).toBeDisabled();
+      expect(await cancelCalls(page)).toHaveLength(0);
+    });
+    test("cancel late response cannot show success under another actor", async ({ page }) => {
+      await open(page);
+      const dialog = await openCancel(page);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.cancelMode = "delay";
+      });
+      await dialog.getByRole("button", { name: "確認取消 Campaign", exact: true }).click();
+      await expect.poll(() => cancelCalls(page)).toHaveLength(1);
+      await page.evaluate(() => window.campaignReviewFixture.changeActor("actor-b"));
+      await page.evaluate(() => window.noLinkBlastFixture.releaseCancel!());
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => JSON.parse(sessionStorage.getItem("no-link-fixture-campaigns")!)[0].cancelWrites,
+          ),
+        )
+        .toBe(1);
+      await expect(page.getByText("Campaign 已取消", { exact: false })).toHaveCount(0);
+      await expect(cancelRecovery(page)).toHaveCount(0);
+      await page.evaluate(() => window.campaignReviewFixture.changeActor("actor-a"));
+      await expect(cancelRecovery(page)).toBeVisible();
+    });
+    test("cancel lost response restores original read gate after reload and never retries", async ({
+      page,
+    }) => {
+      await open(page);
+      const dialog = await openCancel(page);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.cancelMode = "timeout";
+      });
+      await dialog.getByRole("button", { name: "確認取消 Campaign", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText("取消結果未能確認");
+      await expect(
+        dialog.getByRole("button", { name: "確認取消 Campaign", exact: true }),
+      ).toBeDisabled();
+      const journal = await cancelJournal(page);
+      expect(journal).toHaveLength(1);
+      const original = JSON.parse(journal[0][1]).campaignId;
+      expect((await cancelCalls(page))[0].input).toEqual({ id: original });
+      await page.reload();
+      await expect(cancelRecovery(page)).toBeVisible();
+      await expect(row(page)).toContainText("已取消");
+      expect(await cancelJournal(page)).toEqual(journal);
+      await cancelRecovery(page)
+        .getByRole("button", { name: "查回原 Campaign 取消狀態", exact: true })
+        .click();
+      await expect(cancelRecovery(page)).toHaveCount(0);
+      expect(await cancelJournal(page)).toHaveLength(0);
+      expect(await cancelCalls(page)).toHaveLength(0);
+      expect(
+        await page.evaluate(
+          () => JSON.parse(sessionStorage.getItem("no-link-fixture-campaigns")!)[0].cancelWrites,
+        ),
+      ).toBe(1);
+    });
+    test("cancel in-flight reload and nonterminal read keep the original journal and block sending", async ({
+      page,
+    }) => {
+      await open(page);
+      const dialog = await openCancel(page);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.cancelMode = "delay";
+      });
+      await dialog.getByRole("button", { name: "確認取消 Campaign", exact: true }).click();
+      await expect.poll(() => cancelCalls(page)).toHaveLength(1);
+      const journal = await cancelJournal(page);
+      expect(journal).toHaveLength(1);
+      await page.reload();
+      await expect(cancelRecovery(page)).toBeVisible();
+      await cancelRecovery(page)
+        .getByRole("button", { name: "查回原 Campaign 取消狀態", exact: true })
+        .click();
+      await expect(cancelRecovery(page)).toContainText("未能確認取消");
+      expect(await cancelJournal(page)).toEqual(journal);
+      await row(page).getByRole("button", { name: "預覽收件人", exact: true }).click();
+      await expect(row(page).getByRole("button", { name: "發送…", exact: true })).toBeDisabled();
+      await expect(
+        row(page).getByRole("button", { name: "取消 Campaign", exact: true }),
+      ).toBeDisabled();
+      expect(await queueCalls(page)).toHaveLength(0);
+      expect(await cancelCalls(page)).toHaveLength(0);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.readFailure = true;
+      });
+      await cancelRecovery(page)
+        .getByRole("button", { name: "查回原 Campaign 取消狀態", exact: true })
+        .click();
+      await expect(cancelRecovery(page)).toContainText("未能確認取消");
+      expect(await cancelJournal(page)).toEqual(journal);
+      await page.reload();
+      await expect(cancelRecovery(page)).toBeVisible();
+      expect(await cancelJournal(page)).toEqual(journal);
+    });
+    test("cancel storage failure submits no cancellation request", async ({ page }) => {
+      await open(page);
+      const dialog = await openCancel(page);
+      await page.evaluate(() => {
+        const write = Storage.prototype.setItem;
+        Storage.prototype.setItem = function (key, value) {
+          if (key.startsWith("earnest-campaign-cancel:"))
+            throw Error("Owned cancel journal unavailable");
+          write.call(this, key, value);
+        };
+      });
+      await dialog.getByRole("button", { name: "確認取消 Campaign", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toContainText("未有提交取消要求");
+      expect(await cancelCalls(page)).toHaveLength(0);
+      expect(await cancelJournal(page)).toHaveLength(0);
+    });
+    test("cancel definitive refusal keeps campaign status and clears only its operation journal", async ({
+      page,
+    }) => {
+      await open(page);
+      const dialog = await openCancel(page);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.cancelMode = "refused";
+      });
+      await dialog.getByRole("button", { name: "確認取消 Campaign", exact: true }).click();
+      await expect(dialog.getByRole("alert")).toBeVisible();
+      await expect(
+        dialog.getByRole("button", { name: "確認取消 Campaign", exact: true }),
+      ).toBeEnabled();
+      expect(await cancelCalls(page)).toHaveLength(1);
+      expect(await cancelJournal(page)).toHaveLength(0);
+      expect(
+        await page.evaluate(
+          () =>
+            JSON.parse(
+              sessionStorage.getItem("no-link-fixture-campaigns") ?? '[{"status":"review"}]',
+            )[0].status,
+        ),
+      ).toBe("review");
+      await expect(cancelRecovery(page)).toHaveCount(0);
+      await expect(page.getByText("Campaign 已取消", { exact: false })).toHaveCount(0);
+    });
+    test("cancel corrupt journal is retained and blocks mutation only for its actor", async ({
+      page,
+    }) => {
+      await open(page);
+      const key = "earnest-campaign-cancel:actor-a";
+      for (const raw of [
+        "{",
+        "{}",
+        JSON.stringify({ version: 2, campaignId: "60000000-0000-4000-8000-000000000001" }),
+      ]) {
+        await page.evaluate(({ key, raw }) => sessionStorage.setItem(key, raw), { key, raw });
+        await page.reload();
+        await expect(
+          page.getByRole("alert").filter({ hasText: "未能讀取本機取消操作記錄" }),
+        ).toBeVisible();
+        await expect(
+          row(page).getByRole("button", { name: "取消 Campaign", exact: true }),
+        ).toBeDisabled();
+        await row(page).getByRole("button", { name: "預覽收件人", exact: true }).click();
+        await expect(row(page).getByRole("button", { name: "發送…", exact: true })).toBeDisabled();
+        expect(await page.evaluate((key) => sessionStorage.getItem(key), key)).toBe(raw);
+        expect(await cancelCalls(page)).toHaveLength(0);
+        expect(await queueCalls(page)).toHaveLength(0);
+      }
+      await page.evaluate(() => window.campaignReviewFixture.changeActor("actor-b"));
+      await expect(
+        row(page).getByRole("button", { name: "取消 Campaign", exact: true }),
+      ).toBeEnabled();
+      await page.evaluate(() => window.campaignReviewFixture.changeActor("actor-a"));
+      await expect(
+        page.getByRole("alert").filter({ hasText: "未能讀取本機取消操作記錄" }),
+      ).toBeVisible();
+      expect(await cancelJournal(page)).toHaveLength(1);
+    });
     test("lost queue response survives reload and only reads the original campaign", async ({
       page,
     }) => {
