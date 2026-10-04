@@ -7198,5 +7198,25 @@
       "merge": false,
       "nativeScheduleTriggers": 0
     }
+  },
+  "ep14LeadsImeFollowup": {
+    "sourceSha": "32156f8abfa6e4df47c1eab32cc5be8445006da6",
+    "report": "docs\\reports\\2026-10-03-admin-remediation\\ep14-leads-ime-readback.json",
+    "dailyWorkPass": 124,
+    "newCasesPass": 32,
+    "independentPublisherPass": 32,
+    "selectedOwnedCompositionResetCurrentFilter": "READY",
+    "fullTaskAcceptance": "NOT_READY",
+    "formalExternal": "BLOCKED",
+    "oldRootsPreserved": 39,
+    "review": "C0/I1/M0; one authorfixpass closes Important; no secondreview",
+    "effects": {
+      "realSends": 0,
+      "applicationModelSpendUsd": 0,
+      "productionMigrations": 0,
+      "manualDeployments": 0,
+      "merge": false,
+      "nativeScheduleTriggers": 0
+    }
   }
 }
