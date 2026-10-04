@@ -4832,5 +4832,510 @@
         "sha256": "a1bf0993681c7e777f4fe6a5f35c4891768f379c4f4703578a75946655fb490a"
       }
     ]
+  },
+  "adminSessionBoundaryFollowup": {
+    "verifiedAt": "2026-10-04T07:12:27.019761+00:00",
+    "baseline": "110a8cee8a9ce0260474619121aedf006fe8fdc4",
+    "initialCodeSha": "4f91ec44e7b3f7a82c8d12bab21934c0ffdad414",
+    "verifiedCodeSha": "3c14cd06a9584363a6c02101f506faac813f3cd9",
+    "scope": "Master EP00-21 reconciled; EP12 resolved staff scope, unknown lookup gate and obsolete workspace continuations; actual route/store/Toaster with synthetic Auth/API",
+    "red": {
+      "redSummaryLimit": "Failure summary artifacts contain only partial results after aborted per-test recording; runner logs, not these partial JSONs, establish6 failed and5failed/1passed RED totals.",
+      "initialMasked": "4 passed / 2 failed; fixture replaced same-user Auth object and masked four defects; not accepted as valid RED",
+      "correctedScope": {
+        "failed": 6,
+        "passed": 0,
+        "skipped": 0
+      },
+      "reviewR1": {
+        "failed": 5,
+        "passed": 1,
+        "skipped": 0
+      },
+      "draftSelector": "Actual restored DOM value retained; exact getByLabel mismatched controlled label text. Semantic textbox and settled-animation bounding-box assertions retain same draft value."
+    },
+    "ownedBrowser": {
+      "pass": 92,
+      "fail": 0,
+      "skip": 0,
+      "widths": [
+        1440,
+        1280,
+        768,
+        390
+      ],
+      "perWidth": 23,
+      "realAuth": false,
+      "realDatabase": false,
+      "realProvider": false,
+      "screenshots": 12,
+      "sharedPass": 115,
+      "sameContextPositive": true,
+      "acceptedNotePreserved": true,
+      "postReleaseBarrier": "record note-return, drain next requestAnimationFrame, then require zero obsolete follow-on writes/reads/global toasts"
+    },
+    "ownedSQL": {
+      "pass": 4,
+      "fail": 0,
+      "skip": 0,
+      "environment": "owned disposable loopback PostgreSQL17; full85 migrations; independent scoped-list counts SQL readback",
+      "combinedWithBrowser": false,
+      "backendSourceUnchangedSinceBaseline": true
+    },
+    "unit": {
+      "commandCenterNode": 82,
+      "commandCenterBun": 8,
+      "teamNode": 95,
+      "teamBun": 31,
+      "harnessRepair": "Extracted actual addNote required new isWorkspaceCurrent port; constant true for existing same-context fixture only, all note assertions unchanged."
+    },
+    "static": {
+      "typecheck": "exact source commit PASS",
+      "lint": "PASS with three existing unrelated warnings",
+      "build": "PASS separately; own generated routeTree normalized identical HEAD restored",
+      "diffCheck": "PASS"
+    },
+    "review": {
+      "reviewHead": "4f91ec44e7b3f7a82c8d12bab21934c0ffdad414",
+      "critical": 0,
+      "important": 1,
+      "minor": 0,
+      "authorFixedImportant": 1,
+      "authorRemainingImportant": 0,
+      "secondReview": false,
+      "wholeBranchSample": {
+        "cumulativeChangedPaths": 210,
+        "exhaustive": false,
+        "focusedDiffFiles": [
+          "src/routes/admin.leads.tsx",
+          "src/components/admin/AdminShell.tsx",
+          "scripts/browser-fixtures/daily-work/auth.ts",
+          "scripts/browser-fixtures/daily-work/synthetic-api.ts",
+          "e2e/admin-daily-work.spec.ts"
+        ],
+        "additionalChangedSourceSamples": [
+          "src/lib/neon/admin-data.ts",
+          "src/lib/neon/admin-data.server.ts",
+          "src/lib/ai/live-agent.server.ts",
+          "src/lib/ai/knowledge-freshness.server.ts",
+          "src/lib/ai/knowledge.server.ts",
+          "src/lib/ai/crm-analysis-runs.server.ts",
+          "neon/migrations/20261003030000_crm_analysis_runs.sql",
+          "src/lib/ai/content-copilot-repository.server.ts",
+          "src/lib/mls/withdrawal-review.mjs",
+          "src/routes/admin.whatsapp.tsx",
+          "src/components/admin/WhatsappAiSuggestions.tsx"
+        ],
+        "supportingCurrentFiles": [
+          "src/components/admin/staff-session.ts",
+          "src/components/admin/whatsapp/ForwardedEnquiryForm.tsx",
+          "src/auth.ts",
+          "src/hooks/use-neon-auth.tsx"
+        ],
+        "depth": "All five focused diffs and relevant surrounding current code; Leads handlers/rendering/helpers and fixture/test flow read. Eleven other changed source paths sampled at sensitive boundaries. No exhaustive 210-path audit."
+      },
+      "independentProbe": [
+        {
+          "name": "Extracted actual saveLead actor switch continuation",
+          "result": "Confirmed R1; note actor-a -> update actor-b -> read actor-b",
+          "network": false,
+          "database": false
+        }
+      ],
+      "R1": "Single author RED-GREEN pass. Synchronous layout cleanup, generation and live staff fingerprint checks invalidate old action continuations after awaits. Already accepted note retained; no automatic replay."
+    },
+    "configurationDryRun": {
+      "code": "3c14cd06a9584363a6c02101f506faac813f3cd9",
+      "baseline": "110a8cee8a9ce0260474619121aedf006fe8fdc4",
+      "configurationSchemaMigrationPackageWorkflowDiff": "",
+      "existingMigrationCount": 85,
+      "latestExistingMigration": "20261003040000_content_proposal_source_guard.sql",
+      "newMigration": null,
+      "newRuntimeProviderIDs": [],
+      "ownedDB": "owned disposable loopback PostgreSQL17; full85 migrations applied by existing acceptance helper; four exact local readback assertions",
+      "DTOChanges": false,
+      "AuthProviderChanges": false,
+      "manualProductionDeploy": false,
+      "productionMigration": false,
+      "productionWrites": 0,
+      "providerSends": 0,
+      "applicationModelCalls": 0,
+      "rollback": "Limit affected private lead presentation before compatible UI revert; retain server ACL/read gate, actor draft journals, parser/receipt/outbound/provenance/protected edits; no whole DB restore"
+    },
+    "rulings": [
+      {
+        "id": "D1",
+        "reviewerDeclined": "Exhaustive semantic review of all 210 cumulative changed paths; only enumerated sample inspected.",
+        "rootRuling": "NOT_READY",
+        "reason": "Only 16 enumerated changed paths plus four supporting files inspected; no exhaustive cumulative audit.",
+        "costIfWrong": "Undetected cumulative regression"
+      },
+      {
+        "id": "D2",
+        "reviewerDeclined": "Real Neon Auth expiry, logout, revocation, deep-link and cross-tab behavior; synthetic Auth does not establish provider behavior.",
+        "rootRuling": "BLOCKED",
+        "reason": "Synthetic stable Auth/store does not establish actual provider expiry/logout/revocation/deep links/cross tabs.",
+        "costIfWrong": "False formal authorization"
+      },
+      {
+        "id": "D3",
+        "reviewerDeclined": "Branch-only scope changes absent the staff-session DTO and all route/role/flag combinations: NOT_READY.",
+        "rootRuling": "NOT_READY",
+        "reason": "Current staff DTO has user/staff/roles; no branch-only identity evidence or exhaustive route-role-flag matrix.",
+        "costIfWrong": "Cross-scope private presentation"
+      },
+      {
+        "id": "D4",
+        "reviewerDeclined": "Full shared-shell private state lifetime on every other admin route; hiding children does not invalidate parent route async work.",
+        "rootRuling": "NOT_READY",
+        "reason": "Leads lifetime is fixed; other parent route asynchronous work has not been audited exhaustively.",
+        "costIfWrong": "Stale mutation on another route"
+      },
+      {
+        "id": "D5",
+        "reviewerDeclined": "Combined true Auth + browser + PostgreSQL + provider Golden A/B/C journeys: BLOCKED.",
+        "rootRuling": "BLOCKED",
+        "reason": "Owned SQL and synthetic browser are separate layers, not one combined authenticated journey.",
+        "costIfWrong": "False integrated Golden proof"
+      },
+      {
+        "id": "D6",
+        "reviewerDeclined": "Real provider accepted/timeout/delivery/read/acknowledgement, destination identity and receipt reconciliation: BLOCKED.",
+        "rootRuling": "BLOCKED",
+        "reason": "No provider receipt, live destination or send exercise; accepted existing intents/history retained.",
+        "costIfWrong": "Wrong recipient or duplicate send"
+      },
+      {
+        "id": "D7",
+        "reviewerDeclined": "Real model quality, paid budgets, embeddings and deployed usage/cost: BLOCKED.",
+        "rootRuling": "BLOCKED",
+        "reason": "No paid application-model calls or semantic-quality/budget acceptance.",
+        "costIfWrong": "False quality or spend claim"
+      },
+      {
+        "id": "D8",
+        "reviewerDeclined": "Production migration compatibility/locking/load, worker runtime/schema/flags/app SHA alignment and release authorization: BLOCKED.",
+        "rootRuling": "BLOCKED",
+        "reason": "No production migration/deploy/runtime/flags/SHA/load acceptance; compatible UI-only rollback described.",
+        "costIfWrong": "Unsafe formal rollout"
+      },
+      {
+        "id": "D9",
+        "reviewerDeclined": "Property.hk authorised complete branch detail/media scopes and production full/comparable absence: BLOCKED; index/403 cannot prove withdrawal.",
+        "rootRuling": "BLOCKED",
+        "reason": "Property.hk requires authorised EPS/EPT/EPW/dt page1-terminal plus real detail/media; partial/403/index-only is not absence;132 held.",
+        "costIfWrong": "False withdrawal"
+      },
+      {
+        "id": "D10",
+        "reviewerDeclined": "Three repaired 28Hse native schedules and complete private receipts: NOT_READY; current reconciliation says 0/3.",
+        "rootRuling": "NOT_READY",
+        "reason": "Baseline1/3, repaired0/3, agent-triggered0. Natural success37160712576 lacks independently read complete private receipt.",
+        "costIfWrong": "Fabricated schedule acceptance"
+      },
+      {
+        "id": "D11",
+        "reviewerDeclined": "All 1400 source/business action mappings, real devices/IME/native clipboard/accessibility and exhaustive concurrent source phantoms: NOT_READY.",
+        "rootRuling": "NOT_READY",
+        "reason": "1400 mappings and408 old observations unchanged; selected Chromium viewports do not prove all actions, native IME/clipboard/devices/concurrency.",
+        "costIfWrong": "Missing action/device/race defect"
+      },
+      {
+        "id": "D12",
+        "reviewerDeclined": "Production repair/restore/canary/deployment, new customer data preservation under real rollback, and terminal missing-receipt/corrupt-journal support journeys: not executed.",
+        "rootRuling": "BLOCKED / NOT_READY",
+        "reason": "Owned full85/GoldenABC23/clone restore/replay already passed; production restore/canary blocked and terminal corrupt/missing journals unproven.",
+        "costIfWrong": "Unsafe restore or unresolved unknown"
+      },
+      {
+        "id": "D13",
+        "reviewerDeclined": "Historical suite results not independently rerun; no relabeling local SQL and synthetic UI as one integrated journey.",
+        "rootRuling": "AUTHOR_VERIFIED_SELECTED_ONLY",
+        "reason": "Author fresh selected browser92/shared115/SQL4/unit/static; reviewer only diff check and inert extracted handler probe, no suite rerun.",
+        "costIfWrong": "False independent verification attribution"
+      }
+    ],
+    "preservation": {
+      "priorRawHashes": 328,
+      "oldTrackedReports": 65,
+      "oldJSON": "deep identical",
+      "baseline": "29PASS/9FAIL/22BLOCKED",
+      "plannedNEW": 22,
+      "executionCases": 82,
+      "executionStatuses": "40PASS/28PARTIAL/14BLOCKED",
+      "mappingIDs": 1400,
+      "renderHistory": 408,
+      "CSVStatusPromotions": 0
+    },
+    "effects": {
+      "productionWrites": 0,
+      "productionMigrations": 0,
+      "manualDeploys": 0,
+      "merges": 0,
+      "providerSends": 0,
+      "applicationModelCalls": 0,
+      "anonymousFormalGET": "homepage/admin200 availability only; no deployed SHA/Auth capability proof"
+    },
+    "nativeSchedule": {
+      "baselineAccepted": 1,
+      "repairedAccepted": 0,
+      "required": 3,
+      "agentTriggered": 0
+    },
+    "capability": {
+      "READY": "Selected owned local staff scope/lifetime/readback contracts",
+      "NOT_READY": "Full EP12/route-role-action matrix, branch-only identity, all other parent lifetimes, three repaired native schedules",
+      "BLOCKED": "True Auth/provider/model/Property.hk full scopes and formal migration/release/production restore"
+    },
+    "logs": [
+      {
+        "file": "ep12-session-build.log",
+        "sha256": "076ba272189f6148b606b1f1a2638b887c3c97132b37bbc69a17a82e5b6c829b"
+      },
+      {
+        "file": "ep12-session-command-center.log",
+        "sha256": "9f4eadb09f6640e4cd9c8dd86a1df214f460f2e39ec885840502ae6f1b671023"
+      },
+      {
+        "file": "ep12-session-config-dry-run.json",
+        "sha256": "a353d2dcf2c36d80a2d1bb6e91159c1ad4fa54b5936b6257521ce726b2642b32"
+      },
+      {
+        "file": "ep12-session-draft-1280.png",
+        "sha256": "feb1725c9d17a84b064844e933acef3c2d39ad7cd20ffca210ab1abce4ca78a7"
+      },
+      {
+        "file": "ep12-session-draft-1440.png",
+        "sha256": "1b4a22e7110fae5da5d580bc0a5372a896d46d2a99a4ab95b6cde5d8770d907e"
+      },
+      {
+        "file": "ep12-session-draft-390.png",
+        "sha256": "8dc3f3e1384a1c5700f6100dbe213c07128dd37dab5e4cc5f67842b811b8f237"
+      },
+      {
+        "file": "ep12-session-draft-768.png",
+        "sha256": "ce47b6fd2ba8042059130c520900124b35e44475149fd2aba409402b331060a5"
+      },
+      {
+        "file": "ep12-session-draft-debug.log",
+        "sha256": "fcb49b28a99d6bd372abd313b75335027f6f0c44fe878dbe981bba782d6d76bf"
+      },
+      {
+        "file": "ep12-session-draft-layout.log",
+        "sha256": "a3469c178c68424135720192ce2537f5e54473db46559f66a76d7550fb5940ed"
+      },
+      {
+        "file": "ep12-session-exact-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+      },
+      {
+        "file": "ep12-session-exact-ui-summary.json",
+        "sha256": "c2250219d77b439aac4fcc3dc72bbbc88ffe6af5988f7b68a2da956c788f184a"
+      },
+      {
+        "file": "ep12-session-exact-ui.log",
+        "sha256": "690271c59a24bea7188c3bd2911687ac002f45bb9d327dca12487f126a9a6800"
+      },
+      {
+        "file": "ep12-session-final-config-dry-run.json",
+        "sha256": "afee8375b8ea78e8e00a20997c94f196b00670142ccccea4bd156afc877aea9b"
+      },
+      {
+        "file": "ep12-session-final-exact-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+      },
+      {
+        "file": "ep12-session-final-exact-ui-summary.json",
+        "sha256": "fd958131c2bf7819bc536f80303c2f0fdb355e07e25d36353f153dbc79fb6ec4"
+      },
+      {
+        "file": "ep12-session-final-exact-ui.log",
+        "sha256": "ba4dd77232c4958270d5b42e6f9141d256234e67386a0d01d1474d1b9db0313d"
+      },
+      {
+        "file": "ep12-session-final-full-ui.log",
+        "sha256": "33458ab9ae706053ef7b5bbdd4dafe4dbfae4d08c39cebfa98e2379306f62358"
+      },
+      {
+        "file": "ep12-session-first-full-summary.json",
+        "sha256": "19b49d445f6f41a612b1129e476352f5cff545745f872cb68b409c447b19e7ce"
+      },
+      {
+        "file": "ep12-session-focused-green-summary.json",
+        "sha256": "800891df31149e6813c6f926c8af87a627688c4a4dfb7a00d3db071d10365a90"
+      },
+      {
+        "file": "ep12-session-formal-readonly.json",
+        "sha256": "062161b4a10a36fc897362d833124ed35507d985a95fdde08ed11e33d82e1e3e"
+      },
+      {
+        "file": "ep12-session-format-final.log",
+        "sha256": "c6b5910c638e2affc7fbe69f1c60630bbefcb05c8730fdfce60de2feaaae0150"
+      },
+      {
+        "file": "ep12-session-format.log",
+        "sha256": "4c6f8410972a99e178ff896d95c9fa838e2131e6eab311463e7a1fcf4b381cfe"
+      },
+      {
+        "file": "ep12-session-full-ui.log",
+        "sha256": "d74d3c11d5daad84204644b6ef753e85de445ea7fe513a3bacb77ae2dd4b181e"
+      },
+      {
+        "file": "ep12-session-green-focused-ui.log",
+        "sha256": "262523604c6d073c56e004db6549596b5eaf9f6c733111170c48b52fd5737ee4"
+      },
+      {
+        "file": "ep12-session-hidden-1280.png",
+        "sha256": "cf04f43acecb6341346349b891938843ab240641c489b0c66cea6210fa3fc3bb"
+      },
+      {
+        "file": "ep12-session-hidden-1440.png",
+        "sha256": "952dba8ee3ed0973a48e5733454203a1a6407fa5442d380ffcb41ec41fa2f86f"
+      },
+      {
+        "file": "ep12-session-hidden-390.png",
+        "sha256": "9ab3dd5a05da50154b509d50065993831721494b9abe02c6827f809e230ae5e1"
+      },
+      {
+        "file": "ep12-session-hidden-768.png",
+        "sha256": "02a3b19620a770372284e4810132ffde0cf6990500aa349a445861b8d8161ed8"
+      },
+      {
+        "file": "ep12-session-initial-probe-summary.json",
+        "sha256": "bd767af5bfa9dc0fb8e35a9adca249d396f087048ca28aac063b654db8d26f72"
+      },
+      {
+        "file": "ep12-session-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+      },
+      {
+        "file": "ep12-session-owned-sql.log",
+        "sha256": "3a5038da5f41b478ac52f79af32e1365c3a64312506bb1151f2437964acb26dc"
+      },
+      {
+        "file": "ep12-session-r1-build.log",
+        "sha256": "e1ec93e75e32a69bfa2d776bbe4646a443d681a15924c9e664fa9a908f623e8d"
+      },
+      {
+        "file": "ep12-session-r1-command-center-final.log",
+        "sha256": "a965f3f5882db9df43b29545fe5550939ee1f28a6aa03d86b84a3cd0bcbcc662"
+      },
+      {
+        "file": "ep12-session-r1-command-center.log",
+        "sha256": "b1a01a4abb05d85fdd4b2a40fd2e90fbb1d5bca070c5fa5a12d3e0575da34f25"
+      },
+      {
+        "file": "ep12-session-r1-fixture-format.log",
+        "sha256": "0cb218955e7482be3f94645d13947a30b089683045b54541726dbfa458267465"
+      },
+      {
+        "file": "ep12-session-r1-focused-green-summary.json",
+        "sha256": "53511de4439b658835f1610de99988ce8dcc1a79df621bba73b7d2e5dc279488"
+      },
+      {
+        "file": "ep12-session-r1-format.log",
+        "sha256": "d818a6b3e44b7fa5bd559d804d5769a5f27cc991e670e0e0a2c8dc473b458370"
+      },
+      {
+        "file": "ep12-session-r1-full-ui-summary.json",
+        "sha256": "31369ec6bc1c5011cfa0892918cf75e796a8b9c7c20233539fb69238df9b0348"
+      },
+      {
+        "file": "ep12-session-r1-full-ui.log",
+        "sha256": "e39ba9331bae81782916058a8e49a50a468ef9cc7f79e8b3329ac711fb4ac627"
+      },
+      {
+        "file": "ep12-session-r1-green-ui.log",
+        "sha256": "321e31d8964b667531e900bfa36a8fb631a8428c3551526ffe3c96b6a34e0ce1"
+      },
+      {
+        "file": "ep12-session-r1-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+      },
+      {
+        "file": "ep12-session-r1-red-summary.json",
+        "sha256": "610fd6c322f4f0dd55c9846d78db20524f2133b4061925679751c7b1567e66ff"
+      },
+      {
+        "file": "ep12-session-r1-red-ui.log",
+        "sha256": "9e571a469e4bea478ec01bfa285fdda73be4d19b764289e031653a06314f91ca"
+      },
+      {
+        "file": "ep12-session-r1-shared-ui-summary.json",
+        "sha256": "502bcc336408ac24b09d492ffdf2458b5a7473379c032155ab47a2381348c037"
+      },
+      {
+        "file": "ep12-session-r1-shared-ui.log",
+        "sha256": "611dfe256e423704c2e24734137ec1c93222a5815b70315cfdef4cd29c7881dc"
+      },
+      {
+        "file": "ep12-session-r1-source-format.log",
+        "sha256": "0e4dcb489b0eec7ef1e1a6105da0d9a32eb5f06dcaab1ad6865343aff2032ece"
+      },
+      {
+        "file": "ep12-session-r1-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+      },
+      {
+        "file": "ep12-session-red-corrected-ui.log",
+        "sha256": "a83675ad74c625437a892f349cc42afc32c1cf12b91a731effe0a50eb3bec862"
+      },
+      {
+        "file": "ep12-session-red-summary.json",
+        "sha256": "bd767af5bfa9dc0fb8e35a9adca249d396f087048ca28aac063b654db8d26f72"
+      },
+      {
+        "file": "ep12-session-red-ui.log",
+        "sha256": "1ed95de602d3a6d4e588a6f70999951b6e4090ce187732d49841fed35b47b112"
+      },
+      {
+        "file": "ep12-session-restored-1280.png",
+        "sha256": "7627967031485d8dfa47730eb3dee5853642e153ae191eba0bc71a8007074efe"
+      },
+      {
+        "file": "ep12-session-restored-1440.png",
+        "sha256": "d8657b9c032116250347265178077b06b12731993e4122e7f67f2ff9e0ce4b9d"
+      },
+      {
+        "file": "ep12-session-restored-390.png",
+        "sha256": "b40f9d1281f2941e531a1ae971283cf6cf601600b9dc427422e00072f776d784"
+      },
+      {
+        "file": "ep12-session-restored-768.png",
+        "sha256": "d8d918ec48474e37b90b0fc3e8abe3544513aeb5a67d47378a2f03907be3628f"
+      },
+      {
+        "file": "ep12-session-shared-route-ui.log",
+        "sha256": "95297071d3e89e915b2061d3418381dfc90079b09e469ce26925403dddb639a7"
+      },
+      {
+        "file": "ep12-session-shared-ui-summary.json",
+        "sha256": "4331c8c4df08d587958b43d58dd2fdb90641a62d5fd0abb9ad802d4088a48deb"
+      },
+      {
+        "file": "ep12-session-start-remote-heads.txt",
+        "sha256": "1a038d11af27e3d03f1431eb2fb7732be6a21f378dbeaa2a066d609b15ad7f0e"
+      },
+      {
+        "file": "ep12-session-team.log",
+        "sha256": "a5d2ceaf7ca67eda28a3b108a420dbe3b394cba0adfc6d0828540c074bcbb135"
+      },
+      {
+        "file": "ep12-session-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+      },
+      {
+        "file": "review-ep12-session-package.md",
+        "sha256": "1a4024421d5abacf87a0fbb349487421c72f83870113f1fb88568bdff868e433"
+      },
+      {
+        "file": "review-ep12-session-report.md",
+        "sha256": "5c7887e0fd0887d298f3cafa0a74ee9b326f3ba8b3aaa68566a4f0ee78010b69"
+      },
+      {
+        "file": "review-ep12-session-summary.json",
+        "sha256": "638414b25f17db39bb576fee6441d9fd6528d70523ff2a5acd4d16d6cf1fd95b"
+      }
+    ]
   }
 }
