@@ -1,0 +1,505 @@
+{
+  "createdAt": "2026-10-04T20:38:56.360550+00:00",
+  "taskIds": ["EP-00", "EP-01", "EP-02", "EP-03", "EP-04", "EP-20", "EP-21"],
+  "findingIds": ["F01", "F03", "F04"],
+  "caseIds": [
+    "NEW-00",
+    "NEW-01",
+    "NEW-02",
+    "NEW-03",
+    "NEW-04",
+    "NEW-20",
+    "NEW-21",
+    "TEST-02",
+    "TEST-24",
+    "TEST-25",
+    "TEST-26",
+    "TEST-27",
+    "TEST-28",
+    "TEST-29",
+    "TEST-30",
+    "TEST-31",
+    "TEST-32",
+    "TEST-54",
+    "TEST-55",
+    "TEST-56",
+    "TEST-57",
+    "TEST-58"
+  ],
+  "gitSha": "29e839e50e0fa7af627fed6a24be67d62fef0377",
+  "status": "PRODUCTION_SCHEMA_VERIFIED_ONLY",
+  "testedAt": "2026-10-04T20:28:30.602782+00:00",
+  "appDeployment": {
+    "sha": "29e839e50e0fa7af627fed6a24be67d62fef0377",
+    "evidence": ".audit/remediation-20261003/merge-all-green-20261005/integration-readback.json",
+    "source": "prior independent Vercel metadata; no manual deployment in this step",
+    "httpDeploymentSha": "UNKNOWN"
+  },
+  "workerRevision": "UNKNOWN; not changed or dispatched in this step",
+  "schemaVersion": "20261003040000",
+  "environment": "Neon production dawn-meadow-79190048/br-polished-sea-aom4i1ct PostgreSQL18.6; owned clone br-mute-heart-aobbtsju18.6; exact-main GitHub37232450305",
+  "actorRole": "neondb_owner for authorized DDL; no application staff session or model/provider role canary",
+  "sourceRevision": "Immutable85 Git migration blobs at main29e839e; no source data edits",
+  "runOrRequestId": "37232450305",
+  "commandOrBrowserSteps": [
+    "owned clone npm run check:migration-drift RED1 -> npm run neon:migrate0 -> drift GREEN0",
+    "explicit human approval + fresh API/SQL identity + exact4 SHA256/blob preconditions",
+    "production npm run check:migration-drift RED1 -> npm run neon:migrate0 -> drift GREEN0",
+    "independent production catalog/legacy fingerprints compared to owned clone",
+    "gh workflow run migration-drift.yml --ref main: completed success at exact29e839e"
+  ],
+  "expected": "Only approved4 applied; all85 recorded; exact new catalog;84legacy table projections unchanged; independent GitHub drift success",
+  "actual": {
+    "completedAt": "2026-10-04T20:28:30.602782+00:00",
+    "mainSha": "29e839e50e0fa7af627fed6a24be67d62fef0377",
+    "projectId": "dawn-meadow-79190048",
+    "productionBranchId": "br-polished-sea-aom4i1ct",
+    "productionServerVersion": "18.6 (6569466)",
+    "backupBranchId": "br-empty-heart-ao0l70q3",
+    "backupExpiresAt": "2026-10-11T20:07:40Z",
+    "ownedBranchId": "br-mute-heart-aobbtsju",
+    "redExit": 1,
+    "applyExit": 0,
+    "greenExit": 0,
+    "exactFourApplied": [
+      "20261003010000_ai_knowledge_durable_repair.sql",
+      "20261003020000_crm_analysis_contract.sql",
+      "20261003030000_crm_analysis_runs.sql",
+      "20261003040000_content_proposal_source_guard.sql"
+    ],
+    "all85Recorded": true,
+    "catalogEqualsOwnedTest": true,
+    "legacyTables": 84,
+    "legacyFingerprintChangedTables": [],
+    "projection": "Exclude only the eight new nullable metadata columns",
+    "interpretation": "Live concurrent changes, if any, are recorded without restoring over accepted writes; DDL source contains no direct data backfill or deletion",
+    "effects": {
+      "productionMigrationsApplied": 4,
+      "directCustomerDml": 0,
+      "manualDeployments": 0,
+      "realSends": 0,
+      "applicationModelCalls": 0,
+      "workerDispatches": 0,
+      "nativeScheduleTriggers": 0
+    }
+  },
+  "authorization": {
+    "recordedAt": "2026-10-04T20:28:23.831325+00:00",
+    "directHumanAnswer": "批准這 4 份 production migrations，按上述目標與限制執行",
+    "targetProjectId": "dawn-meadow-79190048",
+    "targetBranchId": "br-polished-sea-aom4i1ct",
+    "proposal": ".audit/remediation-20261003/migration-drift-execution-20261005/production-approval-target.md",
+    "migrationCount": 4,
+    "recipients": 0,
+    "sends": 0,
+    "modelCalls": 0,
+    "modelBudgetUsd": 0,
+    "workerDispatches": 0,
+    "nativeScheduleTriggers": 0
+  },
+  "migrationFiles": [
+    {
+      "file": "neon/migrations/20261003010000_ai_knowledge_durable_repair.sql",
+      "bytes": 4923,
+      "sha256": "25c487da84f92fa72f38cf505c29bb3e236df9ce51776ab91746917cd6a2d80b",
+      "gitBlob": "2932b0fc37313ef93781046195845a6bd087fdfb",
+      "createTables": ["ai_knowledge_repair_requests"],
+      "functions": ["ep_queue_knowledge_repair", "ep_invalidate_knowledge_source"],
+      "triggers": [
+        "ep_knowledge_properties",
+        "ep_knowledge_members",
+        "ep_knowledge_groups",
+        "ep_knowledge_protected",
+        "ep_knowledge_source_state",
+        "ep_knowledge_estates",
+        "ep_knowledge_faqs",
+        "ep_knowledge_articles"
+      ],
+      "indexes": [],
+      "alterTables": [],
+      "addedColumns": [],
+      "directBackfillOrDeletion": false
+    },
+    {
+      "file": "neon/migrations/20261003020000_crm_analysis_contract.sql",
+      "bytes": 460,
+      "sha256": "488d549d1e7c0e2a25583dd9f4659478aa861e7ee0bde6e22315f85a21a40259",
+      "gitBlob": "80964eae5d72cd16b6769abadce5437d4d423bdd",
+      "createTables": [],
+      "functions": [],
+      "triggers": [],
+      "indexes": [],
+      "alterTables": ["crm_ai_profiles"],
+      "addedColumns": ["result_kind", "action_type", "validation_code"],
+      "directBackfillOrDeletion": false
+    },
+    {
+      "file": "neon/migrations/20261003030000_crm_analysis_runs.sql",
+      "bytes": 9011,
+      "sha256": "d0697440b8402e5d83445f7654ab0578ee352489133ad65d20104a8d4ec71873",
+      "gitBlob": "66ca9b08df47e821d5400652cb7f9353b57641fd",
+      "createTables": ["crm_ai_analysis_runs"],
+      "functions": [
+        "ep_crm_analysis_source_revision",
+        "ep_assert_crm_analysis_snapshot",
+        "ep_begin_crm_analysis_run",
+        "ep_assert_crm_analysis_run",
+        "ep_assert_crm_tag"
+      ],
+      "triggers": [],
+      "indexes": ["crm_ai_runs_lead_latest"],
+      "alterTables": ["crm_ai_profiles", "crm_ai_tags"],
+      "addedColumns": ["analysis_run_id", "analysis_run_id"],
+      "directBackfillOrDeletion": false
+    },
+    {
+      "file": "neon/migrations/20261003040000_content_proposal_source_guard.sql",
+      "bytes": 6176,
+      "sha256": "6e0a4720837afb6f07928874312dc3136351c2cadfa093c25d5eeed3a799d774",
+      "gitBlob": "26d8d23f1b525a6fa0634fceb77426c90af1c979",
+      "createTables": [],
+      "functions": [
+        "ep_content_source_revision",
+        "ep_assert_content_snapshot",
+        "ep_assert_content_proposal",
+        "ep_assert_content_dependencies_valid"
+      ],
+      "triggers": [],
+      "indexes": [],
+      "alterTables": ["ai_content_proposals", "ai_content_proposals", "ai_content_proposals"],
+      "addedColumns": ["source_db_revision", "requested_auth_user_id", "knowledge_dependencies"],
+      "directBackfillOrDeletion": false
+    }
+  ],
+  "schemaObjects": {
+    "tables": 2,
+    "columns": 8,
+    "functions": 11,
+    "triggers": 8,
+    "indexes": 1
+  },
+  "registry": {
+    "before": 81,
+    "after": 85,
+    "pending": []
+  },
+  "githubReadOnlyDrift": {
+    "conclusion": "success",
+    "databaseId": 37232450305,
+    "event": "workflow_dispatch",
+    "headSha": "29e839e50e0fa7af627fed6a24be67d62fef0377",
+    "jobs": [
+      {
+        "completedAt": "2026-10-04T20:32:21Z",
+        "conclusion": "success",
+        "databaseId": 111524845085,
+        "name": "check",
+        "startedAt": "2026-10-04T20:31:54Z",
+        "status": "completed",
+        "steps": [
+          {
+            "completedAt": "2026-10-04T20:31:55Z",
+            "conclusion": "success",
+            "name": "Set up job",
+            "number": 1,
+            "startedAt": "2026-10-04T20:31:54Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-04T20:31:57Z",
+            "conclusion": "success",
+            "name": "Run actions/checkout@v4",
+            "number": 2,
+            "startedAt": "2026-10-04T20:31:55Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-04T20:31:59Z",
+            "conclusion": "success",
+            "name": "Run actions/setup-node@v4",
+            "number": 3,
+            "startedAt": "2026-10-04T20:31:57Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-04T20:32:18Z",
+            "conclusion": "success",
+            "name": "Run npm ci",
+            "number": 4,
+            "startedAt": "2026-10-04T20:31:59Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-04T20:32:18Z",
+            "conclusion": "success",
+            "name": "Run node --test src/lib/control-plane/migration-versions.test.mjs",
+            "number": 5,
+            "startedAt": "2026-10-04T20:32:18Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-04T20:32:20Z",
+            "conclusion": "success",
+            "name": "Run npm run check:migration-drift",
+            "number": 6,
+            "startedAt": "2026-10-04T20:32:18Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-04T20:32:20Z",
+            "conclusion": "success",
+            "name": "Post Run actions/setup-node@v4",
+            "number": 11,
+            "startedAt": "2026-10-04T20:32:20Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-04T20:32:20Z",
+            "conclusion": "success",
+            "name": "Post Run actions/checkout@v4",
+            "number": 12,
+            "startedAt": "2026-10-04T20:32:20Z",
+            "status": "completed"
+          },
+          {
+            "completedAt": "2026-10-04T20:32:20Z",
+            "conclusion": "success",
+            "name": "Complete job",
+            "number": 13,
+            "startedAt": "2026-10-04T20:32:20Z",
+            "status": "completed"
+          }
+        ],
+        "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37232450305/job/111524845085"
+      }
+    ],
+    "status": "completed",
+    "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37232450305"
+  },
+  "backup": {
+    "id": "br-empty-heart-ao0l70q3",
+    "project_id": "dawn-meadow-79190048",
+    "name": "codex-ep-migration-backup-20261005",
+    "parent_id": "br-polished-sea-aom4i1ct",
+    "parent_lsn": "0/25005728",
+    "current_state": "ready",
+    "expires_at": "2026-10-11T20:07:40Z"
+  },
+  "ownedValidation": {
+    "targetBranchId": "br-mute-heart-aobbtsju",
+    "targetPostgres": "18.6 (4e955f5)",
+    "productionDerived": true,
+    "redExit": 1,
+    "applyExit": 0,
+    "greenExit": 0,
+    "exactFourApplied": [
+      "20261003010000_ai_knowledge_durable_repair.sql",
+      "20261003020000_crm_analysis_contract.sql",
+      "20261003030000_crm_analysis_runs.sql",
+      "20261003040000_content_proposal_source_guard.sql"
+    ],
+    "registryCount": 85,
+    "objects": {
+      "tables": 2,
+      "columns": 8,
+      "functions": 11,
+      "triggers": 8,
+      "indexes": 1
+    },
+    "legacyTablesUnchanged": 84,
+    "legacyRowFingerprintProjection": "Exclude only eight new nullable metadata columns",
+    "realSends": 0,
+    "modelCalls": 0,
+    "workerDispatches": 0
+  },
+  "comparisonLimit": "Owned/production bothPostgreSQL18.6 but provider build hashes differ. Fingerprints84public legacy tables/9628rows exclude only8new nullable metadata columns; managed Auth schema and concurrent background activity not claimed. No customer row values saved.",
+  "automaticRepair": "Future source mutations may enqueue ai.knowledge.repair@1; existing targeted automatic repair explicitly sets allowEmbeddings:false. No manual worker, repair, native schedule or model canary dispatched.",
+  "historicalCatalogHelperUnderclaim": "Raw catalog helper retains projectContextVerifiedByApi:false/branchIdVerifiedByApi:false; fresh authenticated API metadata plus actual SQL project/branch IDs were checked by execution wrapper. Its generic catalogFinding is not an unresolved partial apply: final registry85/pending[] and exact catalog are independently asserted. Raw files preserved.",
+  "configMigrationDiff": {
+    "sourceSqlChanged": false,
+    "newMigrationFiles": 0,
+    "applicationConfigChanges": 0,
+    "workerConfigChanges": 0,
+    "flagsChanged": 0,
+    "providerIdsChanged": 0,
+    "ownedSchemaDiffBytes": 31214,
+    "dryRunLimit": "Existing migration runner has no dry-run flag. Immutable file/SQL inspection and actual owned-clone RED/apply/GREEN supplied preview; production actual execution followed explicit approval."
+  },
+  "csvProof": {
+    "createdAt": "2026-10-04T20:38:56.360550+00:00",
+    "tables": [
+      {
+        "file": "EarnestProperty_Remediation_Traceability_2026-10-03.csv",
+        "rows": 22,
+        "originalColumns": 54,
+        "newColumns": 5,
+        "affectedRows": 7,
+        "allOriginalCellsPreserved": true,
+        "executionStatusCountsPreserved": {
+          "LOCAL_VERIFIED": 8,
+          "LOCAL_PARTIAL": 11,
+          "BLOCKED_ACCEPTANCE": 1,
+          "BLOCKED_EXTERNAL": 1,
+          "BLOCKED_RELEASE": 1
+        }
+      },
+      {
+        "file": "EarnestProperty_UAT_Matrix_2026-10-03.csv",
+        "rows": 82,
+        "originalColumns": 45,
+        "newColumns": 5,
+        "affectedRows": 22,
+        "allOriginalCellsPreserved": true,
+        "executionStatusCountsPreserved": {
+          "PASS": 40,
+          "PARTIAL": 28,
+          "BLOCKED": 14
+        }
+      }
+    ],
+    "historicalBaseline": {
+      "PASS": 29,
+      "BLOCKED": 22,
+      "FAIL": 9
+    },
+    "plannedNewCases": 22,
+    "executionEvidence": {
+      "oldRoots": 40,
+      "newRoots": 41,
+      "allOriginalRootsPreserved": true
+    }
+  },
+  "preservation": {
+    "originalFrozenRawHashObservationsVerifiedInBothCheckouts": 399,
+    "originalAudit": {
+      "PASS": 29,
+      "FAIL": 9,
+      "BLOCKED": 22
+    },
+    "plannedNewCases": 22,
+    "oldExecutionCounts": {
+      "PASS": 40,
+      "PARTIAL": 28,
+      "BLOCKED": 14
+    },
+    "historicalLimits": "27 PNGs and1historical summary raw bytes previously unavailable; original metadata retained, not reconstructed."
+  },
+  "capabilities": {
+    "approvedProductionSchemaAndMigrationParity": "READY",
+    "boundedOwnedRegressionContracts": "READY; prior independent evidence; no rerun claimed here",
+    "trueAuthProviderModelAndPropertyhkCanaries": "BLOCKED",
+    "fullRoleViewportJourneyAcceptance": "NOT_READY",
+    "native28hseThreeDailySchedules": "NOT_READY; last verified repaired0/3, agent-triggered0; no new schedule acceptance claimed",
+    "overallFormalRelease": "BLOCKED; remaining per-capability gates remain open"
+  },
+  "blocker": "Schema blocker resolved. True Auth/provider/model budget, full roles/routes/Golden combined journeys, private source receipts/native3days and Property.hk full scopes remain independently blocked/not ready.",
+  "cleanup": "Owned branch expires2026-10-05T20:11:40Z; no customer DML or destructive cleanup. Backup retained expires2026-10-11T20:07:40Z.",
+  "rollback": "Stop newly enabled scoped effects first, retain new tables/columns/dirty knowledge state, receipts/outbound intents and accepted new data; compatible app/config rollback preserves canonical read gate. Backup branch is a recovery reference, not authorization for production restore/drop/replay. Inspect per-file app_migrations after unknown outcomes; do not blindly replay applied DDL.",
+  "artifacts": [
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/append-only-ledger-proof.json",
+      "bytes": 1076,
+      "sha256": "3599953967df676efdee277ace23d743fd30472c9070d526459be0272cb02b55"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/backup-api-at-approval.json",
+      "bytes": 276,
+      "sha256": "19354b9637930fb6449764c859cb1249a2d51fa10bb806186c92977a107a1927"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/github-main-drift-run.json",
+      "bytes": 3013,
+      "sha256": "4072297179f362fbce9179a9c397855dc3e5bfdb6b02d523385dca789bfe8c5c"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/github-main-drift.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/github-main-drift.log",
+      "bytes": 30320,
+      "sha256": "95d244787dae63691a1c705cd5bf28db7d608645045defdd992d08f7573d56c0"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/history-EarnestProperty_Remediation_Traceability_2026-10-03.csv",
+      "bytes": 60452,
+      "sha256": "9f316384808bbdca133c3173b6e158ec189730f51345e14fd36d47131da2e6ac"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/history-EarnestProperty_UAT_Matrix_2026-10-03.csv",
+      "bytes": 121629,
+      "sha256": "d0c1ac578ef42351d325e6f7aa61e6867be06b0477a4a1b3c81fa799ff70d3a5"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/history-execution-evidence.json",
+      "bytes": 329098,
+      "sha256": "dac9478a1c61336bb978afc0fc6af20da115ed879da78cd84c5560b4ce52e549"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/human-production-approval.json",
+      "bytes": 523,
+      "sha256": "6a7570dc207e668e16f709fbeaf011d391be0f15d794749540bb5262a8384825"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-api-at-approval.json",
+      "bytes": 205,
+      "sha256": "e43a818311219b0ab68eb810b4dfa98af489c48182ab395038a5068208a1a6ae"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-apply.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-apply.log",
+      "bytes": 8890,
+      "sha256": "e06a073f7c31f46f0937db91912c2c1882390e7d2379d0d233e18b96bd9d2a12"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-catalog-after.json",
+      "bytes": 25519,
+      "sha256": "834cebbf2d56b5b950ee26eff29b56879ff6f1ca700466853d0d514ec9988bea"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-catalog-at-apply.json",
+      "bytes": 2643,
+      "sha256": "2ec3af28edecf004ace9a3b4fde07b324b4f69ba559021be9de4a83d3a97a047"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-data-after.json",
+      "bytes": 13831,
+      "sha256": "9887562761159bfc42b3ef7428b735a067e8a541401e4ad57bb91959a128f143"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-data-before.json",
+      "bytes": 13831,
+      "sha256": "968cbb85604647e19b13458f36faf813b23c8b7f9a7354eeef045bc0caf54c4a"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-green-drift.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-green-drift.log",
+      "bytes": 151,
+      "sha256": "1feeeafb333f44c9645b07782cf6d7fa846507fd17b1a24fcdfd8b5a656fe325"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-migration-green-readback.json",
+      "bytes": 1287,
+      "sha256": "09d50fd798a2276ff88df4bc6a8ce35b91d092a463b7b54910d33164ac8e9f8b"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-red-drift.exit",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "file": ".audit/remediation-20261003/migration-drift-production-approved-20261005/production-red-drift.log",
+      "bytes": 682,
+      "sha256": "ec703ef21c1e4eb40bef29abc89c82f07a0c3e23ccd3a47edb379528753dc410"
+    }
+  ]
+}
