@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -66,10 +66,30 @@ const control = "h-11 w-full rounded-md border bg-background px-3 text-sm";
 export function AdminPropertyWorkspace({
   initial,
   sourceId,
+  isWorkspaceCurrent,
+  onUnavailable,
 }: {
   initial: ManagedPropertyDetail;
   sourceId: string;
+  isWorkspaceCurrent: () => boolean;
+  onUnavailable: () => void;
 }) {
+  const active = useRef(false);
+  const lifetime = useRef(0);
+  useLayoutEffect(() => {
+    active.current = true;
+    const epoch = ++lifetime.current;
+    return () => {
+      active.current = false;
+      lifetime.current = epoch + 1;
+    };
+  }, []);
+  const isCurrent = useCallback(
+    (epoch = lifetime.current) => {
+      return active.current && epoch === lifetime.current && isWorkspaceCurrent();
+    },
+    [isWorkspaceCurrent],
+  );
   const [detail, setDetail] = useState(initial);
   const [tab, setTab] = useState<Tab>(
     () =>
@@ -124,19 +144,19 @@ export function AdminPropertyWorkspace({
     let cancelled = false;
     Promise.all([fetchAdminEstateOptions(), fetchAdminDistrictOptions(), fetchAdminAgents()])
       .then(([e, d, a]) => {
-        if (!cancelled) {
+        if (!cancelled && isCurrent()) {
           setEstates(e);
           setDistricts(d);
           setAgents(a);
         }
       })
       .catch(() => {
-        if (!cancelled) setError("選項未能載入，請重新整理。");
+        if (!cancelled && isCurrent()) setError("選項未能載入，請重新整理。");
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isCurrent]);
   function choose(next: Tab) {
     setTab(next);
     setShared(detail.shared);
@@ -146,21 +166,29 @@ export function AdminPropertyWorkspace({
     setError(null);
     setInvalidFields([]);
   }
-  async function reload() {
+  async function reload(epoch = lifetime.current) {
+    if (!isCurrent(epoch)) return false;
     const fresh = await fetchAdminManagedProperty({ data: { id: detail.propertyNo } });
-    if (!fresh) throw new Error("物業不存在或已失去存取權限");
+    if (!isCurrent(epoch)) return false;
+    if (!fresh) {
+      onUnavailable();
+      return false;
+    }
     setDetail(fresh);
     setShared(fresh.shared);
     setConfirmedFields([]);
     setOffer(offeringDraft(tab === "shared" ? null : fresh.offerings[tab]));
     setRefreshNeeded(false);
     setError(null);
+    return true;
   }
   async function save(
     scope: PropertyManagementInput["scope"],
     payload: PropertyManagementInput["payload"],
     expectedVersion = detail.version,
   ) {
+    const epoch = lifetime.current;
+    if (!isCurrent(epoch)) return;
     if (!Object.keys(payload).length) {
       toast.info("沒有需要儲存的修改");
       return;
@@ -173,11 +201,13 @@ export function AdminPropertyWorkspace({
     try {
       await saveAdminPropertyManagement({ data: input });
       saved = true;
+      if (!isCurrent(epoch)) return;
       setPending(null);
       setChangePreview(null);
-      await reload();
+      if (!(await reload(epoch)) || !isCurrent(epoch)) return;
       toast.success("已儲存物業資料");
     } catch (e) {
+      if (!isCurrent(epoch)) return;
       setError(
         saved
           ? "修改已儲存，但畫面未能更新。請重新載入後繼續。"
@@ -187,7 +217,7 @@ export function AdminPropertyWorkspace({
       );
       if (saved) setRefreshNeeded(true);
     } finally {
-      setBusy(false);
+      if (isCurrent(epoch)) setBusy(false);
     }
   }
   function validate(input: PropertyManagementInput) {
@@ -499,6 +529,7 @@ export function AdminPropertyWorkspace({
                 </label>
                 <ImageUploader
                   inputId="property-images"
+                  isWorkspaceCurrent={() => isCurrent()}
                   disabled={!editable || busy}
                   value={shared.images}
                   onUploadingChange={setUploading}
