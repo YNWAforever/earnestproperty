@@ -1272,6 +1272,164 @@ test(
           }
         },
       );
+      await t.test(
+        "qualification output gate preserves exact historical PostgreSQL timestamp precision",
+        async () => {
+          const access = await createReadActor(1812),
+            lead = id(71812),
+            inquiry = id(72812),
+            time = "2026-09-30T01:00:00.123456Z",
+            evidence = "Owned exact microsecond historical accepted source";
+          await query(
+            "INSERT INTO crm_leads(id,source,stage,assigned_agent_id) VALUES($1,'whatsapp','contacted',$2)",
+            [lead, access.staffId],
+          );
+          await query(
+            "INSERT INTO inquiries(id,source,name,created_at,assigned_agent_id,crm_lead_id) VALUES($1,'whatsapp','Owned precision readback','2026-09-30T00:00:00Z',$2,$3)",
+            [inquiry, access.staffId, lead],
+          );
+          await query(
+            "INSERT INTO inquiry_quality_revisions(inquiry_id,quality,reason,changed_by) VALUES($1,'production','Owned precise source verified',$2)",
+            [inquiry, access.staffId],
+          );
+          await query(
+            "INSERT INTO crm_lead_qualifications(lead_id,qualified_at,evidence,qualified_by) VALUES($1,$2,$3,$4)",
+            [lead, time, evidence, access.staffId],
+          );
+          const before = await readHistory(),
+            page = await readbackPage(access),
+            record = page.records.find((r) => r.id === inquiry);
+          assert.deepEqual(record.qualification, {
+            qualifiedAt: "2026-09-30T01:00:00.123Z",
+            evidence,
+            eventKey: `lead_qualified:${lead}`,
+          });
+          assert.ok(
+            !JSON.stringify(page).includes("123456"),
+            "private SQL witness is not a DTO field",
+          );
+          assert.deepEqual(await readHistory(), before);
+          const [raw] = await query(
+            "SELECT extract(microseconds FROM qualified_at)::integer AS precision FROM crm_lead_qualifications WHERE lead_id=$1",
+            [lead],
+          );
+          assert.equal(raw.precision, 123456);
+        },
+      );
+      const finalSourceCases = [
+        ["lead owner leaves branch", "manager", null, "lead-foreign", 409],
+        ["inquiry owner leaves branch", "manager", null, "inquiry-foreign", 409],
+        ["source owner's branch changes", "manager", null, "owner-branch", 409],
+        ["inquiry loses lead link", "manager", null, "unlink", 409],
+        ["inquiry switches to another accepted lead", "manager", null, "relink", 409],
+        ["lead becomes unassigned", "manager", null, "unassign", 409],
+        ["branch-filtered admin loses source scope", "admin", id(500), "lead-foreign", 409],
+        ["global admin retains own source after transfer", "admin", null, "lead-foreign", null],
+        [
+          "manager retains own source after same-branch transfer",
+          "manager",
+          null,
+          "lead-local",
+          null,
+        ],
+        ["stage correction preserves accepted source", "manager", null, "stage", null],
+        ["current actor is revoked after source selection", "manager", null, "revoke", 403],
+      ];
+      for (const [index, [name, role, branchId, change, status]] of finalSourceCases.entries()) {
+        await t.test(`qualification output gate ${name}`, async () => {
+          const n = 1800 + index,
+            owner = await createReadActor(1900 + index),
+            fixture = await seedReadback(n, { owner: owner.staffId });
+          if (role === "admin") {
+            await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'admin')", [
+              fixture.access.staffId,
+            ]);
+            fixture.access.roles = ["admin"];
+          }
+          const replacement = id(70000 + n);
+          if (change === "relink") {
+            await query(
+              "INSERT INTO crm_leads(id,source,stage,assigned_agent_id) VALUES($1,'whatsapp','contacted',$2)",
+              [replacement, owner.staffId],
+            );
+            await qualifyLeadForPerformance(
+              {
+                leadId: replacement,
+                qualifiedAt: fixture.expected.qualifiedAt,
+                evidence: "Owned distinct replacement accepted source evidence",
+              },
+              fixture.access,
+            );
+          }
+          const before = await readHistory();
+          let authorityChecks = 0,
+            metadataSelected = false,
+            changed = false;
+          beforeRead = async (sql) => {
+            if (sql.includes('q.qualified_at AS "qualifiedAt"')) metadataSelected = true;
+            if (sql.includes("AS actor_allowed") && ++authorityChecks === 2) {
+              beforeRead = null;
+              assert.equal(metadataSelected, true, "real qualification SELECT already completed");
+              changed = true;
+              if (change === "lead-foreign" || change === "lead-local" || change === "unassign")
+                await query("UPDATE crm_leads SET assigned_agent_id=$2 WHERE id=$1", [
+                  fixture.lead,
+                  change === "unassign" ? null : id(change === "lead-local" ? 600 : 601),
+                ]);
+              else if (change === "inquiry-foreign")
+                await query("UPDATE inquiries SET assigned_agent_id=$2 WHERE id=$1", [
+                  fixture.inquiry,
+                  id(601),
+                ]);
+              else if (change === "owner-branch")
+                await query("UPDATE staff_users SET branch_id=$2 WHERE id=$1", [
+                  owner.staffId,
+                  id(501),
+                ]);
+              else if (change === "unlink" || change === "relink")
+                await query("UPDATE inquiries SET crm_lead_id=$2 WHERE id=$1", [
+                  fixture.inquiry,
+                  change === "unlink" ? null : replacement,
+                ]);
+              else if (change === "stage")
+                await query("UPDATE crm_leads SET stage='new' WHERE id=$1", [fixture.lead]);
+              else if (change === "revoke")
+                await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [
+                  fixture.access.staffId,
+                ]);
+            }
+          };
+          try {
+            const read = () =>
+              listPerformanceRecords(
+                { filters: { ...filters, branchId }, drilldownKey: "inquiries" },
+                fixture.access,
+              );
+            if (status)
+              await assert.rejects(read(), (e) => e instanceof Response && e.status === status);
+            else {
+              const record = (await read()).records.find((r) => r.id === fixture.inquiry);
+              assert.deepEqual(record.qualification, fixture.expected);
+            }
+            assert.equal(changed, true);
+            assert.deepEqual(await readHistory(), before);
+            if (status === 409) {
+              const current = (await read()).records.find((r) => r.id === fixture.inquiry);
+              assert.ok(!current || current.qualification?.evidence !== fixture.expected.evidence);
+              if (change === "relink") {
+                assert.equal(current.leadId, replacement);
+                assert.equal(
+                  current.qualification.evidence,
+                  "Owned distinct replacement accepted source evidence",
+                );
+              }
+              assert.deepEqual(await readHistory(), before);
+            }
+          } finally {
+            beforeRead = null;
+          }
+        });
+      }
       const qualityFixture = async (kind, n) => {
         const access = await createReadActor(n, "admin"),
           inquiry = id(50000 + n);
