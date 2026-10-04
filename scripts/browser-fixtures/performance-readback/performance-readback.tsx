@@ -12,6 +12,9 @@ state.changeContext = async (actor, binding = "staff-a", role = "manager", denie
   changeActor(actor);
   await staffSessionStore.refresh(actor);
 };
+state.beginRecheck = () => {
+  void staffSessionStore.refresh(state.actor);
+};
 const root = createRootRoute({ component: () => <Outlet /> });
 const router = createRouter({
   routeTree: root.addChildren([

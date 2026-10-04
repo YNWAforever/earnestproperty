@@ -47,9 +47,9 @@ export const Route = createFileRoute("/admin/analytics")({
 });
 function AdminAnalytics() {
   const { user } = useNeonAuth();
-  const { session, loading } = useStaffSession(user?.id ?? null);
+  const { session } = useStaffSession(user?.id ?? null);
   const identity =
-    user && !loading && session?.status === "ok"
+    user && session?.status === "ok"
       ? JSON.stringify([user.id, session.staffId, [...session.roles].sort()])
       : null;
   if (
