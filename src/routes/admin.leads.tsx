@@ -202,6 +202,9 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
   const filters: LeadFilters = useMemo(() => ({ ...defaultFilters, ...search }), [search]);
   const [queryDraft, setQueryDraft] = useState(filters.query);
+  const [queryIsComposing, setQueryIsComposing] = useState(false);
+  const queryCompositionActive = useRef(false);
+  const queryResetRevision = useRef(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStage, setBulkStage] = useState("");
   const [bulkAgentId, setBulkAgentId] = useState("");
@@ -216,15 +219,26 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
   }, [filters.query]);
 
   useEffect(() => {
-    if (queryDraft === filters.query) return;
+    if (queryIsComposing || queryDraft === filters.query) return;
+    const resetRevision = queryResetRevision.current;
     const timer = window.setTimeout(() => {
-      setFilters((current) => ({ ...current, query: queryDraft }), { replace: true });
+      // Composition and explicit reset can arrive before passive cleanup.
+      if (!queryCompositionActive.current && resetRevision === queryResetRevision.current)
+        setFilters((current) => ({ ...current, query: queryDraft }), { replace: true });
     }, 300);
     return () => window.clearTimeout(timer);
-    // setFilters is redeclared each render; depending on it would re-arm the
-    // timer continuously.
+    // Re-arm against the whole filter snapshot so pending text cannot restore
+    // an older stage/agent filter. setFilters is redeclared on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryDraft, filters.query]);
+  }, [queryDraft, filters, queryIsComposing]);
+  function resetFilters() {
+    // Invalidate an already queued callback before the effect cleans up.
+    queryResetRevision.current += 1;
+    queryCompositionActive.current = false;
+    setQueryIsComposing(false);
+    setQueryDraft(defaultFilters.query);
+    setFilters(defaultFilters);
+  }
   function setFilters(
     updater: LeadFilters | ((current: LeadFilters) => LeadFilters),
     options: { replace?: boolean } = {},
@@ -865,6 +879,15 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
               <Input
                 value={queryDraft}
                 onChange={(event) => setQueryDraft(event.target.value)}
+                onCompositionStart={() => {
+                  queryCompositionActive.current = true;
+                  setQueryIsComposing(true);
+                }}
+                onCompositionEnd={(event) => {
+                  queryCompositionActive.current = false;
+                  setQueryDraft(event.currentTarget.value);
+                  setQueryIsComposing(false);
+                }}
                 className="h-11 pl-9 lg:h-9"
                 placeholder="搜尋客戶、電話、放盤"
                 aria-label="搜尋客戶查詢"
@@ -908,7 +931,7 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
               variant="ghost"
               size="sm"
               className="h-11 lg:h-9"
-              onClick={() => setFilters(defaultFilters)}
+              onClick={resetFilters}
             >
               <RotateCcw className="h-4 w-4" />
               重設
@@ -1009,7 +1032,7 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
           title="沒有符合條件的客戶查詢"
           description="搜尋及篩選已套用至全部可查看的查詢。可清除篩選再試。"
           action={
-            <Button variant="outline" size="sm" onClick={() => setFilters(defaultFilters)}>
+            <Button variant="outline" size="sm" onClick={resetFilters}>
               <RotateCcw className="h-4 w-4" />
               清除篩選
             </Button>
