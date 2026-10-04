@@ -42,3 +42,6 @@ Capability：本地 deterministic/owned DB/readback 契約按個別 evidence REA
 Formal 調整仍須具體可審閱目標／差異／recipient/count/budget。此 continuation 未 merge、deploy、send、花費 application-model budget 或套 production migration。
 
 本次 source4f91ec4＋3c14cd0完成 EP-12 step4 的選定 scope／unknown gate／過期 action continuation 修复。唯一 review Important 已由作者一輪 RED→GREEN 修正，沒有二次審閱；最終92 UI、115 shared UI、4 owned SQL及分開 typecheck/build 通過。完整 EP-12仍 PARTIAL，詳見 [ep-12-session-workspace-isolation.md](ep-12-session-workspace-isolation.md)。
+
+
+EP13 continuation BASEf220fce5dbf9c6737e3961f69abeb6b0e543ebfb→source82a03ec470faaffdcc1d759292b943e6d4823fed: selected step4 property scope/lifetime gap red20UI/2pure→exact136UI/115shared/20Ops/40staff/6ownedSQL/29Node+30Bun;separate staticPASS. Resolved membership gates current list/editor, stale callbacks stop bulk/link/save/upload continuations and preserve accepted effects. One sampled wholebranch review C0/I1/M0, author fixedI1, no secondreview; all declinedrulings recorded. FullEP13 remainsLOCAL_PARTIAL/NEW13PARTIAL; task counts/status baselines preserved. Details: [ep-13-property-scope-lifetime.md](ep-13-property-scope-lifetime.md).
