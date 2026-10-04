@@ -260,6 +260,8 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   const inboxQuery = typeof search.q === "string" ? search.q : "";
   const inboxStatus = typeof search.status === "string" ? search.status : "all";
   const [queryDraft, setQueryDraft] = useState(inboxQuery);
+  const [queryIsComposing, setQueryIsComposing] = useState(false);
+  const queryCompositionActive = useRef(false);
 
   const setWhatsappSearch = useCallback(
     (
@@ -285,16 +287,15 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
     setQueryDraft(inboxQuery);
   }, [inboxQuery]);
 
-  // Debounced: bound directly to the router, a Chinese IME loses characters
-  // typed faster than the navigation commits.
+  // Keep uncommitted IME candidates local, including pauses longer than the
+  // debounce. The ref also stops a queued old timer before React effect cleanup.
   useEffect(() => {
-    if (queryDraft === inboxQuery) return;
-    const timer = window.setTimeout(
-      () => setWhatsappSearch({ q: queryDraft.trim() || undefined }),
-      300,
-    );
+    if (queryIsComposing || queryDraft === inboxQuery) return;
+    const timer = window.setTimeout(() => {
+      if (!queryCompositionActive.current) setWhatsappSearch({ q: queryDraft.trim() || undefined });
+    }, 300);
     return () => window.clearTimeout(timer);
-  }, [inboxQuery, queryDraft, setWhatsappSearch]);
+  }, [inboxQuery, queryDraft, queryIsComposing, setWhatsappSearch]);
   const [replyError, setReplyError] = useState<string | null>(null);
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
@@ -1075,6 +1076,15 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
             <Input
               value={queryDraft}
               onChange={(event) => setQueryDraft(event.target.value)}
+              onCompositionStart={() => {
+                queryCompositionActive.current = true;
+                setQueryIsComposing(true);
+              }}
+              onCompositionEnd={(event) => {
+                queryCompositionActive.current = false;
+                setQueryDraft(event.currentTarget.value);
+                setQueryIsComposing(false);
+              }}
               placeholder="搜尋姓名、電話、樓盤或訊息"
               aria-label="搜尋 WhatsApp 對話"
               className="h-11 w-full sm:w-56 lg:h-9"
