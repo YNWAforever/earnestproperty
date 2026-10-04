@@ -23,6 +23,8 @@ const ids = {
   b: "10000000-0000-4000-8000-000000000002",
 };
 let server: Server, origin: string;
+const evidencePrefix = process.env.EP_ACCEPTANCE_EVIDENCE_PREFIX ?? "ep20-keyboard";
+assert.match(evidencePrefix, /^[a-z0-9-]{1,80}$/, "Safe owned evidence filename prefix");
 const results: { name: string; width: number; height: number; status: string }[] = [];
 const errors = new WeakMap<Page, string[]>();
 
@@ -68,7 +70,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/ep13-20-ci-compat-mobile-workspace-browser-summary.json",
+    `.audit/remediation-20261003/${evidencePrefix}-mobile-workspace-browser-summary.json`,
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -193,6 +195,191 @@ async function finish(page: Page, id: string, ordinal: number, outcome: string) 
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("keyboard Enter and Escape return to the conversation opener with focus trapped", async ({
+      page,
+    }) => {
+      await open(page);
+      if (width < 1024)
+        await page
+          .getByRole("button", { name: "關閉", exact: true })
+          .filter({ visible: true })
+          .first()
+          .click();
+      const opener = page.getByRole("button").filter({ hasText: "合成客戶甲" });
+      await opener.focus();
+      await page.keyboard.press("Enter");
+      await expect(reply(page)).toBeVisible();
+      if (width < 1024) {
+        const dialog = page.getByRole("dialog");
+        await expect(dialog).toBeVisible();
+        await page.keyboard.press("Tab");
+        await page.keyboard.press("Shift+Tab");
+        expect(
+          await page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))),
+        ).toBe(true);
+        await page.keyboard.press("Escape");
+        await expect(dialog).toBeHidden();
+      }
+      await expect(opener).toBeFocused();
+    });
+    test("keyboard close and reopen keep the original reply draft and current conversation", async ({
+      page,
+    }) => {
+      await open(page);
+      if (width < 1024)
+        await page
+          .getByRole("button", { name: "關閉", exact: true })
+          .filter({ visible: true })
+          .first()
+          .click();
+      const opener = page.getByRole("button").filter({ hasText: "合成客戶甲" });
+      await opener.focus();
+      await page.keyboard.press("Enter");
+      await expect(reply(page)).toBeVisible();
+      const draft = "原客戶甲中文草稿 English keyboard draft ".repeat(6);
+      await reply(page).fill(draft);
+      if (width < 1024) {
+        await page
+          .getByRole("button", { name: "關閉", exact: true })
+          .filter({ visible: true })
+          .first()
+          .focus();
+        await page.keyboard.press("Enter");
+        await expect(page.getByRole("dialog")).toBeHidden();
+        await expect(opener).toBeFocused();
+      } else {
+        const other = page.getByRole("button").filter({ hasText: "合成客戶乙" });
+        await other.focus();
+        await page.keyboard.press("Space");
+        await expect(reply(page)).toHaveValue("");
+        await opener.focus();
+      }
+      await page.keyboard.press("Enter");
+      await expect(reply(page)).toHaveValue(draft);
+    });
+    test("keyboard return and a late AI result cannot reopen the panel or steal focus", async ({
+      page,
+    }) => {
+      await open(page, "delay");
+      await pending(page, ids.a);
+      let ordinal = 1;
+      const opener = page.getByRole("button").filter({ hasText: "合成客戶甲" });
+      if (width < 1024) {
+        await page.keyboard.press("Escape");
+        await opener.focus();
+        await page.keyboard.press("Enter");
+        ordinal = 2;
+        await pending(page, ids.a, ordinal);
+      }
+      await reply(page).fill("人工保留中文 English draft");
+      if (width < 1024) {
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog")).toBeHidden();
+      } else await opener.focus();
+      await finish(page, ids.a, ordinal, "rules");
+      await expect(opener).toBeFocused();
+      if (width < 1024) {
+        await expect(page.getByRole("dialog")).toBeHidden();
+        await page.keyboard.press("Enter");
+      }
+      await expect(reply(page)).toHaveValue("人工保留中文 English draft");
+    });
+    test("deferred old close cannot consume a reopened panel's keyboard return target", async ({
+      page,
+    }) => {
+      await open(page);
+      const a = page.getByRole("button").filter({ hasText: "合成客戶甲" });
+      const b = page.getByRole("button").filter({ hasText: "合成客戶乙" });
+      if (width >= 1024) {
+        await a.focus();
+        await page.keyboard.press("Enter");
+        await expect(reply(page)).toBeVisible();
+        await expect(a).toBeFocused();
+        return;
+      }
+      await page.keyboard.press("Escape");
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      // Hold only Radix's close-autofocus event, retaining its actual DOM listener.
+      // This isolates the real deferred-close race without stubbing app state.
+      await page.evaluate(() => {
+        const originalDispatch = EventTarget.prototype.dispatchEvent;
+        const originalRemove = EventTarget.prototype.removeEventListener;
+        const held: { target: EventTarget; event: Event }[] = [];
+        const removals: {
+          target: EventTarget;
+          listener: EventListenerOrEventListenerObject;
+          options?: boolean | EventListenerOptions;
+        }[] = [];
+        EventTarget.prototype.dispatchEvent = function (event) {
+          if (event.type === "focusScope.autoFocusOnUnmount") {
+            // Radix modal Content normally prevents the default opener fallback.
+            // Keep it suppressed while its real close callback is held.
+            event.preventDefault();
+            held.push({ target: this, event });
+            return true;
+          }
+          return originalDispatch.call(this, event);
+        };
+        EventTarget.prototype.removeEventListener = function (type, listener, options) {
+          if (!listener) return;
+          if (type === "focusScope.autoFocusOnUnmount") {
+            removals.push({ target: this, listener, options });
+            return;
+          }
+          originalRemove.call(this, type, listener, options);
+        };
+        (
+          window as typeof window & { deferredClose: { count: () => number; release: () => void } }
+        ).deferredClose = {
+          count: () => held.length,
+          release: () => {
+            const next = held.shift();
+            if (!next) throw Error("Owned deferred close missing");
+            originalDispatch.call(next.target, next.event);
+            for (let i = removals.length - 1; i >= 0; i--) {
+              if (removals[i].target !== next.target) continue;
+              const removed = removals.splice(i, 1)[0];
+              originalRemove.call(
+                removed.target,
+                "focusScope.autoFocusOnUnmount",
+                removed.listener,
+                removed.options,
+              );
+            }
+          },
+        };
+      });
+      const count = () =>
+        page.evaluate(() =>
+          (
+            window as typeof window & { deferredClose: { count: () => number } }
+          ).deferredClose.count(),
+        );
+      const release = () =>
+        page.evaluate(() =>
+          (
+            window as typeof window & { deferredClose: { release: () => void } }
+          ).deferredClose.release(),
+        );
+      await a.focus();
+      await page.keyboard.press("Enter");
+      await reply(page).fill("甲原有人工草稿 English draft");
+      await page.keyboard.press("Escape");
+      await expect.poll(count).toBe(1);
+      await b.focus();
+      await page.keyboard.press("Enter");
+      await expect(reply(page)).toHaveValue("");
+      await reply(page).focus();
+      await release();
+      await expect(reply(page)).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect.poll(count).toBe(1);
+      await release();
+      await expect(b).toBeFocused();
+      await a.focus();
+      await page.keyboard.press("Enter");
+      await expect(reply(page)).toHaveValue("甲原有人工草稿 English draft");
+    });
     test("resize scroll event without reader movement retains newest pin and older-reader position", async ({
       page,
     }) => {
