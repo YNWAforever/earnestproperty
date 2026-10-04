@@ -3,7 +3,12 @@ import { createRoot } from "react-dom/client";
 import { createRootRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Route as Links } from "../../../src/routes/admin.whatsapp-links";
-import "./synthetic-batches";
+import { state } from "./synthetic-batches";
+import { staffSessionStore } from "../../../src/components/admin/staff-session";
+state.changeMembership = async (role = "manager", binding = state.binding) => {
+  Object.assign(state, { role, binding });
+  await staffSessionStore.refresh(staffSessionStore.getSnapshot().userId!);
+};
 import "../../../src/styles.css";
 const root = createRootRoute({ component: () => <Outlet /> });
 const router = createRouter({

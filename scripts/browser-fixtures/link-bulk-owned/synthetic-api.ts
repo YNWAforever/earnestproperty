@@ -2,7 +2,9 @@
 export * from "../no-link/synthetic-api";
 import { state, id, staff, offers, record } from "./synthetic-batches";
 export async function fetchStaffSession() {
-  return { status: "ok", staffId: staff, roles: ["manager"] };
+  return state.denied
+    ? { status: "denied", reason: "not-staff" }
+    : { status: "ok", staffId: state.binding, roles: [state.role] };
 }
 export async function fetchAdminAgents() {
   return [{ id: staff, name: "合成同事甲", email: null, active: true }];

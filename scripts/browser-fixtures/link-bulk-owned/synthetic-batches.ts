@@ -18,6 +18,10 @@ const stored = JSON.parse(sessionStorage.getItem("owned-link-bulk-server") ?? "n
 export const state = {
   calls: (stored?.calls ?? []) as { name: string; input: unknown }[],
   operations: (stored?.operations ?? []) as CommitChunkResult[],
+  role: "manager",
+  binding: staff,
+  denied: false,
+  changeMembership: async (_role = "manager", _binding = staff) => {},
   commitMode: "ok",
   readFailure: false,
   deniedReference: false,

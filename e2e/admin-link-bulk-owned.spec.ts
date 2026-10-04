@@ -51,7 +51,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/link-bulk-owned-browser-summary.json",
+    ".audit/remediation-20261003/ep13-20-link-membership-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -99,13 +99,13 @@ test.afterEach(async ({ page }, info) => {
       })),
     );
     await page.screenshot({
-      path: `.audit/remediation-20261003/bulk-overflow-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/ep13-20-bulk-overflow-${page.viewportSize()!.width}.png`,
     });
   }
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("new batch reload"))
     await page.screenshot({
-      path: `.audit/remediation-20261003/bulk-continuation-import-green-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/ep13-20-bulk-continuation-import-green-${page.viewportSize()!.width}.png`,
     });
 });
 const csv = (count = 50) =>
@@ -221,6 +221,48 @@ async function continueFinalTen(page: Page) {
   expect(await draftRows(page)).toEqual([]);
 }
 for (const width of [1440, 1280, 768, 390]) {
+  test(`membership narrows link workspace without deleting the original batch journal ${width}`, async ({
+    page,
+  }) => {
+    await setup(page, width);
+    await previewFifty(page);
+    const drafts = await draftRows(page);
+    expect(drafts).toHaveLength(50);
+    await page.evaluate(() => window.ownedLinkBulk.changeMembership("agent"));
+    await expect(page.getByRole("heading", { name: "建立 WhatsApp 連結" })).toHaveCount(0);
+    expect(await draftRows(page)).toEqual(drafts);
+  });
+  test(`membership change stops the next chunk after accepting the original fifty ${width}`, async ({
+    page,
+  }) => {
+    await setup(page, width);
+    await page.getByLabel("CSV 或貼表格資料").fill(csv(60));
+    await page.getByRole("button", { name: "核對並匯入 60 行" }).click();
+    await page.getByLabel("已人工核對刊登位置").check();
+    await page.getByRole("button", { name: "下一步：跟進" }).click();
+    await page.getByRole("button", { name: "預覽核對", exact: true }).click();
+    await page.evaluate(() => {
+      window.ownedLinkBulk.commitMode = "pending";
+    });
+    await page.getByRole("button", { name: "確認建立 60 筆" }).click();
+    await expect
+      .poll(() => page.evaluate(() => typeof window.ownedLinkBulk.releaseCommit === "function"))
+      .toBe(true);
+    await page.evaluate(() => window.ownedLinkBulk.changeMembership("agent"));
+    await page.evaluate(() => {
+      window.ownedLinkBulk.commitMode = "ok";
+      window.ownedLinkBulk.releaseCommit!();
+    });
+    await expect.poll(() => page.evaluate(() => window.ownedLinkBulk.operations.length)).toBe(1);
+    await page.evaluate(
+      () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+    );
+    expect(
+      await page.evaluate(() => window.ownedLinkBulk.calls.filter((c) => c.name === "commit")),
+    ).toHaveLength(1);
+    expect(await page.evaluate(() => window.ownedLinkBulk.operations[0].rows)).toHaveLength(50);
+  });
+
   test(`copy-all failure reports refusal then copies exactly fifty confirmed codes ${width}`, async ({
     page,
   }) => {
@@ -366,7 +408,7 @@ for (const width of [1440, 1280, 768, 390]) {
     expect(importRead.references.every((r) => r.externalReference === "001-A")).toBe(true);
     expect(await draftRows(page)).toEqual([]);
     await page.screenshot({
-      path: `.audit/remediation-20261003/bulk-continuation-green-${width}.png`,
+      path: `.audit/remediation-20261003/ep13-20-bulk-continuation-green-${width}.png`,
     });
   });
   test(`pending confirmation stays single while results are unavailable ${width}`, async ({
