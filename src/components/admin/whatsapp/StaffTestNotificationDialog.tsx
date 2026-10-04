@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,11 +18,14 @@ export function StaffTestNotificationDialog({
   staffId,
   transport,
   endpointVersion,
+  isWorkspaceCurrent,
 }: {
   staffId: string;
   transport: Transport;
   endpointVersion: number | null;
+  isWorkspaceCurrent?: () => boolean;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const storageKey = `staff-test:${staffId}:${transport}`;
   const [open, setOpen] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
@@ -40,9 +44,9 @@ export function StaffTestNotificationDialog({
     if (!id) return;
     setRequestId(id);
     let active = true;
-    findStaffTestNotificationByRequest(id)
+    findStaffTestNotificationByRequest(id, isCurrent)
       .then((saved) => {
-        if (!active) return;
+        if (!active || !isCurrent()) return;
         setRequestId(id);
         if (saved) {
           setStatus(saved);
@@ -52,28 +56,34 @@ export function StaffTestNotificationDialog({
         }
       })
       .catch(() => {
-        if (active) setError("未能查閱先前試送，請稍後重試。");
+        if (active && isCurrent()) setError("未能查閱先前試送，請稍後重試。");
       });
     return () => {
       active = false;
     };
-  }, [storageKey]);
+  }, [storageKey, isCurrent]);
   async function reconcile() {
+    if (!isCurrent()) return;
     if (!requestId || busy) return;
     setBusy(true);
     setError("");
     setOpen(true);
     try {
-      const saved = await findStaffTestNotificationByRequest(requestId);
+      const saved = await findStaffTestNotificationByRequest(requestId, isCurrent);
+      if (!isCurrent()) return;
       if (saved) setStatus(saved);
       else setError("先前提交的試送尚無紀錄；請保留原請求並稍後查閱，不會重新發送。");
     } catch {
+      if (!isCurrent()) return;
       setError("未能查閱原試送結果；請保留原請求並稍後再試，不會重新發送。");
     } finally {
-      setBusy(false);
+      if (isCurrent()) {
+        setBusy(false);
+      }
     }
   }
   async function showPreview() {
+    if (!isCurrent()) return;
     if (!endpointVersion || unresolved || busy) return;
     setBusy(true);
     setError("");
@@ -81,15 +91,24 @@ export function StaffTestNotificationDialog({
     setRequestId(null);
     window.sessionStorage.removeItem(storageKey);
     try {
-      setPreview(await previewStaffTestNotification({ staffId, transport, endpointVersion }));
+      const workspaceResult = await previewStaffTestNotification(
+        { staffId, transport, endpointVersion },
+        isCurrent,
+      );
+      if (!isCurrent()) return;
+      setPreview(workspaceResult);
       setOpen(true);
     } catch {
+      if (!isCurrent()) return;
       setError("未能建立試送預覽，請核對權限、目的地及服務狀態。");
     } finally {
-      setBusy(false);
+      if (isCurrent()) {
+        setBusy(false);
+      }
     }
   }
   async function send() {
+    if (!isCurrent()) return;
     if (
       !preview?.ready ||
       !preview.previewToken ||
@@ -105,18 +124,27 @@ export function StaffTestNotificationDialog({
     setBusy(true);
     setError("");
     try {
-      const queued = await enqueueStaffTestNotification({
-        staffId,
-        transport,
-        endpointVersion: preview.endpointVersion,
-        previewToken: preview.previewToken,
-        requestId: id,
-      });
-      setStatus(await getStaffTestNotification(queued.attemptId));
+      const queued = await enqueueStaffTestNotification(
+        {
+          staffId,
+          transport,
+          endpointVersion: preview.endpointVersion,
+          previewToken: preview.previewToken,
+          requestId: id,
+        },
+        isCurrent,
+      );
+      if (!isCurrent()) return;
+      const workspaceResult = await getStaffTestNotification(queued.attemptId, isCurrent);
+      if (!isCurrent()) return;
+      setStatus(workspaceResult);
     } catch {
+      if (!isCurrent()) return;
       setError("試送結果尚未核實；請查閱原試送結果，不會建立新請求或重新發送。");
     } finally {
-      setBusy(false);
+      if (isCurrent()) {
+        setBusy(false);
+      }
     }
   }
   return (
@@ -211,18 +239,31 @@ export function StaffTestNotificationDialog({
                     variant="outline"
                     disabled={busy || !evidenceRef.trim()}
                     onClick={async () => {
+                      if (!isCurrent()) return;
                       setBusy(true);
                       setError("");
                       try {
-                        await confirmStaffTestReceipt({
-                          attemptId: status.attemptId,
-                          evidenceRef: evidenceRef.trim(),
-                        });
-                        setStatus(await getStaffTestNotification(status.attemptId));
+                        await confirmStaffTestReceipt(
+                          {
+                            attemptId: status.attemptId,
+                            evidenceRef: evidenceRef.trim(),
+                          },
+                          isCurrent,
+                        );
+                        if (!isCurrent()) return;
+                        const workspaceResult = await getStaffTestNotification(
+                          status.attemptId,
+                          isCurrent,
+                        );
+                        if (!isCurrent()) return;
+                        setStatus(workspaceResult);
                       } catch {
+                        if (!isCurrent()) return;
                         setError("未能記錄人工收件確認；請核對證據編號與權限。");
                       } finally {
-                        setBusy(false);
+                        if (isCurrent()) {
+                          setBusy(false);
+                        }
                       }
                     }}
                   >
