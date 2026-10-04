@@ -3911,5 +3911,554 @@
         "layer": "see report and raw artifact for isolation"
       }
     ]
+  },
+  "performanceQualityRecoveryFollowup": {
+    "verifiedAt": "2026-10-04T03:05:56.561199+00:00",
+    "baseline": "0a7fa46b3639a75e55e565ea2088c178c1910c25",
+    "verifiedCodeSha": "174c83f1e77eea2ed99f1c02a3fd93a5ec15521c",
+    "initialCodeSha": "e5011fea657fd1cd385943df8395d5fb52845cf8",
+    "scope": "EP17/20 quality unknown-outcome recovery and source snapshot CAS",
+    "red": {
+      "ownedSQL": {
+        "tests": 74,
+        "pass": 55,
+        "fail": 19,
+        "directDefects": 18,
+        "parentFailures": 1,
+        "skipped": 0
+      },
+      "ownedBrowserFailed": 4,
+      "pendingDisclosureFailed": 1,
+      "reviewRecoveryDeadEndFailed": 1,
+      "summaryLimitation": "originalfailedworker1failed;partialgreenworker1passed;rawlogs authoritative4fail/3pass1fail",
+      "attempts": "firstSQLgreen72/2 wrongeventreadbackrow;firstbrowsergreen3/1 wrongalloption;analytics64/1 partialfixturemissingtable;wrongsummarycopy path;initialmanifestbuildFAIL;allretained"
+    },
+    "ownedSQL": {
+      "pass": 76,
+      "fail": 0,
+      "skipped": 0,
+      "migrations": 85,
+      "exactCommittedSource": true,
+      "newLeafCases": 22,
+      "networkCalls": 0,
+      "concurrency": "realPG rowlocks identical1append+2ack;different1winner+409",
+      "rawReadback": "accepted retries preserve full histories/newerotheradmin;unacceptedoriginal409 thenfreshbaseexplicitnewdecision"
+    },
+    "ownedBrowser": {
+      "pass": 164,
+      "fail": 0,
+      "skipped": 0,
+      "newCases": 20,
+      "viewports": [
+        1440,
+        1280,
+        768,
+        390
+      ],
+      "eachViewport": 41,
+      "exactCommittedSource": true,
+      "initialExactPass": 160,
+      "firstSnapshotThroughFilterRemount": true,
+      "originalDecisionReadonly": true,
+      "newerDraftRetained": true,
+      "definitive409FreshReadbackBeforeNewDecision": true,
+      "pendingIntentDurable": false,
+      "realAuth": false,
+      "realDatabase": false,
+      "combinedUIAuthSQL": false,
+      "noNewActionIDs": true
+    },
+    "unit": {
+      "analyticsNode": 65,
+      "analyticsBun": 3,
+      "noLinkNode": 99,
+      "noLinkBun": 9,
+      "fail": 0,
+      "skipped": 0
+    },
+    "static": {
+      "typecheck": "exit0",
+      "lint": "exit0;3baselinewarnings",
+      "build": "firstFAIL retained;sequential and final exit0;initialcauseUNPROVEN"
+    },
+    "review": {
+      "model": "gpt-6-astra",
+      "freshContext": true,
+      "reviewedSha": "e5011fea657fd1cd385943df8395d5fb52845cf8",
+      "finalCodeSha": "174c83f1e77eea2ed99f1c02a3fd93a5ec15521c",
+      "critical": 0,
+      "important": 1,
+      "minor": 0,
+      "remainingCritical": 0,
+      "remainingImportant": 0,
+      "authorFixPassRequired": true,
+      "authorFixPassCount": 1,
+      "secondReview": false,
+      "finding": "I1 uncertain precommit then competing admin409 pins quality journal",
+      "authorDisposition": "I1 Important stands;soleauthorfix REDbrowser1->GREEN/full164/exact164,realSQL76GREEN/exact76;matching409clear+freshactive readback;403/400uncertainty retained,newerdraftpreserved;typecheck/lint/buildexit0;no secondreview",
+      "coverage": "all12focused+33additionalcumulative45/207changedfiles risk sample;notexhaustive",
+      "independentProbes": {
+        "executed": true,
+        "count": 1,
+        "kind": "extracted current correctQuality transpiledwith installedTS/stubwriter dependencies",
+        "reproduced": "unknownprecommit->409->journal1->freshchangedrequestblockedbeforethirdnetworkcall",
+        "sqlRerun": false,
+        "browserRerun": false,
+        "diffCheck": "PASS"
+      },
+      "independentlyInspectedEvidence": {
+        "ownedSQL": 74,
+        "browser": 160,
+        "eachViewport": 40,
+        "summaryShaMatches": true,
+        "actualSQLBrowserRerun": false,
+        "finalFixReviewed": false
+      },
+      "declinedRulings": [
+        "D1 NOT_READY: Durable recovery of an uncommitted quality or qualification intent after hard reload/new session — production journals are memory-only; accepted qualification source recovery does not make pending intent durable. Cost if wrong: lost uncertain request.",
+        "D2 BLOCKED: Real Auth login, expiry, session admission, and revocation delivery to the UI — current evidence uses fixture actors and synthetic browser identity, not real sessions. Cost if wrong: false session authorization.",
+        "D3 BLOCKED: A combined real-Auth/browser/PostgreSQL/provider journey — SQL and browser layers were independently tested, not connected end to end. Cost if wrong: invented end-to-end proof.",
+        "D4 NOT_READY: Exhaustive grant promotion, grant insertion/deletion, phantom, ABA, account-rebinding, and lock-order interleavings — selected controlled cases and source inspection do not cover the entire concurrency state space. Cost if wrong: hidden concurrent overwrite.",
+        "D5 NOT_READY: Authorization revocation after the final statement or during response transport — point-in-time transaction/read gates do not establish continuous transport authorization. Cost if wrong: false continuous authorization.",
+        "D6 NOT_READY: Continuous qualification source/owner consistency after metadata selection and before delivery — final read revalidation is actor/scope oriented; no single end-to-end business snapshot was demonstrated. Cost if wrong: stale source evidence.",
+        "D7 NOT_READY: Every cohort, branch/staff/source/deal filter, pagination/backlog combination and concurrent occurrence-time/Hong Kong day correction — scoped queries were read, but the cross-product and time-correction races were not exhausted. Cost if wrong: wrong metric/source scope.",
+        "D8 NOT_READY: Production query latency, index suitability under real distribution, throughput, deadlock frequency, and contention — no load test, EXPLAIN workload, or production measurements. Cost if wrong: operational regression.",
+        "D9 BLOCKED: Production app, worker, schema, migration, and flag alignment — no deployment or authenticated production verification authorized for this review. Cost if wrong: wrong formal environment.",
+        "D10 BLOCKED: Production migrations, canary, cutover, and rollback execution — local additive SQL/source inspection is not actual release/rollback proof. Cost if wrong: unsafe release/restore.",
+        "D11 BLOCKED: Real provider acceptance/delivery/read/staff-ack/human-reply receipts, templates, members, destinations, and sends — no provider exercise; synthetic states cannot prove external delivery. Cost if wrong: wrong real send or duplicate retry.",
+        "D12 BLOCKED: Paid model behavior, semantic answer quality, resolved usage/cost completeness, and budget — no application-model calls; only contract/fallback/provenance source sampled. Cost if wrong: wrong cost or answer.",
+        "D13 BLOCKED: Property.hk EPS/EPT/EPW and dt completeness, terminal paging, detail/media access, and the 132 held candidates — no live complete-scope absence evidence was obtained. Cost if wrong: false withdrawal.",
+        "D14 NOT_READY: Three accepted repaired native 28Hse daily runs — the package retains baseline 1/3, repaired 0/3, agent-triggered 0; the natural workflow success lacks independently read private full receipt. Cost if wrong: fabricated scheduled acceptance.",
+        "D15 BLOCKED: Native clipboard, IME, accessibility across real devices/platforms, and non-Chromium behavior — no native/platform acceptance executed; four viewport results are synthetic Chromium. Cost if wrong: device input failure.",
+        "D16 NOT_READY: Every role, route, feature flag, dialog, and action in the cumulative branch — 45/207 changed files were risk-sampled; all-role/control acceptance is not exhaustive. Cost if wrong: cross-scope action leak.",
+        "D17 NOT_READY: Exhaustive cumulative parser/receipt/CAS/outbound/Inbox/portal-zero-EPWA acceptance — selected UI/server boundaries were reviewed, but unchanged underlying parser/receipt/send implementations and every historical suite were not re-executed. Cost if wrong: untested cumulative regression.",
+        "D18 AUTHOR_INDEPENDENT_VERIFICATION: Exhaustive preservation of historical raw hashes, old JSON identity, original 29/9/22 results, 22 planned NEW cases, 82-case denominator, 40/28/14 execution tally, 1400 IDs and 408 rendered mapping history — ledger/package read only; author must perform the archive/hash reconciliation. Cost if wrong: false preservation attribution.",
+        "D19 UNPROVEN: Root causes of earlier duplicate/Docker failures and the transient build manifest failure — later passes are evidence of passing repeats, not a causal diagnosis. Cost if wrong: hidden intermittent failure.",
+        "D20 AUTHOR_REMOTE_READBACK_PENDING: Latest remote PR content/head synchronization and CI/publication state — this is a local committed-source review; no remote CI or PR readback performed. Cost if wrong: forecast treated as PASS.",
+        "D21 BLOCKED: Formal readiness inferred from anonymous HTTP 200 — anonymous availability does not establish deployed SHA, authenticated functionality, or release readiness. Cost if wrong: false production readiness.",
+        "D22 NOT_READY: Exhaustive handling of manual/district knowledge edits, canonical-source concurrency, CRM dependency insertion phantoms, and source transitions beyond the sampled guards — migrations and key paths were inspected but cumulative database suites were not independently rerun. Cost if wrong: canonical or dependency race.",
+        "D23 NOT_READY: Support resolution for permanently missing source/receipt records or corrupted local campaign/link recovery journals — the sampled UI preserves/blockades uncertainty, but no operational support procedure or terminal recovery was exercised. Cost if wrong: unrecoverable operator workflow."
+      ],
+      "verdict": "With fixes reviewedinitialsource;oneauthorpassverifiedseparately;notwholeplan/production",
+      "authorFinalVerification": {
+        "code": "174c83f1e77eea2ed99f1c02a3fd93a5ec15521c",
+        "SQL": 76,
+        "browser": 164,
+        "eachViewport": 41,
+        "exactCommittedSource": true,
+        "independentReviewerRerun": false
+      }
+    },
+    "configurationDryRun": {
+      "baseline": "0a7fa46b3639a75e55e565ea2088c178c1910c25",
+      "code": "174c83f1e77eea2ed99f1c02a3fd93a5ec15521c",
+      "configurationSchemaMigrationPackageWorkflowDiff": [],
+      "existingMigrations": 85,
+      "latestMigration": "20261003040000_content_proposal_source_guard.sql",
+      "ownedMigrationDryRun": "test:admin-performance:db full85 applied only ownedPG17;74PASS0FAIL/SKIP",
+      "privateCorrectionContract": "expectedRevisionId string/null mandatory;missing orinvalid failsclosed beforeSQL;cachedclientsrefresh;pairedUI/serverrelease required",
+      "existingReadDTO": "optional qualityRevisionId from same SELECT snapshot as displayedquality;legacy purefixture shape preserved",
+      "newAPI": false,
+      "newDTOType": false,
+      "newSchemaMigration": false,
+      "inventedProviderRuntimeIDs": false,
+      "productionMutation": 0
+    },
+    "rulings": [
+      "既有 immutable revision ID/null 作base，原請求kind/source/actor/base/quality/reason核對immediate successor；相同currentlatest決定no-op，舊ACK不覆蓋newer其他admin。錯判成本：重複history或覆蓋protected human decision。",
+      "既有transactionRows先來源rowlock後freshReadCommitted第二statement；單CTE鎖不提供等待後新快照。錯判成本：並發錯誤勝出或duplicate revisions。",
+      "既有PerformanceRecord optionalqualityRevisionId與quality同SELECT；privatequalityPOST requiredexpectedRevisionId:string|null，cachedclients須refresh及pairedUI/serverrelease，無blindwritefallback。錯判成本：舊client不相容或silent staleoverwrite。",
+      "actor-keyed in-memory journal保留原payload/filterremount，原品質原因readonly提示，新draft保持；hardreload未提交intent不宣稱durable。錯判成本：丟失pendingintent或錯誤重送。",
+      "品質writer在currentauthorized existing lockedsource找不到exactimmutable successor才409，此拒絕證明原請求未接受；matchingjournal清除並freshreadback，再由人明確決定。403/400不能排除earlieruncertaincommit，仍保留；qualification409語義不同，保持原gate。錯判成本：false-negative reconciliation或永遠無法修正。",
+      "只在ownedPG17/loopback寫fixture；test-onlysessionStorage為backendfacts，syntheticAuth/API與SQL獨立，非combinedrealAuthjourney。錯判成本：mock冒充正式驗收。",
+      "初SQLpositive assertion選錯responses inquiry而非eventrow，改quality_test_events；alloption實值emptystring；legacyPGlite缺已有revisiontable只補partialreadfixture。所有failedlog保留。錯判成本：測試弱化/身份混淆。",
+      "首build缺TSS_ROUTES_MANIFEST失敗，無source改動sequentialPASS；rootcauseUNPROVEN不冒称race已修。錯判成本：隱藏intermittentbuildfailure。",
+      "自然37160712576/main51 successworkflowonly，privatefullreceipt未獨立讀回，baseline1/3repair0/3agenttrigger0不提升。錯判成本：捏造nativeacceptance。"
+    ],
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidApplicationModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineAccepted": "1/3",
+      "repairProduction": "0/3",
+      "newAgentCollectionRuns": 0,
+      "naturalWorkflowObserved": 37160712576,
+      "acceptance": "workflow only;private complete receipt unread;no count increase"
+    },
+    "capability": {
+      "ownedQualityRecoveryCAS": "READY",
+      "durableIntentFullRolesConcurrencySchedules": "NOT_READY",
+      "trueAuthCombinedUIProviderProduction": "BLOCKED"
+    },
+    "logs": [
+      {
+        "file": "ep17-quality-recovery-analytics-corrected.log",
+        "sha256": "6206f27063caa5fdfd3b098f0c063325086328e516dcfa4c98c01d1853abd50e",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-analytics-final.log",
+        "sha256": "ec2c0db3ef1da2fc489cb737362da9ce3405825bf61789f0ee09b710d32c7c92",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-analytics.log",
+        "sha256": "751d634ad3a15f54269f0a9bbb45b7341f191dff70510b8513f0c52a8a577ff4",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-build-final.log",
+        "sha256": "9b9480f9815ca83f5b3c6b166c10a03419a79c6ecba03becae166974b5484d8c",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-build-sequential.log",
+        "sha256": "10be87e29e96e93e230fa3154f8ade0e7b6c6ac218e70110decc3b223db6fa86",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-build.log",
+        "sha256": "ba3557f19eb3ce6f4d60655f4352e248425cc15925f4f506112545d714a068c9",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-config-dry-run-final.json",
+        "sha256": "d2011a6a63715a89a82500e0b9d7eeb962c3d0ba316568202a608fcc0efcee46",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-config-dry-run.json",
+        "sha256": "8a25a8c7fb156c55911c669807c8c7bcfc74d6a3cc1f5c78ff7bdbbe5ec29887",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-exact-sql-final.log",
+        "sha256": "af245159ebcc922956a498000248c03a62b4aefdcc7e14b8573327ff15cd3c28",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-exact-sql.log",
+        "sha256": "8099ba9be76fb43662d3e2d28578c8d1c206eb64f843a8901002c7fd757d5715",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-exact-ui-final-summary.json",
+        "sha256": "8bb53b305a3e699677e255f9374c25aa38bf0398348e67474c1bd289e97455b8",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-exact-ui-final.log",
+        "sha256": "a49779d7e1db4dafe8013f1894fc6fadf20251d9b78d93c3ae8804b24949c33e",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-exact-ui-summary.json",
+        "sha256": "3c81f85cbd2396b0e2817f239bedf99074fd3e7d2af0d38b055817cf990a913c",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-exact-ui.log",
+        "sha256": "0f35573cfc1ff98192018c42885fdda286006ab20c94306e9f4173b2bab15363",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-formal-readonly.json",
+        "sha256": "b82d86593f547e165def870ab3bd4693329cd14782bb78568ee318b2bed47de5",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-review-ui-summary.json",
+        "sha256": "2e1d85acea056b3d3205c75e02bb14061c92dea7a6bb39ef5da44e12a492c475",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-review-ui.log",
+        "sha256": "3bac09f73908122e7c658418a2c18ffc08c118b04a83e33c55acd427ca888b4d",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-sql-corrected.log",
+        "sha256": "6b55889cacbf3d1b7de4eb8b2dd17d461a2e0168c4934a42153ba806fb761067",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-sql-final.log",
+        "sha256": "2d6e20c5639c229ba0980903e4479ccfaed98fb1cfc7eb48c8374edb0fa49d5c",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-sql.log",
+        "sha256": "1bdbb5c8fe7a907daf5de0e16ab83b2e5f39634c6cb73cef58eb73457c3005ee",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-ui-corrected-summary.json",
+        "sha256": "f8099fedea1176d900b8c8440210d5540f3191191fe77a90d0b35594d1690dc5",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-ui-corrected.log",
+        "sha256": "780668a82597a59be77db081a911836454d4d579c2cbe9cdc1e228defa8a967d",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-ui-final-summary.json",
+        "sha256": "a9009cf7284c69dcf1247a683f8f17da4df44a7acb9dd43dac83acacdcdf8da6",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-ui-final.log",
+        "sha256": "d419922c571e27ba5c9c045dbacb376247249cc6a1779bdf485b1414354581c7",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-ui-focused.log",
+        "sha256": "fc6f7187f89b92190f226d7b3b98e30e3704b02b0053cd0846f3d5403ef93ddf",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-ui-full-summary.json",
+        "sha256": "c6703ddac8b1ad59ff96402278d3b68dcf975973249d104077eabb7631dbec15",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-ui-full.log",
+        "sha256": "d5e27b81dc896c0b64976dd1734571bd7b8a8b25de8046685658bcb07656f338",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-green-ui-partial-summary.json",
+        "sha256": "6c71949390705763bed8c25f6aa0902e2ea97b1b06713ede71d0c83d07bb73ea",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-lint-final.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-native-readonly.json",
+        "sha256": "a6bc34faa878a0b1cef853f583f325f42a440d32b8c7394616c7db31d4bc3751",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-no-link.log",
+        "sha256": "e12df0c22d5c1028c8a9f37dd8005a19ce105acc85732bfb4ddbdc5bcaa83a68",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-prepublication-pr.json",
+        "sha256": "0723cd112de3a9ef49ce873285ff282aad741750423a18c4d1c52df5385b5e41",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-red-pending-disclosure-ui-summary.json",
+        "sha256": "bfedfdcd3f00c736996d6028cb0ad644e67ff2c2e0b9e27bb7b84dd93fe87c21",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-red-pending-disclosure-ui.log",
+        "sha256": "d3e148cf96f50ace442c07ecf6f20ab3def46cd6e7d7a80749c39f13a14eca2c",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-red-review-ui-summary.json",
+        "sha256": "d44556ba1b2338a3918f89aeb359d34dfd1a4c7ef1306c924cbb73a7ca955999",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-red-review-ui.log",
+        "sha256": "13b546ffc54a3cf858e3431c71afef047462184e2f4a7da9d4150ac212bea17c",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-red-sql-verified.log",
+        "sha256": "80c793b2f66d19de5d3cde65488dbeff5f2d95353a7fbcb57ce01132bfd6b1d7",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-red-sql.log",
+        "sha256": "6f3b52ae12ec9209271267a1b9e5c92a3964483a67201c80cbb7385ecfd72de9",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-red-ui-summary.json",
+        "sha256": "bc09a82760cb14288a284eea35d47a91e7029f3843626a5e4e978aef4d6c5d4a",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-red-ui.log",
+        "sha256": "ea53a5511c869442d7df93e1185778daa5d5a71f41780eddcd259a6d1d286b57",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-review-companion-sql.log",
+        "sha256": "23c685b5847492164b8318c0356b06868581688ec17a9c6a52a1ea11ab824ee2",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-typecheck-final.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-typecheck-review-final.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "ep17-quality-recovery-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "review-quality-recovery-package.md",
+        "sha256": "81efb8183eb9d2524c6d2764942a020b8ae4564fbecfd58bb8465f7335e8e29d",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "review-quality-recovery-result.md",
+        "sha256": "c66b59ac585bba7fe4a700c831748cf3645fe0778fd3cd398e08d71e0c920ffc",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "review-quality-recovery-summary.json",
+        "sha256": "e9690a675a46eb9e2b40632ded6b6e61d8e31b6955ffd1c36235d10893db1eef",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "review-quality-recovery-probe.log",
+        "sha256": "1e257b1a5d78f8ac425c38a3729a253c4197af17977968494685fe4d2c6b4b64",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-confirmed-1280.png",
+        "sha256": "5a2a725a06c998f29faf112a2a686fd6d38d6cf0f365326b7c83f15d88af7a72",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-confirmed-1440.png",
+        "sha256": "fbfa93b593dfa07cdf01d2af0eb95bdd3a2e5ff5d77d94da6784e3f5d48c9ab3",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-confirmed-390.png",
+        "sha256": "e5e4b539793a4f6ba974721e9a5efd4fe4777ef857e85609503d55e34c9914b4",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-confirmed-768.png",
+        "sha256": "76e08b90c9ac26befc063b972a33deaaa37bea6ce21e76ec52ad7cb6ed9918a3",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-confirmed-1280.png",
+        "sha256": "5040dbcb4d20f0f3fa1f7ef75b1d33cce048afbe79922bf5405dc37378e226d4",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-confirmed-1440.png",
+        "sha256": "da9e0cb29b7850b966217be612a8801a4616cc1bb08fe15170bfe72efe0460be",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-confirmed-390.png",
+        "sha256": "7b378f90e4c0be331a4438233cf5000acf78ffb7ec0829ca13e0784235360899",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-confirmed-768.png",
+        "sha256": "ac095c70ba8fc9ed0f59d742232a8207e7754dd49b1e8e63f0c5d1bac07e03af",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-quality-confirmed-1280.png",
+        "sha256": "596f0b0de701111c880f831d31161149584e9fd7c2f21bb8906ff80eba2d68c7",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-quality-confirmed-1440.png",
+        "sha256": "b557156c366d07a6514efcf34c7be995e41c12ea7a78db5a34465790f4499d9e",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-quality-confirmed-390.png",
+        "sha256": "febdedbcb97bb996de78de1943b79d33d7618c5128ada9a7faa62d6f5752394d",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-quality-confirmed-768.png",
+        "sha256": "f6298c231e454f7d363b5ddbea76328bf6dd23ce0fdd0b871d8e4800e32366df",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-totals-1280.png",
+        "sha256": "be187bd2cdd02398ffa57f9f7173703b0b4f1bafa74830bfebead8b5ae758ed3",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-totals-1440.png",
+        "sha256": "0158068f1d544522635dbf866e9a46a68eff4a8782fe2d9b52729b4a42238009",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-totals-390.png",
+        "sha256": "bb7280dea2b8d8ea79c8a540f5c8279939b37e2dc2e274a07c2c6d993e685f83",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-final-totals-768.png",
+        "sha256": "7d8bb174affa0c5f811cfd4e47e7fc5407b067fc046556b2221faed76f458c0e",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-quality-confirmed-1280.png",
+        "sha256": "ad031d77342053b4c796e123d3d95d97d2cce7aedee76a5568cc0234963df9d6",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-quality-confirmed-1440.png",
+        "sha256": "5d88934a4e09318c55596fe12eaa955492cbc79cfdf2728d9b84322ad8a9e3df",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-quality-confirmed-390.png",
+        "sha256": "cd296a8fd52aaadbc7c8222bd2f90952a639dd76a695f2feb5887a52162bc6a3",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-quality-confirmed-768.png",
+        "sha256": "e0e479b339de4f72fd366bbc931f4c28d3caf753379636c15329e5790912ea2b",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-totals-1280.png",
+        "sha256": "2bd94c85f6ea983dd6d4f162991925f102e5a3dceb421b204b7eb188f3ad7e7b",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-totals-1440.png",
+        "sha256": "688a9f2de4879dca506d1541a8f7943d3f256155e6264ffae0f82ed07c6fe92f",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-totals-390.png",
+        "sha256": "f8c73fc542ca296dc24e1100b473dc0649d3da7757f66ecce04a86dca66cdc9b",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      },
+      {
+        "file": "performance-quality-recovery-totals-768.png",
+        "sha256": "f54acf937076a4d30bff4ab43b209bee460e57aed31e8056901f1cabb28c3a51",
+        "layer": "see raw artifact/report;SQL/browser/Auth separate"
+      }
+    ]
   }
 }
