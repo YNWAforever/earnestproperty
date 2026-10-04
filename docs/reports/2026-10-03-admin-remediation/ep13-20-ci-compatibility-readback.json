@@ -1,0 +1,1607 @@
+{
+  "createdAt": "2026-10-04T13:26:56.984124+00:00",
+  "priorImplementationSha": "530865b4b26680b424adfd57c3c1342fb5b4dab7",
+  "sourceSha": "308099a38815543789b486840dca63a1180c8894",
+  "commits": [
+    {
+      "sha": "57c0e96ad3088b9cfdf7ece1ed2318b789d2c346",
+      "message": "fix(admin): isolate lifetime hook and explain denied campaign workspace",
+      "files": [
+        "e2e/admin-campaign-review.spec.ts",
+        "e2e/admin-operations-recovery.spec.ts",
+        "e2e/admin-workspace-scope.spec.ts",
+        "scripts/test-whatsapp-link-handoff-browser.ts",
+        "scripts/test-whatsapp-no-link-synthetic-browser.mjs",
+        "src/components/admin/StaffEndpointEditor.tsx",
+        "src/components/admin/StaffReferenceEditor.tsx",
+        "src/components/admin/WhatsappServicePolicyEditor.tsx",
+        "src/components/admin/operations/AdminOperationsAudit.tsx",
+        "src/components/admin/operations/AdminOperationsJobs.tsx",
+        "src/components/admin/operations/AdminOperationsMigrations.tsx",
+        "src/components/admin/operations/WhatsappServiceHealth.tsx",
+        "src/components/admin/whatsapp/StaffMappingWizard.tsx",
+        "src/components/admin/whatsapp/StaffTestNotificationDialog.tsx",
+        "src/components/admin/whatsapp/WhatsappLinkWizard.tsx",
+        "src/components/dashboard/PropertyForm.tsx",
+        "src/hooks/use-staff-workspace.ts",
+        "src/hooks/use-workspace-current.ts",
+        "src/lib/media/media-upload-boundary.test.mjs",
+        "src/routes/admin.blasts.tsx"
+      ]
+    },
+    {
+      "sha": "308099a38815543789b486840dca63a1180c8894",
+      "message": "fix(admin): ep-14 retain newest-message pin through pane resize",
+      "files": [
+        "src/routes/admin.whatsapp.tsx",
+        "e2e/admin-whatsapp-mobile.spec.ts"
+      ]
+    }
+  ],
+  "changedSource": [
+    {
+      "file": "e2e/admin-campaign-review.spec.ts",
+      "bytes": 25946,
+      "sha256": "ed73b7d8f3236397a2a2879f1925dc1c96bba59719702ed2599f2bbfb15c0df4",
+      "gitBlob": "832cebe48b65f764fa473f282013725aa518eae2"
+    },
+    {
+      "file": "e2e/admin-operations-recovery.spec.ts",
+      "bytes": 10038,
+      "sha256": "1d31876da97cf56c73cfe6e8a87b683a107e825441065fd4f9f1daba7f9fb3a5",
+      "gitBlob": "cd10cc9a499559042cbb34735aafa14269b2565d"
+    },
+    {
+      "file": "e2e/admin-whatsapp-mobile.spec.ts",
+      "bytes": 18129,
+      "sha256": "599dd368c638a1718db4c0b117f2e45fb5f641aa7d6dbbcc1cd88b46d51666af",
+      "gitBlob": "3e8eb5a2a6fa7a9847dcad3770a5a3ca6a90719a"
+    },
+    {
+      "file": "e2e/admin-workspace-scope.spec.ts",
+      "bytes": 14167,
+      "sha256": "6df549b3432bb04641e29f071c3049424f200a32d70c0a551312443005bfe4b3",
+      "gitBlob": "1822cc13d025cd136fd6d6c91c648b4cd8e723aa"
+    },
+    {
+      "file": "scripts/test-whatsapp-link-handoff-browser.ts",
+      "bytes": 16933,
+      "sha256": "b117b00bcd9e20963c86c3a517b547e3a15ef902c781b43d06a777198d230a04",
+      "gitBlob": "b3cdc2d227d01f607d1328040460e446361211f0"
+    },
+    {
+      "file": "scripts/test-whatsapp-no-link-synthetic-browser.mjs",
+      "bytes": 118264,
+      "sha256": "a08a56e32e989d759ba38b8696b0fd65ee215c7d6a8740637bcab1bc818a2c0b",
+      "gitBlob": "63d47e1066519d3834d8cda67a6ea2a1fcf7a638"
+    },
+    {
+      "file": "src/components/admin/StaffEndpointEditor.tsx",
+      "bytes": 11915,
+      "sha256": "6af91ccb491d388db3b36b971d8cb0c60f7e2ca8f5a8b90cf83e06072b196ea6",
+      "gitBlob": "3f2e0ed612da95267459ff1e12fc8f3b2b97ba26"
+    },
+    {
+      "file": "src/components/admin/StaffReferenceEditor.tsx",
+      "bytes": 6514,
+      "sha256": "e8b3cbd726d743632f3dbc11609a87ca2e2699220be45ae7f91a664285ad09e2",
+      "gitBlob": "f2df42538b40b871385c204354bccd0025a3532c"
+    },
+    {
+      "file": "src/components/admin/WhatsappServicePolicyEditor.tsx",
+      "bytes": 14564,
+      "sha256": "8f63a6bc0b4887cf847b86686503c248470488a476576dddad086808fb86e851",
+      "gitBlob": "66b937f434f7c8fb7610408ef9f01e4e121bbda2"
+    },
+    {
+      "file": "src/components/admin/operations/AdminOperationsAudit.tsx",
+      "bytes": 12234,
+      "sha256": "6757180723100c7e283021a454dad333ac6deb367fff62d39003faadbee9aa5b",
+      "gitBlob": "ccdb8f833eaf3b1e57bfff797efc8a1645c349e4"
+    },
+    {
+      "file": "src/components/admin/operations/AdminOperationsJobs.tsx",
+      "bytes": 16712,
+      "sha256": "6bb2ad6238e46400acc1798adff4ee6cfb19f679cec323d90ba7e9c25e83b37d",
+      "gitBlob": "0515151017e5c3811e4a3d323054c7b705d328db"
+    },
+    {
+      "file": "src/components/admin/operations/AdminOperationsMigrations.tsx",
+      "bytes": 16337,
+      "sha256": "ddde3e73e22dca3979f6b1e0ef556dd15ea5ae9f0c396553d8d030a05800dfc0",
+      "gitBlob": "746b589e49b7d63b5651487146b5d41f5b43473c"
+    },
+    {
+      "file": "src/components/admin/operations/WhatsappServiceHealth.tsx",
+      "bytes": 6541,
+      "sha256": "cc5d0cb854571472a91f2d85f51ee1308e63af158f46dc0e858b9ebaad232a7b",
+      "gitBlob": "f3d38e0f12fc1ab7adef610e08c9152f7ad85a4d"
+    },
+    {
+      "file": "src/components/admin/whatsapp/StaffMappingWizard.tsx",
+      "bytes": 27159,
+      "sha256": "99f21be459b21729b23b2ffbbb4cf61a350fbb686cb3e471454d7961a0ed7a6b",
+      "gitBlob": "e2bfd67341f339a8594ba0582817615d312c7f44"
+    },
+    {
+      "file": "src/components/admin/whatsapp/StaffTestNotificationDialog.tsx",
+      "bytes": 11387,
+      "sha256": "dd937b382d59aed0ce28ef6c89674000a3199bfd3434216d90233a7a95e6e3ef",
+      "gitBlob": "466e293eff85c987d47b27d9a87de877d8f9795a"
+    },
+    {
+      "file": "src/components/admin/whatsapp/WhatsappLinkWizard.tsx",
+      "bytes": 49223,
+      "sha256": "4e6e1f9414eab51b9ac5adce13d2c58351e72ea00deac6e223ec2a5e8b77bf80",
+      "gitBlob": "86add529114fd9bb5f1be37a111d469b4b6c7fc1"
+    },
+    {
+      "file": "src/components/dashboard/PropertyForm.tsx",
+      "bytes": 23946,
+      "sha256": "c5b9872dffd26d303b94375f1a4eda7894fae6b8102082777cb281605b19d03a",
+      "gitBlob": "8a8213834f9ca9462c76602a3c9fe79435fec12f"
+    },
+    {
+      "file": "src/hooks/use-staff-workspace.ts",
+      "bytes": 1316,
+      "sha256": "4fd8daece8958689109024bd1ac3274f9cf286250d9cc61f45013f7053dc4931",
+      "gitBlob": "65ee352ce21cadad7061c5a5a4e093ff610b7cd3"
+    },
+    {
+      "file": "src/hooks/use-workspace-current.ts",
+      "bytes": 448,
+      "sha256": "785950958756350e23efffe34e4bd8934892a7abcc4a99c54f03a547a5fd5c82",
+      "gitBlob": "518e70c21f48a16d80cf8896307124cfc5514133"
+    },
+    {
+      "file": "src/lib/media/media-upload-boundary.test.mjs",
+      "bytes": 12015,
+      "sha256": "fb9f655688bac63db4ec7be5c35cdc816c457fecdbcde319be30974143607cbc",
+      "gitBlob": "6304e22548dee95037e5a493f528e361d292bfe4"
+    },
+    {
+      "file": "src/routes/admin.blasts.tsx",
+      "bytes": 82001,
+      "sha256": "f3116806adf0f36007f4b9576be6c99e880c2b9d8fb22e0ac6a135fce0658b29",
+      "gitBlob": "7b4d9567b6ae45aa1893cf647e0724d14c9de2a0"
+    },
+    {
+      "file": "src/routes/admin.whatsapp.tsx",
+      "bytes": 95881,
+      "sha256": "41ec0c6fc6e632ff7a3f72aa7cc1689adf8691c3f033284dc4e9940c1ad7e30b",
+      "gitBlob": "dcd4a3522781b395ae478422da3edf578c25f8b9"
+    }
+  ],
+  "firstExactCi": {
+    "id": 37203311589,
+    "headSha": "5491dbae08e6d28f012ece634b3b4bb0e2bca58e",
+    "conclusion": "failure",
+    "url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37203311589",
+    "jobs": [
+      {
+        "name": "browser-handoff",
+        "conclusion": "failure"
+      },
+      {
+        "name": "no-link-local-postgres",
+        "conclusion": "success"
+      },
+      {
+        "name": "ci",
+        "conclusion": "failure"
+      },
+      {
+        "name": "browser-no-link",
+        "conclusion": "failure"
+      },
+      {
+        "name": "browser-staging",
+        "conclusion": "skipped"
+      }
+    ],
+    "ownedSqlCounts": {
+      "test:no-link:local-postgres": 23,
+      "test:admin-golden:db": 23,
+      "test:ai-knowledge:db": 21,
+      "test:crm-analysis:db": 37,
+      "test:conversation-assist:db": 8,
+      "test:whatsapp-setup:db": 2,
+      "test:propertyhk-reconciliation:owned:db": 4,
+      "test:property-withdrawal:owned:db": 2,
+      "test:property-maintenance:owned:db": 6,
+      "test:admin-overview:db": 4,
+      "test:admin-campaign:db": 5,
+      "test:admin-performance:db": 88,
+      "test:admin-link-bulk:db": 8,
+      "test:operations:owned:db": 1
+    },
+    "ownedSqlPass": 232,
+    "goldenDumpBytes": 682030,
+    "stagingSkip": "BLOCKED"
+  },
+  "fixes": [
+    "React-only lifetime hook extraction; same function AST; keep resolved identity in existing staff hook",
+    "Real workspace-request helper provided to two upload VM tests",
+    "Resolved campaign role denial gets explicit reason; assert zero private reads and queue",
+    "Resize-induced unchanged-offset scroll cannot clear latest-message pin; older-reader position remains"
+  ],
+  "localGreen": {
+    "ownedActualRouteUiPass": 180,
+    "ownedActualRouteUiFail": 0,
+    "ownedActualRouteUiSkip": 0,
+    "legacyNoLinkPass": 115,
+    "legacyHandoffPass": 14,
+    "mlsPass": 643,
+    "staticAndUnit": [
+      {
+        "log": ".audit/remediation-20261003/ep13-20-ci-final-test-whatsapp-enquiries.log",
+        "exit": 0,
+        "script": "test:whatsapp-enquiries"
+      },
+      {
+        "log": ".audit/remediation-20261003/ep13-20-ci-final-test-no-link.log",
+        "exit": 0,
+        "script": "test:no-link"
+      },
+      {
+        "log": ".audit/remediation-20261003/ep13-20-ci-final-typecheck.log",
+        "exit": 0,
+        "script": "typecheck"
+      },
+      {
+        "log": ".audit/remediation-20261003/ep13-20-ci-final-lint.log",
+        "exit": 0,
+        "script": "lint"
+      },
+      {
+        "log": ".audit/remediation-20261003/ep13-20-ci-final-build.log",
+        "exit": 0,
+        "script": "build"
+      }
+    ],
+    "priorFirstFullUi": 732,
+    "newResizeUi": 4,
+    "latestPlannedFullUi": 736
+  },
+  "ui": [
+    {
+      "file": ".audit\\remediation-20261003\\ep13-20-ci-compat-campaign-browser-summary.json",
+      "pass": 68,
+      "readback": {
+        "codeSha": "530865b4b26680b424adfd57c3c1342fb5b4dab7",
+        "evidenceLayer": "actual-campaign-route-shell-staff-store-synthetic-auth-api-owned-loopback",
+        "realAuth": false,
+        "realDatabase": false,
+        "realProvider": false,
+        "results": [
+          {
+            "name": "membership narrowing removes private campaign rows",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "membership change retains accepted cancellation without obsolete success toast",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "cancel confirmation preserves accepted history and submits once while pending",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "cancel late response cannot show success under another actor",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "cancel lost response restores original read gate after reload and never retries",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "cancel in-flight reload and nonterminal read keep the original journal and block sending",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "cancel storage failure submits no cancellation request",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "cancel definitive refusal keeps campaign status and clears only its operation journal",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "cancel corrupt journal is retained and blocks mutation only for its actor",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "lost queue response survives reload and only reads the original campaign",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "in-flight queue survives reload and blocks a new send before readback",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "unknown result stays with the original actor across account switches",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "late old actor queue response cannot show success in the new actor",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "unavailable operation storage blocks queue before any request",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "failed recovery read retains the gate through a second reload",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "successful queue stays distinct from delivery and clears only its actor journal",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "missing original campaign cannot clear the unresolved journal",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "membership narrowing removes private campaign rows",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "membership change retains accepted cancellation without obsolete success toast",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "cancel confirmation preserves accepted history and submits once while pending",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "cancel late response cannot show success under another actor",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "cancel lost response restores original read gate after reload and never retries",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "cancel in-flight reload and nonterminal read keep the original journal and block sending",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "cancel storage failure submits no cancellation request",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "cancel definitive refusal keeps campaign status and clears only its operation journal",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "cancel corrupt journal is retained and blocks mutation only for its actor",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "lost queue response survives reload and only reads the original campaign",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "in-flight queue survives reload and blocks a new send before readback",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "unknown result stays with the original actor across account switches",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "late old actor queue response cannot show success in the new actor",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "unavailable operation storage blocks queue before any request",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "failed recovery read retains the gate through a second reload",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "successful queue stays distinct from delivery and clears only its actor journal",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "missing original campaign cannot clear the unresolved journal",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "membership narrowing removes private campaign rows",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "membership change retains accepted cancellation without obsolete success toast",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "cancel confirmation preserves accepted history and submits once while pending",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "cancel late response cannot show success under another actor",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "cancel lost response restores original read gate after reload and never retries",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "cancel in-flight reload and nonterminal read keep the original journal and block sending",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "cancel storage failure submits no cancellation request",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "cancel definitive refusal keeps campaign status and clears only its operation journal",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "cancel corrupt journal is retained and blocks mutation only for its actor",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "lost queue response survives reload and only reads the original campaign",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "in-flight queue survives reload and blocks a new send before readback",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "unknown result stays with the original actor across account switches",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "late old actor queue response cannot show success in the new actor",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "unavailable operation storage blocks queue before any request",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "failed recovery read retains the gate through a second reload",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "successful queue stays distinct from delivery and clears only its actor journal",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "missing original campaign cannot clear the unresolved journal",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "membership narrowing removes private campaign rows",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "membership change retains accepted cancellation without obsolete success toast",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "cancel confirmation preserves accepted history and submits once while pending",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "cancel late response cannot show success under another actor",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "cancel lost response restores original read gate after reload and never retries",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "cancel in-flight reload and nonterminal read keep the original journal and block sending",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "cancel storage failure submits no cancellation request",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "cancel definitive refusal keeps campaign status and clears only its operation journal",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "cancel corrupt journal is retained and blocks mutation only for its actor",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "lost queue response survives reload and only reads the original campaign",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "in-flight queue survives reload and blocks a new send before readback",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "unknown result stays with the original actor across account switches",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "late old actor queue response cannot show success in the new actor",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "unavailable operation storage blocks queue before any request",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "failed recovery read retains the gate through a second reload",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "successful queue stays distinct from delivery and clears only its actor journal",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "missing original campaign cannot clear the unresolved journal",
+            "status": "passed",
+            "width": 390
+          }
+        ]
+      }
+    },
+    {
+      "file": ".audit\\remediation-20261003\\ep13-20-ci-compat-operations-browser-summary.json",
+      "pass": 20,
+      "readback": {
+        "codeSha": "530865b4b26680b424adfd57c3c1342fb5b4dab7",
+        "evidenceLayer": "real-route-synthetic-control-plane-owned-loopback",
+        "realAuth": false,
+        "realDatabase": false,
+        "realWorker": false,
+        "realProvider": false,
+        "results": [
+          {
+            "name": "failed command remains inline with support reference",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "safe retry reads back same job and audit independently",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "unknown command reads original job before another attempt",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "a read started before an unknown command cannot unlock another command",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "read failure preserves visible jobs and restricted actor cannot retry",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "failed command remains inline with support reference",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "safe retry reads back same job and audit independently",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "unknown command reads original job before another attempt",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "a read started before an unknown command cannot unlock another command",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "read failure preserves visible jobs and restricted actor cannot retry",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "failed command remains inline with support reference",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "safe retry reads back same job and audit independently",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "unknown command reads original job before another attempt",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "a read started before an unknown command cannot unlock another command",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "read failure preserves visible jobs and restricted actor cannot retry",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "failed command remains inline with support reference",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "safe retry reads back same job and audit independently",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "unknown command reads original job before another attempt",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "a read started before an unknown command cannot unlock another command",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "read failure preserves visible jobs and restricted actor cannot retry",
+            "status": "passed",
+            "width": 390
+          }
+        ]
+      }
+    },
+    {
+      "file": ".audit\\remediation-20261003\\ep13-20-ci-compat-workspace-browser-summary.json",
+      "pass": 44,
+      "readback": {
+        "codeSha": "530865b4b26680b424adfd57c3c1342fb5b4dab7",
+        "evidenceLayer": "real-route-synthetic-control-plane-owned-loopback",
+        "realAuth": false,
+        "realDatabase": false,
+        "realWorker": false,
+        "realProvider": false,
+        "results": [
+          {
+            "name": "workspace boundary: unknown membership starts no new-property directory reads",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: new-property role change clears private unsent input",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: new-property auth renewal preserves unsent input",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: accepted create suppresses obsolete navigation and success toast",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: new-property queued uploads stop after membership changes",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: unknown membership starts no operations reads",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: operations role narrowing clears private rows",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: accepted retry does not continue obsolete reads or toast",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: staff role narrowing clears reviewed candidates",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: accepted mapping save stops obsolete refresh",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: same binding recheck preserves reviewed draft",
+            "status": "passed",
+            "width": 1440
+          },
+          {
+            "name": "workspace boundary: unknown membership starts no new-property directory reads",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: new-property role change clears private unsent input",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: new-property auth renewal preserves unsent input",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: accepted create suppresses obsolete navigation and success toast",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: new-property queued uploads stop after membership changes",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: unknown membership starts no operations reads",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: operations role narrowing clears private rows",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: accepted retry does not continue obsolete reads or toast",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: staff role narrowing clears reviewed candidates",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: accepted mapping save stops obsolete refresh",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: same binding recheck preserves reviewed draft",
+            "status": "passed",
+            "width": 1280
+          },
+          {
+            "name": "workspace boundary: unknown membership starts no new-property directory reads",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: new-property role change clears private unsent input",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: new-property auth renewal preserves unsent input",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: accepted create suppresses obsolete navigation and success toast",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: new-property queued uploads stop after membership changes",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: unknown membership starts no operations reads",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: operations role narrowing clears private rows",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: accepted retry does not continue obsolete reads or toast",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: staff role narrowing clears reviewed candidates",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: accepted mapping save stops obsolete refresh",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: same binding recheck preserves reviewed draft",
+            "status": "passed",
+            "width": 768
+          },
+          {
+            "name": "workspace boundary: unknown membership starts no new-property directory reads",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "workspace boundary: new-property role change clears private unsent input",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "workspace boundary: new-property auth renewal preserves unsent input",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "workspace boundary: accepted create suppresses obsolete navigation and success toast",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "workspace boundary: new-property queued uploads stop after membership changes",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "workspace boundary: unknown membership starts no operations reads",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "workspace boundary: operations role narrowing clears private rows",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "workspace boundary: accepted retry does not continue obsolete reads or toast",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "workspace boundary: staff role narrowing clears reviewed candidates",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "workspace boundary: accepted mapping save stops obsolete refresh",
+            "status": "passed",
+            "width": 390
+          },
+          {
+            "name": "workspace boundary: same binding recheck preserves reviewed draft",
+            "status": "passed",
+            "width": 390
+          }
+        ]
+      }
+    },
+    {
+      "file": ".audit\\remediation-20261003\\ep13-20-ci-compat-mobile-workspace-browser-summary.json",
+      "pass": 48,
+      "readback": {
+        "codeSha": "530865b4b26680b424adfd57c3c1342fb5b4dab7",
+        "evidenceLayer": "actual-whatsapp-route-synthetic-auth-api-owned-loopback",
+        "realAuth": false,
+        "realDatabase": false,
+        "realProvider": false,
+        "realModel": false,
+        "results": [
+          {
+            "name": "resize scroll event without reader movement retains newest pin and older-reader position",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership denial removes private inbox and ignores pending AI while keeping stored drafts",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership binding renews inbox reads and drops the prior AI response",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership role renews inbox reads and drops the prior AI response",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "same membership recheck retains conversation reply draft",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "AI read outage has recoverable error and retry retains draft",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "successful missing result stays empty without a fabricated error",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "late A rules cannot replace B suggestion draft or focus",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "late A error cannot replace B suggestion draft or focus",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "A B A rejects earlier request for the same conversation",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "suggestion apply requires explicit overwrite choice and never sends",
+            "width": 1440,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "reduced keyboard height and late suggestion keep composer focus and send reachable",
+            "width": 1440,
+            "height": 540,
+            "status": "passed"
+          },
+          {
+            "name": "resize scroll event without reader movement retains newest pin and older-reader position",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership denial removes private inbox and ignores pending AI while keeping stored drafts",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership binding renews inbox reads and drops the prior AI response",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership role renews inbox reads and drops the prior AI response",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "same membership recheck retains conversation reply draft",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "AI read outage has recoverable error and retry retains draft",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "successful missing result stays empty without a fabricated error",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "late A rules cannot replace B suggestion draft or focus",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "late A error cannot replace B suggestion draft or focus",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "A B A rejects earlier request for the same conversation",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "suggestion apply requires explicit overwrite choice and never sends",
+            "width": 1280,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "reduced keyboard height and late suggestion keep composer focus and send reachable",
+            "width": 1280,
+            "height": 540,
+            "status": "passed"
+          },
+          {
+            "name": "resize scroll event without reader movement retains newest pin and older-reader position",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership denial removes private inbox and ignores pending AI while keeping stored drafts",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership binding renews inbox reads and drops the prior AI response",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership role renews inbox reads and drops the prior AI response",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "same membership recheck retains conversation reply draft",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "AI read outage has recoverable error and retry retains draft",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "successful missing result stays empty without a fabricated error",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "late A rules cannot replace B suggestion draft or focus",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "late A error cannot replace B suggestion draft or focus",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "A B A rejects earlier request for the same conversation",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "suggestion apply requires explicit overwrite choice and never sends",
+            "width": 768,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "reduced keyboard height and late suggestion keep composer focus and send reachable",
+            "width": 768,
+            "height": 540,
+            "status": "passed"
+          },
+          {
+            "name": "resize scroll event without reader movement retains newest pin and older-reader position",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership denial removes private inbox and ignores pending AI while keeping stored drafts",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership binding renews inbox reads and drops the prior AI response",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "membership role renews inbox reads and drops the prior AI response",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "same membership recheck retains conversation reply draft",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "AI read outage has recoverable error and retry retains draft",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "successful missing result stays empty without a fabricated error",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "late A rules cannot replace B suggestion draft or focus",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "late A error cannot replace B suggestion draft or focus",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "A B A rejects earlier request for the same conversation",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "suggestion apply requires explicit overwrite choice and never sends",
+            "width": 390,
+            "height": 900,
+            "status": "passed"
+          },
+          {
+            "name": "reduced keyboard height and late suggestion keep composer focus and send reachable",
+            "width": 390,
+            "height": 540,
+            "status": "passed"
+          }
+        ]
+      }
+    }
+  ],
+  "hookAst": {
+    "priorCommit": "530865b4b26680b424adfd57c3c1342fb5b4dab7",
+    "priorFile": "src/hooks/use-staff-workspace.ts",
+    "currentFile": "src/hooks/use-workspace-current.ts",
+    "functionAstEqual": true,
+    "printedFunction": "export function useWorkspaceCurrent(parent?: () => boolean) {\n    const active = useRef(false);\n    useLayoutEffect(() => {\n        active.current = true;\n        return () => {\n            active.current = false;\n        };\n    }, []);\n    return useCallback(() => active.current && (!parent || parent()), [parent]);\n}"
+  },
+  "failedAttempts": {
+    "firstExactCi": "FAILURE kept unchanged",
+    "uploadVm": "643 collected, 641 pass, 2 fail",
+    "handoffBuild": "failed before cases on TanStack server-entry dependency",
+    "campaignDenialUi": "4 valid RED viewport cases",
+    "legacyFirst": "115 collected,112 pass,3 scroll failures",
+    "legacyRetry": "115 collected,111 pass,4 fail; three same early scroll failures; extra late overview failure after diagnostic rebuilt the shared fixture output; entire run not accepted as green, late failure cause unconfirmed",
+    "diagnosticFiltered": "5 exercised,3 pass,2 fail,110 unexercised; not complete acceptance",
+    "resizeRace": "4 valid RED; all 48 mobile cases GREEN"
+  },
+  "artifactNamespace": "new ep13-20-ci-compat prefixes; prior proof snapshots preserved",
+  "artifacts": [
+    {
+      "file": "../ep13-20-ci-compat-final-no-link-synthetic-browser-results.json",
+      "bytes": 337972,
+      "sha256": "465943f5c4b7b9cc926f8ebab4127bff693f170dd6cb4342573996f6ca288723"
+    },
+    {
+      "file": "../ep13-20-ci-compat-whatsapp-link-handoff-results.json",
+      "bytes": 2184,
+      "sha256": "78ad988ee5abd9df7954e93e9bc1e1f6c3ecf8f755169faa2d6564792fe62840"
+    },
+    {
+      "file": "ep13-20-ci-compat-build.log",
+      "bytes": 260579,
+      "sha256": "05d91566aa5e705a297b5798a573444db4d82f82591d2716c33f80869d3823f2"
+    },
+    {
+      "file": "ep13-20-ci-compat-denial-red.log",
+      "bytes": 13619,
+      "sha256": "bb9c5599a45605f5f0af2585889882b83ac21553bc602f29b0a0309ee0d3095d"
+    },
+    {
+      "file": "ep13-20-ci-compat-format.log",
+      "bytes": 1163,
+      "sha256": "4235f03b7505f9b54192e60d70742eafa89a6b4313a3c867951267765b85efbc"
+    },
+    {
+      "file": "ep13-20-ci-compat-handoff-green.log",
+      "bytes": 1066,
+      "sha256": "39a96675d0465109d4e40d98bd53d91aa0197a361cca98155470587751df251c"
+    },
+    {
+      "file": "ep13-20-ci-compat-handoff-red.log",
+      "bytes": 1366,
+      "sha256": "b0cc7081bc5442b278c74e726d0e466b9c2312585da13ddbd6f1049e48fb9946"
+    },
+    {
+      "file": "ep13-20-ci-compat-hook-ast-proof.json",
+      "bytes": 551,
+      "sha256": "a651136f3c433051e3829f516510d148c1bcecd201bbc9487e44b98ae1eb40e7"
+    },
+    {
+      "file": "ep13-20-ci-compat-lint.log",
+      "bytes": 883,
+      "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+    },
+    {
+      "file": "ep13-20-ci-compat-media-green.log",
+      "bytes": 57025,
+      "sha256": "aae996cacffd206c19bffa9a524d877003da291b055927b07501ed007baf44a4"
+    },
+    {
+      "file": "ep13-20-ci-compat-media-red.log",
+      "bytes": 59662,
+      "sha256": "8e3876c554f9ab39f08d58c6bd27d7362941564221f65aff1c02f4a7993b8211"
+    },
+    {
+      "file": "ep13-20-ci-compat-mobile-green.log",
+      "bytes": 27727,
+      "sha256": "ac1552da9f2aad84e731108ef7906dccb96f759499d0f87e33f42c88888da950"
+    },
+    {
+      "file": "ep13-20-ci-compat-no-link-final.log",
+      "bytes": 25958,
+      "sha256": "c83e725402d6029b1a6c1d876393341c8e494c1b0318f385fd385091a2cf4c08"
+    },
+    {
+      "file": "ep13-20-ci-compat-no-link-green.log",
+      "bytes": 29221,
+      "sha256": "a2d4784d807bbe1b8b91ecafb53db44920572e0c016063ec8175beb342d55b37"
+    },
+    {
+      "file": "ep13-20-ci-compat-no-link-retry.log",
+      "bytes": 29505,
+      "sha256": "92d62fe8965f2157f69571546eedbfd98f94e007ed0409db35d2b3a7dcfd6217"
+    },
+    {
+      "file": "ep13-20-ci-compat-owned-ui-green.log",
+      "bytes": 30164,
+      "sha256": "76daff9b7df1e31d95ed3bab67400d38cb9c840140e6bd4e7e5eb6154ca86aff"
+    },
+    {
+      "file": "ep13-20-ci-compat-test-command-center.log",
+      "bytes": 8524,
+      "sha256": "62b8d51aa5d73e753c8d2c5fadcd9338f3a1910078989cb7a7dc109fd8f74d22"
+    },
+    {
+      "file": "ep13-20-ci-compat-test-operations.log",
+      "bytes": 3544,
+      "sha256": "921b0e11c051d233019a7f85af82bb95f007af794ad03cd543489fb813244985"
+    },
+    {
+      "file": "ep13-20-ci-compat-typecheck.log",
+      "bytes": 33,
+      "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+    },
+    {
+      "file": "ep13-20-ci-final-build.log",
+      "bytes": 260581,
+      "sha256": "e59ffac5077deebb4313230403a7f4506bc992a7e60d3e2ab31fdbc5caaee59d"
+    },
+    {
+      "file": "ep13-20-ci-final-lint.log",
+      "bytes": 883,
+      "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+    },
+    {
+      "file": "ep13-20-ci-final-test-no-link.log",
+      "bytes": 12145,
+      "sha256": "a7cdddbdf1551d41c6755b9fb5712dec6f546b4bb48c4a41f78bf5245bb6a241"
+    },
+    {
+      "file": "ep13-20-ci-final-test-whatsapp-enquiries.log",
+      "bytes": 10568,
+      "sha256": "f0baf25db0bb9f7d9bf817818797b8e5f0a860a435d4e6e057cea4ebc3a53fa6"
+    },
+    {
+      "file": "ep13-20-ci-final-typecheck.log",
+      "bytes": 33,
+      "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+    },
+    {
+      "file": "ep13-20-publication-ci-failed-readback.json",
+      "bytes": 21574,
+      "sha256": "a174b0fc5aeda63a61e4afc4f4213dce83bfaf042328a6c923ce56a320bdb8f4"
+    },
+    {
+      "file": "ep13-20-publication-ci-first-sql.log",
+      "bytes": 128651,
+      "sha256": "28e6c60f92c0e07164bc9e2d0bee8f17160aa8a129927bff3b72c533a26b8538"
+    },
+    {
+      "file": "ep13-20-scroll-diagnostic.log",
+      "bytes": 31073,
+      "sha256": "bcb05a49ee3affa3e5ad39051a9ae0d354db2e2f02e431e40050a5811d580228"
+    },
+    {
+      "file": "ep13-20-scroll-race-red-summary.json",
+      "bytes": 434,
+      "sha256": "61278bbca033bb4bc82d815ae25f0ba01b661bfb01293712d3656532bc968490"
+    },
+    {
+      "file": "ep13-20-scroll-race-red.log",
+      "bytes": 85754,
+      "sha256": "575cbb0b4f0a9472b9e4bd2c63967235b69238fe1c71db7eef2cda26139953d7"
+    },
+    {
+      "file": "../ep13-20-ci-compat-final-no-link-browser-1280.png",
+      "bytes": 235525,
+      "sha256": "45d341fa80931b76fb4685bbbb1b804b9e4a4aac279e38608b5706969edf4fee"
+    },
+    {
+      "file": "../ep13-20-ci-compat-final-no-link-browser-1440.png",
+      "bytes": 238116,
+      "sha256": "30b9fc9a9407d4e1fde4419b9a18c88452974f33259ba2e67052394976d274f4"
+    },
+    {
+      "file": "../ep13-20-ci-compat-final-no-link-browser-390.png",
+      "bytes": 109650,
+      "sha256": "5fafe947e49249dbd3a73209612b010469619a953e1e024b24cfd5b817aaf742"
+    },
+    {
+      "file": "../ep13-20-ci-compat-final-no-link-browser-768.png",
+      "bytes": 159731,
+      "sha256": "58bad1b4f3624cc3e0bb280d3c35b935b917829fec0e8f7fc7d97ac33979d533"
+    },
+    {
+      "file": "../ep13-20-ci-compat-final-no-link-forward-390.png",
+      "bytes": 48806,
+      "sha256": "debea80000e7bca2b4a2f6511e31566bb49262b2bcebbbd693d0f34139c0c4db"
+    },
+    {
+      "file": "../ep13-20-ci-compat-no-link-browser-1280.png",
+      "bytes": 234445,
+      "sha256": "358d71d9af6b7ee4576876b5ecb385b8151a696d5512e75294ffd30b1e54498a"
+    },
+    {
+      "file": "../ep13-20-ci-compat-no-link-browser-1440.png",
+      "bytes": 237054,
+      "sha256": "fd65a90e6168837fe338056198d3717473e21b27eb6780b24c9b985b007620a1"
+    },
+    {
+      "file": "../ep13-20-ci-compat-no-link-browser-3.png",
+      "bytes": 109159,
+      "sha256": "3042eb992efd9573c76c1c1d0e89bec2c4d5689ee77c05684e517e26f4c34b4a"
+    },
+    {
+      "file": "../ep13-20-ci-compat-no-link-browser-4.png",
+      "bytes": 160264,
+      "sha256": "44c5f4b08313a77e20dcefd5f99934d51729823b79f12ef72cc3250d322010ab"
+    },
+    {
+      "file": "../ep13-20-ci-compat-no-link-browser-8.png",
+      "bytes": 109159,
+      "sha256": "3042eb992efd9573c76c1c1d0e89bec2c4d5689ee77c05684e517e26f4c34b4a"
+    },
+    {
+      "file": "ep13-20-ci-compat-campaign-browser-summary.json",
+      "bytes": 10171,
+      "sha256": "8ab8486fca85da917b36b35e4435d793ec494017687ed569e208bed8449bc45d"
+    },
+    {
+      "file": "ep13-20-ci-compat-campaign-cancel-confirmed-1280.png",
+      "bytes": 100077,
+      "sha256": "e4696ce5aa6f7e108554e313828788a7afd284a4e70f2f6f7c3a3c678ad3d19b"
+    },
+    {
+      "file": "ep13-20-ci-compat-campaign-cancel-confirmed-1440.png",
+      "bytes": 102222,
+      "sha256": "3924da7fe64deaef068bb210ee5fd5258a200a70b541b34514687d69a6c5bf8d"
+    },
+    {
+      "file": "ep13-20-ci-compat-campaign-cancel-confirmed-390.png",
+      "bytes": 41583,
+      "sha256": "df44a860613ce3eb07e632a37692421b69e70cd4a6cf1298a447e31dec411627"
+    },
+    {
+      "file": "ep13-20-ci-compat-campaign-cancel-confirmed-768.png",
+      "bytes": 61668,
+      "sha256": "09ee2c407f11d53456b1b5901ca5d2f04d6384093aadfac3210c165e7aa4a7bf"
+    },
+    {
+      "file": "ep13-20-ci-compat-campaign-cancel-green-1280.png",
+      "bytes": 89714,
+      "sha256": "014990d7ed91e007d44230bfa730ce59a7853e7c83366682548df5edb652814e"
+    },
+    {
+      "file": "ep13-20-ci-compat-campaign-cancel-green-1440.png",
+      "bytes": 92717,
+      "sha256": "9c56ad0d77d0c15faaa3c4b5c5913e37289d6739a2c44b3c6cdd640d9edf354f"
+    },
+    {
+      "file": "ep13-20-ci-compat-campaign-cancel-green-390.png",
+      "bytes": 40172,
+      "sha256": "f79c1aef3b827391197a8646d60dbb283f030fe8b9b361e7b759609232902cd6"
+    },
+    {
+      "file": "ep13-20-ci-compat-campaign-cancel-green-768.png",
+      "bytes": 56108,
+      "sha256": "79bb1d58e773b09a2b9dd0302c2c64573428f0dd5542c8ee7ed70fafd5740e5b"
+    },
+    {
+      "file": "ep13-20-ci-compat-mobile-workspace-browser-summary.json",
+      "bytes": 8157,
+      "sha256": "a32425dd7505b9a21c51d721fb3ca260abe5170471fb375fcbf6b211e513809b"
+    },
+    {
+      "file": "ep13-20-ci-compat-operations-browser-summary.json",
+      "bytes": 2982,
+      "sha256": "9175705eb95582aa69b8f21ffbbfb738913a66df6dc8cdf35626461fd0c6b5cc"
+    },
+    {
+      "file": "ep13-20-ci-compat-workspace-browser-summary.json",
+      "bytes": 6730,
+      "sha256": "b943e484c2a278cb9adc8f6982ae2875a61898e08f57c5917763f03c404f83a5"
+    }
+  ],
+  "configAndMigration": {
+    "newSchemaMigrations": 0,
+    "newConfig": 0,
+    "serverRuntimeChanges": 0,
+    "schemaInventory": 85,
+    "registryInventory": 1,
+    "dryRun": "ep13-20-config-dry-run.json",
+    "providerIdInvented": false
+  },
+  "publication": {
+    "pr": 219,
+    "state": "OPEN_DRAFT",
+    "exactHeadCi": "PENDING_NEXT_PUSH; final readback in PR and publication-readback.json"
+  },
+  "capability": {
+    "selectedLocalContracts": "READY",
+    "fullEP13To20": "NOT_READY",
+    "trueAuthProviderModelPropertyHkRelease": "BLOCKED",
+    "repairedNative28hse": "NOT_READY_0_OF_3"
+  },
+  "effects": {
+    "productionWrites": 0,
+    "productionMigrations": 0,
+    "realSends": 0,
+    "applicationModelCalls": 0,
+    "manualDeploys": 0,
+    "merge": false
+  },
+  "historicalScreenshotLimitation": "ep13-20-historical-artifact-limit.json (27 original PNG bytes unavailable; metadata and statuses preserved)",
+  "csvProof": {
+    "EarnestProperty_Remediation_Traceability_2026-10-03.csv": {
+      "oldColumnsAndCellsUnchanged": true,
+      "rows": 22,
+      "executionStatusCounts": {
+        "LOCAL_VERIFIED": 8,
+        "LOCAL_PARTIAL": 11,
+        "BLOCKED_ACCEPTANCE": 1,
+        "BLOCKED_EXTERNAL": 1,
+        "BLOCKED_RELEASE": 1
+      },
+      "originalStatusCounts": {
+        "待開始": 21,
+        "受阻（真實 detail；本地修正可先做）": 1
+      }
+    },
+    "EarnestProperty_UAT_Matrix_2026-10-03.csv": {
+      "oldColumnsAndCellsUnchanged": true,
+      "rows": 82,
+      "executionStatusCounts": {
+        "PASS": 40,
+        "PARTIAL": 28,
+        "BLOCKED": 14
+      },
+      "originalStatusCounts": {
+        "PASS": 29,
+        "BLOCKED": 22,
+        "FAIL": 9,
+        "NOT_APPLICABLE_NEW_CASE": 22
+      }
+    }
+  }
+}
