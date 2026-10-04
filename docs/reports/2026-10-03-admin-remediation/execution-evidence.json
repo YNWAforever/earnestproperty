@@ -7139,5 +7139,27 @@
       "agentTriggered": 0,
       "required": 3
     }
+  },
+  "ep21ReleaseReadiness": {
+    "sourceSha": "b157b66cd4b061d0306c90a22a788384d4974216",
+    "subjectSha": "f985cad43c0c327201ebbd3b18bf414f655f37e7",
+    "report": "docs/reports/2026-10-03-admin-remediation/ep21-release-readiness-readback.json",
+    "localCheckerPass": 123,
+    "localCheckerFail": 0,
+    "localCheckerSkip": 0,
+    "formal": "BLOCKED_RELEASE",
+    "cliExpectedExit": 2,
+    "cliActualExit": 2,
+    "configSchemaRuntimeChanges": 0,
+    "effects": {
+      "providerCalls": 0,
+      "realSends": 0,
+      "modelSpendUsd": 0,
+      "productionMigrations": 0,
+      "manualDeployments": 0,
+      "merge": 0,
+      "newNativeScheduleRuns": 0
+    },
+    "oldRootsPreserved": true
   }
 }
