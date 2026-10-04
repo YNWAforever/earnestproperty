@@ -192,9 +192,122 @@ async function finish(page: Page, id: string, ordinal: number, outcome: string) 
     () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
   );
 }
+async function compositionInput(
+  input: import("@playwright/test").Locator,
+  value: string,
+  composing: boolean,
+) {
+  await input.evaluate(
+    (element, { value, composing }) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      if (!setter) throw Error("Native owned input setter missing");
+      setter.call(element, value);
+      element.dispatchEvent(
+        new InputEvent("input", {
+          bubbles: true,
+          data: value,
+          inputType: "insertCompositionText",
+          isComposing: composing,
+        }),
+      );
+    },
+    { value, composing },
+  );
+}
+async function conversationQueries(page: Page) {
+  return page.evaluate(() =>
+    window.noLinkFixture.calls
+      .filter((call) => {
+        const input = call.input as { resource?: string } | undefined;
+        return call.name === "page" && input?.resource === "conversations";
+      })
+      .map((call) => (call.input as { q?: string }).q),
+  );
+}
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("IME composition pause keeps uncommitted search out of URL and reads", async ({
+      page,
+    }) => {
+      await open(page);
+      await reply(page).fill("中文與 English 草稿保持甲");
+      if (width < 1024) {
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+      }
+      const search = page.getByRole("textbox", { name: "搜尋 WhatsApp 對話", exact: true });
+      await search.focus();
+      await page.clock.install();
+      await page.clock.pauseAt(Date.now() + 1000);
+      await search.dispatchEvent("compositionstart", { data: "" });
+      await compositionInput(search, "合成客戶", true);
+      await expect(search).toHaveValue("合成客戶");
+      await page.clock.runFor(700);
+      expect(new URL(page.url()).searchParams.get("q")).toBeNull();
+      expect(await conversationQueries(page)).not.toContain("合成客戶");
+      await compositionInput(search, "合成客戶甲", false);
+      await search.dispatchEvent("compositionend", { data: "合成客戶甲" });
+      await page.clock.runFor(700);
+      await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("合成客戶甲");
+      expect(await conversationQueries(page)).toContain("合成客戶甲");
+      await expect(search).toBeFocused();
+      await search.fill("  A074714  ");
+      await page.clock.runFor(700);
+      await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("A074714");
+      expect(await conversationQueries(page)).toContain("A074714");
+      await expect(search).toBeFocused();
+      await page.clock.resume();
+      const opener = page.getByRole("button").filter({ hasText: "合成客戶甲" });
+      await opener.focus();
+      await page.keyboard.press("Enter");
+      await expect(reply(page)).toHaveValue("中文與 English 草稿保持甲");
+    });
+    test("IME start cancels pending debounce and unchanged committed text restarts it", async ({
+      page,
+    }) => {
+      await open(page);
+      if (width < 1024) {
+        await page.keyboard.press("Escape");
+        await expect(page.getByRole("dialog")).toHaveCount(0);
+      }
+      const search = page.getByRole("textbox", { name: "搜尋 WhatsApp 對話", exact: true });
+      await page.clock.install();
+      await page.clock.pauseAt(Date.now() + 1000);
+      await search.fill("合成客戶");
+      await page.clock.runFor(100);
+      await search.dispatchEvent("compositionstart", { data: "合成客戶" });
+      await page.clock.runFor(700);
+      expect(new URL(page.url()).searchParams.get("q")).toBeNull();
+      expect(await conversationQueries(page)).not.toContain("合成客戶");
+      await search.dispatchEvent("compositionend", { data: "合成客戶" });
+      await page.clock.runFor(700);
+      await expect.poll(() => new URL(page.url()).searchParams.get("q")).toBe("合成客戶");
+      expect(await conversationQueries(page)).toContain("合成客戶");
+      await expect(search).toBeFocused();
+      await page.clock.resume();
+    });
+    test("keyboard modal Tab wraps at the last and first controls", async ({ page }) => {
+      await open(page);
+      if (width >= 1024) {
+        const opener = page.getByRole("button").filter({ hasText: "合成客戶甲" });
+        await opener.focus();
+        await page.keyboard.press("Enter");
+        await expect(opener).toBeFocused();
+        await expect(reply(page)).toBeVisible();
+        return;
+      }
+      const dialog = page.getByRole("dialog");
+      const last = dialog.getByRole("button", { name: "關閉", exact: true });
+      await last.focus();
+      await page.keyboard.press("Tab");
+      await expect(last).not.toBeFocused();
+      expect(await dialog.evaluate((element) => element.contains(document.activeElement))).toBe(
+        true,
+      );
+      await page.keyboard.press("Shift+Tab");
+      await expect(last).toBeFocused();
+    });
     test("keyboard Enter and Escape return to the conversation opener with focus trapped", async ({
       page,
     }) => {
