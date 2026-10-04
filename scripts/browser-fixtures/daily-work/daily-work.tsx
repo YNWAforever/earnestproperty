@@ -1,4 +1,5 @@
 import React from "react";
+import { Toaster } from "sonner";
 import { createRoot } from "react-dom/client";
 import { createRootRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -29,5 +30,6 @@ window.dailyWorkFixture.changeContext = async (
 createRoot(document.getElementById("root")!).render(
   <QueryClientProvider client={new QueryClient()}>
     <RouterProvider router={router} />
+    <Toaster />
   </QueryClientProvider>,
 );

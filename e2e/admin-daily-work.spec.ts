@@ -11,6 +11,10 @@ declare global {
       overviewMode: string;
       staffMode: string;
       leadsMode: string;
+      noteMode: string;
+      mutationPending: { release: () => void }[];
+      acceptedNotes: { actor: string; input: Record<string, unknown> }[];
+      leadUpdates: { actor: string; input: Record<string, unknown> }[];
       teamMode: string;
       empty: boolean;
       pending: { release: () => void; actor: string; role: string }[];
@@ -61,7 +65,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/daily-work-session-boundary-summary.json",
+    ".audit/remediation-20261003/daily-work-session-lifetime-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -112,6 +116,80 @@ async function open(page: Page, role = "manager") {
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    for (const change of ["actor", "role", "binding", "aba", "late-failure", "same-context"]) {
+      test(`delayed note continuation respects workspace lifetime ${change}`, async ({ page }) => {
+        await open(page);
+        await card(page, "開放查詢").click();
+        await page.getByText("每日工作合成查詢0", { exact: true }).click();
+        await expect(page.getByLabel("新增內部跟進紀錄", { exact: true })).toBeVisible();
+        await page.getByLabel("新增內部跟進紀錄", { exact: true }).fill("原 actor 已提交的備註");
+        await page
+          .getByLabel("內部備註（不會傳送給客戶）", { exact: true })
+          .fill("原 actor 的 draft");
+        await page.evaluate(
+          (change) =>
+            (window.dailyWorkFixture.noteMode =
+              change === "late-failure" ? "delayed-failure" : "delayed"),
+          change,
+        );
+        await page.getByRole("button", { name: "儲存", exact: true }).click();
+        await expect
+          .poll(() => page.evaluate(() => window.dailyWorkFixture.mutationPending.length))
+          .toBe(1);
+        if (["actor", "late-failure", "aba"].includes(change))
+          await page.evaluate(() =>
+            window.dailyWorkFixture.changeContext("actor-b", "manager", "staff-b"),
+          );
+        if (change === "role")
+          await page.evaluate(() => window.dailyWorkFixture.changeContext("actor-a", "agent"));
+        if (change === "binding")
+          await page.evaluate(() =>
+            window.dailyWorkFixture.changeContext("actor-a", "manager", "staff-b"),
+          );
+        if (change === "aba") {
+          await expect(page.getByLabel("內部備註（不會傳送給客戶）", { exact: true })).toHaveValue(
+            "",
+          );
+          await page.evaluate(() => window.dailyWorkFixture.changeContext("actor-a", "manager"));
+        }
+        if (change === "same-context")
+          await page.evaluate(() => window.dailyWorkFixture.changeContext("actor-a", "manager"));
+        else
+          await expect(page.getByLabel("內部備註（不會傳送給客戶）", { exact: true })).toHaveValue(
+            "",
+          );
+        const before = (await calls(page, "lead-detail")).length;
+        await page.evaluate(async () => {
+          window.dailyWorkFixture.mutationPending[0].release();
+          // The synthetic request continuation drains before this next frame.
+          await new Promise<void>((done) => requestAnimationFrame(() => done()));
+        });
+        expect(await calls(page, "lead-note-return")).toHaveLength(1);
+        if (change === "same-context") {
+          await expect
+            .poll(() => page.evaluate(() => window.dailyWorkFixture.leadUpdates.length))
+            .toBe(1);
+          await expect(page.getByRole("button", { name: "儲存", exact: true })).toBeEnabled();
+          expect(await page.evaluate(() => window.dailyWorkFixture.leadUpdates[0])).toMatchObject({
+            actor: "actor-a",
+            input: { note: "原 actor 的 draft" },
+          });
+        } else {
+          await expect
+            .poll(() => page.evaluate(() => window.dailyWorkFixture.mutationPending.length))
+            .toBe(1);
+          await expect(page.getByText("Owned old note failed", { exact: true })).toHaveCount(0);
+          expect(await calls(page, "lead-update")).toHaveLength(0);
+          expect(await calls(page, "lead-detail")).toHaveLength(before);
+          await expect(page.getByLabel("內部備註（不會傳送給客戶）", { exact: true })).toHaveValue(
+            "",
+          );
+        }
+        expect(await page.evaluate(() => window.dailyWorkFixture.acceptedNotes.length)).toBe(
+          change === "late-failure" ? 0 : 1,
+        );
+      });
+    }
     test("lead list same-user downgrade removes old scope and selection", async ({ page }) => {
       await open(page);
       await card(page, "開放查詢").click();
