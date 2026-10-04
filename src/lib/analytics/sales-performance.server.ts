@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import type { StaffAccess } from "../neon/auth.server.ts";
 import { queryRows } from "../neon/db.server.ts";
+import { reviseSourceQuality } from "./performance-events.server.ts";
 import { calculateSalesPerformance, parsePerformanceFilters } from "./sales-performance.mjs";
 import {
   BACKLOG_SQL,
@@ -224,44 +225,24 @@ export async function listPerformanceRecords(
 }
 
 export async function reviseInquiryQuality(
-  input: { inquiryId: string; quality: "production" | "test" | "spam" | "unknown"; reason: string },
+  input: {
+    inquiryId: string;
+    quality: "production" | "test" | "spam" | "unknown";
+    reason: string;
+    expectedRevisionId: string | null;
+  },
   actor: StaffAccess,
 ): Promise<{ inquiryId: string; affectedHkDay: string }> {
   if (!actor.roles.includes("admin")) throw new Response("Forbidden", { status: 403 });
   if (
+    typeof input.inquiryId !== "string" ||
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
       input.inquiryId,
-    ) ||
-    !["production", "test", "spam", "unknown"].includes(input.quality) ||
-    input.reason.trim().length < 8
-  ) {
+    )
+  )
     throw new Response("Invalid quality correction", { status: 400 });
-  }
-  const rows = await queryRows<{
-    inquiry_id: string | null;
-    affected_hk_day: string | null;
-    actor_allowed: boolean;
-  }>(
-    `WITH actor_row AS MATERIALIZED (
-       SELECT id FROM staff_users WHERE id=$4::uuid AND auth_user_id=$5 AND active FOR SHARE
-     ), actor_grant AS MATERIALIZED (
-       SELECT r.staff_user_id FROM staff_roles r JOIN actor_row a ON a.id=r.staff_user_id
-       WHERE r.role='admin' FOR SHARE OF r
-     ), selected AS MATERIALIZED (
-       SELECT id,created_at FROM inquiries WHERE id=$1::uuid
-     ), written AS (
-       INSERT INTO inquiry_quality_revisions(inquiry_id,quality,reason,changed_by)
-       SELECT s.id,$2,$3,a.staff_user_id FROM selected s CROSS JOIN actor_grant a
-       RETURNING inquiry_id
-     ) SELECT (SELECT inquiry_id::text FROM written) AS inquiry_id,
-       (SELECT (created_at AT TIME ZONE 'Asia/Hong_Kong')::date::text FROM selected) AS affected_hk_day,
-       EXISTS(SELECT 1 FROM actor_grant) AS actor_allowed`,
-    [input.inquiryId, input.quality, input.reason.trim(), actor.staffId, actor.authUserId],
-  );
-  if (!rows[0]?.actor_allowed) throw new Response("Forbidden", { status: 403 });
-  if (!rows[0].inquiry_id || !rows[0].affected_hk_day)
-    throw new Response("Inquiry not found", { status: 404 });
-  return { inquiryId: rows[0].inquiry_id, affectedHkDay: rows[0].affected_hk_day };
+  const decision = await reviseSourceQuality("inquiry", input.inquiryId, input, actor);
+  return { inquiryId: decision.sourceKey, affectedHkDay: decision.affectedHkDay };
 }
 
 export async function getPerformanceFilterOptions(actor: StaffAccess) {

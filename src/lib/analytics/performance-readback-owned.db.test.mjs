@@ -12,7 +12,7 @@ test(
     const networkGuard = t.mock.method(globalThis, "fetch", async () => {
       throw new Error("Provider/network request forbidden in owned quality acceptance");
     });
-    await withOwnedPostgres(async ({ query, transaction, migrationCount }) => {
+    await withOwnedPostgres(async ({ query, transaction, migrationCount, pool }) => {
       assert.equal(migrationCount, 85);
       let beforeRead = null;
       const readQuery = async (sql, params) => {
@@ -25,10 +25,42 @@ test(
         getSalesPerformance,
         listPerformanceRecords,
         getPerformanceFilterOptions,
-        reviseInquiryQuality,
+        reviseInquiryQuality: rawReviseInquiryQuality,
       } = await import("./sales-performance.server.ts");
-      const { revisePerformanceEventQuality, qualifyLeadForPerformance } =
-        await import("./performance-events.server.ts");
+      const {
+        revisePerformanceEventQuality: rawRevisePerformanceEventQuality,
+        qualifyLeadForPerformance,
+      } = await import("./performance-events.server.ts");
+      // Existing cases explicitly read their fixture snapshot; new recovery cases call raw writers.
+      const snapshot = async (kind, key) => {
+        const [r] = await query(
+          kind === "inquiry"
+            ? "SELECT id::text AS id FROM inquiry_quality_revisions WHERE inquiry_id=$1 ORDER BY id DESC LIMIT 1"
+            : "SELECT id::text AS id FROM performance_event_quality_revisions WHERE event_key=$1 ORDER BY id DESC LIMIT 1",
+          [key],
+        );
+        return r?.id ?? null;
+      };
+      const reviseInquiryQuality = async (value, access) =>
+        rawReviseInquiryQuality(
+          {
+            ...value,
+            expectedRevisionId:
+              typeof value.inquiryId === "string"
+                ? await snapshot("inquiry", value.inquiryId)
+                : null,
+          },
+          access,
+        );
+      const revisePerformanceEventQuality = async (value, access) =>
+        rawRevisePerformanceEventQuality(
+          {
+            ...value,
+            expectedRevisionId:
+              typeof value.eventKey === "string" ? await snapshot("event", value.eventKey) : null,
+          },
+          access,
+        );
       for (const n of [0, 1])
         await query("INSERT INTO branches(id,slug,name) VALUES($1,$2,$3)", [
           id(500 + n),
@@ -1240,6 +1272,260 @@ test(
           }
         },
       );
+      const qualityFixture = async (kind, n) => {
+        const access = await createReadActor(n, "admin"),
+          inquiry = id(50000 + n);
+        await query(
+          "INSERT INTO inquiries(id,source,name,created_at,assigned_agent_id) VALUES($1,'whatsapp','Owned quality recovery','2026-09-30T01:00:00Z',$2)",
+          [inquiry, access.staffId],
+        );
+        let key = inquiry;
+        if (kind === "event") {
+          await query(
+            "INSERT INTO inquiry_quality_revisions(inquiry_id,quality,reason,changed_by) VALUES($1,'production','Owned source inquiry review',$2)",
+            [inquiry, access.staffId],
+          );
+          await query(
+            "UPDATE inquiries SET first_human_response_at='2026-09-30T02:00:00Z',first_human_response_staff_id=$2 WHERE id=$1",
+            [inquiry, access.staffId],
+          );
+          key = `human_response:${inquiry}`;
+        }
+        const revise =
+          kind === "inquiry" ? rawReviseInquiryQuality : rawRevisePerformanceEventQuality;
+        const request = {
+          ...(kind === "inquiry" ? { inquiryId: key } : { eventKey: key }),
+          quality: "production",
+          reason: `Owned original quality recovery ${n}`,
+          expectedRevisionId: null,
+        };
+        const history = () =>
+          query(
+            kind === "inquiry"
+              ? "SELECT * FROM inquiry_quality_revisions WHERE inquiry_id=$1 ORDER BY id"
+              : "SELECT * FROM performance_event_quality_revisions WHERE event_key=$1 ORDER BY id",
+            [key],
+          );
+        return { kind, key, inquiry, access, revise, request, history };
+      };
+      const waitForTwoLocks = async () => {
+        for (let n = 0; n < 100; n++) {
+          const [r] = await query(
+            "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'",
+          );
+          if (r.n >= 2) return;
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        assert.fail("Two owned quality calls did not reach their real PostgreSQL lock barrier");
+      };
+      for (const [kind, offset] of [
+        ["inquiry", 930],
+        ["event", 950],
+      ]) {
+        await t.test(
+          `quality recovery ${kind} returns the exact visible revision snapshot`,
+          async () => {
+            const f = await qualityFixture(kind, offset),
+              page = await listPerformanceRecords(
+                {
+                  filters,
+                  drilldownKey: kind === "inquiry" ? "unknown_backlog" : "quality_unknown_events",
+                },
+                f.access,
+              );
+            const row = page.records.find((r) => r.id === f.key);
+            assert.ok(row);
+            assert.equal(row.qualityRevisionId, null);
+            const quality = kind === "inquiry" ? "production" : "test";
+            await f.revise({ ...f.request, quality }, f.access);
+            const key = kind === "inquiry" ? "inquiries" : "quality_test_events";
+            const found = (
+              await listPerformanceRecords({ filters, drilldownKey: key }, f.access)
+            ).records.find((r) => r.id === f.key);
+            assert.ok(found);
+            assert.equal(found.qualityRevisionId, await snapshot(kind, f.key));
+            assert.equal(found.quality, quality);
+          },
+        );
+        await t.test(
+          `quality recovery ${kind} lost committed response retries without another immutable revision`,
+          async () => {
+            const f = await qualityFixture(kind, offset + 1);
+            await assert.rejects(async () => {
+              await f.revise(f.request, f.access);
+              throw Error("Owned quality response lost after commit");
+            }, /response lost/);
+            const before = await readHistory(),
+              source = await f.history();
+            assert.equal(source.length, 1);
+            await f.revise(f.request, f.access);
+            await f.revise(f.request, f.access);
+            await f.revise(
+              { ...f.request, expectedRevisionId: await snapshot(kind, f.key) },
+              f.access,
+            );
+            assert.deepEqual(await readHistory(), before);
+          },
+        );
+        await t.test(
+          `quality recovery ${kind} old accepted retry never overwrites a newer other-admin decision`,
+          async () => {
+            const f = await qualityFixture(kind, offset + 2),
+              other = await createReadActor(offset + 100, "admin");
+            await f.revise(f.request, f.access);
+            await f.revise(
+              {
+                ...f.request,
+                expectedRevisionId: await snapshot(kind, f.key),
+                quality: "spam",
+                reason: "Owned protected later colleague decision",
+              },
+              other,
+            );
+            const before = await readHistory();
+            await f.revise(f.request, f.access);
+            assert.deepEqual(await readHistory(), before);
+            assert.equal((await f.history()).at(-1).quality, "spam");
+          },
+        );
+        await t.test(
+          `quality recovery ${kind} refuses changed original reason or quality`,
+          async () => {
+            const f = await qualityFixture(kind, offset + 3);
+            await f.revise(f.request, f.access);
+            const before = await readHistory();
+            for (const delta of [
+              { reason: "Owned changed pending original reason" },
+              { quality: "test" },
+            ])
+              await assert.rejects(
+                f.revise({ ...f.request, ...delta }, f.access),
+                (e) => e instanceof Response && e.status === 409,
+              );
+            assert.deepEqual(await readHistory(), before);
+          },
+        );
+        await t.test(
+          `quality recovery ${kind} cannot acknowledge another actor's original request`,
+          async () => {
+            const f = await qualityFixture(kind, offset + 4),
+              other = await createReadActor(offset + 101, "admin");
+            await f.revise(f.request, f.access);
+            const before = await readHistory();
+            await assert.rejects(
+              f.revise(f.request, other),
+              (e) => e instanceof Response && e.status === 409,
+            );
+            assert.deepEqual(await readHistory(), before);
+          },
+        );
+        await t.test(
+          `quality recovery ${kind} rejects absent and invalid snapshots before revision`,
+          async () => {
+            const f = await qualityFixture(kind, offset + 5),
+              before = await readHistory();
+            for (const expectedRevisionId of [
+              undefined,
+              "",
+              "0",
+              "-1",
+              "1.1",
+              "9223372036854775808",
+              1,
+            ])
+              await assert.rejects(
+                f.revise({ ...f.request, expectedRevisionId }, f.access),
+                (e) => e instanceof Response && e.status === 400,
+              );
+            assert.deepEqual(await readHistory(), before);
+          },
+        );
+        await t.test(
+          `quality recovery ${kind} rejects a revision snapshot belonging to a different source`,
+          async () => {
+            const f = await qualityFixture(kind, offset + 6),
+              other = await qualityFixture(kind, offset + 200);
+            await other.revise(other.request, other.access);
+            const before = await readHistory();
+            await assert.rejects(
+              f.revise(
+                { ...f.request, expectedRevisionId: await snapshot(kind, other.key) },
+                f.access,
+              ),
+              (e) => e instanceof Response && e.status === 409,
+            );
+            assert.deepEqual(await readHistory(), before);
+          },
+        );
+        await t.test(
+          `quality recovery ${kind} retry rechecks revoked current account authority`,
+          async () => {
+            const f = await qualityFixture(kind, offset + 7);
+            await f.revise(f.request, f.access);
+            await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [f.access.staffId]);
+            const before = await readHistory();
+            await assert.rejects(
+              f.revise(f.request, f.access),
+              (e) => e instanceof Response && e.status === 403,
+            );
+            assert.deepEqual(await readHistory(), before);
+          },
+        );
+        for (const identical of [true, false])
+          await t.test(
+            `quality recovery ${kind} concurrent ${identical ? "identical retries append once" : "different decisions preserve one winner and refuse stale CAS"}`,
+            async () => {
+              const f = await qualityFixture(kind, offset + (identical ? 8 : 9)),
+                lock = await pool.connect();
+              let first, second;
+              try {
+                await lock.query("BEGIN");
+                await lock.query(
+                  kind === "inquiry"
+                    ? "SELECT id FROM inquiries WHERE id=$1 FOR UPDATE"
+                    : "SELECT event_key FROM performance_events WHERE event_key=$1 FOR UPDATE",
+                  [f.key],
+                );
+                first = f.revise(f.request, f.access);
+                second = f.revise(
+                  identical
+                    ? f.request
+                    : {
+                        ...f.request,
+                        quality: "test",
+                        reason: "Owned competing simultaneous quality decision",
+                      },
+                  f.access,
+                );
+                // Attach handlers immediately; the source lock is the real barrier.
+                const settled = Promise.allSettled([first, second]);
+                await waitForTwoLocks();
+                await lock.query("COMMIT");
+                const result = await settled;
+                assert.equal(
+                  result.filter((r) => r.status === "fulfilled").length,
+                  identical ? 2 : 1,
+                );
+                if (!identical)
+                  assert.ok(
+                    result.some(
+                      (r) =>
+                        r.status === "rejected" &&
+                        r.reason instanceof Response &&
+                        r.reason.status === 409,
+                    ),
+                  );
+                const rows = await f.history();
+                assert.equal(rows.length, 1);
+                assert.equal(rows[0].changed_by, f.access.staffId);
+              } finally {
+                await lock.query("ROLLBACK");
+                lock.release();
+                if (first && second) await Promise.allSettled([first, second]);
+              }
+            },
+          );
+      }
     });
     assert.equal(networkGuard.mock.calls.length, 0);
   },

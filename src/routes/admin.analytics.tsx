@@ -109,6 +109,16 @@ function AdminAnalyticsWorkspace() {
   const qualificationRequests = useRef(
     new Map<string, { leadId: string; qualifiedAt: string; evidence: string }>(),
   );
+  const qualityRequests = useRef(
+    new Map<
+      string,
+      {
+        expectedRevisionId: string | null;
+        quality: "production" | "test" | "spam" | "unknown";
+        reason: string;
+      }
+    >(),
+  );
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -217,19 +227,44 @@ function AdminAnalyticsWorkspace() {
     quality: "production" | "test" | "spam" | "unknown";
     reason: string;
   }) {
-    if (input.record.kind === "inquiry")
-      await correctInquiryQuality({
-        inquiryId: input.record.id,
-        quality: input.quality,
-        reason: input.reason,
-      });
-    else if (input.record.eventKey)
-      await correctPerformanceEventQuality({
-        eventKey: input.record.eventKey,
-        quality: input.quality,
-        reason: input.reason,
-      });
-    else throw new Error("Missing event evidence");
+    const key =
+      input.record.kind === "inquiry"
+        ? `inquiry:${input.record.id}`
+        : input.record.eventKey
+          ? `event:${input.record.eventKey}`
+          : null;
+    if (!key || input.record.qualityRevisionId === undefined)
+      throw new Error("Reload the quality source snapshot before correcting");
+    const reason = input.reason.trim();
+    const previous = qualityRequests.current.get(key);
+    if (previous && (previous.quality !== input.quality || previous.reason !== reason)) {
+      const error = new Error("Restore the original quality decision before retrying");
+      error.name = "QualityRequestChanged";
+      throw error;
+    }
+    // The actor-keyed workspace keeps the first snapshot through unknown outcomes
+    // and filter remounts. A newer source read must not replace that original base.
+    const request = previous ?? {
+      expectedRevisionId: input.record.qualityRevisionId,
+      quality: input.quality,
+      reason,
+    };
+    qualityRequests.current.set(key, request);
+    try {
+      if (input.record.kind === "inquiry")
+        await correctInquiryQuality({ inquiryId: input.record.id, ...request });
+      else await correctPerformanceEventQuality({ eventKey: input.record.eventKey!, ...request });
+    } catch (error) {
+      if (
+        !previous &&
+        error instanceof ServerFnResponseError &&
+        [400, 403, 409].includes(error.status) &&
+        qualityRequests.current.get(key) === request
+      )
+        qualityRequests.current.delete(key);
+      throw error;
+    }
+    if (qualityRequests.current.get(key) === request) qualityRequests.current.delete(key);
     await refreshAfterMutation();
   }
   async function qualifyLead(input: { leadId: string; qualifiedAt: string; evidence: string }) {
@@ -477,6 +512,11 @@ function AdminAnalyticsWorkspace() {
                 onMore={() => void openRecords(drilldownKey, recordPage?.nextCursor ?? null, true)}
                 onCorrect={correctQuality}
                 onQualify={qualifyLead}
+                getPendingQualityDecision={(record) =>
+                  qualityRequests.current.get(
+                    record.kind === "inquiry" ? `inquiry:${record.id}` : `event:${record.eventKey}`,
+                  )
+                }
                 getPendingQualificationEvidence={(leadId) =>
                   qualificationRequests.current.get(leadId)?.evidence
                 }

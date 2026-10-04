@@ -49,6 +49,12 @@ window.performanceReadbackFixture = state;
 function scope() {
   return state.actor === "actor-a" && state.binding === "staff-a" ? 0 : 1;
 }
+function qualityRevision(kind: string, key: string) {
+  return state.qualityRevisions
+    .map((r, index) => ({ ...r, id: String(index + 1) }))
+    .filter((r) => r.kind === kind && r.key === key)
+    .at(-1);
+}
 function input(value: unknown) {
   if (state.denied || !["admin", "manager"].includes(state.role))
     throw new Response("Owned forbidden", { status: 403 });
@@ -65,6 +71,7 @@ function input(value: unknown) {
     at = "2026-09-30T00:00:00Z",
   ) => ({
     id: id(n),
+    qualityRevisionId: qualityRevision("inquiry", id(n))?.id ?? null,
     quality:
       state.qualityRevisions.filter((r) => r.kind === "inquiry" && r.key === id(n)).at(-1)
         ?.quality ?? quality,
@@ -106,6 +113,7 @@ function input(value: unknown) {
   const visible = new Set(inquiries.map((i) => i.id));
   const event = (type: string, n: number) => ({
     type,
+    qualityRevisionId: qualityRevision("event", `${type}:${id(n)}`)?.id ?? null,
     quality:
       state.qualityRevisions
         .filter((r) => r.kind === "event" && r.key === `${type}:${id(n)}`)
@@ -121,6 +129,7 @@ function input(value: unknown) {
     const key = `lead_qualified:${q.leadId}`;
     return {
       type: "lead_qualified",
+      qualityRevisionId: qualityRevision("event", key)?.id ?? null,
       quality:
         state.qualityRevisions.filter((r) => r.kind === "event" && r.key === key).at(-1)?.quality ??
         "unknown",
@@ -149,6 +158,7 @@ function input(value: unknown) {
       current: true,
       status: "verified_attributed",
       quality: "production",
+      qualityRevisionId: null,
       dealType,
       leadId: id(101 + index),
       confirmedAt: "2026-09-30T01:00:00Z",
@@ -188,15 +198,19 @@ export async function fetchSalesPerformanceRecords(value: {
   drilldownKey: string;
   cursor?: string | null;
 }) {
-  const page = selectPerformanceRecords(
-    await read("records", value.filters, state.recordsMode),
-    value.drilldownKey,
-    value.cursor ?? null,
-  );
+  const data = await read("records", value.filters, state.recordsMode);
+  const page = selectPerformanceRecords(data, value.drilldownKey, value.cursor ?? null);
   // Test-only backend read port. Production metadata is independently checked with real SQL.
   return {
     ...page,
-    records: page.records.map((record) => {
+    records: page.records.map((initial) => {
+      const source =
+        initial.kind === "inquiry"
+          ? data.inquiries.find((r) => r.id === initial.id)
+          : initial.kind === "event"
+            ? data.events.find((r) => r.eventKey === initial.eventKey)
+            : data.deals.find((r) => r.transactionId === initial.id);
+      const record = { ...initial, qualityRevisionId: source?.qualityRevisionId ?? null };
       const original = state.qualifications.find(
         (q) =>
           q.leadId === record.leadId &&
@@ -260,39 +274,72 @@ export async function fetchOperationalAnalytics(range: { start: string; end: str
     ],
   };
 }
-async function correct(kind: string, key: string, quality: string, reason: string) {
+async function correct(
+  kind: string,
+  key: string,
+  quality: string,
+  reason: string,
+  expectedRevisionId: string | null,
+) {
   const actor = state.actor;
   state.calls.push({
     name: "quality",
     actor,
     binding: state.binding,
-    input: { kind, key, quality, reason },
+    input: { kind, key, quality, reason, expectedRevisionId },
   });
   if (state.role !== "admin" || state.denied)
-    throw new Response("Owned correction forbidden", { status: 403 });
-  if (reason.trim().length < 8 || !["production", "test", "spam", "unknown"].includes(quality))
-    throw new Response("Owned invalid correction", { status: 400 });
+    throw new ServerFnResponseError("Owned correction forbidden", 403);
+  if (
+    reason.trim().length < 8 ||
+    !["production", "test", "spam", "unknown"].includes(quality) ||
+    !(
+      expectedRevisionId === null ||
+      (typeof expectedRevisionId === "string" && /^[1-9]\d*$/.test(expectedRevisionId))
+    )
+  )
+    throw new ServerFnResponseError("Owned invalid quality snapshot", 400);
   const mode = state.qualityMode;
   if (mode.startsWith("delayed"))
     await new Promise<void>((release) => state.pending.push({ release }));
   if (mode.endsWith("failure")) throw Error("Owned correction refused before write");
-  state.qualityRevisions.push({ kind, key, quality, reason: reason.trim(), actor });
-  sessionStorage.setItem("performance-quality-revisions", JSON.stringify(state.qualityRevisions));
+  const rows = state.qualityRevisions
+    .map((r, index) => ({ ...r, id: String(index + 1) }))
+    .filter((r) => r.kind === kind && r.key === key);
+  const base = expectedRevisionId === null ? null : rows.find((r) => r.id === expectedRevisionId);
+  const validBase = expectedRevisionId === null || Boolean(base);
+  const original = rows.find(
+    (r) => expectedRevisionId === null || BigInt(r.id) > BigInt(expectedRevisionId),
+  );
+  const last = rows.at(-1),
+    same = (r: typeof last) =>
+      r && r.actor === actor && r.quality === quality && r.reason === reason.trim();
+  const accepted =
+    validBase && (same(original) || (expectedRevisionId === (last?.id ?? null) && same(last)));
+  if (!accepted) {
+    if (!validBase || expectedRevisionId !== (last?.id ?? null))
+      throw new ServerFnResponseError("Owned quality snapshot conflict", 409);
+    state.qualityRevisions.push({ kind, key, quality, reason: reason.trim(), actor });
+    sessionStorage.setItem("performance-quality-revisions", JSON.stringify(state.qualityRevisions));
+  }
+  if (mode === "commit-unknown") throw Error("Owned quality response lost after accepted decision");
 }
 export async function correctInquiryQuality(input: {
   inquiryId: string;
   quality: string;
   reason: string;
+  expectedRevisionId: string | null;
 }) {
-  await correct("inquiry", input.inquiryId, input.quality, input.reason);
+  await correct("inquiry", input.inquiryId, input.quality, input.reason, input.expectedRevisionId);
   return { inquiryId: input.inquiryId, affectedHkDay: "2026-09-30" };
 }
 export async function correctPerformanceEventQuality(input: {
   eventKey: string;
   quality: string;
   reason: string;
+  expectedRevisionId: string | null;
 }) {
-  await correct("event", input.eventKey, input.quality, input.reason);
+  await correct("event", input.eventKey, input.quality, input.reason, input.expectedRevisionId);
   return { eventKey: input.eventKey, affectedHkDay: "2026-09-30" };
 }
 export async function qualifyPerformanceLead(value: {
