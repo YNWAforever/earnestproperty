@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
@@ -70,11 +71,14 @@ export function AdminOperationsMigrations({
   capabilities,
   active,
   onApplied,
+  isWorkspaceCurrent,
 }: {
   capabilities: OperationsCapabilities;
   active: boolean;
   onApplied: () => void | Promise<void>;
+  isWorkspaceCurrent?: () => boolean;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const [rows, setRows] = useState<MigrationState[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +93,7 @@ export function AdminOperationsMigrations({
   const requestSequence = useRef(0);
 
   const loadMigrations = useCallback(async () => {
+    if (!isCurrent()) return;
     setPlan(null);
     setTypedId("");
     setConfirmOpen(false);
@@ -97,17 +102,21 @@ export function AdminOperationsMigrations({
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchOperationsMigrations();
+      const result = await fetchOperationsMigrations(isCurrent);
+      if (!isCurrent()) return;
       if (request !== requestSequence.current) return;
       setRows(result.data);
     } catch (reason) {
+      if (!isCurrent()) return;
       if (request === requestSequence.current) {
         setError(migrationErrorMessage(reason, "未能載入遷移清單。"));
       }
     } finally {
-      if (request === requestSequence.current) setLoading(false);
+      if (isCurrent()) {
+        if (request === requestSequence.current) setLoading(false);
+      }
     }
-  }, [active, capabilities.migrationsPlan]);
+  }, [active, capabilities.migrationsPlan, isCurrent]);
 
   useEffect(() => {
     if (!active || !capabilities.migrationsPlan) return;
@@ -122,6 +131,7 @@ export function AdminOperationsMigrations({
   );
 
   const runPlan = async (migration: MigrationState) => {
+    if (!isCurrent()) return;
     if (migration.status !== "pending" || planningId || applying) return;
     setPlanningId(migration.id);
     setPlan(null);
@@ -129,23 +139,28 @@ export function AdminOperationsMigrations({
     setConfirmOpen(false);
     setError(null);
     try {
-      const result = await planOperationsMigration(migration.id);
+      const result = await planOperationsMigration(migration.id, isCurrent);
+      if (!isCurrent()) return;
       setPlan(result.data);
       setTypedId("");
       setConfirmOpen(true);
       toast.success("遷移計劃已就緒，請核對後確認。");
     } catch (reason) {
+      if (!isCurrent()) return;
       setPlan(null);
       setConfirmOpen(false);
       const message = migrationErrorMessage(reason, "未能產生遷移計劃。");
       setError(message);
       toast.error(message);
     } finally {
-      setPlanningId(null);
+      if (isCurrent()) {
+        setPlanningId(null);
+      }
     }
   };
 
   const runApply = async () => {
+    if (!isCurrent()) return;
     const currentPlan = plan;
     if (!currentPlan || !canConfirmMigrationApply(currentPlan.migrationId, typedId)) return;
     // `plan` is deliberately NOT cleared before the await. It used to be, and
@@ -158,14 +173,18 @@ export function AdminOperationsMigrations({
     setApplyError(null);
     setApplying(true);
     try {
-      await applyOperationsMigration(currentPlan.migrationId, currentPlan.approvalToken);
+      await applyOperationsMigration(currentPlan.migrationId, currentPlan.approvalToken, isCurrent);
+      if (!isCurrent()) return;
       setConfirmOpen(false);
       setPlan(null);
       setTypedId("");
       toast.success(`已套用遷移 ${currentPlan.migrationId}`);
       await loadMigrations();
+      if (!isCurrent()) return;
       await onApplied();
+      if (!isCurrent()) return;
     } catch (reason) {
+      if (!isCurrent()) return;
       if (reason instanceof OperationsClientError && migrationPlanShouldClear(reason.status)) {
         // 409: the plan no longer matches the database. Closing is correct here
         // -- the approval token is spent and Plan must be re-run.
@@ -175,13 +194,16 @@ export function AdminOperationsMigrations({
         setError("遷移計劃已過期，請重新執行「計劃」。");
         toast.error("遷移計劃已過期，請重新執行「計劃」。");
         await loadMigrations();
+        if (!isCurrent()) return;
       } else {
         // Recoverable: keep the dialog open with the typed ID intact so the
         // operator can retry without re-planning.
         setApplyError(migrationErrorMessage(reason, "未能套用此遷移。"));
       }
     } finally {
-      setApplying(false);
+      if (isCurrent()) {
+        setApplying(false);
+      }
     }
   };
 

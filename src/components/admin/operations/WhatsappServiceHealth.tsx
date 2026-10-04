@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { fetchWhatsappServiceHealth } from "@/lib/neon/whatsapp-service-health";
 import { Button } from "@/components/ui/button";
@@ -13,36 +14,45 @@ const labels: Record<string, string> = {
 const state = (value: string) =>
   value === "ready" ? "就緒" : value === "blocked" ? "受阻" : "未核實";
 
-export function WhatsappServiceHealth() {
+export function WhatsappServiceHealth({
+  isWorkspaceCurrent,
+}: {
+  isWorkspaceCurrent?: () => boolean;
+}) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const [health, setHealth] = useState<Awaited<
     ReturnType<typeof fetchWhatsappServiceHealth>
   > | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   async function refresh() {
+    if (!isCurrent()) return;
     setLoading(true);
     try {
-      setHealth(await fetchWhatsappServiceHealth());
+      const value = await fetchWhatsappServiceHealth();
+      if (!isCurrent()) return;
+      setHealth(value);
       setError("");
     } catch {
+      if (!isCurrent()) return;
       setError("未能載入服務狀態；需要管理員或經理權限。");
     } finally {
-      setLoading(false);
+      if (isCurrent()) setLoading(false);
     }
   }
   useEffect(() => {
     let active = true;
     fetchWhatsappServiceHealth()
       .then((value) => {
-        if (active) setHealth(value);
+        if (active && isCurrent()) setHealth(value);
       })
       .catch(() => {
-        if (active) setError("未能載入服務狀態；需要管理員或經理權限。");
+        if (active && isCurrent()) setError("未能載入服務狀態；需要管理員或經理權限。");
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [isCurrent]);
   return (
     <section className="my-4 space-y-3 rounded border p-4" aria-label="WhatsApp 服務健康">
       <div className="flex items-center justify-between">

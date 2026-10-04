@@ -2,7 +2,6 @@
 import { operationsCapabilitiesForRoles } from "../../../src/lib/control-plane/capabilities";
 import { OperationsClientError } from "../../../src/lib/admin/operations/operations-client";
 import type { JobListItem, AuditRow } from "../../../src/lib/admin/operations/operations-types";
-import { actor } from "./synthetic-api";
 export { OperationsClientError };
 const key = "operations-fixture-jobs";
 const job: JobListItem = {
@@ -39,7 +38,7 @@ export async function fetchOperationsHealth() {
       status: "degraded",
       checkedAt: "2026-10-03T01:00:00Z",
       checks: [],
-      capabilities: operationsCapabilitiesForRoles([actor]),
+      capabilities: operationsCapabilitiesForRoles([window.propertyFixture.role]),
     },
   };
 }
@@ -114,6 +113,11 @@ export async function retryOperationsJob(id: string) {
       },
     ]),
   );
+  if (state.mode === "deferred-command")
+    await new Promise<void>((release) =>
+      window.propertyFixture.pending.push({ kind: "job-retry", release }),
+    );
+  call("retry-return", id);
   return { requestId: "synthetic-retry-ref", data: { id, status: "queued" } };
 }
 export const cancelOperationsJob = async () => {
