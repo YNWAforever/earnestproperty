@@ -1,3 +1,4 @@
+import { dispatchWorkspaceRequest } from "../admin/workspace-request";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { withStaffAuthHeaders } from "@/auth";
@@ -44,15 +45,38 @@ const read = createServerFn({ method: "GET" })
       await requireStaffAccess(getRequest(), ["admin", "manager"]),
     );
   });
-export const previewWhatsappLinkBatch = async (data: {
-  batchId: string;
-  rows: z.infer<typeof batchRowSchema>[];
-}) => preview(await withStaffAuthHeaders({ data }));
-export const commitWhatsappLinkChunk = async (data: {
-  batchId: string;
-  chunkId: string;
-  previewToken: string;
-  rows: z.infer<typeof batchRowSchema>[];
-}) => commit(await withStaffAuthHeaders({ data }));
-export const getWhatsappLinkBatchResult = async (batchId: string) =>
-  read(await withStaffAuthHeaders({ data: { batchId } }));
+export const previewWhatsappLinkBatch = async (
+  data: {
+    batchId: string;
+    rows: z.infer<typeof batchRowSchema>[];
+  },
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => preview(prepared),
+    isWorkspaceCurrent,
+  );
+export const commitWhatsappLinkChunk = async (
+  data: {
+    batchId: string;
+    chunkId: string;
+    previewToken: string;
+    rows: z.infer<typeof batchRowSchema>[];
+  },
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => commit(prepared),
+    isWorkspaceCurrent,
+  );
+export const getWhatsappLinkBatchResult = async (
+  batchId: string,
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data: { batchId } }),
+    (prepared) => read(prepared),
+    isWorkspaceCurrent,
+  );

@@ -1,3 +1,4 @@
+import { dispatchWorkspaceRequest } from "../admin/workspace-request";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
@@ -35,8 +36,27 @@ const retire = createServerFn({ method: "POST" })
       await requireStaffAccess(getRequest(), ["admin", "manager"]),
     );
   });
-export const fetchStaffReferences = async () => list(await withStaffAuthHeaders({}));
-export const createStaffReference = async (data: Parameters<typeof save>[0]["data"]) =>
-  save(await withStaffAuthHeaders({ data }));
-export const disableStaffReference = async (data: { id: string }) =>
-  retire(await withStaffAuthHeaders({ data }));
+export const fetchStaffReferences = async (isWorkspaceCurrent?: () => boolean) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({}),
+    (prepared) => list(prepared),
+    isWorkspaceCurrent,
+  );
+export const createStaffReference = async (
+  data: Parameters<typeof save>[0]["data"],
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => save(prepared),
+    isWorkspaceCurrent,
+  );
+export const disableStaffReference = async (
+  data: { id: string },
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => retire(prepared),
+    isWorkspaceCurrent,
+  );

@@ -1,3 +1,4 @@
+import { assertWorkspaceCurrent, dispatchWorkspaceRequest } from "../admin/workspace-request";
 import {
   parseAdminPageInput,
   type AdminPageInput,
@@ -455,9 +456,16 @@ const saveAdminPropertyServer = createServerFn({ method: "POST" })
     return adminData.saveAdminProperty(data, staff);
   });
 
-export async function saveAdminProperty(options: { data: AdminPropertyInput }) {
+export async function saveAdminProperty(
+  options: { data: AdminPropertyInput },
+  isWorkspaceCurrent?: () => boolean,
+) {
   return callStaffServerFn(async () =>
-    saveAdminPropertyServer(await withStaffAuthHeaders(options)),
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => saveAdminPropertyServer(prepared),
+      isWorkspaceCurrent,
+    ),
   );
 }
 
@@ -1350,11 +1358,18 @@ const fetchAdminConversationServer = createServerFn({ method: "GET" })
     return adminData.fetchAdminConversation(data.id, staff, data.includeMessages ?? true);
   });
 
-export async function fetchAdminConversation(options: {
-  data: { id: string; includeMessages?: boolean };
-}) {
+export async function fetchAdminConversation(
+  options: {
+    data: { id: string; includeMessages?: boolean };
+  },
+  isWorkspaceCurrent?: () => boolean,
+) {
   return callStaffServerFn(async () =>
-    fetchAdminConversationServer(await withStaffAuthHeaders(options)),
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => fetchAdminConversationServer(prepared),
+      isWorkspaceCurrent,
+    ),
   );
 }
 
@@ -1392,9 +1407,16 @@ const updateAdminConversationServer = createServerFn({ method: "POST" })
     return adminData.updateAdminConversation(data, staff);
   });
 
-export async function updateAdminConversation(options: { data: AdminConversationUpdateInput }) {
+export async function updateAdminConversation(
+  options: { data: AdminConversationUpdateInput },
+  isWorkspaceCurrent?: () => boolean,
+) {
   return callStaffServerFn(async () =>
-    updateAdminConversationServer(await withStaffAuthHeaders(options)),
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => updateAdminConversationServer(prepared),
+      isWorkspaceCurrent,
+    ),
   );
 }
 
@@ -1476,12 +1498,16 @@ export async function fetchAdminOutboundIntent(options: {
   return payload as { ok: true; intent: { id: string; kind: string; state: string } };
 }
 
-export async function sendAdminConversationReply(options: {
-  data: { conversationId: string; text: string; requestId: string; enquiryId?: string };
-}) {
+export async function sendAdminConversationReply(
+  options: {
+    data: { conversationId: string; text: string; requestId: string; enquiryId?: string };
+  },
+  isWorkspaceCurrent?: () => boolean,
+) {
   const request = await withStaffAuthHeaders({
     headers: { "Content-Type": "application/json" },
   });
+  assertWorkspaceCurrent(isWorkspaceCurrent);
   const response = await fetch("/api/admin/woztell/send", {
     method: "POST",
     headers: request.headers,
@@ -1498,12 +1524,16 @@ export async function sendAdminConversationReply(options: {
   };
 }
 
-export async function sendAdminConversationTemplate(options: {
-  data: { conversationId: string; templateId: string; requestId: string; enquiryId?: string };
-}) {
+export async function sendAdminConversationTemplate(
+  options: {
+    data: { conversationId: string; templateId: string; requestId: string; enquiryId?: string };
+  },
+  isWorkspaceCurrent?: () => boolean,
+) {
   const request = await withStaffAuthHeaders({
     headers: { "Content-Type": "application/json" },
   });
+  assertWorkspaceCurrent(isWorkspaceCurrent);
   const response = await fetch("/api/admin/woztell/send-template", {
     method: "POST",
     headers: request.headers,
@@ -1543,12 +1573,16 @@ export type WoztellBackfillResult = {
  * apart and reported with their own text, instead of collapsing into one
  * generic failure.
  */
-export async function runAdminWoztellBackfill(options?: {
-  data?: { maxPages?: number; after?: string | null; mode?: "forward" | "backward" };
-}): Promise<WoztellBackfillResult> {
+export async function runAdminWoztellBackfill(
+  options?: {
+    data?: { maxPages?: number; after?: string | null; mode?: "forward" | "backward" };
+  },
+  isWorkspaceCurrent?: () => boolean,
+): Promise<WoztellBackfillResult> {
   const request = await withStaffAuthHeaders({
     headers: { "Content-Type": "application/json" },
   });
+  assertWorkspaceCurrent(isWorkspaceCurrent);
   const response = await fetch("/api/admin/woztell/backfill", {
     method: "POST",
     headers: request.headers,
@@ -1618,15 +1652,29 @@ const deleteAdminAudienceServer = createServerFn({ method: "POST" })
     return adminData.deleteAdminAudience(data.id, staff);
   });
 
-export async function deleteAdminAudience(options: { data: { id: string } }) {
+export async function deleteAdminAudience(
+  options: { data: { id: string } },
+  isWorkspaceCurrent?: () => boolean,
+) {
   return callStaffServerFn(async () =>
-    deleteAdminAudienceServer(await withStaffAuthHeaders(options)),
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => deleteAdminAudienceServer(prepared),
+      isWorkspaceCurrent,
+    ),
   );
 }
 
-export async function saveAdminAudience(options: { data: AdminAudienceInput }) {
+export async function saveAdminAudience(
+  options: { data: AdminAudienceInput },
+  isWorkspaceCurrent?: () => boolean,
+) {
   return callStaffServerFn(async () =>
-    saveAdminAudienceServer(await withStaffAuthHeaders(options)),
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => saveAdminAudienceServer(prepared),
+      isWorkspaceCurrent,
+    ),
   );
 }
 
@@ -1638,11 +1686,18 @@ const previewAdminAudienceServer = createServerFn({ method: "GET" })
     return adminData.previewAdminAudience(data);
   });
 
-export async function previewAdminAudience(options: {
-  data: { audience_id?: string; filters?: AdminAudienceInput["filters"] };
-}) {
+export async function previewAdminAudience(
+  options: {
+    data: { audience_id?: string; filters?: AdminAudienceInput["filters"] };
+  },
+  isWorkspaceCurrent?: () => boolean,
+) {
   return callStaffServerFn(async () =>
-    previewAdminAudienceServer(await withStaffAuthHeaders(options)),
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => previewAdminAudienceServer(prepared),
+      isWorkspaceCurrent,
+    ),
   );
 }
 
@@ -1654,9 +1709,16 @@ const saveAdminCampaignServer = createServerFn({ method: "POST" })
     return adminData.saveAdminCampaign(data, staff);
   });
 
-export async function saveAdminCampaign(options: { data: AdminCampaignInput }) {
+export async function saveAdminCampaign(
+  options: { data: AdminCampaignInput },
+  isWorkspaceCurrent?: () => boolean,
+) {
   return callStaffServerFn(async () =>
-    saveAdminCampaignServer(await withStaffAuthHeaders(options)),
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => saveAdminCampaignServer(prepared),
+      isWorkspaceCurrent,
+    ),
   );
 }
 
@@ -1674,10 +1736,14 @@ export async function materializeCampaignRecipients(options: { data: { campaign_
   );
 }
 
-export async function sendAdminCampaignQueue(options: { data: { id: string } }) {
+export async function sendAdminCampaignQueue(
+  options: { data: { id: string } },
+  isWorkspaceCurrent?: () => boolean,
+) {
   const request = await withStaffAuthHeaders({
     headers: { "Content-Type": "application/json" },
   });
+  assertWorkspaceCurrent(isWorkspaceCurrent);
   const response = await fetch(`/api/admin/campaigns/${options.data.id}/queue`, {
     method: "POST",
     headers: request.headers,
@@ -1719,9 +1785,16 @@ const cancelAdminCampaignServer = createServerFn({ method: "POST" })
     return adminData.cancelAdminCampaign(data.id, staff);
   });
 
-export async function cancelAdminCampaign(options: { data: { id: string } }) {
+export async function cancelAdminCampaign(
+  options: { data: { id: string } },
+  isWorkspaceCurrent?: () => boolean,
+) {
   return callStaffServerFn(async () =>
-    cancelAdminCampaignServer(await withStaffAuthHeaders(options)),
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => cancelAdminCampaignServer(prepared),
+      isWorkspaceCurrent,
+    ),
   );
 }
 
@@ -1731,10 +1804,17 @@ const fetchAdminPageServer = createServerFn({ method: "GET" })
     const staff = await requireStaff(["admin", "manager", "agent"]);
     return (await import("./admin-pagination.server")).readAdminPage(data, staff);
   });
-export async function fetchAdminPage<R extends AdminPageResource>(options: {
-  data: AdminPageInput & { resource: R };
-}): Promise<CursorPage<AdminPageRows[R]>> {
+export async function fetchAdminPage<R extends AdminPageResource>(
+  options: {
+    data: AdminPageInput & { resource: R };
+  },
+  isWorkspaceCurrent?: () => boolean,
+): Promise<CursorPage<AdminPageRows[R]>> {
   return (await callStaffServerFn(async () =>
-    fetchAdminPageServer(await withStaffAuthHeaders(options)),
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => fetchAdminPageServer(prepared),
+      isWorkspaceCurrent,
+    ),
   )) as CursorPage<AdminPageRows[R]>;
 }
