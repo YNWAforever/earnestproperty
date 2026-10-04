@@ -64,6 +64,15 @@ const row = (id: string, name: string, external: string) => ({
 const rows = [row(ids.a, "合成客戶甲", "4033349"), row(ids.b, "合成客戶乙", "4033350")];
 const state = {
   calls: [] as { name: string; input: unknown }[],
+  membershipMode: "ok",
+  membershipRole: actor === "manager" ? "manager" : "agent",
+  membershipBinding: actor === "agent-b" ? ids.staffB : ids.staff,
+  pendingMembership: [] as { release: () => void }[],
+  refreshMembership: async (
+    _mode = "ok",
+    _role = actor === "manager" ? "manager" : "agent",
+    _binding = ids.staff,
+  ) => {},
   templateFailure: false,
   assignmentFailure: false,
   delayDetail: false,
@@ -91,6 +100,23 @@ Object.assign(window, {
   noLinkFixture: { ...state, ids, actor, lastMessage: rows[0].messages.at(-1)!.text },
 });
 const fixture = () => (window as unknown as { noLinkFixture: typeof state }).noLinkFixture;
+fixture().refreshMembership = async (
+  mode = "ok",
+  role = actor === "manager" ? "manager" : "agent",
+  binding = ids.staff,
+) => {
+  Object.assign(fixture(), {
+    membershipMode: mode,
+    membershipRole: role,
+    membershipBinding: binding,
+  });
+  const { staffSessionStore } = await import("../../../src/components/admin/staff-session");
+  if (mode === "delayed") {
+    void staffSessionStore.refresh(actor);
+    return;
+  }
+  await staffSessionStore.refresh(actor);
+};
 const call = (name: string, input?: unknown) => fixture().calls.push({ name, input });
 function readable(id: string) {
   return ["agent-a", "manager"].includes(actor) && rows.some((r) => r.id === id);
@@ -100,12 +126,14 @@ function deny() {
 }
 export async function fetchStaffSession() {
   call("staffSession");
-  return actor === "viewer"
+  if (fixture().membershipMode === "delayed")
+    await new Promise<void>((release) => fixture().pendingMembership.push({ release }));
+  return actor === "viewer" || fixture().membershipMode === "denied"
     ? { status: "denied", reason: "not-staff" }
     : {
         status: "ok",
-        roles: [actor === "manager" ? "manager" : "agent"],
-        staffId: actor === "agent-b" ? ids.staffB : ids.staff,
+        roles: [fixture().membershipRole],
+        staffId: fixture().membershipBinding,
       };
 }
 export async function fetchAdminAgents() {

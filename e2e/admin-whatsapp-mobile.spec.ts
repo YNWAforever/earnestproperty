@@ -9,6 +9,9 @@ declare global {
   interface Window {
     noLinkFixture: {
       calls: { name: string; input?: unknown }[];
+      membershipMode: string;
+      pendingMembership: { release: () => void }[];
+      refreshMembership: (mode?: string, role?: string, binding?: string) => Promise<void>;
       aiMode: string;
       pendingAi: { conversationId: string; ordinal: number; finish: (outcome: string) => void }[];
     };
@@ -65,7 +68,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/mobile-ai-browser-summary.json",
+    ".audit/remediation-20261003/ep13-20-mobile-workspace-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -190,6 +193,69 @@ async function finish(page: Page, id: string, ordinal: number, outcome: string) 
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("membership denial removes private inbox and ignores pending AI while keeping stored drafts", async ({
+      page,
+    }) => {
+      await open(page, "delay");
+      await reply(page).fill("Owned original conversation draft retained in its journal");
+      await pending(page, ids.a);
+      await page.evaluate(() => window.noLinkFixture.refreshMembership("denied"));
+      await expect(reply(page)).toHaveCount(0);
+      await expect(page.getByRole("button").filter({ hasText: "合成客戶甲" })).toHaveCount(0);
+      await finish(page, ids.a, 1, "rules");
+      await expect(page.getByText("合成甲規則摘要 1")).toHaveCount(0);
+      const journals = await page.evaluate(() => Object.values(sessionStorage));
+      expect(
+        journals.some((s) =>
+          s.includes("Owned original conversation draft retained in its journal"),
+        ),
+      ).toBe(true);
+      await page.evaluate(() => window.noLinkFixture.refreshMembership());
+      await expect(reply(page)).toHaveValue(
+        "Owned original conversation draft retained in its journal",
+      );
+    });
+    for (const change of ["binding", "role"] as const)
+      test(`membership ${change} renews inbox reads and drops the prior AI response`, async ({
+        page,
+      }) => {
+        await open(page, "delay");
+        await reply(page).fill("Owned retained actor conversation reply");
+        await pending(page, ids.a);
+        await page.evaluate(
+          (change) =>
+            window.noLinkFixture.refreshMembership(
+              "ok",
+              change === "role" ? "manager" : "agent",
+              change === "binding"
+                ? "20000000-0000-4000-8000-000000000002"
+                : "20000000-0000-4000-8000-000000000001",
+            ),
+          change,
+        );
+        await pending(page, ids.a, 2);
+        await finish(page, ids.a, 1, "rules");
+        await expect(reply(page)).toHaveValue("Owned retained actor conversation reply");
+        await expect(page.getByText("合成甲規則摘要 1", { exact: true })).toHaveCount(0);
+        await finish(page, ids.a, 2, "rules");
+        await expand(page);
+        await expect(suggestions(page)).toContainText("合成甲規則摘要 2");
+      });
+    test("same membership recheck retains conversation reply draft", async ({ page }) => {
+      await open(page);
+      await reply(page).fill("Owned same member reply draft");
+      await page.evaluate(() => window.noLinkFixture.refreshMembership("delayed"));
+      await expect
+        .poll(() => page.evaluate(() => window.noLinkFixture.pendingMembership.length))
+        .toBe(1);
+      await expect(reply(page)).toHaveValue("Owned same member reply draft");
+      await page.evaluate(() => {
+        window.noLinkFixture.membershipMode = "ok";
+        window.noLinkFixture.pendingMembership.splice(0).forEach((p) => p.release());
+      });
+      await expect(reply(page)).toHaveValue("Owned same member reply draft");
+    });
+
     test("AI read outage has recoverable error and retry retains draft", async ({ page }) => {
       await open(page, "error");
       await reply(page).fill("人工草稿。Do not replace.");

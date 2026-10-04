@@ -1,3 +1,4 @@
+import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { StaffNotificationPanel } from "@/components/admin/StaffNotificationPanel";
 import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContext";
 import { NoLinkInboxSummary } from "@/components/admin/whatsapp/NoLinkInbox";
@@ -160,6 +161,17 @@ export const Route = createFileRoute("/admin/whatsapp")({
 });
 
 function AdminWhatsapp() {
+  const identity = useStaffWorkspaceIdentity();
+  if (!identity)
+    return (
+      <AdminShell title="WhatsApp 收件匣" description="核對查詢、跟進及回覆草稿。">
+        <Skeleton className="h-56 w-full" />
+      </AdminShell>
+    );
+  return <AdminWhatsappWorkspace key={identity} identity={identity} />;
+}
+function AdminWhatsappWorkspace({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const { session: staffSession } = useStaffSession(user?.id ?? null);
   const canBackfill = staffSession?.status === "ok" && staffSession.roles.includes("admin");
@@ -227,7 +239,7 @@ function AdminWhatsapp() {
   const [outboundReservations, setOutboundReservations] = useState<
     Record<string, "loading" | "ready" | "blocked" | "error">
   >({});
-  useEffect(() => {
+  useLayoutEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
@@ -294,9 +306,12 @@ function AdminWhatsapp() {
     [rows, selectedId],
   );
 
-  const canApplyConversationDetail = useCallback((id: string) => {
-    return mounted.current && selectedIdRef.current === id;
-  }, []);
+  const canApplyConversationDetail = useCallback(
+    (id: string) => {
+      return mounted.current && isWorkspaceCurrent() && selectedIdRef.current === id;
+    },
+    [isWorkspaceCurrent],
+  );
 
   const checkOutboundReservation = useCallback(
     async (targetId: string, actorId: string) => {
@@ -334,30 +349,37 @@ function AdminWhatsapp() {
   const listCursorRef = useRef<string | null>(null);
   const olderPending = useRef(false);
   const loadTemplates = useCallback(async () => {
+    if (!isWorkspaceCurrent()) return;
     const request = ++templatesRequestRef.current;
     setTemplatesLoading(true);
     setTemplatesError(null);
     try {
       const data = await fetchAdminWhatsappTemplates();
-      if (request === templatesRequestRef.current) setTemplates(data as AdminWhatsappTemplateRow[]);
+      if (isWorkspaceCurrent() && request === templatesRequestRef.current)
+        setTemplates(data as AdminWhatsappTemplateRow[]);
     } catch (err) {
-      if (request === templatesRequestRef.current) setTemplatesError(errorText(err));
+      if (isWorkspaceCurrent() && request === templatesRequestRef.current)
+        setTemplatesError(errorText(err));
     } finally {
-      if (request === templatesRequestRef.current) setTemplatesLoading(false);
+      if (isWorkspaceCurrent() && request === templatesRequestRef.current)
+        setTemplatesLoading(false);
     }
-  }, []);
+  }, [isWorkspaceCurrent]);
   const refreshConversations = useCallback(
     async (cursor: string | null = listCursorRef.current) => {
-      if (!user) return;
+      if (!user || !isWorkspaceCurrent()) return;
 
       const requestId = listRequestRef.current + 1;
       listRequestRef.current = requestId;
       setLoadingRows(true);
       try {
-        const data = await fetchAdminPage({
-          data: { resource: "conversations", cursor, q: inboxQuery, status: inboxStatus },
-        });
-        if (requestId !== listRequestRef.current) return;
+        const data = await fetchAdminPage(
+          {
+            data: { resource: "conversations", cursor, q: inboxQuery, status: inboxStatus },
+          },
+          isWorkspaceCurrent,
+        );
+        if (!isWorkspaceCurrent() || requestId !== listRequestRef.current) return;
         setRows(data.rows);
         setListCursor(cursor);
         listCursorRef.current = cursor;
@@ -367,18 +389,19 @@ function AdminWhatsapp() {
         setError(null);
         return true;
       } catch (err) {
-        if (requestId !== listRequestRef.current) return;
+        if (!isWorkspaceCurrent() || requestId !== listRequestRef.current) return;
         setError(errorText(err));
         return false;
       } finally {
-        if (requestId === listRequestRef.current) setLoadingRows(false);
+        if (isWorkspaceCurrent() && requestId === listRequestRef.current) setLoadingRows(false);
       }
     },
-    [user, inboxQuery, inboxStatus],
+    [user, inboxQuery, inboxStatus, isWorkspaceCurrent],
   );
 
   const loadConversationAiAssist = useCallback(
     async (id: string, options: { background?: boolean } = {}) => {
+      if (!canApplyConversationDetail(id)) return;
       const requestId = aiAssistRequestRef.current + 1;
       aiAssistRequestRef.current = requestId;
       setAiAssistError(null);
@@ -413,7 +436,8 @@ function AdminWhatsapp() {
       id: string,
       options: { resetReply?: boolean; background?: boolean; silent?: boolean } = {},
     ) => {
-      if (options.background && olderPending.current) return null;
+      if (!canApplyConversationDetail(id) || (options.background && olderPending.current))
+        return null;
       const requestId = detailRequestRef.current + 1;
       detailRequestRef.current = requestId;
       // A background detail refresh must not flip the pane into its loading state or wipe
@@ -435,18 +459,24 @@ function AdminWhatsapp() {
         messageRefreshOffset.current = offset + refreshIds.length;
         const [data, messagePage, statusPage] = await Promise.all([
           fetchAdminConversation({ data: { id, includeMessages: false } }),
-          fetchAdminPage({
-            data: {
-              resource: "messages",
-              conversationId: id,
-              cursor: incremental ? messageCursors.current?.newest : null,
-              direction: incremental ? "newer" : "older",
+          fetchAdminPage(
+            {
+              data: {
+                resource: "messages",
+                conversationId: id,
+                cursor: incremental ? messageCursors.current?.newest : null,
+                direction: incremental ? "newer" : "older",
+              },
             },
-          }),
+            isWorkspaceCurrent,
+          ),
           refreshIds.length
-            ? fetchAdminPage({
-                data: { resource: "messages", conversationId: id, messageIds: refreshIds },
-              })
+            ? fetchAdminPage(
+                {
+                  data: { resource: "messages", conversationId: id, messageIds: refreshIds },
+                },
+                isWorkspaceCurrent,
+              )
             : Promise.resolve({ rows: [] }),
         ]);
         if (requestId !== detailRequestRef.current || !canApplyConversationDetail(id)) return null;
@@ -493,7 +523,7 @@ function AdminWhatsapp() {
         }
       }
     },
-    [canApplyConversationDetail, loadConversationAiAssist],
+    [canApplyConversationDetail, loadConversationAiAssist, isWorkspaceCurrent],
   );
 
   async function loadOlderMessages() {
@@ -503,14 +533,17 @@ function AdminWhatsapp() {
     const epoch = detailRequestRef.current;
     setLoadingOlder(true);
     try {
-      const page = await fetchAdminPage({
-        data: {
-          resource: "messages",
-          conversationId: state.id,
-          cursor: state.older,
-          direction: "older",
+      const page = await fetchAdminPage(
+        {
+          data: {
+            resource: "messages",
+            conversationId: state.id,
+            cursor: state.older,
+            direction: "older",
+          },
         },
-      });
+        isWorkspaceCurrent,
+      );
       if (!canApplyConversationDetail(state.id) || epoch !== detailRequestRef.current) return;
       setDetail((current) =>
         current?.id === state.id
@@ -520,10 +553,13 @@ function AdminWhatsapp() {
       if (messageCursors.current?.id === state.id) messageCursors.current.older = page.nextCursor;
       setOlderCursor(page.nextCursor);
     } catch (err) {
-      toast.error(errorText(err));
+      if (canApplyConversationDetail(state.id) && epoch === detailRequestRef.current)
+        toast.error(errorText(err));
     } finally {
-      olderPending.current = false;
-      setLoadingOlder(false);
+      if (canApplyConversationDetail(state.id) && epoch === detailRequestRef.current) {
+        olderPending.current = false;
+        setLoadingOlder(false);
+      }
     }
   }
 
@@ -631,19 +667,23 @@ function AdminWhatsapp() {
     status: string;
     assigned_agent_id: string | null;
   }) {
-    if (!detail || detail.id !== selectedIdRef.current) return;
+    if (!isWorkspaceCurrent() || !detail || detail.id !== selectedIdRef.current) return;
 
     const targetId = detail.id;
     setMutatingAction("conversation");
     try {
-      const result = await updateAdminConversation({
-        data: {
-          id: targetId,
-          status: input.status,
-          assigned_agent_id: input.assigned_agent_id,
+      const result = await updateAdminConversation(
+        {
+          data: {
+            id: targetId,
+            status: input.status,
+            assigned_agent_id: input.assigned_agent_id,
+          },
         },
-      });
+        isWorkspaceCurrent,
+      );
       assertNoMutationError(result);
+      if (!canApplyConversationDetail(targetId)) return;
 
       // Claim the list request slot before refetching. This fetch ran outside
       // listRequestRef entirely, so an earlier list request could resolve
@@ -660,11 +700,14 @@ function AdminWhatsapp() {
       setLoadingRows(true);
       let refreshedRows: AdminConversationRow[] = [];
       try {
-        const page = await fetchAdminPage({
-          data: { resource: "conversations", q: inboxQuery, status: inboxStatus },
-        });
+        const page = await fetchAdminPage(
+          {
+            data: { resource: "conversations", q: inboxQuery, status: inboxStatus },
+          },
+          isWorkspaceCurrent,
+        );
         refreshedRows = page.rows;
-        if (listRequestId === listRequestRef.current) {
+        if (isWorkspaceCurrent() && listRequestId === listRequestRef.current) {
           setListCursor(null);
           listCursorRef.current = null;
           setNextListCursor(page.nextCursor);
@@ -673,7 +716,7 @@ function AdminWhatsapp() {
           setListUpdatedAt(Date.now());
         }
       } finally {
-        if (listRequestId === listRequestRef.current) setLoadingRows(false);
+        if (isWorkspaceCurrent() && listRequestId === listRequestRef.current) setLoadingRows(false);
       }
       if (!canApplyConversationDetail(targetId)) return;
 
@@ -681,7 +724,12 @@ function AdminWhatsapp() {
       // the follow-up detail read 404s. That used to run through the error path
       // and answer a successful handoff with a red 「找不到 WhatsApp 對話」 and a
       // blank pane, so the agent reassigned again or escalated to support.
-      if (!(await fetchAdminConversation({ data: { id: targetId, includeMessages: false } }))) {
+      const handedOff = !(await fetchAdminConversation(
+        { data: { id: targetId, includeMessages: false } },
+        isWorkspaceCurrent,
+      ));
+      if (!canApplyConversationDetail(targetId)) return;
+      if (handedOff) {
         toast.success("對話已轉交，並已移出你的收件匣");
         clearSelectedConversation();
         return;
@@ -729,19 +777,22 @@ function AdminWhatsapp() {
     setMutatingAction("reply");
     setReplyError(null);
     try {
-      const result = await sendAdminConversationReply({
-        data: {
-          conversationId: targetId,
-          enquiryId: enquirySelections[targetId] || undefined,
-          requestId: stableOutboundRequestId(
-            user?.id,
-            targetId,
-            "text",
-            JSON.stringify([text, enquirySelections[targetId] ?? null]),
-          ),
-          text,
+      const result = await sendAdminConversationReply(
+        {
+          data: {
+            conversationId: targetId,
+            enquiryId: enquirySelections[targetId] || undefined,
+            requestId: stableOutboundRequestId(
+              user?.id,
+              targetId,
+              "text",
+              JSON.stringify([text, enquirySelections[targetId] ?? null]),
+            ),
+            text,
+          },
         },
-      });
+        isWorkspaceCurrent,
+      );
       assertKnownOutboundResult(result);
       if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
       clearOutboundRequestId(user?.id, targetId, "text");
@@ -803,19 +854,22 @@ function AdminWhatsapp() {
     setMutatingAction("template");
     setReplyError(null);
     try {
-      const result = await sendAdminConversationTemplate({
-        data: {
-          conversationId: targetId,
-          enquiryId: enquirySelections[targetId] || undefined,
-          templateId,
-          requestId: stableOutboundRequestId(
-            user?.id,
-            targetId,
-            "template",
-            JSON.stringify([templateId, enquirySelections[targetId] ?? null]),
-          ),
+      const result = await sendAdminConversationTemplate(
+        {
+          data: {
+            conversationId: targetId,
+            enquiryId: enquirySelections[targetId] || undefined,
+            templateId,
+            requestId: stableOutboundRequestId(
+              user?.id,
+              targetId,
+              "template",
+              JSON.stringify([templateId, enquirySelections[targetId] ?? null]),
+            ),
+          },
         },
-      });
+        isWorkspaceCurrent,
+      );
       assertKnownOutboundResult(result);
       if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
       clearOutboundRequestId(user?.id, targetId, "template");
@@ -959,11 +1013,19 @@ function AdminWhatsapp() {
    * again, since every run is idempotent.
    */
   const runBackfill = useCallback(async () => {
+    if (!isWorkspaceCurrent()) return;
     setBackfilling(true);
     const toastId = toast.loading("正在從 Woztell 匯入歷史訊息…");
 
     try {
-      const result = await runAdminWoztellBackfill({ data: { mode: "forward" } });
+      const result = await runAdminWoztellBackfill(
+        { data: { mode: "forward" } },
+        isWorkspaceCurrent,
+      );
+      if (!isWorkspaceCurrent()) {
+        toast.dismiss(toastId);
+        return;
+      }
       if (!result.ok) {
         toast.error(result.hint ?? result.error ?? "匯入失敗", { id: toastId });
         return;
@@ -977,11 +1039,12 @@ function AdminWhatsapp() {
 
       await refreshConversations();
     } catch (err) {
-      toast.error(errorText(err), { id: toastId });
+      if (isWorkspaceCurrent()) toast.error(errorText(err), { id: toastId });
+      else toast.dismiss(toastId);
     } finally {
-      setBackfilling(false);
+      if (isWorkspaceCurrent()) setBackfilling(false);
     }
-  }, [refreshConversations]);
+  }, [refreshConversations, isWorkspaceCurrent]);
 
   return (
     <AdminShell
