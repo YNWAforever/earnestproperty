@@ -124,7 +124,7 @@ test(
           });
           mkdirSync(".audit/remediation-20261003", { recursive: true });
           writeFileSync(
-            ".audit/remediation-20261003/ep18-measurements.json",
+            ".audit/remediation-20261003/ep13-20-ep18-measurements.json",
             JSON.stringify(evidence, null, 2),
           );
           assert.equal(
