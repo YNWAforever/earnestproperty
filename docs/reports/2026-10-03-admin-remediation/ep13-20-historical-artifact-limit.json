@@ -1,0 +1,199 @@
+{
+  "error": "Historical screenshot names reused in first full run",
+  "rawHistoricalHashesMatching": 524,
+  "rawHistoricalHashMismatches": [
+    {
+      "file": "bulk-continuation-green-390.png",
+      "expectedHistoricalSha256": "40a31593976a6ae58c25b7fdebdda310cac3aac82229dcc857ce458d6b61ac8e",
+      "availableBytesSha256": "9e4b8ba9b9ab572bb7b28ab13b595428dedc40f194e0ea1199c50a97d2a20b77",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "bulk-continuation-import-green-390.png",
+      "expectedHistoricalSha256": "da7156d8479144d6d9bb60cf7be65132ec0516d10c658bc45841fb1e817a95c2",
+      "availableBytesSha256": "bed901d2354a276502bc69c369ba5db90da1febacc215bc313154f07ced93401",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "bulk-continuation-green-768.png",
+      "expectedHistoricalSha256": "a9fbbf5cc13c265394fbbfeec27bc7093971dc95dbe960bd1ccc3c067c60b136",
+      "availableBytesSha256": "c445475d998a0c27c4a2800704409647dd599ebd50617cb4f8e85d3b802625e6",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "bulk-continuation-import-green-768.png",
+      "expectedHistoricalSha256": "856c8f3c65776dc5bc4393bc378070f862754830a69176201c34b04a836b38d3",
+      "availableBytesSha256": "f1bd7f1f53bd6c1f2d6b435d9929b1f037d9a60c563d4cd0071e330901555363",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "bulk-continuation-green-1280.png",
+      "expectedHistoricalSha256": "37656de855727fcf188fb72d95fc5e2cf363039c4adffee615da60451103b8ed",
+      "availableBytesSha256": "7d59177c54bf4070f1433f6c92b57197f5143792ff00dee81fe413c430f9ba43",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "bulk-continuation-import-green-1280.png",
+      "expectedHistoricalSha256": "8a20a180fe306b79943b5314625043d2fa2b96e179f59720ebcfe3c57c8894b1",
+      "availableBytesSha256": "5316becc8e609f078ae8b79ee9e372ba6d53ce17c1fe7f963e667f45a1477274",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "bulk-continuation-green-1440.png",
+      "expectedHistoricalSha256": "5a288f9820a651e1125d99650fcfd12392f7a78d26a2840f444a2acb71dcd922",
+      "availableBytesSha256": "2f7ef8bc946bdf8088273d6a463fd48222e5116860fed55594846a71344570dc",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "bulk-continuation-import-green-1440.png",
+      "expectedHistoricalSha256": "b7a6eb9f0f74bc5d89b607253027dd1b8acdd831ad3d7bdd846211ebbf4feaa2",
+      "availableBytesSha256": "f6477d692974f85aac7cf6f91b635215bdff2cc1fc37f5cba588f18c691ae32c",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "campaign-cancel-confirmed-390.png",
+      "expectedHistoricalSha256": "b297f36c58634c770e9ef3a39703b7d60cc016a467312b450e4b5fc530f901b2",
+      "availableBytesSha256": "cfa500eba94419fc36b07f965ed806797ca776e378f0bf33efe26968d3aec5d1",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "campaign-cancel-green-390.png",
+      "expectedHistoricalSha256": "1483c838db25fca8f106b505378675c30f07b0656292b10b9fbf68b4a4c31ed2",
+      "availableBytesSha256": "ea80ae77b8fa64a471f80d0ca3dc4ab4b78415237b4317849a6a7c268e950054",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "campaign-cancel-confirmed-768.png",
+      "expectedHistoricalSha256": "f689e26e80c735b80f8e2e940654a271cbbe5836d3f3a539e210af58f1a4f66a",
+      "availableBytesSha256": "aceb7fb161f4bf867d8e108212abbc68d3984b888b9a642b1ac2950d713efdae",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "campaign-cancel-green-768.png",
+      "expectedHistoricalSha256": "3b7e85679d81dcf83d61d9376c3922e9d0ba5ee771c4d9845d86b19c93f1c225",
+      "availableBytesSha256": "02c69615c22c662988b80ab1d37361683f65a9ae2d0c7fb6494db79c865d6365",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "campaign-cancel-confirmed-1280.png",
+      "expectedHistoricalSha256": "b400af52aee1eb58f8c21770f631c24daf9b16be84010819b828cf24c7179cf5",
+      "availableBytesSha256": "4f5e985d6ebb8893075969b88f694a7efb4f4cff19ce06e0fc4a6d6886c7dd39",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "campaign-cancel-green-1280.png",
+      "expectedHistoricalSha256": "608c12e18ac733c7d38606891b7d8278dda535bb62b2a6deb84f00eddac0f1ae",
+      "availableBytesSha256": "aeb2d0bb19f5cef8a62953bde382764c56e6bfa3d8eeb84bb813ed868d65e5b2",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "campaign-cancel-confirmed-1440.png",
+      "expectedHistoricalSha256": "71713b829f5f3a47b93060c4926fbe8800b7d3565933f26944a77b2730667aaf",
+      "availableBytesSha256": "b924f378d3453fda91009e606ba871f6b954b11960dafe0af1a2ac3960c0bc80",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "campaign-cancel-green-1440.png",
+      "expectedHistoricalSha256": "bbd7178c261ef40c9ac72d66f8b8adbcbde2ad7a79b259f8d5b3c6a56c305952",
+      "availableBytesSha256": "455516914b559849b60e79a7d985fc6b76946554ff1614b4d128c2ba4a623e55",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-confirmed-1280.png",
+      "expectedHistoricalSha256": "71e6dab1aabc7255ec83aeb3ce211786a40f5c04f5230c55013b2adae9122d76",
+      "availableBytesSha256": "394c968b32adf7ebba1937a87a83d68cfad6b7574cb0bc0e24443abeec2b845b",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-confirmed-1440.png",
+      "expectedHistoricalSha256": "9beea7c0b04e7f91d400aab222c0aa027003487aaf3be3c950fecdb5cd93676f",
+      "availableBytesSha256": "4667930e6f4f20f10019cde540c8eceb1391bf263fa8a0be3bde9e2a228bb226",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-confirmed-390.png",
+      "expectedHistoricalSha256": "e676cd499687fed07efdeceae6f8bf09b0dccec3d10414c0aac9dab040ce6425",
+      "availableBytesSha256": "7b378f90e4c0be331a4438233cf5000acf78ffb7ec0829ca13e0784235360899",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-confirmed-768.png",
+      "expectedHistoricalSha256": "76e08b90c9ac26befc063b972a33deaaa37bea6ce21e76ec52ad7cb6ed9918a3",
+      "availableBytesSha256": "ac095c70ba8fc9ed0f59d742232a8207e7754dd49b1e8e63f0c5d1bac07e03af",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-quality-confirmed-1280.png",
+      "expectedHistoricalSha256": "ea07433d438eb2952d9ca1277a5d1112d3ff0e2acee8105c1e42bef622b31a85",
+      "availableBytesSha256": "ad031d77342053b4c796e123d3d95d97d2cce7aedee76a5568cc0234963df9d6",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-quality-confirmed-1440.png",
+      "expectedHistoricalSha256": "6f073e193f7338044a1db418cd1ba7b0149fb25336919f830ae1777bb36588fc",
+      "availableBytesSha256": "762cf97fbd7d5e4d12a5fc6f967604c85b8f7763acc82a675fb9d2bdfe80bc7c",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-quality-confirmed-390.png",
+      "expectedHistoricalSha256": "cd296a8fd52aaadbc7c8222bd2f90952a639dd76a695f2feb5887a52162bc6a3",
+      "availableBytesSha256": "4055d4f546669ee2c9a72d61d10b07c2a1d59fa4bf7fe9569ae53d434a6e4478",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-totals-1280.png",
+      "expectedHistoricalSha256": "169f1d1d06dc80525170d30cd846d1d5008999a457d31dac6780e39566ce6985",
+      "availableBytesSha256": "1708d21a4e8204594ba7e7bdfdc688bd7a05b6793234d91b62d787dca58b2435",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-totals-1440.png",
+      "expectedHistoricalSha256": "0158068f1d544522635dbf866e9a46a68eff4a8782fe2d9b52729b4a42238009",
+      "availableBytesSha256": "48381019bdc5ae0f4a273dc304094d933774388048d8cd68cd701e0edb545395",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-totals-390.png",
+      "expectedHistoricalSha256": "271830a876c6a7c3a71b8929f4c9f32a9e88a230d4472df7721f43816771bf1e",
+      "availableBytesSha256": "f86c9c43c3be22d47669f37965f94bea7fdb1cad3636879075fb139e925995aa",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    },
+    {
+      "file": "performance-final-source-gate-totals-768.png",
+      "expectedHistoricalSha256": "6bf0174a6eee718b495d35b475cb19a61b8a5bbb63283c74911d439f9dc20926",
+      "availableBytesSha256": "d3078b780fbf5dcd986a28fd72ebbb67bdaeec52787562c8d2da43773e61d091",
+      "historicalScreenshotEvidence": "UNAVAILABLE_HASH_MISMATCH",
+      "recovery": "No matching original in inspected publisher/task backup; recorded metadata retained"
+    }
+  ],
+  "oldRecordsChanged": false,
+  "newNamespace": "ep13-20-",
+  "futureLegacyWrites": 0,
+  "newProductRegressionEvidenceDependsOnOldPNG": false
+}

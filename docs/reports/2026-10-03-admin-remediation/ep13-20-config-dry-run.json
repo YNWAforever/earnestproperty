@@ -1,0 +1,35 @@
+{
+  "environment": "isolated local; read-only registry/config dry-run",
+  "baseSha": "9e22ae24f286438743b0a893d0a90edfd7f6eba2",
+  "schemaMigrationCount": 85,
+  "latestSchemaMigration": "20261003040000_content_proposal_source_guard.sql",
+  "controlPlaneRegistryCount": 1,
+  "controlPlaneRegistry": [
+    {
+      "id": "20260715120000_ops_jobs_status_updated_index",
+      "checksum": "sha256:ed40f99a97680eadb16499bf519cd7e7dcd2075de8501b2be8f6dadeac53b582",
+      "dependencies": [
+        "20260714180000_backend_control_plane.sql"
+      ],
+      "postconditions": [
+        {
+          "relation": "ops_jobs",
+          "column": "status"
+        },
+        {
+          "relation": "ops_jobs",
+          "column": "updated_at"
+        }
+      ]
+    }
+  ],
+  "checksumValidation": "PASS",
+  "newConfigOrSchemaChanges": [],
+  "serverRuntimeChanges": [],
+  "newProviderOrRuntimeIdentifiers": [],
+  "appliedMigrations": 0,
+  "productionMutations": 0,
+  "providerCalls": 0,
+  "manualDeployments": 0,
+  "verifiedSourceCommit": "39d21a294a67e84c4f71c15abb62b658803926fc"
+}
