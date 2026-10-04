@@ -152,8 +152,14 @@ export async function fetchStaffSession() {
     ? { status: "denied", reason: "not-staff" }
     : { status: "ok", roles: [state.role], staffId: state.binding };
 }
-export const fetchAdminAgents = async () => [{ id: staff, name: "合成代理甲", email: null }];
-export const fetchAdminEstateOptions = async () => [{ id: estate, name_zh: "碧堤半島" }];
+export const fetchAdminAgents = async () => {
+  call("agents");
+  return [{ id: staff, name: "合成代理甲", email: null }];
+};
+export const fetchAdminEstateOptions = async () => {
+  call("estates");
+  return [{ id: estate, name_zh: "碧堤半島" }];
+};
 export const fetchAdminDistrictOptions = async () => [{ slug: "sham-tseng", name_zh: "深井" }];
 export async function fetchAdminManagedProperty({ data }: { data: { id: string } }) {
   const captured = context();
@@ -285,4 +291,23 @@ export const snapshotWhatsappLinkOffers = async (filters?: PropertyGroupFilters)
     await new Promise<void>((release) => state.pending.push({ kind: "link", release }));
   call("snapshot-return", filters, captured);
   return snapshot;
+};
+
+export async function saveAdminProperty({ data }: { data: unknown }) {
+  const captured = context();
+  call("create", data, captured);
+  const rows = JSON.parse(localStorage.getItem("property-fixture-created") ?? "[]");
+  const saved = { id: crypto.randomUUID(), data, actor: captured.actor, binding: captured.binding };
+  rows.push(saved);
+  localStorage.setItem("property-fixture-created", JSON.stringify(rows));
+  if (state.saveMode === "delayed")
+    await new Promise<void>((release) => state.pending.push({ kind: "create", release }));
+  call("create-return", data, captured);
+  return { id: saved.id };
+}
+export const generateAdminContentProposal = async () => {
+  throw Error("Application model outside owned fixture");
+};
+export const decideAdminContentProposal = async () => {
+  throw Error("Proposal apply outside owned new-property fixture");
 };

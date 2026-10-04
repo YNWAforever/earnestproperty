@@ -112,7 +112,7 @@ test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await mkdir(".audit/remediation-20261003", { recursive: true });
   await writeFile(
-    ".audit/remediation-20261003/property-scope-browser-summary.json",
+    ".audit/remediation-20261003/ep13-20-property-scope-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -166,7 +166,7 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(page.getByText("已選 0 個物業", { exact: true })).toBeVisible();
       await expect(page.getByRole("link", { name: "#A000006", exact: true })).toHaveCount(0);
       await page.screenshot({
-        path: `.audit/remediation-20261003/ep13-scope-role-${width}.png`,
+        path: `.audit/remediation-20261003/ep13-20-ep13-scope-role-${width}.png`,
         fullPage: true,
         animations: "disabled",
       });
@@ -237,7 +237,7 @@ for (const width of [1440, 1280, 768, 390]) {
       ).toBeVisible();
       await expect(page.getByRole("link", { name: "#A000001", exact: true })).toHaveCount(0);
       await page.screenshot({
-        path: `.audit/remediation-20261003/ep13-scope-unknown-${width}.png`,
+        path: `.audit/remediation-20261003/ep13-20-ep13-scope-unknown-${width}.png`,
         fullPage: true,
         animations: "disabled",
       });

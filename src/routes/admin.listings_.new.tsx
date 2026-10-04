@@ -1,3 +1,4 @@
+import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 
@@ -13,6 +14,18 @@ export const Route = createFileRoute("/admin/listings_/new")({
 });
 
 function NewAdminListingPage() {
+  const identity = useStaffWorkspaceIdentity(["admin", "manager", "agent"]);
+  if (!identity)
+    return (
+      <AdminShell title="新增放盤" description="建立售盤或租盤，設定相片、代理、SEO 及發布狀態。">
+        {null}
+      </AdminShell>
+    );
+  return <NewAdminListingWorkspace key={identity} identity={identity} />;
+}
+
+function NewAdminListingWorkspace({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const navigate = useNavigate();
 
   return (
@@ -39,7 +52,12 @@ function NewAdminListingPage() {
             返回
           </Link>
         </Button>
-        <PropertyForm onSaved={() => navigate({ to: "/admin/listings" })} />
+        <PropertyForm
+          isWorkspaceCurrent={isWorkspaceCurrent}
+          onSaved={() => {
+            if (isWorkspaceCurrent()) void navigate({ to: "/admin/listings" });
+          }}
+        />
       </div>
     </AdminShell>
   );

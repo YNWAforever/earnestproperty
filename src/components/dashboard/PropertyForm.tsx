@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -131,9 +132,11 @@ function mapPropertySaveError(error: string): { message: string; field?: keyof F
 type Props = {
   property?: Property;
   onSaved: (id: string) => void;
+  isWorkspaceCurrent?: () => boolean;
 };
 
-export function PropertyForm({ property, onSaved }: Props) {
+export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const formRef = useRef<HTMLFormElement>(null);
   const [estates, setEstates] = useState<Estate[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -169,13 +172,22 @@ export function PropertyForm({ property, onSaved }: Props) {
   }
 
   useEffect(() => {
+    if (!isCurrent()) return;
+    let cancelled = false;
     Promise.all([fetchAdminEstateOptions(), fetchAdminAgents()])
       .then(([estateData, agentData]) => {
+        if (cancelled || !isCurrent()) return;
         setEstates(estateData as Estate[]);
         setAgents(agentData as Agent[]);
       })
-      .catch((err) => toast.error(err instanceof Error ? err.message : String(err)));
-  }, []);
+      .catch((err) => {
+        if (!cancelled && isCurrent())
+          toast.error(err instanceof Error ? err.message : String(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isCurrent]);
 
   // Editing a field (by hand or via the copilot) has to drop its stale inline
   // error, otherwise the message from the last failed submit stays under a value
@@ -210,6 +222,7 @@ export function PropertyForm({ property, onSaved }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!isCurrent() || submitting) return;
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
       const nextErrors: Partial<Record<keyof FormState, string>> = {};
@@ -258,10 +271,11 @@ export function PropertyForm({ property, onSaved }: Props) {
     };
 
     setSubmitting(true);
-    const result = await saveAdminProperty({ data: payload }).catch((err) => ({
+    const result = await saveAdminProperty({ data: payload }, isCurrent).catch((err) => ({
       error: err instanceof Error ? err.message : String(err),
       id: null,
     }));
+    if (!isCurrent()) return;
     setSubmitting(false);
 
     if ("error" in result && result.error) {
@@ -532,6 +546,7 @@ export function PropertyForm({ property, onSaved }: Props) {
             points there -- clicking the label opens the file picker. */}
         <Field label="相片" htmlFor="property_images" full>
           <ImageUploader
+            isWorkspaceCurrent={isCurrent}
             inputId="property_images"
             ownerType="property"
             value={images}
@@ -565,6 +580,7 @@ export function PropertyForm({ property, onSaved }: Props) {
           seo_description: form.seo_description,
         })}
         onApply={(patch) => {
+          if (!isCurrent()) return;
           setForm((current) => applyPropertyContentCopilotPatch(current, patch));
           clearErrors(Object.keys(patch));
         }}

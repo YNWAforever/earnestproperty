@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { createRootRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { Toaster } from "sonner";
 import { Route as Listings } from "../../../src/routes/admin.listings";
+import { Route as NewListing } from "../../../src/routes/admin.listings_.new";
 import { Route as Detail } from "../../../src/routes/admin.listings_.$id";
 import { Route as Operations } from "../../../src/routes/admin.operations";
 import { Route as StaffSettings } from "../../../src/routes/admin.whatsapp-settings";
@@ -31,6 +32,11 @@ const router = createRouter({
     Listings.update({
       id: "/admin/listings",
       path: "/admin/listings",
+      getParentRoute: () => root,
+    } as never),
+    NewListing.update({
+      id: "/admin/listings/new",
+      path: "/admin/listings/new",
       getParentRoute: () => root,
     } as never),
     Detail.update({
