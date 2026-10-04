@@ -1,0 +1,882 @@
+{
+  "createdAt": "2026-10-04T18:21:07.116416+00:00",
+  "sourceSha": "32156f8abfa6e4df47c1eab32cc5be8445006da6",
+  "baseSha": "9c1a323192257675311cbd2bad364d49a2c89be1",
+  "source": [
+    {
+      "file": "src/routes/admin.leads.tsx",
+      "gitBlob": "21f448ec6441897a548743cc3fdad47011599612",
+      "sha256": "efdd18c399e733497595072adc2ddb159deb04b7277dbdabbe4d14aa7cb369e7"
+    },
+    {
+      "file": "e2e/admin-daily-work.spec.ts",
+      "gitBlob": "2ac8335e86fe4b1c05512b6482fba9a4db550b3f",
+      "sha256": "6f3df22949f7e33a257aae3aac289e1cfe107f79159866c2368540ec0f091fc3"
+    }
+  ],
+  "evidenceLayer": "owned loopback actual overview/Leads/AdminShell; synthetic Auth/API; DOM composition/input and controlled clock; URL/API args, not real SQL filtering",
+  "tests": {
+    "initialRed": {
+      "collected": 16,
+      "fail": 12,
+      "pass": 4,
+      "skip": 0,
+      "errors": 12,
+      "reason": "8 interimquery prematurely published;4stage new reverted toopen;4workspace-remount positives pass.",
+      "redJsonComplete": false,
+      "authoritativeRed": "Complete raw log and12error contexts; original partial afterAllJSON retained."
+    },
+    "reviewRed": {
+      "collected": 16,
+      "fail": 16,
+      "pass": 0,
+      "skip": 0,
+      "errors": 16,
+      "reason": "Both explicit reset buttons left Pending search/未確認組字 in textbox with URL query absent.",
+      "redJsonComplete": false,
+      "authoritativeRed": "Complete raw log and16error contexts; failed-worker summary partial, not reconstructed."
+    },
+    "green": {
+      "pass": 124,
+      "fail": 0,
+      "skip": 0,
+      "previousCases": 92,
+      "newCases": 32,
+      "viewportWidths": [
+        390,
+        768,
+        1280,
+        1440
+      ]
+    },
+    "initialGreenBeforeReviewFix": {
+      "pass": 108,
+      "fail": 0,
+      "skip": 0,
+      "immutableHistoricalPhase": true
+    },
+    "independentPublisher": {
+      "headSha": "2653c16fd82de19fa106cf8b3e4bc58709e1e25a",
+      "sourceSha": "32156f8abfa6e4df47c1eab32cc5be8445006da6",
+      "pass": 32,
+      "fail": 0,
+      "skip": 0,
+      "widths": [
+        390,
+        768,
+        1280,
+        1440
+      ],
+      "sourceBlobs": {
+        "src/routes/admin.leads.tsx": "21f448ec6441897a548743cc3fdad47011599612",
+        "e2e/admin-daily-work.spec.ts": "2ac8335e86fe4b1c05512b6482fba9a4db550b3f"
+      },
+      "sourceBlobsMatch": true,
+      "realAuth": false,
+      "realDatabase": false,
+      "realProvider": false,
+      "realModel": false,
+      "effects": "New32cases assert zero acceptednotes/leadupdates/outbound; externalrequests blocked, loopback GET/HEAD only."
+    },
+    "namedUnits": {
+      "command-center": {
+        "nodePass": 83,
+        "bunPass": 8,
+        "exit": 0
+      },
+      "woztell": {
+        "nodePass": 159,
+        "bunPass": 9,
+        "exit": 0
+      }
+    }
+  },
+  "static": {
+    "lintExit": 0,
+    "errors": 0,
+    "existingWarnings": 3,
+    "typecheckExit": 0,
+    "buildExit": 0,
+    "separateScripts": true
+  },
+  "review": {
+    "reviewer": "gpt-6-astra",
+    "reasoningEffort": "xhigh",
+    "freshFinalReview": true,
+    "readOnly": true,
+    "critical": 0,
+    "important": 1,
+    "minor": 0,
+    "secondReview": false,
+    "importantFinding": {
+      "file": "src/routes/admin.leads.tsx",
+      "lines": [
+        220,
+        924,
+        1025
+      ],
+      "kind": "pre-existing residual in directly reviewed lifecycle",
+      "impact": "Pending search reappears after explicit reset with absent URL query.",
+      "reviewerReproduced": false,
+      "authorDisposition": "Accepted for one author RED-to-GREEN reset pass; results recorded separately."
+    },
+    "declinedToJudgeRulings": [
+      {
+        "area": "Native OS IME and event ordering",
+        "reason": "DOM events/controlled clock only",
+        "ruling": "BLOCKED",
+        "cost": "OS candidate/event ordering still needs actual device evidence."
+      },
+      {
+        "area": "TrueAuth/DB filtering/providers/models",
+        "reason": "Synthetic API/Auth fixture and no real-action authority",
+        "ruling": "BLOCKED",
+        "cost": "Browser URL/API-argument evidence does not prove real SQL results or delivery."
+      },
+      {
+        "area": "Full EP12/14/20 journeys and unrelated dirt",
+        "reason": "Focused Leads review only",
+        "ruling": "NOT_READY",
+        "cost": "Full roles/actions/combined Golden must pass their own evidence gates."
+      },
+      {
+        "area": "Build outcome at review",
+        "reason": "Still running when inspected",
+        "ruling": "Author fresh completed exit required",
+        "cost": "Review does not certify final build; separate logs must establish result."
+      }
+    ],
+    "assessmentAtReview": "With fixes; no merge/deployment authorization",
+    "verbatimFile": ".audit\\remediation-20261003\\ep14-leads-ime-final-review-verbatim.md",
+    "authorResolution": {
+      "importantAccepted": 1,
+      "importantResolvedByAuthor": 1,
+      "criticalOpen": 0,
+      "importantOpen": 0,
+      "validReviewRed": {
+        "collected": 16,
+        "fail": 16,
+        "pass": 0,
+        "skip": 0
+      },
+      "greenProof": "Full124 plus independent32, both reset entries/pending+composing/fourviewports; late compositionend remains empty and ordinary search resumes.",
+      "secondReview": false,
+      "reviewAssessmentUnchanged": "Original With fixes preserved; author evidence closes Important, no merge authorized."
+    }
+  },
+  "configMigrationDryRun": {
+    "sourceSha": "32156f8abfa6e4df47c1eab32cc5be8445006da6",
+    "baseSha": "9c1a323192257675311cbd2bad364d49a2c89be1",
+    "changedFiles": [
+      "src/routes/admin.leads.tsx",
+      "e2e/admin-daily-work.spec.ts"
+    ],
+    "applicationUiChanges": [
+      "Hold interim IME search and cancel pending timer; final same-value end commits.",
+      "Preserve newer filter snapshot during pending search.",
+      "Explicit reset clears draft/composition and synchronously invalidates queued debounce callbacks."
+    ],
+    "schemaChanges": [],
+    "serverDtoChanges": [],
+    "configChanges": [],
+    "providerRuntimeChanges": [],
+    "newMigration": null,
+    "candidateManifest": {
+      "names": [
+        "20260622060000_public_content.sql",
+        "20260623090000_neon_admin_crm_whatsapp.sql",
+        "20260624110000_ai_crm_live_agent.sql",
+        "20260626120000_live_agent_security.sql",
+        "20260626120100_crm_ai_profile_status.sql",
+        "20260626120200_woztell_member_identity.sql",
+        "20260709090000_cms_videos.sql",
+        "20260710090000_agent_profiles.sql",
+        "20260711090000_cms_content_revisions.sql",
+        "20260712120000_ai_content_proposals.sql",
+        "20260714180000_backend_control_plane.sql",
+        "20260801090000_staff_public_slug_unique.sql",
+        "20260802090000_listing_search_indexes.sql",
+        "20260802100000_agent_specialties.sql",
+        "20260816120000_staff_identity_actions.sql",
+        "20260817120000_dual_source_listing_sync.sql",
+        "20260817130000_youtube_channel_sync.sql",
+        "20260822120000_whatsapp_audience_segment_link.sql",
+        "20260830120000_listing_alerts.sql",
+        "20260830130000_estate_expansion.sql",
+        "20260830140000_transaction_provenance.sql",
+        "20260830150000_agent_languages.sql",
+        "20260830160000_branches_entity.sql",
+        "20260830170000_valuation_leads.sql",
+        "20260831090000_staff_viewer_role.sql",
+        "20260831180000_video_category.sql",
+        "20260901100000_estate_expansion_facts.sql",
+        "20260901110000_estate_expansion_publish.sql",
+        "20260902100000_estate_expansion_school_net_correction.sql",
+        "20260902110000_estate_expansion_facts_resolution.sql",
+        "20260905110000_cms_atomic_mutations.sql",
+        "20260905120000_campaign_dispatch_boundary.sql",
+        "20260905130000_outbound_intents.sql",
+        "20260905140000_media_upload_intents.sql",
+        "20260905150000_inquiry_submission_identity.sql",
+        "20260905151000_consent_evidence.sql",
+        "20260905180000_admin_message_paging.sql",
+        "20260905181000_cms_browse_order.sql",
+        "20260906020000_whatsapp_delivery_events.sql",
+        "20260906021000_estate_editorial_backfill.sql",
+        "20260906022000_estate_verified_details.sql",
+        "20260906040000_property_public_identity.sql",
+        "20260906090000_canonical_property_identity.sql",
+        "20260906100000_whatsapp_inbound_leads.sql",
+        "20260906110000_estate_listing_links.sql",
+        "20260906120000_admin_property_management.sql",
+        "20260907120000_propertyhk_ingestion_v2.sql",
+        "20260909120000_source_promotion_tiers.sql",
+        "20260912120000_whatsapp_enquiry_events.sql",
+        "20260912130000_whatsapp_enquiry_episodes.sql",
+        "20260912140000_whatsapp_assignment_evidence.sql",
+        "20260912150000_whatsapp_service_workflow.sql",
+        "20260912160000_staff_reference_snapshots.sql",
+        "20260912170000_staff_notifications.sql",
+        "20260925120000_rate_limit_bucket_cleanup.sql",
+        "20260927080000_staff_notification_receipt_times.sql",
+        "20260927083000_staff_notification_test_attempts.sql",
+        "20260927090000_whatsapp_link_batch_operations.sql",
+        "20260927093000_whatsapp_link_management_indexes.sql",
+        "20260927100000_whatsapp_redirect_bucket_retention.sql",
+        "20260927110000_staff_mapping_review_versions.sql",
+        "20260927120000_named_inbox_folders.sql",
+        "20260927130000_staff_notification_test_evidence.sql",
+        "20260927140000_whatsapp_link_reference_scope.sql",
+        "20260927150000_whatsapp_link_batch_mapping_guard.sql",
+        "20260927160000_transaction_sales_attribution.sql",
+        "20260927170000_performance_event_quality.sql",
+        "20260927171000_inquiry_quality.sql",
+        "20260927172000_media_asset_variants.sql",
+        "20260929100000_whatsapp_inbound_receipts.sql",
+        "20260929101000_whatsapp_receipt_identity.sql",
+        "20260929102000_whatsapp_portal_resolution.sql",
+        "20260929103000_whatsapp_no_link_episodes.sql",
+        "20260929104000_whatsapp_enquiry_access.sql",
+        "20260929105000_whatsapp_no_link_effects.sql",
+        "20260929106000_whatsapp_enquiry_resolution_guard.sql",
+        "20260929107000_whatsapp_forwarded_enquiries.sql",
+        "20260930090000_whatsapp_no_link_source_authority.sql",
+        "20261001090000_whatsapp_outbound_unknown_reservation.sql",
+        "20261001120000_property_sync_operations.sql",
+        "20261001130000_property_withdrawal_review.sql",
+        "20261003010000_ai_knowledge_durable_repair.sql",
+        "20261003020000_crm_analysis_contract.sql",
+        "20261003030000_crm_analysis_runs.sql",
+        "20261003040000_content_proposal_source_guard.sql"
+      ],
+      "sha256": "42c087012a528554e4a353c7ce1426e9ee5bb3c11feaa9cbd87452446b49bb5d",
+      "latestVersion": "20261003040000",
+      "commit": "32156f8abfa6e4df47c1eab32cc5be8445006da6",
+      "count": 85,
+      "digestMethod": "SHA256 of sorted filename + space + immutable Git blob SHA + newline"
+    },
+    "migrationDryRun": "No SQL/config delta; prior immutable85 migration Git blobs unchanged; no apply.",
+    "registry": "Prior recorded20260715120000_ops_jobs_status_updated_index only; no new production DB access.",
+    "runtimeProviderModelIds": "UNKNOWN pending authorized actual runtime readback",
+    "effects": {
+      "realSends": 0,
+      "applicationModelSpendUsd": 0,
+      "productionMigrations": 0,
+      "manualDeployments": 0,
+      "merge": false,
+      "nativeScheduleTriggers": 0
+    }
+  },
+  "history": {
+    "originalAudit": {
+      "PASS": 29,
+      "FAIL": 9,
+      "BLOCKED": 22
+    },
+    "plannedNEW": 22,
+    "executionCounts": {
+      "PASS": 40,
+      "PARTIAL": 28,
+      "BLOCKED": 14
+    },
+    "taskCounts": {
+      "LOCAL_VERIFIED": 8,
+      "LOCAL_PARTIAL": 11,
+      "BLOCKED_ACCEPTANCE": 1,
+      "BLOCKED_EXTERNAL": 1,
+      "BLOCKED_RELEASE": 1
+    },
+    "totalCandidates": 1400,
+    "businessActions": 68,
+    "sourceCandidates": 1332,
+    "historicalRenderedObservations": 408,
+    "oldRawHashes": {
+      "ep20-ime-readback.json": 29,
+      "ep20-keyboard-readback.json": 68,
+      "ep21-release-readiness-readback.json": 46,
+      "ep20-ime-final-publication-readback.json": 28,
+      "ep20-keyboard-final-publication-readback.json": 27
+    },
+    "knownArtifactLimitations": {
+      "priorPngUnavailable": 27,
+      "priorDailySummaryUnavailable": 1,
+      "originalSummarySha256": "299e12e8e6f29a0b54464317f899e7ddc12e68596f3fd3c2a984ecdefd17bda7",
+      "originalMetadataPreserved": true,
+      "noNewOverwrite": true
+    },
+    "noTaskOrSourceCandidatePromotion": true
+  },
+  "csvProof": {
+    "EarnestProperty_Remediation_Traceability_2026-10-03.csv": {
+      "rows": 22,
+      "oldColumnsPreserved": 49,
+      "newColumns": [
+        "execution_2026_10_05_ep14_leads_ime_sha",
+        "execution_2026_10_05_ep14_leads_ime_environment",
+        "execution_2026_10_05_ep14_leads_ime_evidence",
+        "execution_2026_10_05_ep14_leads_ime_result",
+        "execution_2026_10_05_ep14_leads_ime_status"
+      ],
+      "oldCellsPreserved": true,
+      "oldBytesSha256": "35b7e1bf5eb445cf4f075fabdb557c15e6ee046f7ac7a0979f12d6b56cafd2bb",
+      "executionCountsUnchanged": {
+        "LOCAL_VERIFIED": 8,
+        "LOCAL_PARTIAL": 11,
+        "BLOCKED_ACCEPTANCE": 1,
+        "BLOCKED_EXTERNAL": 1,
+        "BLOCKED_RELEASE": 1
+      }
+    },
+    "EarnestProperty_UAT_Matrix_2026-10-03.csv": {
+      "rows": 82,
+      "oldColumnsPreserved": 40,
+      "newColumns": [
+        "execution_2026_10_05_ep14_leads_ime_sha",
+        "execution_2026_10_05_ep14_leads_ime_environment",
+        "execution_2026_10_05_ep14_leads_ime_evidence",
+        "execution_2026_10_05_ep14_leads_ime_result",
+        "execution_2026_10_05_ep14_leads_ime_status"
+      ],
+      "oldCellsPreserved": true,
+      "oldBytesSha256": "6be008b737dcd5888f0b941c047048d21caff5c38d705e60264d22d8bda3a704",
+      "executionCountsUnchanged": {
+        "PASS": 40,
+        "PARTIAL": 28,
+        "BLOCKED": 14
+      },
+      "baselineCountsUnchanged": {
+        "PASS": 29,
+        "BLOCKED": 22,
+        "FAIL": 9,
+        "NOT_APPLICABLE_NEW_CASE": 22
+      }
+    }
+  },
+  "capabilities": {
+    "selectedOwnedLeadsCompositionResetAndCurrentFilter": "READY",
+    "fullEP12EP14EP20RolesActionsCombinedGolden": "NOT_READY",
+    "nativeIMETrueAuthProviderModelPropertyHkNativeScheduleProductionRelease": "BLOCKED"
+  },
+  "formalNativeSchedule": {
+    "baselineObserved": 1,
+    "repairedAccepted": 0,
+    "required": 3,
+    "agentTriggered": 0
+  },
+  "effects": {
+    "realSends": 0,
+    "applicationModelSpendUsd": 0,
+    "productionMigrations": 0,
+    "manualDeployments": 0,
+    "merge": false,
+    "nativeScheduleTriggers": 0
+  },
+  "artifacts": [
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-1280-Lead-193d7-eeps-the-newer-stage-filter-owned-chromium/error-context.md",
+      "bytes": 11872,
+      "sha256": "e32829da251a35c5f2973a66525f4de7b82f8a906d14d23c5d5928fe4b48ffc3"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-1280-Lead-32d95-ged-composition-end-commits-owned-chromium/error-context.md",
+      "bytes": 11572,
+      "sha256": "74b06a6195ecb7794d226938acf6b02401acd793231939b38b0365afb558813f"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-1280-Lead-4f90f-idate-local-until-committed-owned-chromium/error-context.md",
+      "bytes": 11121,
+      "sha256": "5039f8119981c919b39f0ea6002aaa4d328625ec9baa71a224003a8039d8f89b"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-1440-Lead-8558a-eeps-the-newer-stage-filter-owned-chromium/error-context.md",
+      "bytes": 11872,
+      "sha256": "8d906421503c269755ece5086806c7a74ab165d4f94a6ad082e54f6b76cca741"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-1440-Lead-a8313-ged-composition-end-commits-owned-chromium/error-context.md",
+      "bytes": 11572,
+      "sha256": "491baf568af443e651000bf399e9c42845a19b13d02c5007dbf06e91c5ae2e4c"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-1440-Lead-d7a04-idate-local-until-committed-owned-chromium/error-context.md",
+      "bytes": 11121,
+      "sha256": "6f24685556ba1efa81a9693cb80287bb53c7b1ff4dac7928280845462fef1064"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-390-Leads-4082b-eeps-the-newer-stage-filter-owned-chromium/error-context.md",
+      "bytes": 11871,
+      "sha256": "5969c643b522503190ae8f3da2a341fd0df58300452e9c4556345b3204d6242c"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-390-Leads-4f7d6-ged-composition-end-commits-owned-chromium/error-context.md",
+      "bytes": 11571,
+      "sha256": "9b29a850a3c4b637720f3f38621ab29d212437b8a14cc648606a04a6fa7b8f76"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-390-Leads-b5944-idate-local-until-committed-owned-chromium/error-context.md",
+      "bytes": 11120,
+      "sha256": "47d3b8c04da94791aa510a11fe7cb434a773416bd2d88c7e55bf0ed4592a6d15"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-768-Leads-13e7e-ged-composition-end-commits-owned-chromium/error-context.md",
+      "bytes": 11571,
+      "sha256": "8a5baa159b7a812784adbc68acc4e6aa574e32617ac33307c6af39f784f4020f"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-768-Leads-b79bc-idate-local-until-committed-owned-chromium/error-context.md",
+      "bytes": 11120,
+      "sha256": "fba3356876a532b98cedd3014083f3591990b9154123baf85ac67188925d1bf9"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-red-playwright/admin-daily-work-768-Leads-efc93-eeps-the-newer-stage-filter-owned-chromium/error-context.md",
+      "bytes": 11871,
+      "sha256": "a3ad8e550b2bbed9098f2eb6e0ffdacc93162686e028fb6e6b3eae42511b8f21"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-1280-Lead-158a4-omposing-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13712,
+      "sha256": "8c6ac6eebe708a4ad445f60406305393094e6a36d40902ba61c39657b62a1d87"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-1280-Lead-48e26--pending-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13700,
+      "sha256": "604aa3b7a30f4ac8ab53f6453310a3049ab6335de7212a584ebea6d51163b7e1"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-1280-Lead-4f848-omposing-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13706,
+      "sha256": "47c610c4988b7e4d215c9734d88d77c5452df1b9419bfb952ecd46c9b04d582d"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-1280-Lead-d20ca--pending-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13706,
+      "sha256": "56b11ab8d39bc9c390730da9827de84ab0229e927dff6dfb69bcb146ed60b02d"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-1440-Lead-9dce4-omposing-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13706,
+      "sha256": "abbf55c76819626f58ea10f8803f4f18ff56b16d339aa2fa74e6447a322ee77a"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-1440-Lead-a52c2-omposing-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13712,
+      "sha256": "44b9e16ce1bbb631d393c467c51132436c00156bdc998ec0ab0f4dc5509dc345"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-1440-Lead-b489b--pending-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13700,
+      "sha256": "26445626898a9a4495d1f3454288e1a701397296d4d3c4ef94381eb9f41811c8"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-1440-Lead-be374--pending-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13706,
+      "sha256": "12adee5d6d5b504e653dcfebd035612193967ae50e93fdb647ac0c46ae77be47"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-390-Leads-308cf--pending-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13699,
+      "sha256": "73a02c149016d538abdbcba55c35abe2f51fef578a312f321dcbcdac3a5b286e"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-390-Leads-6d5d1--pending-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13705,
+      "sha256": "3a00f671df463cce0452f3aaf895bc10697dbc91b84085b8a1465443f75b6f41"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-390-Leads-afae3-omposing-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13711,
+      "sha256": "cf9f454399a3d5d743c355dfb290c9b2a715b04bb64bec1f6182d94c0519517f"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-390-Leads-b9510-omposing-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13705,
+      "sha256": "c531956f9c4dc099df106ec6b987f16350828b8f0bcca628c6c5123fcd952967"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-768-Leads-3026b--pending-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13699,
+      "sha256": "a1a98e45e66c55248d746319726ac16cc4e68ec01eca764d77f2177ce191cf50"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-768-Leads-5c3a3-omposing-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13711,
+      "sha256": "5efa8a4895474ce72b0d365fc83ec53ef91393f5ef0bab2155afc1a5b0c82d6c"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-768-Leads-71743-omposing-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13705,
+      "sha256": "a38ff7b1c4d984916fd5273c34b6dbb753d52087e9f4e18b35ff1b81ac38e97d"
+    },
+    {
+      "file": ".audit/ep14-leads-ime-review-red-playwright/admin-daily-work-768-Leads-c9029--pending-search-and-resumes-owned-chromium/error-context.md",
+      "bytes": 13705,
+      "sha256": "22caef38533df591f3484d7608613bc40de25d33d32b888f63dea837ce376706"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-build.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-build.log",
+      "bytes": 260581,
+      "sha256": "d3a5a62edac704195d6f91a60edf5b1ff91dc9cedffcaefea092ae847bb389b5"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-command-center.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-command-center.log",
+      "bytes": 8537,
+      "sha256": "17f098d40e3b69732d4daf8c6d0d28f6e1e9b3554a19b6cbece3fff5a9306ad6"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-config-migration-dry-run.json",
+      "bytes": 6022,
+      "sha256": "6adb69a6b1becf5936471de3c0cdd7914451528b2e9e6bc6393617212b1e35d2"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-build.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-build.log",
+      "bytes": 260580,
+      "sha256": "6b95adcc8d4754f1c778bdd232afbd4c2f17f1d11c1664e093e555d92c8ece93"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-daily-work-session-lifetime-summary.json",
+      "bytes": 17699,
+      "sha256": "df8fd8e800b915a9f75903947369c56415ff93476b56d362c577c8bdf6cd9814"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-draft-1280.png",
+      "bytes": 99521,
+      "sha256": "6c4080a15715e06239a94259d36c82043da217e10d03f42ebc0865271d4f1f0c"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-draft-1440.png",
+      "bytes": 101909,
+      "sha256": "3d6cab7979e2e5cca32be0fe17b27edd004919728056fa7fbe6f6ad1df6c0286"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-draft-390.png",
+      "bytes": 43663,
+      "sha256": "1d208b36d3328866077230909c021990ecb7c83bf998db3df302fbd3e24cdef5"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-draft-768.png",
+      "bytes": 62965,
+      "sha256": "deb11ff56739ca8816cc319d8d7ea218506b239888446ac36f4630f21007cf02"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-hidden-1280.png",
+      "bytes": 52620,
+      "sha256": "cf04f43acecb6341346349b891938843ab240641c489b0c66cea6210fa3fc3bb"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-hidden-1440.png",
+      "bytes": 53843,
+      "sha256": "952dba8ee3ed0973a48e5733454203a1a6407fa5442d380ffcb41ec41fa2f86f"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-hidden-390.png",
+      "bytes": 16152,
+      "sha256": "9ab3dd5a05da50154b509d50065993831721494b9abe02c6827f809e230ae5e1"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-hidden-768.png",
+      "bytes": 17563,
+      "sha256": "02a3b19620a770372284e4810132ffde0cf6990500aa349a445861b8d8161ed8"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-restored-1280.png",
+      "bytes": 85811,
+      "sha256": "7627967031485d8dfa47730eb3dee5853642e153ae191eba0bc71a8007074efe"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-restored-1440.png",
+      "bytes": 88270,
+      "sha256": "d8657b9c032116250347265178077b06b12731993e4122e7f67f2ff9e0ce4b9d"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-restored-390.png",
+      "bytes": 40099,
+      "sha256": "b40f9d1281f2941e531a1ae971283cf6cf601600b9dc427422e00072f776d784"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-ep12-session-restored-768.png",
+      "bytes": 48482,
+      "sha256": "b5a0f69ebe66a7b4a581277f1f1e9d9e55ea05626a5896385961d045756e3eba"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-lint.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-lint.log",
+      "bytes": 883,
+      "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-review-verbatim.md",
+      "bytes": 3382,
+      "sha256": "1aaecbd078ca1f0065119c8dec37179039181fdbb5cba6429e2dda1c2b176e20"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-review.json",
+      "bytes": 2393,
+      "sha256": "9440baf19b9511a153ca097c8a792b8638dae6a73b787ede213367850bd4d003"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-source.diff",
+      "bytes": 12491,
+      "sha256": "8c1443ecddf1c7ae5b4bed85406655db4fca5e4c815478a73105dfbb5b719c0a"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-typecheck.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final-typecheck.log",
+      "bytes": 33,
+      "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-final.log",
+      "bytes": 19899,
+      "sha256": "88b7490e59f41dd99b64318533b9c75e73fa7ab80e96b369491972cd9e51163a"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-formal-http-readback.json",
+      "bytes": 1017,
+      "sha256": "701bb4d1cbf05defda4fb28b434ad08179aa7e623dc778b013b9a45ec57934e4"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-daily-work-session-lifetime-summary.json",
+      "bytes": 15435,
+      "sha256": "1e248232a10775bdf784aa524535d6b3403991ef739575591a5dd57c35a8890d"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-draft-1280.png",
+      "bytes": 99521,
+      "sha256": "6c4080a15715e06239a94259d36c82043da217e10d03f42ebc0865271d4f1f0c"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-draft-1440.png",
+      "bytes": 101910,
+      "sha256": "1e64147b0196487efa4134cd3ea629241e2f1e20687554ddea571334f0bfd30a"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-draft-390.png",
+      "bytes": 43663,
+      "sha256": "1d208b36d3328866077230909c021990ecb7c83bf998db3df302fbd3e24cdef5"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-draft-768.png",
+      "bytes": 62964,
+      "sha256": "cd19250ffb9882155769adec4bd43fdb4c71335ea2ee73d3eaf28b9233334b7a"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-hidden-1280.png",
+      "bytes": 52620,
+      "sha256": "cf04f43acecb6341346349b891938843ab240641c489b0c66cea6210fa3fc3bb"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-hidden-1440.png",
+      "bytes": 53843,
+      "sha256": "952dba8ee3ed0973a48e5733454203a1a6407fa5442d380ffcb41ec41fa2f86f"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-hidden-390.png",
+      "bytes": 16152,
+      "sha256": "9ab3dd5a05da50154b509d50065993831721494b9abe02c6827f809e230ae5e1"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-hidden-768.png",
+      "bytes": 17563,
+      "sha256": "02a3b19620a770372284e4810132ffde0cf6990500aa349a445861b8d8161ed8"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-restored-1280.png",
+      "bytes": 85811,
+      "sha256": "7627967031485d8dfa47730eb3dee5853642e153ae191eba0bc71a8007074efe"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-restored-1440.png",
+      "bytes": 88270,
+      "sha256": "d8657b9c032116250347265178077b06b12731993e4122e7f67f2ff9e0ce4b9d"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-restored-390.png",
+      "bytes": 40099,
+      "sha256": "b40f9d1281f2941e531a1ae971283cf6cf601600b9dc427422e00072f776d784"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green-ep12-session-restored-768.png",
+      "bytes": 48482,
+      "sha256": "b5a0f69ebe66a7b4a581277f1f1e9d9e55ea05626a5896385961d045756e3eba"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-green.log",
+      "bytes": 18193,
+      "sha256": "2f68db4e4933345c8781eca23e33933add48d7981ce81da2c84dc617aeef9927"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-lint.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-lint.log",
+      "bytes": 883,
+      "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-native-config-readback.json",
+      "bytes": 1669,
+      "sha256": "23eb82066e5a248010d09233413961559d799673399addcea365df290707d508"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-native-metadata-readback.json",
+      "bytes": 18445,
+      "sha256": "343d1e224fc5c0b61417dd2c5e50133ea7bd8b80ce44e9f09198985c6cd2ccaa"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-prior-integrity.json",
+      "bytes": 307,
+      "sha256": "caebda2e8369f5ad9c801e9071b219f3f751ed91dbdc661498a15d00266939ec"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-progress.md",
+      "bytes": 3640,
+      "sha256": "e7617fbf0ede5cee79d57ace9efc5132d4e8ac569f8aad5efa18c7a1806f18fe"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-publisher-daily-work-session-lifetime-summary.json",
+      "bytes": 4829,
+      "sha256": "45dff68ade73481b575551aa7b381a3e45968e8c26762013a4d8e3bf55582722"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-publisher-independent-readback.json",
+      "bytes": 665,
+      "sha256": "a278f2b31e4611ebe47ed02487c78d7965436404f88dabd36e864ce8401fca2b"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-publisher.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-publisher.log",
+      "bytes": 6713,
+      "sha256": "6b23babb996d35da7be5dd4c6e683107d44ad96a5327bb8d43415743a6fc3f58"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-red-daily-work-session-lifetime-summary.json",
+      "bytes": 392,
+      "sha256": "f5f7755eeec391be389c8ef6897c0f438a72200e5c4784ba29de77690fc26079"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-red.exit",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-red.log",
+      "bytes": 39366,
+      "sha256": "b9f9cafa679215b290492000df0c4f1676c60bd927dffdf652f32f696c2e470c"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-review-package.md",
+      "bytes": 3015,
+      "sha256": "a25f107704f650d73e61f1b984b6e1527d3695b04075f30f657a2730609bc0d6"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-review-red-classification.json",
+      "bytes": 346,
+      "sha256": "ddeab7399552705234439a96e8a69b7dfdbc69a6652f605f2e4ff6342fb37851"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-review-red-daily-work-session-lifetime-summary.json",
+      "bytes": 390,
+      "sha256": "87223d82a2c9ef809403301f1c945c336d523b3eb82e92c06e3e6ce967571e40"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-review-red.exit",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-review-red.log",
+      "bytes": 64994,
+      "sha256": "2560ac5b0605910e482842d4fcc565a86090feaffe7419ecc8c47fa19b3f7877"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-review-source.diff",
+      "bytes": 9435,
+      "sha256": "6aef6815365be42793faeb522d75847d460bd01419c36eb19658cfb4c9d268aa"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-source-commits.json",
+      "bytes": 367,
+      "sha256": "30076a12a7f022ff6dfe614cd42041ecb2e3900db002a2f5b5cab17f40095cc3"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-typecheck.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-typecheck.log",
+      "bytes": 33,
+      "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-woztell.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep14-leads-ime-woztell.log",
+      "bytes": 15247,
+      "sha256": "110e1e62940b8a6adb39c14b5310f15d2161f56cb42d7b012af1b9e8f2075cd2"
+    }
+  ],
+  "rollback": "Revert only focused Leads source commit; no SQL/config rollback; retain receipts/accepted-write journals, earlier fixes and all historical evidence."
+}

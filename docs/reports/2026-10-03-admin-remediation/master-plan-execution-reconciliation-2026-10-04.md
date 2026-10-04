@@ -60,3 +60,6 @@ EP14/20 keyboard follow-up source `83b28eb7a608144728699772f1b7f86d95e67857`：o
 
 
 EP14/20 composition follow-up `283a887f955aa0f15652963554ae6136469eb7aa`：有效RED8compositionFAIL/4positivePASS後，fullWhatsApp76、159Node+9Bun與separate static0；owned DOM composition和modal first/last wrapping READY（前輪P3 boundary本地驗證已補），fulltask NOT_READY/nativeIME和formalexternal BLOCKED。追加CSV5dated欄保留44/35原欄及38oldroots，old46/68/27hashes一致；歷史27PNG+1summary限制保留。本輪無server/DTO/config/SQL/provider變更或production effects。見[本輪組字讀回](ep-20-ime-composition-followup.md)。
+
+
+EP12/14/20 Leads continuation `32156f8abfa6e4df47c1eab32cc5be8445006da6`：初始RED12FAIL4PASS、覆核resetRED16FAIL後full124及publisher32PASS；C0/I1/M0一次覆核、作者單pass關閉Important。選定owned組字/重設/較新filter READY；fulltask NOT_READY/nativeIME與formalexternal BLOCKED。追加CSV5dated欄保留49/40欄及39roots，198舊raw hashes一致；歷史27PNG+1summary限制不變。無serverDTO/config/SQL/provider變更或productioneffects。見[Leads讀回](ep-14-leads-ime-followup.md)。
