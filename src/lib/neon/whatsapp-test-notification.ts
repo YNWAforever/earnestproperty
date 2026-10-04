@@ -1,3 +1,4 @@
+import { dispatchWorkspaceRequest } from "../admin/workspace-request";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { withStaffAuthHeaders } from "@/auth";
@@ -39,13 +40,33 @@ const read = createServerFn({ method: "GET" })
       await requireStaffAccess(getRequest(), ["admin", "manager"]),
     );
   });
-export const previewStaffTestNotification = async (data: z.infer<typeof fields>) =>
-  preview(await withStaffAuthHeaders({ data }));
+export const previewStaffTestNotification = async (
+  data: z.infer<typeof fields>,
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => preview(prepared),
+    isWorkspaceCurrent,
+  );
 export const enqueueStaffTestNotification = async (
   data: z.infer<typeof fields> & { requestId: string; previewToken: string },
-) => submit(await withStaffAuthHeaders({ data }));
-export const getStaffTestNotification = async (attemptId: string) =>
-  read(await withStaffAuthHeaders({ data: { attemptId } }));
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => submit(prepared),
+    isWorkspaceCurrent,
+  );
+export const getStaffTestNotification = async (
+  attemptId: string,
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data: { attemptId } }),
+    (prepared) => read(prepared),
+    isWorkspaceCurrent,
+  );
 
 const manualConfirmation = createServerFn({ method: "POST" })
   .inputValidator(
@@ -63,8 +84,15 @@ const manualConfirmation = createServerFn({ method: "POST" })
       await requireStaffAccess(getRequest(), ["admin", "manager"]),
     );
   });
-export const confirmStaffTestReceipt = async (data: { attemptId: string; evidenceRef: string }) =>
-  manualConfirmation(await withStaffAuthHeaders({ data }));
+export const confirmStaffTestReceipt = async (
+  data: { attemptId: string; evidenceRef: string },
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => manualConfirmation(prepared),
+    isWorkspaceCurrent,
+  );
 
 const readByRequest = createServerFn({ method: "GET" })
   .inputValidator(z.object({ requestId: z.string().uuid() }).strict())
@@ -75,5 +103,12 @@ const readByRequest = createServerFn({ method: "GET" })
       await requireStaffAccess(getRequest(), ["admin", "manager"]),
     );
   });
-export const findStaffTestNotificationByRequest = async (requestId: string) =>
-  readByRequest(await withStaffAuthHeaders({ data: { requestId } }));
+export const findStaffTestNotificationByRequest = async (
+  requestId: string,
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data: { requestId } }),
+    (prepared) => readByRequest(prepared),
+    isWorkspaceCurrent,
+  );

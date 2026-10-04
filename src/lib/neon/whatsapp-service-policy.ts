@@ -1,3 +1,4 @@
+import { dispatchWorkspaceRequest } from "../admin/workspace-request";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { withStaffAuthHeaders } from "@/auth";
@@ -33,12 +34,30 @@ const approve = createServerFn({ method: "POST" })
       a,
     );
   });
-export async function getWhatsappServicePolicies() {
-  return list(await withStaffAuthHeaders({}));
+export async function getWhatsappServicePolicies(isWorkspaceCurrent?: () => boolean) {
+  return dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({}),
+    (prepared) => list(prepared),
+    isWorkspaceCurrent,
+  );
 }
-export async function saveWhatsappServicePolicy(data: Parameters<typeof save>[0]["data"]) {
-  return save(await withStaffAuthHeaders({ data }));
+export async function saveWhatsappServicePolicy(
+  data: Parameters<typeof save>[0]["data"],
+  isWorkspaceCurrent?: () => boolean,
+) {
+  return dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => save(prepared),
+    isWorkspaceCurrent,
+  );
 }
-export async function approveWhatsappServicePolicy(data: Parameters<typeof approve>[0]["data"]) {
-  return approve(await withStaffAuthHeaders({ data }));
+export async function approveWhatsappServicePolicy(
+  data: Parameters<typeof approve>[0]["data"],
+  isWorkspaceCurrent?: () => boolean,
+) {
+  return dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => approve(prepared),
+    isWorkspaceCurrent,
+  );
 }
