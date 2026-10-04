@@ -11,6 +11,8 @@ export const state = {
   binding: "staff-a",
   role: sessionStorage.getItem("performance-readback-role") ?? "manager",
   denied: false,
+  staffMode: "ok",
+  beginRecheck: () => {},
   reportMode: sessionStorage.getItem("performance-delayed-initial") === "true" ? "delayed" : "ok",
   recordsMode: "ok",
   qualityMode: "ok",

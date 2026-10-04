@@ -49,7 +49,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/performance-final-source-gate-browser-summary.json",
+    ".audit/remediation-20261003/ep13-20-performance-recheck-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -85,7 +85,7 @@ test.afterEach(async ({ page }, info) => {
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("totals"))
     await page.screenshot({
-      path: `.audit/remediation-20261003/performance-final-source-gate-totals-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/ep13-20-performance-final-source-gate-totals-${page.viewportSize()!.width}.png`,
     });
 });
 const id = (n: number) => `80000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -141,6 +141,33 @@ const qualificationCalls = (page: Page) =>
 for (const width of [1440, 1280, 768, 390])
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    for (const kind of ["qualification", "quality"] as const)
+      test(`membership recheck preserves unsaved ${kind} evidence`, async ({ page }) => {
+        await admin(page);
+        await drill(page);
+        const evidence = "Owned pending contact evidence during same membership recheck";
+        const label = kind === "qualification" ? "核實依據" : "修正原因";
+        if (kind === "qualification") await editQualification(page, 1, evidence);
+        else await editQuality(page, 1, "test", evidence);
+        const before = await page.evaluate(() => window.performanceReadbackFixture.calls.length);
+        await page.evaluate(() => {
+          window.performanceReadbackFixture.staffMode = "delayed";
+          window.performanceReadbackFixture.beginRecheck();
+        });
+        await expect
+          .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+          .toBe(1);
+        await expect(row(page, 1).getByLabel(label, { exact: true })).toHaveValue(evidence);
+        await page.evaluate(() => {
+          window.performanceReadbackFixture.staffMode = "ok";
+          window.performanceReadbackFixture.pending.splice(0).forEach((p) => p.release());
+        });
+        await expect(row(page, 1).getByLabel(label, { exact: true })).toHaveValue(evidence);
+        expect(await page.evaluate(() => window.performanceReadbackFixture.calls.length)).toBe(
+          before,
+        );
+      });
+
     test("quality recovery retries a lost committed inquiry response with the same snapshot once", async ({
       page,
     }) => {
@@ -757,7 +784,7 @@ for (const width of [1440, 1280, 768, 390])
       expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(2);
       expect(csv).not.toContain(id(4));
       await page.screenshot({
-        path: `.audit/remediation-20261003/performance-final-source-gate-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/ep13-20-performance-final-source-gate-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(metric(page, "合格線索").locator("p").first()).toHaveText("1");
@@ -951,7 +978,7 @@ for (const width of [1440, 1280, 768, 390])
       for (const n of [2, 3, 4]) expect(csv).toContain(id(n));
       expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(4);
       await page.screenshot({
-        path: `.audit/remediation-20261003/performance-final-source-gate-quality-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/ep13-20-performance-final-source-gate-quality-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("3");
