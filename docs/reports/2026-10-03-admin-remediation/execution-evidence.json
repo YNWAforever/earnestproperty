@@ -3548,5 +3548,368 @@
         "layer": "see report and original log for isolation"
       }
     ]
+  },
+  "performanceQualificationReadbackFollowup": {
+    "verifiedAt": "2026-10-04T01:17:49.700020+00:00",
+    "baseline": "1a998f5ca4d6550a91a534d1144092cd33e929c5",
+    "verifiedCodeSha": "2d1c3a390703b4ac267a09df8f534897c1d1bbf7",
+    "scope": "EP17/20 accepted qualification source readback after reload/new browser context",
+    "red": {
+      "originalOwnedSQL": {
+        "tests": 53,
+        "pass": 48,
+        "fail": 5,
+        "skipped": 0
+      },
+      "expandedOwnedSQL": {
+        "tests": 54,
+        "pass": 48,
+        "fail": 6,
+        "skipped": 0
+      },
+      "directMissingReadback": 5,
+      "parentFailures": 1,
+      "ownedBrowserFailed": 3,
+      "redSummaryLimitation": "last failed worker1case only;rawlog authoritative3",
+      "failedWriterAttempts": "cp950 before UI writes;unassigned marker assertion before writes;repeat-final log53RED retained;first evidence writer nestedquote SyntaxError before anywrites",
+      "invalidScriptAttempt": "test:no-link-lead-boundary missing;retained;correct namedtest:no-link passed"
+    },
+    "ownedSQL": {
+      "pass": 54,
+      "fail": 0,
+      "skipped": 0,
+      "migrations": 85,
+      "exactCommittedSource": true,
+      "newLeafCases": 11,
+      "networkCalls": 0,
+      "independentRawReadback": "full immutable qualifications/baseevents/occurrencerevisions/inquiryquality/eventquality arrays unchanged;current scope/source/auth tests"
+    },
+    "ownedBrowser": {
+      "pass": 144,
+      "fail": 0,
+      "skipped": 0,
+      "newCases": 16,
+      "viewports": [
+        1440,
+        1280,
+        768,
+        390
+      ],
+      "eachViewport": 36,
+      "exactCommittedSource": true,
+      "realReload": true,
+      "freshBrowserContext": true,
+      "sourceRecoveryOnly": true,
+      "pendingUncommittedIntentDurable": false,
+      "realAuth": false,
+      "realDatabase": false,
+      "combinedUIAuthSQL": false,
+      "noNewActionIDs": true
+    },
+    "unit": {
+      "analyticsNode": 65,
+      "analyticsBun": 3,
+      "noLinkNode": 99,
+      "noLinkBun": 9,
+      "fail": 0,
+      "skipped": 0
+    },
+    "static": {
+      "typecheck": "exit0",
+      "lint": "exit0;3baselinewarnings",
+      "build": "exit0"
+    },
+    "review": {
+      "model": "gpt-6-astra",
+      "freshContext": true,
+      "reviewedSha": "2d1c3a390703b4ac267a09df8f534897c1d1bbf7",
+      "finalCodeSha": "2d1c3a390703b4ac267a09df8f534897c1d1bbf7",
+      "critical": 0,
+      "important": 0,
+      "minor": 0,
+      "remainingCritical": 0,
+      "remainingImportant": 0,
+      "authorFixPassRequired": false,
+      "secondReview": false,
+      "coverage": "all7focusedfiles;202cumulative risk sample,notexhaustive",
+      "independentProbes": {
+        "executed": false,
+        "sqlRerun": false,
+        "browserRerun": false,
+        "additionalExecutableProbe": false,
+        "diffCheck": "pass"
+      },
+      "independentlyInspectedEvidence": {
+        "ownedSQL": 54,
+        "browser": 144,
+        "eachViewport": 36,
+        "summaryShaMatches": true,
+        "actualSQLBrowserRerun": false
+      },
+      "declinedRulings": [
+        "Durable uncommitted qualification intent NOT_READY — memory-only journal;accepted-source read cannot prove pending intent survived reload — costifwrong: lost uncertain request.",
+        "Unknown-outcome quality revision recovery NOT_READY — separate retry/reconciliation outside this continuation — costifwrong: duplicate immutable quality revision.",
+        "Other-author qualification audit browsing NOT_READY — own-author recovery intentionally withholds others evidence — costifwrong: overstated audit browsing or privacy leak.",
+        "All cohort/filter/backlog/pagination combinations NOT_READY — bounded page logic inspected;combinations not exhausted — costifwrong: hidden missing readback.",
+        "Real Auth/session admission/expiry/revocation BLOCKED — trustedSQLactors/synthetic identity not real sessions — costifwrong: false authorization.",
+        "Combined realAuth/UI/PG/provider journey BLOCKED — independent acceptance layers only — costifwrong: invented end-to-end proof.",
+        "Every role/branch/route/flag/action NOT_READY — 202cumulative files sampled,notexhaustive — costifwrong: crossscope or untestedcontrol regression.",
+        "Revocation after finalstatement/transport NOT_READY — point-in-time gate only — costifwrong: overstated continuous authorization.",
+        "Grant-lock/phantom/ABA interleavings NOT_READY — controlledcases/sourceinspection not exhaustive — costifwrong: hidden concurrencywindow.",
+        "Owner/source after metadata statement NOT_READY — finalgate actor-only,notcontinuous source/singlebusinesssnapshot — costifwrong: evidence from changed source ownership.",
+        "Occurrence corrections/HKday serialization NOT_READY — outside demonstrated concurrency acceptance — costifwrong: misstated cohort/time.",
+        "Production latency/lockcontention/throughput NOT_READY — no load or productionquerymeasurement — costifwrong: operational regression.",
+        "Production app/worker/schema/flag alignment BLOCKED — no deploy/liveauthenticated verification — costifwrong: wrong formal environment.",
+        "Production migration/canary/rollback execution BLOCKED — unauthorized external mutation;source rollback only — costifwrong: unsafe release or restore.",
+        "Real provider receipts/templates/members/transport/sends BLOCKED — no providerexercise — costifwrong: wrong send or retry.",
+        "Paid model behavior/usage/budget BLOCKED — no paidapplicationmodelcalls — costifwrong: wrong spend or unvalidated result.",
+        "Propertyhk completeness/132held BLOCKED — noEPS/EPT/EPW/dt terminal/detailmedia absenceproof — costifwrong: false withdrawal.",
+        "Three repaired nativeDaily NOT_READY — acceptedbaseline1/3repair0/3agenttrigger0;newnaturalworkflow receipt unread — costifwrong: fabricated schedule acceptance.",
+        "Native clipboard/IME/platform inputs BLOCKED — syntheticChromium not nativeplatform — costifwrong: hidden deviceinputfailure.",
+        "Exhaustive history/1400IDs/408render mappings author independent verification — reviewer did not hash archive;root verifies prior178hashes/62oldreports/deepoldJSON/mappings beforedelivery — costifwrong: misattributed preservation proof.",
+        "Earlier duplicate/Docker root causes UNPROVEN — laterPASS does notdiagnose retainedhistory — costifwrong: hidden intermittentfailure.",
+        "CurrentremoteCI/publication sync author independent readback pending — local review only;root willread exactremotehead/allCIoutputs — costifwrong: forecast treated asPASS.",
+        "Formal readiness fromanonymousHTTP200 BLOCKED — availabilityonly,nodeployedSHA/Auth/functionproof — costifwrong: falseproduction readiness.",
+        "Unsampled cumulative CAS/parser/receipt/portalzeroEPWA/Inbox/outbound NOT_READY — risk-based sample;no freshfullacceptance rerun — costifwrong: untested cumulative regression."
+      ],
+      "verdict": "ready for scoped source integration;notwholeplancompletion/production"
+    },
+    "configurationDryRun": {
+      "baseline": "1a998f5ca4d6550a91a534d1144092cd33e929c5",
+      "code": "2d1c3a390703b4ac267a09df8f534897c1d1bbf7",
+      "configurationSchemaMigrationPackageWorkflowDiff": [],
+      "newDTOType": false,
+      "existingDTOOptionalField": "PerformanceRecord.qualification:qualifiedAt/evidence/eventKey",
+      "newAPIEndpoint": false,
+      "newRuntimeProviderIds": false,
+      "productionApplied": false,
+      "migrationDryRun": "all85 existing migrations in fresh owned PG17;54GREEN/exact54;no production migration",
+      "rollback": "restrict report/records/qualification entry before compatible source revert;retain immutable quality/qualification/events/receipts/outbound/run/provenance/protectededits;no wholeDBrestore/blindretry"
+    },
+    "rulings": [
+      "沿用 GET records 及既有 PerformanceRecord 可選欄位，只讀當前可見 inquiry 的本人 immutable qualification/canonical event；不新增 API/DTO type/migration/provider ID。錯判成本：洩露他人核實依據。",
+      "核實作者與 assigned event colleague 分別核對，不要求兩者相等；global admin 有效未指派來源可讀，降權manager需雙owner本分行。錯判成本：拒絕有效來源或錯誤擴權。",
+      "已提交來源在真reload/newcontext讀回；未落庫/未提交intent仍不宣稱durable，production無browser storage journal。錯判成本：丟失未確認請求或誤報完成。",
+      "已接受來源read-only/阻止再次提交；fresh matching source才清原journal；manual newer draft不替換且仍可見。錯判成本：草稿流失或重複/錯誤寫入。",
+      "Fixture sessionStorage只模擬synthetic backend facts，SQL/browser/syntheticAuth獨立分層。錯判成本：合成驗證冒充真Auth/UI+PG。",
+      "Statement-time source/current pre-output actor gate沒有完整business snapshot/phantom/ABA/transport持續撤權保證。錯判成本：漏掉未驗競態。",
+      "新natural schedule37160712576/main51 success/public_verified只workflow層，未讀private完整receipt，不提升baseline1/3或repair0/3；agenttrigger0。錯判成本：虛報排程資料驗收。"
+    ],
+    "effects": {
+      "productionMutation": 0,
+      "realSends": 0,
+      "providerRequests": 0,
+      "paidApplicationModelCalls": 0
+    },
+    "nativeSchedule": {
+      "baselineAccepted": "1/3",
+      "repairProduction": "0/3",
+      "newAgentCollectionRuns": 0,
+      "newNaturallyObservedRun": 37160712576,
+      "newRunAcceptance": "workflow success/public_verified only;private fullreceipt unread;not added to accepted count",
+      "manualReplaySkipNotCounted": true
+    },
+    "capability": {
+      "ownedAcceptedQualificationSourceRecovery": "READY",
+      "durablePendingIntentQualityUnknownFullRolesSchedules": "NOT_READY",
+      "trueAuthCombinedUIProviderProduction": "BLOCKED"
+    },
+    "logs": [
+      {
+        "file": "ep17-qualification-readback-red-sql.log",
+        "sha256": "e97f71f4709fa482119217dd5c2518499991f7ca650bb02c17f524fda62f32cf",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-red-sql-final.log",
+        "sha256": "6e16ccd1a79df3e6881a3c2873c844b9e8ed0f8f70dd264bac72554f707a36fd",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-red-sql-unassigned.log",
+        "sha256": "cc91b4c1feb9b96640d0ae3e8a8ca98d4c5a4edf4880eeeb4adef03fe1f4d396",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-red-ui.log",
+        "sha256": "d1e0476d47cd107a7c8bf11382ce7bbf8d3a6c65f9054ce304f96e57e77b6cbc",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-red-ui-summary.json",
+        "sha256": "9f783880c1065b7c91fa13e80ed5e129614a6e4ceb0f84d75e00184b5810b1d5",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-green-sql.log",
+        "sha256": "7d692edce862a48c9e137b7bfcf96e93ec329e69fe96d234234c929d1b00821b",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-green-ui-focused.log",
+        "sha256": "e3abf02da6f54f427b9866f9ae0e359112cf27352a285e992ac39e5019b4e9ee",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-green-ui-focused-summary.json",
+        "sha256": "dc1ef31bd6967c85a7f245344b4357db88cc92d5ffca1d5de985e1f4d16e8ad6",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-green-ui-full.log",
+        "sha256": "fdeb42cd1b6567f1f17d79a898fdddb64fa986571ad96bb84b665e9a774c5d1f",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-green-ui-full-summary.json",
+        "sha256": "4d56ac975c4b8cf834b75f72504f46a79b7fc6a58c181d338b97a6cbcf260da0",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-exact-sql.log",
+        "sha256": "0929613e3dbbb56bc410cbf2f93e5d7d8f8af904ef69969469fdd4ef2be7e0f1",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-exact-ui.log",
+        "sha256": "aae19923efddc0217363f469e381d6ab182890876bc393f953307c84e2b08bec",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-exact-ui-summary.json",
+        "sha256": "b9d0695df79a2f46b4a93c24187861454f889835a8e1ae3f2664a5a2e2ee5d10",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-analytics.log",
+        "sha256": "345a1efc7c51013840083830f4d39551c0cac9bc4d166bfd65279ce3cdf80c6f",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-no-link-script-name-error.log",
+        "sha256": "0152c1d75f168c7dd29175ebef27107dd54c873fbb87ac4168d56ac018f58de9",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-no-link.log",
+        "sha256": "bdc7e013e74567f542399663eb5cf087c77878f1e9bd45c36006874fb979db17",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-lint.log",
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-build.log",
+        "sha256": "bdf4e499e107199eee9025f53a81d26746faad3772ae32e6765e813eca662481",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-config-dry-run.json",
+        "sha256": "c6aafabc7e9ef6802d8edb3cd65c04f218327692a5d7a7f63cc0e7b264e477c0",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-formal-readonly.json",
+        "sha256": "f48320b1780de09c20e39a3b58eafa5757146d0f21f8d9a19ef704460cf28eb4",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-native-readonly.json",
+        "sha256": "3aad0b2d2d96b62770920a263b0186f1db6ffbf44420ce02dedf8a08d5e9f558",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-native-new-run.json",
+        "sha256": "32e13c5bba92964dee6469483e6c869c86e2df6600dc1f1a82fd1abb685f6dcb",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "ep17-qualification-readback-native-new-log.txt",
+        "sha256": "d434b4470aa82786e48c22850910662daad2779b5e32c08f81a39d7364290730",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "review-qualification-readback-package.md",
+        "sha256": "6f971174d4b48231acbe2bd5ed3f2ec805eda7c5ffd659a2516fd62903c55f8e",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "review-qualification-readback-result.md",
+        "sha256": "707e90491c91c054b36a7aa47e1c9e15254117dee097f2d4e757e178a28537e3",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "review-qualification-readback-summary.json",
+        "sha256": "84c5bca1fd72b1a3fbfc61f323c4ba003094132af1857c57bafb0a5ac1117c71",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-totals-1440.png",
+        "sha256": "4afdac40fee45b47f1d38731677b2a794b34a90a2daccda109e6edacf08a238c",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-totals-1280.png",
+        "sha256": "169f1d1d06dc80525170d30cd846d1d5008999a457d31dac6780e39566ce6985",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-totals-768.png",
+        "sha256": "d3078b780fbf5dcd986a28fd72ebbb67bdaeec52787562c8d2da43773e61d091",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-totals-390.png",
+        "sha256": "f8993bef8a41785e6a4671adebdc43c983edb8be9870b42238b844c482f1550a",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-confirmed-1440.png",
+        "sha256": "4667930e6f4f20f10019cde540c8eceb1391bf263fa8a0be3bde9e2a228bb226",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-confirmed-1280.png",
+        "sha256": "459a28d06bd18ccd8fca82a0132c628d20d4460b3e90fc2aa3af959dd386a801",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-confirmed-768.png",
+        "sha256": "32d8c55f0fbd77aa3ba20caa022b48dfed80f349a35d860763772f677bd0e9d8",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-confirmed-390.png",
+        "sha256": "16ad608c0bc744f78dbcd8547ea686a3703b6a2d726706141f50288c22ade3a3",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-quality-confirmed-1440.png",
+        "sha256": "123e3640722961c524846f1bd9b484f5258cca60db058d14f5104aef460d8dc4",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-quality-confirmed-1280.png",
+        "sha256": "6b20ce7f15519d3c865cc19fad13adba6cb52f8a4305d9a21cfad5d1bfe119dc",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-quality-confirmed-768.png",
+        "sha256": "f6298c231e454f7d363b5ddbea76328bf6dd23ce0fdd0b871d8e4800e32366df",
+        "layer": "see report and raw artifact for isolation"
+      },
+      {
+        "file": "performance-qualification-readback-quality-confirmed-390.png",
+        "sha256": "c9ef5cc8615f689666f9eca9d331643361522f4d162f5d66207cda45fdd0830b",
+        "layer": "see report and raw artifact for isolation"
+      }
+    ]
   }
 }
