@@ -1,3 +1,4 @@
+import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { WhatsappServiceHealth } from "@/components/admin/operations/WhatsappServiceHealth";
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -79,6 +80,17 @@ const HEALTH_STATUS_LABELS: Record<string, string> = {
 };
 
 function AdminOperations() {
+  const identity = useStaffWorkspaceIdentity();
+  if (!identity)
+    return (
+      <AdminShell title="系統營運" description="控制平面狀態，以及按權限開放的營運工具。">
+        {null}
+      </AdminShell>
+    );
+  return <AdminOperationsWorkspace key={identity} identity={identity} />;
+}
+function AdminOperationsWorkspace({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const { pulse, refreshNow } = useOperationsPulse();
@@ -98,18 +110,19 @@ function AdminOperations() {
     let fetchedHealth: HealthData | null = null;
     const loader = createOperationsHealthLoader({
       fetchHealth: async () => {
-        const result = await fetchOperationsHealth();
+        const result = await fetchOperationsHealth(isWorkspaceCurrent);
         fetchedHealth = result.data;
         return result;
       },
       setState: (updater) => {
-        if (!cancelled) setHealthState(updater);
+        if (!cancelled && isWorkspaceCurrent()) setHealthState(updater);
       },
     });
 
     async function loadOperationsOverview() {
+      if (!isWorkspaceCurrent()) return;
       await loader.load();
-      if (cancelled || !fetchedHealth) return;
+      if (cancelled || !isWorkspaceCurrent() || !fetchedHealth) return;
 
       const currentHealth = fetchedHealth as HealthData;
       const refreshedTab = resolveOperationsRouteState(search.tab, currentHealth).activeTab;
@@ -120,19 +133,20 @@ function AdminOperations() {
       // jump mid-read. The values are replaced in place once the fetch resolves.
       setOverviewError(null);
       const jobsPromise = currentHealth.capabilities.jobsRead
-        ? fetchOperationsJobs({ limit: 5 })
+        ? fetchOperationsJobs({ limit: 5 }, isWorkspaceCurrent)
         : Promise.resolve(null);
       const migrationsPromise = currentHealth.capabilities.migrationsPlan
-        ? fetchOperationsMigrations()
+        ? fetchOperationsMigrations(isWorkspaceCurrent)
         : Promise.resolve(null);
 
       try {
         const [jobsPage, migrationPage] = await Promise.all([jobsPromise, migrationsPromise]);
-        if (cancelled) return;
+        if (cancelled || !isWorkspaceCurrent()) return;
         setJobsSummary(jobsPage?.data.summary ?? null);
         setMigrations(migrationPage?.data ?? null);
       } catch (reason) {
-        if (!cancelled) setOverviewError(safeOperationsRefreshError(reason));
+        if (!cancelled && isWorkspaceCurrent())
+          setOverviewError(safeOperationsRefreshError(reason));
       }
     }
 
@@ -140,48 +154,52 @@ function AdminOperations() {
     return () => {
       cancelled = true;
     };
-  }, [pulse, search.tab]);
+  }, [pulse, search.tab, isWorkspaceCurrent]);
 
   const { allowedTabs, activeTab, correction } = resolveOperationsRouteState(search.tab, health);
 
   useEffect(() => {
-    if (!health || !correction) return;
+    if (!health || !correction || !isWorkspaceCurrent()) return;
     void navigate({ search: correction, replace: true });
-  }, [correction, health, navigate]);
+  }, [correction, health, navigate, isWorkspaceCurrent]);
 
   const handleTabChange = useCallback(
     (tab: string) => {
+      if (!isWorkspaceCurrent()) return;
       void navigate({ search: { tab: tab === "overview" ? undefined : tab } });
     },
-    [navigate],
+    [navigate, isWorkspaceCurrent],
   );
 
   const handleMutationComplete = useCallback(() => {
+    if (!isWorkspaceCurrent()) return;
     setMutationRevision((value) => value + 1);
     refreshNow();
-  }, [refreshNow]);
+  }, [refreshNow, isWorkspaceCurrent]);
 
   const handleMigrationApplied = useCallback(async () => {
+    if (!isWorkspaceCurrent()) return;
     setMutationRevision((value) => value + 1);
     refreshNow();
     if (!health) return;
 
     setOverviewError(null);
     const jobsPromise = health.capabilities.jobsRead
-      ? fetchOperationsJobs({ limit: 5 })
+      ? fetchOperationsJobs({ limit: 5 }, isWorkspaceCurrent)
       : Promise.resolve(null);
     const migrationsPromise = health.capabilities.migrationsPlan
-      ? fetchOperationsMigrations()
+      ? fetchOperationsMigrations(isWorkspaceCurrent)
       : Promise.resolve(null);
 
     try {
       const [jobsPage, migrationPage] = await Promise.all([jobsPromise, migrationsPromise]);
+      if (!isWorkspaceCurrent()) return;
       setJobsSummary(jobsPage?.data.summary ?? null);
       setMigrations(migrationPage?.data ?? null);
     } catch (reason) {
-      setOverviewError(safeOperationsRefreshError(reason));
+      if (isWorkspaceCurrent()) setOverviewError(safeOperationsRefreshError(reason));
     }
-  }, [health, refreshNow]);
+  }, [health, refreshNow, isWorkspaceCurrent]);
 
   return (
     <AdminShell title="系統營運" description="控制平面狀態，以及按權限開放的營運工具。">
@@ -228,7 +246,7 @@ function AdminOperations() {
       ) : null}
       {!health && !error ? <Skeleton className="mt-4 h-48 w-full" /> : null}
 
-      {health ? <WhatsappServiceHealth /> : null}
+      {health ? <WhatsappServiceHealth isWorkspaceCurrent={isWorkspaceCurrent} /> : null}
       {health ? (
         <Tabs.Root value={activeTab} onValueChange={handleTabChange} className="mt-4">
           {/* Every tab is rendered, not just the permitted ones. Omitting them
@@ -268,17 +286,23 @@ function AdminOperations() {
                 />
               ) : tab === "jobs" && activeTab === "jobs" && health.capabilities.jobsRead ? (
                 <AdminOperationsJobs
+                  isWorkspaceCurrent={isWorkspaceCurrent}
                   capabilities={health.capabilities}
                   active
                   pulse={pulse}
                   onMutationComplete={handleMutationComplete}
                 />
               ) : tab === "audit" && activeTab === "audit" && health.capabilities.auditRead ? (
-                <AdminOperationsAudit active revision={mutationRevision} />
+                <AdminOperationsAudit
+                  isWorkspaceCurrent={isWorkspaceCurrent}
+                  active
+                  revision={mutationRevision}
+                />
               ) : tab === "migrations" &&
                 activeTab === "migrations" &&
                 health.capabilities.migrationsPlan ? (
                 <AdminOperationsMigrations
+                  isWorkspaceCurrent={isWorkspaceCurrent}
                   capabilities={health.capabilities}
                   active
                   onApplied={handleMigrationApplied}

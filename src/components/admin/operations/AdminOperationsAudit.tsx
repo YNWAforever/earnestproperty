@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ChevronDown, LoaderCircle } from "lucide-react";
 
@@ -52,7 +53,16 @@ function outcomeVariant(outcome: AuditOutcome) {
   return "default" as const;
 }
 
-export function AdminOperationsAudit({ active, revision }: { active: boolean; revision: number }) {
+export function AdminOperationsAudit({
+  active,
+  revision,
+  isWorkspaceCurrent,
+}: {
+  active: boolean;
+  revision: number;
+  isWorkspaceCurrent?: () => boolean;
+}) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const [outcomeDraft, setOutcomeDraft] = useState<AuditFilters["outcome"]>("all");
   const [actionDraft, setActionDraft] = useState("");
   const [requestIdDraft, setRequestIdDraft] = useState("");
@@ -72,34 +82,38 @@ export function AdminOperationsAudit({ active, revision }: { active: boolean; re
 
   const loadAudit = useCallback(
     async ({ append = false, cursor }: { append?: boolean; cursor?: string } = {}) => {
-      if (!active) return;
+      if (!active || !isCurrent()) return;
       const request = ++requestSequence.current;
       setLoading(true);
       setError(null);
       try {
-        const result = await fetchOperationsAudit({
-          outcome: filters.outcome === "all" ? undefined : filters.outcome,
-          action: filters.action || undefined,
-          requestId: filters.requestId || undefined,
-          cursor,
-          limit: 25,
-        });
-        if (request !== requestSequence.current) return;
+        const result = await fetchOperationsAudit(
+          {
+            outcome: filters.outcome === "all" ? undefined : filters.outcome,
+            action: filters.action || undefined,
+            requestId: filters.requestId || undefined,
+            cursor,
+            limit: 25,
+          },
+          isCurrent,
+        );
+        if (!isCurrent() || request !== requestSequence.current) return;
         setRows((current) => (append ? [...current, ...result.data.rows] : result.data.rows));
         setNextCursor(result.data.nextCursor);
       } catch {
-        if (request === requestSequence.current) setError("未能載入審計紀錄，請稍後再試。");
+        if (isCurrent() && request === requestSequence.current)
+          setError("未能載入審計紀錄，請稍後再試。");
       } finally {
-        if (request === requestSequence.current) setLoading(false);
+        if (isCurrent() && request === requestSequence.current) setLoading(false);
       }
     },
-    [active, filters],
+    [active, filters, isCurrent],
   );
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || !isCurrent()) return;
     void loadAudit();
-  }, [active, filterRevision, loadAudit, revision]);
+  }, [active, filterRevision, loadAudit, revision, isCurrent]);
 
   useEffect(
     () => () => {

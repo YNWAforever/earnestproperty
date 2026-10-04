@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { LoaderCircle, RefreshCw, RotateCcw, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -78,12 +79,15 @@ export function AdminOperationsJobs({
   active,
   pulse,
   onMutationComplete,
+  isWorkspaceCurrent,
 }: {
   capabilities: OperationsCapabilities;
   active: boolean;
   pulse: number;
   onMutationComplete: () => void | Promise<void>;
+  isWorkspaceCurrent?: () => boolean;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const [status, setStatus] = useState<"all" | JobStatus>("all");
   const [jobTypeDraft, setJobTypeDraft] = useState("");
   const [jobType, setJobType] = useState("");
@@ -105,20 +109,23 @@ export function AdminOperationsJobs({
       cursor,
       background = false,
     }: { mode?: JobRowMergeMode; cursor?: string; background?: boolean } = {}) => {
-      if (!active || !capabilities.jobsRead) return;
+      if (!active || !capabilities.jobsRead || !isCurrent()) return;
       const request = ++requestSequence.current;
       // A background tick must not set `loading`: the filter controls are
       // disabled on it, so a 30s poll interrupted typing mid-word.
       if (!background) setLoading(true);
       setError(null);
       try {
-        const result = await fetchOperationsJobs({
-          status: status === "all" ? undefined : status,
-          jobType: jobType || undefined,
-          cursor,
-          limit: 25,
-        });
-        if (request !== requestSequence.current) return;
+        const result = await fetchOperationsJobs(
+          {
+            status: status === "all" ? undefined : status,
+            jobType: jobType || undefined,
+            cursor,
+            limit: 25,
+          },
+          isCurrent,
+        );
+        if (request !== requestSequence.current || !isCurrent()) return;
         if (
           unconfirmedJob.current &&
           result.data.rows.some((job) => job.id === unconfirmedJob.current)
@@ -132,18 +139,19 @@ export function AdminOperationsJobs({
         if (mode !== "refresh") setNextCursor(result.data.nextCursor);
         setHasLoadedOnce(true);
       } catch (reason) {
-        if (request === requestSequence.current) setError(operationsErrorMessage(reason));
+        if (request === requestSequence.current && isCurrent())
+          setError(operationsErrorMessage(reason));
       } finally {
-        if (request === requestSequence.current && !background) setLoading(false);
+        if (request === requestSequence.current && isCurrent() && !background) setLoading(false);
       }
     },
-    [active, capabilities.jobsRead, jobType, status],
+    [active, capabilities.jobsRead, jobType, status, isCurrent],
   );
 
   useEffect(() => {
-    if (!active || !capabilities.jobsRead) return;
+    if (!active || !capabilities.jobsRead || !isCurrent()) return;
     void loadJobs();
-  }, [active, capabilities.jobsRead, loadJobs]);
+  }, [active, capabilities.jobsRead, loadJobs, isCurrent]);
 
   useEffect(() => {
     const priorPulse = previousPulse.current;
@@ -192,7 +200,7 @@ export function AdminOperationsJobs({
   };
 
   const runCommand = async () => {
-    if (!command || pendingCommand || readbackRequired) return;
+    if (!command || pendingCommand || readbackRequired || !isCurrent()) return;
     const current = command;
     // A read started before this command cannot confirm its eventual outcome.
     requestSequence.current += 1;
@@ -200,18 +208,22 @@ export function AdminOperationsJobs({
     setError(null);
     setPendingCommand(current);
     try {
-      if (current.action === "retry") await retryOperationsJob(current.job.id);
-      else await cancelOperationsJob(current.job.id);
+      if (current.action === "retry") await retryOperationsJob(current.job.id, isCurrent);
+      else await cancelOperationsJob(current.job.id, isCurrent);
+      if (!isCurrent()) return;
       setCommand(null);
       toast.success(current.action === "retry" ? "已重新排隊執行此工作。" : "已取消此工作。");
       await onMutationComplete();
+      if (!isCurrent()) return;
       await loadJobs();
     } catch (reason) {
+      if (!isCurrent()) return;
       setCommand(null);
       if (reason instanceof OperationsClientError && reason.status === 409) {
         // Previously this closed the dialog and set only a quiet status line, so
         // a rejected command looked exactly like a successful one.
         await loadJobs();
+        if (!isCurrent()) return;
         toast.error("此工作的狀態已改變，指令未有執行。已重新載入最新狀態。");
         setError("此工作的狀態已改變，指令未有執行。");
       } else {
@@ -226,7 +238,7 @@ export function AdminOperationsJobs({
         toast.error(message);
       }
     } finally {
-      setPendingCommand(null);
+      if (isCurrent()) setPendingCommand(null);
     }
   };
 
