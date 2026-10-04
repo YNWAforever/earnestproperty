@@ -115,9 +115,173 @@ async function open(page: Page, role = "manager") {
   await expect(card(page, "開放查詢")).toContainText(role === "manager" ? "7" : "2");
   expect(errors).toEqual([]);
 }
+async function leadSearch(page: Page, empty = false) {
+  await open(page);
+  if (empty) await page.evaluate(() => (window.dailyWorkFixture.empty = true));
+  await card(page, "開放查詢").click();
+  const input = page.getByRole("textbox", { name: "搜尋客戶查詢", exact: true });
+  await expect(input).toBeVisible();
+  await input.focus();
+  await page.clock.install();
+  await page.clock.pauseAt(Date.now() + 1000);
+  return input;
+}
+async function leadCompositionInput(
+  input: import("@playwright/test").Locator,
+  value: string,
+  composing: boolean,
+) {
+  await input.evaluate(
+    (element, { value, composing }) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      if (!setter) throw Error("Owned native input setter missing");
+      setter.call(element, value);
+      element.dispatchEvent(
+        new InputEvent("input", {
+          bubbles: true,
+          data: value,
+          inputType: "insertCompositionText",
+          isComposing: composing,
+        }),
+      );
+    },
+    { value, composing },
+  );
+}
+async function leadQueryArguments(page: Page) {
+  return (await calls(page, "leads")).map((call) => (call.input as { q?: string }).q);
+}
+async function noLeadSearchEffects(page: Page) {
+  expect(await calls(page, "lead-update")).toHaveLength(0);
+  expect(await calls(page, "lead-note")).toHaveLength(0);
+  expect(await page.evaluate(() => window.dailyWorkFixture.acceptedNotes)).toHaveLength(0);
+  expect(await page.evaluate(() => window.dailyWorkFixture.leadUpdates)).toHaveLength(0);
+  expect(await page.evaluate(() => window.noLinkOutboundFixture.calls)).toHaveLength(0);
+}
+
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("Leads IME pause and same identity recheck keep candidate local until committed", async ({
+      page,
+    }) => {
+      const input = await leadSearch(page);
+      await input.dispatchEvent("compositionstart");
+      await leadCompositionInput(input, "每日工作", true);
+      await page.evaluate(() => window.dailyWorkFixture.changeContext("actor-a", "manager"));
+      await expect(input).toHaveValue("每日工作");
+      await expect(input).toBeFocused();
+      await page.clock.runFor(700);
+      expect(new URL(page.url()).searchParams.get("query")).toBeNull();
+      expect(await leadQueryArguments(page)).not.toContain("每日工作");
+      await leadCompositionInput(input, "每日工作合成查詢", false);
+      await input.dispatchEvent("compositionend");
+      await page.clock.runFor(700);
+      await expect
+        .poll(() => new URL(page.url()).searchParams.get("query"))
+        .toBe("每日工作合成查詢");
+      expect(await leadQueryArguments(page)).toContain("每日工作合成查詢");
+      await expect(input).toBeFocused();
+      await input.fill("English sale");
+      await page.clock.runFor(700);
+      await expect.poll(() => new URL(page.url()).searchParams.get("query")).toBe("English sale");
+      expect(await leadQueryArguments(page)).toContain("English sale");
+      await expect(input).toBeFocused();
+      await page.clock.resume();
+      await noLeadSearchEffects(page);
+    });
+    test("Leads IME start cancels pending search and unchanged composition end commits", async ({
+      page,
+    }) => {
+      const input = await leadSearch(page);
+      await input.fill("每日工作");
+      await page.clock.runFor(100);
+      await input.dispatchEvent("compositionstart");
+      await page.clock.runFor(700);
+      expect(new URL(page.url()).searchParams.get("query")).toBeNull();
+      expect(await leadQueryArguments(page)).not.toContain("每日工作");
+      await input.dispatchEvent("compositionend");
+      await page.clock.runFor(700);
+      await expect.poll(() => new URL(page.url()).searchParams.get("query")).toBe("每日工作");
+      expect(await leadQueryArguments(page)).toContain("每日工作");
+      await expect(input).toBeFocused();
+      await page.clock.resume();
+      await noLeadSearchEffects(page);
+    });
+    test("Leads pending search keeps the newer stage filter", async ({ page }) => {
+      const input = await leadSearch(page);
+      await input.fill("English sale");
+      await page.clock.runFor(100);
+      await page.getByRole("button", { name: "新查詢", exact: true }).focus();
+      await page.keyboard.press("Enter");
+      await page.clock.runFor(10);
+      await expect.poll(() => new URL(page.url()).searchParams.get("stage")).toBe("new");
+      await page.clock.runFor(700);
+      await expect.poll(() => new URL(page.url()).searchParams.get("query")).toBe("English sale");
+      expect(new URL(page.url()).searchParams.get("stage")).toBe("new");
+      expect((await calls(page, "leads")).at(-1)?.input).toMatchObject({
+        q: "English sale",
+        stage: "new",
+      });
+      await page.clock.resume();
+      await noLeadSearchEffects(page);
+    });
+    test("Leads composition workspace replacement never commits the old candidate", async ({
+      page,
+    }) => {
+      const input = await leadSearch(page);
+      await input.dispatchEvent("compositionstart");
+      await leadCompositionInput(input, "每日工作", true);
+      await page.clock.runFor(100);
+      await page.evaluate(() =>
+        window.dailyWorkFixture.changeContext("actor-b", "agent", "staff-b"),
+      );
+      await expect(input).toHaveValue("");
+      await page.clock.runFor(700);
+      expect(new URL(page.url()).searchParams.get("query")).toBeNull();
+      expect(await leadQueryArguments(page)).not.toContain("每日工作");
+      expect((await calls(page, "leads")).at(-1)).toMatchObject({
+        actor: "actor-b",
+        role: "agent",
+        binding: "staff-b",
+      });
+      await page.clock.resume();
+      await noLeadSearchEffects(page);
+    });
+    for (const reset of ["重設", "清除篩選"]) {
+      for (const composing of [false, true]) {
+        test(`Leads explicit reset ${reset} clears ${composing ? "composing" : "pending"} search and resumes`, async ({
+          page,
+        }) => {
+          const input = await leadSearch(page, reset === "清除篩選");
+          const candidate = composing ? "未確認組字" : "Pending search";
+          if (composing) {
+            await input.dispatchEvent("compositionstart");
+            await leadCompositionInput(input, candidate, true);
+          } else await input.fill(candidate);
+          await page.clock.runFor(100);
+          expect(new URL(page.url()).searchParams.get("query")).toBeNull();
+          await page.getByRole("button", { name: reset, exact: true }).focus();
+          await page.keyboard.press("Enter");
+          await page.clock.runFor(10);
+          await expect(input).toHaveValue("");
+          if (composing) await input.dispatchEvent("compositionend");
+          await page.clock.runFor(700);
+          expect(new URL(page.url()).searchParams.get("query")).toBeNull();
+          expect(new URL(page.url()).searchParams.get("stage")).not.toBe("open");
+          expect(await leadQueryArguments(page)).not.toContain(candidate);
+          expect((await calls(page, "leads")).at(-1)?.input).toMatchObject({ q: "", stage: "all" });
+          await input.fill("English resumed");
+          await page.clock.runFor(700);
+          await expect
+            .poll(() => new URL(page.url()).searchParams.get("query"))
+            .toBe("English resumed");
+          expect(await leadQueryArguments(page)).toContain("English resumed");
+          await page.clock.resume();
+          await noLeadSearchEffects(page);
+        });
+      }
+    }
     for (const change of ["actor", "role", "binding", "aba", "late-failure", "same-context"]) {
       test(`delayed note continuation respects workspace lifetime ${change}`, async ({ page }) => {
         await open(page);
