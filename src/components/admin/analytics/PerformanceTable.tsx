@@ -113,6 +113,10 @@ export function PerformanceTable({
   async function qualify(event: FormEvent, record: PerformanceRecord) {
     event.preventDefault();
     if (submitting.current) return;
+    if (record.qualification) {
+      setSaveError("已讀回核實紀錄，毋須再次提交。");
+      return;
+    }
     if (
       !record.leadId ||
       !isEditor(record, "qualification") ||
@@ -318,10 +322,31 @@ export function PerformanceTable({
                                 </p>
                               </div>
                             ) : null}
+                            {isEditor(record, "qualification") && record.qualification ? (
+                              <div className="text-xs text-muted-foreground">
+                                <p>已讀回核實紀錄，毋須再次提交。品質分類仍須另行核對。</p>
+                                <p role="note" aria-label="已核實依據" className="break-words">
+                                  {record.qualification.evidence}
+                                </p>
+                                <p>
+                                  原核實時間（香港）：
+                                  <time dateTime={record.qualification.qualifiedAt}>
+                                    {new Date(record.qualification.qualifiedAt).toLocaleString(
+                                      "zh-HK",
+                                      {
+                                        timeZone: "Asia/Hong_Kong",
+                                        hour12: false,
+                                      },
+                                    )}
+                                  </time>
+                                </p>
+                              </div>
+                            ) : null}
                             <Label htmlFor={"qualification-" + record.id}>核實依據</Label>
                             <Input
                               id={"qualification-" + record.id}
                               value={qualificationEvidence}
+                              readOnly={Boolean(record.qualification)}
                               minLength={8}
                               required
                               onChange={(event) => {
@@ -333,7 +358,11 @@ export function PerformanceTable({
                             <Button
                               type="submit"
                               size="sm"
-                              disabled={saving !== null || !isEditor(record, "qualification")}
+                              disabled={
+                                saving !== null ||
+                                !isEditor(record, "qualification") ||
+                                Boolean(record.qualification)
+                              }
                             >
                               記錄合格線索
                             </Button>

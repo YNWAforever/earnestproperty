@@ -188,11 +188,34 @@ export async function fetchSalesPerformanceRecords(value: {
   drilldownKey: string;
   cursor?: string | null;
 }) {
-  return selectPerformanceRecords(
+  const page = selectPerformanceRecords(
     await read("records", value.filters, state.recordsMode),
     value.drilldownKey,
     value.cursor ?? null,
   );
+  // Test-only backend read port. Production metadata is independently checked with real SQL.
+  return {
+    ...page,
+    records: page.records.map((record) => {
+      const original = state.qualifications.find(
+        (q) =>
+          q.leadId === record.leadId &&
+          q.actor === state.actor &&
+          q.staffId === id(600 + scope()) &&
+          q.branchId === id(500 + scope()),
+      );
+      return record.kind === "inquiry" && original
+        ? {
+            ...record,
+            qualification: {
+              qualifiedAt: original.qualifiedAt,
+              evidence: original.evidence,
+              eventKey: `lead_qualified:${original.leadId}`,
+            },
+          }
+        : record;
+    }),
+  };
 }
 export async function fetchPerformanceFilterOptions() {
   state.calls.push({ name: "options", actor: state.actor, binding: state.binding, input: null });
