@@ -255,13 +255,18 @@ function AdminAnalyticsWorkspace() {
         await correctInquiryQuality({ inquiryId: input.record.id, ...request });
       else await correctPerformanceEventQuality({ eventKey: input.record.eventKey!, ...request });
     } catch (error) {
+      const conflict = error instanceof ServerFnResponseError && error.status === 409;
+      // This quality writer returns409 only when the exact immutable successor
+      // was not accepted. Revoked authority or invalid input cannot prove that.
       if (
-        !previous &&
-        error instanceof ServerFnResponseError &&
-        [400, 403, 409].includes(error.status) &&
+        (conflict ||
+          (!previous &&
+            error instanceof ServerFnResponseError &&
+            [400, 403].includes(error.status))) &&
         qualityRequests.current.get(key) === request
       )
         qualityRequests.current.delete(key);
+      if (conflict) await refreshAfterMutation();
       throw error;
     }
     if (qualityRequests.current.get(key) === request) qualityRequests.current.delete(key);

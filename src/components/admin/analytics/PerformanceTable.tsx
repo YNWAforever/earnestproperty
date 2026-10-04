@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { ServerFnResponseError } from "@/lib/neon/server-fn-response";
 import { safePerformanceCsvCell } from "@/lib/analytics/performance-csv";
 import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
@@ -116,7 +117,9 @@ export function PerformanceTable({
         setSaveError(
           error instanceof Error && error.name === "QualityRequestChanged"
             ? "上次品質修正尚未確認，請還原原品質及原因再重試。"
-            : "未能儲存品質修正，請重試。",
+            : error instanceof ServerFnResponseError && error.status === 409
+              ? "品質來源已變更，請核對最新記錄後再提交；你的草稿已保留。"
+              : "未能儲存品質修正，請重試。",
         );
     } finally {
       submitting.current = false;
