@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
+import { assertWorkspaceCurrent } from "../admin/workspace-request.ts";
 function load(path, dependencies, extra = {}) {
   const module = { exports: {} };
   vm.runInNewContext(
@@ -179,6 +180,7 @@ test("client preserves retry identity and signed receipt across calls and passes
   const { uploadAdminMedia } = load(
     "src/lib/admin/media-upload.ts",
     {
+      "./workspace-request": { assertWorkspaceCurrent },
       "@/auth": {
         withStaffUploadIdentity: async () => ({
           actorId: "staff-a",
@@ -237,6 +239,7 @@ test("upload recovery is isolated by account and survives same-account token rot
   const { uploadAdminMedia } = load(
     "src/lib/admin/media-upload.ts",
     {
+      "./workspace-request": { assertWorkspaceCurrent },
       "@/auth": {
         withStaffAuthHeaders: async () => ({ headers: new Headers({ authorization: token }) }),
         withStaffUploadIdentity: async () => ({

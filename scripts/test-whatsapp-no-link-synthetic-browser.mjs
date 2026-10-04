@@ -5,6 +5,8 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { chromium, expect } from "@playwright/test";
+const evidencePrefix = process.env.EARNEST_BROWSER_EVIDENCE_PREFIX ?? "";
+if (!/^[a-z0-9-]*$/.test(evidencePrefix)) throw Error("Invalid owned evidence prefix");
 
 assert.ok(
   !process.env.PLAYWRIGHT_BASE_URL,
@@ -160,14 +162,20 @@ async function check(name, width, run, actor = "agent-a", height = 844) {
     }
     results.push({ name, width, height, actor, status: "PASS" });
     if ([390, 768, 1280, 1440].includes(width) && name === `${width}px long timeline and composer`)
-      await page.screenshot({ path: `.audit/no-link-browser-${width}.png`, fullPage: true });
+      await page.screenshot({
+        path: `.audit/${evidencePrefix}no-link-browser-${width}.png`,
+        fullPage: true,
+      });
     console.log(`PASS ${name}`);
   } catch (error) {
     if (await page.getByRole("button", { name: "Show Error" }).count()) {
       await page.getByRole("button", { name: "Show Error" }).click();
       console.error("Route error:", await page.locator("body").innerText());
     }
-    await page.screenshot({ path: `.audit/no-link-browser-${results.length}.png`, fullPage: true });
+    await page.screenshot({
+      path: `.audit/${evidencePrefix}no-link-browser-${results.length}.png`,
+      fullPage: true,
+    });
     results.push({ name, width, height, actor, status: "FAIL", error: error.message });
     console.error(`FAIL ${name}: ${error.message}`);
   } finally {
@@ -469,7 +477,7 @@ try {
       });
       await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
       await expect(dialog.getByRole("alert")).toBeVisible();
-      await page.screenshot({ path: ".audit/no-link-forward-390.png" });
+      await page.screenshot({ path: `.audit/${evidencePrefix}no-link-forward-390.png` });
       const first = await page.evaluate(
         () => JSON.parse(sessionStorage.getItem("no-link-fixture-forward-attempts"))[0],
       );
@@ -1509,13 +1517,18 @@ try {
     390,
     async (page) => {
       await open(page, `${origin}/admin/blasts`);
-      await expect(page.getByText("合成角色沒有推廣權限", { exact: false })).toBeVisible();
+      await expect(
+        page.getByText("尚未取得已核實的推廣管理權限。", { exact: false }),
+      ).toBeVisible();
       expect(
         await page.evaluate(
           () =>
-            window.noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue").length,
+            window.noLinkFixture.calls.filter((c) =>
+              /^synthetic(Campaign|Audience|Blast|Options)/.test(c.name),
+            ).length,
         ),
       ).toBe(0);
+      await expect(page.getByRole("button", { name: /新增 Campaign/ })).toHaveCount(0);
     },
     "agent-b",
   );
@@ -2516,7 +2529,7 @@ try {
   await new Promise((done) => server.close(done));
   await mkdir(".audit", { recursive: true });
   await writeFile(
-    ".audit/no-link-synthetic-browser-results.json",
+    `.audit/${evidencePrefix}no-link-synthetic-browser-results.json`,
     JSON.stringify(
       {
         environment: "real-route-synthetic-auth-api",

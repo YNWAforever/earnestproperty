@@ -52,7 +52,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/ep13-20-operations-browser-summary.json",
+    ".audit/remediation-20261003/ep13-20-ci-compat-operations-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),

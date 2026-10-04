@@ -132,7 +132,7 @@ function AdminBlasts() {
   if (!identity)
     return (
       <AdminShell title="WhatsApp 群發" description="核對收件範圍及推廣操作結果。">
-        <Skeleton className="h-56 w-full" />
+        <AdminError message="尚未取得已核實的推廣管理權限。" />
       </AdminShell>
     );
   return <AdminBlastsWorkspace key={identity} identity={identity} />;

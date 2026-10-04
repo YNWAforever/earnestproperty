@@ -1,4 +1,4 @@
-import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";

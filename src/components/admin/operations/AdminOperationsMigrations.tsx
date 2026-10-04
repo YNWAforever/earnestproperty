@@ -1,4 +1,4 @@
-import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";

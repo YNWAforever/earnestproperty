@@ -1,4 +1,4 @@
-import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useState } from "react";
 import { fetchWhatsappServiceHealth } from "@/lib/neon/whatsapp-service-health";
 import { Button } from "@/components/ui/button";

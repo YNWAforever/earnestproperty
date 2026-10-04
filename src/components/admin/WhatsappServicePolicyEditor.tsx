@@ -1,4 +1,4 @@
-import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useState } from "react";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { Button } from "@/components/ui/button";

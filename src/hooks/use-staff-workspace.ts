@@ -1,4 +1,6 @@
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useCallback } from "react";
+import { useWorkspaceCurrent } from "./use-workspace-current";
+export { useWorkspaceCurrent } from "./use-workspace-current";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { staffSessionStore, useStaffSession } from "@/components/admin/staff-session";
 import type { StaffSession } from "@/lib/neon/admin-data.types";
@@ -16,18 +18,6 @@ export function useStaffWorkspaceIdentity(roles?: readonly string[]) {
   if (roles && (session?.status !== "ok" || !session.roles.some((role) => roles.includes(role))))
     return null;
   return workspaceIdentity(user?.id ?? null, session);
-}
-
-/** Stop asynchronous work synchronously when its component lifetime ends. */
-export function useWorkspaceCurrent(parent?: () => boolean) {
-  const active = useRef(false);
-  useLayoutEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-    };
-  }, []);
-  return useCallback(() => active.current && (!parent || parent()), [parent]);
 }
 
 export function useStaffWorkspaceCurrent(identity: string) {

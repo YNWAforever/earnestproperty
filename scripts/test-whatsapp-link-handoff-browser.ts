@@ -3,6 +3,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 /** Real React component in Chromium; synthetic API only, no auth or DB claims. */
 import { chromium, expect } from "@playwright/test";
+const evidencePrefix = process.env.EARNEST_BROWSER_EVIDENCE_PREFIX ?? "";
+if (!/^[a-z0-9-]*$/.test(evidencePrefix)) throw Error("Invalid owned evidence prefix");
 import { linkBatchProgressKey } from "../src/lib/admin/whatsapp-link-batch-client.ts";
 const build = spawnSync("bun", ["scripts/browser-fixtures/build-whatsapp-link-handoff.ts"], {
   stdio: "inherit",
@@ -380,7 +382,7 @@ try {
   server.stop();
 }
 writeFileSync(
-  ".audit/whatsapp-link-handoff-results.json",
+  `.audit/${evidencePrefix}whatsapp-link-handoff-results.json`,
   JSON.stringify(
     {
       environment: {
