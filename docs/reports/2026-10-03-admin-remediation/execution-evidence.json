@@ -7161,5 +7161,23 @@
       "newNativeScheduleRuns": 0
     },
     "oldRootsPreserved": true
+  },
+  "ep20KeyboardFollowup": {
+    "sourceSha": "83b28eb7a608144728699772f1b7f86d95e67857",
+    "report": "docs/reports/2026-10-03-admin-remediation/ep20-keyboard-readback.json",
+    "whatsAppPass": 64,
+    "dailyPass": 92,
+    "localBoundedFocus": "READY",
+    "fullTaskAcceptance": "NOT_READY",
+    "formalExternal": "BLOCKED",
+    "oldRootsPreserved": true,
+    "effects": {
+      "realSends": 0,
+      "applicationModelSpendUsd": 0,
+      "productionMigrations": 0,
+      "manualDeployments": 0,
+      "merge": false,
+      "nativeScheduleTriggers": 0
+    }
   }
 }

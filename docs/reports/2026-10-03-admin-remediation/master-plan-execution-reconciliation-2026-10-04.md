@@ -54,3 +54,6 @@ EP13–20 first exactCI37203311589 at5491dba failed; author compatibility and ac
 
 
 EP21 offline checker source `b157b66cd4b061d0306c90a22a788384d4974216`：實際RED分層及唯一審閱C0/I2/M0的一輪作者fix後123PASS/0FAIL/0SKIP；lint0errors、typecheck/build分開exit0。候選app subjectf985cad 的實際CI37205841916/preview success與85 immutable Git migrations獨立讀回；CLI expected2/actual2，productionAuthorized:false，正式EP21維持BLOCKED_RELEASE。已補非零completed canary receipt及native first-attempt/originalreceipt binding，防schedule event保留的manualrerun。新CSV五日期欄保留所有旧cells，execution-evidence新增root保留旧roots；原29/9/22、22NEW及40/28/14不變。無app/config/schema/provider/send/model/prod變更；baseline native1/3、修復0/3、新trigger0，既有27PNG歷史限制保留。見[EP21分層交接](ep-21-release-readiness.md)。
+
+
+EP14/20 keyboard follow-up source `83b28eb7a608144728699772f1b7f86d95e67857`：original RED6focus failures及deferred-close validRED2後，shared DOM-owned opener回復；WhatsApp64/daily92、team126/commandcentre91/static PASS。新dated CSV5欄保留39/30旧欄及37 evidence roots。local bounded keyboard READY，fulltask NOT_READY，formalexternal BLOCKED；minor trapboundary未验。新增1歷史summary原bytes不可用明示，27PNG限制保留；全部oldstatus/hashmetadata保留。詳細見[本輪焦點讀回](ep-20-keyboard-focus-followup.md)。
