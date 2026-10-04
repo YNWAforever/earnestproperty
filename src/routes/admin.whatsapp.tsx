@@ -1955,6 +1955,7 @@ function MessageTimeline({
 }) {
   const container = useRef<HTMLDivElement | null>(null);
   const pinned = useRef(true);
+  const observedScrollTop = useRef(0);
   const anchor = useRef<{ height: number; top: number } | null>(null);
   useLayoutEffect(() => {
     const element = container.current;
@@ -1963,6 +1964,7 @@ function MessageTimeline({
       element.scrollTop = anchor.current.top + element.scrollHeight - anchor.current.height;
       anchor.current = null;
     } else if (pinned.current) element.scrollTop = element.scrollHeight;
+    observedScrollTop.current = element.scrollTop;
   }, [messages]);
   useLayoutEffect(() => {
     const element = container.current;
@@ -1971,7 +1973,10 @@ function MessageTimeline({
     // Keep the newest message in view as the pane changes size, unless the
     // reader has scrolled back or an older-page anchor is being restored.
     const observer = new ResizeObserver(() => {
-      if (pinned.current && !anchor.current) element.scrollTop = element.scrollHeight;
+      if (pinned.current && !anchor.current) {
+        element.scrollTop = element.scrollHeight;
+        observedScrollTop.current = element.scrollTop;
+      }
     });
     observer.observe(element);
     return () => observer.disconnect();
@@ -1990,7 +1995,12 @@ function MessageTimeline({
       ref={container}
       onScroll={() => {
         const e = container.current;
-        if (e) pinned.current = e.scrollHeight - e.scrollTop - e.clientHeight < 80;
+        // A pane resize can emit scroll before ResizeObserver without moving
+        // the reader. Only a changed offset may change their pinned intent.
+        if (e && e.scrollTop !== observedScrollTop.current) {
+          observedScrollTop.current = e.scrollTop;
+          pinned.current = e.scrollHeight - e.scrollTop - e.clientHeight < 80;
+        }
       }}
       className="min-h-0 flex-1 overflow-y-auto p-4"
       style={{ overflowAnchor: "none" }}

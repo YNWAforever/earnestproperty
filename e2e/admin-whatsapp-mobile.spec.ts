@@ -68,7 +68,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/ep13-20-mobile-workspace-browser-summary.json",
+    ".audit/remediation-20261003/ep13-20-ci-compat-mobile-workspace-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -193,6 +193,58 @@ async function finish(page: Page, id: string, ordinal: number, outcome: string) 
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("resize scroll event without reader movement retains newest pin and older-reader position", async ({
+      page,
+    }) => {
+      await open(page);
+      await page.evaluate(() => document.fonts.ready);
+      const last = page
+        .locator("p.whitespace-pre-wrap.break-words")
+        .filter({ hasText: "合成訊息 30" })
+        .filter({ visible: true })
+        .last();
+      await expect(last).toBeVisible();
+      const timeline = last.locator("xpath=ancestor::div[contains(@class,'overflow-y-auto')][1]");
+      await timeline.evaluate((element) => {
+        element.style.flex = "0 0 180px";
+        element.style.height = "180px";
+      });
+      await page.evaluate(
+        () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+      );
+      await timeline.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+        element.dispatchEvent(new Event("scroll", { bubbles: true }));
+      });
+      await timeline.evaluate((element) => {
+        const top = element.scrollTop;
+        element.style.flex = "0 0 80px";
+        element.style.height = "80px";
+        if (element.clientHeight !== 80 || element.scrollTop !== top)
+          throw Error("Owned resize race precondition failed");
+        // Layout changes can emit scroll before ResizeObserver without reader movement.
+        element.dispatchEvent(new Event("scroll", { bubbles: true }));
+      });
+      await expect
+        .poll(() =>
+          timeline.evaluate(
+            (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+          ),
+        )
+        .toBeLessThanOrEqual(1);
+      await timeline.evaluate((element) => {
+        element.scrollTop = 0;
+        element.dispatchEvent(new Event("scroll", { bubbles: true }));
+        element.style.flex = "0 0 60px";
+        element.style.height = "60px";
+        void element.clientHeight;
+        element.dispatchEvent(new Event("scroll", { bubbles: true }));
+      });
+      await page.evaluate(
+        () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+      );
+      expect(await timeline.evaluate((element) => element.scrollTop)).toBe(0);
+    });
     test("membership denial removes private inbox and ignores pending AI while keeping stored drafts", async ({
       page,
     }) => {
