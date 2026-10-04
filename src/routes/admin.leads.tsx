@@ -1,4 +1,12 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { aiResultPresentation } from "@/lib/admin/ai-result-presentation";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
@@ -13,7 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
-import { useStaffSession } from "@/components/admin/staff-session";
+import { staffSessionStore, useStaffSession } from "@/components/admin/staff-session";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { ForwardedEnquiryForm } from "@/components/admin/whatsapp/ForwardedEnquiryForm";
 import { ForwardedEnquiryEvidence } from "@/components/admin/whatsapp/ForwardedEnquiryEvidence";
@@ -181,10 +189,10 @@ function AdminLeads() {
   // workspace drops private rows, selections, details and late read callbacks.
   // Actor-keyed unsent forwarded drafts retain their existing storage boundary.
   const identity = JSON.stringify([user.id, session.staffId, [...session.roles].sort()]);
-  return <AdminLeadsWorkspace key={identity} />;
+  return <AdminLeadsWorkspace key={identity} identity={identity} />;
 }
 
-function AdminLeadsWorkspace() {
+function AdminLeadsWorkspace({ identity }: { identity: string }) {
   const { user } = useNeonAuth();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -264,9 +272,40 @@ function AdminLeadsWorkspace() {
   const selectedIdRef = useRef<string | null>(null);
   const panelOpenRef = useRef(false);
 
-  const canApplyLeadDetail = useCallback((id: string) => {
-    return panelOpenRef.current && selectedIdRef.current === id;
+  const workspaceActiveRef = useRef(true);
+  const workspaceLifetimeRef = useRef(0);
+  useLayoutEffect(() => {
+    workspaceActiveRef.current = true;
+    workspaceLifetimeRef.current += 1;
+    return () => {
+      // Unmount cannot cancel an accepted write, but must stop its next phase.
+      // Layout cleanup also closes the window before deferred passive cleanup.
+      workspaceActiveRef.current = false;
+      workspaceLifetimeRef.current += 1;
+      listRequestRef.current += 1;
+      detailRequestRef.current += 1;
+      aiRequestRef.current += 1;
+      selectedIdRef.current = null;
+      panelOpenRef.current = false;
+    };
   }, []);
+  const isWorkspaceCurrent = useCallback(
+    (lifetime = workspaceLifetimeRef.current) => {
+      const snapshot = staffSessionStore.getSnapshot();
+      const session = snapshot.session;
+      return (
+        workspaceActiveRef.current &&
+        lifetime === workspaceLifetimeRef.current &&
+        session?.status === "ok" &&
+        JSON.stringify([snapshot.userId, session.staffId, [...session.roles].sort()]) === identity
+      );
+    },
+    [identity],
+  );
+  const canApplyLeadDetail = useCallback(
+    (id: string) => isWorkspaceCurrent() && panelOpenRef.current && selectedIdRef.current === id,
+    [isWorkspaceCurrent],
+  );
 
   function resetAiProfileState() {
     aiRequestRef.current += 1;
@@ -279,7 +318,7 @@ function AdminLeadsWorkspace() {
   }
 
   const refreshLeads = useCallback(async () => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
 
     const requestId = listRequestRef.current + 1;
     listRequestRef.current = requestId;
@@ -297,19 +336,20 @@ function AdminLeadsWorkspace() {
           optIn: filters.optIn,
         },
       });
-      if (requestId !== listRequestRef.current) return;
+      if (requestId !== listRequestRef.current || !isWorkspaceCurrent()) return;
       setRows(data.rows);
       setNextCursor(data.nextCursor);
       setTotalRows(data.total);
       setError(null);
     } catch (err) {
-      if (requestId !== listRequestRef.current) return;
+      if (requestId !== listRequestRef.current || !isWorkspaceCurrent()) return;
       setError(errorText(err));
     } finally {
-      if (requestId === listRequestRef.current) setLoadingRows(false);
+      if (requestId === listRequestRef.current && isWorkspaceCurrent()) setLoadingRows(false);
     }
   }, [
     user,
+    isWorkspaceCurrent,
     filters.cursor,
     filters.query,
     filters.stage,
@@ -321,6 +361,7 @@ function AdminLeadsWorkspace() {
 
   const loadLeadAiProfile = useCallback(
     async (id: string) => {
+      if (!isWorkspaceCurrent()) return null;
       const requestId = aiRequestRef.current + 1;
       aiRequestRef.current = requestId;
       setAiError(null);
@@ -344,11 +385,12 @@ function AdminLeadsWorkspace() {
         if (requestId === aiRequestRef.current && canApplyLeadDetail(id)) setAiLoading(false);
       }
     },
-    [canApplyLeadDetail],
+    [canApplyLeadDetail, isWorkspaceCurrent],
   );
 
   const loadLeadDetail = useCallback(
     async (id: string, options: { resetNote?: boolean; closeOnError?: boolean } = {}) => {
+      if (!isWorkspaceCurrent()) return null;
       const requestId = detailRequestRef.current + 1;
       detailRequestRef.current = requestId;
       setDetailLoading(true);
@@ -389,7 +431,7 @@ function AdminLeadsWorkspace() {
         }
       }
     },
-    [canApplyLeadDetail, loadLeadAiProfile],
+    [canApplyLeadDetail, isWorkspaceCurrent, loadLeadAiProfile],
   );
 
   const reloadLeadContact = useCallback(
@@ -432,21 +474,21 @@ function AdminLeadsWorkspace() {
   }, [panelOpen]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
     let cancelled = false;
 
     fetchAdminAgents()
       .then((data) => {
-        if (!cancelled) setAgents(data as AdminAgentRow[]);
+        if (!cancelled && isWorkspaceCurrent()) setAgents(data as AdminAgentRow[]);
       })
       .catch((err) => {
-        if (!cancelled) setError(errorText(err));
+        if (!cancelled && isWorkspaceCurrent()) setError(errorText(err));
       });
 
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, isWorkspaceCurrent]);
 
   useEffect(() => {
     if (!selectedId || !panelOpen) return;
@@ -490,7 +532,8 @@ function AdminLeadsWorkspace() {
   }
 
   async function runBulkUpdate() {
-    if (!selectedVisibleIds.length) return;
+    if (!selectedVisibleIds.length || !isWorkspaceCurrent()) return;
+    const lifetime = workspaceLifetimeRef.current;
     const assignAgent = bulkAgentId !== "";
     setBulkPending(true);
     try {
@@ -504,9 +547,11 @@ function AdminLeadsWorkspace() {
         },
       })) as { ok?: boolean; error?: string; updated?: number; requested?: number };
 
+      if (!isWorkspaceCurrent(lifetime)) return;
       if (!result.ok) throw new Error(bulkErrorLabels[result.error ?? ""] ?? "批量更新失敗");
 
       await refreshLeads();
+      if (!isWorkspaceCurrent(lifetime)) return;
       setSelectedIds(new Set());
       setBulkStage("");
       setBulkAgentId("");
@@ -522,9 +567,9 @@ function AdminLeadsWorkspace() {
           : `已更新 ${updated}／${requested} 筆客戶查詢，其餘沒有權限修改`,
       );
     } catch (err) {
-      toast.error(errorText(err));
+      if (isWorkspaceCurrent(lifetime)) toast.error(errorText(err));
     } finally {
-      setBulkPending(false);
+      if (isWorkspaceCurrent(lifetime)) setBulkPending(false);
     }
   }
 
@@ -592,7 +637,8 @@ function AdminLeadsWorkspace() {
   }
 
   async function saveLead(nextDraft = draft, successMessage = "客戶查詢已更新") {
-    if (!detail || !nextDraft) return;
+    if (!detail || !nextDraft || !isWorkspaceCurrent()) return;
+    const lifetime = workspaceLifetimeRef.current;
 
     // Without this the inline error was decorative: 儲存 still wrote a reversed
     // or negative range straight through to the columns that drive segment
@@ -627,27 +673,31 @@ function AdminLeadsWorkspace() {
             completed_at: null,
           },
         });
+        if (!isWorkspaceCurrent(lifetime)) return;
         setNoteBody("");
         setNoteError(null);
       }
 
       const result = await updateAdminLead({ data: draftToInput(targetLeadId, nextDraft) });
+      if (!isWorkspaceCurrent(lifetime)) return;
       assertNoMutationError(result);
 
       await refreshLeads();
-      if (!canApplyLeadDetail(targetLeadId)) return;
+      if (!isWorkspaceCurrent(lifetime) || !canApplyLeadDetail(targetLeadId)) return;
 
       const refreshed = await loadLeadDetail(targetLeadId);
-      if (refreshed && canApplyLeadDetail(targetLeadId)) toast.success(successMessage);
+      if (isWorkspaceCurrent(lifetime) && refreshed && canApplyLeadDetail(targetLeadId))
+        toast.success(successMessage);
     } catch (err) {
-      if (canApplyLeadDetail(targetLeadId)) toast.error(errorText(err));
+      if (isWorkspaceCurrent(lifetime) && canApplyLeadDetail(targetLeadId))
+        toast.error(errorText(err));
     } finally {
-      setMutatingAction(null);
+      if (isWorkspaceCurrent(lifetime)) setMutatingAction(null);
     }
   }
 
   async function addNote() {
-    if (!detail) return;
+    if (!detail || !isWorkspaceCurrent()) return;
     const body = noteBody.trim();
     if (!body) {
       // A distant toast gave no pointer to the field itself. The inline error
@@ -717,7 +767,7 @@ function AdminLeadsWorkspace() {
   }
 
   async function refreshAiProfile() {
-    if (!detail) return;
+    if (!detail || !isWorkspaceCurrent()) return;
 
     const targetLeadId = detail.id;
     const requestId = aiRequestRef.current + 1;
@@ -762,7 +812,7 @@ function AdminLeadsWorkspace() {
   }
 
   async function decideAiTag(tagId: string, approve: boolean) {
-    if (!detail) return;
+    if (!detail || !isWorkspaceCurrent()) return;
 
     const targetLeadId = detail.id;
     setAiMutatingTagId(tagId);
@@ -1147,6 +1197,7 @@ function AdminLeadsWorkspace() {
               agents={agents.map((agent) => ({ id: agent.id, name: agent.name, active: true }))}
               onCancel={() => setForwardOpen(false)}
               onSaved={(leadId) => {
+                if (!isWorkspaceCurrent()) return;
                 setForwardOpen(false);
                 void refreshLeads();
                 openLead(leadId);

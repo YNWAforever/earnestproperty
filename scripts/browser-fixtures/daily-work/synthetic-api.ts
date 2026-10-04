@@ -1,5 +1,6 @@
 // Synthetic Auth/API ports only. Actual route/shell/staff store and SQL are separate evidence layers.
 export * from "../no-link/synthetic-api";
+import { fetchAdminLead as baseLead } from "../no-link/synthetic-api";
 import { fetchAdminPage as basePage } from "../no-link/synthetic-api";
 const now = "2026-10-03T00:00:00.000Z";
 const state = {
@@ -9,6 +10,10 @@ const state = {
   denied: false,
   staffMode: sessionStorage.getItem("daily-work-staff-mode") ?? "ok",
   leadsMode: "ok",
+  noteMode: "ok",
+  mutationPending: [] as { release: () => void }[],
+  acceptedNotes: [] as { actor: string; input: Record<string, unknown> }[],
+  leadUpdates: [] as { actor: string; input: Record<string, unknown> }[],
   empty: false,
   overviewMode: "ok",
   teamMode: "ok",
@@ -125,4 +130,56 @@ export async function fetchAdminPage({ data }: { data: { resource: string; stage
     );
   if (mode === "delayed-denied") throw new Response("Owned forbidden", { status: 403 });
   return { rows, total: rows.length, nextCursor: null };
+}
+
+export async function fetchAdminLead({ data }: { data: { id: string } }) {
+  if (!data.id.startsWith("40000000-0000-4000-8000-")) return baseLead({ data });
+  call("lead-detail", data);
+  const ordinal = Number(data.id.slice(-12)) - 1;
+  if (state.denied || ordinal < 0 || ordinal >= scopedCount())
+    throw new Response("Owned forbidden", { status: 403 });
+  const update = state.leadUpdates.filter((x) => x.input.id === data.id).at(-1)?.input;
+  return {
+    id: data.id,
+    name: "每日工作合成查詢" + ordinal,
+    stage: "contacted",
+    intent: "buyer",
+    source: "website",
+    created_at: now,
+    assigned_agent_id: "20000000-0000-4000-8000-000000000001",
+    contact_id: null,
+    phone: null,
+    email: null,
+    budget_min: null,
+    budget_max: null,
+    opt_in_whatsapp: false,
+    note: null,
+    preferred_estates: [],
+    ...update,
+    activities: state.acceptedNotes
+      .filter((x) => x.input.lead_id === data.id)
+      .map((x, n) => ({
+        id: String(n),
+        activity_type: "note",
+        body: x.input.body,
+        staff_name: x.actor,
+        created_at: now,
+      })),
+  };
+}
+export async function createAdminLeadActivity({ data }: { data: Record<string, unknown> }) {
+  call("lead-note", data);
+  const mode = state.noteMode;
+  if (mode !== "delayed-failure")
+    state.acceptedNotes.push({ actor: state.actor, input: { ...data } });
+  if (mode.startsWith("delayed"))
+    await new Promise<void>((release) => state.mutationPending.push({ release }));
+  call("lead-note-return");
+  if (mode === "delayed-failure") throw Error("Owned old note failed");
+  return { ok: true };
+}
+export async function updateAdminLead({ data }: { data: Record<string, unknown> }) {
+  call("lead-update", data);
+  state.leadUpdates.push({ actor: state.actor, input: { ...data } });
+  return { ok: true };
 }

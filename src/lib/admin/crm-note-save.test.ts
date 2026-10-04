@@ -22,6 +22,7 @@ function fixture() {
   const updated = { id: "lead-1", activities: ["submitted note"] };
   const ports = {
     detail: { id: "lead-1", contact_id: "contact-1" },
+    isWorkspaceCurrent: () => true,
     noteBody: state.note,
     setNoteError: () => {},
     setMutatingAction: () => {},
