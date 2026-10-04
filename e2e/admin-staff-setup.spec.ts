@@ -57,7 +57,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/staff-browser-summary.json",
+    ".audit/remediation-20261003/ep13-20-staff-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),

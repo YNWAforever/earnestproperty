@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,12 +50,15 @@ export function StaffMappingWizard({
   initialStaffId,
   initialStep = 0,
   allowReviewedSave = true,
+  isWorkspaceCurrent,
 }: {
   agents: Agent[];
   initialStaffId?: string;
   initialStep?: number;
   allowReviewedSave?: boolean;
+  isWorkspaceCurrent?: () => boolean;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const [step, setStep] = useState(initialStep);
   const [draft, setDraft] = useState<ConnectionDraft>(emptyDraft);
   const [reviewedVersion, setReviewedVersion] = useState<number | null>(null);
@@ -90,15 +94,17 @@ export function StaffMappingWizard({
     draft.dirty || !!retireReason.trim() || Object.values(folderForm).some(Boolean);
   const { dialog: leaveGuard } = useRouteLeaveGuard(hasUnsavedInput);
   const loadFolders = useCallback(async () => {
+    if (!isCurrent()) return;
     setFolderState({ kind: "loading" });
     try {
       const items = await getInboxFolders();
+      if (!isCurrent()) return;
       setFolders(items);
       setFolderState({ kind: items.length ? "ready" : "empty" });
     } catch (failure) {
-      setFolderState(classifyFolderLoad(failure));
+      if (isCurrent()) setFolderState(classifyFolderLoad(failure));
     }
-  }, []);
+  }, [isCurrent]);
   useEffect(() => {
     if (initialStaffId && agents.some((agent) => agent.id === initialStaffId && agent.active))
       setDraft((current) =>
@@ -110,24 +116,25 @@ export function StaffMappingWizard({
     Promise.all([
       getWhatsappStaffChannels(),
       getWhatsappStaffReadiness(),
-      fetchStaffEndpoints(),
+      fetchStaffEndpoints(isCurrent),
       getWhatsappRuntimeStatus().catch(() => null),
     ])
       .then(([channels, capabilities, destinations, currentRuntime]) => {
-        if (!live) return;
+        if (!live || !isCurrent()) return;
         setRows(channels);
         setReadiness(capabilities);
         setEndpoints(destinations);
         setRuntime(currentRuntime);
       })
       .catch(() => {
-        if (live) setError("未能載入連接設定；請檢查管理權限、公司連接及資料庫遷移。");
+        if (live && isCurrent())
+          setError("未能載入連接設定；請檢查管理權限、公司連接及資料庫遷移。");
       });
     void loadFolders();
     return () => {
       live = false;
     };
-  }, [loadFolders]);
+  }, [loadFolders, isCurrent]);
   const selected = agents.find((agent) => agent.id === draft.staffId);
   const mapping = rows.find((row) => row.staff_id === draft.staffId) ?? null;
   const version = mapping?.version ?? null;
@@ -140,12 +147,14 @@ export function StaffMappingWizard({
     )?.version ?? null;
   const titles = ["選同事", "連接 Inbox", "通知方式", "核實與試送"];
   async function refresh() {
+    if (!isCurrent()) return;
     const [channels, capabilities, destinations, currentRuntime] = await Promise.all([
       getWhatsappStaffChannels(),
       getWhatsappStaffReadiness(),
-      fetchStaffEndpoints(),
+      fetchStaffEndpoints(isCurrent),
       getWhatsappRuntimeStatus().catch(() => null),
     ]);
+    if (!isCurrent()) return;
     setRows(channels);
     setReadiness(capabilities);
     setEndpoints(destinations);
@@ -153,6 +162,7 @@ export function StaffMappingWizard({
     await loadFolders();
   }
   async function explain(errorValue: unknown, fallback: string) {
+    if (!isCurrent()) return;
     const status =
       errorValue instanceof Response
         ? errorValue.status
@@ -180,7 +190,9 @@ export function StaffMappingWizard({
           "。",
       );
       try {
+        if (!isCurrent()) return;
         await refresh();
+        if (!isCurrent()) return;
       } catch {
         /* Keep the current selection for retry. */
       }
@@ -262,6 +274,7 @@ export function StaffMappingWizard({
     }
   }
   async function save() {
+    if (!isCurrent()) return;
     if (!allowReviewedSave) return;
     if (
       !canSaveReviewedMapping(draft, reviewedVersion, version, new Date().toISOString()) ||
@@ -271,13 +284,18 @@ export function StaffMappingWizard({
     setBusy(true);
     setError("");
     try {
-      await saveReviewedWhatsappStaffChannel({
-        staffId: draft.staffId,
-        expectedVersion: version,
-        evidenceId: draft.review.evidenceId,
-        eligible: true,
-      });
+      await saveReviewedWhatsappStaffChannel(
+        {
+          staffId: draft.staffId,
+          expectedVersion: version,
+          evidenceId: draft.review.evidenceId,
+          eligible: true,
+        },
+        isCurrent,
+      );
+      if (!isCurrent()) return;
       await refresh();
+      if (!isCurrent()) return;
       setDraft((current) => ({ ...current, review: null, dirty: false }));
       setReviewedVersion(null);
       setNotice("Inbox 映射已儲存；儲存本身不會發送訊息。");
@@ -285,7 +303,7 @@ export function StaffMappingWizard({
     } catch (failure) {
       await explain(failure, "未能儲存映射；請重新檢查連接、同事及 Folder。");
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
   }
   async function retire() {
@@ -293,12 +311,17 @@ export function StaffMappingWizard({
     setBusy(true);
     setError("");
     try {
-      await retireWhatsappStaffChannel({
-        mappingId: mapping.id,
-        expectedVersion: mapping.version,
-        reason: retireReason.trim(),
-      });
+      await retireWhatsappStaffChannel(
+        {
+          mappingId: mapping.id,
+          expectedVersion: mapping.version,
+          reason: retireReason.trim(),
+        },
+        isCurrent,
+      );
+      if (!isCurrent()) return;
       await refresh();
+      if (!isCurrent()) return;
       setDraft((current) => ({ ...current, review: null, dirty: false }));
       setReviewedVersion(null);
       setRetireReason("");
@@ -306,7 +329,7 @@ export function StaffMappingWizard({
     } catch (failure) {
       await explain(failure, "未能停用；請核對映射版本及管理權限。");
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
   }
   const done = [
@@ -378,7 +401,7 @@ export function StaffMappingWizard({
               disabled={busy || folderState.kind !== "ready"}
               onChange={(event) => {
                 requestGeneration.current += 1;
-                setBusy(false);
+                if (isCurrent()) setBusy(false);
                 setDraft((current) => ({
                   ...current,
                   folderKey: event.target.value,
@@ -405,14 +428,14 @@ export function StaffMappingWizard({
               selectedUserId={draft.userId}
               onSelect={(userId) => {
                 requestGeneration.current += 1;
-                setBusy(false);
+                if (isCurrent()) setBusy(false);
                 setDraft((current) => ({ ...current, userId, review: null, dirty: true }));
                 setReviewedVersion(null);
               }}
               query={query}
               onQueryChange={(value) => {
                 requestGeneration.current += 1;
-                setBusy(false);
+                if (isCurrent()) setBusy(false);
                 setQuery(value);
               }}
               onSearch={() => void browse()}
@@ -537,7 +560,7 @@ export function StaffMappingWizard({
                   } catch {
                     setError("Folder 未能儲存；請核對公司連接、識別碼及是否已存在。");
                   } finally {
-                    setBusy(false);
+                    if (isCurrent()) setBusy(false);
                   }
                 }}
               >
@@ -553,10 +576,18 @@ export function StaffMappingWizard({
             為 {selected.name ?? "未命名同事"}{" "}
             設定可選的獨立通知目的地；手機通知預設停用。儲存不發送，也不代表已送達。
           </p>
-          <StaffEndpointEditor agents={agents} selectedStaffId={draft.staffId} />
+          <StaffEndpointEditor
+            isWorkspaceCurrent={isCurrent}
+            agents={agents}
+            selectedStaffId={draft.staffId}
+          />
           <details className="rounded border p-3">
             <summary className="cursor-pointer">進階：28hse／YouTube 等外部同事代碼</summary>
-            <StaffReferenceEditor agents={agents} selectedStaffId={draft.staffId} />
+            <StaffReferenceEditor
+              isWorkspaceCurrent={isCurrent}
+              agents={agents}
+              selectedStaffId={draft.staffId}
+            />
           </details>
         </div>
       ) : null}
@@ -619,12 +650,14 @@ export function StaffMappingWizard({
             同事手機：{capability?.maskedDestination ?? "未設定"}。供應商接納後仍須核對實際送達。
           </p>
           <StaffTestNotificationDialog
+            isWorkspaceCurrent={isCurrent}
             key={draft.staffId + ":inbox"}
             staffId={draft.staffId}
             transport="inbox_private_note"
             endpointVersion={endpointVersion("inbox_private_note")}
           />
           <StaffTestNotificationDialog
+            isWorkspaceCurrent={isCurrent}
             key={draft.staffId + ":wa"}
             staffId={draft.staffId}
             transport="staff_whatsapp"
@@ -635,7 +668,9 @@ export function StaffMappingWizard({
             variant="outline"
             onClick={async () => {
               try {
+                if (!isCurrent()) return;
                 await refresh();
+                if (!isCurrent()) return;
                 setError("");
               } catch {
                 setError("重新核對失敗，請稍後再試。");
@@ -661,7 +696,9 @@ export function StaffMappingWizard({
           onClick={async () => {
             if (step === 2) {
               try {
+                if (!isCurrent()) return;
                 await refresh();
+                if (!isCurrent()) return;
               } catch {
                 setError("未能核對端點。");
                 return;

@@ -152,6 +152,11 @@ export const saveReviewedWhatsappStaffChannel = async (input: {
     },
   ];
   localStorage.setItem("staff-fixture-mapping", JSON.stringify(rows));
+  if (state.submit === "save-delayed")
+    await new Promise<void>((release) =>
+      window.propertyFixture.pending.push({ kind: "mapping-save", release }),
+    );
+  call("mapping-save-return", input);
   return { mappingId: rows[0].id, version: rows[0].version };
 };
 export const fetchStaffEndpoints = async () => [
