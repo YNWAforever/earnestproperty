@@ -7179,5 +7179,24 @@
       "merge": false,
       "nativeScheduleTriggers": 0
     }
+  },
+  "ep20ImeFollowup": {
+    "sourceSha": "283a887f955aa0f15652963554ae6136469eb7aa",
+    "report": "docs\\reports\\2026-10-03-admin-remediation\\ep20-ime-readback.json",
+    "whatsAppPass": 76,
+    "woztellNodePass": 159,
+    "woztellBunPass": 9,
+    "selectedOwnedDOMCompositionAndWrapping": "READY",
+    "fullTaskAcceptance": "NOT_READY",
+    "formalExternal": "BLOCKED",
+    "oldRootsPreserved": true,
+    "effects": {
+      "realSends": 0,
+      "applicationModelSpendUsd": 0,
+      "productionMigrations": 0,
+      "manualDeployments": 0,
+      "merge": false,
+      "nativeScheduleTriggers": 0
+    }
   }
 }

@@ -1,0 +1,477 @@
+{
+  "createdAt": "2026-10-04T17:12:01.617329+00:00",
+  "sourceSha": "283a887f955aa0f15652963554ae6136469eb7aa",
+  "baseSha": "ac30bf95ab92a5911bd89e0b7722d380a494babc",
+  "source": [
+    {
+      "file": "src/routes/admin.whatsapp.tsx",
+      "gitBlob": "2d7174d9ee52003f6ee1992712384876136b0f0c",
+      "sha256": "4bb89cc10eb48910546dfe0a1e457adcc8df73ee102d8aa00bf54c6c51d4e6b3"
+    },
+    {
+      "file": "e2e/admin-whatsapp-mobile.spec.ts",
+      "gitBlob": "f32ad5ac6967cf95016b2ddde797ac86cf85a255",
+      "sha256": "5a226db0aa6ba089e845b77ce04c6b59f3af5f07edbab7c165344c4d0a3840c5"
+    }
+  ],
+  "evidenceLayer": "owned loopback actual WhatsApp route; synthetic Auth/API; DOM composition/input and controlled clock; no nativeIME/DB/provider/model",
+  "tests": {
+    "red": {
+      "collected": 12,
+      "pass": 4,
+      "fail": 8,
+      "skip": 0,
+      "reason": "All8 composition cases prematurely wrote interim q合成客戶 to URL; trap/desktop controls passed. No harness error.",
+      "redJsonComplete": false,
+      "redJsonRetainedResults": 1,
+      "authoritativeRed": "Complete Playwright log and8errorcontexts; afterAll JSON partial following failed-worker restarts"
+    },
+    "green": {
+      "pass": 76,
+      "fail": 0,
+      "skip": 0,
+      "newCases": 12,
+      "previousCases": 64
+    },
+    "woztell": {
+      "nodePass": 159,
+      "bunPass": 9,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "static": {
+    "lintExit": 0,
+    "errors": 0,
+    "existingWarnings": 3,
+    "typecheckExit": 0,
+    "buildExit": 0,
+    "separateScripts": true
+  },
+  "review": {
+    "reviewer": "fresh gpt-6-astra xhigh read-only",
+    "baseSha": "ac30bf95ab92a5911bd89e0b7722d380a494babc",
+    "critical": 0,
+    "important": 0,
+    "minor": 1,
+    "minorFindings": [
+      {
+        "priority": "P3",
+        "file": "e2e/admin-whatsapp-mobile.spec.ts",
+        "line": 70,
+        "finding": "RED JSON is process-local partial after failed-worker restarts",
+        "authorDisposition": "Document partialJSON; fullREDlog/errorcontexts authoritative; no runtime fix needed"
+      }
+    ],
+    "declinedRulings": [
+      {
+        "behavior": "RED afterAll JSON overwritten across failed-worker restarts",
+        "ruling": "Treat retained JSON as partial1PASS; complete log12collected8FAIL4PASS plus8errorcontexts authoritative. No historical bytes rewritten.",
+        "costIfWrong": "PartialJSON could be mistaken for completeRED; explicit audit qualification and original raw logs required."
+      },
+      {
+        "behavior": "Native OS/device IME",
+        "ruling": "BLOCKED; DOMevent/clock evidence only.",
+        "costIfWrong": "OS candidate ordering and keyboard layout may differ from synthetic browser."
+      },
+      {
+        "behavior": "Production Auth/DB/provider/model/send",
+        "ruling": "BLOCKED; owned synthetic fixture and separate historicalSQL evidence cannot grant formal acceptance.",
+        "costIfWrong": "True identity/recipient/provider behavior could differ; no external effects authorized."
+      },
+      {
+        "behavior": "Previously reviewed PR scopes and unrelated dirt",
+        "ruling": "Exclude from fresh focusedreview; earlier datedreviews retained, unrelated files unstaged.",
+        "costIfWrong": "A wholebranch claim would exceed selectedreview evidence."
+      },
+      {
+        "behavior": "External URL changes during composition",
+        "ruling": "Keep existing authoritative URL synchronization. Deliberate navigation may replace unfinishedcandidate; no new preservation guarantee.",
+        "costIfWrong": "Unfinishedcandidate can be lost on usernavigation; native/navigation interaction needs trueIME acceptance."
+      },
+      {
+        "behavior": "Reviewer ready-to-merge wording",
+        "ruling": "Focused source review readiness only; no merge/deployment authorization or fulltask promotion.",
+        "costIfWrong": "Merging or releasing without formal gates violates user scope."
+      }
+    ],
+    "secondReview": false,
+    "sourceFixRequired": false,
+    "reviewVerdict": "Focused source ready subject remaining releasechecks; production authority false",
+    "redEvidence": {
+      "jsonComplete": false,
+      "jsonRetainedResults": 1,
+      "authoritativeLog": "ep20-ime-red.log",
+      "collected": 12,
+      "pass": 4,
+      "fail": 8,
+      "skip": 0,
+      "errorContexts": 8
+    }
+  },
+  "configMigrationDryRun": {
+    "sourceSha": "283a887f955aa0f15652963554ae6136469eb7aa",
+    "baseSha": "ac30bf95ab92a5911bd89e0b7722d380a494babc",
+    "changedFiles": [
+      "src/routes/admin.whatsapp.tsx",
+      "e2e/admin-whatsapp-mobile.spec.ts"
+    ],
+    "applicationUiChanges": [
+      "Hold uncommitted search text during IME composition; cancel pending debounce; commit final same-value text after compositionend."
+    ],
+    "schemaChanges": [],
+    "serverDtoChanges": [],
+    "configChanges": [],
+    "providerRuntimeChanges": [],
+    "newMigration": null,
+    "candidateManifest": {
+      "names": [
+        "20260622060000_public_content.sql",
+        "20260623090000_neon_admin_crm_whatsapp.sql",
+        "20260624110000_ai_crm_live_agent.sql",
+        "20260626120000_live_agent_security.sql",
+        "20260626120100_crm_ai_profile_status.sql",
+        "20260626120200_woztell_member_identity.sql",
+        "20260709090000_cms_videos.sql",
+        "20260710090000_agent_profiles.sql",
+        "20260711090000_cms_content_revisions.sql",
+        "20260712120000_ai_content_proposals.sql",
+        "20260714180000_backend_control_plane.sql",
+        "20260801090000_staff_public_slug_unique.sql",
+        "20260802090000_listing_search_indexes.sql",
+        "20260802100000_agent_specialties.sql",
+        "20260816120000_staff_identity_actions.sql",
+        "20260817120000_dual_source_listing_sync.sql",
+        "20260817130000_youtube_channel_sync.sql",
+        "20260822120000_whatsapp_audience_segment_link.sql",
+        "20260830120000_listing_alerts.sql",
+        "20260830130000_estate_expansion.sql",
+        "20260830140000_transaction_provenance.sql",
+        "20260830150000_agent_languages.sql",
+        "20260830160000_branches_entity.sql",
+        "20260830170000_valuation_leads.sql",
+        "20260831090000_staff_viewer_role.sql",
+        "20260831180000_video_category.sql",
+        "20260901100000_estate_expansion_facts.sql",
+        "20260901110000_estate_expansion_publish.sql",
+        "20260902100000_estate_expansion_school_net_correction.sql",
+        "20260902110000_estate_expansion_facts_resolution.sql",
+        "20260905110000_cms_atomic_mutations.sql",
+        "20260905120000_campaign_dispatch_boundary.sql",
+        "20260905130000_outbound_intents.sql",
+        "20260905140000_media_upload_intents.sql",
+        "20260905150000_inquiry_submission_identity.sql",
+        "20260905151000_consent_evidence.sql",
+        "20260905180000_admin_message_paging.sql",
+        "20260905181000_cms_browse_order.sql",
+        "20260906020000_whatsapp_delivery_events.sql",
+        "20260906021000_estate_editorial_backfill.sql",
+        "20260906022000_estate_verified_details.sql",
+        "20260906040000_property_public_identity.sql",
+        "20260906090000_canonical_property_identity.sql",
+        "20260906100000_whatsapp_inbound_leads.sql",
+        "20260906110000_estate_listing_links.sql",
+        "20260906120000_admin_property_management.sql",
+        "20260907120000_propertyhk_ingestion_v2.sql",
+        "20260909120000_source_promotion_tiers.sql",
+        "20260912120000_whatsapp_enquiry_events.sql",
+        "20260912130000_whatsapp_enquiry_episodes.sql",
+        "20260912140000_whatsapp_assignment_evidence.sql",
+        "20260912150000_whatsapp_service_workflow.sql",
+        "20260912160000_staff_reference_snapshots.sql",
+        "20260912170000_staff_notifications.sql",
+        "20260925120000_rate_limit_bucket_cleanup.sql",
+        "20260927080000_staff_notification_receipt_times.sql",
+        "20260927083000_staff_notification_test_attempts.sql",
+        "20260927090000_whatsapp_link_batch_operations.sql",
+        "20260927093000_whatsapp_link_management_indexes.sql",
+        "20260927100000_whatsapp_redirect_bucket_retention.sql",
+        "20260927110000_staff_mapping_review_versions.sql",
+        "20260927120000_named_inbox_folders.sql",
+        "20260927130000_staff_notification_test_evidence.sql",
+        "20260927140000_whatsapp_link_reference_scope.sql",
+        "20260927150000_whatsapp_link_batch_mapping_guard.sql",
+        "20260927160000_transaction_sales_attribution.sql",
+        "20260927170000_performance_event_quality.sql",
+        "20260927171000_inquiry_quality.sql",
+        "20260927172000_media_asset_variants.sql",
+        "20260929100000_whatsapp_inbound_receipts.sql",
+        "20260929101000_whatsapp_receipt_identity.sql",
+        "20260929102000_whatsapp_portal_resolution.sql",
+        "20260929103000_whatsapp_no_link_episodes.sql",
+        "20260929104000_whatsapp_enquiry_access.sql",
+        "20260929105000_whatsapp_no_link_effects.sql",
+        "20260929106000_whatsapp_enquiry_resolution_guard.sql",
+        "20260929107000_whatsapp_forwarded_enquiries.sql",
+        "20260930090000_whatsapp_no_link_source_authority.sql",
+        "20261001090000_whatsapp_outbound_unknown_reservation.sql",
+        "20261001120000_property_sync_operations.sql",
+        "20261001130000_property_withdrawal_review.sql",
+        "20261003010000_ai_knowledge_durable_repair.sql",
+        "20261003020000_crm_analysis_contract.sql",
+        "20261003030000_crm_analysis_runs.sql",
+        "20261003040000_content_proposal_source_guard.sql"
+      ],
+      "sha256": "42c087012a528554e4a353c7ce1426e9ee5bb3c11feaa9cbd87452446b49bb5d",
+      "latestVersion": "20261003040000",
+      "commit": "283a887f955aa0f15652963554ae6136469eb7aa",
+      "count": 85,
+      "digestMethod": "SHA256 of sorted filename + space + immutable Git blob SHA + newline"
+    },
+    "migrationDryRun": "No SQL/config delta; prior immutable85 migration Git blobs unchanged; no apply attempted.",
+    "registry": "Prior recorded readback only20260715120000_ops_jobs_status_updated_index; no new production database access.",
+    "runtimeProviderModelIds": "UNKNOWN until authorized real runtime readback",
+    "effects": {
+      "realSends": 0,
+      "applicationModelSpendUsd": 0,
+      "productionMigrations": 0,
+      "manualDeployments": 0,
+      "merge": false,
+      "nativeScheduleTriggers": 0
+    }
+  },
+  "history": {
+    "originalAudit": {
+      "PASS": 29,
+      "FAIL": 9,
+      "BLOCKED": 22
+    },
+    "plannedNEW": 22,
+    "executionCounts": {
+      "PASS": 40,
+      "PARTIAL": 28,
+      "BLOCKED": 14
+    },
+    "businessActions": 68,
+    "sourceCandidates": 1332,
+    "totalCandidates": 1400,
+    "historicalRenderedObservations": 408,
+    "oldIntegrity": {
+      "ep21-release-readiness-readback.json": 46,
+      "ep20-keyboard-readback.json": 68,
+      "ep20-keyboard-final-publication-readback.json": 27
+    },
+    "knownArtifactLimitations": {
+      "priorPngUnavailable": 27,
+      "priorDailySummaryUnavailable": 1,
+      "originalSummarySha256": "299e12e8e6f29a0b54464317f899e7ddc12e68596f3fd3c2a984ecdefd17bda7",
+      "originalMetadataPreserved": true,
+      "noNewOverwrite": true
+    },
+    "oldRootsPreserved": true,
+    "noTaskOrSourceCandidatePromotion": true
+  },
+  "csvProof": {
+    "EarnestProperty_Remediation_Traceability_2026-10-03.csv": {
+      "rows": 22,
+      "oldColumnsPreserved": 44,
+      "newColumns": [
+        "execution_2026_10_05_ep20_ime_sha",
+        "execution_2026_10_05_ep20_ime_environment",
+        "execution_2026_10_05_ep20_ime_evidence",
+        "execution_2026_10_05_ep20_ime_result",
+        "execution_2026_10_05_ep20_ime_status"
+      ],
+      "oldCellsPreserved": true,
+      "oldBytesSha256": "703797cfe0ac73f59080fe0a0bd2a448a74631c8e10e66a4eb3c212e2ec90e7c",
+      "executionCountsUnchanged": {
+        "LOCAL_VERIFIED": 8,
+        "LOCAL_PARTIAL": 11,
+        "BLOCKED_ACCEPTANCE": 1,
+        "BLOCKED_EXTERNAL": 1,
+        "BLOCKED_RELEASE": 1
+      }
+    },
+    "EarnestProperty_UAT_Matrix_2026-10-03.csv": {
+      "rows": 82,
+      "oldColumnsPreserved": 35,
+      "newColumns": [
+        "execution_2026_10_05_ep20_ime_sha",
+        "execution_2026_10_05_ep20_ime_environment",
+        "execution_2026_10_05_ep20_ime_evidence",
+        "execution_2026_10_05_ep20_ime_result",
+        "execution_2026_10_05_ep20_ime_status"
+      ],
+      "oldCellsPreserved": true,
+      "oldBytesSha256": "f388fc60352923b2d65a7942363e11c75dea9d1d3177a7348c61fba5fea10269",
+      "executionCountsUnchanged": {
+        "PASS": 40,
+        "PARTIAL": 28,
+        "BLOCKED": 14
+      },
+      "baselineCountsUnchanged": {
+        "PASS": 29,
+        "BLOCKED": 22,
+        "FAIL": 9,
+        "NOT_APPLICABLE_NEW_CASE": 22
+      }
+    }
+  },
+  "capabilities": {
+    "selectedOwnedDOMCompositionAndModalWrapping": "READY",
+    "fullEP14EP20RolesActionsCombinedGolden": "NOT_READY",
+    "nativeIMETrueAuthProviderModelPropertyHkNativeScheduleProductionRelease": "BLOCKED"
+  },
+  "formalNativeSchedule": {
+    "baselineObserved": 1,
+    "repairedAccepted": 0,
+    "required": 3,
+    "agentTriggered": 0
+  },
+  "effects": {
+    "realSends": 0,
+    "applicationModelSpendUsd": 0,
+    "productionMigrations": 0,
+    "manualDeployments": 0,
+    "merge": false,
+    "nativeScheduleTriggers": 0
+  },
+  "artifacts": [
+    {
+      "file": ".audit/ep20-ime-red-playwright/admin-whatsapp-mobile-1280-eb8ef-search-out-of-URL-and-reads-owned-chromium/error-context.md",
+      "bytes": 10240,
+      "sha256": "0a61c7cb30e946ec48e044fb6383d2c37466026b886651f91edbe449adec906e"
+    },
+    {
+      "file": ".audit/ep20-ime-red-playwright/admin-whatsapp-mobile-1280-f084d--committed-text-restarts-it-owned-chromium/error-context.md",
+      "bytes": 10449,
+      "sha256": "5954f2b148f2bb61a8d93a6d98e7808c706b986a157e065d91e5af5f3faaa19b"
+    },
+    {
+      "file": ".audit/ep20-ime-red-playwright/admin-whatsapp-mobile-1440-68bac--committed-text-restarts-it-owned-chromium/error-context.md",
+      "bytes": 10449,
+      "sha256": "8e11c486a6c5c37b6a076515d5cb90811c3e5df5900f6dea28654c9823e6e132"
+    },
+    {
+      "file": ".audit/ep20-ime-red-playwright/admin-whatsapp-mobile-1440-c70fb-search-out-of-URL-and-reads-owned-chromium/error-context.md",
+      "bytes": 10240,
+      "sha256": "4392c210083021d736a8ebf473c5ca373b867e80333abb92eebea9521da78cf3"
+    },
+    {
+      "file": ".audit/ep20-ime-red-playwright/admin-whatsapp-mobile-390--195f3-search-out-of-URL-and-reads-owned-chromium/error-context.md",
+      "bytes": 10239,
+      "sha256": "c7ce3188e7727285694e598521649a6ae5dec956846e52990e8af4ca9902d822"
+    },
+    {
+      "file": ".audit/ep20-ime-red-playwright/admin-whatsapp-mobile-390--33fd7--committed-text-restarts-it-owned-chromium/error-context.md",
+      "bytes": 10448,
+      "sha256": "348aebe24ac5e6f7dbd5c888cc41474b6544632e1a632b017475daaa211e68bc"
+    },
+    {
+      "file": ".audit/ep20-ime-red-playwright/admin-whatsapp-mobile-768--310f4--committed-text-restarts-it-owned-chromium/error-context.md",
+      "bytes": 10448,
+      "sha256": "ee7f7c784483908b9f2324e9b14fd2866b81dc47f6d3f1fa59e3af77c8ba1e65"
+    },
+    {
+      "file": ".audit/ep20-ime-red-playwright/admin-whatsapp-mobile-768--73c56-search-out-of-URL-and-reads-owned-chromium/error-context.md",
+      "bytes": 10239,
+      "sha256": "6c50d736dfa9d82153b32e4573d9b3fa7eb1fcd26630c04c793da7f25b68d64c"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-build.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-build.log",
+      "bytes": 260581,
+      "sha256": "c403e48d72ee99172a704ab1974039f627dc719b31d4d7bf7031f8bb8e8b1e73"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-config-migration-dry-run.json",
+      "bytes": 5933,
+      "sha256": "4603c02111c4c3974bd02f69012e60a54ae6a2fbd61b9b7089155ef88a1616dc"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-final-review.json",
+      "bytes": 2742,
+      "sha256": "a9bcd9f1f1f2b2f128956b56408460ae95890703a1f8e36916874075e48ee6f8"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-final-review.md",
+      "bytes": 1721,
+      "sha256": "1865e64d899bcf47510a0b5475999a4ca448fa1c6bd50521845d5c5878a90bc1"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-green-mobile-workspace-browser-summary.json",
+      "bytes": 12907,
+      "sha256": "5c788e3e399e10070bc1e1455bab3f2bf9a9a8df8e08f9d191affe4d30d6fc71"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-green.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-green.log",
+      "bytes": 32321,
+      "sha256": "43d27fbd926958acfdae3a3d963cfa5121072e409c6f8e7aaf808763033d55c5"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-lint.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-lint.log",
+      "bytes": 883,
+      "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-pr-before.json",
+      "bytes": 204,
+      "sha256": "ec98328aec9c1325c8e35177da2247189d89e74e1410d03183d46f93bc3fe68e"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-progress.md",
+      "bytes": 3635,
+      "sha256": "6ecd6319e68c547872f3801c27e4534c38e96339d314cf18d92851966f242a7a"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-red-mobile-workspace-browser-summary.json",
+      "bytes": 401,
+      "sha256": "e93b8e6f9f25c47a20a938c2b8dfefc147bb284ab0bee45f3345f4e49108c131"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-red.exit",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-red.log",
+      "bytes": 192263,
+      "sha256": "bd4ea5f627cd6dbc1d6ae0c6ef43777df8232d3a209563a7027db99adbf7f500"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-review-package.md",
+      "bytes": 2993,
+      "sha256": "f4350e815acc6ee49b10c8b6fe91135f230b63f6839e9562e223a1ae6ff4f0db"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-review-source.diff",
+      "bytes": 8272,
+      "sha256": "0e49b9d0250754b027a1c220efffeb40b58e12bc6124bb361610296a63e9c6a4"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-typecheck.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-typecheck.log",
+      "bytes": 33,
+      "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-woztell.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-ime-woztell.log",
+      "bytes": 15229,
+      "sha256": "94fee19fc8c604839af387d38f0dd956f00f855b743b196cabf190efbb199083"
+    }
+  ],
+  "rollback": "Revert only focused IME source commit; no SQL/config rollback; preserve prior fixes, receipts and all dated evidence."
+}
