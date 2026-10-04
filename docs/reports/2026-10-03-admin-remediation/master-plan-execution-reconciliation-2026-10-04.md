@@ -63,3 +63,6 @@ EP14/20 composition follow-up `283a887f955aa0f15652963554ae6136469eb7aa`：有�
 
 
 EP12/14/20 Leads continuation `32156f8abfa6e4df47c1eab32cc5be8445006da6`：初始RED12FAIL4PASS、覆核resetRED16FAIL後full124及publisher32PASS；C0/I1/M0一次覆核、作者單pass關閉Important。選定owned組字/重設/較新filter READY；fulltask NOT_READY/nativeIME與formalexternal BLOCKED。追加CSV5dated欄保留49/40欄及39roots，198舊raw hashes一致；歷史27PNG+1summary限制不變。無serverDTO/config/SQL/provider變更或productioneffects。見[Leads讀回](ep-14-leads-ime-followup.md)。
+
+
+Production schema continuation 2026-10-05：4份existing main29e839e additive SQL在exact human approval後套用指定Neon production；81→85、獨立catalog與ownedNeon18.6相同、84legacy tables/9628rows fingerprints一致、exact-main GitHub37232450305 drift success。CSV追加5dated execution欄及execution-evidence第41root，所有旧cells／40roots保留，原29/9/22＋22planned NEW不提升。Schema parity READY；完整roles/Golden/native3daily NOT_READY，真Auth/provider/model/Property.hk及整體release仍BLOCKED。agent sends/model/worker/native/manualdeploy0；backup至2026-10-12 04:07:40HKT，回退保留additive schema及新accepted資料，不作production restore。舊本回合未套migration／禁止production的段落是相應歷史紀錄，本次exact4授權及實際執行見 [正式schema讀回](production-schema-repair-2026-10-05.md)。
