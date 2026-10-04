@@ -72,6 +72,15 @@ jobs:
       - name: Install Chromium for isolated source-sync UI
         run: npx playwright install --with-deps chromium
       - run: npm run test:property-sync:ui
+      - run: npm run test:property-maintenance:ui
+      - run: npm run test:operations:ui
+      - run: npm run test:staff-setup:ui
+      - run: npm run test:whatsapp-mobile:ui
+      - run: npm run test:property-sync:recovery:ui
+      - run: npm run test:admin-daily-work:ui
+      - run: npm run test:admin-campaign-review:ui
+      - run: npm run test:admin-performance:ui
+      - run: npm run test:admin-link-bulk:ui
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
@@ -133,8 +142,19 @@ jobs:
       # fake provider ports. No DATABASE_URL or provider secret is supplied.
       - run: docker pull pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
       - run: npm run test:no-link:local-postgres
+      - run: npm run test:admin-golden:db
       - run: npm run test:ai-knowledge:db
       - run: npm run test:crm-analysis:db
+      - run: npm run test:conversation-assist:db
+      - run: npm run test:whatsapp-setup:db
+      - run: npm run test:propertyhk-reconciliation:owned:db
+      - run: npm run test:property-withdrawal:owned:db
+      - run: npm run test:property-maintenance:owned:db
+      - run: npm run test:admin-overview:db
+      - run: npm run test:admin-campaign:db
+      - run: npm run test:admin-performance:db
+      - run: npm run test:admin-link-bulk:db
+      - run: npm run test:operations:owned:db
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:

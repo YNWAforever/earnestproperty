@@ -1,0 +1,86 @@
+{
+  "environment": {
+    "ownedLoopback": true,
+    "realComponent": true,
+    "syntheticAPI": true,
+    "realAuth": false,
+    "database": false,
+    "providerSend": false
+  },
+  "codeSha": "523a636c3c68bbd262cd67d2c2a5904d43270b99",
+  "results": [
+    {
+      "name": "fresh listing selection is visible",
+      "width": 1280,
+      "status": "PASS"
+    },
+    {
+      "name": "new selection cannot disappear behind a saved preview",
+      "width": 1280,
+      "status": "PASS"
+    },
+    {
+      "name": "unknown submission is preserved when a new selection arrives",
+      "width": 1280,
+      "status": "PASS"
+    },
+    {
+      "name": "reload of a preview returns to confirmation, not an empty result",
+      "width": 1280,
+      "status": "PASS"
+    },
+    {
+      "name": "empty lookup does not unlock an unknown submission",
+      "width": 1280,
+      "status": "PASS"
+    },
+    {
+      "name": "partial batch must finish before replacing selection",
+      "width": 1280,
+      "status": "PASS"
+    },
+    {
+      "name": "known rejected batch permits a new selection",
+      "width": 1280,
+      "status": "PASS"
+    },
+    {
+      "name": "editing a restored preview returns to source step",
+      "width": 1280,
+      "status": "PASS"
+    },
+    {
+      "name": "one blocked row permits a freshly previewed 59-row subset",
+      "width": 1280,
+      "status": "PASS"
+    },
+    {
+      "name": "fifty-row CSV validates, commits once, reloads and exports each outcome",
+      "width": 390,
+      "status": "PASS"
+    },
+    {
+      "name": "fifty-row CSV validates, commits once, reloads and exports each outcome",
+      "width": 768,
+      "status": "PASS"
+    },
+    {
+      "name": "fifty-row CSV validates, commits once, reloads and exports each outcome",
+      "width": 1280,
+      "status": "PASS"
+    },
+    {
+      "name": "fifty-row CSV validates, commits once, reloads and exports each outcome",
+      "width": 1440,
+      "status": "PASS"
+    },
+    {
+      "name": "fifty-row unknown commit reload reconciles original operation without replaying successes",
+      "width": 390,
+      "status": "PASS"
+    }
+  ],
+  "passed": 14,
+  "failed": 0,
+  "skipped": 0
+}

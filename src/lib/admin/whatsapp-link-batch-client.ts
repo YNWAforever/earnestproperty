@@ -8,6 +8,7 @@ import type {
 
 export type LinkBatchProgress = {
   batchId: string;
+  draftId?: string;
   rows: BatchRowDraft[];
   chunkIds: string[];
   completed: CommitChunkResult[];
@@ -44,25 +45,48 @@ export function knownFailedBatchRows(progress: LinkBatchProgress): BatchRowDraft
 export function batchResultCsv(
   progress: LinkBatchProgress,
   source?: BatchRowDraft["input"]["placementSource"],
+  category: "success" | "failure" = "success",
 ) {
   const byKey = new Map(progress.rows.map((row) => [row.rowKey, row]));
-  const header = ["public_listing_no", "deal_type", "source", "placement_id", "outcome", "link"];
+  const header =
+    category === "failure"
+      ? [
+          "row_key",
+          "public_listing_no",
+          "deal_type",
+          "source",
+          "placement_id",
+          "outcome",
+          "reason_code",
+        ]
+      : ["public_listing_no", "deal_type", "source", "placement_id", "outcome", "link"];
   const lines = batchRowsOf(progress).flatMap((result) => {
     const row = byKey.get(result.rowKey);
-    if (!row || !result.code || !["created", "reused"].includes(result.outcome)) return [];
+    if (!row) return [];
+    if (category === "failure") {
+      if (!["blocked", "failed"].includes(result.outcome)) return [];
+    } else if (!result.code || !["created", "reused"].includes(result.outcome)) return [];
     if (source && row.input.placementSource !== source) return [];
-    return [
-      [
-        row.input.publicListingNo,
-        row.input.dealType,
-        row.input.placementSource,
-        row.placementId,
-        result.outcome,
-        `/w/${result.code}`,
-      ]
-        .map((cell) => safeCsvCell(cell))
-        .join(","),
-    ];
+    const cells =
+      category === "failure"
+        ? [
+            result.rowKey,
+            row.input.publicListingNo,
+            row.input.dealType,
+            row.input.placementSource,
+            row.placementId,
+            result.outcome,
+            result.reasonCode,
+          ]
+        : [
+            row.input.publicListingNo,
+            row.input.dealType,
+            row.input.placementSource,
+            row.placementId,
+            result.outcome,
+            `/w/${result.code}`,
+          ];
+    return [cells.map((cell) => safeCsvCell(cell)).join(",")];
   });
   return `\ufeff${header.map((cell) => safeCsvCell(cell)).join(",")}\r\n${lines.join("\r\n")}${lines.length ? "\r\n" : ""}`;
 }

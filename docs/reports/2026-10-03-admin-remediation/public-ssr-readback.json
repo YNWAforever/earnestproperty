@@ -1,0 +1,22 @@
+{
+  "environment": "public readonly HTTP/SSR; zero mutation",
+  "appSha": "51cb0e9c08269ebabeb0b593d4dea611b9246c32",
+  "checkedAt": "2026-10-02T21:57:49.8916599Z",
+  "homepageStatus": 200,
+  "propertyUrls": [
+    "/property/A034788?deal=rent",
+    "/property/A054660?deal=rent",
+    "/property/A056377?deal=rent",
+    "/property/B052737?deal=sale",
+    "/property/C004693?deal=rent",
+    "/property/T027001?deal=sale"
+  ],
+  "detailStatus": 200,
+  "detailSaleInquiryContainsT027001": true,
+  "companyWhatsAppNumberOmitted": true,
+  "adminHttpStatus": 200,
+  "adminHasStaffSignInInSsr": false,
+  "authSession": "NONE",
+  "browser": "BLOCKED_CUA_WINDOWS_SANDBOX_ACL",
+  "browserReadinessNotInferred": true
+}

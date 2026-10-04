@@ -195,3 +195,44 @@ test("results export only known successful links and failed-row repair excludes 
   expect(batchResultCsv(progress, "youtube")).not.toContain("unsafe");
   expect(knownFailedBatchRows({ ...progress, uncertain: true })).toEqual([]);
 });
+
+test("fifty-row results export confirmed failures separately with reasons and safe cells", () => {
+  const progress = initial();
+  progress.rows = rows.slice(0, 50).map((row, index) => ({
+    ...row,
+    placementId: index === 49 ? "=unsafe" : `website:${index}`,
+    input: { ...row.input, publicListingNo: `A${String(index + 1).padStart(6, "0")}` },
+  }));
+  progress.chunkIds = [id(101)];
+  progress.nextChunk = 1;
+  progress.completed = [
+    {
+      batchId: progress.batchId,
+      chunkId: id(101),
+      state: "committed",
+      rows: progress.rows.map((row, index) => ({
+        rowKey: row.rowKey,
+        outcome: index < 40 ? "created" : index < 45 ? "reused" : index < 48 ? "blocked" : "failed",
+        code: index < 45 ? `confirmed-${index}` : null,
+        linkId: index < 45 ? id(index + 300) : null,
+        version: index < 45 ? 1 : null,
+        reasonCode: index < 45 ? null : index === 49 ? "@unsafe" : "WA_LINK_VERSION_STALE",
+      })),
+    },
+  ];
+  const successful = batchResultCsv(progress, "website").trim().split("\r\n");
+  const failures = batchResultCsv(progress, "website", "failure").trim().split("\r\n");
+  expect(successful).toHaveLength(46);
+  expect(failures).toHaveLength(6);
+  expect(failures[0]).toContain("reason_code");
+  expect(failures[0]).toContain("row_key");
+  for (let index = 45; index < 50; index++)
+    expect(failures.join("\n")).toContain(progress.rows[index].rowKey);
+  expect(failures.join("\n")).not.toContain("/w/");
+  expect(failures.join("\n")).toContain("'=unsafe");
+  expect(failures.join("\n")).toContain("'@unsafe");
+  expect(batchResultCsv(progress, "youtube", "failure").trim().split("\r\n")).toHaveLength(1);
+  // Unsubmitted/unknown rows are not failures. Only committed row results export.
+  const unknown = { ...progress, completed: [], nextChunk: 0, uncertain: true };
+  expect(batchResultCsv(unknown, "website", "failure").trim().split("\r\n")).toHaveLength(1);
+});

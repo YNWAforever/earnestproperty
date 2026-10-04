@@ -1,0 +1,75 @@
+# EarnestProperty — 本輪修復及分層驗證
+
+原基準 main/audit SHA `51cb0e9c08269ebabeb0b593d4dea611b9246c32`。outer ZIP 的實際 SHA256 是 592ccad5466966abbd153163395d0e346c3e7f41306c16d57eb1aeff0d78167a；用戶所列 ffcfe416… 是內含原 audit ZIP。84/84＋74/74 manifests 已核對。原工作目錄 dirty，採用獨立 attached worktree，既有 bun.lockb 修改沒有 stage。
+
+## 隔離鏈及測試層次
+
+| 驗證 | actual 結果 | 可證明／不能替代 |
+|---|---|---|
+| EP-00 paired compiler＋secret sentinels | RED 29/30 → GREEN31/31；9 秘密名稱仍拒絕 | race 消除；没有 source scan 豁免 |
+| public knowledge owned SQL | 21 PASS、0 SKIP | normal/fallback canonical/full revision、in-flight、commit repair/restart、overlapping publication/reactivation；非真模型品質 |
+| CRM/content persistence owned SQL | 34 PASS、0 SKIP | request/save/apply actor/auth/source及全部引用版本、run identity、cancel/replay/unknown outcome、protected human review |
+| inverted CRM probes | 6 PASS | 真函式＋synthetic transport；原 probe PASS 仍代表舊缺陷，原證據保留 |
+| conversation assist | 8 PASS、0 SKIP | 最近10則／100k資料、SQL bytes/plan、ACL、明確deadline；非生产 latency |
+| provider setup owned SQL | 1 PASS、0 SKIP | paginated identity/evidence/version/audit、獨立 capability；非正式 directory/phone |
+| Property.hk owned SQL/media | 4 PASS、0 SKIP | dual offers、aliases/full gate、real decoded bytes through fake owned blob、replay；非真 detail |
+| withdrawal owned SQL | 2 PASS、0 SKIP | active canonical sale sibling、合法 sale-only 保留 rent、stale/replay、132 historical 全不下架 |
+| property maintenance owned SQL | 5 PASS、0 SKIP | actual server save＋另一 reader、photo metadata order、sale/rent CAS、revoked writer；非真 upload |
+| Golden A/B/C，同一 full schema | 23 PASS、0 SKIP | signed receipt→enquiry→resolution→confirmed assignment→ack→human reply；CRM review/tag→SQL；price→canonical→repair→fresh AI |
+| owned restore | Golden 其中1项；最終683674-byte dump | 新 clone record counts/FK／receipt replay无重複；原 DB 還原後新寫入保留；非正式 restore |
+| real-route synthetic browser | 115 PASS、0 SKIP | 390/768/1280/1440＋360、草稿/focus/keyboard/unknown/reload/跨actor、報表flag／drilldown／CSV；非真 auth/provider |
+| source-sync UI | 46 PASS | 真 component／synthetic API，1440/390；非4尺寸全站驗收 |
+| wizard/bulk browser | 14 PASS、0 SKIP | 真 wizard／synthetic API；四尺寸50列匯入／結果／重載／success與failure CSV／unknown原operation恢復，沒有 send；非真 provider membership |
+
+owned SQL 每次新建 loopback Docker PostgreSQL17、核 container/port/name/pinned image，85 migrations 全部真执行。不是把 Neon URL guard 改成接受任意 localhost。Model、provider、portal、Blob transports 是明確 synthetic；零真發送／模型 spend。8 concurrent actor identities 是真 DB pool 並發，不是8個正式 Neon Auth login sessions。
+
+## 已有 main 的獨立回歸
+
+| task/module | suites／PASS | 實作判定 |
+|---|---|---|
+| EP-07 no-link | Node99＋Bun9；enquiries103；Golden A | 保留 receipts/parser/assignment/outbound intents、zero EPWA；真 canary blocked |
+| EP-08/09 sync | daily38；Python122；admin17 | 保留分段 sync/full gate；真 scope／3 native schedule 待驗 |
+| EP-12 navigation/session/overview | command-center82＋Bun8；team95＋Bun31 | main 已有 grouped nav、safe redirect/scoped policies；没有更換 auth；新增scope/as-of/error/permission loss、open card/list owned4及四viewport12驗證；真auth和完整team/inventory/flags仍待驗 |
+| EP-13 editor/CMS | properties29＋Bun27；CMS53＋Bun4 | 既有 save/CAS/dirty recovery 保留，owned server readback 新增 |
+| EP-15 staff setup | notifications21＋Bun14；wizard/bulk9 | 既有 Inbox picker/review 四步保留；real phone delivery blocked |
+| EP-16 bulk/campaign | enquiries103；WozTell159＋Bun9；browser campaign scenarios；wizard14 | 50-row UI import／一次提交／逐列讀回／success及failure CSV／只修3失敗行／unknown原operation恢復已補驗；真queue/send/Auth/SQL UI integration仍待驗 |
+| EP-17 metrics | analytics65＋Bun3；四尺寸新增8 browser scenarios | actual dashboard／drilldown／CSV／HKT boundary／quality／source／human response已補驗；flag-off理由明示不當0，沒有自動啟用；真runtime flag/Auth/SQL combined仍待驗 |
+| EP-19 operations | operations17＋Bun8；sync-admin17；sync UI46 | error/partial/held/unknown恢复保留；全部正式 ops routes/operator session 待驗 |
+
+同一測試出现在两任務列不重算 aggregate。Node/Bun/Python 按 package.json 指定 runner，无 npm test。最後 typecheck、lint（0 errors，3 baseline warnings）和 local build 各自 exit0。local build 不是正式 deploy，G00 schema/worker/flag 不由 build 成功推斷。
+
+## 歷史與未完成驗收
+
+兩份指定 CSV 僅新增 execution 欄位，原29 PASS／9 FAIL／22 BLOCKED、60 core IDs 及22 NEW planned cases原值保留。NEW case不因檔案存在全標PASS。1400 action IDs（68代表＋1332source candidates）在 action mapping 保留；408 rendered observations 去重，但仍 observation-only，G11未完成。
+
+正式 alias 已唯讀核實：Vercel dpl_E97EZatvQ3Uuz2i9i7Cfx8HYxP6e、www.earnestproperty.com、main51cb0e9、TanStack Start、READY。這是舊正式 app metadata；worker/schema/runtime flags/roles未讀回，不能稱修復已部署。ops:release-readiness 在無正式 env/acceptance 下 exit2，保持 blocked。
+
+F01/F03/F04/F08：local修復 READY，正式 runtime/canary BLOCKED；F02/F07：local contract READY、真租戶接駁/收送 BLOCKED；F05：NOT_READY（部份本地UX回歸，尚有全route/roles/flags/G11）；F06：Property.hk BLOCKED，28Hse三次排程 NOT_READY。EP-20/21不是全站結案；按 release 文件逐 capability補證。
+
+首輪程式 `c8710def5cc74bef3833e7f3f0b1c695590a701b`：affected owned suites90 PASS（21＋34＋23＋8＋4），未受改動的owned setup/publication/withdrawal/maintenance12 PASS，總102，0 SKIP；Copilot Node77＋Bun34、六個反向safety probes、control-plane105；當時四viewport實際路由107；typecheck/lint/build各自exit0。Astra四項Important及一項Minor已按[review resolution](2026-10-03-admin-remediation/independent-review-resolution.md)完成同一fix pass；EP-12後續slice以本地測試另證，不冒稱重新獨立review。
+
+本地補驗程式 `523a636c3c68bbd262cd67d2c2a5904d43270b99`：EP-16 failed CSV／subset summary及EP-17 disabled reporting原因已各自RED→GREEN；115 real-route＋14 wizard browser在此SHA exact重跑PASS、0SKIP。詳見[EP-16／17補驗](2026-10-03-admin-remediation/ep-16-17-local-readback.md)。這批沒有SQL/schema/provider/config變更，owned102原SHA分項證據保留；新的遠端CI在PR head再跑owned套件，不以舊測試SHA冒稱新來源已重跑。全部四批draft PR initial CI＋Preview成功；正式browser-staging仍SKIPPED而保持blocked。
+
+新execution為40 PASS／28 PARTIAL／14 BLOCKED，僅表示各行註明的本地／唯讀層次，不能代替全部正式用例；原歷史29／9／22不改。
+
+後續程式 `a3f24df9921a573e1aa429262bc62cb0b3eb9074`：EP-13 preview／非法值focus、EP-19 persistent error／unknown command須原job新讀回，四viewport48 browser PASS／0 SKIP；full85 owned property6＋Ops1 PASS／0 SKIP，control-plane105、properties Node29＋Bun27、operations Node17＋Bun8 PASS。typecheck/lint/build各自exit0，lint3 baseline warnings。之前owned102及EP-16/17證據仍保留各SHA；遠端PR head結果另記，不混算。詳見[EP-13／19](2026-10-03-admin-remediation/ep-13-19-local-readback.md)。
+
+CSV直接與原實作包比對，trace原 `verification_environment`／`blocker`恢復planned值，新 `execution_environment`／`execution_blocker`另列實際環境及限制，baseline29/9/22不動。1400 action IDs保持，尚未按完整動作關G11。native37079390201既有main完整cycle1/3，修復分支正式0/3；published0／held74／unknown0，只有首頁HTTPverify，詳細公開同版本驗收仍NOT_READY。[排程證據及界限](2026-10-03-property-sync-readiness.md)。
+
+後續EP-15程式 `f596c9a45f530dfae91924538d241aa9c6e24733`：試送unknown原request journal遺失的有效RED1 FAIL，修復後staff settings四尺寸40 PASS／0 SKIP，涵蓋四步設定、同名分頁、denied／expired／empty／outage、reload及原request恢復、endpoint captured version。共享owned UI88（property28／Ops20／staff40）PASS／0 SKIP；full85 owned setup SQL2及notifications Node21＋Bun14 PASS；typecheck／lint／build分開exit0，lint3 baseline warnings。原102／104歷史aggregate保留SHA，新PR-head結果另記。實際SQL request／job／audit各1，mock wake1，跨actor read拒絕；不是combined Auth／SQL browser或真worker／phone證據。兩份CSV原值直接比對原包不變，execution仍40 PASS／28 PARTIAL／14 BLOCKED。詳見[EP-15分層讀回](2026-10-03-admin-remediation/ep-15-local-readback.md)，formal capability維持BLOCKED／NOT_READY。
+
+後續EP-05／14程式 `a13e9187a76b0d3c379a43130a5ccc1975a00085`：AI read outage的有效RED1 FAIL→安全錯誤／只讀retry GREEN。四尺寸mobile28及shared115 exact-source PASS／0 SKIP；no-link Node99＋Bun9、woztell／suggestions Node159＋Bun9及typecheck／lint／build各PASS／exit0。A→B的晚到success／error、A→B→A request generation、manual draft／focus／overwrite choice／reload與540px keyboard-equivalent hit-test均通過，不是native IME或真Auth。先前contact timeout單獨及完整serial未再重現，原因未證實，沒有加retry掩蓋。ACT-27是新增local action PARTIAL；source Button候選是同一logical action，caller component occurrence不當另一已驗按鈕，歷史408 observations不覆蓋，G09／G11仍NOT_READY。原CSV29/9/22、execution40/28/14、82cases／1400IDs保持。詳見[EP-14分層證據](2026-10-03-admin-remediation/ep-14-ai-recovery-readback.md)。
+
+後續EP-11／19程式 `bf585c0adec25ec3d82c4eafb26b39f748802d77`：兩個有效RED各1 FAIL→新來源讀取先清舊候選／選擇及來源切換清舊結果GREEN。四viewport actual source-sync route36及既有component UI46 PASS／0SKIP；full85 owned withdrawal2（132 NOT_APPROVED／零撤盤、active sibling阻止apply）、policy12／daily38及typecheck／lint／build各PASS／exit0，lint3 baseline warnings。unknown withdrawal／dispatch在reload後核原key，stage retry保留原runId；既有role recheck／actor boundary通過且未改。ACT-13／14／15及14個重疊source控制候選LOCAL_PARTIAL，不能重複計business actions；原29/9/22、planned22NEW、execution40/28/14、82cases／1400IDs／408歷史observations保持。formal Auth／source／provider仍BLOCKED，native schedule本批新增0、baseline1/3及修復正式0/3不變。詳見[來源恢復分層證據](2026-10-03-admin-remediation/ep-11-source-recovery-readback.md)。
+
+後續EP-12程式 `266f8c75c2917a476436ffb54f32c0c91ce3a454`：same-user角色／staff binding與partial-source last-read時間三個有效RED各1 FAIL→32 actual overview/leads/shell/staff-store synthetic Auth/API browser PASS四尺寸。identity含user/binding/sorted roles；scope/revoked membership清舊值、晚到舊actor回應丟棄；失敗card顯示其自己的HK最後成功讀回時間，非provider freshness。independent full85 owned SQL4、shared115（已含原overview12）、command-center82+8/team95+31及typecheck／lint／build PASS，lint3 baseline warnings。ACT03及兩個重疊source controls LOCAL_PARTIAL，Link只驗open-leads。原29/9/22、22NEW、execution40/28/14、82cases／1400IDs／408歷史observations保持。正式Auth/deep-link/expiry/full roles/actions仍NOT_READY或BLOCKED；native新增0、baseline1/3／repair formal0/3不變。詳見[每日總覽分層證據](2026-10-03-admin-remediation/ep-12-daily-work-readback.md)。
+
+後續EP-16程式 `d89b94d4fbfe3f6401f8e02e47c7e0ea15fcb07e`：unknown/inflight reload及actor dialog三個RED、late actor success／storage request／mobile overflow各1 RED→per-user原Campaign journal提交前保存、原結果read-only gate跨同tab reload、actor workspace／晚到queue response隔離、storage不可用零提交，default grid修390 pageWidth1396。32 actual campaign/shell/staff-store synthetic Auth/API browser四尺寸PASS；independent full85 SQL4確認既有CAS／consent／cancel history guard；shared115/woztell159+9/enquiries103及static/build PASS，lint3 baseline warnings。中途18/14 layout及test type error保留且修正。ACT46/48/49＋5重疊controls LOCAL_PARTIAL，cancel Button未稱已驗；原29/9/22、22NEW、execution40/28/14及82/1400/408歷史保持。runtime config/migration/provider差異0；native新增0，baseline1/3／repair formal0/3。詳見[推廣恢復補驗及rollback](2026-10-03-admin-remediation/ep-16-campaign-recovery-readback.md)。
+
+後續EP-17產品 `ddd9318464c09c0eb32d19dcd5a16f04ec5d0f2e`／測試 `fa379ea97ed906155a27e29d3f9cf44325481fda`：actor舊CSV、staff binding4vs1及釋放舊report4vs1三個RED→verified user/staff/roles workspace隔離、晚到records無舊CSV、unready/denied零績效reads。48 actual analytics/dashboard/table/shell/staff-store synthetic browser四尺寸＋full85 ownedSQL4 PASS；analytics65+3/typecheck/lint0，runtime tree相同的產品SHA shared115/no-link99+9/build0分層保留。日期/branch/staff/source/deal/cohort真的操作、reload同scope、scopedCSV逐ID；unknown客戶/click維持未知、assignment不計真人回覆、duplicate inquiry不複製成交numerator。fixture錯誤及static render缺ports64/1保留後修正。ACT55/56/57+15重疊controls LOCAL_PARTIAL，品質修正Button未稱已驗。原29/9/22、22NEW、execution40/28/14及82/1400/408不變；無runtime/provider/config/migration正式變更、新native0、baseline1/3／repair正式0/3。詳見[績效補驗及rollback](2026-10-03-admin-remediation/ep-17-performance-readback.md)。
+
+後續EP-16 `051119d33af62d11165443e04943aa525ba89869`：兩個成功draft恢復RED＋一個390長CSV header overflow520 RED→terminal原receipt清成功rows、fresh新batch UUID不覆寫未完成5及換行。44 actual links route/wizard/import/client/shell/store synthetic browser四尺寸＋full85 actualSQL7 PASS；properties29+27/enquiries103/typecheck/lint/build exact-SHA PASS，shared115 precommit另記。50sale/rent/front-zero/Chinese/source/verified aliases，pending防重送、unknown原read不作成功、45/5 draft恢復、safe success/failure CSV逐ID核對。fixture failures保留；ACT59–62+17重疊controls LOCAL_PARTIAL，copy-all/repair/normal multichunk continue未聲稱已驗。原29/9/22、22NEW、execution40/28/14及82/1400/408不變；無正式config/migration/provider/send/model changes，native new0、baseline1/3／repair production0/3。local bulk recovery READY；正式Auth/combined/fullroles/完整actions BLOCKED或NOT_READY；[批量補驗及rollback](2026-10-03-admin-remediation/ep-16-bulk-draft-readback.md)。
+
+EP-16審閱後最終 `653695a0226b856876c9fb4d5dbd58613de79f39`：四P2 RED→GREEN；草稿5可實際重開提交、保留最新inline repair、原batch/draft跨tab lineage、quota保留valid unknown journal。60 actual synthetic browser四尺寸＋full85 actualSQL7／properties29+Bun28/typecheck/lint/build PASS；初次44及中間56分層保留。ACT59-62+18重疊controls LOCAL_PARTIAL，0434repair已操作，copy-all/normal multichunk未驗。baseline29/9/22、22NEW、execution40/28/14與82/1400/408不改；正式Auth/combined/fullrole/flags/provider及native repair0/3待驗收。rollback先停bulk及讀回原lineage，保留unknown journal與人工最新edits。見[批量最終補驗](2026-10-03-admin-remediation/ep-16-bulk-draft-readback.md)。
+
+EP-16 clipboard/50+10 continuation source0927bd498d776f50b9430fa9a3009500545a1100:two stale-success defects RED to GREEN;72 actual synthetic browser/four widths plus independent full85 actualSQL8,properties29+Bun28/typecheck/lint/build PASS. Original50 receipt resumes only secondchunk10;60 distinct raw links;clipboard denied/pending/success ports are synthetic,not OS acceptance. ACT59-62 plus19 overlapping controls LOCAL_PARTIAL;0388copy/0433normal continuation operated. Historical60/7 and29/9/22,22NEW/execution40/28/14,82/1400/408 retained. No config/schema/provider/send/model/production changes;native baseline1/3,repair0/3,new0. See [copy and continuation readback](2026-10-03-admin-remediation/ep-16-copy-continuation-readback.md).

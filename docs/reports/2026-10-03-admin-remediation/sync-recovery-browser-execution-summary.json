@@ -1,0 +1,191 @@
+{
+  "codeSha": "bf585c0adec25ec3d82c4eafb26b39f748802d77",
+  "evidenceLayer": "actual-property-sync-route-shell-staff-store-synthetic-auth-api-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realProvider": false,
+  "realWorker": false,
+  "realSchedule": false,
+  "results": [
+    {
+      "name": "stage and held counts do not imply publication or approve conflicting offers",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "source read failure removes previous source candidates before readback",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "pending source read hides stale candidates until its own response",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "confirmed result clears when source changes and cancellation never applies",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "unknown withdrawal reload reads the original key without reapplying",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "dispatch unknown reload and frozen-stage retry retain their identities",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "role recheck and actor switch discard preview and late source read",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "viewer has no whole-company reads and manager has no dispatch",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "disabled review exposes its reason without candidates or preview",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "stage and held counts do not imply publication or approve conflicting offers",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "source read failure removes previous source candidates before readback",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "pending source read hides stale candidates until its own response",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "confirmed result clears when source changes and cancellation never applies",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "unknown withdrawal reload reads the original key without reapplying",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "dispatch unknown reload and frozen-stage retry retain their identities",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "role recheck and actor switch discard preview and late source read",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "viewer has no whole-company reads and manager has no dispatch",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "disabled review exposes its reason without candidates or preview",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "stage and held counts do not imply publication or approve conflicting offers",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "source read failure removes previous source candidates before readback",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "pending source read hides stale candidates until its own response",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "confirmed result clears when source changes and cancellation never applies",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "unknown withdrawal reload reads the original key without reapplying",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "dispatch unknown reload and frozen-stage retry retain their identities",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "role recheck and actor switch discard preview and late source read",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "viewer has no whole-company reads and manager has no dispatch",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "disabled review exposes its reason without candidates or preview",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "stage and held counts do not imply publication or approve conflicting offers",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "source read failure removes previous source candidates before readback",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "pending source read hides stale candidates until its own response",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "confirmed result clears when source changes and cancellation never applies",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "unknown withdrawal reload reads the original key without reapplying",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "dispatch unknown reload and frozen-stage retry retain their identities",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "role recheck and actor switch discard preview and late source read",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "viewer has no whole-company reads and manager has no dispatch",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "disabled review exposes its reason without candidates or preview",
+      "status": "passed",
+      "width": 390
+    }
+  ]
+}

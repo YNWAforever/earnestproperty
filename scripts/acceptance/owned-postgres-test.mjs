@@ -162,3 +162,26 @@ export async function mockOwnedServerDb(mock, query, transaction) {
     },
   });
 }
+
+/** Existing MLS functions accept client ports; bind them only to the owned pool. */
+export function ownedMlsPorts(pool) {
+  assert.equal(pool.options.host, "127.0.0.1");
+  const connectionString = `postgresql://postgres@127.0.0.1:${pool.options.port}/postgres`;
+  return {
+    connectionString,
+    createClient: (config) => {
+      assert.equal(config.connectionString, connectionString);
+      let client;
+      return {
+        neonConfig: {},
+        connect: async () => {
+          client = await pool.connect();
+        },
+        query: (sql, params) => client.query(sql, params),
+        end: async () => {
+          client?.release();
+        },
+      };
+    },
+  };
+}

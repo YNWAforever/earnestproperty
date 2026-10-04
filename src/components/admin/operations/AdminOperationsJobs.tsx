@@ -95,6 +95,8 @@ export function AdminOperationsJobs({
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [pendingCommand, setPendingCommand] = useState<JobCommand | null>(null);
   const requestSequence = useRef(0);
+  const unconfirmedJob = useRef<string | null>(null);
+  const [readbackRequired, setReadbackRequired] = useState(false);
   const previousPulse = useRef(pulse);
 
   const loadJobs = useCallback(
@@ -117,6 +119,13 @@ export function AdminOperationsJobs({
           limit: 25,
         });
         if (request !== requestSequence.current) return;
+        if (
+          unconfirmedJob.current &&
+          result.data.rows.some((job) => job.id === unconfirmedJob.current)
+        ) {
+          unconfirmedJob.current = null;
+          setReadbackRequired(false);
+        }
         setRows((current) => mergeOperationsJobRows(current, result.data.rows, mode));
         // A refresh only knows about page 1, so it must not clobber the cursor
         // the operator has already paged past.
@@ -183,8 +192,12 @@ export function AdminOperationsJobs({
   };
 
   const runCommand = async () => {
-    if (!command || pendingCommand) return;
+    if (!command || pendingCommand || readbackRequired) return;
     const current = command;
+    // A read started before this command cannot confirm its eventual outcome.
+    requestSequence.current += 1;
+    setLoading(false);
+    setError(null);
     setPendingCommand(current);
     try {
       if (current.action === "retry") await retryOperationsJob(current.job.id);
@@ -202,7 +215,15 @@ export function AdminOperationsJobs({
         toast.error("此工作的狀態已改變，指令未有執行。已重新載入最新狀態。");
         setError("此工作的狀態已改變，指令未有執行。");
       } else {
-        toast.error(operationsErrorMessage(reason));
+        const definiteRejection =
+          reason instanceof OperationsClientError && [400, 401, 403, 404].includes(reason.status);
+        if (!definiteRejection) {
+          unconfirmedJob.current = current.job.id;
+          setReadbackRequired(true);
+        }
+        const message = operationsErrorMessage(reason);
+        setError(definiteRejection ? message : `${message} 請先重新載入原工作並核對，勿直接重試。`);
+        toast.error(message);
       }
     } finally {
       setPendingCommand(null);
@@ -274,6 +295,11 @@ export function AdminOperationsJobs({
           {error}
         </p>
       ) : null}
+      {readbackRequired ? (
+        <p role="status" className="text-sm text-amber-800">
+          指令結果未明。重新載入原工作前，暫停提交其他工作指令。
+        </p>
+      ) : null}
 
       <Table>
         <TableHeader>
@@ -317,7 +343,7 @@ export function AdminOperationsJobs({
                             size="icon"
                             variant="ghost"
                             aria-label={`重試工作 ${job.id}`}
-                            disabled={pendingCommand !== null}
+                            disabled={pendingCommand !== null || readbackRequired}
                             onClick={() => setCommand({ action: "retry", job })}
                           >
                             <RotateCcw className="size-4" />
@@ -334,7 +360,7 @@ export function AdminOperationsJobs({
                             size="icon"
                             variant="ghost"
                             aria-label={`取消工作 ${job.id}`}
-                            disabled={pendingCommand !== null}
+                            disabled={pendingCommand !== null || readbackRequired}
                             onClick={() => setCommand({ action: "cancel", job })}
                           >
                             <XCircle className="size-4" />
@@ -389,6 +415,7 @@ export function AdminOperationsJobs({
         confirmLabel={command?.action === "retry" ? "重試" : "取消工作"}
         confirmVariant={command?.action === "cancel" ? "destructive" : "default"}
         isPending={pendingCommand !== null}
+        disabled={readbackRequired}
         onOpenChange={(open) => {
           if (!open) setCommand(null);
         }}

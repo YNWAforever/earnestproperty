@@ -273,7 +273,9 @@ export async function answerFromPublicKnowledge(input: { question: string }) {
 
     return {
       answer: result.ok ? result.text : fallbackAnswer,
-      confidence: result.ok ? 0.75 : 0.45,
+      // Compatibility only: no calibrated probability is available.
+      confidence: 0,
+      confidenceKind: "legacy_uncalibrated" as const,
       citations: chunks.map((chunk) => ({
         title: chunk.title ?? "Earnest Property",
         url_path: chunk.url_path ?? null,
@@ -737,6 +739,7 @@ function publicFallbackAnswer() {
   return {
     answer: "我暫時未能從已核實資料找到準確答案，可以留下 WhatsApp 讓持牌代理跟進。",
     confidence: 0,
+    confidenceKind: "legacy_uncalibrated" as const,
     citations: [] as Array<{ title: string; url_path: string | null; source_type: string }>,
   };
 }

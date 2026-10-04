@@ -4,6 +4,18 @@ const remoteBaseUrl = process.env.PLAYWRIGHT_BASE_URL;
 
 export default defineConfig({
   testDir: "./e2e",
+  // These suites own loopback servers and refuse external targets. Use their named scripts.
+  testIgnore: [
+    "**/admin-property-maintenance.spec.ts",
+    "**/admin-operations-recovery.spec.ts",
+    "**/admin-staff-setup.spec.ts",
+    "**/admin-whatsapp-mobile.spec.ts",
+    "**/admin-property-sync-recovery.spec.ts",
+    "**/admin-daily-work.spec.ts",
+    "**/admin-campaign-review.spec.ts",
+    "**/admin-performance-readback.spec.ts",
+    "**/admin-link-bulk-owned.spec.ts",
+  ],
   fullyParallel: true,
   retries: 0,
   reporter: "list",

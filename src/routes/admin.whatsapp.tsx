@@ -244,6 +244,7 @@ function AdminWhatsapp() {
   }, [staffUserId, selectedId]);
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
+  const [aiAssistError, setAiAssistError] = useState<string | null>(null);
   const inboxQuery = typeof search.q === "string" ? search.q : "";
   const inboxStatus = typeof search.status === "string" ? search.status : "all";
   const [queryDraft, setQueryDraft] = useState(inboxQuery);
@@ -380,6 +381,7 @@ function AdminWhatsapp() {
     async (id: string, options: { background?: boolean } = {}) => {
       const requestId = aiAssistRequestRef.current + 1;
       aiAssistRequestRef.current = requestId;
+      setAiAssistError(null);
       // A background detail refresh must leave the current AI card on screen.
       if (!options.background) {
         setAiAssist(null);
@@ -394,6 +396,7 @@ function AdminWhatsapp() {
         setAiAssist(assist as AdminConversationAiAssist);
       } catch {
         if (requestId !== aiAssistRequestRef.current || !canApplyConversationDetail(id)) return;
+        setAiAssistError("未能載入建議；請稍後重試或核對查看權限。已輸入草稿會保留。");
         // Keep the last good card rather than blanking it on a transient refresh error.
         if (!options.background) setAiAssist(null);
       } finally {
@@ -603,6 +606,7 @@ function AdminWhatsapp() {
     setOlderCursor(null);
     setAiAssist(null);
     setAiAssistLoading(false);
+    setAiAssistError(null);
     setDetailError(null);
     setDetailLoading(loading);
     setReplyError(null);
@@ -1150,6 +1154,10 @@ function AdminWhatsapp() {
               error={detailError}
               replyBody={replyBody}
               aiAssistLoading={aiAssistLoading}
+              aiAssistError={aiAssistError}
+              onRetryAiAssist={() => {
+                if (selectedIdRef.current) void loadConversationAiAssist(selectedIdRef.current);
+              }}
               replyError={replyError}
               aiAssist={aiAssist}
               woztellEnabled={woztellEnabled}
@@ -1211,6 +1219,10 @@ function AdminWhatsapp() {
           error={detailError}
           replyBody={replyBody}
           aiAssistLoading={aiAssistLoading}
+          aiAssistError={aiAssistError}
+          onRetryAiAssist={() => {
+            if (selectedIdRef.current) void loadConversationAiAssist(selectedIdRef.current);
+          }}
           replyError={replyError}
           aiAssist={aiAssist}
           woztellEnabled={woztellEnabled}
@@ -1438,6 +1450,8 @@ function ConversationWorkspace({
   error,
   replyBody,
   aiAssistLoading,
+  aiAssistError,
+  onRetryAiAssist,
   replyError,
   aiAssist,
   woztellEnabled,
@@ -1470,6 +1484,8 @@ function ConversationWorkspace({
   error: string | null;
   replyBody: string;
   aiAssistLoading: boolean;
+  aiAssistError: string | null;
+  onRetryAiAssist: () => void;
   replyError: string | null;
   aiAssist: AdminConversationAiAssist | null;
   woztellEnabled: boolean | null;
@@ -1693,10 +1709,12 @@ function ConversationWorkspace({
           </div>
         </div>
         <details className="mt-3 text-sm">
-          <summary className="cursor-pointer">AI 回覆建議（只作草稿）</summary>
+          <summary className="cursor-pointer">規則回覆建議（只作草稿）</summary>
           <AiAssistPanel
             aiAssist={aiAssist}
             loading={aiAssistLoading}
+            error={aiAssistError}
+            onRetry={onRetryAiAssist}
             onUseSuggestedReply={(value) => {
               if (replyBody.trim() && !window.confirm("將會覆蓋你已輸入的回覆內容，確定繼續？")) {
                 return;
@@ -1713,16 +1731,24 @@ function ConversationWorkspace({
 function AiAssistPanel({
   aiAssist,
   loading,
+  error,
+  onRetry,
   onUseSuggestedReply,
 }: {
   aiAssist: AdminConversationAiAssist | null;
   loading: boolean;
+  error: string | null;
+  onRetry: () => void;
   onUseSuggestedReply: (value: string) => void;
 }) {
   return (
     <WhatsappAiSuggestions
       loading={loading}
+      error={error}
+      onRetry={onRetry}
       summary={aiAssist?.summary}
+      method={aiAssist?.method}
+      checkedAt={aiAssist?.checkedAt}
       suggestedReply={aiAssist?.suggestedReply}
       intentLabel={aiAssist ? intentLabel(aiAssist.detectedIntent) : undefined}
       urgencyLabel={aiAssist ? urgencyLabel(aiAssist.urgency) : undefined}

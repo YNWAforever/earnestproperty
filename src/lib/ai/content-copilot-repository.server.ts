@@ -117,7 +117,7 @@ export async function startContentProposal(input: StartContentProposalInput) {
 
   try {
     const sql = getSql();
-    const [, , , rows] = await sql.transaction((tx) => [
+    const results = await sql.transaction((tx) => [
       tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))", [input.staffId]),
       tx.query("SELECT ep_assert_content_snapshot($1,$2::uuid,$3::uuid,$4,$5)", [
         requestResult.data.resourceType,
@@ -126,6 +126,9 @@ export async function startContentProposal(input: StartContentProposalInput) {
         input.authUserId,
         input.sourceDbRevision,
       ]),
+      ...contentKnowledgeDependencyLocks("$1::jsonb").map((statement) =>
+        tx.query(statement, [JSON.stringify(input.knowledgeDependencies)]),
+      ),
       tx.query(contentKnowledgeDependencyGuard("$1::jsonb"), [
         JSON.stringify(input.knowledgeDependencies),
       ]),
@@ -162,6 +165,7 @@ export async function startContentProposal(input: StartContentProposalInput) {
         ],
       ),
     ]);
+    const rows = results[results.length - 1];
     if (!rows[0]) throw contentCopilotError("COPILOT_RATE_LIMITED");
     return mapProposal(requireProposal(rows[0]));
   } catch (error) {
@@ -299,12 +303,15 @@ async function guardedContentProposalQuery(
   params: unknown[],
 ) {
   try {
-    const [, , rows] = await getSql().transaction((tx) => [
+    const results = await getSql().transaction((tx) => [
       tx.query("SELECT ep_assert_content_proposal($1::uuid,$2::uuid,$3)", [
         proposalId,
         staffId,
         authUserId,
       ]),
+      ...contentKnowledgeDependencyLocks(
+        "(SELECT knowledge_dependencies FROM ai_content_proposals WHERE id=$1::uuid)",
+      ).map((statement) => tx.query(statement, [proposalId])),
       tx.query(
         contentKnowledgeDependencyGuard(
           "(SELECT knowledge_dependencies FROM ai_content_proposals WHERE id=$1::uuid)",
@@ -313,10 +320,51 @@ async function guardedContentProposalQuery(
       ),
       tx.query(statement, params),
     ]);
-    return rows;
+    return results[results.length - 1];
   } catch (error) {
     throw contentTransitionError(error);
   }
+}
+
+// Lock source bindings first, then their authoritative facts. Separate statements
+// give revision validation a fresh snapshot after any wait on a concurrent edit.
+function contentKnowledgeDependencyLocks(dependencies: string) {
+  const sources = `SELECT s.* FROM jsonb_to_recordset(${dependencies}) AS dependency("sourceId" text)
+    JOIN ai_knowledge_sources s ON s.id=dependency."sourceId"::uuid`;
+  const listingIds = `SELECT source_id FROM (${sources}) cited WHERE source_type='listing'`;
+  const groups = `SELECT public_listing_no FROM property_public_members WHERE property_id::text IN (${listingIds})`;
+  return [
+    `SELECT s.id FROM jsonb_to_recordset(${dependencies}) AS dependency("sourceId" text)
+     JOIN ai_knowledge_sources s ON s.id=dependency."sourceId"::uuid ORDER BY s.id FOR SHARE OF s`,
+    `SELECT id FROM properties WHERE id::text IN (${listingIds}) ORDER BY id FOR SHARE`,
+    `SELECT property_id FROM property_public_members WHERE property_id::text IN (${listingIds})
+     ORDER BY property_id FOR SHARE`,
+    `SELECT public_listing_no FROM property_public_groups WHERE public_listing_no IN (${groups})
+     ORDER BY public_listing_no FOR UPDATE`,
+    `WITH cited AS MATERIALIZED (${sources}),
+     locked_members AS MATERIALIZED (
+       SELECT property_id FROM property_public_members WHERE public_listing_no IN (${groups})
+       ORDER BY property_id FOR SHARE
+     ), locked_properties AS MATERIALIZED (
+       SELECT id,estate_id FROM properties WHERE id IN (SELECT property_id FROM locked_members)
+         OR id::text IN (SELECT source_id FROM cited WHERE source_type='listing') ORDER BY id FOR SHARE
+     ), locked_protected AS MATERIALIZED (
+       SELECT property_id,field_name FROM property_sync_fields WHERE property_id IN (SELECT id FROM locked_properties)
+       ORDER BY property_id,field_name FOR SHARE
+     ), locked_identity AS MATERIALIZED (
+       SELECT source,external_listing_id,deal_type FROM mls_source_state WHERE property_id IN (SELECT id FROM locked_properties)
+       ORDER BY source,external_listing_id,deal_type FOR SHARE
+     ), locked_faqs AS MATERIALIZED (
+       SELECT id FROM faqs WHERE id::text IN (SELECT source_id FROM cited WHERE source_type='faq') ORDER BY id FOR SHARE
+     ), locked_articles AS MATERIALIZED (
+       SELECT id FROM articles WHERE id::text IN (SELECT source_id FROM cited WHERE source_type='article') ORDER BY id FOR SHARE
+     ), locked_estates AS MATERIALIZED (
+       SELECT id FROM estates WHERE id IN (SELECT estate_id FROM locked_properties)
+         OR id::text IN (SELECT source_id FROM cited WHERE source_type='estate') ORDER BY id FOR SHARE
+     ) SELECT (SELECT count(*) FROM locked_members)+(SELECT count(*) FROM locked_properties)
+       +(SELECT count(*) FROM locked_protected)+(SELECT count(*) FROM locked_identity)
+       +(SELECT count(*) FROM locked_faqs)+(SELECT count(*) FROM locked_articles)+(SELECT count(*) FROM locked_estates)`,
+  ];
 }
 
 function contentKnowledgeDependencyGuard(dependencies: string) {

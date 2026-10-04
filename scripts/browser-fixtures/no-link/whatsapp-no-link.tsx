@@ -6,6 +6,8 @@ import { Toaster } from "sonner";
 import { Route } from "../../../src/routes/admin.whatsapp";
 import { Route as LeadsRoute } from "../../../src/routes/admin.leads";
 import { Route as BlastsRoute } from "../../../src/routes/admin.blasts";
+import { Route as OverviewRoute } from "../../../src/routes/admin.index";
+import { Route as AnalyticsRoute } from "../../../src/routes/admin.analytics";
 import "../../../src/styles.css";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
@@ -38,7 +40,17 @@ const blasts = BlastsRoute.update({
   getParentRoute: () => root,
 } as never);
 const router = createRouter({
-  routeTree: root.addChildren([route, leads, blasts]),
+  routeTree: root.addChildren([
+    route,
+    leads,
+    blasts,
+    OverviewRoute.update({ id: "/admin", path: "/admin", getParentRoute: () => root } as never),
+    AnalyticsRoute.update({
+      id: "/admin/analytics",
+      path: "/admin/analytics",
+      getParentRoute: () => root,
+    } as never),
+  ]),
   defaultPreload: false,
 });
 createRoot(document.getElementById("root")!).render(

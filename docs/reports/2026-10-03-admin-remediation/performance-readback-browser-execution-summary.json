@@ -1,0 +1,249 @@
+{
+  "codeSha": "fa379ea97ed906155a27e29d3f9cf44325481fda",
+  "evidenceLayer": "actual-analytics-route-dashboard-table-shell-staff-store-synthetic-auth-api-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realProvider": false,
+  "results": [
+    {
+      "name": "actor switch clears old report records and export before new scoped read",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "same-user staff binding change refetches report and options",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "late old-actor report cannot restore old company metrics",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "late old-actor record reply cannot restore old rows or export",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "same-user role downgrade clears report and makes no denied performance reads",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "invalid URL filters block report reads until explicit reset",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "totals drilldown and visible CSV reconcile quality duplicate and HK day",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "unknown click denominator stays unknown and assignments do not count as human replies",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "source and rent filters retain same scope across reload and sales stay distinct",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "failed filtered report and drilldown never export previous rows or invent zero",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "explicit branch staff dates and cohort scope survive reload and match exported row",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "disabled flag explains unavailable report and makes no performance reads",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "actor switch clears old report records and export before new scoped read",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "same-user staff binding change refetches report and options",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "late old-actor report cannot restore old company metrics",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "late old-actor record reply cannot restore old rows or export",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "same-user role downgrade clears report and makes no denied performance reads",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "invalid URL filters block report reads until explicit reset",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "totals drilldown and visible CSV reconcile quality duplicate and HK day",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "unknown click denominator stays unknown and assignments do not count as human replies",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "source and rent filters retain same scope across reload and sales stay distinct",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "failed filtered report and drilldown never export previous rows or invent zero",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "explicit branch staff dates and cohort scope survive reload and match exported row",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "disabled flag explains unavailable report and makes no performance reads",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "actor switch clears old report records and export before new scoped read",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "same-user staff binding change refetches report and options",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "late old-actor report cannot restore old company metrics",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "late old-actor record reply cannot restore old rows or export",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "same-user role downgrade clears report and makes no denied performance reads",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "invalid URL filters block report reads until explicit reset",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "totals drilldown and visible CSV reconcile quality duplicate and HK day",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "unknown click denominator stays unknown and assignments do not count as human replies",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "source and rent filters retain same scope across reload and sales stay distinct",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "failed filtered report and drilldown never export previous rows or invent zero",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "explicit branch staff dates and cohort scope survive reload and match exported row",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "disabled flag explains unavailable report and makes no performance reads",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "actor switch clears old report records and export before new scoped read",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "same-user staff binding change refetches report and options",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "late old-actor report cannot restore old company metrics",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "late old-actor record reply cannot restore old rows or export",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "same-user role downgrade clears report and makes no denied performance reads",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "invalid URL filters block report reads until explicit reset",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "totals drilldown and visible CSV reconcile quality duplicate and HK day",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "unknown click denominator stays unknown and assignments do not count as human replies",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "source and rent filters retain same scope across reload and sales stay distinct",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "failed filtered report and drilldown never export previous rows or invent zero",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "explicit branch staff dates and cohort scope survive reload and match exported row",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "disabled flag explains unavailable report and makes no performance reads",
+      "status": "passed",
+      "width": 390
+    }
+  ]
+}
