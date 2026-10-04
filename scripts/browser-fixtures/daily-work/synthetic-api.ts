@@ -7,6 +7,8 @@ const state = {
   role: sessionStorage.getItem("daily-work-role") ?? "manager",
   binding: "staff-a",
   denied: false,
+  staffMode: sessionStorage.getItem("daily-work-staff-mode") ?? "ok",
+  leadsMode: "ok",
   empty: false,
   overviewMode: "ok",
   teamMode: "ok",
@@ -32,6 +34,12 @@ const scopedCount = () =>
         : 3;
 export async function fetchStaffSession() {
   call("staff-session");
+  const mode = state.staffMode;
+  if (mode === "delayed")
+    await new Promise<void>((release) =>
+      state.pending.push({ release, actor: state.actor, role: state.role }),
+    );
+  if (mode === "failure") throw Error("owned staff verification unavailable");
   return state.denied
     ? { status: "denied", reason: "not-staff" }
     : { status: "ok", staffId: state.binding, roles: [state.role] };
@@ -110,5 +118,11 @@ export async function fetchAdminPage({ data }: { data: { resource: string; stage
     email: null,
     opt_in_whatsapp: false,
   }));
+  const mode = state.leadsMode;
+  if (mode.startsWith("delayed"))
+    await new Promise<void>((release) =>
+      state.pending.push({ release, actor: state.actor, role: state.role }),
+    );
+  if (mode === "delayed-denied") throw new Response("Owned forbidden", { status: 403 });
   return { rows, total: rows.length, nextCursor: null };
 }

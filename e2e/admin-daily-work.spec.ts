@@ -9,6 +9,8 @@ declare global {
     dailyWorkFixture: {
       calls: { name: string; actor: string; role: string; binding: string; input: unknown }[];
       overviewMode: string;
+      staffMode: string;
+      leadsMode: string;
       teamMode: string;
       empty: boolean;
       pending: { release: () => void; actor: string; role: string }[];
@@ -59,7 +61,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/daily-work-browser-summary.json",
+    ".audit/remediation-20261003/daily-work-session-boundary-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -110,6 +112,180 @@ async function open(page: Page, role = "manager") {
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("lead list same-user downgrade removes old scope and selection", async ({ page }) => {
+      await open(page);
+      await card(page, "開放查詢").click();
+      await expect(page.getByText("每日工作合成查詢6", { exact: true })).toBeVisible();
+      await page.getByRole("checkbox").first().click();
+      await expect(page.getByText(/已選.*7/)).toBeVisible();
+      await page.evaluate(() => window.dailyWorkFixture.changeContext("actor-a", "agent"));
+      await expect(page.getByText("每日工作合成查詢6", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("每日工作合成查詢1", { exact: true })).toBeVisible();
+      await expect(page.getByText(/已選.*7/)).toHaveCount(0);
+      expect((await calls(page, "leads")).map((c) => c.role)).toEqual(["manager", "agent"]);
+    });
+    test("lead list same-user relink starts a fresh staff scope", async ({ page }) => {
+      await open(page, "agent");
+      await card(page, "開放查詢").click();
+      await expect(page.getByText("每日工作合成查詢1", { exact: true })).toBeVisible();
+      await page.evaluate(() =>
+        window.dailyWorkFixture.changeContext("actor-a", "agent", "staff-b"),
+      );
+      await expect(page.getByText("每日工作合成查詢2", { exact: true })).toBeVisible();
+      expect((await calls(page, "leads")).map((c) => c.binding)).toEqual(["staff-a", "staff-b"]);
+    });
+    for (const outcome of ["success", "denied"]) {
+      test(`late old lead list ${outcome} cannot affect new scope`, async ({ page }) => {
+        await open(page);
+        await page.evaluate(
+          (outcome) => (window.dailyWorkFixture.leadsMode = "delayed-" + outcome),
+          outcome,
+        );
+        await card(page, "開放查詢").click();
+        await expect
+          .poll(() => page.evaluate(() => window.dailyWorkFixture.pending.length))
+          .toBe(1);
+        await page.evaluate(() => {
+          window.dailyWorkFixture.leadsMode = "ok";
+          return window.dailyWorkFixture.changeContext("actor-a", "agent");
+        });
+        await expect(page.getByText("每日工作合成查詢1", { exact: true })).toBeVisible();
+        await page.evaluate(() => window.dailyWorkFixture.pending[0].release());
+        await expect(page.getByText("每日工作合成查詢6", { exact: true })).toHaveCount(0);
+        await expect(page.getByText("每日工作合成查詢1", { exact: true })).toBeVisible();
+        await expect(page.getByText("Owned forbidden", { exact: true })).toHaveCount(0);
+        expect((await calls(page, "leads")).map((c) => c.role)).toEqual(["manager", "agent"]);
+      });
+    }
+    test("unknown staff verification hides private page and restores with a fresh read", async ({
+      page,
+    }) => {
+      await open(page);
+      await card(page, "開放查詢").click();
+      await expect(page.getByText("每日工作合成查詢6", { exact: true })).toBeVisible();
+      await page.evaluate(() => {
+        window.dailyWorkFixture.staffMode = "failure";
+        return window.dailyWorkFixture.changeContext("actor-a", "manager");
+      });
+      await expect(page.getByRole("heading", { name: "未能核實職員權限" })).toBeVisible();
+      await expect(page.getByText("每日工作合成查詢6", { exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "記錄人工轉交", exact: true })).toHaveCount(0);
+      const before = (await calls(page, "leads")).length;
+      await page.evaluate(() => (window.dailyWorkFixture.staffMode = "ok"));
+      await page.getByRole("button", { name: "重新檢查", exact: true }).click();
+      await expect(page.getByText("每日工作合成查詢6", { exact: true })).toBeVisible();
+      expect(await calls(page, "leads")).toHaveLength(before + 1);
+    });
+    test("initial pending staff verification does not mount lead page reads", async ({ page }) => {
+      await page.route("**/*", (route) =>
+        new URL(route.request().url()).origin === origin ? route.continue() : route.abort(),
+      );
+      await page.addInitScript(() => sessionStorage.setItem("daily-work-staff-mode", "delayed"));
+      await page.goto(origin + "/admin/leads?stage=open");
+      await expect.poll(() => page.evaluate(() => window.dailyWorkFixture.pending.length)).toBe(1);
+      await expect(page.getByRole("heading", { name: "正在核實職員權限" })).toBeVisible();
+      expect(await calls(page, "leads")).toHaveLength(0);
+      await page.evaluate(() => window.dailyWorkFixture.pending[0].release());
+      await expect(page.getByText("每日工作合成查詢6", { exact: true })).toBeVisible();
+      expect(await calls(page, "leads")).toHaveLength(1);
+    });
+    test("same staff identity recheck preserves selection and unsent work", async ({ page }) => {
+      await open(page);
+      await card(page, "開放查詢").click();
+      await expect(page.getByText("每日工作合成查詢6", { exact: true })).toBeVisible();
+      await page.getByRole("checkbox").first().click();
+      await page.evaluate(() => window.dailyWorkFixture.changeContext("actor-a", "manager"));
+      await expect(page.getByText(/已選.*7/)).toBeVisible();
+      expect(await calls(page, "leads")).toHaveLength(1);
+    });
+    test("unsent forwarded draft survives unknown verification but stays actor isolated", async ({
+      page,
+    }) => {
+      await open(page);
+      await card(page, "開放查詢").click();
+      await page.getByRole("button", { name: "記錄人工轉交", exact: true }).click();
+      await page.getByLabel("原文／轉交內容", { exact: true }).fill("只屬於甲的未送草稿");
+      await page.getByLabel("業務來源", { exact: true }).fill("甲的合成來源");
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              JSON.parse(sessionStorage.getItem("ep-forwarded-enquiry-draft:v1:actor-a")!).fields
+                .text,
+          ),
+        )
+        .toBe("只屬於甲的未送草稿");
+      await page.evaluate(() => {
+        window.dailyWorkFixture.staffMode = "failure";
+        return window.dailyWorkFixture.changeContext("actor-a", "manager");
+      });
+      await expect(page.getByRole("heading", { name: "未能核實職員權限" })).toBeVisible();
+      await expect(page.getByLabel("原文／轉交內容", { exact: true })).toHaveCount(0);
+      await page.screenshot({
+        path: `.audit/remediation-20261003/ep12-session-hidden-${width}.png`,
+        fullPage: true,
+      });
+      await page.evaluate(() => {
+        window.dailyWorkFixture.staffMode = "ok";
+        return window.dailyWorkFixture.changeContext("actor-b", "agent", "staff-b");
+      });
+      await page.getByRole("button", { name: "記錄人工轉交", exact: true }).click();
+      await expect(page.getByLabel("原文／轉交內容", { exact: true })).toHaveValue("");
+      await page.evaluate(() => window.dailyWorkFixture.changeContext("actor-a", "agent"));
+      await page.getByRole("button", { name: "記錄人工轉交", exact: true }).click();
+      await expect(page.getByRole("textbox", { name: "原文／轉交內容", exact: true })).toHaveValue(
+        "只屬於甲的未送草稿",
+      );
+      await expect(page.getByLabel("業務來源", { exact: true })).toHaveValue("甲的合成來源");
+      const dialog = page.getByRole("dialog", { name: "記錄人工轉交查詢", exact: true });
+      await dialog.evaluate((element) =>
+        Promise.all(
+          element
+            .getAnimations({ subtree: true })
+            .map((animation) => animation.finished.catch(() => undefined)),
+        ),
+      );
+      const bounds = await dialog.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+      await page.screenshot({
+        animations: "disabled",
+        path: `.audit/remediation-20261003/ep12-session-draft-${width}.png`,
+        fullPage: true,
+      });
+      expect(
+        await page.evaluate(
+          () =>
+            (
+              window as unknown as { noLinkFixture: { calls: { name: string }[] } }
+            ).noLinkFixture.calls.filter((c: { name: string }) => c.name === "syntheticForward")
+              .length,
+        ),
+      ).toBe(0);
+    });
+    test("denied membership hides lead history and restoration starts a fresh read", async ({
+      page,
+    }) => {
+      await open(page);
+      await card(page, "開放查詢").click();
+      await expect(page.getByText("每日工作合成查詢6", { exact: true })).toBeVisible();
+      const before = (await calls(page, "leads")).length;
+      await page.evaluate(() =>
+        window.dailyWorkFixture.changeContext("actor-a", "agent", "staff-a", true),
+      );
+      await expect(page.getByText("此帳戶不是職員帳戶", { exact: true })).toBeVisible();
+      await expect(page.getByText("每日工作合成查詢6", { exact: true })).toHaveCount(0);
+      expect(await calls(page, "leads")).toHaveLength(before);
+      await page.evaluate(() => window.dailyWorkFixture.changeContext("actor-a", "agent"));
+      await expect(page.getByText("每日工作合成查詢1", { exact: true })).toBeVisible();
+      await expect(page.getByText("每日工作合成查詢6", { exact: true })).toHaveCount(0);
+      expect(await calls(page, "leads")).toHaveLength(before + 1);
+      await page.screenshot({
+        path: `.audit/remediation-20261003/ep12-session-restored-${width}.png`,
+        fullPage: true,
+      });
+    });
     test("same-user role downgrade clears whole-company values and restricted team history", async ({
       page,
     }) => {
