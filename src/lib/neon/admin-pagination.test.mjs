@@ -138,6 +138,7 @@ function inboxLoader(ports) {
   const context = {
     visibleMessagesRef: { current: [] },
     messageRefreshOffset: { current: 0 },
+    isWorkspaceCurrent: () => true,
     ...ports,
     mergeMessagePages,
   };
@@ -201,7 +202,20 @@ test("actual background inbox loader does no request while older-page scroll anc
   let calls = 0;
   const load = inboxLoader({
     olderPending: { current: true },
+    canApplyConversationDetail: () => true,
     fetchAdminConversation: () => calls++,
+  });
+  await load(actor.staffId, { background: true });
+  assert.equal(calls, 0);
+});
+
+test("obsolete inbox workspace starts no detail or message reads", async () => {
+  let calls = 0;
+  const load = inboxLoader({
+    olderPending: { current: false },
+    canApplyConversationDetail: () => false,
+    fetchAdminConversation: () => calls++,
+    fetchAdminPage: () => calls++,
   });
   await load(actor.staffId, { background: true });
   assert.equal(calls, 0);
