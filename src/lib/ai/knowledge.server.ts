@@ -12,6 +12,10 @@ import {
   normalizeKnowledgeSource,
 } from "./knowledge.ts";
 import { embedAiTexts, generateAiText } from "./provider.server.ts";
+import {
+  publicKnowledgeCurrentSourcesCte,
+  publicKnowledgeRevisionGate,
+} from "./knowledge-freshness.server";
 
 // Must match the embedding column dimension in the ai_knowledge_chunks migration
 // (vector(1536)). A returned embedding of any other length cannot be stored, so we
@@ -30,6 +34,7 @@ type RawSource = {
   district_slug?: string | null;
   listing_id?: string | null;
   metadata?: Record<string, unknown>;
+  source_revision?: string;
 };
 
 type KnowledgeChunkRow = {
@@ -49,6 +54,7 @@ type KnowledgeChunkRow = {
   freshness_score: unknown;
   stale: unknown;
   published: unknown;
+  source_revision: unknown;
 };
 
 type ObservedKnowledgeSource = {
@@ -77,17 +83,24 @@ const MANAGED_REBUILD_SOURCE_TYPES: AiKnowledgeSourceType[] = [
   "listing",
 ];
 
-export async function rebuildAiKnowledgeIndex(options: { checkpoint?: () => Promise<void> } = {}) {
+export async function rebuildAiKnowledgeIndex(
+  options: {
+    checkpoint?: () => Promise<void>;
+    sourceKeys?: ObservedKnowledgeSource[];
+    allowEmbeddings?: boolean;
+  } = {},
+) {
   const checkpoint = options.checkpoint ?? (async () => {});
   await checkpoint();
   const sources = await fetchPublicKnowledgeSources();
-  const observedSources = new Map<string, ObservedKnowledgeSource>();
   const embeddingModel = getAiServerConfig().embeddingModel;
   let indexedSources = 0;
   let indexedChunks = 0;
   let embeddingDimensionFailures = 0;
 
+  const sourceKeys = options.sourceKeys ? new Set(options.sourceKeys.map(sourceKey)) : null;
   for (const source of sources) {
+    if (sourceKeys && !sourceKeys.has(sourceKey(source))) continue;
     await checkpoint();
     const normalizedText = normalizeSourceText(source.text);
     if (!normalizedText) continue;
@@ -104,7 +117,10 @@ export async function rebuildAiKnowledgeIndex(options: { checkpoint?: () => Prom
     if (chunks.length === 0) continue;
 
     await checkpoint();
-    const embeddings = await embedAiTexts(chunks.map((chunk) => chunk.text));
+    const embeddings =
+      options.allowEmbeddings === false
+        ? { ok: false as const, embeddings: [] as number[][] }
+        : await embedAiTexts(chunks.map((chunk) => chunk.text));
     await checkpoint();
     const preparedChunks = chunks.map<PreparedKnowledgeChunk>((chunk, index) => ({
       sort_order: chunk.sort_order,
@@ -114,6 +130,7 @@ export async function rebuildAiKnowledgeIndex(options: { checkpoint?: () => Prom
         url_path: source.url_path,
         source_type: source.source_type,
         ...(source.metadata ?? {}),
+        source_revision: source.source_revision,
       },
       estate_slug: source.estate_slug ?? null,
       district_slug: source.district_slug ?? null,
@@ -129,51 +146,20 @@ export async function rebuildAiKnowledgeIndex(options: { checkpoint?: () => Prom
       content_hash: chunk.content_hash,
     }));
 
-    observedSources.set(sourceKey(normalized), {
-      source_type: normalized.source_type,
-      source_id: normalized.source_id,
-    });
-
     await checkpoint();
-    const sourceRows = await queryRows(
-      `INSERT INTO ai_knowledge_sources (
-        source_type, source_id, title, url_path, public_visibility, published,
-        last_indexed_at, content_hash, updated_at
-      )
-      VALUES ($1::ai_knowledge_source_type,$2,$3,$4,$5::ai_visibility,$6,now(),$7,now())
-      ON CONFLICT (source_type, source_id) DO UPDATE SET
-        title = EXCLUDED.title,
-        url_path = EXCLUDED.url_path,
-        public_visibility = EXCLUDED.public_visibility,
-        published = EXCLUDED.published,
-        last_indexed_at = now(),
-        content_hash = EXCLUDED.content_hash,
-        updated_at = now()
-      RETURNING id`,
-      [
-        normalized.source_type,
-        normalized.source_id,
-        normalized.title,
-        normalized.url_path,
-        normalized.visibility,
-        normalized.published,
-        contentHash,
-      ],
+    const publishedChunks = await replaceKnowledgeChunks(
+      normalized,
+      source.source_revision ?? "",
+      contentHash,
+      preparedChunks,
     );
-
-    const sourceId = stringOrEmpty(sourceRows[0]?.id);
-    if (!sourceId) continue;
-
     await checkpoint();
-    await replaceKnowledgeChunks(sourceId, preparedChunks);
-    await checkpoint();
-    indexedChunks += preparedChunks.length;
-
-    indexedSources += 1;
+    indexedChunks += publishedChunks;
+    if (publishedChunks) indexedSources += 1;
   }
 
   await checkpoint();
-  await reconcileUnobservedKnowledgeSources(Array.from(observedSources.values()));
+  await reconcileUnobservedKnowledgeSources(options.sourceKeys);
   await checkpoint();
 
   if (embeddingDimensionFailures > 0) {
@@ -213,7 +199,7 @@ export async function searchPublicKnowledge(input: { query: string; limit?: numb
     ? Math.min(Math.max(Math.floor(requestedLimit), 1), 12)
     : 6;
   const rows = await queryRows<KnowledgeChunkRow>(
-    `SELECT
+    `${publicKnowledgeCurrentSourcesCte()} SELECT
        c.id,
        c.source_id,
        s.source_type,
@@ -229,13 +215,16 @@ export async function searchPublicKnowledge(input: { query: string; limit?: numb
        c.visibility,
        c.freshness_score::float AS freshness_score,
        c.stale,
-       s.published
+       s.published,
+       current_source.source_revision
      FROM ai_knowledge_chunks c
      JOIN ai_knowledge_sources s ON s.id = c.source_id
+     LEFT JOIN current_public_sources current_source ON current_source.source_type=s.source_type::text AND current_source.source_id=s.source_id
      WHERE c.visibility = 'public'
        AND s.public_visibility = 'public'
        AND s.published = true
        AND c.stale = false
+       ${publicKnowledgeRevisionGate}
        AND (
          c.chunk_text ILIKE '%' || $1 || '%' ESCAPE '\\'
          OR s.title ILIKE '%' || $1 || '%' ESCAPE '\\'
@@ -277,6 +266,11 @@ export async function answerFromPublicKnowledge(input: { question: string }) {
       maxOutputTokens: 450,
     });
 
+    // Discard the entire answer, including the fallback excerpt, if any source
+    // changed while the provider was in flight. Removing citations alone leaves
+    // stale facts in the generated text.
+    if (!(await revalidatePublicKnowledgeChunks(chunks))) return publicFallbackAnswer();
+
     return {
       answer: result.ok ? result.text : fallbackAnswer,
       confidence: result.ok ? 0.75 : 0.45,
@@ -294,44 +288,24 @@ export async function answerFromPublicKnowledge(input: { question: string }) {
 async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
   const [faqs, estates, articles, listings] = await Promise.all([
     queryRows(
-      "SELECT id, scope, question, answer FROM faqs ORDER BY scope, sort_order, created_at",
+      "SELECT id, scope, question, answer, md5(to_jsonb(f)::text) AS source_revision FROM faqs f ORDER BY scope, sort_order, created_at",
     ),
     queryRows(
       `SELECT id, slug, name_zh, name_en, district_slug, developer, year_completed,
-        phases, total_units, area_min, area_max, description, facilities, seo_title, seo_description
-       FROM estates
+        phases, total_units, area_min, area_max, description, facilities, seo_title, seo_description,
+        md5(to_jsonb(e)::text) AS source_revision
+       FROM estates e
        ORDER BY name_zh`,
     ),
     queryRows(
-      `SELECT id, slug, title, excerpt, content, published, category, seo_title, seo_description
-       FROM articles
+      `SELECT id, slug, title, excerpt, content, published, category, seo_title, seo_description,
+        md5(to_jsonb(a)::text) AS source_revision
+       FROM articles a
        WHERE published = true
        ORDER BY published_at DESC NULLS LAST, updated_at DESC`,
     ),
     queryRows(
-      `SELECT
-        p.id,
-        p.listing_no,
-        p.title_zh,
-        p.deal_type,
-        p.price,
-        p.rent,
-        p.saleable_area,
-        p.bedrooms,
-        p.bathrooms,
-        p.description,
-        p.status,
-        p.district_slug,
-        p.estate_id,
-        p.seo_title,
-        p.seo_description,
-        e.slug AS estate_slug,
-        e.name_zh AS estate_name_zh
-       FROM properties p
-       LEFT JOIN estates e ON e.id = p.estate_id
-       WHERE p.status = 'active'
-       ORDER BY p.updated_at DESC
-       LIMIT 500`,
+      `${publicKnowledgeCurrentSourcesCte()} SELECT * FROM current_public_listings ORDER BY updated_at DESC`,
     ),
   ]);
 
@@ -339,6 +313,7 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
     ...faqs.map((row) => ({
       source_type: "faq" as const,
       source_id: stringOrEmpty(row.id),
+      source_revision: stringOrEmpty(row.source_revision),
       title: stringOrEmpty(row.question),
       url_path: null,
       text: joinText([row.question, row.answer]),
@@ -348,6 +323,7 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
     ...estates.map((row) => ({
       source_type: "estate" as const,
       source_id: stringOrEmpty(row.id),
+      source_revision: stringOrEmpty(row.source_revision),
       title: stringOrEmpty(row.name_zh),
       url_path: `/estate/${stringOrEmpty(row.slug)}`,
       text: joinText([
@@ -373,6 +349,7 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
     ...articles.map((row) => ({
       source_type: "article" as const,
       source_id: stringOrEmpty(row.id),
+      source_revision: stringOrEmpty(row.source_revision),
       title: stringOrEmpty(row.title),
       url_path: `/blog/${stringOrEmpty(row.slug)}`,
       text: joinText([row.title, row.excerpt, row.content, row.seo_title, row.seo_description]),
@@ -382,8 +359,9 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
     ...listings.map((row) => ({
       source_type: "listing" as const,
       source_id: stringOrEmpty(row.id),
+      source_revision: stringOrEmpty(row.source_revision),
       title: stringOrEmpty(row.title_zh),
-      url_path: `/property/${stringOrEmpty(row.listing_no)}`,
+      url_path: `/property/${stringOrEmpty(row.public_listing_no)}`,
       text: joinText([
         row.title_zh,
         row.estate_name_zh,
@@ -399,6 +377,8 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
       listing_id: stringOrEmpty(row.id),
       metadata: {
         listing_no: stringOrNull(row.listing_no),
+        public_listing_no: stringOrNull(row.public_listing_no),
+        offerings: row.offerings,
         deal_type: stringOrNull(row.deal_type),
         estate_id: stringOrNull(row.estate_id),
         price: row.price ?? null,
@@ -411,17 +391,53 @@ async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
   ];
 }
 
-async function replaceKnowledgeChunks(sourceId: string, chunks: PreparedKnowledgeChunk[]) {
+async function replaceKnowledgeChunks(
+  source: ReturnType<typeof normalizeKnowledgeSource>,
+  revision: string,
+  contentHash: string,
+  chunks: PreparedKnowledgeChunk[],
+) {
   const sql = getSql();
-  await sql.transaction((tx) => [
-    tx.query("DELETE FROM ai_knowledge_chunks WHERE source_id = $1", [sourceId]),
+  const currentGate = `EXISTS(SELECT 1 FROM current_public_sources current_source
+    WHERE current_source.source_type=$1::text AND current_source.source_id=$2
+      AND current_source.source_revision=$3)`;
+  const keyParams = [source.source_type, source.source_id, revision];
+  // Lock publication before reading current revisions. An older worker must
+  // never overwrite a newer worker that has already acknowledged the ledger.
+  const results = await sql.transaction((tx) => [
+    tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+      `knowledge:${sourceKey(source)}`,
+    ]),
     tx.query(
-      `INSERT INTO ai_knowledge_chunks (
+      `${publicKnowledgeCurrentSourcesCte()}
+      INSERT INTO ai_knowledge_sources(source_type,source_id,title,url_path,public_visibility,published,last_indexed_at,content_hash,updated_at)
+      SELECT $1::text::ai_knowledge_source_type,$2,$4,$5,$6::ai_visibility,$7,now(),$8,now()
+      WHERE ${currentGate}
+      ON CONFLICT(source_type,source_id) DO UPDATE SET title=EXCLUDED.title,url_path=EXCLUDED.url_path,
+        public_visibility=EXCLUDED.public_visibility,published=EXCLUDED.published,
+        last_indexed_at=now(),content_hash=EXCLUDED.content_hash,updated_at=now()`,
+      [
+        ...keyParams,
+        source.title,
+        source.url_path,
+        source.visibility,
+        source.published,
+        contentHash,
+      ],
+    ),
+    tx.query(
+      `${publicKnowledgeCurrentSourcesCte()}
+      DELETE FROM ai_knowledge_chunks WHERE source_id IN(SELECT id FROM ai_knowledge_sources WHERE source_type::text=$1 AND source_id=$2)
+      AND ${currentGate}`,
+      keyParams,
+    ),
+    tx.query(
+      `${publicKnowledgeCurrentSourcesCte()} INSERT INTO ai_knowledge_chunks (
         source_id, sort_order, chunk_text, summary, metadata, estate_slug, district_slug,
         listing_id, visibility, freshness_score, embedding, content_hash, stale, updated_at
       )
       SELECT
-        $1::uuid,
+        s.id,
         chunk.sort_order,
         chunk.chunk_text,
         chunk.summary,
@@ -435,7 +451,7 @@ async function replaceKnowledgeChunks(sourceId: string, chunks: PreparedKnowledg
         chunk.content_hash,
         false,
         now()
-      FROM jsonb_to_recordset($2::jsonb) AS chunk(
+      FROM ai_knowledge_sources s CROSS JOIN jsonb_to_recordset($4::jsonb) AS chunk(
         sort_order integer,
         chunk_text text,
         summary text,
@@ -447,52 +463,32 @@ async function replaceKnowledgeChunks(sourceId: string, chunks: PreparedKnowledg
         freshness_score numeric,
         embedding text,
         content_hash text
-      )`,
-      [sourceId, JSON.stringify(chunks)],
+      ) WHERE s.source_type::text=$1 AND s.source_id=$2 AND ${currentGate}
+      RETURNING id`,
+      [...keyParams, JSON.stringify(chunks)],
     ),
   ]);
+  return results[3].length;
 }
 
-async function reconcileUnobservedKnowledgeSources(observedSources: ObservedKnowledgeSource[]) {
-  if (observedSources.length === 0) {
-    await queryRows(
-      `WITH obsolete AS (
-         UPDATE ai_knowledge_sources
-         SET published = false, public_visibility = 'staff', updated_at = now()
-         WHERE source_type::text = ANY($1::text[])
-         RETURNING id
-       )
-       UPDATE ai_knowledge_chunks c
-       SET stale = true, updated_at = now()
-       WHERE c.source_id IN (SELECT id FROM obsolete)`,
-      [MANAGED_REBUILD_SOURCE_TYPES],
-    );
-    return;
-  }
-
+async function reconcileUnobservedKnowledgeSources(sourceKeys?: ObservedKnowledgeSource[]) {
+  // Absence belongs to the current authoritative view, never to an older
+  // worker's captured list. A concurrent reactivation must remain published.
   await queryRows(
-    `WITH observed AS (
-       SELECT
-         source_type::ai_knowledge_source_type AS source_type,
-         source_id
-       FROM jsonb_to_recordset($1::jsonb) AS source(source_type text, source_id text)
-     ),
-     obsolete AS (
+    `${publicKnowledgeCurrentSourcesCte()}, obsolete AS (
        UPDATE ai_knowledge_sources s
        SET published = false, public_visibility = 'staff', updated_at = now()
        WHERE s.source_type::text = ANY($2::text[])
-         AND NOT EXISTS (
-         SELECT 1
-         FROM observed o
-         WHERE o.source_type = s.source_type
-           AND o.source_id = s.source_id
-       )
+         AND ($1::jsonb IS NULL OR EXISTS(SELECT 1 FROM jsonb_to_recordset($1::jsonb)
+           AS target(source_type text,source_id text) WHERE target.source_type=s.source_type::text AND target.source_id=s.source_id))
+         AND NOT EXISTS (SELECT 1 FROM current_public_sources current_source
+           WHERE current_source.source_type=s.source_type::text AND current_source.source_id=s.source_id)
        RETURNING s.id
      )
      UPDATE ai_knowledge_chunks c
      SET stale = true, updated_at = now()
      WHERE c.source_id IN (SELECT id FROM obsolete)`,
-    [JSON.stringify(observedSources), MANAGED_REBUILD_SOURCE_TYPES],
+    [sourceKeys ? JSON.stringify(sourceKeys) : null, MANAGED_REBUILD_SOURCE_TYPES],
   );
 }
 
@@ -518,16 +514,54 @@ function joinText(values: unknown[]) {
 }
 
 function listingFacts(row: Record<string, unknown>) {
+  const offerings = Array.isArray(row.offerings)
+    ? (row.offerings as Array<Record<string, unknown>>)
+    : [];
   const facts = [
-    row.deal_type ? `類型：${row.deal_type}` : null,
-    row.price ? `售價：${row.price}` : null,
-    row.rent ? `租金：${row.rent}` : null,
+    ...offerings.map((offer) =>
+      offer.deal_type === "sale"
+        ? `出售：${offer.price ?? "待核實"}`
+        : `出租：${offer.rent ?? "待核實"}`,
+    ),
     row.saleable_area ? `實用面積：${row.saleable_area}` : null,
     row.bedrooms ? `睡房：${row.bedrooms}` : null,
     row.bathrooms ? `浴室：${row.bathrooms}` : null,
     row.district_slug ? `地區：${row.district_slug}` : null,
   ].filter(Boolean);
   return facts.length ? facts.join("\n") : null;
+}
+
+export async function repairPublicKnowledgeIndex(
+  options: { checkpoint?: () => Promise<void> } = {},
+) {
+  const requests = await queryRows<{
+    source_type: AiKnowledgeSourceType;
+    source_id: string;
+    revision: string;
+  }>(
+    "SELECT source_type,source_id,revision::text FROM ai_knowledge_repair_requests WHERE revision>completed_revision ORDER BY requested_at,source_type,source_id LIMIT 200",
+  );
+  if (!requests.length)
+    return { indexedSources: 0, indexedChunks: 0, embeddingDimensionFailures: 0 };
+  const result = await rebuildAiKnowledgeIndex({
+    ...options,
+    sourceKeys: requests,
+    allowEmbeddings: false,
+  });
+  await (options.checkpoint ?? (async () => {}))();
+  await queryRows(
+    `UPDATE ai_knowledge_repair_requests r SET completed_revision=r.revision,completed_at=now()
+    FROM jsonb_to_recordset($1::jsonb) AS completed(source_type text,source_id text,revision text)
+    WHERE r.source_type::text=completed.source_type AND r.source_id=completed.source_id AND r.revision=completed.revision::bigint`,
+    [JSON.stringify(requests)],
+  );
+  // A batch may exceed the bounded work limit, or change during provider/DB
+  // work. Keep a new durable job for whatever has not been acknowledged by CAS.
+  await queryRows(`INSERT INTO ops_jobs(job_type,payload_version,payload,status,max_attempts,idempotency_key)
+    SELECT 'ai.knowledge.repair',1,jsonb_build_object('batchId',txid_current()::text),'queued',5,'ai.knowledge.repair:'||txid_current()::text
+    WHERE EXISTS(SELECT 1 FROM ai_knowledge_repair_requests WHERE revision>completed_revision)
+    ON CONFLICT(idempotency_key) DO NOTHING`);
+  return result;
 }
 
 function freshnessScore(sourceType: AiKnowledgeSourceType) {
@@ -590,6 +624,7 @@ function mapKnowledgeChunkRows(rows: KnowledgeChunkRow[]) {
       freshness_score: Number(row.freshness_score ?? 0),
       stale: row.stale === true,
       published: row.published === true,
+      source_revision: stringOrNull(row.source_revision),
     })),
   ) as AiKnowledgeChunk[];
 }
@@ -599,7 +634,7 @@ async function fallbackSearchPublicKnowledge(input: { query: string; limit: numb
   if (!tokens.length) return [] as AiKnowledgeChunk[];
 
   const rows = await queryRows<KnowledgeChunkRow>(
-    `SELECT
+    `${publicKnowledgeCurrentSourcesCte()} SELECT
        c.id,
        c.source_id,
        s.source_type,
@@ -615,13 +650,16 @@ async function fallbackSearchPublicKnowledge(input: { query: string; limit: numb
        c.visibility,
        c.freshness_score::float AS freshness_score,
        c.stale,
-       s.published
+       s.published,
+       current_source.source_revision
      FROM ai_knowledge_chunks c
      JOIN ai_knowledge_sources s ON s.id = c.source_id
+     LEFT JOIN current_public_sources current_source ON current_source.source_type=s.source_type::text AND current_source.source_id=s.source_id
      WHERE c.visibility = 'public'
        AND s.public_visibility = 'public'
        AND s.published = true
        AND c.stale = false
+       ${publicKnowledgeRevisionGate}
      ORDER BY c.freshness_score DESC, c.created_at DESC
      LIMIT 800`,
   );
@@ -634,6 +672,22 @@ async function fallbackSearchPublicKnowledge(input: { query: string; limit: numb
     .map((item) => item.chunk);
 
   return scored;
+}
+
+export async function revalidatePublicKnowledgeChunks(chunks: AiKnowledgeChunk[]) {
+  if (!chunks.length) return true;
+  const rows = await queryRows<{ id: string; source_revision: string }>(
+    `${publicKnowledgeCurrentSourcesCte()} SELECT c.id,current_source.source_revision
+     FROM ai_knowledge_chunks c JOIN ai_knowledge_sources s ON s.id=c.source_id
+     LEFT JOIN current_public_sources current_source ON current_source.source_type=s.source_type::text AND current_source.source_id=s.source_id
+     WHERE c.id=ANY($1::uuid[]) AND c.visibility='public' AND s.public_visibility='public'
+       AND s.published=true AND c.stale=false ${publicKnowledgeRevisionGate}`,
+    [chunks.map((chunk) => chunk.id)],
+  );
+  const revisions = new Map(rows.map((row) => [row.id, row.source_revision]));
+  return chunks.every(
+    (chunk) => Boolean(chunk.source_revision) && revisions.get(chunk.id) === chunk.source_revision,
+  );
 }
 
 function knowledgeSearchTokens(query: string) {
