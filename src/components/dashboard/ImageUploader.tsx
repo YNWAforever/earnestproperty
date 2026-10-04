@@ -87,7 +87,7 @@ export function ImageUploader({
       if (!isCurrent(epoch)) return;
       const file = valid[i];
       try {
-        const data = await uploadAdminMedia(file, ownerType);
+        const data = await uploadAdminMedia(file, ownerType, () => isCurrent(epoch));
         if (!isCurrent(epoch)) return;
         uploaded.push(data.url);
       } catch (error) {

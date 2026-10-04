@@ -1,8 +1,13 @@
+import { assertWorkspaceCurrent } from "./workspace-request";
 import { withStaffUploadIdentity } from "@/auth";
 
 // File content binds retries across re-selection and reload in this tab. A failed
 // storage write stops before dispatch, so reload cannot accidentally create a new blob.
-export async function uploadAdminMedia(file: File, ownerType: string) {
+export async function uploadAdminMedia(
+  file: File,
+  ownerType: string,
+  isWorkspaceCurrent?: () => boolean,
+) {
   if (
     !file.size ||
     file.size > 5 * 1024 * 1024 ||
@@ -10,8 +15,11 @@ export async function uploadAdminMedia(file: File, ownerType: string) {
   ) {
     throw new Error("請選擇非空白 JPG / PNG / WEBP / AVIF 檔案，每張不超過 5MB。");
   }
+  assertWorkspaceCurrent(isWorkspaceCurrent);
   const { actorId, headers } = await withStaffUploadIdentity();
+  assertWorkspaceCurrent(isWorkspaceCurrent);
   const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  assertWorkspaceCurrent(isWorkspaceCurrent);
   const key = `media-upload:${encodeURIComponent(actorId)}:${ownerType}:${file.type}:${Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("")}`;
   const stored = sessionStorage.getItem(key);
   const intent: { id: string; receipt?: string } = stored
@@ -23,6 +31,7 @@ export async function uploadAdminMedia(file: File, ownerType: string) {
   body.set("ownerType", ownerType);
   body.set("uploadId", intent.id);
   if (intent.receipt) body.set("receipt", intent.receipt);
+  assertWorkspaceCurrent(isWorkspaceCurrent);
   let response: Response;
   try {
     response = await fetch("/api/admin/media/upload", {
