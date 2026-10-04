@@ -18,7 +18,7 @@ import {
   PERFORMANCE_DRILLDOWN_KEYS,
   selectPerformanceRecords,
 } from "./sales-performance-drilldown.mjs";
-import type { PerformanceReport } from "./sales-performance.types.ts";
+import type { PerformanceRecordPage, PerformanceReport } from "./sales-performance.types.ts";
 
 async function resolveBranchScope(actor: StaffAccess, requested: string | null) {
   const cachedAdmin = actor.roles.includes("admin");
@@ -147,7 +147,7 @@ export async function listPerformanceRecords(
     ids.length ? queryRows(SOURCE_EVIDENCE_SQL, [ids]) : Promise.resolve([]),
   ]);
   const evidenceById = new Map(sourceRows.map((row) => [String(row.inquiryId), row]));
-  let records;
+  let records: PerformanceRecordPage;
   try {
     records = selectPerformanceRecords(
       {
@@ -163,6 +163,61 @@ export async function listPerformanceRecords(
     );
   } catch {
     throw new Response("Invalid performance cursor", { status: 400 });
+  }
+  // Read accepted source facts for this page only, never infer them from an aggregate.
+  // The author is independent of the colleague credited by the immutable event.
+  const visibleIds = records.records
+    .filter((r) => r.kind === "inquiry" && r.leadId)
+    .map((r) => r.id);
+  if (visibleIds.length) {
+    const qualifications = await queryRows<{
+      inquiryId: string;
+      leadId: string;
+      qualifiedAt: string | Date;
+      evidence: string;
+      eventKey: string;
+    }>(
+      `WITH actor_row AS MATERIALIZED (
+         SELECT id,branch_id FROM staff_users
+         WHERE id=$2::uuid AND auth_user_id=$3 AND active FOR SHARE
+       ), actor_roles AS MATERIALIZED (
+         SELECT r.role FROM staff_roles r JOIN actor_row a ON a.id=r.staff_user_id
+         WHERE r.role IN ('admin','manager') FOR SHARE OF r
+       ) SELECT i.id::text AS "inquiryId",l.id::text AS "leadId",
+         q.qualified_at AS "qualifiedAt",q.evidence,e.event_key AS "eventKey"
+       FROM inquiries i JOIN crm_leads l ON l.id=i.crm_lead_id
+       LEFT JOIN staff_users inquiry_owner ON inquiry_owner.id=i.assigned_agent_id
+       LEFT JOIN staff_users source_owner ON source_owner.id=l.assigned_agent_id
+       CROSS JOIN actor_row a
+       JOIN crm_lead_qualifications q ON q.lead_id=l.id AND q.qualified_by=a.id
+       JOIN performance_events e ON e.lead_id=q.lead_id
+         AND e.event_type='lead_qualified' AND e.source_id=q.lead_id::text
+         AND e.event_key='lead_qualified:'||q.lead_id::text
+         AND e.source='crm_lead:'||q.lead_id::text AND e.occurred_at=q.qualified_at
+       WHERE i.id=ANY($1::uuid[]) AND EXISTS(SELECT 1 FROM actor_roles)
+         AND (($4::boolean AND EXISTS(SELECT 1 FROM actor_roles WHERE role='admin'))
+           OR (a.branch_id IS NOT NULL AND inquiry_owner.branch_id=a.branch_id
+             AND source_owner.branch_id=a.branch_id))
+         AND ($5::uuid IS NULL OR (inquiry_owner.branch_id=$5::uuid AND source_owner.branch_id=$5::uuid))
+       FOR SHARE OF i,l,q,e`,
+      [visibleIds, actor.staffId, actor.authUserId, actor.roles.includes("admin"), branch],
+    );
+    const byInquiry = new Map(qualifications.map((q) => [q.inquiryId, q]));
+    records = {
+      ...records,
+      records: records.records.map((record) => {
+        const source = byInquiry.get(record.id);
+        if (record.kind !== "inquiry" || !source || source.leadId !== record.leadId) return record;
+        return {
+          ...record,
+          qualification: {
+            qualifiedAt: new Date(source.qualifiedAt).toISOString(),
+            evidence: source.evidence,
+            eventKey: source.eventKey,
+          },
+        };
+      }),
+    };
   }
   await revalidatePerformanceScope(actor, filters.branchId, scope);
   return records;

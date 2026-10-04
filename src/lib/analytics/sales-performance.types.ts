@@ -81,6 +81,7 @@ export type PerformanceRecord = {
   leadId: string | null;
   transactionId: string | null;
   eventKey: string | null;
+  qualification?: { qualifiedAt: string; evidence: string; eventKey: string };
 };
 export type PerformanceRecordPage = { records: PerformanceRecord[]; nextCursor: string | null };
 

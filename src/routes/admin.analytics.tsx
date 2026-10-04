@@ -184,6 +184,18 @@ function AdminAnalyticsWorkspace() {
         cursor,
       });
       if (requestId !== recordRequest.current) return;
+      for (const record of next.records) {
+        if (!record.leadId || !record.qualification) continue;
+        const pending = qualificationRequests.current.get(record.leadId);
+        const source = record.qualification;
+        if (
+          pending &&
+          pending.evidence === source.evidence &&
+          new Date(pending.qualifiedAt).getTime() === new Date(source.qualifiedAt).getTime() &&
+          source.eventKey === `lead_qualified:${pending.leadId}`
+        )
+          qualificationRequests.current.delete(record.leadId);
+      }
       setRecordPage((current) =>
         append && current
           ? { records: [...current.records, ...next.records], nextCursor: next.nextCursor }

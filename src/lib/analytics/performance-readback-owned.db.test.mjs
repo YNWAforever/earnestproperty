@@ -20,7 +20,7 @@ test(
         return query(sql, params);
       };
       await mockOwnedServerDb(mock, readQuery, transaction);
-      const { INQUIRY_ROWS_SQL } = await import("./sales-performance.queries.mjs");
+      const { INQUIRY_ROWS_SQL, EVENT_ROWS_SQL } = await import("./sales-performance.queries.mjs");
       const {
         getSalesPerformance,
         listPerformanceRecords,
@@ -872,6 +872,9 @@ test(
         inquiryQuality: await query("SELECT * FROM inquiry_quality_revisions ORDER BY id"),
         eventQuality: await query("SELECT * FROM performance_event_quality_revisions ORDER BY id"),
         events: await query("SELECT * FROM performance_events ORDER BY event_key"),
+        occurrences: await query(
+          "SELECT * FROM performance_event_occurrence_revisions ORDER BY id",
+        ),
         qualifications: await query("SELECT * FROM crm_lead_qualifications ORDER BY lead_id"),
       });
       for (const [readerIndex, [name, read]] of readers.entries()) {
@@ -966,6 +969,277 @@ test(
           },
         );
       }
+      const seedReadback = async (
+        n,
+        { owner = null, forgedProjection = false, unassigned = false } = {},
+      ) => {
+        const access = await createReadActor(n, unassigned ? "admin" : "manager"),
+          lead = id(10000 + n),
+          inquiry = id(20000 + n);
+        const sourceOwner = unassigned ? null : (owner ?? access.staffId),
+          qualifiedAt = "2026-09-30T01:00:00.000Z";
+        const evidence = `Owned original accepted contact and requirements ${n}`;
+        await query(
+          "INSERT INTO crm_leads(id,source,stage,assigned_agent_id) VALUES($1,'whatsapp','contacted',$2)",
+          [lead, sourceOwner],
+        );
+        await query(
+          "INSERT INTO inquiries(id,source,name,created_at,customer_message_at,assigned_agent_id,crm_lead_id) VALUES($1,'whatsapp','Owned recovery inquiry','2026-09-30T00:00:00Z','2026-09-30T00:00:00Z',$2,$3)",
+          [inquiry, sourceOwner, lead],
+        );
+        await query(
+          "INSERT INTO inquiry_quality_revisions(inquiry_id,quality,reason,changed_by) VALUES($1,'production','Owned recovery inquiry verified',$2)",
+          [inquiry, access.staffId],
+        );
+        if (forgedProjection) {
+          await query(
+            "INSERT INTO performance_events(event_key,event_type,source_id,lead_id,staff_id,branch_id_at_event,occurred_at,source) VALUES($1,'lead_qualified',$2,$3,$4,$5,$6,'owned-wrong-source')",
+            [`lead_qualified:${lead}`, lead, lead, sourceOwner, id(500), qualifiedAt],
+          );
+          await query(
+            "INSERT INTO crm_lead_qualifications(lead_id,qualified_at,evidence,qualified_by) VALUES($1,$2,$3,$4)",
+            [lead, qualifiedAt, evidence, access.staffId],
+          );
+        } else await qualifyLeadForPerformance({ leadId: lead, qualifiedAt, evidence }, access);
+        return {
+          access,
+          lead,
+          inquiry,
+          expected: { qualifiedAt, evidence, eventKey: `lead_qualified:${lead}` },
+        };
+      };
+      const readbackPage = (access) =>
+        listPerformanceRecords({ filters, drilldownKey: "inquiries" }, access);
+      for (const [n, name, setup] of [
+        [
+          880,
+          "reads own accepted immutable source without retry and retains unknown quality",
+          async () => {},
+        ],
+        [
+          881,
+          "reads the accepted source after stage changes without creating a new qualification",
+          async (fixture) => {
+            await query("UPDATE crm_leads SET stage='new' WHERE id=$1", [fixture.lead]);
+          },
+        ],
+        [
+          882,
+          "reuses one source for duplicate inquiry rows without duplicating evidence",
+          async (fixture) => {
+            await query(
+              "INSERT INTO inquiries(id,source,name,created_at,customer_message_at,assigned_agent_id,crm_lead_id) VALUES($1,'whatsapp','Owned duplicate recovery inquiry','2026-09-30T00:00:00Z','2026-09-30T00:00:00Z',$2,$3)",
+              [id(30000 + 882), fixture.access.staffId, fixture.lead],
+            );
+            await query(
+              "INSERT INTO inquiry_quality_revisions(inquiry_id,quality,reason,changed_by) VALUES($1,'production','Owned duplicate verified',$2)",
+              [id(30000 + 882), fixture.access.staffId],
+            );
+          },
+        ],
+      ]) {
+        await t.test(`qualification readback ${name}`, async () => {
+          const fixture = await seedReadback(n);
+          await setup(fixture);
+          const before = await readHistory();
+          const page = await readbackPage(fixture.access),
+            selected = page.records.filter((r) => r.leadId === fixture.lead);
+          assert.equal(selected.length, n === 882 ? 2 : 1);
+          for (const r of selected) assert.deepEqual(r.qualification, fixture.expected);
+          const [raw] = await query(
+            "SELECT qualified_at,evidence,qualified_by::text AS actor FROM crm_lead_qualifications WHERE lead_id=$1",
+            [fixture.lead],
+          );
+          assert.equal(new Date(raw.qualified_at).toISOString(), fixture.expected.qualifiedAt);
+          assert.equal(raw.evidence, fixture.expected.evidence);
+          assert.equal(raw.actor, fixture.access.staffId);
+          const scoped = { ...filters, staffId: fixture.access.staffId };
+          assert.equal(
+            (await getSalesPerformance(scoped, fixture.access)).acquisition.qualifiedLeads.value,
+            0,
+          );
+          assert.deepEqual(await readHistory(), before);
+        });
+      }
+      await t.test(
+        "qualification readback separates the author from the assigned source colleague",
+        async () => {
+          const fixture = await seedReadback(883, { owner: id(600) }),
+            before = await readHistory();
+          const [projection] = await query(
+            "SELECT staff_id::text AS owner FROM performance_events WHERE event_key=$1",
+            [fixture.expected.eventKey],
+          );
+          assert.equal(projection.owner, id(600));
+          assert.notEqual(projection.owner, fixture.access.staffId);
+          const page = await readbackPage(fixture.access);
+          assert.deepEqual(
+            page.records.find((r) => r.id === fixture.inquiry).qualification,
+            fixture.expected,
+          );
+          assert.deepEqual(await readHistory(), before);
+        },
+      );
+      await t.test(
+        "qualification readback permits own admin source with unassigned owners but restricts a later downgrade",
+        async () => {
+          const fixture = await seedReadback(891, { unassigned: true }),
+            before = await readHistory();
+          const record = (await readbackPage(fixture.access)).records.find(
+            (r) => r.id === fixture.inquiry,
+          );
+          assert.deepEqual(record.qualification, fixture.expected);
+          await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [fixture.access.staffId]);
+          await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [
+            fixture.access.staffId,
+          ]);
+          const downgraded = await readbackPage(fixture.access);
+          assert.ok(
+            downgraded.records.every(
+              (r) => r.id !== fixture.inquiry || r.qualification === undefined,
+            ),
+          );
+          assert.deepEqual(await readHistory(), before);
+        },
+      );
+      await t.test(
+        "qualification readback does not expose another author even in the same branch",
+        async () => {
+          const fixture = await seedReadback(884),
+            other = await createReadActor(885),
+            before = await readHistory();
+          const record = (await readbackPage(other)).records.find((r) => r.id === fixture.inquiry);
+          assert.ok(record);
+          assert.equal(record.qualification, undefined);
+          assert.deepEqual(await readHistory(), before);
+        },
+      );
+      await t.test(
+        "qualification readback omits evidence when current lead owner leaves the visible inquiry branch",
+        async () => {
+          const fixture = await seedReadback(886);
+          await query("UPDATE crm_leads SET assigned_agent_id=$2 WHERE id=$1", [
+            fixture.lead,
+            id(601),
+          ]);
+          const before = await readHistory(),
+            record = (await readbackPage(fixture.access)).records.find(
+              (r) => r.id === fixture.inquiry,
+            );
+          assert.ok(record);
+          assert.equal(record.qualification, undefined);
+          assert.deepEqual(await readHistory(), before);
+        },
+      );
+      await t.test(
+        "qualification readback does not misattach a source when inquiry lead changes between reads",
+        async () => {
+          const fixture = await seedReadback(887),
+            replacement = id(40887);
+          await query(
+            "INSERT INTO crm_leads(id,source,stage,assigned_agent_id) VALUES($1,'whatsapp','contacted',$2)",
+            [replacement, fixture.access.staffId],
+          );
+          await qualifyLeadForPerformance(
+            {
+              leadId: replacement,
+              qualifiedAt: fixture.expected.qualifiedAt,
+              evidence: "Owned different replacement source evidence",
+            },
+            fixture.access,
+          );
+          const before = await readHistory();
+          let changed = false;
+          beforeRead = async (sql) => {
+            if (sql === EVENT_ROWS_SQL) {
+              beforeRead = null;
+              changed = true;
+              await query("UPDATE inquiries SET crm_lead_id=$2 WHERE id=$1", [
+                fixture.inquiry,
+                replacement,
+              ]);
+            }
+          };
+          try {
+            const record = (await readbackPage(fixture.access)).records.find(
+              (r) => r.id === fixture.inquiry,
+            );
+            assert.equal(changed, true);
+            assert.equal(record.leadId, fixture.lead);
+            assert.equal(record.qualification, undefined);
+            assert.deepEqual(await readHistory(), before);
+          } finally {
+            beforeRead = null;
+          }
+        },
+      );
+      await t.test(
+        "qualification readback omits a mismatched immutable projection source",
+        async () => {
+          const fixture = await seedReadback(888, { forgedProjection: true }),
+            before = await readHistory();
+          const record = (await readbackPage(fixture.access)).records.find(
+            (r) => r.id === fixture.inquiry,
+          );
+          assert.equal(record.qualification, undefined);
+          assert.deepEqual(await readHistory(), before);
+        },
+      );
+      await t.test(
+        "qualification readback rechecks source owner after initial inquiry selection",
+        async () => {
+          const fixture = await seedReadback(889),
+            before = await readHistory();
+          let changed = false;
+          beforeRead = async (sql) => {
+            if (sql === EVENT_ROWS_SQL) {
+              beforeRead = null;
+              changed = true;
+              await query("UPDATE crm_leads SET assigned_agent_id=$2 WHERE id=$1", [
+                fixture.lead,
+                id(601),
+              ]);
+            }
+          };
+          try {
+            const record = (await readbackPage(fixture.access)).records.find(
+              (r) => r.id === fixture.inquiry,
+            );
+            assert.equal(changed, true);
+            assert.equal(record.qualification, undefined);
+            assert.deepEqual(await readHistory(), before);
+          } finally {
+            beforeRead = null;
+          }
+        },
+      );
+      await t.test(
+        "qualification readback refuses revoked current authority without changing any source",
+        async () => {
+          const fixture = await seedReadback(890),
+            before = await readHistory();
+          let changed = false;
+          beforeRead = async (sql) => {
+            if (sql === EVENT_ROWS_SQL) {
+              beforeRead = null;
+              changed = true;
+              await query("DELETE FROM staff_roles WHERE staff_user_id=$1", [
+                fixture.access.staffId,
+              ]);
+            }
+          };
+          try {
+            await assert.rejects(
+              readbackPage(fixture.access),
+              (e) => e instanceof Response && e.status === 403,
+            );
+            assert.equal(changed, true);
+            assert.deepEqual(await readHistory(), before);
+          } finally {
+            beforeRead = null;
+          }
+        },
+      );
     });
     assert.equal(networkGuard.mock.calls.length, 0);
   },

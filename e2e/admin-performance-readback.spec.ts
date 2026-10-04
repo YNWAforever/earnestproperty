@@ -49,7 +49,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/performance-qualification-replay-browser-summary.json",
+    ".audit/remediation-20261003/performance-qualification-readback-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -85,7 +85,7 @@ test.afterEach(async ({ page }, info) => {
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("totals"))
     await page.screenshot({
-      path: `.audit/remediation-20261003/performance-replay-totals-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/performance-qualification-readback-totals-${page.viewportSize()!.width}.png`,
     });
 });
 const id = (n: number) => `80000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -141,6 +141,166 @@ const qualificationCalls = (page: Page) =>
 for (const width of [1440, 1280, 768, 390])
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("qualification readback restores committed evidence after real page reload without another write", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "commit-unknown";
+      });
+      const evidence = "Owned immutable original qualification after actual page reload";
+      await editQualification(page, 1, evidence);
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      const original = await page.evaluate(() =>
+        JSON.parse(JSON.stringify(window.performanceReadbackFixture.qualifications)),
+      );
+      expect(original).toHaveLength(1);
+      expect(await qualificationCalls(page)).toHaveLength(1);
+      await page.clock.setFixedTime(new Date("2026-09-30T02:00:00Z"));
+      await page.reload();
+      await drill(page);
+      await row(page, 1).getByText("核實合格線索", { exact: true }).click();
+      await expect(row(page, 1).getByRole("note", { name: "已核實依據" })).toHaveText(evidence);
+      await expect(row(page, 1).locator("time")).toHaveAttribute(
+        "datetime",
+        original[0].qualifiedAt,
+      );
+      await expect(
+        row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }),
+      ).toBeDisabled();
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveAttribute(
+        "readonly",
+        "",
+      );
+      expect(await qualificationCalls(page)).toHaveLength(0);
+      expect(await page.evaluate(() => window.performanceReadbackFixture.qualifications)).toEqual(
+        original,
+      );
+      await expect(metric(page, "合格線索").locator("p").first()).toHaveText("0");
+      const download = page.waitForEvent("download");
+      await records(page).getByRole("button", { name: "匯出本頁 CSV", exact: true }).click();
+      const csv = await readFile((await (await download).path())!, "utf8");
+      expect(csv).not.toContain(evidence);
+      expect(csv).not.toContain("qualification");
+    });
+    test("qualification readback restores accepted source in a fresh browser context without a client journal", async ({
+      page,
+      browser,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "commit-unknown";
+      });
+      await editQualification(
+        page,
+        1,
+        "Owned accepted qualification persists beyond browser context",
+      );
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
+      const original = await page.evaluate(() =>
+        JSON.parse(JSON.stringify(window.performanceReadbackFixture.qualifications)),
+      );
+      expect(await qualificationCalls(page)).toHaveLength(1);
+      const context = await browser.newContext({ viewport: { width, height: 900 } });
+      try {
+        const fresh = await context.newPage();
+        // Seed only the fixture backend's immutable facts; no production client journal/storage.
+        await fresh.addInitScript(
+          (facts) => sessionStorage.setItem("performance-qualifications", JSON.stringify(facts)),
+          original,
+        );
+        await open(fresh);
+        await drill(fresh);
+        await row(fresh, 1).getByText("核實合格線索", { exact: true }).click();
+        await expect(row(fresh, 1).getByRole("note", { name: "已核實依據" })).toHaveText(
+          original[0].evidence,
+        );
+        await expect(row(fresh, 1).locator("time")).toHaveAttribute(
+          "datetime",
+          original[0].qualifiedAt,
+        );
+        await expect(
+          row(fresh, 1).getByRole("button", { name: "記錄合格線索", exact: true }),
+        ).toBeDisabled();
+        expect(await qualificationCalls(fresh)).toHaveLength(0);
+        expect(
+          await fresh.evaluate(() => window.performanceReadbackFixture.qualifications),
+        ).toEqual(original);
+        expect(await fresh.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+          true,
+        );
+      } finally {
+        await context.close();
+      }
+    });
+    test("qualification readback preserves a newer manual draft when accepted source returns", async ({
+      page,
+    }) => {
+      await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
+      await open(page);
+      await drill(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualificationMode = "delayed";
+      });
+      const original = "Owned original accepted qualification before newer draft";
+      await editQualification(page, 1, original);
+      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      const newer = "Owned newer unsent manual qualification draft must remain visible";
+      await row(page, 1).getByLabel("核實依據", { exact: true }).fill(newer);
+      await page.evaluate(() => window.performanceReadbackFixture.pending.shift()!.release());
+      await expect(row(page, 1).getByRole("note", { name: "已核實依據" })).toHaveText(original);
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue(newer);
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveAttribute(
+        "readonly",
+        "",
+      );
+      await expect(
+        row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }),
+      ).toBeDisabled();
+      expect(await qualificationCalls(page)).toHaveLength(1);
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualifications),
+      ).toMatchObject([{ evidence: original }]);
+    });
+    test("qualification readback never reveals another author in the same visible branch", async ({
+      page,
+    }) => {
+      await page.addInitScript(() =>
+        sessionStorage.setItem(
+          "performance-qualifications",
+          JSON.stringify([
+            {
+              leadId: "80000000-0000-4000-8000-000000000101",
+              qualifiedAt: "2026-09-30T00:30:00.000Z",
+              evidence: "Owned other author confidential qualification evidence",
+              actor: "actor-c",
+              staffId: "80000000-0000-4000-8000-000000000602",
+              branchId: "80000000-0000-4000-8000-000000000500",
+            },
+          ]),
+        ),
+      );
+      await open(page);
+      await drill(page);
+      await row(page, 1).getByText("核實合格線索", { exact: true }).click();
+      await expect(records(page)).not.toContainText(
+        "Owned other author confidential qualification evidence",
+      );
+      await expect(row(page, 1).getByRole("note", { name: "已核實依據" })).toHaveCount(0);
+      await expect(
+        row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }),
+      ).toBeEnabled();
+      expect(await qualificationCalls(page)).toHaveLength(0);
+    });
     test("qualification lost commit response retries identical original input and repeated uncertainty preserves one source", async ({
       page,
     }) => {
@@ -209,7 +369,7 @@ for (const width of [1440, 1280, 768, 390])
         "Owned accepted original qualification contact evidence",
       );
     });
-    test("qualification original request survives filter and record table remount before replay", async ({
+    test("qualification original source survives filter remount and is acknowledged by readback", async ({
       page,
     }) => {
       await page.clock.setFixedTime(new Date("2026-09-30T00:30:00Z"));
@@ -237,17 +397,13 @@ for (const width of [1440, 1280, 768, 390])
         window.performanceReadbackFixture.qualificationMode = "ok";
       });
       await row(page, 1).getByText("核實合格線索", { exact: true }).click();
-      const retained = row(page, 1).getByRole("note", { name: "上次待確認的核實依據" });
-      await expect(retained).toHaveText(evidence);
-      // Restore from what the user can read, not a hidden fixture/test variable.
-      await row(page, 1)
-        .getByLabel("核實依據", { exact: true })
-        .fill((await retained.textContent())!);
-      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
-      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue("");
+      await expect(row(page, 1).getByRole("note", { name: "已核實依據" })).toHaveText(evidence);
+      await expect(row(page, 1).getByRole("note", { name: "上次待確認的核實依據" })).toHaveCount(0);
+      await expect(
+        row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }),
+      ).toBeDisabled();
       const attempts = await qualificationCalls(page);
-      expect(attempts).toHaveLength(2);
-      expect(attempts[1].input).toEqual(attempts[0].input);
+      expect(attempts).toHaveLength(1);
       expect(await page.evaluate(() => window.performanceReadbackFixture.qualifications)).toEqual(
         before,
       );
@@ -388,7 +544,7 @@ for (const width of [1440, 1280, 768, 390])
       expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(2);
       expect(csv).not.toContain(id(4));
       await page.screenshot({
-        path: `.audit/remediation-20261003/performance-replay-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/performance-qualification-readback-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(metric(page, "合格線索").locator("p").first()).toHaveText("1");
@@ -409,15 +565,17 @@ for (const width of [1440, 1280, 768, 390])
       await editQualification(page, 1, "Owned original immutable qualification evidence");
       await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
       await expect(page.getByRole("button", { name: "未知跟進事件 1", exact: true })).toBeVisible();
-      await row(page, 1)
-        .getByLabel("核實依據", { exact: true })
-        .fill("Owned later reason cannot overwrite original evidence");
-      await row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }).click();
-      await expect(records(page).getByRole("alert")).toContainText("未能核實線索");
-      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveValue(
-        "Owned later reason cannot overwrite original evidence",
+      await expect(row(page, 1).getByRole("note", { name: "已核實依據" })).toHaveText(
+        "Owned original immutable qualification evidence",
       );
-      expect(await qualificationCalls(page)).toHaveLength(2);
+      await expect(row(page, 1).getByLabel("核實依據", { exact: true })).toHaveAttribute(
+        "readonly",
+        "",
+      );
+      await expect(
+        row(page, 1).getByRole("button", { name: "記錄合格線索", exact: true }),
+      ).toBeDisabled();
+      expect(await qualificationCalls(page)).toHaveLength(1);
       expect(
         await page.evaluate(() => window.performanceReadbackFixture.qualifications),
       ).toMatchObject([{ evidence: "Owned original immutable qualification evidence" }]);
@@ -580,7 +738,7 @@ for (const width of [1440, 1280, 768, 390])
       for (const n of [2, 3, 4]) expect(csv).toContain(id(n));
       expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(4);
       await page.screenshot({
-        path: `.audit/remediation-20261003/performance-replay-quality-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/performance-qualification-readback-quality-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("3");
