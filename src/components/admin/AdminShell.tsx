@@ -382,16 +382,16 @@ export function AdminShell({
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  // The server's resolution of who this signed-in user is as a staff member,
-  // from the shared store in staff-session.ts. null = not known yet (or the
-  // lookup itself failed): pages render as normal and the data layer still
-  // enforces access. Only an explicit denial swaps the page for an explanation.
+  // Unknown staff identity hides private presentation until the server can
+  // resolve it; lookup failure is distinct from an explicit access denial.
+  // Server handlers independently enforce every read and write permission.
   const {
     session: staffSession,
     loading: rechecking,
     refresh: refreshStaffSession,
   } = useStaffSession(user?.id ?? null);
-  const staffRoles = staffSession?.status === "ok" ? staffSession.roles : null;
+  const staffReady = staffSession?.status === "ok";
+  const staffRoles = staffReady ? staffSession.roles : [];
   const [showFirstLogin, setShowFirstLogin] = useState(false);
   useEffect(() => {
     if (staffSession?.status !== "ok") {
@@ -518,14 +518,18 @@ export function AdminShell({
                     </div>
                   </SheetContent>
                 </Sheet>
-                <h1 className="truncate text-2xl font-semibold tracking-normal">{title}</h1>
+                <h1 className="truncate text-2xl font-semibold tracking-normal">
+                  {staffReady ? title : "後台"}
+                </h1>
               </div>
-              {breadcrumb ? (
+              {staffReady && breadcrumb ? (
                 <div className="mt-1 text-xs text-muted-foreground">{breadcrumb}</div>
               ) : null}
-              <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {staffReady ? description : "請先核實職員存取權限。"}
+              </p>
             </div>
-            {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
+            {staffReady && actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
           </header>
           {showFirstLogin && staffSession?.status === "ok" ? (
             <section
@@ -566,8 +570,28 @@ export function AdminShell({
               onRecheck={() => void refreshStaffSession()}
               onSignOut={() => setSignOutOpen(true)}
             />
-          ) : (
+          ) : staffReady ? (
             children
+          ) : (
+            <section role="status" className="rounded-lg border bg-card p-5 text-sm">
+              <h2 className="text-base font-semibold">
+                {rechecking ? "正在核實職員權限" : "未能核實職員權限"}
+              </h2>
+              <p className="mt-2 text-muted-foreground">
+                {rechecking
+                  ? "核實完成後才會顯示頁面資料。"
+                  : "暫時無法確認職員權限，頁面資料已隱藏。請重新檢查；如登入已失效，請登出後重新登入。"}
+              </p>
+              <Button
+                className="mt-4"
+                size="sm"
+                type="button"
+                disabled={rechecking}
+                onClick={() => void refreshStaffSession()}
+              >
+                {rechecking ? "檢查中…" : "重新檢查"}
+              </Button>
+            </section>
           )}
         </div>
       </div>

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { useStaffSession } from "@/components/admin/staff-session";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { ForwardedEnquiryForm } from "@/components/admin/whatsapp/ForwardedEnquiryForm";
 import { ForwardedEnquiryEvidence } from "@/components/admin/whatsapp/ForwardedEnquiryEvidence";
@@ -167,6 +168,23 @@ export const Route = createFileRoute("/admin/leads")({
 // nothing, the query is the source of truth.
 
 function AdminLeads() {
+  const { user } = useNeonAuth();
+  const { session } = useStaffSession(user?.id ?? null);
+  if (!user || session?.status !== "ok") {
+    return (
+      <AdminShell title="客戶查詢" description="集中處理買樓、租樓及業主估價查詢。">
+        {null}
+      </AdminShell>
+    );
+  }
+  // Scope resolution can change while Auth keeps the same user object. A new
+  // workspace drops private rows, selections, details and late read callbacks.
+  // Actor-keyed unsent forwarded drafts retain their existing storage boundary.
+  const identity = JSON.stringify([user.id, session.staffId, [...session.roles].sort()]);
+  return <AdminLeadsWorkspace key={identity} />;
+}
+
+function AdminLeadsWorkspace() {
   const { user } = useNeonAuth();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();

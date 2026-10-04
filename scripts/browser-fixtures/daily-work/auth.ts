@@ -9,6 +9,7 @@ let auth = {
   signOut: async () => {},
 };
 export function changeActor(id: string) {
+  if (auth.user.id === id) return;
   auth = { ...auth, user: { ...auth.user, id } };
   for (const listener of listeners) listener();
 }
