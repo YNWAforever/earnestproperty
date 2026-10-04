@@ -505,6 +505,9 @@ export type AdminAiKnowledgeRebuildResult = {
 };
 
 export type AdminLeadAiProfile = {
+  analysis?: Partial<import("../ai/ai-types").CrmAnalysisRunMeta> & {
+    status: import("../ai/ai-types").CrmAnalysisRunMeta["status"];
+  };
   profile: CrmAiProfile | null;
   tags: CrmAiTag[];
 };

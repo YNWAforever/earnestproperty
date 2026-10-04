@@ -50,6 +50,11 @@ export type AiKnowledgeChunk = {
 };
 
 export type CrmAiProfile = {
+  analysis_run_id?: string | null;
+  generated_by?: string | null;
+  result_kind?: string | null;
+  action_type?: string | null;
+  validation_code?: string | null;
   id: string;
   contact_id: string | null;
   lead_id: string | null;
@@ -65,6 +70,27 @@ export type CrmAiProfile = {
   summary: string | null;
   last_analyzed_at: string | null;
   analysis_version: string;
+};
+
+export type CrmAnalysisRunMeta = {
+  runId: string;
+  actorStaffId: string;
+  sourceFingerprint: string;
+  promptVersion: string;
+  schemaVersion: string;
+  status: "pending" | "completed" | "stale" | "denied" | "cancelled" | "failed";
+  resultKind: "model_validated" | "deterministic" | "fallback" | "failed";
+  provider: string | null;
+  resolvedModel: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  validationCode: string | null;
+  usage: {
+    inputTokens: number | null;
+    outputTokens: number | null;
+    costAmount: string | null;
+    costCurrency: string | null;
+  } | null;
 };
 
 export type CrmAiTag = {

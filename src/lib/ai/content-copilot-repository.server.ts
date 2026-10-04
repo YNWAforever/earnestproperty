@@ -1,6 +1,8 @@
 import "@tanstack/react-start/server-only";
 
 import { getSql, queryRows, type DbRow } from "@/lib/neon/db.server";
+import { publicKnowledgeCurrentSourcesCte } from "./knowledge-freshness.server";
+import type { ContentKnowledgeDependency } from "./content-copilot-context.server";
 
 import {
   allowedContentCopilotFields,
@@ -51,6 +53,9 @@ export type ContentProposalRecord = {
 
 export type StartContentProposalInput = {
   staffId: string;
+  authUserId: string;
+  sourceDbRevision: string;
+  knowledgeDependencies: ContentKnowledgeDependency[];
   request: ContentCopilotRequest;
   sourceFingerprint: string;
   promptVersion: string;
@@ -60,6 +65,7 @@ export type StartContentProposalInput = {
 
 export type CompleteContentProposalInput = {
   staffId: string;
+  authUserId: string;
   proposalId: string;
   resourceType: ContentCopilotResourceType;
   resourceId: string;
@@ -80,6 +86,7 @@ export type FailContentProposalInput = {
 
 export type DecideContentProposalInput = {
   staffId: string;
+  authUserId: string;
   proposalId: string;
   acceptedFields: string[];
 };
@@ -92,19 +99,43 @@ export async function startContentProposal(input: StartContentProposalInput) {
     throw contentCopilotError("COPILOT_PROVIDER_UNSUPPORTED");
   if (!/^[0-9a-f]{64}$/.test(input.sourceFingerprint))
     throw contentCopilotError("COPILOT_FINGERPRINT_INVALID");
+  if (
+    !/^[0-9a-f]{32}$/.test(input.sourceDbRevision ?? "") ||
+    !Array.isArray(input.knowledgeDependencies) ||
+    input.knowledgeDependencies.length > 6 ||
+    input.knowledgeDependencies.some(
+      (d) =>
+        !isContentCopilotAuditUuid(d.sourceId) ||
+        !d.chunkId ||
+        !/^[0-9a-f]{32,64}$/.test(d.sourceRevision),
+    )
+  )
+    throw contentCopilotError("COPILOT_STALE_PROPOSAL");
+  if (!input.authUserId) throw contentCopilotError("COPILOT_FORBIDDEN");
 
   await expireGeneratingProposal(input.staffId);
 
   try {
     const sql = getSql();
-    const [, rows] = await sql.transaction((tx) => [
+    const [, , , rows] = await sql.transaction((tx) => [
       tx.query("SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))", [input.staffId]),
+      tx.query("SELECT ep_assert_content_snapshot($1,$2::uuid,$3::uuid,$4,$5)", [
+        requestResult.data.resourceType,
+        requestResult.data.resourceId,
+        input.staffId,
+        input.authUserId,
+        input.sourceDbRevision,
+      ]),
+      tx.query(contentKnowledgeDependencyGuard("$1::jsonb"), [
+        JSON.stringify(input.knowledgeDependencies),
+      ]),
       tx.query(
         `INSERT INTO ai_content_proposals (
            resource_type, resource_id, action, selected_fields, source_fingerprint,
-           request_context, provider, model, prompt_version, status, requested_by
+           request_context, provider, model, prompt_version, status, requested_by, source_db_revision,
+           requested_auth_user_id, knowledge_dependencies
          )
-         SELECT $1,$2,$3,$4::text[],$5,$6::jsonb,$7,$8,$9,'generating',$10
+         SELECT $1,$2,$3,$4::text[],$5,$6::jsonb,$7,$8,$9,'generating',$10,$11,$12,$13::jsonb
          WHERE (SELECT count(*)::int
                 FROM ai_content_proposals
                 WHERE requested_by = $10::uuid
@@ -125,6 +156,9 @@ export async function startContentProposal(input: StartContentProposalInput) {
           input.model ?? null,
           input.promptVersion,
           input.staffId,
+          input.sourceDbRevision,
+          input.authUserId,
+          JSON.stringify(input.knowledgeDependencies),
         ],
       ),
     ]);
@@ -135,7 +169,7 @@ export async function startContentProposal(input: StartContentProposalInput) {
       throw contentCopilotError("COPILOT_GENERATION_IN_PROGRESS");
     if (postgresErrorCode(error) === "23505")
       throw contentCopilotError("COPILOT_DATABASE_CONFLICT");
-    throw error;
+    throw contentTransitionError(error);
   }
 }
 
@@ -146,7 +180,10 @@ export async function completeContentProposal(input: CompleteContentProposalInpu
     throw contentCopilotError("COPILOT_PROPOSAL_CONTEXT_MISMATCH");
 
   await expireOwnedProposal(input.proposalId, input.staffId);
-  const rows = await queryRows(
+  const rows = await guardedContentProposalQuery(
+    input.proposalId,
+    input.staffId,
+    input.authUserId,
     `UPDATE ai_content_proposals
      SET status = 'generated',
          patches = $1::jsonb,
@@ -222,25 +259,76 @@ export async function getContentProposal(input: { proposalId: string; staffId: s
 export async function decideContentProposal(input: DecideContentProposalInput) {
   const acceptedFields = uniqueFields(input.acceptedFields);
   await expireOwnedProposal(input.proposalId, input.staffId);
-  const rows = await queryRows(
+  const rows = await guardedContentProposalQuery(
+    input.proposalId,
+    input.staffId,
+    input.authUserId,
     `UPDATE ai_content_proposals
      SET status = CASE
            WHEN cardinality($1::text[]) = 0 THEN 'rejected'
            WHEN $1::text[] @> selected_fields AND selected_fields @> $1::text[] THEN 'applied'
            ELSE 'partially_applied'
          END,
-         accepted_fields = $1::text[],
+         accepted_fields = CASE WHEN status='generated' THEN $1::text[] ELSE accepted_fields END,
          decided_by = $2,
-         decided_at = now()
+         decided_at = COALESCE(decided_at,now())
      WHERE id = $3
        AND requested_by = $2
-       AND status = 'generated'
+       AND (status = 'generated' OR (status IN('applied','partially_applied','rejected') AND accepted_fields @> $1::text[] AND $1::text[] @> accepted_fields))
        AND $1::text[] <@ selected_fields
        AND expires_at > now()
      RETURNING *`,
     [acceptedFields, input.staffId, input.proposalId],
   );
   return requireTransition(rows[0], input.proposalId, input.staffId);
+}
+
+function contentTransitionError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  const code = message.match(/COPILOT_(FORBIDDEN|STALE_PROPOSAL)/)?.[0];
+  if (code) return contentCopilotError(code);
+  if (["40001", "40P01"].includes(postgresErrorCode(error) ?? ""))
+    return contentCopilotError("COPILOT_STALE_PROPOSAL");
+  return error;
+}
+async function guardedContentProposalQuery(
+  proposalId: string,
+  staffId: string,
+  authUserId: string,
+  statement: string,
+  params: unknown[],
+) {
+  try {
+    const [, , rows] = await getSql().transaction((tx) => [
+      tx.query("SELECT ep_assert_content_proposal($1::uuid,$2::uuid,$3)", [
+        proposalId,
+        staffId,
+        authUserId,
+      ]),
+      tx.query(
+        contentKnowledgeDependencyGuard(
+          "(SELECT knowledge_dependencies FROM ai_content_proposals WHERE id=$1::uuid)",
+        ),
+        [proposalId],
+      ),
+      tx.query(statement, params),
+    ]);
+    return rows;
+  } catch (error) {
+    throw contentTransitionError(error);
+  }
+}
+
+function contentKnowledgeDependencyGuard(dependencies: string) {
+  return `${publicKnowledgeCurrentSourcesCte()}
+    SELECT ep_assert_content_dependencies_valid(NOT EXISTS(
+      SELECT 1 FROM jsonb_to_recordset(${dependencies}) AS dependency("sourceId" text,"sourceRevision" text)
+      LEFT JOIN ai_knowledge_sources s ON s.id=dependency."sourceId"::uuid
+      LEFT JOIN current_public_sources current_source
+        ON current_source.source_type=s.source_type::text AND current_source.source_id=s.source_id
+      WHERE current_source.source_revision IS DISTINCT FROM dependency."sourceRevision"
+        OR current_source.source_revision IS NULL
+    ))`;
 }
 
 export type ContentCopilotAuditMetadata = Partial<{

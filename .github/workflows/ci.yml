@@ -100,6 +100,7 @@ jobs:
       - run: npm run test:team
       - run: npm run test:property-experience
       - run: npm run test:content-copilot
+      - run: npm run test:crm-analysis
       - run: npm run test:live-agent
       - run: npm run test:admin-properties
       - run: npm run test:cms
@@ -133,6 +134,7 @@ jobs:
       - run: docker pull pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
       - run: npm run test:no-link:local-postgres
       - run: npm run test:ai-knowledge:db
+      - run: npm run test:crm-analysis:db
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:

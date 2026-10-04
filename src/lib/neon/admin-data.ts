@@ -1266,7 +1266,12 @@ export const fetchAdminLeadAiProfile = async function fetchAdminLeadAiProfile(op
 };
 
 const analyzeAdminLeadAiProfileServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { leadId: string }) => data)
+  .inputValidator((data: unknown) =>
+    z
+      .object({ leadId: z.string().uuid(), requestId: z.string().uuid().optional() })
+      .strict()
+      .parse(data),
+  )
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
@@ -1274,7 +1279,7 @@ const analyzeAdminLeadAiProfileServer = createServerFn({ method: "POST" })
   });
 
 export const analyzeAdminLeadAiProfile = async function analyzeAdminLeadAiProfile(options: {
-  data: { leadId: string };
+  data: { leadId: string; requestId?: string };
 }) {
   return callStaffServerFn(async () =>
     analyzeAdminLeadAiProfileServer(await withStaffAuthHeaders(options)),
@@ -1560,6 +1565,22 @@ const fetchAdminBlastOptionsServer = createServerFn({ method: "GET" }).handler(a
   const data = await import("./admin-data.server");
   return data.fetchAdminBlastOptions();
 });
+
+const cancelAdminLeadAiAnalysisServer = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) =>
+    z.object({ leadId: z.string().uuid(), runId: z.string().uuid() }).strict().parse(data),
+  )
+  .handler(async ({ data }) => {
+    const actor = await requireStaff(["admin", "manager", "agent"]);
+    return (await import("./admin-data.server")).cancelAdminLeadAiAnalysis(data, actor);
+  });
+export async function cancelAdminLeadAiAnalysis(options: {
+  data: { leadId: string; runId: string };
+}) {
+  return callStaffServerFn(async () =>
+    cancelAdminLeadAiAnalysisServer(await withStaffAuthHeaders(options)),
+  );
+}
 
 export async function fetchAdminBlastOptions() {
   return callStaffServerFn(async () => fetchAdminBlastOptionsServer(await withStaffAuthHeaders()));

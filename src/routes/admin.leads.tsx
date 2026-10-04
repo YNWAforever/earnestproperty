@@ -241,6 +241,7 @@ function AdminLeads() {
   const listRequestRef = useRef(0);
   const detailRequestRef = useRef(0);
   const aiRequestRef = useRef(0);
+  const aiRunRequestsRef = useRef(new Map<string, string>());
   const selectedIdRef = useRef<string | null>(null);
   const panelOpenRef = useRef(false);
 
@@ -699,6 +700,8 @@ function AdminLeads() {
 
     const targetLeadId = detail.id;
     const requestId = aiRequestRef.current + 1;
+    const runRequestId = aiRunRequestsRef.current.get(targetLeadId) ?? crypto.randomUUID();
+    aiRunRequestsRef.current.set(targetLeadId, runRequestId);
     aiRequestRef.current = requestId;
     setAiLoading(true);
     // This is the retry the error banner asks for, so it must clear the banner
@@ -706,10 +709,25 @@ function AdminLeads() {
     // the same time -- and set it again if the retry also fails.
     setAiError(null);
     try {
-      const profile = await analyzeAdminLeadAiProfile({ data: { leadId: targetLeadId } });
+      const profile = await analyzeAdminLeadAiProfile({
+        data: { leadId: targetLeadId, requestId: runRequestId },
+      });
       if (requestId !== aiRequestRef.current || !canApplyLeadDetail(targetLeadId)) return;
+      if (profile.analysis?.status !== "pending") aiRunRequestsRef.current.delete(targetLeadId);
       setAiProfile(profile as AdminLeadAiProfile);
-      toast.success("AI 分析 已更新");
+      if (profile.analysis && profile.analysis.status !== "completed") {
+        setAiError(
+          profile.analysis.status === "denied"
+            ? "權限或負責同事已更新，結果未有保存。"
+            : "來源或分析狀態已更新，結果未有保存。請重新覆核。",
+        );
+        return;
+      }
+      toast.success(
+        profile.profile?.result_kind === "model_validated"
+          ? "模型分析已驗證及保存"
+          : "備用建議已保存，請由同事覆核",
+      );
     } catch (err) {
       if (canApplyLeadDetail(targetLeadId)) {
         setAiError(errorText(err));
