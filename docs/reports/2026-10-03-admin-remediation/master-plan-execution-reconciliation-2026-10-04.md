@@ -57,3 +57,6 @@ EP21 offline checker source `b157b66cd4b061d0306c90a22a788384d4974216`：實際R
 
 
 EP14/20 keyboard follow-up source `83b28eb7a608144728699772f1b7f86d95e67857`：original RED6focus failures及deferred-close validRED2後，shared DOM-owned opener回復；WhatsApp64/daily92、team126/commandcentre91/static PASS。新dated CSV5欄保留39/30旧欄及37 evidence roots。local bounded keyboard READY，fulltask NOT_READY，formalexternal BLOCKED；minor trapboundary未验。新增1歷史summary原bytes不可用明示，27PNG限制保留；全部oldstatus/hashmetadata保留。詳細見[本輪焦點讀回](ep-20-keyboard-focus-followup.md)。
+
+
+EP14/20 composition follow-up `283a887f955aa0f15652963554ae6136469eb7aa`：有效RED8compositionFAIL/4positivePASS後，fullWhatsApp76、159Node+9Bun與separate static0；owned DOM composition和modal first/last wrapping READY（前輪P3 boundary本地驗證已補），fulltask NOT_READY/nativeIME和formalexternal BLOCKED。追加CSV5dated欄保留44/35原欄及38oldroots，old46/68/27hashes一致；歷史27PNG+1summary限制保留。本輪無server/DTO/config/SQL/provider變更或production effects。見[本輪組字讀回](ep-20-ime-composition-followup.md)。
