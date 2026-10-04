@@ -1471,6 +1471,37 @@ test(
             assert.deepEqual(await readHistory(), before);
           },
         );
+        await t.test(
+          `quality recovery ${kind} rejects an unaccepted original then permits an explicit fresh-base decision`,
+          async () => {
+            const f = await qualityFixture(kind, offset + 10);
+            const other = await createReadActor(offset + 300, "admin");
+            await f.revise(
+              { ...f.request, quality: "spam", reason: "Owned protected competing admin decision" },
+              other,
+            );
+            const before = await readHistory(),
+              protectedHistory = await f.history();
+            await assert.rejects(
+              f.revise(f.request, f.access),
+              (e) => e instanceof Response && e.status === 409,
+            );
+            assert.deepEqual(await readHistory(), before);
+            await f.revise(
+              {
+                ...f.request,
+                expectedRevisionId: await snapshot(kind, f.key),
+                reason: "Owned explicit decision after fresh snapshot",
+              },
+              f.access,
+            );
+            const after = await f.history();
+            assert.equal(after.length, 2);
+            assert.deepEqual(after[0], protectedHistory[0]);
+            assert.equal(after[1].changed_by, f.access.staffId);
+            assert.equal(after[1].quality, "production");
+          },
+        );
         for (const identical of [true, false])
           await t.test(
             `quality recovery ${kind} concurrent ${identical ? "identical retries append once" : "different decisions preserve one winner and refuse stale CAS"}`,

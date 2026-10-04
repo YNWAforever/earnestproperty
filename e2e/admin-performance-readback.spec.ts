@@ -49,7 +49,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/performance-quality-recovery-browser-summary.json",
+    ".audit/remediation-20261003/performance-quality-recovery-final-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -85,7 +85,7 @@ test.afterEach(async ({ page }, info) => {
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("totals"))
     await page.screenshot({
-      path: `.audit/remediation-20261003/performance-quality-recovery-totals-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/performance-quality-recovery-final-totals-${page.viewportSize()!.width}.png`,
     });
 });
 const id = (n: number) => `80000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -240,6 +240,69 @@ for (const width of [1440, 1280, 768, 390])
       expect(await page.evaluate(() => window.performanceReadbackFixture.qualityRevisions)).toEqual(
         before,
       );
+    });
+    test("quality recovery releases an unaccepted original after conflict and preserves the newer draft", async ({
+      page,
+    }) => {
+      await admin(page);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.qualityMode = "failure";
+      });
+      const original = "Owned unaccepted original quality request";
+      const newer = "Owned newer draft after competing admin decision";
+      await editQuality(page, 1, "production", original);
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect(records(page).getByRole("alert")).toBeVisible();
+      expect(
+        await page.evaluate(() => window.performanceReadbackFixture.qualityRevisions),
+      ).toHaveLength(0);
+      await page.evaluate((key) => {
+        window.performanceReadbackFixture.qualityRevisions.push({
+          kind: "inquiry",
+          key,
+          quality: "production",
+          reason: "Owned protected competing admin decision",
+          actor: "other-admin",
+        });
+        window.performanceReadbackFixture.qualityMode = "delayed";
+      }, id(1));
+      const protectedHistory = await page.evaluate(
+        () => window.performanceReadbackFixture.qualityRevisions,
+      );
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
+        .toBe(1);
+      await row(page, 1).getByLabel("修正原因", { exact: true }).fill(newer);
+      await page.evaluate(() => {
+        window.performanceReadbackFixture.pending.splice(0).forEach((p) => p.release());
+        window.performanceReadbackFixture.qualityMode = "ok";
+      });
+      await expect(
+        row(page, 1).getByRole("button", { name: "儲存修正", exact: true }),
+      ).toBeEnabled();
+      await expect(row(page, 1).getByText("上次待確認的品質修正：", { exact: true })).toHaveCount(
+        0,
+      );
+      await expect(row(page, 1).getByLabel("修正原因", { exact: true })).toHaveValue(newer);
+      expect(await page.evaluate(() => window.performanceReadbackFixture.qualityRevisions)).toEqual(
+        protectedHistory,
+      );
+      await row(page, 1).getByRole("button", { name: "儲存修正", exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => window.performanceReadbackFixture.qualityRevisions.length))
+        .toBe(2);
+      const calls = await qualityCalls(page);
+      expect(calls).toHaveLength(3);
+      expect(calls[1].input).toEqual(calls[0].input);
+      expect(calls[2].input).toMatchObject({
+        expectedRevisionId: "1",
+        reason: newer,
+        quality: "production",
+      });
+      const after = await page.evaluate(() => window.performanceReadbackFixture.qualityRevisions);
+      expect(after[0]).toEqual(protectedHistory[0]);
+      expect(after[1]).toMatchObject({ actor: "actor-a", reason: newer });
     });
     test("quality recovery retries an uncertain event correction without a second revision", async ({
       page,
@@ -694,7 +757,7 @@ for (const width of [1440, 1280, 768, 390])
       expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(2);
       expect(csv).not.toContain(id(4));
       await page.screenshot({
-        path: `.audit/remediation-20261003/performance-quality-recovery-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/performance-quality-recovery-final-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(metric(page, "合格線索").locator("p").first()).toHaveText("1");
@@ -888,7 +951,7 @@ for (const width of [1440, 1280, 768, 390])
       for (const n of [2, 3, 4]) expect(csv).toContain(id(n));
       expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(4);
       await page.screenshot({
-        path: `.audit/remediation-20261003/performance-quality-recovery-quality-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/performance-quality-recovery-final-quality-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("3");
