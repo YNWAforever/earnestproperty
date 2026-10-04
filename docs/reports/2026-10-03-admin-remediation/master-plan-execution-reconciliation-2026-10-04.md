@@ -45,3 +45,5 @@ Formal 調整仍須具體可審閱目標／差異／recipient/count/budget。此
 
 
 EP13 continuation BASEf220fce5dbf9c6737e3961f69abeb6b0e543ebfb→source82a03ec470faaffdcc1d759292b943e6d4823fed: selected step4 property scope/lifetime gap red20UI/2pure→exact136UI/115shared/20Ops/40staff/6ownedSQL/29Node+30Bun;separate staticPASS. Resolved membership gates current list/editor, stale callbacks stop bulk/link/save/upload continuations and preserve accepted effects. One sampled wholebranch review C0/I1/M0, author fixedI1, no secondreview; all declinedrulings recorded. FullEP13 remainsLOCAL_PARTIAL/NEW13PARTIAL; task counts/status baselines preserved. Details: [ep-13-property-scope-lifetime.md](ep-13-property-scope-lifetime.md).
+
+EP13 CI compatibility continuation test74873e076ef9c7c04b3b39ddb1b24cca74c42d03/runtime82a03ec470faaffdcc1d759292b943e6d4823fed: exactCI37193043713 only stale cancellation regex fails;209SQL/648UI per-layer PASS retained without overall promotion. Actual local RED81/1→GREEN82Node+8Bun and159Node+9Bun. Explicit dual guard on all three settled paths; runtime unchanged, new exact CI pending, statuses unchanged. [Details](ep-13-ci-contract-readback.md).

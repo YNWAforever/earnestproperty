@@ -6060,5 +6060,155 @@
         "sha256": "02a3b19620a770372284e4810132ffde0cf6990500aa349a445861b8d8161ed8"
       }
     ]
+  },
+  "adminPropertyScopeCIContractFollowup": {
+    "verifiedAt": "2026-10-04T10:08:45.339359+00:00",
+    "baseline": "6fce451bd60bfa2794a2e8cacdb0129c830a7957",
+    "verifiedTestContractSha": "74873e076ef9c7c04b3b39ddb1b24cca74c42d03",
+    "verifiedRuntimeCodeSha": "82a03ec470faaffdcc1d759292b943e6d4823fed",
+    "changedFiles": [
+      "src/routes/admin.routes.test.mjs"
+    ],
+    "scope": "EP13 exact-head CI contract compatibility; no runtime edits",
+    "failedExactHead": {
+      "run": 37193043713,
+      "head": "219c4f2993edf45cf2ed7bc49f257c3c68cad8f8",
+      "overall": "FAILURE",
+      "onlyFailure": "Run npm run test:command-center",
+      "cause": "obsolete exact if (!cancelled) regex; actual cancelled AND workspace current guards",
+      "ownedSQLPass": 209,
+      "ownedBrowserSuites": {
+        "property-maintenance": 136,
+        "operations": 20,
+        "staff-setup": 40,
+        "whatsapp-mobile": 28,
+        "property-sync:recovery": 36,
+        "admin-daily-work": 92,
+        "admin-campaign-review": 60,
+        "admin-performance": 164,
+        "admin-link-bulk": 72
+      },
+      "ownedBrowserPass": 648,
+      "formal": "SKIPPED_BLOCKED",
+      "NOTAcceptance": "Overall CI failed despite independent passing SQL and UI layers"
+    },
+    "red": {
+      "tests": 82,
+      "pass": 81,
+      "fail": 1,
+      "skipped": 0
+    },
+    "green": {
+      "commandCenterNode": {
+        "tests": 82,
+        "pass": 82,
+        "fail": 0,
+        "skipped": 0
+      },
+      "commandCenterBun": {
+        "pass": 8,
+        "fail": 0,
+        "skip": 0
+      },
+      "woztellNode": {
+        "tests": 159,
+        "pass": 159,
+        "fail": 0,
+        "skipped": 0
+      },
+      "woztellBun": {
+        "pass": 9,
+        "fail": 0,
+        "skip": 0
+      }
+    },
+    "lint": "0 errors,3 existing unrelated warnings",
+    "configMigrationDryRun": {
+      "verifiedAt": "2026-10-04T10:08:45.059985+00:00",
+      "testContractSha": "74873e076ef9c7c04b3b39ddb1b24cca74c42d03",
+      "runtimeCodeSha": "82a03ec470faaffdcc1d759292b943e6d4823fed",
+      "changesSinceRuntimeVerification": [
+        "src/routes/admin.routes.test.mjs"
+      ],
+      "configAuthProviderSchemaWorkflowPackageDiff": [],
+      "existingMigrationCount": 85,
+      "latestMigration": "20261003040000_content_proposal_source_guard.sql",
+      "runtimeFiles": "IDENTICAL",
+      "newMigration": false,
+      "productionMigrationApplied": false,
+      "typecheckBuild": "Previous independently verified runtime source retained; local correction is test-only, no redundant local build/typecheck",
+      "rollback": "Revert test contract correction only if replaced with an equivalent cancellation+workspace guard contract; keep runtime scope guards and accepted effects"
+    },
+    "newExactCI": "PENDING; failed exact-head37193043713 is not overall acceptance",
+    "history": "All existing execution JSON entries and raw evidence preserved; original 29PASS/9FAIL/22BLOCKED and22 plannedNEW retained; no status promotions",
+    "review": "Previously completed one fresh review and one author runtime fix pass retained; no second review",
+    "rulings": [
+      {
+        "id": "CI01",
+        "decision": "STRENGTHEN_TEST_CONTRACT_ONLY",
+        "reason": "Runtime correctly gates all settled reads by cancellation and current staff workspace; replace obsolete exact cancellation-only regex with explicit dual guard checks for each setter. Existing actual-route scope tests remain authoritative behavioral evidence. No second review, no second runtime fix pass.",
+        "costIfWrong": "Source syntax assertion may reject an equivalent future implementation; it does not replace actual-route behavior or full matrix acceptance."
+      }
+    ],
+    "effects": {
+      "productionWrites": 0,
+      "productionMigrations": 0,
+      "merges": 0,
+      "manualDeploys": 0,
+      "providerSends": 0,
+      "applicationModelCalls": 0
+    },
+    "logs": [
+      {
+        "file": "ep13-scope-ci-contract-red.log",
+        "bytes": 19397,
+        "sha256": "d735bd6d527b73a393e9dd053e2993b56868788cc5f98f0b1055340eede93666"
+      },
+      {
+        "file": "ep13-scope-ci-contract-green-command-center-final.log",
+        "bytes": 8441,
+        "sha256": "13e9beabe45d906afced6dda55d136c34f0070189e1251279d356c116fa1e394"
+      },
+      {
+        "file": "ep13-scope-ci-contract-green-woztell-final.log",
+        "bytes": 15226,
+        "sha256": "352dd2f607539cac732f1d2afc4280b45877530274b3d7b36a39590bd6782387"
+      },
+      {
+        "file": "ep13-scope-ci-contract-lint.log",
+        "bytes": 883,
+        "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+      },
+      {
+        "file": "ep13-scope-ci-contract-failed-run.json",
+        "bytes": 21748,
+        "sha256": "d00f5024cc6aa07f03fe2985006a82cd93fc1f4e1d5cffd44c00cfa78620c597"
+      },
+      {
+        "file": "ep13-scope-publication-failed-ci.log",
+        "bytes": 1324380,
+        "sha256": "e3379e105155bc169ec4f3c71f4d17a310a55ee3ae0154d2388be0acacd099fd"
+      },
+      {
+        "file": "ep13-scope-ci-contract-failed-readback.json",
+        "bytes": 729,
+        "sha256": "e771f461348e2aef2f82a51ba96f4fbc74bca76a1e0ecb140fbc681389bb031e"
+      },
+      {
+        "file": "ep13-scope-ci-contract-failed-sql-api.log",
+        "bytes": 76811,
+        "sha256": "b714538492f24a696350dbe1ae09cb39302f98a2a37ce9a1a1c2922e4ed8529f"
+      },
+      {
+        "file": "ep13-scope-ci-contract-failed-sql-readback.json",
+        "bytes": 2105,
+        "sha256": "03275a2f4c3636bd91c6c45d984cdd80733db174ad136efdfdf5ed5360968ca5"
+      },
+      {
+        "file": "ep13-scope-ci-contract-config-dry-run.json",
+        "bytes": 853,
+        "sha256": "2e71ffa7e5b7bdf30bfc31986e0ad8563afc97c4904c13771fd0e75febc3ab04"
+      }
+    ]
   }
 }
