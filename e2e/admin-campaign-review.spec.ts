@@ -58,7 +58,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/ep13-20-campaign-membership-browser-summary.json",
+    ".audit/remediation-20261003/ep13-20-ci-compat-campaign-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -105,7 +105,7 @@ test.afterEach(async ({ page }, info) => {
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("lost queue response")) {
     await page.screenshot({
-      path: `.audit/remediation-20261003/ep13-20-campaign-cancel-green-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/ep13-20-ci-compat-campaign-cancel-green-${page.viewportSize()!.width}.png`,
     });
   }
 });
@@ -159,6 +159,7 @@ for (const width of [1440, 1280, 768, 390])
       await open(page);
       await page.evaluate(() => window.campaignReviewFixture.changeMembership("agent"));
       await expect(row(page)).toHaveCount(0);
+      await expect(page.getByText("尚未取得已核實的推廣管理權限。", { exact: true })).toBeVisible();
       expect(await queueCalls(page)).toHaveLength(0);
     });
     test("membership change retains accepted cancellation without obsolete success toast", async ({
@@ -231,7 +232,7 @@ for (const width of [1440, 1280, 768, 390])
       });
       expect(await cancelJournal(page)).toHaveLength(0);
       await page.screenshot({
-        path: `.audit/remediation-20261003/ep13-20-campaign-cancel-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/ep13-20-ci-compat-campaign-cancel-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(row(page)).toContainText("已發送 1");

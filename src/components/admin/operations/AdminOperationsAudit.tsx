@@ -1,4 +1,4 @@
-import { useWorkspaceCurrent } from "@/hooks/use-staff-workspace";
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ChevronDown, LoaderCircle } from "lucide-react";
 
