@@ -1,0 +1,722 @@
+{
+  "createdAt": "2026-10-04T16:02:40.545990+00:00",
+  "sourceSha": "83b28eb7a608144728699772f1b7f86d95e67857",
+  "baseSha": "20ab7863fb3fff491629bdb6c6d2bfd6131324c9",
+  "source": [
+    {
+      "file": "src/components/admin/AdminDetailPanel.tsx",
+      "gitBlob": "2ee0c34f43539cb44a3fd5a5bb1d0625d667f8f9",
+      "sha256": "0f778104ed3a2c9a09f08baf56c419e240de15f8a75092550b9c05010d6ec7cd"
+    },
+    {
+      "file": "e2e/admin-whatsapp-mobile.spec.ts",
+      "gitBlob": "95ebfb4f4b89409ec7d2e4ec7097003080a98e53",
+      "sha256": "a90331f800e8c419fe6a6ec3ec114fb0ee754f4a11747ae8ee5c2030da43f1c1"
+    },
+    {
+      "file": "e2e/admin-daily-work.spec.ts",
+      "gitBlob": "2f1086216a7a648f45a8bd271338a288802e4386",
+      "sha256": "56099de0b263888e23b182a66878479f4b4d4f79203dd7845c4a2516f55c28e0"
+    }
+  ],
+  "evidenceLayer": "owned loopback actual admin routes; synthetic Auth/API; no DB/provider/model/nativeIME; independent publisher and exact-head CI separately",
+  "tests": {
+    "redInitial": {
+      "collected": 12,
+      "pass": 6,
+      "fail": 6,
+      "skip": 0
+    },
+    "firstReviewHarness": {
+      "pass": 4,
+      "notValidRed": true,
+      "reason": "Held event let defaultFocusScope fallback mask loss; raw diagnostic retained."
+    },
+    "redReviewValid": {
+      "collected": 4,
+      "pass": 2,
+      "fail": 2,
+      "skip": 0
+    },
+    "whatsAppFinal": {
+      "pass": 64,
+      "fail": 0,
+      "skip": 0,
+      "newCases": 16,
+      "previousCases": 48
+    },
+    "dailyFinal": {
+      "pass": 92,
+      "fail": 0,
+      "skip": 0
+    },
+    "team": {
+      "nodePass": 95,
+      "bunPass": 31,
+      "fail": 0,
+      "skip": 0
+    },
+    "commandCenter": {
+      "nodePass": 83,
+      "bunPass": 8,
+      "fail": 0,
+      "skip": 0
+    }
+  },
+  "static": {
+    "lintExit": 0,
+    "lintErrors": 0,
+    "baselineWarnings": 3,
+    "typecheckExit": 0,
+    "buildExit": 0,
+    "separateScripts": true
+  },
+  "review": {
+    "reviewer": "gpt-6-astra xhigh fresh read-only",
+    "base": "20ab7863fb3fff491629bdb6c6d2bfd6131324c9",
+    "critical": 0,
+    "important": [
+      {
+        "id": "P2",
+        "file": "src/components/admin/AdminDetailPanel.tsx:46",
+        "behavior": "Deferred old unmount autofocus reads and clears newer shared opener ref before external-focus guard.",
+        "severity": "Important",
+        "authorAction": "Accept; one deterministic owned-browser RED/GREEN author fix pass; opener ownership keyed by actual panel DOM node."
+      }
+    ],
+    "minor": [
+      {
+        "id": "P3",
+        "file": "e2e/admin-whatsapp-mobile.spec.ts:215",
+        "behavior": "Tab then ShiftTab interior assertion does not prove focus wrapping at boundary.",
+        "action": "Deferred; trap-boundary coverage not claimed; Radix opening/trapping unchanged."
+      }
+    ],
+    "declinedRulings": [
+      {
+        "behavior": "True authentication and server authorization",
+        "ruling": "Keep synthetic Auth/API proof distinct; formal gate BLOCKED.",
+        "costIfWrong": "Synthetic scope checks cannot establish real session authorization."
+      },
+      {
+        "behavior": "Owned PostgreSQL and combined Golden journeys",
+        "ruling": "No DB edit; prior ownedPG proof stays separate from this actual-route browser. Full combined acceptance NOT_READY.",
+        "costIfWrong": "Separate layers can miss integration defects."
+      },
+      {
+        "behavior": "Real providers/models/message delivery/production",
+        "ruling": "No invocation or budget; IDs unknown and formal gates BLOCKED.",
+        "costIfWrong": "Live runtime behavior and costs remain unverified."
+      },
+      {
+        "behavior": "Native mobile keyboard and IME composition",
+        "ruling": "Chromium viewports only; nativeIME gate BLOCKED.",
+        "costIfWrong": "Device-specific focus/viewport effects may differ."
+      },
+      {
+        "behavior": "Earlier EP13-21 findings and unrelated lock/generated changes",
+        "ruling": "Previously reviewed scope retained; unrelated dirt unstaged.",
+        "costIfWrong": "New focused review cannot reaffirm every old code path."
+      },
+      {
+        "behavior": "Overall build/lint/typecheck and other suites",
+        "ruling": "Author independently runs existing scripts and preserves raw logs; reviewer did not rerun.",
+        "costIfWrong": "Author verification has no second independent execution."
+      },
+      {
+        "behavior": "New fallback destination if opener disappears",
+        "ruling": "Shared panel rejects detached/nonfocusable opener and retains newer focus; no route fallback invented.",
+        "costIfWrong": "If original opener disappears focus may remain body; role/scope-specific fallback needs consumer policy."
+      }
+    ],
+    "verdictBeforeFix": "With fixes",
+    "filesMutatedByReviewer": false,
+    "subagents": 0,
+    "secondReview": false,
+    "authorFix": {
+      "validRed": {
+        "collected": 4,
+        "passed": 2,
+        "failed": 2,
+        "skip": 0
+      },
+      "greenFullSuite": {
+        "passed": 64,
+        "failed": 0,
+        "skip": 0
+      },
+      "fix": "WeakMap by panel DOM; each close deletes only its own saved opener",
+      "secondReview": false
+    }
+  },
+  "configMigrationDryRun": {
+    "sourceSha": "83b28eb7a608144728699772f1b7f86d95e67857",
+    "baseSha": "20ab7863fb3fff491629bdb6c6d2bfd6131324c9",
+    "changedFiles": [
+      "src/components/admin/AdminDetailPanel.tsx",
+      "e2e/admin-whatsapp-mobile.spec.ts",
+      "e2e/admin-daily-work.spec.ts"
+    ],
+    "applicationUiChanges": [
+      "controlled detail drawer opener restoration and per-panel deferred-close ownership"
+    ],
+    "schemaChanges": [],
+    "serverDtoChanges": [],
+    "configChanges": [],
+    "providerRuntimeChanges": [],
+    "newMigration": null,
+    "candidateManifest": {
+      "names": [
+        "20260622060000_public_content.sql",
+        "20260623090000_neon_admin_crm_whatsapp.sql",
+        "20260624110000_ai_crm_live_agent.sql",
+        "20260626120000_live_agent_security.sql",
+        "20260626120100_crm_ai_profile_status.sql",
+        "20260626120200_woztell_member_identity.sql",
+        "20260709090000_cms_videos.sql",
+        "20260710090000_agent_profiles.sql",
+        "20260711090000_cms_content_revisions.sql",
+        "20260712120000_ai_content_proposals.sql",
+        "20260714180000_backend_control_plane.sql",
+        "20260801090000_staff_public_slug_unique.sql",
+        "20260802090000_listing_search_indexes.sql",
+        "20260802100000_agent_specialties.sql",
+        "20260816120000_staff_identity_actions.sql",
+        "20260817120000_dual_source_listing_sync.sql",
+        "20260817130000_youtube_channel_sync.sql",
+        "20260822120000_whatsapp_audience_segment_link.sql",
+        "20260830120000_listing_alerts.sql",
+        "20260830130000_estate_expansion.sql",
+        "20260830140000_transaction_provenance.sql",
+        "20260830150000_agent_languages.sql",
+        "20260830160000_branches_entity.sql",
+        "20260830170000_valuation_leads.sql",
+        "20260831090000_staff_viewer_role.sql",
+        "20260831180000_video_category.sql",
+        "20260901100000_estate_expansion_facts.sql",
+        "20260901110000_estate_expansion_publish.sql",
+        "20260902100000_estate_expansion_school_net_correction.sql",
+        "20260902110000_estate_expansion_facts_resolution.sql",
+        "20260905110000_cms_atomic_mutations.sql",
+        "20260905120000_campaign_dispatch_boundary.sql",
+        "20260905130000_outbound_intents.sql",
+        "20260905140000_media_upload_intents.sql",
+        "20260905150000_inquiry_submission_identity.sql",
+        "20260905151000_consent_evidence.sql",
+        "20260905180000_admin_message_paging.sql",
+        "20260905181000_cms_browse_order.sql",
+        "20260906020000_whatsapp_delivery_events.sql",
+        "20260906021000_estate_editorial_backfill.sql",
+        "20260906022000_estate_verified_details.sql",
+        "20260906040000_property_public_identity.sql",
+        "20260906090000_canonical_property_identity.sql",
+        "20260906100000_whatsapp_inbound_leads.sql",
+        "20260906110000_estate_listing_links.sql",
+        "20260906120000_admin_property_management.sql",
+        "20260907120000_propertyhk_ingestion_v2.sql",
+        "20260909120000_source_promotion_tiers.sql",
+        "20260912120000_whatsapp_enquiry_events.sql",
+        "20260912130000_whatsapp_enquiry_episodes.sql",
+        "20260912140000_whatsapp_assignment_evidence.sql",
+        "20260912150000_whatsapp_service_workflow.sql",
+        "20260912160000_staff_reference_snapshots.sql",
+        "20260912170000_staff_notifications.sql",
+        "20260925120000_rate_limit_bucket_cleanup.sql",
+        "20260927080000_staff_notification_receipt_times.sql",
+        "20260927083000_staff_notification_test_attempts.sql",
+        "20260927090000_whatsapp_link_batch_operations.sql",
+        "20260927093000_whatsapp_link_management_indexes.sql",
+        "20260927100000_whatsapp_redirect_bucket_retention.sql",
+        "20260927110000_staff_mapping_review_versions.sql",
+        "20260927120000_named_inbox_folders.sql",
+        "20260927130000_staff_notification_test_evidence.sql",
+        "20260927140000_whatsapp_link_reference_scope.sql",
+        "20260927150000_whatsapp_link_batch_mapping_guard.sql",
+        "20260927160000_transaction_sales_attribution.sql",
+        "20260927170000_performance_event_quality.sql",
+        "20260927171000_inquiry_quality.sql",
+        "20260927172000_media_asset_variants.sql",
+        "20260929100000_whatsapp_inbound_receipts.sql",
+        "20260929101000_whatsapp_receipt_identity.sql",
+        "20260929102000_whatsapp_portal_resolution.sql",
+        "20260929103000_whatsapp_no_link_episodes.sql",
+        "20260929104000_whatsapp_enquiry_access.sql",
+        "20260929105000_whatsapp_no_link_effects.sql",
+        "20260929106000_whatsapp_enquiry_resolution_guard.sql",
+        "20260929107000_whatsapp_forwarded_enquiries.sql",
+        "20260930090000_whatsapp_no_link_source_authority.sql",
+        "20261001090000_whatsapp_outbound_unknown_reservation.sql",
+        "20261001120000_property_sync_operations.sql",
+        "20261001130000_property_withdrawal_review.sql",
+        "20261003010000_ai_knowledge_durable_repair.sql",
+        "20261003020000_crm_analysis_contract.sql",
+        "20261003030000_crm_analysis_runs.sql",
+        "20261003040000_content_proposal_source_guard.sql"
+      ],
+      "sha256": "42c087012a528554e4a353c7ce1426e9ee5bb3c11feaa9cbd87452446b49bb5d",
+      "latestVersion": "20261003040000",
+      "commit": "83b28eb7a608144728699772f1b7f86d95e67857",
+      "count": 85,
+      "digestMethod": "SHA256 of sorted filename + space + immutable Git blob SHA + newline"
+    },
+    "migrationDryRun": "No SQL/config delta vs baseline; immutable Git candidate manifest matches prior85; no apply attempted.",
+    "registry": "Last recorded readback only20260715120000_ops_jobs_status_updated_index; no new production DB read/write in this continuation.",
+    "runtimeProviderModelIds": "UNKNOWN until actual authorized runtime readback",
+    "effects": {
+      "realSends": 0,
+      "applicationModelSpendUsd": 0,
+      "productionMigrations": 0,
+      "manualDeployments": 0,
+      "merge": false,
+      "nativeScheduleTriggers": 0
+    }
+  },
+  "history": {
+    "originalAudit": {
+      "PASS": 29,
+      "FAIL": 9,
+      "BLOCKED": 22
+    },
+    "plannedNEW": 22,
+    "executionCounts": {
+      "PASS": 40,
+      "PARTIAL": 28,
+      "BLOCKED": 14
+    },
+    "businessActions": 68,
+    "sourceCandidates": 1332,
+    "totalCandidates": 1400,
+    "historicalRenderedObservations": 408,
+    "priorEp21Artifacts": {
+      "checked": 46,
+      "mismatches": 0
+    },
+    "knownArtifactLimitations": {
+      "priorPngMismatch": 27,
+      "newOverwrittenUnavailableSummary": {
+        "file": ".audit/remediation-20261003/ep13-20-daily-work-session-lifetime-summary.json",
+        "originalSha256": "299e12e8e6f29a0b54464317f899e7ddc12e68596f3fd3c2a984ecdefd17bda7",
+        "originalBytesRecovered": false,
+        "validHistoricalProof": false,
+        "rerunPreservedAs": "ep20-keyboard-daily-initial-summary.json"
+      },
+      "oldHashMetadataUnchanged": true
+    },
+    "oldEvidenceRootsPreserved": true,
+    "taskOrSourceCandidatePromotion": false
+  },
+  "csvProof": {
+    "EarnestProperty_Remediation_Traceability_2026-10-03.csv": {
+      "rows": 22,
+      "oldColumnsPreserved": 39,
+      "newColumns": [
+        "execution_2026_10_05_ep20_keyboard_sha",
+        "execution_2026_10_05_ep20_keyboard_environment",
+        "execution_2026_10_05_ep20_keyboard_evidence",
+        "execution_2026_10_05_ep20_keyboard_result",
+        "execution_2026_10_05_ep20_keyboard_status"
+      ],
+      "oldCellsPreserved": true,
+      "oldBytesSha256": "2596e395dc5d0d18f03e447048caa23c587e33ac3d761159001e1551fd6792b3",
+      "executionStatusCountsUnchanged": {
+        "LOCAL_VERIFIED": 8,
+        "LOCAL_PARTIAL": 11,
+        "BLOCKED_ACCEPTANCE": 1,
+        "BLOCKED_EXTERNAL": 1,
+        "BLOCKED_RELEASE": 1
+      }
+    },
+    "EarnestProperty_UAT_Matrix_2026-10-03.csv": {
+      "rows": 82,
+      "oldColumnsPreserved": 30,
+      "newColumns": [
+        "execution_2026_10_05_ep20_keyboard_sha",
+        "execution_2026_10_05_ep20_keyboard_environment",
+        "execution_2026_10_05_ep20_keyboard_evidence",
+        "execution_2026_10_05_ep20_keyboard_result",
+        "execution_2026_10_05_ep20_keyboard_status"
+      ],
+      "oldCellsPreserved": true,
+      "oldBytesSha256": "be05dde9025d2bc5110eef11af7ada52a20d2a74d801c76e49fa74e389b9c3a8",
+      "executionStatusCountsUnchanged": {
+        "PASS": 40,
+        "PARTIAL": 28,
+        "BLOCKED": 14
+      },
+      "baselineCountsUnchanged": {
+        "PASS": 29,
+        "BLOCKED": 22,
+        "FAIL": 9,
+        "NOT_APPLICABLE_NEW_CASE": 22
+      }
+    }
+  },
+  "capabilities": {
+    "selectedOwnedKeyboardFocusAndDraftReturn": "READY",
+    "fullEP14AndEP20RolesActionsCombinedGolden": "NOT_READY",
+    "trueAuthNativeIMEProviderModelPropertyHkNativeScheduleProductionRelease": "BLOCKED"
+  },
+  "formalNativeSchedule": {
+    "baselineObserved": 1,
+    "repairedAccepted": 0,
+    "required": 3,
+    "agentTriggered": 0
+  },
+  "effects": {
+    "realSends": 0,
+    "applicationModelSpendUsd": 0,
+    "productionMigrations": 0,
+    "manualDeployments": 0,
+    "merge": false,
+    "nativeScheduleTriggers": 0
+  },
+  "artifacts": [
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-build.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-build.log",
+      "bytes": 260581,
+      "sha256": "aeb3d95176fb94c592880b6f3fa7f8b5cacc00b76bb7aa1dea232ca8578659ac"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-command-center.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-command-center.log",
+      "bytes": 8534,
+      "sha256": "01e3a7d92b1436cc4123931b0216fe1abc64280b708517bb1202089b91180e53"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-config-migration-dry-run.json",
+      "bytes": 5969,
+      "sha256": "919a7fda6190feaf3c96f736092f4de86489d2f56bfc502abf144f3119d0db23"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-daily-work-session-lifetime-summary.json",
+      "bytes": 13115,
+      "sha256": "d2048eeb2891918bdee035950ed82cd3011374bd0c63690f1fc413cd918c3f6f"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final.log",
+      "bytes": 15615,
+      "sha256": "8dca1b46982b7a1712016210f57c07fc6794e1db47a3de87fb5e16b8c901be45"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-initial-summary.json",
+      "bytes": 13115,
+      "sha256": "d2048eeb2891918bdee035950ed82cd3011374bd0c63690f1fc413cd918c3f6f"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily.log",
+      "bytes": 15599,
+      "sha256": "fffabbfa785b999dd194391799654b115475d2fcaa62a1f686831e14af13cf96"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final-build.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final-build.log",
+      "bytes": 260579,
+      "sha256": "fbc6cb260ef10a5635b5984391c9694d2e6eada69dd2ccbe54cd7c9fd6316099"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final-fixed-typecheck.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final-fixed-typecheck.log",
+      "bytes": 33,
+      "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final-lint.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final-lint.log",
+      "bytes": 883,
+      "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final-mobile-workspace-browser-summary.json",
+      "bytes": 10949,
+      "sha256": "c7934120b9dfda72ff13bb94bc27c4c003d06c1a3471624609e0db90482c7a3a"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final-review.json",
+      "bytes": 2885,
+      "sha256": "67805d210a4ccd098ce45716b858cd1b1ddedcecf992f36a2555c2f527fea3ff"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final-typecheck.exit",
+      "bytes": 3,
+      "sha256": "df4e26a04a444901b95afef44e4a96cfae34690fff2ad2c66389c70079cdff2b"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final-typecheck.log",
+      "bytes": 587,
+      "sha256": "ab65ab51c7c1d2adbde87377a914cb825b233b68e2d2da9f4561005b611bf569"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-final.log",
+      "bytes": 30437,
+      "sha256": "392236086188127366a34b4e545fc5987a4c5dbaa0939b21d595695b0c660998"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-green-mobile-workspace-browser-summary.json",
+      "bytes": 10259,
+      "sha256": "8fe97406445ce29171ec1b23ab4e4002e822e345fe5613ff157f892ebb1f27c6"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-green.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-green.log",
+      "bytes": 29765,
+      "sha256": "5a931cee3c692290a57141872ea01968c1e8e4f5bcadbde422cd5c28f56d917f"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-lint.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-lint.log",
+      "bytes": 883,
+      "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-pr-before.json",
+      "bytes": 271,
+      "sha256": "0a9b70134e4fe8a4deaf6841767c51c219c08c38a7e609e0494055452b69933e"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-progress.md",
+      "bytes": 6245,
+      "sha256": "bf4b405c8c7b63a05c6d12a0f7e8a5158327f11bf05bcf7ca14b5c71c7f3fb6f"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-red-mobile-workspace-browser-summary.json",
+      "bytes": 421,
+      "sha256": "287b039c1249a680d00d628f7d5dce712b41a3952c46ce336dfb78a4bd25271f"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-red.exit",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-red.log",
+      "bytes": 132888,
+      "sha256": "2b748abb0e9bb5eb8d1d16f84494dbda6c0d3dc4b1fe48cdee1c0ff3337f58bc"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-diagnostic-mobile-workspace-browser-summary.json",
+      "bytes": 421,
+      "sha256": "c8a6c11da4ae6f8e633f05ff24f1b22c8d2afec8ab3d52e061b246ffe26b666f"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-diagnostic.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-diagnostic.log",
+      "bytes": 21939,
+      "sha256": "fb8805eef6d686e136ffa0fa14ee27b976fa7f710a00431c0d9e2652569178f3"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-package.md",
+      "bytes": 2999,
+      "sha256": "d5288878dba05331e323faffbf96f7e12f6831865903f5795c3860745c3b3875"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-red-mobile-workspace-browser-summary.json",
+      "bytes": 939,
+      "sha256": "700d03fcdeda56d66c2f39eb9a30666db8b3bafe9df05d098eeacacb0f400054"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-red.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-red.log",
+      "bytes": 20865,
+      "sha256": "c50966c9cfdedd8b852a4205550c45f3d0a012d253cd0f94ff014401b003f484"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-source.diff",
+      "bytes": 7377,
+      "sha256": "c0b784ecdd5edcac655dbaea1c0b03d27bff97ec0b4077d5fda6bb6cec859f69"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-valid-red-mobile-workspace-browser-summary.json",
+      "bytes": 421,
+      "sha256": "87b358880d09a54dfa82e399bdac4beecce01ae85d9d2de217f5c73a5e5b30f1"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-valid-red.exit",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-review-valid-red.log",
+      "bytes": 44490,
+      "sha256": "23236f4d250d25cc991f70b844d628bb3703d58470441d6774e0f84f00078eee"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-team.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-team.log",
+      "bytes": 16334,
+      "sha256": "6ede518d32a78667379985546ee116f0cbe0ed3e993cb6c26bd065acce334ee9"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-typecheck.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-typecheck.log",
+      "bytes": 33,
+      "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+    },
+    {
+      "file": ".audit/ep20-keyboard-red-playwright/admin-whatsapp-mobile-390--549c7-en-the-panel-or-steal-focus-owned-chromium/error-context.md",
+      "bytes": 11391,
+      "sha256": "cea5600d383a102938a360377c63149b5ee12c1e679f1101dadb3caaace305d6"
+    },
+    {
+      "file": ".audit/ep20-keyboard-red-playwright/admin-whatsapp-mobile-390--70967-n-opener-with-focus-trapped-owned-chromium/error-context.md",
+      "bytes": 10890,
+      "sha256": "6b5f89f74ccc2707e5f856562f7df87206edc57bafaa0f7d072e450b8c8aedbc"
+    },
+    {
+      "file": ".audit/ep20-keyboard-red-playwright/admin-whatsapp-mobile-390--9f25b-ft-and-current-conversation-owned-chromium/error-context.md",
+      "bytes": 11065,
+      "sha256": "489b565a819f3639f20529d4bfe933af9f11ca62927fcb68d1153c6a3b2d29ad"
+    },
+    {
+      "file": ".audit/ep20-keyboard-red-playwright/admin-whatsapp-mobile-768--6ad95-ft-and-current-conversation-owned-chromium/error-context.md",
+      "bytes": 11065,
+      "sha256": "c1326a2a9cde19d2112296e25ec880ac26aa75fa03cce667e21b5f8b9d509564"
+    },
+    {
+      "file": ".audit/ep20-keyboard-red-playwright/admin-whatsapp-mobile-768--946d5-n-opener-with-focus-trapped-owned-chromium/error-context.md",
+      "bytes": 10890,
+      "sha256": "7d8075a79108b012c39bcd2fa697606cf6a5b4e8dd06027a4d6a93a45fe7edc9"
+    },
+    {
+      "file": ".audit/ep20-keyboard-red-playwright/admin-whatsapp-mobile-768--ae978-en-the-panel-or-steal-focus-owned-chromium/error-context.md",
+      "bytes": 11391,
+      "sha256": "f16b15f90d36fa0df4fd6449e3e601ba3dfca74e9429f5a2182dda219f0f46a4"
+    },
+    {
+      "file": ".audit/ep20-keyboard-review-valid-red-playwright/admin-whatsapp-mobile-390--1d9fa-el-s-keyboard-return-target-owned-chromium/error-context.md",
+      "bytes": 11811,
+      "sha256": "c316814f4ab052c84846c4954954816bf4f2444af1730548d2981774460048f8"
+    },
+    {
+      "file": ".audit/ep20-keyboard-review-valid-red-playwright/admin-whatsapp-mobile-768--edea7-el-s-keyboard-return-target-owned-chromium/error-context.md",
+      "bytes": 11811,
+      "sha256": "7463dff732841c4f673ef417252b23b432fa5bbc6c38673e3299a1c3bbabb7ac"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-draft-1280.png",
+      "bytes": 99521,
+      "sha256": "845de1fbb9582784586cdbae820c30b2040a0d671779f48f8ed94b2a335d01e8"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-draft-1440.png",
+      "bytes": 101909,
+      "sha256": "3d6cab7979e2e5cca32be0fe17b27edd004919728056fa7fbe6f6ad1df6c0286"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-draft-390.png",
+      "bytes": 43663,
+      "sha256": "1d208b36d3328866077230909c021990ecb7c83bf998db3df302fbd3e24cdef5"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-draft-768.png",
+      "bytes": 62964,
+      "sha256": "cd19250ffb9882155769adec4bd43fdb4c71335ea2ee73d3eaf28b9233334b7a"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-hidden-1280.png",
+      "bytes": 52620,
+      "sha256": "cf04f43acecb6341346349b891938843ab240641c489b0c66cea6210fa3fc3bb"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-hidden-1440.png",
+      "bytes": 53843,
+      "sha256": "952dba8ee3ed0973a48e5733454203a1a6407fa5442d380ffcb41ec41fa2f86f"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-hidden-390.png",
+      "bytes": 16152,
+      "sha256": "9ab3dd5a05da50154b509d50065993831721494b9abe02c6827f809e230ae5e1"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-hidden-768.png",
+      "bytes": 17563,
+      "sha256": "02a3b19620a770372284e4810132ffde0cf6990500aa349a445861b8d8161ed8"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-restored-1280.png",
+      "bytes": 85811,
+      "sha256": "7627967031485d8dfa47730eb3dee5853642e153ae191eba0bc71a8007074efe"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-restored-1440.png",
+      "bytes": 88270,
+      "sha256": "d8657b9c032116250347265178077b06b12731993e4122e7f67f2ff9e0ce4b9d"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-restored-390.png",
+      "bytes": 40099,
+      "sha256": "b40f9d1281f2941e531a1ae971283cf6cf601600b9dc427422e00072f776d784"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep20-keyboard-daily-final-ep12-session-restored-768.png",
+      "bytes": 48482,
+      "sha256": "b5a0f69ebe66a7b4a581277f1f1e9d9e55ea05626a5896385961d045756e3eba"
+    }
+  ],
+  "rollback": "Revert only this focused UI source commit; no SQL/config rollback needed; keep dated evidence/history additive. Never reset/cherry-revert earlier EP13-21 or unrelated dirt.",
+  "verificationScope": {
+    "applicationComponentBytes": "64-case final runtime suite ran the final WeakMap source before commit; no app change since then",
+    "testHookTyping": "Null listener no-op/type narrowing added after64PASS; freshtypecheck0; publisher16/exact-head CI64 validates final committed testbytes separately",
+    "preCommitCodeSha": "20ab7863fb3fff491629bdb6c6d2bfd6131324c9",
+    "immutableSubjectSourceSha": "83b28eb7a608144728699772f1b7f86d95e67857"
+  }
+}
