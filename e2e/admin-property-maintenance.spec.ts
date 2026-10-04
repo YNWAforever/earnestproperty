@@ -24,6 +24,7 @@ declare global {
       linkSeedKey: string;
       pending: { kind: string; release: () => void }[];
       changeContext: (actor: string, role: string, binding?: string) => Promise<void>;
+      refreshAuthUser: () => void;
     };
   }
 }
@@ -418,6 +419,29 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(page.getByRole("textbox", { name: /^物業介紹/ })).toHaveValue("同職員保留草稿");
       expect(await saveCalls(page)).toBe(0);
     });
+    test("scope auth object renewal retains unsaved editor without a second read", async ({
+      page,
+    }) => {
+      await open(page);
+      await page.getByRole("textbox", { name: /^物業介紹/ }).fill("同身份更新仍保留未儲存文字");
+      const reads = await page.evaluate(
+        () => window.propertyFixture.calls.filter((c) => c.name === "read").length,
+      );
+      await page.evaluate(async () => {
+        window.propertyFixture.readFailure = true;
+        window.propertyFixture.refreshAuthUser();
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      });
+      expect(
+        await page.evaluate(
+          () => window.propertyFixture.calls.filter((c) => c.name === "read").length,
+        ),
+      ).toBe(reads);
+      await expect(page.getByRole("textbox", { name: /^物業介紹/ })).toHaveValue(
+        "同身份更新仍保留未儲存文字",
+      );
+      expect(await saveCalls(page)).toBe(0);
+    });
     for (const transition of ["actor", "role", "binding", "aba", "same-context"])
       test(`scope editor save continuation ${transition} preserves accepted edit`, async ({
         page,
@@ -444,8 +468,11 @@ for (const width of [1440, 1280, 768, 390]) {
               "manager",
               "20000000-0000-4000-8000-000000000002",
             );
-          if (kind === "same-context")
+          if (kind === "same-context") {
             await window.propertyFixture.changeContext("manager", "manager");
+            window.propertyFixture.refreshAuthUser();
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          }
         }, transition);
         const reads = await page.evaluate(
           () => window.propertyFixture.calls.filter((c) => c.name === "read").length,
@@ -511,8 +538,11 @@ for (const width of [1440, 1280, 768, 390]) {
               "manager",
               "20000000-0000-4000-8000-000000000002",
             );
-          if (kind === "same-context")
+          if (kind === "same-context") {
             await window.propertyFixture.changeContext("manager", "manager");
+            window.propertyFixture.refreshAuthUser();
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          }
         }, transition);
         await page.evaluate(async () => {
           window.propertyFixture.uploadMode = "ok";

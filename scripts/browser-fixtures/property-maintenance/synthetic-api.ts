@@ -95,6 +95,7 @@ const state = {
   linkSeedKey,
   pending: [] as { kind: string; release: () => void }[],
   changeContext: async (_actor: string, _role: string, _binding?: string) => {},
+  refreshAuthUser: () => {},
   calls: [] as { name: string; input: unknown; actor: string; role: string; binding: string }[],
   saveMode: "ok",
   readMode: "ok",
@@ -125,6 +126,11 @@ export const useNeonAuth = () =>
     () => authState,
     () => authState,
   );
+state.refreshAuthUser = () => {
+  authState = { ...authState, user: { id: authState.user.id } };
+  for (const listener of authListeners) listener();
+  call("auth-refresh");
+};
 state.changeContext = async (nextActor, role, binding = staff) => {
   state.actor = nextActor;
   state.role = role;

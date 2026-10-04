@@ -29,6 +29,7 @@ function EditAdminListingPage() {
 function EditAdminListingWorkspace({ identity }: { identity: string }) {
   const { id } = Route.useParams();
   const { user, loading } = useNeonAuth();
+  const userId = user?.id ?? null;
   const active = useRef(false);
   const unavailable = useRef(false);
   useLayoutEffect(() => {
@@ -59,7 +60,7 @@ function EditAdminListingWorkspace({ identity }: { identity: string }) {
     unavailable.current = false;
     setProperty(null);
     setError(null);
-    if (loading || !user || !isWorkspaceCurrent()) {
+    if (loading || !userId || !isWorkspaceCurrent()) {
       setFetching(loading);
       return () => {
         cancelled = true;
@@ -80,7 +81,7 @@ function EditAdminListingWorkspace({ identity }: { identity: string }) {
     return () => {
       cancelled = true;
     };
-  }, [id, user, loading, retry, isWorkspaceCurrent]);
+  }, [id, userId, loading, retry, isWorkspaceCurrent]);
   return (
     <AdminShell
       title="管理物業"
