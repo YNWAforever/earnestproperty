@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { resolve, sep, extname } from "node:path";
+import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -13,6 +14,16 @@ declare global {
       readFailure: boolean;
       uploadMode: string;
       bulkMode: string;
+      actor: string;
+      role: string;
+      binding: string;
+      denied: boolean;
+      staffMode: string;
+      groupsMode: string;
+      linkMode: string;
+      linkSeedKey: string;
+      pending: { kind: string; release: () => void }[];
+      changeContext: (actor: string, role: string, binding?: string) => Promise<void>;
     };
   }
 }
@@ -21,13 +32,56 @@ declare global {
 let server: Server, origin: string;
 const evidence: { name: string; status: string; width: number }[] = [];
 test.beforeAll(async () => {
+  test.setTimeout(120000);
   assert.ok(!process.env.PLAYWRIGHT_BASE_URL, "Unset external browser target for owned tests");
-  assert.equal(
-    spawnSync(process.execPath, ["scripts/browser-fixtures/build-property-maintenance.mjs"], {
-      stdio: "inherit",
-    }).status,
-    0,
-  );
+  const runKey = process.env.EP_PROPERTY_BROWSER_BUILD_RUN;
+  assert.ok(!runKey || /^[0-9a-f-]{36}$/i.test(runKey), "Owned run cache key must be UUID");
+  const fingerprint = createHash("sha256")
+    .update(spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout)
+    .update(
+      spawnSync(
+        "git",
+        ["diff", "HEAD", "--", "src", "scripts", "e2e", "package.json", "package-lock.json"],
+        { encoding: "utf8" },
+      ).stdout,
+    )
+    .digest("hex");
+  const marker = resolve(".audit/remediation-20261003", `ep13-scope-build-${runKey}.json`);
+  const entry = resolve(".audit/property-maintenance-browser/index.html");
+  let reusable = false;
+  if (runKey) {
+    try {
+      const proof = JSON.parse(await readFile(marker, "utf8"));
+      reusable =
+        proof.fingerprint === fingerprint &&
+        proof.entryHash ===
+          createHash("sha256")
+            .update(await readFile(entry))
+            .digest("hex");
+    } catch {
+      /* fresh owned invocation */
+    }
+  }
+  if (!reusable) {
+    assert.equal(
+      spawnSync(process.execPath, ["scripts/browser-fixtures/build-property-maintenance.mjs"], {
+        stdio: "inherit",
+      }).status,
+      0,
+    );
+    if (runKey) {
+      await mkdir(resolve(".audit/remediation-20261003"), { recursive: true });
+      await writeFile(
+        marker,
+        JSON.stringify({
+          fingerprint,
+          entryHash: createHash("sha256")
+            .update(await readFile(entry))
+            .digest("hex"),
+        }),
+      );
+    }
+  }
   const root = resolve(".audit/property-maintenance-browser");
   server = createServer(async (request, response) => {
     try {
@@ -54,10 +108,10 @@ test.beforeAll(async () => {
   origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 });
 test.afterAll(async () => {
-  await new Promise<void>((done) => server.close(() => done()));
+  if (server) await new Promise<void>((done) => server.close(() => done()));
   await mkdir(".audit/remediation-20261003", { recursive: true });
   await writeFile(
-    ".audit/remediation-20261003/property-browser-summary.json",
+    ".audit/remediation-20261003/property-scope-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -90,7 +144,7 @@ async function open(page: Page, path = "/admin/listings/A000001") {
   await page.goto(origin + path);
   await expect(
     page.getByRole("heading", {
-      name: path.includes("A000001") ? "管理物業" : "物業管理",
+      name: /\/listings\/A\d/.test(path) ? "管理物業" : "物業管理",
       exact: true,
     }),
   ).toBeVisible();
@@ -101,6 +155,421 @@ const saveCalls = (page: Page) =>
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("scope role change clears stale selected properties", async ({ page }) => {
+      await open(page, "/admin/listings?pageSize=50&status=all");
+      await page.getByRole("checkbox", { name: "選擇本頁全部可管理物業", exact: true }).check();
+      await page.evaluate(() => window.propertyFixture.changeContext("manager", "agent"));
+      await expect(
+        page.getByText("共 5 個物業 · 同一物業的租售只計一次", { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByText("已選 0 個物業", { exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: "#A000006", exact: true })).toHaveCount(0);
+      await page.screenshot({
+        path: `.audit/remediation-20261003/ep13-scope-role-${width}.png`,
+        fullPage: true,
+        animations: "disabled",
+      });
+    });
+    test("scope staff rebind removes old frozen bulk preview", async ({ page }) => {
+      await page.addInitScript(() => sessionStorage.setItem("property-fixture-role", "agent"));
+      await open(page, "/admin/listings?pageSize=50&status=all");
+      await page.getByRole("checkbox", { name: "選擇本頁全部可管理物業", exact: true }).check();
+      await page.getByRole("button", { name: "核對修改（5）", exact: true }).click();
+      await expect(page.getByRole("alertdialog")).toBeVisible();
+      await page.evaluate(() =>
+        window.propertyFixture.changeContext(
+          "manager",
+          "agent",
+          "20000000-0000-4000-8000-000000000002",
+        ),
+      );
+      await expect(page.getByRole("alertdialog")).toHaveCount(0);
+      await expect(page.getByText("已選 0 個物業", { exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: "#A000001", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("link", { name: "#A000006", exact: true })).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => window.propertyFixture.calls.filter((c) => c.name === "bulk").length,
+        ),
+      ).toBe(0);
+    });
+    for (const outcome of ["delayed", "delayed-denied"])
+      test(`scope late property read ${outcome} cannot affect new staff`, async ({ page }) => {
+        await open(page, "/admin/listings?pageSize=50&status=all");
+        await page.evaluate((mode) => (window.propertyFixture.groupsMode = mode), outcome);
+        await page
+          .getByRole("combobox", { name: "排序欄位", exact: true })
+          .selectOption("propertyNo");
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => window.propertyFixture.pending.filter((p) => p.kind === "groups").length,
+            ),
+          )
+          .toBe(1);
+        await page.evaluate(async () => {
+          window.propertyFixture.groupsMode = "ok";
+          await window.propertyFixture.changeContext("manager", "agent");
+        });
+        await expect(
+          page.getByText("共 5 個物業 · 同一物業的租售只計一次", { exact: true }),
+        ).toBeVisible();
+        await page.evaluate(async () => {
+          window.propertyFixture.pending.find((p) => p.kind === "groups")!.release();
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        });
+        await expect(
+          page.getByText("共 5 個物業 · 同一物業的租售只計一次", { exact: true }),
+        ).toBeVisible();
+        await expect(page.getByText("owned old property read denied", { exact: true })).toHaveCount(
+          0,
+        );
+      });
+    test("scope unknown lookup hides private list and restoration reloads it", async ({ page }) => {
+      await open(page, "/admin/listings?pageSize=50&status=all");
+      await page.evaluate(async () => {
+        window.propertyFixture.staffMode = "failure";
+        await window.propertyFixture.changeContext("manager", "manager");
+      });
+      await expect(
+        page.getByRole("heading", { name: "未能核實職員權限", exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole("link", { name: "#A000001", exact: true })).toHaveCount(0);
+      await page.screenshot({
+        path: `.audit/remediation-20261003/ep13-scope-unknown-${width}.png`,
+        fullPage: true,
+        animations: "disabled",
+      });
+      const before = await page.evaluate(
+        () => window.propertyFixture.calls.filter((c) => c.name === "groups").length,
+      );
+      await page.evaluate(async () => {
+        window.propertyFixture.staffMode = "ok";
+        await window.propertyFixture.changeContext("manager", "manager");
+      });
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => window.propertyFixture.calls.filter((c) => c.name === "groups").length,
+          ),
+        )
+        .toBe(before + 1);
+      await expect(page.getByRole("link", { name: "#A000001", exact: true })).toBeVisible();
+    });
+    test("scope initial pending lookup never starts private property reads", async ({ page }) => {
+      await page.addInitScript(() =>
+        sessionStorage.setItem("property-fixture-staff-mode", "delayed"),
+      );
+      await page.route("**/*", (route) =>
+        new URL(route.request().url()).origin === origin &&
+        ["GET", "HEAD"].includes(route.request().method())
+          ? route.continue()
+          : route.abort(),
+      );
+      await page.goto(origin + "/admin/listings?pageSize=50&status=all");
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => window.propertyFixture.pending.filter((p) => p.kind === "staff").length,
+          ),
+        )
+        .toBe(1);
+      expect(
+        await page.evaluate(
+          () => window.propertyFixture.calls.filter((c) => c.name === "groups").length,
+        ),
+      ).toBe(0);
+      await page.evaluate(() => {
+        window.propertyFixture.staffMode = "ok";
+        window.propertyFixture.pending.find((p) => p.kind === "staff")!.release();
+      });
+      await expect(page.getByRole("link", { name: "#A000001", exact: true })).toBeVisible();
+    });
+    test("scope same identity recheck retains frozen preview without writes", async ({ page }) => {
+      await open(page, "/admin/listings?pageSize=50&status=all");
+      await page.getByRole("checkbox", { name: "選擇本頁全部可管理物業", exact: true }).check();
+      await page.getByRole("button", { name: "核對修改（50）", exact: true }).click();
+      await page.evaluate(() => window.propertyFixture.changeContext("manager", "manager"));
+      await expect(page.getByRole("alertdialog")).toContainText("50 個物業");
+      expect(
+        await page.evaluate(
+          () => window.propertyFixture.calls.filter((c) => c.name === "bulk").length,
+        ),
+      ).toBe(0);
+    });
+    for (const transition of ["actor", "role", "binding", "aba", "same-context"])
+      test(`scope bulk continuation ${transition} preserves accepted chunk only`, async ({
+        page,
+      }) => {
+        await open(page, "/admin/listings?pageSize=50&status=all");
+        await page.getByRole("checkbox", { name: "選擇本頁全部可管理物業", exact: true }).check();
+        await page.evaluate(() => (window.propertyFixture.bulkMode = "delayed"));
+        await page.getByRole("button", { name: "核對修改（50）", exact: true }).click();
+        await page.getByRole("button", { name: "確認修改 50 個物業", exact: true }).click();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => window.propertyFixture.pending.filter((p) => p.kind === "bulk").length,
+            ),
+          )
+          .toBe(1);
+        await page.evaluate(async (kind) => {
+          if (kind === "actor" || kind === "aba")
+            await window.propertyFixture.changeContext("actor-b", "manager");
+          if (kind === "aba") await window.propertyFixture.changeContext("manager", "manager");
+          if (kind === "role") await window.propertyFixture.changeContext("manager", "agent");
+          if (kind === "binding")
+            await window.propertyFixture.changeContext(
+              "manager",
+              "manager",
+              "20000000-0000-4000-8000-000000000002",
+            );
+        }, transition);
+        const reads = await page.evaluate(
+          () => window.propertyFixture.calls.filter((c) => c.name === "groups").length,
+        );
+        await page.evaluate(async () => {
+          window.propertyFixture.bulkMode = "ok";
+          window.propertyFixture.pending.find((p) => p.kind === "bulk")!.release();
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        });
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => window.propertyFixture.calls.filter((c) => c.name === "bulk-return").length,
+            ),
+          )
+          .toBe(transition === "same-context" ? 10 : 1);
+        const result = await page.evaluate(() => ({
+          calls: window.propertyFixture.calls.filter((c) => c.name === "bulk"),
+          reads: window.propertyFixture.calls.filter((c) => c.name === "groups").length,
+          saved: JSON.parse(localStorage.getItem("property-fixture-store")!).filter(
+            (r: { offerings: { sale: { status: string } } }) =>
+              r.offerings.sale.status === "offline",
+          ).length,
+        }));
+        expect(result.calls).toHaveLength(transition === "same-context" ? 10 : 1);
+        expect(result.saved).toBe(transition === "same-context" ? 50 : 5);
+        expect(result.reads).toBe(transition === "same-context" ? reads + 1 : reads);
+        await page.reload();
+        await expect(page.getByText("已選 0 個物業", { exact: true })).toBeVisible();
+        expect(
+          await page.evaluate(
+            () => window.propertyFixture.calls.filter((c) => c.name === "bulk").length,
+          ),
+        ).toBe(0);
+      });
+    for (const transition of ["actor", "same-context"])
+      test(`scope link continuation ${transition} checks identity before seed and navigation`, async ({
+        page,
+      }) => {
+        await open(page, "/admin/listings?pageSize=50&status=all");
+        await page.evaluate(() => (window.propertyFixture.linkMode = "delayed"));
+        await page
+          .getByRole("button", { name: "下一步：預覽 WhatsApp 連結（全部符合篩選）", exact: true })
+          .click();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => window.propertyFixture.pending.filter((p) => p.kind === "link").length,
+            ),
+          )
+          .toBe(1);
+        if (transition === "actor")
+          await page.evaluate(() => window.propertyFixture.changeContext("actor-b", "manager"));
+        if (transition === "actor")
+          await page.evaluate(async () => {
+            window.propertyFixture.pending.find((p) => p.kind === "link")!.release();
+            await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          });
+        else
+          await Promise.all([
+            page.waitForURL(/\/admin\/whatsapp-links$/),
+            page.evaluate(() =>
+              window.propertyFixture.pending.find((p) => p.kind === "link")!.release(),
+            ),
+          ]);
+        if (transition === "actor") {
+          await expect(page).toHaveURL(/\/admin\/listings\?/);
+          expect(
+            await page.evaluate(() => sessionStorage.getItem(window.propertyFixture.linkSeedKey)),
+          ).toBeNull();
+        } else {
+          await expect(page).toHaveURL(/\/admin\/whatsapp-links$/);
+          const seed = await page.evaluate(() =>
+            JSON.parse(sessionStorage.getItem(window.propertyFixture.linkSeedKey)!),
+          );
+          expect(seed.offers.length).toBeGreaterThan(0);
+          expect(seed.scope).toContain("50 個物業");
+        }
+      });
+    test("scope editor downgrade clears inaccessible history and inputs", async ({ page }) => {
+      await open(page, "/admin/listings/A000006");
+      await page.getByRole("textbox", { name: /^物業介紹/ }).fill("私人的未儲存修改");
+      await page.evaluate(() => window.propertyFixture.changeContext("manager", "agent"));
+      await expect(page.getByText("找不到物業或沒有存取權限。", { exact: true })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: /^物業介紹/ })).toHaveCount(0);
+      await expect(page.getByText("樓編號 #A000006", { exact: true })).toHaveCount(0);
+    });
+    test("scope editor same identity recheck retains unsaved draft", async ({ page }) => {
+      await open(page);
+      await page.getByRole("textbox", { name: /^物業介紹/ }).fill("同職員保留草稿");
+      await page.evaluate(() => window.propertyFixture.changeContext("manager", "manager"));
+      await expect(page.getByRole("textbox", { name: /^物業介紹/ })).toHaveValue("同職員保留草稿");
+      expect(await saveCalls(page)).toBe(0);
+    });
+    for (const transition of ["actor", "role", "binding", "aba", "same-context"])
+      test(`scope editor save continuation ${transition} preserves accepted edit`, async ({
+        page,
+      }) => {
+        await open(page);
+        await page.getByRole("textbox", { name: /^物業介紹/ }).fill("已接受的人工作品");
+        await page.evaluate(() => (window.propertyFixture.saveMode = "delayed"));
+        await page.getByRole("button", { name: "儲存共用資料", exact: true }).click();
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => window.propertyFixture.pending.filter((p) => p.kind === "save").length,
+            ),
+          )
+          .toBe(1);
+        await page.evaluate(async (kind) => {
+          if (kind === "actor" || kind === "aba")
+            await window.propertyFixture.changeContext("actor-b", "manager");
+          if (kind === "aba") await window.propertyFixture.changeContext("manager", "manager");
+          if (kind === "role") await window.propertyFixture.changeContext("manager", "agent");
+          if (kind === "binding")
+            await window.propertyFixture.changeContext(
+              "manager",
+              "manager",
+              "20000000-0000-4000-8000-000000000002",
+            );
+          if (kind === "same-context")
+            await window.propertyFixture.changeContext("manager", "manager");
+        }, transition);
+        const reads = await page.evaluate(
+          () => window.propertyFixture.calls.filter((c) => c.name === "read").length,
+        );
+        await page.evaluate(async () => {
+          window.propertyFixture.pending.find((p) => p.kind === "save")!.release();
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        });
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => window.propertyFixture.calls.filter((c) => c.name === "save-return").length,
+            ),
+          )
+          .toBe(1);
+        expect(
+          await page.evaluate(
+            () => window.propertyFixture.calls.filter((c) => c.name === "read").length,
+          ),
+        ).toBe(transition === "same-context" ? reads + 1 : reads);
+        expect(await saveCalls(page)).toBe(1);
+        await expect(page.getByText("已儲存物業資料", { exact: true })).toHaveCount(
+          transition === "same-context" ? 1 : 0,
+        );
+        expect(
+          await page.evaluate(
+            () =>
+              JSON.parse(localStorage.getItem("property-fixture-store")!).find(
+                (r: { propertyNo: string }) => r.propertyNo === "A000001",
+              ).shared.description,
+          ),
+        ).toBe("已接受的人工作品");
+        await page.reload();
+        await expect(page.getByRole("textbox", { name: /^物業介紹/ })).toHaveValue(
+          "已接受的人工作品",
+        );
+        expect(await saveCalls(page)).toBe(0);
+      });
+    for (const transition of ["actor", "binding", "aba", "same-context"])
+      test(`scope upload continuation ${transition} retains accepted media without submitting next file`, async ({
+        page,
+      }) => {
+        await open(page);
+        await page.evaluate(() => (window.propertyFixture.uploadMode = "delayed"));
+        await page.locator("#property-images").setInputFiles([
+          { name: "one.png", mimeType: "image/png", buffer: Buffer.from("owned one") },
+          { name: "two.png", mimeType: "image/png", buffer: Buffer.from("owned two") },
+        ]);
+        await expect
+          .poll(() =>
+            page.evaluate(
+              () => window.propertyFixture.pending.filter((p) => p.kind === "upload").length,
+            ),
+          )
+          .toBe(1);
+        await page.evaluate(async (kind) => {
+          if (kind === "actor" || kind === "aba")
+            await window.propertyFixture.changeContext("actor-b", "manager");
+          if (kind === "aba") await window.propertyFixture.changeContext("manager", "manager");
+          if (kind === "binding")
+            await window.propertyFixture.changeContext(
+              "manager",
+              "manager",
+              "20000000-0000-4000-8000-000000000002",
+            );
+          if (kind === "same-context")
+            await window.propertyFixture.changeContext("manager", "manager");
+        }, transition);
+        await page.evaluate(async () => {
+          window.propertyFixture.uploadMode = "ok";
+          window.propertyFixture.pending.find((p) => p.kind === "upload")!.release();
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+        });
+        expect(
+          await page.evaluate(
+            () => window.propertyFixture.calls.filter((c) => c.name === "upload").length,
+          ),
+        ).toBe(transition === "same-context" ? 2 : 1);
+        expect(
+          await page.evaluate(
+            () => JSON.parse(localStorage.getItem("property-fixture-accepted-uploads")!).length,
+          ),
+        ).toBe(transition === "same-context" ? 2 : 1);
+        await expect(page.getByText(/^已上載 \d 張相片$/, { exact: true })).toHaveCount(
+          transition === "same-context" ? 1 : 0,
+        );
+        await expect(page.getByRole("img", { name: "相片 3", exact: true })).toHaveCount(
+          transition === "same-context" ? 1 : 0,
+        );
+        expect(await saveCalls(page)).toBe(0);
+      });
+    test("scope property ownership loss on readback clears cached private editor", async ({
+      page,
+    }) => {
+      await page.addInitScript(() => sessionStorage.setItem("property-fixture-role", "agent"));
+      await open(page);
+      await page.getByRole("textbox", { name: /^物業介紹/ }).fill("已儲存後失去存取權限");
+      await page.evaluate(() => (window.propertyFixture.saveMode = "read-fail"));
+      await page.getByRole("button", { name: "儲存共用資料", exact: true }).click();
+      await expect(
+        page.getByText("修改已儲存，但畫面未能更新。請重新載入後繼續。", { exact: true }),
+      ).toBeVisible();
+      await page.evaluate(() => {
+        window.propertyFixture.readFailure = false;
+        const rows = JSON.parse(localStorage.getItem("property-fixture-store")!);
+        const row = rows.find((r: { propertyNo: string }) => r.propertyNo === "A000001");
+        row.offerings.sale.agentId = row.offerings.rent.agentId =
+          "20000000-0000-4000-8000-000000000002";
+        localStorage.setItem("property-fixture-store", JSON.stringify(rows));
+      });
+      await page.getByRole("button", { name: "重新載入最新資料", exact: true }).click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "重新載入", exact: true })
+        .click();
+      await expect(page.getByText("找不到物業或沒有存取權限。", { exact: true })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: /^物業介紹/ })).toHaveCount(0);
+      expect(await saveCalls(page)).toBe(1);
+      expect(
+        await page.evaluate(
+          () => JSON.parse(localStorage.getItem("property-fixture-store")!)[0].shared.description,
+        ),
+      ).toBe("已儲存後失去存取權限");
+    });
     test("publication requires a frozen preview before saving", async ({ page }) => {
       await open(page);
       await page.getByText("1 項資料有差異，請核實", { exact: true }).click();

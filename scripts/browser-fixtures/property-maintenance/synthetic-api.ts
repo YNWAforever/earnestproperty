@@ -1,3 +1,5 @@
+import { useSyncExternalStore } from "react";
+import { linkOffersFromGroups, linkSeedKey } from "../../../src/lib/admin/whatsapp-link-selection";
 // Only an owned browser model. Real JWT, SQL, Blob and public retrieval are separate gates.
 import {
   propertyManagementSchema,
@@ -21,7 +23,7 @@ function initial(n: number): ManagedPropertyDetail {
     rent: dealType === "rent" ? 18000 : null,
     status: n === 1 && dealType === "sale" ? "draft" : "active",
     description: "人工保護原文",
-    agentId: staff,
+    agentId: n <= 5 ? staff : "20000000-0000-4000-8000-000000000002",
     agentName: "合成代理甲",
     editable: actor !== "viewer",
   });
@@ -83,8 +85,20 @@ const readStore = (): ManagedPropertyDetail[] =>
 const writeStore = (rows: ManagedPropertyDetail[]) =>
   localStorage.setItem("property-fixture-store", JSON.stringify(rows));
 const state = {
-  calls: [] as { name: string; input: unknown }[],
+  actor,
+  role: sessionStorage.getItem("property-fixture-role") ?? actor,
+  binding: staff,
+  denied: false,
+  staffMode: sessionStorage.getItem("property-fixture-staff-mode") ?? "ok",
+  groupsMode: "ok",
+  linkMode: "outside",
+  linkSeedKey,
+  pending: [] as { kind: string; release: () => void }[],
+  changeContext: async (_actor: string, _role: string, _binding?: string) => {},
+  calls: [] as { name: string; input: unknown; actor: string; role: string; binding: string }[],
   saveMode: "ok",
+  readMode: "ok",
+  acceptedUploads: [] as { actor: string; binding: string; file: string; url: string }[],
   readFailure: false,
   uploadMode: "ok",
   bulkMode: "ok",
@@ -95,39 +109,91 @@ declare global {
   }
 }
 window.propertyFixture = state;
-const call = (name: string, input?: unknown) => state.calls.push({ name, input });
-const authState = { user: { id: actor }, loading: false, signOut: async () => {} };
-export const useNeonAuth = () => authState;
+const context = () => ({ actor: state.actor, role: state.role, binding: state.binding });
+const call = (name: string, input?: unknown, captured = context()) =>
+  state.calls.push({ name, input, ...captured });
+const authListeners = new Set<() => void>();
+let authState = { user: { id: actor }, loading: false, signOut: async () => {} };
+export const useNeonAuth = () =>
+  useSyncExternalStore(
+    (listener) => {
+      authListeners.add(listener);
+      return () => {
+        authListeners.delete(listener);
+      };
+    },
+    () => authState,
+    () => authState,
+  );
+state.changeContext = async (nextActor, role, binding = staff) => {
+  state.actor = nextActor;
+  state.role = role;
+  state.binding = binding;
+  if (authState.user.id !== nextActor) {
+    authState = { ...authState, user: { id: nextActor } };
+    for (const listener of authListeners) listener();
+  }
+  const { staffSessionStore } = await import("../../../src/components/admin/staff-session");
+  await staffSessionStore.refresh(nextActor);
+};
 export const withStaffAuthHeaders = async <T>(value: T) => value;
-export const fetchStaffSession = async () => ({ status: "ok", roles: [actor], staffId: staff });
+export async function fetchStaffSession() {
+  call("staff-session");
+  if (state.staffMode === "delayed")
+    await new Promise<void>((release) => state.pending.push({ kind: "staff", release }));
+  if (state.staffMode === "failure") throw Error("owned property staff verification unavailable");
+  return state.denied
+    ? { status: "denied", reason: "not-staff" }
+    : { status: "ok", roles: [state.role], staffId: state.binding };
+}
 export const fetchAdminAgents = async () => [{ id: staff, name: "合成代理甲", email: null }];
 export const fetchAdminEstateOptions = async () => [{ id: estate, name_zh: "碧堤半島" }];
 export const fetchAdminDistrictOptions = async () => [{ slug: "sham-tseng", name_zh: "深井" }];
 export async function fetchAdminManagedProperty({ data }: { data: { id: string } }) {
-  call("read", data);
+  const captured = context();
+  call("read", data, captured);
   if (state.readFailure) throw Error("合成讀回失敗");
-  return readStore().find((row) => row.propertyNo === data.id) ?? null;
+  const found = readStore().find((row) => row.propertyNo === data.id) ?? null;
+  return structuredClone(
+    state.role === "agent" &&
+      !Object.values(found?.offerings ?? {}).some((offer) => offer?.agentId === state.binding)
+      ? null
+      : found,
+  );
 }
+
 export async function fetchAdminPropertyGroups({ data }: { data: PropertyGroupFilters }) {
   call("groups", data);
-  const rows = readStore().filter(
+  const rows = structuredClone(readStore()).filter(
     (row) =>
-      !data.q ||
-      [row.propertyNo, row.estateName, `EXTERNAL-${Number(row.propertyNo.slice(1))}`].some(
-        (value) => value?.includes(data.q!),
-      ),
+      (state.role !== "agent" ||
+        Object.values(row.offerings).some((offer) => offer?.agentId === state.binding)) &&
+      (!data.q ||
+        [row.propertyNo, row.estateName, `EXTERNAL-${Number(row.propertyNo.slice(1))}`].some(
+          (value) => value?.includes(data.q!),
+        )),
   );
   const page = data.page ?? 1,
     pageSize = data.pageSize ?? 30;
-  return {
+  const snapshot = {
     rows: rows.slice((page - 1) * pageSize, page * pageSize),
     total: rows.length,
     page,
     pageSize,
   };
+  const captured = context();
+  const mode = state.groupsMode;
+  if (mode.startsWith("delayed"))
+    await new Promise<void>((release) => state.pending.push({ kind: "groups", release }));
+  call("groups-return", data, captured);
+  if (mode === "delayed-denied") throw Error("owned old property read denied");
+  return snapshot;
 }
+
 export async function saveAdminPropertyManagement({ data }: { data: PropertyManagementInput }) {
   call("save", data);
+  const captured = context();
+  const mode = state.saveMode;
   propertyManagementSchema.parse(data);
   if (state.saveMode === "conflict") throw Error("物業資料已被更新。請重新載入並核對後再提交。");
   if (state.saveMode === "revoked") throw Error("你沒有權限修改此物業或放盤。");
@@ -142,16 +208,36 @@ export async function saveAdminPropertyManagement({ data }: { data: PropertyMana
       Object.assign(row.offerings[deal]!, data.payload);
   row.version = `v${Number(row.version.slice(1)) + 1}`;
   writeStore(rows);
-  if (state.saveMode === "read-fail") state.readFailure = true;
+  if (mode === "read-fail") state.readFailure = true;
+  if (mode === "delayed")
+    await new Promise<void>((release) => state.pending.push({ kind: "save", release }));
+  call("save-return", data, captured);
   return { ok: true };
 }
 export async function uploadAdminMedia(file: File) {
   call("upload", file.name);
   if (state.uploadMode === "fail") throw Error("合成媒體服務失敗");
-  return { url: image(3) };
+  const accepted = {
+    actor: state.actor,
+    binding: state.binding,
+    file: file.name,
+    url: image(3 + state.acceptedUploads.length),
+  };
+  state.acceptedUploads.push(accepted);
+  localStorage.setItem("property-fixture-accepted-uploads", JSON.stringify(state.acceptedUploads));
+  if (state.uploadMode === "delayed")
+    await new Promise<void>((release) => state.pending.push({ kind: "upload", release }));
+  call("upload-return", file.name, {
+    actor: accepted.actor,
+    role: state.role,
+    binding: accepted.binding,
+  });
+  return { url: accepted.url };
 }
 export async function applyAdminPropertyBulk({ data }: { data: BulkPropertyManagementInput }) {
   call("bulk", data);
+  const captured = context();
+  const mode = state.bulkMode;
   const rows = readStore();
   const results = data.items.map((item) => {
     const no = Number(item.propertyNo.slice(1));
@@ -176,9 +262,21 @@ export async function applyAdminPropertyBulk({ data }: { data: BulkPropertyManag
     return { propertyNo: item.propertyNo, ok: true };
   });
   writeStore(rows);
-  if (state.bulkMode === "unknown") throw Error("合成回應遺失");
+  if (mode === "delayed")
+    await new Promise<void>((release) => state.pending.push({ kind: "bulk", release }));
+  call("bulk-return", data, captured);
+  if (mode === "unknown") throw Error("合成回應遺失");
   return results;
 }
-export const snapshotWhatsappLinkOffers = async () => {
-  throw Error("Link creation is outside this fixture");
+export const snapshotWhatsappLinkOffers = async (filters?: PropertyGroupFilters) => {
+  const captured = context();
+  call("snapshot", filters, captured);
+  if (state.linkMode === "outside") throw Error("Link creation is outside this fixture");
+  const rows = structuredClone(readStore());
+  const offers = linkOffersFromGroups(rows);
+  const snapshot = { offers, totalProperties: rows.length, activeOffers: offers.length };
+  if (state.linkMode === "delayed")
+    await new Promise<void>((release) => state.pending.push({ kind: "link", release }));
+  call("snapshot-return", filters, captured);
+  return snapshot;
 };

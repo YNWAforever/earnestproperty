@@ -55,3 +55,37 @@ test("server-reported uncertain save stops later chunks", async () => {
   expect(results[0].uncertain).toBe(true);
   expect(results[5].error).toContain("尚未提交");
 });
+
+test("scope change before a later chunk preserves accepted rows and never submits remaining ones", async () => {
+  let current = true;
+  let calls = 0;
+  const results = await runPropertyBulkChunks(
+    input,
+    async (batch) => {
+      calls++;
+      current = false;
+      return batch.items.map((item) => ({ propertyNo: item.propertyNo, ok: true }));
+    },
+    undefined,
+    () => current,
+  );
+  expect(calls).toBe(1);
+  expect(results.filter((r) => r.ok)).toHaveLength(5);
+  expect(results.filter((r) => r.uncertain)).toHaveLength(0);
+  expect(results.slice(5).every((r) => !r.ok && r.error?.includes("尚未提交"))).toBe(true);
+});
+test("scope already lost before first chunk submits nothing", async () => {
+  let calls = 0;
+  const results = await runPropertyBulkChunks(
+    input,
+    async () => {
+      calls++;
+      return [];
+    },
+    undefined,
+    () => false,
+  );
+  expect(calls).toBe(0);
+  expect(results).toHaveLength(12);
+  expect(results.every((r) => !r.ok && !r.uncertain && r.error?.includes("尚未提交"))).toBe(true);
+});

@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useBlocker } from "@tanstack/react-router";
 import { AdminShell, AdminError } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
+import { staffSessionStore, useStaffSession } from "@/components/admin/staff-session";
 import { fetchAdminAgents, fetchAdminEstateOptions } from "@/lib/neon/admin-data";
 import { fetchAdminPropertyGroups } from "@/lib/neon/admin-properties";
 import { snapshotWhatsappLinkOffers } from "@/lib/neon/whatsapp-link-selection";
@@ -58,6 +59,21 @@ export const Route = createFileRoute("/admin/listings")({
 });
 function AdminListings() {
   const { user } = useNeonAuth();
+  const { session } = useStaffSession(user?.id ?? null);
+  if (!user || session?.status !== "ok")
+    return (
+      <AdminShell
+        title="物業管理"
+        description="一個樓編號，一個管理頁。出售與出租的價格和狀態獨立管理。"
+      >
+        {null}
+      </AdminShell>
+    );
+  const identity = JSON.stringify([user.id, session.staffId, [...session.roles].sort()]);
+  return <AdminListingsWorkspace key={identity} identity={identity} />;
+}
+function AdminListingsWorkspace({ identity }: { identity: string }) {
+  const { user } = useNeonAuth();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const [data, setData] = useState<PropertyGroupPage | null>(null);
@@ -79,12 +95,40 @@ function AdminListings() {
     setSelected(new Set());
   }, [search]);
   const sequence = useRef(0);
+  const active = useRef(false);
+  const lifetime = useRef(0);
+  useLayoutEffect(() => {
+    active.current = true;
+    const epoch = ++lifetime.current;
+    return () => {
+      active.current = false;
+      lifetime.current = epoch + 1;
+      sequence.current++;
+    };
+  }, []);
+  const isWorkspaceCurrent = useCallback(
+    (epoch = lifetime.current) => {
+      const current = staffSessionStore.getSnapshot();
+      return (
+        active.current &&
+        lifetime.current === epoch &&
+        current.session?.status === "ok" &&
+        JSON.stringify([
+          current.userId,
+          current.session.staffId,
+          [...current.session.roles].sort(),
+        ]) === identity
+      );
+    },
+    [identity],
+  );
   const [query, setQuery] = useState(search.q ?? "");
   const [estates, setEstates] = useState<{ id: string; name_zh: string }[]>([]);
   const [agents, setAgents] = useState<{ id: string; name: string | null; email: string | null }[]>(
     [],
   );
   function filter(patch: Partial<PropertyGroupFilters>) {
+    if (!isWorkspaceCurrent()) return;
     void navigate({
       search: parseListingSearch({ ...search, ...patch, page: 1 }),
       replace: true,
@@ -103,31 +147,31 @@ function AdminListings() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query, search.q]);
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
     let cancelled = false;
     Promise.all([fetchAdminEstateOptions(), fetchAdminAgents()])
       .then(([e, a]) => {
-        if (!cancelled) {
+        if (!cancelled && isWorkspaceCurrent()) {
           setEstates(e);
           setAgents(a);
         }
       })
       .catch(() => {
-        if (!cancelled) setError("篩選選項未能載入，請重新整理。");
+        if (!cancelled && isWorkspaceCurrent()) setError("篩選選項未能載入，請重新整理。");
       });
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, isWorkspaceCurrent]);
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
     const request = ++sequence.current;
     setBusy(true);
 
     setError(null);
     fetchAdminPropertyGroups({ data: search })
       .then((result) => {
-        if (sequence.current === request) {
+        if (sequence.current === request && isWorkspaceCurrent()) {
           setData(result);
           setSelected(
             (current) =>
@@ -138,19 +182,20 @@ function AdminListings() {
         }
       })
       .catch((e) => {
-        if (sequence.current === request) {
+        if (sequence.current === request && isWorkspaceCurrent()) {
           setData(null);
           setError(e instanceof Error ? e.message : "未能載入物業");
         }
       })
       .finally(() => {
-        if (sequence.current === request) setBusy(false);
+        if (sequence.current === request && isWorkspaceCurrent()) setBusy(false);
       });
     return () => {
       sequence.current = request + 1;
     };
-  }, [user, search, retry]);
+  }, [user, search, retry, isWorkspaceCurrent]);
   function openLinkWizard(offers: LinkOfferSelection[], scope: string) {
+    if (!isWorkspaceCurrent()) return;
     if (!offers.length) {
       setError("所選範圍沒有目前公開的租售盤。");
       return;
@@ -316,19 +361,25 @@ function AdminListings() {
               variant="outline"
               disabled={linkBusy || busy || bulkBusy || !data.total || data.total > 1000}
               onClick={() => {
+                const epoch = lifetime.current;
+                if (!isWorkspaceCurrent(epoch)) return;
                 setLinkBusy(true);
                 setError(null);
                 void snapshotWhatsappLinkOffers({ ...search, page: 1, pageSize: 100 })
-                  .then((snapshot) =>
-                    openLinkWizard(
-                      snapshot.offers,
-                      `全部符合篩選 ${snapshot.totalProperties} 個物業；展開 ${snapshot.activeOffers} 筆租售`,
-                    ),
-                  )
-                  .catch((cause) =>
-                    setError(cause instanceof Error ? cause.message : "未能擷取符合篩選的樓盤"),
-                  )
-                  .finally(() => setLinkBusy(false));
+                  .then((snapshot) => {
+                    if (isWorkspaceCurrent(epoch))
+                      openLinkWizard(
+                        snapshot.offers,
+                        `全部符合篩選 ${snapshot.totalProperties} 個物業；展開 ${snapshot.activeOffers} 筆租售`,
+                      );
+                  })
+                  .catch((cause) => {
+                    if (isWorkspaceCurrent(epoch))
+                      setError(cause instanceof Error ? cause.message : "未能擷取符合篩選的樓盤");
+                  })
+                  .finally(() => {
+                    if (isWorkspaceCurrent(epoch)) setLinkBusy(false);
+                  });
               }}
             >
               下一步：預覽 WhatsApp 連結（全部符合篩選）
@@ -341,6 +392,7 @@ function AdminListings() {
             rows={data.rows.filter((row) => selected.has(row.propertyNo))}
             agents={agents}
             disabled={busy || bulkBusy}
+            isWorkspaceCurrent={isWorkspaceCurrent}
             onBusy={setBulkBusy}
             onClear={() => setSelected(new Set())}
             onReload={() => setRetry((v) => v + 1)}
