@@ -76,6 +76,7 @@ export type PerformanceRecord = {
   id: string;
   occurredAt: string;
   quality: string;
+  qualityRevisionId?: string | null;
   staffId: string | null;
   inquiryId: string | null;
   leadId: string | null;

@@ -20,6 +20,9 @@ type Props = {
   onMore: () => void;
   onQualify: (input: { leadId: string; qualifiedAt: string; evidence: string }) => Promise<void>;
   getPendingQualificationEvidence?: (leadId: string) => string | undefined;
+  getPendingQualityDecision?: (
+    record: PerformanceRecord,
+  ) => { quality: string; reason: string } | undefined;
   onCorrect: (input: {
     record: PerformanceRecord;
     quality: "production" | "test" | "spam" | "unknown";
@@ -56,6 +59,7 @@ export function PerformanceTable({
   onCorrect,
   onQualify,
   getPendingQualificationEvidence,
+  getPendingQualityDecision,
 }: Props) {
   const [quality, setQuality] = useState<"production" | "test" | "spam" | "unknown">("unknown");
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -92,6 +96,10 @@ export function PerformanceTable({
       setSaveError("請重新開啟此記錄的修正表單。");
       return;
     }
+    if (record.qualityRevisionId === undefined) {
+      setSaveError("請重新載入記錄後再修正品質。");
+      return;
+    }
     if (reason.trim().length < 8) {
       setSaveError("修正原因最少 8 個字。");
       return;
@@ -103,8 +111,13 @@ export function PerformanceTable({
     try {
       await onCorrect({ record, quality, reason: reason.trim() });
       if (revision === editingRevision.current) setReason("");
-    } catch {
-      if (revision === editingRevision.current) setSaveError("未能儲存品質修正，請重試。");
+    } catch (error) {
+      if (revision === editingRevision.current)
+        setSaveError(
+          error instanceof Error && error.name === "QualityRequestChanged"
+            ? "上次品質修正尚未確認，請還原原品質及原因再重試。"
+            : "未能儲存品質修正，請重試。",
+        );
     } finally {
       submitting.current = false;
       setSaving(null);
@@ -255,6 +268,18 @@ export function PerformanceTable({
                             onSubmit={(event) => void save(event, record)}
                             className="mt-2 space-y-2"
                           >
+                            {isEditor(record, "quality") && getPendingQualityDecision?.(record) ? (
+                              <div className="text-xs text-muted-foreground">
+                                <p>上次待確認的品質修正：</p>
+                                <p>{getPendingQualityDecision(record)?.quality}</p>
+                                <p
+                                  data-pending-quality-reason
+                                  className="whitespace-pre-wrap break-all"
+                                >
+                                  {getPendingQualityDecision(record)?.reason}
+                                </p>
+                              </div>
+                            ) : null}
                             <Label htmlFor={"quality-" + record.id}>品質狀態</Label>
                             <select
                               id={"quality-" + record.id}
@@ -282,10 +307,19 @@ export function PerformanceTable({
                               }}
                               placeholder="記錄核實依據"
                             />
+                            {record.qualityRevisionId === undefined ? (
+                              <p className="text-xs text-muted-foreground">
+                                請重新載入記錄後再修正品質。
+                              </p>
+                            ) : null}
                             <Button
                               type="submit"
                               size="sm"
-                              disabled={saving !== null || !isEditor(record, "quality")}
+                              disabled={
+                                saving !== null ||
+                                !isEditor(record, "quality") ||
+                                record.qualityRevisionId === undefined
+                              }
                             >
                               儲存修正
                             </Button>

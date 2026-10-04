@@ -56,6 +56,16 @@ const qualifyLeadServer = createServerFn({ method: "POST" })
     ).requireStaffAccess(getRequest(), ["admin", "manager"]);
     return (await import("./performance-events.server.ts")).qualifyLeadForPerformance(data, actor);
   });
+function correctionRevision(input: unknown): string | null {
+  if (input === null) return null;
+  if (
+    typeof input !== "string" ||
+    !/^[1-9][0-9]{0,18}$/.test(input) ||
+    BigInt(input) > 9223372036854775807n
+  )
+    throw new Response("Invalid quality snapshot", { status: 400 });
+  return input;
+}
 const reviseEventQualityServer = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => {
     if (!input || typeof input !== "object") throw new Error("Invalid correction");
@@ -64,6 +74,7 @@ const reviseEventQualityServer = createServerFn({ method: "POST" })
       eventKey: String(row.eventKey ?? ""),
       quality: String(row.quality ?? "") as "production" | "test" | "spam" | "unknown",
       reason: String(row.reason ?? ""),
+      expectedRevisionId: correctionRevision(row.expectedRevisionId),
     };
   })
   .handler(async ({ data }) => {
@@ -83,6 +94,7 @@ const reviseInquiryQualityServer = createServerFn({ method: "POST" })
       inquiryId: String(row.inquiryId ?? ""),
       quality: String(row.quality ?? "") as "production" | "test" | "spam" | "unknown",
       reason: String(row.reason ?? ""),
+      expectedRevisionId: correctionRevision(row.expectedRevisionId),
     };
   })
   .handler(async ({ data }) => {
@@ -108,6 +120,7 @@ export async function correctPerformanceEventQuality(input: {
   eventKey: string;
   quality: "production" | "test" | "spam" | "unknown";
   reason: string;
+  expectedRevisionId: string | null;
 }) {
   return unwrapServerFnResponse(
     reviseEventQualityServer(await withStaffAuthHeaders({ data: input })),
@@ -117,6 +130,7 @@ export async function correctInquiryQuality(input: {
   inquiryId: string;
   quality: "production" | "test" | "spam" | "unknown";
   reason: string;
+  expectedRevisionId: string | null;
 }) {
   return unwrapServerFnResponse(
     reviseInquiryQualityServer(await withStaffAuthHeaders({ data: input })),
