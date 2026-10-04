@@ -108,7 +108,8 @@ export function WhatsappBatchImport({
     <section aria-label="貼表格匯入連結" className="space-y-2 rounded-lg border p-3">
       <h3 className="font-medium">貼表格匯入多來源</h3>
       <p className="text-xs text-muted-foreground">
-        固定欄位：<code>{template}</code>。同事來源代碼格式為「來源/帳戶|原始代碼」， 例如
+        固定欄位：<code className="break-all">{template}</code>
+        。同事來源代碼格式為「來源/帳戶|原始代碼」， 例如
         28hse/account540|001-A；不按姓名自動配對。網址只作本機格式解析，不會讀取外站。
       </p>
       <label className="block text-sm">

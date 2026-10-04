@@ -15,6 +15,7 @@ export const INQUIRY_ROWS_SQL =
     i.created_at AS "createdAt",i.customer_message_at AS "customerMessageAt",
     i.webhook_received_at AS "webhookReceivedAt",i.response_due_at AS "responseDueAt",
     i.service_policy_id::text AS "servicePolicyId",q.quality,
+    (SELECT id::text FROM inquiry_quality_revisions WHERE inquiry_id=i.id ORDER BY id DESC LIMIT 1) AS "qualityRevisionId",
     i.assigned_agent_id::text AS "assignedStaffId"
   FROM inquiries i
   JOIN inquiry_quality_records q ON q.inquiry_id=i.id
@@ -30,8 +31,10 @@ SELECT * FROM ranked WHERE "createdAt">=($1::date::timestamp AT TIME ZONE 'Asia/
 export const EVENT_ROWS_SQL = `SELECT event_type AS type,inquiry_id::text AS "inquiryId",
   lead_id::text AS "leadId",transaction_id::text AS "transactionId",
   staff_id::text AS "staffId",branch_id_at_event::text AS "branchIdAtEvent",
-  occurred_at AS "occurredAt",quality,event_key AS "eventKey"
-  FROM performance_event_records
+  occurred_at AS "occurredAt",quality,event_key AS "eventKey",
+  (SELECT id::text FROM performance_event_quality_revisions WHERE event_key=record.event_key
+    ORDER BY id DESC LIMIT 1) AS "qualityRevisionId"
+  FROM performance_event_records record
   WHERE (inquiry_id=ANY($1::uuid[]) OR lead_id=ANY($2::uuid[]))
   AND event_type IN ('lead_qualified','viewing_completed','assignment_confirmed','human_response')
   ORDER BY occurred_at,event_key`;
@@ -39,7 +42,9 @@ export const DEAL_ROWS_SQL = `SELECT p.transaction_id::text AS "transactionId",p
   p.attribution_status AS status,p.lead_id::text AS "leadId",
   p.confirmed_at AS "confirmedAt",t.price::text AS price,t.deal_type::text AS "dealType",
   p.commission_receivable::text AS "commissionReceivable",
-  COALESCE(e.quality,'unknown') AS quality,e.event_key AS "eventKey",true AS current
+  COALESCE(e.quality,'unknown') AS quality,e.event_key AS "eventKey",true AS current,
+  (SELECT id::text FROM performance_event_quality_revisions WHERE event_key=e.event_key
+    ORDER BY id DESC LIMIT 1) AS "qualityRevisionId"
   FROM transaction_performance p JOIN transactions t ON t.id=p.transaction_id
   LEFT JOIN staff_users owner ON owner.id=t.agent_id
   LEFT JOIN performance_event_records e ON e.event_key='deal_confirmed:'||
@@ -81,7 +86,8 @@ export const BACKLOG_SQL =
 export const BACKLOG_ROWS_SQL =
   `SELECT i.id::text AS id,i.created_at AS "createdAt",
   i.assigned_agent_id::text AS "assignedStaffId",i.crm_lead_id::text AS "crmLeadId",
-  i.status,q.quality
+  i.status,q.quality,
+  (SELECT id::text FROM inquiry_quality_revisions WHERE inquiry_id=i.id ORDER BY id DESC LIMIT 1) AS "qualityRevisionId"
   FROM inquiries i JOIN inquiry_quality_records q ON q.inquiry_id=i.id
   LEFT JOIN staff_users owner ON owner.id=i.assigned_agent_id
   LEFT JOIN properties property ON property.id=i.property_id

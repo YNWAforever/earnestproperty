@@ -1,0 +1,149 @@
+{
+  "codeSha": "a3f24df9921a573e1aa429262bc62cb0b3eb9074",
+  "evidenceLayer": "real-routes-synthetic-api-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realMediaProvider": false,
+  "results": [
+    {
+      "name": "publication requires a frozen preview before saving",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "validation retains input and focuses the first invalid field",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "invalid offer amount focuses the amount and dirty scope cancel keeps text",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "failed upload retains text and photo order survives a fresh page",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "CAS conflict and failed readback retain draft until confirmed reload",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "50 selected properties keep sale-only scope and per-row partial results",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "unknown bulk outcome stops remaining chunks and requires readback",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "publication requires a frozen preview before saving",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "validation retains input and focuses the first invalid field",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "invalid offer amount focuses the amount and dirty scope cancel keeps text",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "failed upload retains text and photo order survives a fresh page",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "CAS conflict and failed readback retain draft until confirmed reload",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "50 selected properties keep sale-only scope and per-row partial results",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "unknown bulk outcome stops remaining chunks and requires readback",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "publication requires a frozen preview before saving",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "validation retains input and focuses the first invalid field",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "invalid offer amount focuses the amount and dirty scope cancel keeps text",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "failed upload retains text and photo order survives a fresh page",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "CAS conflict and failed readback retain draft until confirmed reload",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "50 selected properties keep sale-only scope and per-row partial results",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "unknown bulk outcome stops remaining chunks and requires readback",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "publication requires a frozen preview before saving",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "validation retains input and focuses the first invalid field",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "invalid offer amount focuses the amount and dirty scope cancel keeps text",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "failed upload retains text and photo order survives a fresh page",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "CAS conflict and failed readback retain draft until confirmed reload",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "50 selected properties keep sale-only scope and per-row partial results",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "unknown bulk outcome stops remaining chunks and requires readback",
+      "status": "passed",
+      "width": 390
+    }
+  ]
+}

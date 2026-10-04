@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,9 +23,12 @@ import { WhatsappBatchResult } from "./WhatsappBatchResult";
 import { WhatsappBatchImport } from "./WhatsappBatchImport";
 import {
   clearDraft,
+  listDrafts,
   loadDraft,
   prepareEligibleSubset,
+  resolveBatchDraftId,
   saveDraft,
+  type WhatsappBatchDraft,
 } from "@/lib/admin/whatsapp-batch-draft";
 
 type Staff = { id: string; name: string | null; email: string | null; active?: boolean };
@@ -33,11 +37,6 @@ type Routing = "property-agent" | "uniform" | "per-row" | "reception";
 const control = "min-h-11 w-full rounded-md border bg-background px-3 text-sm";
 const label = (offer: LinkOfferSelection) =>
   `${offer.publicListingNo} · ${offer.dealType === "sale" ? "售" : "租"} · ${offer.title} · ${offer.price == null ? "價格待核實" : offer.price.toLocaleString("en-HK")}`;
-const api = {
-  preview: previewWhatsappLinkBatch,
-  commit: commitWhatsappLinkChunk,
-  read: getWhatsappLinkBatchResult,
-};
 
 export function WhatsappLinkWizard({
   seed,
@@ -47,6 +46,7 @@ export function WhatsappLinkWizard({
   enableBatchImport = true,
   seedScope,
   onSeedConsumed,
+  isWorkspaceCurrent,
 }: {
   seed: LinkOfferSelection[];
   agents: Staff[];
@@ -55,10 +55,20 @@ export function WhatsappLinkWizard({
   enableBatchImport?: boolean;
   seedScope?: string;
   onSeedConsumed?: () => void;
+  isWorkspaceCurrent?: () => boolean;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
+  const api = {
+    preview: (input: Parameters<typeof previewWhatsappLinkBatch>[0]) =>
+      previewWhatsappLinkBatch(input, isCurrent),
+    commit: (input: Parameters<typeof commitWhatsappLinkChunk>[0]) =>
+      commitWhatsappLinkChunk(input, isCurrent),
+    read: (batchId: string) => getWhatsappLinkBatchResult(batchId, isCurrent),
+  };
   const [step, setStep] = useState(1);
   const [draftId, setDraftId] = useState<string>(() => crypto.randomUUID());
   const [draftReady, setDraftReady] = useState(false);
+  const [savedDrafts, setSavedDrafts] = useState<WhatsappBatchDraft[]>([]);
   const [repairRows, setRepairRows] = useState<BatchRowDraft[] | null>(null);
   const [previewDirty, setPreviewDirty] = useState(false);
   const [selectedEligible, setSelectedEligible] = useState<string[]>([]);
@@ -71,18 +81,31 @@ export function WhatsappLinkWizard({
   const [source, setSource] = useState<Source>("website");
   const [sources, setSources] = useState<ImportSource[]>(["website"]);
   const [importedRows, setImportedRows] = useState<BatchRowDraft[] | null>(null);
-  const [importSummary, setImportSummary] = useState<{
-    offerCount: number;
-    saleCount: number;
-    rentCount: number;
-    sourceCount: number;
-  } | null>(null);
+  const importSummary = useMemo(() => {
+    const offers = (importedRows ?? []).filter((row) => row.input.entryPointType === "sales");
+    return {
+      offerCount: new Set(offers.map((row) => `${row.input.publicListingNo}:${row.input.dealType}`))
+        .size,
+      saleCount: new Set(
+        offers
+          .filter((row) => row.input.dealType === "sale")
+          .map((row) => row.input.publicListingNo),
+      ).size,
+      rentCount: new Set(
+        offers
+          .filter((row) => row.input.dealType === "rent")
+          .map((row) => row.input.publicListingNo),
+      ).size,
+      sourceCount: new Set((importedRows ?? []).map((row) => row.input.placementSource)).size,
+    };
+  }, [importedRows]);
   const [placement, setPlacement] = useState<Record<string, string>>({});
   const [verified, setVerified] = useState(false);
   const [routing, setRouting] = useState<Routing>("reception");
   const [staffId, setStaffId] = useState("");
   const [perRowStaff, setPerRowStaff] = useState<Record<string, string>>({});
   const [progress, setProgress] = useState<LinkBatchProgress | null>(null);
+  const [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
   const [incomingPending, setIncomingPending] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -99,8 +122,22 @@ export function WhatsappLinkWizard({
       const raw = sessionStorage.getItem(linkBatchProgressKey(actorScope));
       if (!raw) return;
       const stored = JSON.parse(raw) as LinkBatchProgress;
-      if (stored.batchId && Array.isArray(stored.rows) && Array.isArray(stored.chunkIds)) {
-        setProgress(stored);
+      if (
+        stored.batchId &&
+        Array.isArray(stored.rows) &&
+        Array.isArray(stored.chunkIds) &&
+        Array.isArray(stored.completed) &&
+        Array.isArray(stored.preview?.rows)
+      ) {
+        let owningDraftId: string | null = null;
+        try {
+          owningDraftId = resolveBatchDraftId(actorScope, stored.rows, stored.draftId);
+        } catch {
+          setError("草稿讀取未完成；原批次仍保留，請先查回結果。");
+        }
+        const restored = { ...stored, draftId: owningDraftId ?? undefined };
+        setProgress(restored);
+        if (owningDraftId) setDraftId(owningDraftId);
         setRepairRows(stored.rows);
         setSelectedEligible(
           stored.preview.rows.filter((row) => row.decision !== "blocked").map((row) => row.rowKey),
@@ -108,15 +145,28 @@ export function WhatsappLinkWizard({
         setStep(
           stored.nextChunk === 0 && !stored.uncertain && stored.completed.length === 0 ? 4 : 5,
         );
+        if (owningDraftId && owningDraftId !== stored.draftId) {
+          try {
+            sessionStorage.setItem(linkBatchProgressKey(actorScope), JSON.stringify(restored));
+          } catch {
+            setError("恢復記錄未能更新；原批次仍保留，請先查回結果。");
+          }
+        }
+      } else {
+        setRecoveryUnavailable(true);
+        setError("恢復記錄需要核對；請保留記錄，暫停建立新批次。");
       }
     } catch {
-      sessionStorage.removeItem(linkBatchProgressKey(actorScope));
+      setRecoveryUnavailable(true);
+      setError("恢復記錄讀取未完成；請保留記錄，暫停建立新批次。");
     }
   }, [actorScope]);
   useEffect(() => {
     try {
       const pointerKey = `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`;
       const pointer = localStorage.getItem(pointerKey);
+      setSavedDrafts(listDrafts(actorScope));
+      if (sessionStorage.getItem(linkBatchProgressKey(actorScope))) return;
       if (pointer) {
         const stored = loadDraft(actorScope, pointer);
         if (stored?.rows.length) {
@@ -135,6 +185,7 @@ export function WhatsappLinkWizard({
     }
   }, [actorScope]);
   const save = (next: LinkBatchProgress) => {
+    if (!isCurrent()) return;
     sessionStorage.setItem(linkBatchProgressKey(actorScope), JSON.stringify(next));
     setProgress(next);
   };
@@ -207,23 +258,26 @@ export function WhatsappLinkWizard({
         `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`,
         draftId,
       );
+      setSavedDrafts(listDrafts(actorScope));
     } catch {
       // The browser may disallow local storage; preview/commit still require server validation.
     }
   }, [actorScope, draftId, draftReady, progress, rows]);
   // rowKey must remain stable between dry-run and commit; preview stores this immutable copy.
   async function run(task: () => Promise<void>) {
+    if (!isCurrent()) return;
     setBusy(true);
     setError("");
     try {
       await task();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "操作未完成，請重試。");
+      if (isCurrent()) setError(cause instanceof Error ? cause.message : "操作未完成，請重試。");
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
   }
   async function dryRun() {
+    if (recoveryUnavailable) throw new Error("請先核對原批次恢復記錄。");
     if (mode === "sales" && !selected.length && !importedRows)
       throw new Error("請先選擇至少一筆樓盤租售。");
     if (rows.length > 1000 || (expansion?.rowCount ?? 0) > 1000)
@@ -239,8 +293,10 @@ export function WhatsappLinkWizard({
       throw new Error("請逐行選擇同事。");
     const batchId = crypto.randomUUID();
     const preview = await api.preview({ batchId, rows });
+    if (!isCurrent()) return;
     const next: LinkBatchProgress = {
       batchId,
+      draftId,
       rows,
       preview,
       chunkIds: Array.from({ length: Math.ceil(rows.length / 50) }, () => crypto.randomUUID()),
@@ -263,8 +319,10 @@ export function WhatsappLinkWizard({
     if (!canReplace || progress?.nextChunk) throw new Error("請先查回現有批次結果。");
     const batchId = crypto.randomUUID();
     const preview = await api.preview({ batchId, rows: nextRows });
+    if (!isCurrent()) return;
     const next: LinkBatchProgress = {
       batchId,
+      draftId,
       rows: nextRows,
       preview,
       chunkIds: Array.from({ length: Math.ceil(nextRows.length / 50) }, () => crypto.randomUUID()),
@@ -362,17 +420,19 @@ export function WhatsappLinkWizard({
     setStep(2);
   }
   async function submit() {
-    if (!progress) return;
+    if (!isCurrent() || !progress) return;
     if (previewDirty) throw new Error("行內內容已更改，請先重新預覽。");
     let current = progress;
     if (current.uncertain) {
       current = reconcileLinkBatch(current, (await api.read(current.batchId)).operations);
       save(current);
+      if (!isCurrent()) return;
       if (current.uncertain)
         throw new Error("提交結果仍未確認；請稍後查回伺服器結果，不要重新送出。");
     }
     if (current.nextChunk === 0 || Date.parse(current.preview.expiresAt) <= Date.now() + 30_000) {
       const refreshed = await api.preview({ batchId: current.batchId, rows: current.rows });
+      if (!isCurrent()) return;
       current = { ...current, preview: refreshed };
       save(current);
       setSelectedEligible(
@@ -384,10 +444,17 @@ export function WhatsappLinkWizard({
       }
     }
     setStep(5);
-    const result = await runWhatsappLinkBatch(current, api, save);
+    const result = await runWhatsappLinkBatch(current, api, save, isCurrent);
+    if (!isCurrent()) return;
     save(result);
     setStep(5);
     if (result.completed.some((chunk) => chunk.state === "committed")) onCreated();
+    retainUnfinishedDraft(result);
+  }
+  function retainUnfinishedDraft(result: LinkBatchProgress) {
+    const owningDraftId = result.draftId;
+    // Never attach an unresolved legacy lineage to another tab's active draft.
+    if (!owningDraftId) return;
     if (
       !result.uncertain &&
       (result.nextChunk >= result.chunkIds.length ||
@@ -400,31 +467,32 @@ export function WhatsappLinkWizard({
             .map((row) => row.rowKey),
         ),
       );
-      const existing = loadDraft(actorScope, draftId)?.rows ?? [];
-      const unfinished = [
-        ...existing.filter((row) => !successful.has(row.rowKey)),
-        ...result.rows.filter(
-          (row) =>
-            !successful.has(row.rowKey) && !existing.some((item) => item.rowKey === row.rowKey),
-        ),
-      ];
-      if (unfinished.length) saveDraft(actorScope, { draftId, rows: unfinished });
-      else {
-        clearDraft(actorScope, draftId);
-        localStorage.removeItem(
-          `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`,
-        );
+      const existing = loadDraft(actorScope, owningDraftId)?.rows ?? [];
+      const unfinished = new Map(
+        existing.filter((row) => !successful.has(row.rowKey)).map((row) => [row.rowKey, row]),
+      );
+      // Signed preview rows contain the latest edits; deferred rows remain from the draft.
+      for (const row of result.rows) {
+        if (!successful.has(row.rowKey)) unfinished.set(row.rowKey, row);
       }
+      if (unfinished.size)
+        saveDraft(actorScope, { draftId: owningDraftId, rows: [...unfinished.values()] });
+      else {
+        clearDraft(actorScope, owningDraftId);
+        const pointerKey = `earnest:whatsapp-link-draft-active:v1:${encodeURIComponent(actorScope)}`;
+        if (localStorage.getItem(pointerKey) === owningDraftId) localStorage.removeItem(pointerKey);
+      }
+      setSavedDrafts(listDrafts(actorScope));
     }
   }
   async function recover() {
     if (!progress) return;
     const result = reconcileLinkBatch(progress, (await api.read(progress.batchId)).operations);
     save(result);
+    retainUnfinishedDraft(result);
   }
   const toggle = (offer: LinkOfferSelection) => {
     setImportedRows(null);
-    setImportSummary(null);
     setSelected((current) =>
       current.some((item) => item.propertyId === offer.propertyId)
         ? current.filter((item) => item.propertyId !== offer.propertyId)
@@ -433,11 +501,12 @@ export function WhatsappLinkWizard({
   };
   const hasActiveBatch = progress && progress.nextChunk < progress.chunkIds.length;
   const canReplace =
-    !progress ||
-    (!progress.uncertain &&
-      (progress.nextChunk === 0 ||
-        !hasActiveBatch ||
-        progress.completed.some((chunk) => chunk.state === "rejected")));
+    !recoveryUnavailable &&
+    (!progress ||
+      (!progress.uncertain &&
+        (progress.nextChunk === 0 ||
+          !hasActiveBatch ||
+          progress.completed.some((chunk) => chunk.state === "rejected"))));
   const conflict = incomingPending && seed.length > 0 && progress !== null;
   function useIncoming() {
     if (!canReplace || busy) return;
@@ -449,7 +518,6 @@ export function WhatsappLinkWizard({
     setPlacement({});
     setPerRowStaff({});
     setImportedRows(null);
-    setImportSummary(null);
     setError("");
     setStep(1);
   }
@@ -496,6 +564,46 @@ export function WhatsappLinkWizard({
       ) : null}
       {step === 1 ? (
         <div className="space-y-3">
+          {!progress && savedDrafts.some((draft) => draft.draftId !== draftId) ? (
+            <section aria-label="未完成草稿" className="space-y-2 rounded border p-3">
+              <p className="text-sm">未完成的行仍已儲存。開啟後需重新核對及預覽。</p>
+              <div className="flex flex-wrap gap-2">
+                {savedDrafts
+                  .filter((draft) => draft.draftId !== draftId)
+                  .map((draft) => (
+                    <Button
+                      key={draft.draftId}
+                      variant="outline"
+                      disabled={busy || recoveryUnavailable}
+                      onClick={() => {
+                        const stored = loadDraft(actorScope, draft.draftId);
+                        if (!stored?.rows.length) {
+                          setSavedDrafts(listDrafts(actorScope));
+                          return;
+                        }
+                        setDraftId(stored.draftId);
+                        setImportedRows(stored.rows);
+                        setRepairRows(null);
+                        setSelected([]);
+                        setMode("sales");
+                        setRouting("reception");
+                        setVerified(false);
+                        setPreviewDirty(false);
+                        setSelectedEligible([]);
+                        setConfirmSubset(false);
+                        setDeferredCount(0);
+                        setError("");
+                        setIncomingPending(false);
+                        onSeedConsumed?.();
+                        setStep(2);
+                      }}
+                    >
+                      開啟未完成草稿（{draft.rows.length} 行）
+                    </Button>
+                  ))}
+              </div>
+            </section>
+          ) : null}
           <fieldset className="flex flex-wrap gap-4">
             <legend className="font-medium">查詢入口</legend>
             <label>
@@ -516,7 +624,6 @@ export function WhatsappLinkWizard({
               disabled={busy || !canReplace}
               onImported={(result) => {
                 setImportedRows(result.rows);
-                setImportSummary(result);
                 setSelected(result.offers);
                 setMode("sales");
                 setRouting("reception");
@@ -607,10 +714,8 @@ export function WhatsappLinkWizard({
                 variant="outline"
                 onClick={() => {
                   setImportedRows(null);
-                  setImportSummary(null);
                   setSelected([]);
                   setImportedRows(null);
-                  setImportSummary(null);
                   setStep(1);
                 }}
               >
@@ -1039,6 +1144,15 @@ export function WhatsappLinkWizard({
                   sessionStorage.removeItem(linkBatchProgressKey(actorScope));
                   setProgress(null);
                   setSelected([]);
+                  setImportedRows(null);
+                  setRepairRows(null);
+                  setDraftId(crypto.randomUUID());
+                  setMode("sales");
+                  setVerified(false);
+                  setPreviewDirty(false);
+                  setSelectedEligible([]);
+                  setConfirmSubset(false);
+                  setDeferredCount(0);
                   setStep(1);
                 }}
               >

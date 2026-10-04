@@ -13,7 +13,7 @@ test("Operations package script runs the focused route, library, and component s
 
   assert.equal(
     packageJson.scripts["test:operations"],
-    "node --test src/lib/admin/operations/operations.test.mjs src/routes/admin.operations.test.mjs && bun test src/components/admin/operations/operations-components.test.tsx",
+    "node --test src/lib/admin/operations/operations.test.mjs src/lib/admin/workspace-review.test.mjs src/routes/admin.operations.test.mjs && bun test src/components/admin/operations/operations-components.test.tsx",
   );
 });
 
@@ -36,14 +36,14 @@ test("Operations route integration contracts gate protected reads and remain acc
   const shellSource = readFileSync(shellPath, "utf8");
 
   assert.match(routeSource, /fetchOperationsHealth/);
-  assert.match(routeSource, /fetchOperationsHealth\(\)/);
+  assert.match(routeSource, /fetchOperationsHealth\(isWorkspaceCurrent\)/);
   assert.match(routeSource, /currentHealth\.capabilities\.jobsRead[\s\S]*fetchOperationsJobs/);
   assert.match(
     routeSource,
     /currentHealth\.capabilities\.migrationsPlan[\s\S]*fetchOperationsMigrations/,
   );
   assert.match(routeSource, /refreshedTab !== "overview"/);
-  assert.match(routeSource, /\}, \[pulse, search\.tab\]\);/);
+  assert.match(routeSource, /\}, \[pulse, search\.tab, isWorkspaceCurrent\]\);/);
   assert.doesNotMatch(routeSource, /fetchOperationsAudit/);
   assert.match(routeSource, /AdminOperationsAudit/);
   assert.match(routeSource, /activeTab === "audit"[\s\S]*health\.capabilities\.auditRead/);

@@ -5,6 +5,8 @@ import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve, extname, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 import { chromium, expect } from "@playwright/test";
+const evidencePrefix = process.env.EARNEST_BROWSER_EVIDENCE_PREFIX ?? "";
+if (!/^[a-z0-9-]*$/.test(evidencePrefix)) throw Error("Invalid owned evidence prefix");
 
 assert.ok(
   !process.env.PLAYWRIGHT_BASE_URL,
@@ -44,6 +46,7 @@ await new Promise((done) => server.listen(0, "127.0.0.1", done));
 const origin = `http://127.0.0.1:${server.address().port}`;
 let browser;
 const results = [];
+const renderedControls = new Map();
 let collected = 0;
 const ids = {
   a: "10000000-0000-4000-8000-000000000001",
@@ -108,16 +111,71 @@ async function check(name, width, run, actor = "agent-a", height = 844) {
       0,
       "No mutation adapter calls",
     );
+    // Observed controls are inventory candidates. A passed scenario does not
+    // assert that every visible control was operated or is production-ready.
+    const controls = await page
+      .locator("button,a,input,textarea,select,[role='tab'],[role='combobox']")
+      .evaluateAll((elements) =>
+        elements
+          .filter(
+            (element) =>
+              element.getClientRects().length && getComputedStyle(element).visibility !== "hidden",
+          )
+          .map((element) => ({
+            role:
+              element.getAttribute("role") ||
+              ({
+                BUTTON: "button",
+                A: "link",
+                INPUT: "input",
+                TEXTAREA: "textbox",
+                SELECT: "combobox",
+              }[element.tagName] ??
+                element.tagName.toLowerCase()),
+            name: (
+              element.getAttribute("aria-label") ||
+              element.labels?.[0]?.textContent ||
+              element.innerText ||
+              element.getAttribute("placeholder") ||
+              element.getAttribute("title") ||
+              ""
+            )
+              .trim()
+              .slice(0, 160),
+            disabled: Boolean(element.disabled || element.getAttribute("aria-disabled") === "true"),
+          })),
+      );
+    const path = new URL(page.url()).pathname;
+    for (const control of controls) {
+      const key = JSON.stringify([path, actor, control.role, control.name]);
+      const record = renderedControls.get(key) ?? {
+        path,
+        actor,
+        ...control,
+        widths: [],
+        observedInScenarios: [],
+        evidenceLevel: "rendered_observation_only",
+      };
+      if (!record.widths.includes(width)) record.widths.push(width);
+      if (!record.observedInScenarios.includes(name)) record.observedInScenarios.push(name);
+      renderedControls.set(key, record);
+    }
     results.push({ name, width, height, actor, status: "PASS" });
-    if (name === "390px long timeline and composer")
-      await page.screenshot({ path: ".audit/no-link-browser-390.png" });
+    if ([390, 768, 1280, 1440].includes(width) && name === `${width}px long timeline and composer`)
+      await page.screenshot({
+        path: `.audit/${evidencePrefix}no-link-browser-${width}.png`,
+        fullPage: true,
+      });
     console.log(`PASS ${name}`);
   } catch (error) {
     if (await page.getByRole("button", { name: "Show Error" }).count()) {
       await page.getByRole("button", { name: "Show Error" }).click();
       console.error("Route error:", await page.locator("body").innerText());
     }
-    await page.screenshot({ path: `.audit/no-link-browser-${results.length}.png`, fullPage: true });
+    await page.screenshot({
+      path: `.audit/${evidencePrefix}no-link-browser-${results.length}.png`,
+      fullPage: true,
+    });
     results.push({ name, width, height, actor, status: "FAIL", error: error.message });
     console.error(`FAIL ${name}: ${error.message}`);
   } finally {
@@ -155,11 +213,23 @@ try {
       page.getByText(ids.staff, { exact: false }).filter({ visible: true }).first(),
     ).toBeVisible();
   });
-  for (const width of [360, 390, 768, 1280]) {
+  for (const width of [360, 390, 768, 1280, 1440]) {
     await check(`${width}px long timeline and composer`, width, async (page) => {
       await open(page, url(ids.a));
       const input = page.getByLabel("WhatsApp 回覆").filter({ visible: true });
       await expect(input).toBeVisible();
+      if (width < 1024) {
+        const close = page
+          .getByRole("button", { name: "關閉", exact: true })
+          .filter({ visible: true })
+          .first();
+        await expect(close).toBeInViewport();
+        const closeBox = await close.boundingBox();
+        assert.ok(
+          closeBox && closeBox.width >= 44 && closeBox.height >= 44,
+          `Mobile close target: ${JSON.stringify(closeBox)}`,
+        );
+      }
       const last = await page.evaluate(() => window.noLinkFixture.lastMessage);
       await expect(page.getByText(last, { exact: true }).filter({ visible: true })).toBeVisible();
       if (width < 1024)
@@ -407,7 +477,7 @@ try {
       });
       await dialog.getByRole("button", { name: "保存人工轉交查詢" }).click();
       await expect(dialog.getByRole("alert")).toBeVisible();
-      await page.screenshot({ path: ".audit/no-link-forward-390.png" });
+      await page.screenshot({ path: `.audit/${evidencePrefix}no-link-forward-390.png` });
       const first = await page.evaluate(
         () => JSON.parse(sessionStorage.getItem("no-link-fixture-forward-attempts"))[0],
       );
@@ -1447,13 +1517,18 @@ try {
     390,
     async (page) => {
       await open(page, `${origin}/admin/blasts`);
-      await expect(page.getByText("合成角色沒有推廣權限", { exact: false })).toBeVisible();
+      await expect(
+        page.getByText("尚未取得已核實的推廣管理權限。", { exact: false }),
+      ).toBeVisible();
       expect(
         await page.evaluate(
           () =>
-            window.noLinkFixture.calls.filter((c) => c.name === "syntheticCampaignQueue").length,
+            window.noLinkFixture.calls.filter((c) =>
+              /^synthetic(Campaign|Audience|Blast|Options)/.test(c.name),
+            ).length,
         ),
       ).toBe(0);
+      await expect(page.getByRole("button", { name: /新增 Campaign/ })).toHaveCount(0);
     },
     "agent-b",
   );
@@ -2321,12 +2396,140 @@ try {
       expect(await page.evaluate(() => window.noLinkOutboundFixture.calls.length)).toBe(0);
     },
   );
+  for (const width of [390, 768, 1280, 1440]) {
+    const analyticsUrl = `${origin}/admin/analytics?start=2026-09-30&end=2026-09-30&cohortWindowDays=30`;
+    await check(
+      "analytics disabled capability is explicit and obtains no performance report",
+      width,
+      async (page) => {
+        await page.addInitScript(() =>
+          sessionStorage.setItem("analytics-fixture-enabled", "false"),
+        );
+        await open(page, analyticsUrl);
+        await expect(page.getByText("銷售及代理績效暫未啟用", { exact: true })).toBeVisible();
+        await expect(page.getByRole("form", { name: "績效篩選" })).toHaveCount(0);
+        expect(await page.evaluate(() => window.analyticsFixture.reads.length)).toBe(0);
+      },
+      "manager",
+    );
+    await check(
+      "analytics KPI drilldown and visible CSV match scoped Hong Kong cohort",
+      width,
+      async (page) => {
+        await open(page, analyticsUrl);
+        const dashboard = page.getByRole("region", { name: "銷售及代理績效" });
+        const card = (label) =>
+          dashboard
+            .locator("div.rounded-lg.border.bg-card")
+            .filter({ has: page.getByRole("heading", { name: label, exact: true }) });
+        await expect(card("有效查詢").locator("p").first()).toHaveText("3");
+        await card("有效查詢").getByRole("button", { name: "可查看記錄" }).click();
+        const records = page.getByRole("region", { name: "對應記錄" });
+        await expect(records.locator("tbody tr")).toHaveCount(3);
+        const visibleIds = await records
+          .locator("tbody tr")
+          .evaluateAll((rows) => rows.map((row) => row.textContent));
+        const downloadReady = page.waitForEvent("download");
+        await records.getByRole("button", { name: /匯出/ }).click();
+        const csv = await readFile(await (await downloadReady).path(), "utf8");
+        expect(csv.trim().split("\r\n")).toHaveLength(4);
+        for (const n of [1, 2, 3])
+          expect(csv).toContain(`80000000-0000-4000-8000-${String(n).padStart(12, "0")}`);
+        for (const n of [4, 5, 6, 7, 8])
+          expect(csv).not.toContain(`80000000-0000-4000-8000-${String(n).padStart(12, "0")}`);
+        expect(visibleIds).toHaveLength(3);
+        await dashboard.getByRole("tab", { name: "來源證據" }).click();
+        await expect(card("點擊至查詢比率")).toContainText("未有足夠資料");
+        await expect(card("點擊至查詢比率")).not.toContainText("0%");
+        await expect(card("點擊至查詢比率")).not.toContainText("100%");
+        for (const label of ["28Hse 訊息來源", "有追蹤開啟證據的查詢", "來源未核實"])
+          await expect(card(label).locator("p").first()).toHaveText("1");
+        await dashboard.getByRole("tab", { name: "回覆及跟進" }).click();
+        await expect(card("已確認分配").locator("p").first()).toHaveText("1");
+        await expect(card("未回覆").locator("p").first()).toHaveText("2");
+        await expect(card("首回覆中位數").locator("p").first()).toHaveText("15 分鐘");
+        await dashboard.getByRole("tab", { name: "成交及佣金" }).click();
+        await expect(card("已核實成交").locator("p").first()).toHaveText("2");
+        await expect(card("買賣成交額").locator("p").first()).toHaveText("HK$10,000,000.00");
+        await page.reload();
+        await expect(card("有效查詢").locator("p").first()).toHaveText("3");
+        await page.locator("#performance-source").selectOption("28hse");
+        await page.getByRole("button", { name: "套用篩選" }).click();
+        await expect(card("有效查詢").locator("p").first()).toHaveText("1");
+        await card("有效查詢").getByRole("button", { name: "可查看記錄" }).click();
+        await expect(records.locator("tbody tr")).toHaveCount(1);
+      },
+      "manager",
+    );
+  }
+  for (const width of [390, 768, 1280, 1440]) {
+    await check(
+      "overview permission loss clears previous restricted counts",
+      width,
+      async (page) => {
+        await open(page, origin + "/admin");
+        const card = page.getByRole("link").filter({ hasText: "開放查詢" });
+        await expect(card).toContainText("2");
+        await page.evaluate(() => {
+          window.noLinkFixture.failOverviewDenied = true;
+        });
+        await page.getByRole("button", { name: "重新整理", exact: true }).click();
+        await expect(card.getByRole("alert")).toBeVisible();
+        await expect(card).toContainText("—");
+        await expect(card).not.toContainText("2");
+      },
+      "manager",
+    );
+    await check(
+      "overview card opens the same two open leads with scope and as-of",
+      width,
+      async (page) => {
+        await page.addInitScript(() => sessionStorage.setItem("no-link-fixture-overview", "true"));
+        await open(page, origin + "/admin");
+        await expect(page.getByText(/客戶資料範圍：全公司/)).toBeVisible();
+        await expect(page.getByText(/資料截至.*香港時間/)).toBeVisible();
+        const card = page.getByRole("link").filter({ hasText: "開放查詢" });
+        await expect(card).toContainText("2");
+        await card.click();
+        await expect(page).toHaveURL(/stage=open/);
+        await expect(page.getByText("顯示 2 筆 / 共 2 筆")).toBeVisible();
+        expect(
+          await page.evaluate(
+            () =>
+              window.noLinkFixture.calls
+                .filter((c) => c.name === "page" && c.input.resource === "leads")
+                .at(-1).input.stage,
+          ),
+        ).toBe("open");
+        await page.reload();
+        await expect(page.getByText("顯示 2 筆 / 共 2 筆")).toBeVisible();
+      },
+      "manager",
+    );
+    await check(
+      "overview failed refresh retains last success with visible error, not false zero",
+      width,
+      async (page) => {
+        await open(page, origin + "/admin");
+        const card = page.getByRole("link").filter({ hasText: "開放查詢" });
+        await expect(card).toContainText("2");
+        await page.evaluate(() => {
+          window.noLinkFixture.failOverview = true;
+        });
+        await page.getByRole("button", { name: "重新整理", exact: true }).click();
+        await expect(card.getByRole("alert")).toBeVisible();
+        await expect(card).toContainText("2");
+        await expect(page.getByText(/資料截至.*香港時間/)).toBeVisible();
+      },
+      "manager",
+    );
+  }
 } finally {
   await browser?.close();
   await new Promise((done) => server.close(done));
   await mkdir(".audit", { recursive: true });
   await writeFile(
-    ".audit/no-link-synthetic-browser-results.json",
+    `.audit/${evidencePrefix}no-link-synthetic-browser-results.json`,
     JSON.stringify(
       {
         environment: "real-route-synthetic-auth-api",
@@ -2342,6 +2545,7 @@ try {
         syntheticCampaignModel: true,
         syntheticStaffWorkModel: true,
         syntheticOutboundModel: true,
+        renderedControls: [...renderedControls.values()],
         results,
       },
       null,

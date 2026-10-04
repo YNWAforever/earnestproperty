@@ -1,25 +1,20 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { openSyncTestDatabase } from "./sync-test-database.mjs";
+import { withOwnedPostgres } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import {
   listWithdrawalCandidates,
   previewWithdrawals,
   applyWithdrawalPreview,
 } from "./withdrawal-review.mjs";
-test(
-  "132 historical missing synthetic candidates remain NOT_APPROVED with zero inventory withdrawals",
-  { skip: !process.env.ASTRA_TEST_DATABASE_URL },
-  async () => {
-    const db = await openSyncTestDatabase([
-      "20261001120000_property_sync_operations.sql",
-      "20261001130000_property_withdrawal_review.sql",
-    ]);
-    const q = db.query;
+test("132 historical missing synthetic candidates remain NOT_APPROVED with zero inventory withdrawals", async () => {
+  await withOwnedPostgres(async ({ pool, query: q }) => {
+    const client = await pool.connect();
+    const db = { client };
     const actor = { staffId: randomUUID(), roles: ["manager"] };
     try {
-      await q("INSERT INTO staff_users VALUES($1,true);", [actor.staffId]);
-      await q("INSERT INTO staff_roles VALUES($1,'manager')", [actor.staffId]);
+      await q("INSERT INTO staff_users(id,active) VALUES($1,true);", [actor.staffId]);
+      await q("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [actor.staffId]);
       await q(
         "INSERT INTO mls_ingestion_policies(source,scope_id,policy_version,parser_version,owner,publish_enabled,config) VALUES('28hse_agent_540','agent:540','no-hermes-v2','fixture-v2','no-hermes-v2',false,'{}')",
       );
@@ -36,7 +31,7 @@ test(
       );
       // Direct, labelled fixture setup; no production baseline or parser authority is claimed.
       await q(
-        "INSERT INTO properties(listing_no,canonical_property_no,title_zh,deal_type,district_slug,status) SELECT 'HIST-'||g,'Z'||lpad(g::text,6,'0'),'合成歷史候選','sale','fixture','active' FROM generate_series(1,132) g",
+        "INSERT INTO properties(listing_no,title_zh,deal_type,district_slug,status) SELECT 'HIST-'||g,'合成歷史候選','sale','fixture','active' FROM generate_series(1,132) g",
       );
       await q(
         "INSERT INTO property_source_links(property_id,source,external_listing_id,deal_type,match_key,link_reason,status,first_seen_at,last_seen_at,last_seen_run_id) SELECT p.id,'28hse_agent_540',substring(p.listing_no from 6),'sale','fixture','exact_property_no_and_deal_type','active',now()-interval '72 hours',now()-interval '72 hours',$1 FROM properties p",
@@ -99,7 +94,7 @@ test(
         before,
       );
     } finally {
-      await db.close();
+      client.release();
     }
-  },
-);
+  });
+});

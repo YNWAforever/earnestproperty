@@ -1,0 +1,24 @@
+import { defineConfig, devices } from "@playwright/test";
+export default defineConfig({
+  testDir: "./e2e",
+  testMatch: [
+    "admin-property-maintenance.spec.ts",
+    "admin-operations-recovery.spec.ts",
+    "admin-workspace-scope.spec.ts",
+    "admin-staff-setup.spec.ts",
+    "admin-whatsapp-mobile.spec.ts",
+    "admin-property-sync-recovery.spec.ts",
+    "admin-daily-work.spec.ts",
+    "admin-campaign-review.spec.ts",
+    "admin-performance-readback.spec.ts",
+    "admin-link-bulk-owned.spec.ts",
+  ],
+  workers: 1,
+  fullyParallel: false,
+  retries: 0,
+  timeout: 20000,
+  expect: { timeout: 4000 },
+  reporter: "list",
+  outputDir: ".audit/property-maintenance-playwright",
+  projects: [{ name: "owned-chromium", use: { ...devices["Desktop Chrome"] } }],
+});

@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { AdminShell, AdminError } from "@/components/admin/AdminShell";
+import { useStaffSession } from "@/components/admin/staff-session";
+import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { PerformanceDashboard } from "@/components/admin/analytics/PerformanceDashboard";
 import { finalFixUiFlags } from "@/lib/admin/final-fix-rollout";
 import { PerformanceTable } from "@/components/admin/analytics/PerformanceTable";
@@ -13,6 +15,7 @@ import {
   fetchSalesPerformanceRecords,
   qualifyPerformanceLead,
 } from "@/lib/analytics/sales-performance-client";
+import { ServerFnResponseError } from "@/lib/neon/server-fn-response";
 import { parsePerformanceFilters } from "@/lib/analytics/sales-performance.mjs";
 import { parsePerformanceSearch as parsePerformanceSearchInput } from "@/lib/analytics/performance-route-search.mjs";
 import type {
@@ -43,6 +46,32 @@ export const Route = createFileRoute("/admin/analytics")({
   component: AdminAnalytics,
 });
 function AdminAnalytics() {
+  const { user } = useNeonAuth();
+  const { session } = useStaffSession(user?.id ?? null);
+  const identity =
+    user && session?.status === "ok"
+      ? JSON.stringify([user.id, session.staffId, [...session.roles].sort()])
+      : null;
+  if (
+    !identity ||
+    session?.status !== "ok" ||
+    !session.roles.some((role) => role === "admin" || role === "manager")
+  )
+    return (
+      <AdminShell
+        title="營運及轉換統計"
+        description="香港時間每日匯總，只顯示數量，不載入客戶明細。"
+      >
+        {identity ? (
+          <AdminError message="需要管理員或主管權限，請聯絡管理員。" />
+        ) : (
+          <Skeleton className="h-56 w-full" />
+        )}
+      </AdminShell>
+    );
+  return <AdminAnalyticsWorkspace key={identity} />;
+}
+function AdminAnalyticsWorkspace() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const performanceFilters: PerformanceFilters = useMemo(
@@ -76,6 +105,29 @@ function AdminAnalytics() {
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const recordRequest = useRef(0);
+  const currentRecordsReadback = useRef<(() => Promise<void>) | null>(null);
+  const qualificationRequests = useRef(
+    new Map<string, { leadId: string; qualifiedAt: string; evidence: string }>(),
+  );
+  const qualityRequests = useRef(
+    new Map<
+      string,
+      {
+        expectedRevisionId: string | null;
+        quality: "production" | "test" | "spam" | "unknown";
+        reason: string;
+      }
+    >(),
+  );
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    const requests = recordRequest;
+    return () => {
+      active.current = false;
+      requests.current++;
+    };
+  }, []);
   const [performanceRevision, setPerformanceRevision] = useState(0);
   useEffect(() => {
     if (!finalFixUiFlags.salesPerformanceReporting) return;
@@ -93,6 +145,7 @@ function AdminAnalytics() {
   }, []);
   useEffect(() => {
     recordRequest.current++;
+    currentRecordsReadback.current = null;
     setDrilldownKey(null);
     setRecordPage(null);
   }, [performanceFilters]);
@@ -126,7 +179,9 @@ function AdminAnalytics() {
     };
   }, [performanceFilters, performanceRevision, search.invalidFilter]);
   async function openRecords(key: string, cursor: string | null = null, append = false) {
-    if (!finalFixUiFlags.salesPerformanceReporting || search.invalidFilter) return;
+    if (!active.current || !finalFixUiFlags.salesPerformanceReporting || search.invalidFilter)
+      return;
+    currentRecordsReadback.current = () => openRecords(key);
     const requestId = ++recordRequest.current;
     setDrilldownKey(key);
     setRecordsLoading(true);
@@ -139,6 +194,18 @@ function AdminAnalytics() {
         cursor,
       });
       if (requestId !== recordRequest.current) return;
+      for (const record of next.records) {
+        if (!record.leadId || !record.qualification) continue;
+        const pending = qualificationRequests.current.get(record.leadId);
+        const source = record.qualification;
+        if (
+          pending &&
+          pending.evidence === source.evidence &&
+          new Date(pending.qualifiedAt).getTime() === new Date(source.qualifiedAt).getTime() &&
+          source.eventKey === `lead_qualified:${pending.leadId}`
+        )
+          qualificationRequests.current.delete(record.leadId);
+      }
       setRecordPage((current) =>
         append && current
           ? { records: [...current.records, ...next.records], nextCursor: next.nextCursor }
@@ -150,34 +217,94 @@ function AdminAnalytics() {
       if (requestId === recordRequest.current) setRecordsLoading(false);
     }
   }
+  async function refreshAfterMutation() {
+    if (!active.current) return;
+    setPerformanceRevision((v) => v + 1);
+    await currentRecordsReadback.current?.();
+  }
   async function correctQuality(input: {
     record: PerformanceRecord;
     quality: "production" | "test" | "spam" | "unknown";
     reason: string;
   }) {
-    if (input.record.kind === "inquiry")
-      await correctInquiryQuality({
-        inquiryId: input.record.id,
-        quality: input.quality,
-        reason: input.reason,
-      });
-    else if (input.record.eventKey)
-      await correctPerformanceEventQuality({
-        eventKey: input.record.eventKey,
-        quality: input.quality,
-        reason: input.reason,
-      });
-    else throw new Error("Missing event evidence");
-    setPerformanceRevision((v) => v + 1);
-    if (drilldownKey) await openRecords(drilldownKey);
+    const key =
+      input.record.kind === "inquiry"
+        ? `inquiry:${input.record.id}`
+        : input.record.eventKey
+          ? `event:${input.record.eventKey}`
+          : null;
+    if (!key || input.record.qualityRevisionId === undefined)
+      throw new Error("Reload the quality source snapshot before correcting");
+    const reason = input.reason.trim();
+    const previous = qualityRequests.current.get(key);
+    if (previous && (previous.quality !== input.quality || previous.reason !== reason)) {
+      const error = new Error("Restore the original quality decision before retrying");
+      error.name = "QualityRequestChanged";
+      throw error;
+    }
+    // The actor-keyed workspace keeps the first snapshot through unknown outcomes
+    // and filter remounts. A newer source read must not replace that original base.
+    const request = previous ?? {
+      expectedRevisionId: input.record.qualityRevisionId,
+      quality: input.quality,
+      reason,
+    };
+    qualityRequests.current.set(key, request);
+    try {
+      if (input.record.kind === "inquiry")
+        await correctInquiryQuality({ inquiryId: input.record.id, ...request });
+      else await correctPerformanceEventQuality({ eventKey: input.record.eventKey!, ...request });
+    } catch (error) {
+      const conflict = error instanceof ServerFnResponseError && error.status === 409;
+      // This quality writer returns409 only when the exact immutable successor
+      // was not accepted. Revoked authority or invalid input cannot prove that.
+      if (
+        (conflict ||
+          (!previous &&
+            error instanceof ServerFnResponseError &&
+            [400, 403].includes(error.status))) &&
+        qualityRequests.current.get(key) === request
+      )
+        qualityRequests.current.delete(key);
+      if (conflict) await refreshAfterMutation();
+      throw error;
+    }
+    if (qualityRequests.current.get(key) === request) qualityRequests.current.delete(key);
+    await refreshAfterMutation();
   }
   async function qualifyLead(input: { leadId: string; qualifiedAt: string; evidence: string }) {
-    await qualifyPerformanceLead(input);
-    setPerformanceRevision((value) => value + 1);
-    if (drilldownKey) await openRecords(drilldownKey);
+    const evidence = input.evidence.trim();
+    const previous = qualificationRequests.current.get(input.leadId);
+    if (previous && previous.evidence !== evidence) {
+      const error = new Error("Restore the original qualification evidence before retrying");
+      error.name = "QualificationRequestChanged";
+      throw error;
+    }
+    // Keep the original request through uncertainty and table/filter remounts.
+    // The actor-keyed workspace discards this journal when identity changes.
+    const request = previous ?? { ...input, evidence };
+    qualificationRequests.current.set(input.leadId, request);
+    try {
+      await qualifyPerformanceLead(request);
+    } catch (error) {
+      // A first definite refusal did not accept this request. A later refusal
+      // cannot disprove an earlier uncertain commit, so retain that journal.
+      if (
+        !previous &&
+        error instanceof ServerFnResponseError &&
+        [400, 403, 409].includes(error.status) &&
+        qualificationRequests.current.get(input.leadId) === request
+      )
+        qualificationRequests.current.delete(input.leadId);
+      throw error;
+    }
+    if (qualificationRequests.current.get(input.leadId) === request)
+      qualificationRequests.current.delete(input.leadId);
+    await refreshAfterMutation();
   }
   function applyPerformanceFilters(next: PerformanceFilters) {
     recordRequest.current++;
+    currentRecordsReadback.current = null;
     setDrilldownKey(null);
     setRecordPage(null);
     void navigate({ search: parsePerformanceFilters(next) });
@@ -354,6 +481,14 @@ function AdminAnalytics() {
             </Button>
           </div>
         ) : null}
+        {!finalFixUiFlags.salesPerformanceReporting ? (
+          <section aria-label="銷售及代理績效狀態" className="rounded border p-4">
+            <h2 className="font-semibold">銷售及代理績效暫未啟用</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              此功能尚未在目前環境開放，並非沒有查詢或成交資料。請聯絡管理員核實啟用狀態；現有營運統計仍可查看。
+            </p>
+          </section>
+        ) : null}
         {finalFixUiFlags.salesPerformanceReporting ? (
           <>
             <PerformanceDashboard
@@ -375,12 +510,21 @@ function AdminAnalytics() {
                 error={recordsError}
                 onClose={() => {
                   recordRequest.current++;
+                  currentRecordsReadback.current = null;
                   setDrilldownKey(null);
                   setRecordPage(null);
                 }}
                 onMore={() => void openRecords(drilldownKey, recordPage?.nextCursor ?? null, true)}
                 onCorrect={correctQuality}
                 onQualify={qualifyLead}
+                getPendingQualityDecision={(record) =>
+                  qualityRequests.current.get(
+                    record.kind === "inquiry" ? `inquiry:${record.id}` : `event:${record.eventKey}`,
+                  )
+                }
+                getPendingQualificationEvidence={(leadId) =>
+                  qualificationRequests.current.get(leadId)?.evidence
+                }
               />
             ) : null}
           </>

@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,10 +10,13 @@ import {
 export function StaffReferenceEditor({
   agents,
   selectedStaffId,
+  isWorkspaceCurrent,
 }: {
   agents: { id: string; name: string | null; active: boolean }[];
   selectedStaffId?: string;
+  isWorkspaceCurrent?: () => boolean;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const [rows, setRows] = useState<Awaited<ReturnType<typeof fetchStaffReferences>>>([]),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -33,17 +37,17 @@ export function StaffReferenceEditor({
   }, [selectedStaffId]);
   useEffect(() => {
     let active = true;
-    fetchStaffReferences()
+    fetchStaffReferences(isCurrent)
       .then((r) => {
-        if (active) setRows(r);
+        if (active && isCurrent()) setRows(r);
       })
       .catch(() => {
-        if (active) setError("未能載入代碼映射，請核對遷移及管理權限。");
+        if (active && isCurrent()) setError("未能載入代碼映射，請核對遷移及管理權限。");
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [isCurrent]);
   return (
     <section aria-label="同事來源代碼映射" className="space-y-3 border-t pt-4">
       <h2 className="font-semibold">同事來源代碼映射</h2>
@@ -54,16 +58,23 @@ export function StaffReferenceEditor({
       <form
         className="grid max-w-xl gap-2"
         onSubmit={async (e) => {
+          if (!isCurrent()) return;
           e.preventDefault();
           setBusy(true);
           setError("");
           try {
-            await createStaffReference(form);
-            setRows(await fetchStaffReferences());
+            await createStaffReference(form, isCurrent);
+            if (!isCurrent()) return;
+            const workspaceResult = await fetchStaffReferences(isCurrent);
+            if (!isCurrent()) return;
+            setRows(workspaceResult);
           } catch {
+            if (!isCurrent()) return;
             setError("未能儲存，請檢查映射是否重疊及核實證據。");
           } finally {
-            setBusy(false);
+            if (isCurrent()) {
+              setBusy(false);
+            }
           }
         }}
       >
@@ -145,14 +156,21 @@ export function StaffReferenceEditor({
                 variant="outline"
                 disabled={busy}
                 onClick={async () => {
+                  if (!isCurrent()) return;
                   setBusy(true);
                   try {
-                    await disableStaffReference({ id: String(r.id) });
-                    setRows(await fetchStaffReferences());
+                    await disableStaffReference({ id: String(r.id) }, isCurrent);
+                    if (!isCurrent()) return;
+                    const workspaceResult = await fetchStaffReferences(isCurrent);
+                    if (!isCurrent()) return;
+                    setRows(workspaceResult);
                   } catch {
+                    if (!isCurrent()) return;
                     setError("停用未完成，請重新核對。");
                   } finally {
-                    setBusy(false);
+                    if (isCurrent()) {
+                      setBusy(false);
+                    }
                   }
                 }}
               >

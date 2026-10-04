@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { AdminError } from "./AdminShell";
 import { AdminConfirmDialog } from "./AdminConfirmDialog";
 import { ImageUploader } from "@/components/dashboard/ImageUploader";
 import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
+import { formatHkDateTime } from "@/lib/format";
 import {
   fetchAdminAgents,
   fetchAdminEstateOptions,
@@ -22,6 +23,7 @@ import type {
   PropertyManagementInput,
   SharedPropertyFields,
 } from "@/lib/neon/admin-properties.types";
+import { propertyManagementSchema } from "@/lib/neon/admin-properties.types";
 import {
   propertyContentReviewReasons,
   changedFields,
@@ -49,15 +51,45 @@ const labels: Record<string, string> = {
   seo_title: "SEO 標題",
   seo_description: "SEO 描述",
   video_url: "影片網址",
+  price: "售價",
+  rent: "月租",
+  status: "狀態",
+  agent_id: "負責代理",
 };
+function conflictLabel(field: string) {
+  const [prefix, deal, key] = field.split(".");
+  return prefix === "source"
+    ? `來源差異（${deal === "sale" ? "出售" : "出租"}）：${labels[key] ?? key}`
+    : (labels[field] ?? field);
+}
 const control = "h-11 w-full rounded-md border bg-background px-3 text-sm";
 export function AdminPropertyWorkspace({
   initial,
   sourceId,
+  isWorkspaceCurrent,
+  onUnavailable,
 }: {
   initial: ManagedPropertyDetail;
   sourceId: string;
+  isWorkspaceCurrent: () => boolean;
+  onUnavailable: () => void;
 }) {
+  const active = useRef(false);
+  const lifetime = useRef(0);
+  useLayoutEffect(() => {
+    active.current = true;
+    const epoch = ++lifetime.current;
+    return () => {
+      active.current = false;
+      lifetime.current = epoch + 1;
+    };
+  }, []);
+  const isCurrent = useCallback(
+    (epoch = lifetime.current) => {
+      return active.current && epoch === lifetime.current && isWorkspaceCurrent();
+    },
+    [isWorkspaceCurrent],
+  );
   const [detail, setDetail] = useState(initial);
   const [tab, setTab] = useState<Tab>(
     () =>
@@ -79,6 +111,13 @@ export function AdminPropertyWorkspace({
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  const [invalidFields, setInvalidFields] = useState<string[]>([]);
+  const [changePreview, setChangePreview] = useState<{
+    input: PropertyManagementInput;
+    before: string;
+    after: string;
+  } | null>(null);
   const [refreshNeeded, setRefreshNeeded] = useState(false);
   const [pending, setPending] = useState<{
     scope: "sale" | "rent" | "all";
@@ -105,19 +144,19 @@ export function AdminPropertyWorkspace({
     let cancelled = false;
     Promise.all([fetchAdminEstateOptions(), fetchAdminDistrictOptions(), fetchAdminAgents()])
       .then(([e, d, a]) => {
-        if (!cancelled) {
+        if (!cancelled && isCurrent()) {
           setEstates(e);
           setDistricts(d);
           setAgents(a);
         }
       })
       .catch(() => {
-        if (!cancelled) setError("選項未能載入，請重新整理。");
+        if (!cancelled && isCurrent()) setError("選項未能載入，請重新整理。");
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isCurrent]);
   function choose(next: Tab) {
     setTab(next);
     setShared(detail.shared);
@@ -125,37 +164,50 @@ export function AdminPropertyWorkspace({
     setOffer(offeringDraft(next === "shared" ? null : detail.offerings[next]));
     setNextTab(null);
     setError(null);
+    setInvalidFields([]);
   }
-  async function reload() {
+  async function reload(epoch = lifetime.current) {
+    if (!isCurrent(epoch)) return false;
     const fresh = await fetchAdminManagedProperty({ data: { id: detail.propertyNo } });
-    if (!fresh) throw new Error("物業不存在或已失去存取權限");
+    if (!isCurrent(epoch)) return false;
+    if (!fresh) {
+      onUnavailable();
+      return false;
+    }
     setDetail(fresh);
     setShared(fresh.shared);
     setConfirmedFields([]);
     setOffer(offeringDraft(tab === "shared" ? null : fresh.offerings[tab]));
     setRefreshNeeded(false);
     setError(null);
+    return true;
   }
   async function save(
     scope: PropertyManagementInput["scope"],
     payload: PropertyManagementInput["payload"],
+    expectedVersion = detail.version,
   ) {
+    const epoch = lifetime.current;
+    if (!isCurrent(epoch)) return;
     if (!Object.keys(payload).length) {
       toast.info("沒有需要儲存的修改");
       return;
     }
+    const input = { propertyNo: detail.propertyNo, expectedVersion, scope, payload };
+    if (!validate(input)) return;
     setBusy(true);
     setError(null);
     let saved = false;
     try {
-      await saveAdminPropertyManagement({
-        data: { propertyNo: detail.propertyNo, expectedVersion: detail.version, scope, payload },
-      });
+      await saveAdminPropertyManagement({ data: input });
       saved = true;
+      if (!isCurrent(epoch)) return;
       setPending(null);
-      await reload();
+      setChangePreview(null);
+      if (!(await reload(epoch)) || !isCurrent(epoch)) return;
       toast.success("已儲存物業資料");
     } catch (e) {
+      if (!isCurrent(epoch)) return;
       setError(
         saved
           ? "修改已儲存，但畫面未能更新。請重新載入後繼續。"
@@ -165,14 +217,74 @@ export function AdminPropertyWorkspace({
       );
       if (saved) setRefreshNeeded(true);
     } finally {
-      setBusy(false);
+      if (isCurrent(epoch)) setBusy(false);
     }
+  }
+  function validate(input: PropertyManagementInput) {
+    const parsed = propertyManagementSchema.safeParse(input);
+    if (parsed.success) {
+      setInvalidFields([]);
+      setError(null);
+      return true;
+    }
+    const fields = parsed.error.issues
+      .filter((issue) => issue.path[0] === "payload")
+      .map((issue) => String(issue.path[1] ?? ""));
+    setInvalidFields(fields);
+    const first = fields[0];
+    setError(
+      ["saleable_area", "bedrooms", "bathrooms"].includes(first)
+        ? `${labels[first]}必須為非負整數，請保留其他輸入並修正此欄位。`
+        : `請檢查${labels[first] ?? "輸入資料"}，其他輸入已保留。`,
+    );
+    const control = formRef.current?.elements.namedItem(first);
+    if (control instanceof HTMLElement) control.focus();
+    return false;
+  }
+  function fieldProps(name: string) {
+    return { name, "aria-invalid": invalidFields.includes(name) };
   }
   function submit() {
     try {
-      void save(tab, tab === "shared" ? sharedPatch : offeringPatch(current, offer, tab));
+      const payload: PropertyManagementInput["payload"] =
+        tab === "shared" ? sharedPatch : offeringPatch(current, offer, tab);
+      const input = {
+        propertyNo: detail.propertyNo,
+        expectedVersion: detail.version,
+        scope: tab,
+        payload,
+      };
+      if (!validate(input)) return;
+      if (tab !== "shared" && payload.status && payload.status !== current?.status) {
+        setChangePreview({
+          input,
+          before: `${propertyStatusLabels[current?.status ?? "draft"]} · ${offeringPrice(current)}`,
+          after: `${propertyStatusLabels[offer.status]} · ${offeringPrice({
+            ...(current ?? {
+              id: "",
+              title: detail.title,
+              description: null,
+              agentId: null,
+              agentName: null,
+              editable: true,
+            }),
+            dealType: tab,
+            price: tab === "sale" && offer.amount !== "" ? Number(offer.amount) : null,
+            rent: tab === "rent" && offer.amount !== "" ? Number(offer.amount) : null,
+            status: offer.status,
+          })}`,
+        });
+        return;
+      }
+      void save(tab, payload);
     } catch (e) {
       setError(e instanceof Error ? e.message : "請檢查輸入資料");
+      if (tab !== "shared") {
+        const name = tab === "sale" ? "price" : "rent";
+        setInvalidFields([name]);
+        const control = formRef.current?.elements.namedItem(name);
+        if (control instanceof HTMLElement) control.focus();
+      }
     }
   }
   return (
@@ -181,6 +293,9 @@ export function AdminPropertyWorkspace({
         <div>
           <h2 className="text-xl font-semibold">{neutralPropertyTitle(detail.title)}</h2>
           <p className="text-sm text-muted-foreground">樓編號 #{detail.propertyNo}</p>
+          <p className="text-xs text-muted-foreground">
+            管理資料更新：{formatHkDateTime(detail.updatedAt) ?? "未核實"}（香港時間）
+          </p>
         </div>
         <Button asChild variant="outline">
           <Link to="/property/$listingNo" params={{ listingNo: detail.propertyNo }}>
@@ -229,12 +344,12 @@ export function AdminPropertyWorkspace({
             {detail.conflicts.length} 項資料有差異，請核實
           </summary>
           <p className="my-2 text-sm">
-            以下列出來源的不同內容。只有你修改的欄位才會套用到租售資料。
+            以下列出來源與管理資料的不同內容。人工修改的值會保留；只有你修改或確認的欄位才會套用到租售資料。
           </p>
           <dl className="space-y-3 text-sm">
             {detail.conflicts.map((c) => (
               <div key={c.field}>
-                <dt className="font-medium">{labels[c.field] ?? c.field}</dt>
+                <dt className="font-medium">{conflictLabel(c.field)}</dt>
                 <dd className="break-words whitespace-pre-wrap text-muted-foreground">
                   {c.values.join(" ／ ")}
                   {tab === "shared" && Object.hasOwn(shared, c.field) ? (
@@ -291,6 +406,17 @@ export function AdminPropertyWorkspace({
         ))}
       </div>
       <form
+        ref={formRef}
+        noValidate
+        onChange={(event) => {
+          const target = event.target;
+          if (
+            target instanceof HTMLInputElement ||
+            target instanceof HTMLSelectElement ||
+            target instanceof HTMLTextAreaElement
+          )
+            setInvalidFields((fields) => fields.filter((field) => field !== target.name));
+        }}
         onSubmit={(e) => {
           e.preventDefault();
           submit();
@@ -329,6 +455,7 @@ export function AdminPropertyWorkspace({
                   <label key={key} className="space-y-1 text-sm">
                     <span>{labels[key]}</span>
                     <Input
+                      {...fieldProps(key)}
                       className="h-11"
                       type={
                         ["saleable_area", "bedrooms", "bathrooms"].includes(key) ? "number" : "text"
@@ -353,6 +480,7 @@ export function AdminPropertyWorkspace({
                 <label className="space-y-1 text-sm">
                   <span>屋苑</span>
                   <select
+                    {...fieldProps("estate_id")}
                     className={control}
                     value={shared.estate_id ?? ""}
                     onChange={(e) =>
@@ -370,6 +498,7 @@ export function AdminPropertyWorkspace({
                 <label className="space-y-1 text-sm">
                   <span>分區</span>
                   <select
+                    {...fieldProps("district_slug")}
                     className={control}
                     value={shared.district_slug}
                     onChange={(e) => setShared((s) => ({ ...s, district_slug: e.target.value }))}
@@ -386,6 +515,7 @@ export function AdminPropertyWorkspace({
               <label className="block space-y-1 text-sm">
                 <span>物業介紹</span>
                 <Textarea
+                  {...fieldProps("description")}
                   rows={5}
                   value={shared.description ?? ""}
                   onChange={(e) =>
@@ -399,6 +529,7 @@ export function AdminPropertyWorkspace({
                 </label>
                 <ImageUploader
                   inputId="property-images"
+                  isWorkspaceCurrent={() => isCurrent()}
                   disabled={!editable || busy}
                   value={shared.images}
                   onUploadingChange={setUploading}
@@ -419,6 +550,7 @@ export function AdminPropertyWorkspace({
                     <label key={key} className="block space-y-1 text-sm">
                       <span>{labels[key]}</span>
                       <Textarea
+                        {...fieldProps(key)}
                         value={shared[key] ?? ""}
                         onChange={(e) =>
                           setShared((s) => ({ ...s, [key]: e.target.value || null }))
@@ -440,6 +572,7 @@ export function AdminPropertyWorkspace({
                 <label className="space-y-1 text-sm">
                   <span>{tab === "sale" ? "售價（港元）" : "月租（港元）"}</span>
                   <Input
+                    {...fieldProps(tab === "sale" ? "price" : "rent")}
                     className="h-11"
                     type="number"
                     min="0"
@@ -451,6 +584,7 @@ export function AdminPropertyWorkspace({
                 <label className="space-y-1 text-sm">
                   <span>{tab === "sale" ? "出售" : "出租"}狀態</span>
                   <select
+                    {...fieldProps("status")}
                     className={control}
                     value={offer.status}
                     onChange={(e) => setOffer((s) => ({ ...s, status: e.target.value }))}
@@ -471,6 +605,7 @@ export function AdminPropertyWorkspace({
                 <label className="space-y-1 text-sm">
                   <span>負責代理</span>
                   <select
+                    {...fieldProps("agentId")}
                     className={control}
                     value={offer.agentId}
                     onChange={(e) => setOffer((s) => ({ ...s, agentId: e.target.value }))}
@@ -487,6 +622,7 @@ export function AdminPropertyWorkspace({
               <label className="block space-y-1 text-sm">
                 <span>{tab === "sale" ? "出售" : "出租"}補充說明</span>
                 <Textarea
+                  {...fieldProps("description")}
                   rows={5}
                   value={offer.description}
                   onChange={(e) => setOffer((s) => ({ ...s, description: e.target.value }))}
@@ -564,10 +700,57 @@ export function AdminPropertyWorkspace({
               <span>
                 {propertyStatusLabels[h.status] ?? h.status} · {h.current ? "目前版本" : "歷史記錄"}
               </span>
+              <span className="text-xs text-muted-foreground">
+                來源更新：{formatHkDateTime(h.sourceUpdatedAt) ?? "未核實"}（香港時間）
+              </span>
             </li>
           ))}
         </ul>
       </details>
+      <AdminConfirmDialog
+        open={changePreview !== null}
+        title={`確認${changePreview?.input.scope === "sale" ? "出售" : "出租"}設定變更？`}
+        description="請核對目前值與新值。只修改所選租售設定，共用資料及另一類放盤保持獨立。"
+        confirmLabel={changePreview?.input.payload.status === "active" ? "確認公開" : "確認修改"}
+        confirmVariant={
+          changePreview?.input.payload.status === "active" ? "default" : "destructive"
+        }
+        isPending={busy}
+        error={error}
+        onOpenChange={(open) => {
+          if (!open) setChangePreview(null);
+        }}
+        onConfirm={() => {
+          if (changePreview) {
+            const { scope, payload, expectedVersion } = changePreview.input;
+            void save(scope, payload, expectedVersion);
+          }
+        }}
+      >
+        <dl className="space-y-2 text-sm">
+          <div>
+            <dt className="font-medium">目前</dt>
+            <dd>{changePreview?.before}</dd>
+          </div>
+          <div>
+            <dt className="font-medium">改為</dt>
+            <dd>{changePreview?.after}</dd>
+          </div>
+          <div>
+            <dt className="font-medium">本次修改欄位</dt>
+            <dd>
+              {Object.keys(changePreview?.input.payload ?? {})
+                .map(
+                  (key) =>
+                    labels[key] ??
+                    { price: "售價", rent: "月租", status: "狀態", agentId: "負責代理" }[key] ??
+                    key,
+                )
+                .join("、")}
+            </dd>
+          </div>
+        </dl>
+      </AdminConfirmDialog>
       <AdminConfirmDialog
         open={pending !== null}
         title={

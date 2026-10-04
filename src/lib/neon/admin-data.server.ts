@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { conversationDeadline } from "@/lib/admin/ai-result-presentation";
 
 import {
   addParam,
@@ -953,26 +954,30 @@ async function assertAudienceFilterChoices(filters: AudienceFilters) {
   }
 }
 
-export async function getAdminOverview() {
+export async function getAdminOverview(actor: StaffAccess) {
+  if (!actor) throw new Response("Forbidden", { status: 403 });
+  const { readAdminPage } = await import("./admin-pagination.server");
   const [inventory, leads, contacts, conversations, campaigns] = await Promise.all([
     getPublicInventoryCounts(),
-    queryRows(
-      "SELECT count(*)::int AS total FROM crm_leads WHERE stage NOT IN ('closed_won', 'closed_lost')",
-    ),
-    queryRows("SELECT count(*)::int AS total FROM crm_contacts"),
-    queryRows("SELECT count(*)::int AS total FROM whatsapp_conversations WHERE status = 'open'"),
-    queryRows(
-      "SELECT count(*)::int AS total FROM whatsapp_campaigns WHERE status IN ('draft', 'review', 'queued', 'sending')",
-    ),
+    readAdminPage({ resource: "leads", stage: "open", limit: 1 }, actor),
+    readAdminPage({ resource: "contacts", limit: 1 }, actor),
+    readAdminPage({ resource: "conversations", status: "open", limit: 1 }, actor),
+    actor.roles.some((role) => role === "admin" || role === "manager")
+      ? queryRows(
+          "SELECT count(*)::int AS total FROM whatsapp_campaigns WHERE status IN ('draft', 'review', 'queued', 'sending')",
+        )
+      : Promise.resolve(null),
   ]);
   return {
     publicProperties: inventory.publicProperties,
     publicOffers: inventory.publicOffers,
     inventoryCheckedAt: inventory.checkedAt,
-    openLeads: Number(leads[0]?.total ?? 0),
-    contacts: Number(contacts[0]?.total ?? 0),
-    openConversations: Number(conversations[0]?.total ?? 0),
-    activeCampaigns: Number(campaigns[0]?.total ?? 0),
+    openLeads: leads.total,
+    contacts: contacts.total,
+    openConversations: conversations.total,
+    activeCampaigns: campaigns ? Number(campaigns[0]?.total ?? 0) : null,
+    scope: agentScope(actor) ? ("own" as const) : ("all" as const),
+    checkedAt: new Date().toISOString(),
   };
 }
 
@@ -3051,13 +3056,18 @@ export async function fetchAdminConversationAiAssist(
              'text', m.text,
              'created_at', m.created_at
            )
-           ORDER BY m.created_at DESC
+           ORDER BY m.created_at DESC, m.id DESC
          ) FILTER (WHERE m.id IS NOT NULL),
          '[]'::json
        ) AS messages
      FROM whatsapp_conversations wc
      LEFT JOIN crm_contacts c ON c.id = wc.contact_id
-     LEFT JOIN whatsapp_messages m ON m.conversation_id = wc.id
+     LEFT JOIN LATERAL (
+       SELECT id,direction,text,created_at FROM whatsapp_messages
+       WHERE conversation_id=wc.id
+       ORDER BY created_at DESC,id DESC
+       LIMIT 10
+     ) m ON true
      WHERE wc.id = $1${scopeClause}
      GROUP BY wc.id, c.name, c.opted_out_whatsapp
      LIMIT 1`,
@@ -3066,7 +3076,7 @@ export async function fetchAdminConversationAiAssist(
   const row = rows[0];
   if (!row) throw new Error("Conversation not found");
 
-  const messages = parseConversationAiMessages(row.messages).slice(0, 10);
+  const messages = parseConversationAiMessages(row.messages);
   const latestInbound = messages.find((message) => message.direction === "inbound");
   const latestInboundText = latestInbound?.text ?? "";
   // Values are picked to match AI_INTENT_LABELS/AI_URGENCY_LABELS in
@@ -3077,17 +3087,21 @@ export async function fetchAdminConversationAiAssist(
     ? "tenant"
     : /估價|放盤|sell|valuation/i.test(latestInboundText)
       ? "seller"
-      : latestInboundText
+      : /買樓|買盤|睇樓|buy|purchase/i.test(latestInboundText)
         ? "buyer"
         : null;
   const optedOut = row.opted_out_whatsapp === true;
+  const urgencyEvidence = conversationDeadline(latestInboundText);
 
   return {
+    method: "deterministic_rules",
+    checkedAt: new Date().toISOString(),
+    urgencyEvidence,
     summary: messages.length
       ? `最近 ${messages.length} 則 WhatsApp 訊息，客戶需要跟進。`
       : "未有足夠訊息。",
     detectedIntent,
-    urgency: messages.length >= 3 ? "high" : "normal",
+    urgency: urgencyEvidence ? "high" : "normal",
     suggestedReply: optedOut ? null : "你好，多謝查詢。請問你想了解買樓、租樓，還是放盤估價？",
     handoffNote: stringOrNull(row.name)
       ? `${stringOrNull(row.name)} 由 WhatsApp 查詢，請查看最近訊息。`

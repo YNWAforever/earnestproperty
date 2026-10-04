@@ -1,3 +1,4 @@
+import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import {
   type FormEvent,
   type ReactNode,
@@ -127,7 +128,29 @@ export const Route = createFileRoute("/admin/blasts")({
 });
 
 function AdminBlasts() {
+  const identity = useStaffWorkspaceIdentity(["admin", "manager"]);
+  if (!identity)
+    return (
+      <AdminShell title="WhatsApp 群發" description="核對收件範圍及推廣操作結果。">
+        <AdminError message="尚未取得已核實的推廣管理權限。" />
+      </AdminShell>
+    );
+  return <AdminBlastsWorkspace key={identity} identity={identity} />;
+}
+
+function AdminBlastsWorkspace({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
+  const activeRef = useRef(true);
+  const queueJournalKey = user ? `earnest-campaign-queue:${encodeURIComponent(user.id)}` : null;
+  const cancelJournalKey = user ? `earnest-campaign-cancel:${encodeURIComponent(user.id)}` : null;
+  const [cancelJournalReady, setCancelJournalReady] = useState(false);
+  const [cancelJournalError, setCancelJournalError] = useState<string | null>(null);
+  const cancellingRef = useRef(false);
+  const cancelReadbackRef = useRef<string | null>(null);
+  const [cancelNeedsReadback, setCancelNeedsReadback] = useState<string | null>(null);
+  const [queueJournalReady, setQueueJournalReady] = useState(false);
+  const [queueJournalError, setQueueJournalError] = useState<string | null>(null);
   const [rows, setRows] = useState<AdminCampaignRow[] | null>(null);
   const [options, setOptions] = useState<AdminBlastOptions | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -165,15 +188,67 @@ function AdminBlasts() {
   const previewRequestRef = useRef(0);
   const hasRowPreviews = Object.keys(rowPreviews).length > 0;
 
+  useEffect(() => {
+    activeRef.current = true;
+    if (queueJournalKey) {
+      try {
+        const raw = sessionStorage.getItem(queueJournalKey);
+        if (raw) {
+          const journal = JSON.parse(raw);
+          if (
+            journal?.version !== 1 ||
+            typeof journal.campaignId !== "string" ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+              journal.campaignId,
+            )
+          )
+            throw Error("Invalid campaign queue journal");
+          queueReadbackRef.current = journal.campaignId;
+          setQueueNeedsReadback(journal.campaignId);
+        }
+        setQueueJournalReady(true);
+      } catch {
+        setQueueJournalError("未能讀取本機操作記錄，請聯絡支援核對；未有提交新的加入佇列要求。");
+      }
+    }
+    if (cancelJournalKey) {
+      try {
+        const raw = sessionStorage.getItem(cancelJournalKey);
+        if (raw) {
+          const journal = JSON.parse(raw);
+          if (
+            journal?.version !== 1 ||
+            typeof journal.campaignId !== "string" ||
+            !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+              journal.campaignId,
+            )
+          )
+            throw Error("Invalid campaign cancellation journal");
+          cancelReadbackRef.current = journal.campaignId;
+          setCancelNeedsReadback(journal.campaignId);
+        }
+        setCancelJournalReady(true);
+      } catch {
+        setCancelJournalError(
+          "未能讀取本機取消操作記錄，請聯絡支援核對；未有提交新的取消或加入佇列要求。",
+        );
+      }
+    }
+    return () => {
+      activeRef.current = false;
+    };
+  }, [queueJournalKey, cancelJournalKey]);
+
   const refreshAdminData = useCallback(
     async (settings: { clearRowPreviews?: boolean } = {}) => {
-      if (!user) return;
+      if (!user || !isWorkspaceCurrent()) return;
       setLoading(true);
       try {
         const [campaignRows, blastOptions] = await Promise.all([
           fetchAdminCampaigns(),
           fetchAdminBlastOptions(),
         ]);
+        if (!isWorkspaceCurrent()) return null;
         setRows(campaignRows as AdminCampaignRow[]);
         setOptions(blastOptions as AdminBlastOptions);
         setSelectedPreviewAudienceId((current) => {
@@ -192,7 +267,7 @@ function AdminBlasts() {
         setLoading(false);
       }
     },
-    [user],
+    [user, isWorkspaceCurrent],
   );
 
   const activePreview = useMemo<PreviewContext | null>(() => {
@@ -252,28 +327,29 @@ function AdminBlasts() {
 
     const timeout = window.setTimeout(
       () => {
-        previewAdminAudience({ data: activePreview.data })
+        previewAdminAudience({ data: activePreview.data }, isWorkspaceCurrent)
           .then((data) => {
-            if (requestId === previewRequestRef.current) {
+            if (isWorkspaceCurrent() && requestId === previewRequestRef.current) {
               setPreview(data as AdminAudiencePreview);
               setPreviewCheckedAt(Date.now());
             }
           })
           .catch((err) => {
-            if (requestId === previewRequestRef.current) {
+            if (isWorkspaceCurrent() && requestId === previewRequestRef.current) {
               setPreviewError(errorText(err));
               setPreview(null);
             }
           })
           .finally(() => {
-            if (requestId === previewRequestRef.current) setPreviewLoading(false);
+            if (isWorkspaceCurrent() && requestId === previewRequestRef.current)
+              setPreviewLoading(false);
           });
       },
       activePreview.debounce ? 300 : 0,
     );
 
     return () => window.clearTimeout(timeout);
-  }, [activePreview, user, previewRetry]);
+  }, [activePreview, user, previewRetry, isWorkspaceCurrent]);
 
   function openCampaignDialog() {
     const template =
@@ -296,6 +372,7 @@ function AdminBlasts() {
   }
 
   async function handleSaveAudience(event: FormEvent<HTMLFormElement>) {
+    if (!isWorkspaceCurrent()) return;
     event.preventDefault();
     if (!audienceDraft) return;
     if (!audienceDraft.name.trim()) {
@@ -311,22 +388,31 @@ function AdminBlasts() {
         description: nullIfBlank(audienceDraft.description ?? ""),
         filters: normalizeAudienceFilters(audienceDraft.filters),
       };
-      const result = (await saveAdminAudience({ data: payload })) as MutationResult;
+      const result = (await saveAdminAudience(
+        { data: payload },
+        isWorkspaceCurrent,
+      )) as MutationResult;
+      if (!isWorkspaceCurrent()) return;
       assertNoServerError(result);
       setSavedAudienceDraft(payload);
       if (result.id) setSelectedPreviewAudienceId(result.id);
       await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
       setAudienceDraft(null);
       setSavedAudienceDraft(null);
       toast.success("收件群組已儲存");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
   async function handleSaveCampaign(event: FormEvent<HTMLFormElement>) {
+    if (!isWorkspaceCurrent()) return;
     event.preventDefault();
     if (!campaignDraft) return;
     if (!campaignDraft.name.trim() || !campaignDraft.template_id || !campaignDraft.audience_id) {
@@ -345,18 +431,26 @@ function AdminBlasts() {
       // `id` afterwards is the saved row's id, which is always truthy, so the
       // 已新增 branch was unreachable and creating a campaign said 已儲存.
       const isUpdate = Boolean(campaignDraft.id);
-      const result = (await saveAdminCampaign({ data: payload })) as MutationResult;
+      const result = (await saveAdminCampaign(
+        { data: payload },
+        isWorkspaceCurrent,
+      )) as MutationResult;
+      if (!isWorkspaceCurrent()) return;
       assertNoServerError(result);
       const id = result.id || campaignDraft.id;
       const savedDraft = { ...payload, id };
       setCampaignDraft(savedDraft);
       setSavedCampaignDraft(savedDraft);
       await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
       toast.success(isUpdate ? "Campaign 已儲存" : "Campaign 已新增");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -374,17 +468,22 @@ function AdminBlasts() {
   }
 
   async function handleDeleteAudience() {
+    if (!isWorkspaceCurrent()) return;
     if (!pendingAudienceDelete) return;
     const target = pendingAudienceDelete;
     setMutatingAction(`audience-delete:${target.id}`);
     setConfirmError(null);
     try {
-      const result = (await deleteAdminAudience({ data: { id: target.id } })) as {
+      const result = (await deleteAdminAudience(
+        { data: { id: target.id } },
+        isWorkspaceCurrent,
+      )) as {
         ok?: boolean;
         error?: string;
         campaigns?: string[];
         detachedCampaigns?: number;
       };
+      if (!isWorkspaceCurrent()) return;
       if (!result.ok) {
         // AUDIENCE_IN_USE names the campaigns rather than failing vaguely: the
         // FK is ON DELETE SET NULL, so the operator needs to know exactly what
@@ -403,6 +502,7 @@ function AdminBlasts() {
         return;
       }
       await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
       setPendingAudienceDelete(null);
       toast.success(
         result.detachedCampaigns
@@ -410,13 +510,17 @@ function AdminBlasts() {
           : "收件群組已刪除",
       );
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
       setConfirmError(errorText(err));
     } finally {
-      setMutatingAction(null);
+      if (isWorkspaceCurrent()) {
+        setMutatingAction(null);
+      }
     }
   }
 
   async function handlePreviewCampaignAudience(campaign: AdminCampaignRow) {
+    if (!isWorkspaceCurrent()) return;
     if (!campaign.audience_id) {
       toast.error("此 campaign 未設定收件群組");
       return;
@@ -425,9 +529,13 @@ function AdminBlasts() {
     const action = `preview:${campaign.id}`;
     setMutatingAction(action);
     try {
-      const data = (await previewAdminAudience({
-        data: { audience_id: campaign.audience_id },
-      })) as AdminAudiencePreview;
+      const data = (await previewAdminAudience(
+        {
+          data: { audience_id: campaign.audience_id },
+        },
+        isWorkspaceCurrent,
+      )) as AdminAudiencePreview;
+      if (!isWorkspaceCurrent()) return;
       setRowPreviews((current) => ({
         ...current,
         [campaign.id]: { preview: data, checkedAt: Date.now() },
@@ -436,6 +544,7 @@ function AdminBlasts() {
       setPreview(data);
       toast.success("收件人預覽已更新");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
       setRowPreviews((current) => {
         const next = { ...current };
         delete next[campaign.id];
@@ -443,7 +552,9 @@ function AdminBlasts() {
       });
       toast.error(errorText(err));
     } finally {
-      setMutatingAction(null);
+      if (isWorkspaceCurrent()) {
+        setMutatingAction(null);
+      }
     }
   }
 
@@ -451,7 +562,14 @@ function AdminBlasts() {
    * interstitial that used to be missing entirely, so a mis-click on Queue sent
    * thousands of irreversible WhatsApp messages. */
   function requestSendCampaign(campaign: AdminCampaignRow, eligible: number, checkedAt: number) {
-    if (queueReadbackRef.current || !isQueueableStatus(campaign.status)) return;
+    if (
+      !queueJournalReady ||
+      !cancelJournalReady ||
+      cancelReadbackRef.current ||
+      queueReadbackRef.current ||
+      !isQueueableStatus(campaign.status)
+    )
+      return;
     if (eligible <= 0 || Date.now() - checkedAt > PREVIEW_FRESHNESS_MS) {
       toast.error("收件人預覽已過期或沒有合資格收件人，請重新預覽");
       return;
@@ -478,9 +596,21 @@ function AdminBlasts() {
 
   async function handleConfirmSend() {
     if (!pendingSend || !providerReviewed || sendingRef.current) return;
+    if (!cancelJournalReady || cancelReadbackRef.current) return;
     if (queueReadbackRef.current) return;
+    if (!queueJournalReady || !queueJournalKey) return;
     if (Date.now() - pendingSend.checkedAt > PREVIEW_FRESHNESS_MS) {
       setConfirmError("收件人預覽已過期，請關閉視窗並重新預覽");
+      return;
+    }
+    // Persist the original campaign before submitting: reload or a lost response
+    // must restore a read-only outcome check, not another queue request.
+    try {
+      const raw = JSON.stringify({ version: 1, campaignId: pendingSend.campaignId });
+      sessionStorage.setItem(queueJournalKey, raw);
+      if (sessionStorage.getItem(queueJournalKey) !== raw) throw Error("Journal not retained");
+    } catch {
+      setConfirmError("本機未能保留操作記錄，請檢查瀏覽器儲存或聯絡支援；未有提交加入佇列要求。");
       return;
     }
     sendingRef.current = true;
@@ -488,14 +618,20 @@ function AdminBlasts() {
     setMutatingAction(action);
     setConfirmError(null);
     try {
-      const result = (await sendAdminCampaignQueue({
-        data: { id: pendingSend.campaignId },
-      })) as MutationResult & {
+      const result = (await sendAdminCampaignQueue(
+        {
+          data: { id: pendingSend.campaignId },
+        },
+        isWorkspaceCurrent,
+      )) as MutationResult & {
         materialization?: Partial<AdminAudiencePreview>;
       };
       assertNoServerError(result);
+      if (!isWorkspaceCurrent()) return;
 
       await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
+      sessionStorage.removeItem(queueJournalKey);
       setCampaignDraft(null);
       setPendingSend(null);
       toast.success(
@@ -504,6 +640,7 @@ function AdminBlasts() {
     } catch (err) {
       // Kept inside the dialog rather than behind it: the operator needs the
       // reason next to the action they just authorised.
+      if (!isWorkspaceCurrent()) return;
       queueReadbackRef.current = pendingSend.campaignId;
       setQueueNeedsReadback(pendingSend.campaignId);
       setRowPreviews({});
@@ -523,39 +660,120 @@ function AdminBlasts() {
     setConfirmError(null);
     try {
       const current = await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
       if (!current?.some((row) => row.id === campaignId)) {
         setConfirmError("未能讀回此 Campaign，或權限已變更。未有重送加入佇列要求。");
         return;
       }
+      if (queueJournalKey) sessionStorage.removeItem(queueJournalKey);
       queueReadbackRef.current = null;
       setQueueNeedsReadback(null);
       setPendingSend(null);
       setProviderReviewed(false);
       setPreviewCheckedAt(0);
       toast.success("已讀回目前 Campaign 狀態。沒有重送；如需繼續，請重新預覽並確認。");
+    } catch {
+      if (isWorkspaceCurrent())
+        setConfirmError("未能更新本機操作記錄，請聯絡支援；未有重送加入佇列要求。");
     } finally {
       sendingRef.current = false;
       setMutatingAction(null);
     }
   }
 
+  function finishCancellationReadback(current: AdminCampaignRow[] | null | undefined) {
+    const campaignId = cancelReadbackRef.current;
+    if (
+      !isWorkspaceCurrent() ||
+      !campaignId ||
+      !cancelJournalKey ||
+      !current?.some((row) => row.id === campaignId && row.status === "cancelled")
+    )
+      return false;
+    sessionStorage.removeItem(cancelJournalKey);
+    cancelReadbackRef.current = null;
+    setCancelNeedsReadback(null);
+    setCampaignDraft((current) => (current?.id === campaignId ? null : current));
+    setSavedCampaignDraft((current) => (current?.id === campaignId ? null : current));
+    setPendingCancel(null);
+    setConfirmError(null);
+    toast.success("Campaign 已取消；已發出的訊息無法收回。");
+    return true;
+  }
+
+  async function readCampaignCancellationOutcome() {
+    if (!cancelReadbackRef.current || cancellingRef.current) return;
+    cancellingRef.current = true;
+    setMutatingAction(`cancel-read:${cancelReadbackRef.current}`);
+    setConfirmError(null);
+    try {
+      const current = await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
+      if (!finishCancellationReadback(current))
+        setConfirmError(
+          "未能確認取消：原 Campaign 未讀回已取消狀態，或權限已變更。未有重試取消或加入佇列。",
+        );
+    } catch {
+      if (isWorkspaceCurrent())
+        setConfirmError("未能更新本機取消操作記錄，請聯絡支援；未有重試取消。");
+    } finally {
+      cancellingRef.current = false;
+      if (isWorkspaceCurrent()) setMutatingAction(null);
+    }
+  }
+
   async function handleConfirmCancel() {
-    if (!pendingCancel) return;
+    if (
+      !pendingCancel ||
+      cancellingRef.current ||
+      cancelReadbackRef.current ||
+      !cancelJournalReady ||
+      !cancelJournalKey
+    )
+      return;
     const campaignId = pendingCancel.id;
+    try {
+      const raw = JSON.stringify({ version: 1, campaignId });
+      sessionStorage.setItem(cancelJournalKey, raw);
+      if (sessionStorage.getItem(cancelJournalKey) !== raw) throw Error("Journal not retained");
+    } catch {
+      setConfirmError("本機未能保留取消操作記錄，請檢查瀏覽器儲存或聯絡支援；未有提交取消要求。");
+      return;
+    }
+    cancellingRef.current = true;
+    cancelReadbackRef.current = campaignId;
+    setCancelNeedsReadback(campaignId);
     const action = `cancel:${campaignId}`;
     setMutatingAction(action);
     setConfirmError(null);
     try {
-      const result = (await cancelAdminCampaign({ data: { id: campaignId } })) as MutationResult;
+      const result = (await cancelAdminCampaign(
+        { data: { id: campaignId } },
+        isWorkspaceCurrent,
+      )) as MutationResult;
+      if (!isWorkspaceCurrent()) return;
+      if (result.ok === false) {
+        sessionStorage.removeItem(cancelJournalKey);
+        cancelReadbackRef.current = null;
+        setCancelNeedsReadback(null);
+        assertNoServerError(result);
+        return;
+      }
       assertNoServerError(result);
-      await refreshAdminData({ clearRowPreviews: true });
-      if (campaignDraft?.id === campaignId) closeCampaignDialog();
-      setPendingCancel(null);
-      toast.success("Campaign 已取消");
+      const current = await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
+      if (!finishCancellationReadback(current))
+        setConfirmError("取消已確認，但未能讀回畫面。請先查回原 Campaign，不要重試取消。");
     } catch (err) {
-      setConfirmError(errorText(err));
+      if (!isWorkspaceCurrent()) return;
+      setConfirmError(
+        cancelReadbackRef.current
+          ? `取消結果未能確認，請先查回原 Campaign 狀態。${errorText(err)}`
+          : errorText(err),
+      );
     } finally {
-      setMutatingAction(null);
+      cancellingRef.current = false;
+      if (isWorkspaceCurrent()) setMutatingAction(null);
     }
   }
 
@@ -589,14 +807,21 @@ function AdminBlasts() {
       description: "你為此收件群組輸入的資料尚未儲存，關閉後會遺失。確定要關閉嗎？",
     });
 
-  const queueBlockReason = hasUnsavedCampaignChanges
-    ? "請先儲存變更才可發送"
-    : campaignDraft?.id && !isQueueableStatus(currentDraftRow?.status ?? "")
-      ? "目前 Campaign 狀態不能加入發送佇列"
-      : campaignDraft && !isQueueableStatus(campaignDraft.status)
-        ? "草稿不可直接發送，請先將狀態改為「待審核」"
-        : null;
+  const queueBlockReason = !cancelJournalReady
+    ? (cancelJournalError ?? "正在讀取取消操作記錄")
+    : cancelNeedsReadback
+      ? "請先核對原 Campaign 取消結果"
+      : hasUnsavedCampaignChanges
+        ? "請先儲存變更才可發送"
+        : campaignDraft?.id && !isQueueableStatus(currentDraftRow?.status ?? "")
+          ? "目前 Campaign 狀態不能加入發送佇列"
+          : campaignDraft && !isQueueableStatus(campaignDraft.status)
+            ? "草稿不可直接發送，請先將狀態改為「待審核」"
+            : null;
   const canQueueDraft =
+    queueJournalReady &&
+    cancelJournalReady &&
+    !cancelNeedsReadback &&
     canSubmitCampaign &&
     !hasUnsavedCampaignChanges &&
     !queueNeedsReadback &&
@@ -620,6 +845,8 @@ function AdminBlasts() {
       description="WhatsApp 群發：只用已審批範本、只發給已同意接收的客戶。"
     >
       {error ? <AdminError message={error} /> : null}
+      {queueJournalError ? <AdminError message={queueJournalError} /> : null}
+      {cancelJournalError ? <AdminError message={cancelJournalError} /> : null}
       {queueNeedsReadback && !pendingSend ? (
         <div role="alert" className="space-y-2 rounded-md border p-3 text-sm">
           <p>加入佇列結果未能確認。請先讀回 Campaign 狀態；未有重送。</p>
@@ -631,6 +858,21 @@ function AdminBlasts() {
             onClick={() => void readCampaignQueueOutcome()}
           >
             重新載入 Campaign 狀態
+          </Button>
+        </div>
+      ) : null}
+
+      {cancelNeedsReadback ? (
+        <div role="alert" className="space-y-2 rounded-md border p-3 text-sm">
+          <p>取消結果待核對。請先查回原 Campaign 狀態；未有重試取消，已發出的訊息無法收回。</p>
+          {confirmError ? <p>{confirmError}</p> : null}
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!!mutatingAction}
+            onClick={() => void readCampaignCancellationOutcome()}
+          >
+            查回原 Campaign 取消狀態
           </Button>
         </div>
       ) : null}
@@ -703,7 +945,7 @@ function AdminBlasts() {
 
       {!rows && loading ? <Skeleton className="h-72 w-full" /> : null}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Campaign 一覽</CardTitle>
@@ -739,6 +981,9 @@ function AdminBlasts() {
                       // re-materialises the audience at queue time, so an old
                       // number describes an audience that may no longer exist.
                       const queueEnabled =
+                        queueJournalReady &&
+                        cancelJournalReady &&
+                        !cancelNeedsReadback &&
                         isQueueableStatus(campaign.status) &&
                         !!stamped &&
                         !previewStale &&
@@ -746,7 +991,10 @@ function AdminBlasts() {
                         !queueNeedsReadback &&
                         !mutatingAction;
                       const cancelEnabled =
-                        cancellableStatuses.has(campaign.status) && !mutatingAction;
+                        cancelJournalReady &&
+                        !cancelNeedsReadback &&
+                        cancellableStatuses.has(campaign.status) &&
+                        !mutatingAction;
 
                       return (
                         <TableRow key={campaign.id}>
@@ -946,7 +1194,7 @@ function AdminBlasts() {
         previewError={previewError}
         onRetryPreview={() => setPreviewRetry((value) => value + 1)}
         saving={saving}
-        mutating={!!mutatingAction}
+        mutating={!!mutatingAction || !cancelJournalReady || !!cancelNeedsReadback}
         canQueue={canQueueDraft}
         queueBlockReason={queueBlockReason}
         onChange={setCampaignDraft}
@@ -1057,7 +1305,8 @@ function AdminBlasts() {
         description="尚未發出的收件人會被中止，已發出的訊息無法收回。此操作無法復原。"
         confirmLabel="確認取消 Campaign"
         confirmVariant="destructive"
-        isPending={mutatingAction?.startsWith("cancel:") ?? false}
+        disabled={!!cancelNeedsReadback}
+        isPending={mutatingAction?.startsWith("cancel") ?? false}
         error={confirmError}
         onOpenChange={(open) => {
           if (!open) {
@@ -1067,6 +1316,16 @@ function AdminBlasts() {
         }}
         onConfirm={() => void handleConfirmCancel()}
       >
+        {cancelNeedsReadback ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!!mutatingAction}
+            onClick={() => void readCampaignCancellationOutcome()}
+          >
+            查回原 Campaign 取消狀態
+          </Button>
+        ) : null}
         {pendingCancel ? (
           <dl className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
             <ConfirmRow label="Campaign" value={pendingCancel.name} />

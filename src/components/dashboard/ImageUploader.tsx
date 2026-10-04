@@ -1,5 +1,5 @@
 import { uploadAdminMedia } from "@/lib/admin/media-upload";
-import { type Dispatch, type SetStateAction, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useLayoutEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ type Props = {
   /** Lets the calling form's label point at the hidden file input. */
   inputId?: string;
   onUploadingChange?: (uploading: boolean) => void;
+  isWorkspaceCurrent?: () => boolean;
 };
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
@@ -39,7 +40,20 @@ export function ImageUploader({
   onChange,
   inputId,
   onUploadingChange,
+  isWorkspaceCurrent,
 }: Props) {
+  const active = useRef(false);
+  const lifetime = useRef(0);
+  useLayoutEffect(() => {
+    active.current = true;
+    const epoch = ++lifetime.current;
+    return () => {
+      active.current = false;
+      lifetime.current = epoch + 1;
+    };
+  }, []);
+  const isCurrent = (epoch: number) =>
+    active.current && epoch === lifetime.current && (!isWorkspaceCurrent || isWorkspaceCurrent());
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
@@ -47,7 +61,8 @@ export function ImageUploader({
   const [failures, setFailures] = useState<string[]>([]);
 
   async function handleFiles(files: FileList | null) {
-    if (disabled || uploading || !files || files.length === 0) return;
+    const epoch = lifetime.current;
+    if (!isCurrent(epoch) || disabled || uploading || !files || files.length === 0) return;
     const list = Array.from(files);
     const valid = list.filter((f) => {
       if (!ACCEPT.includes(f.type)) {
@@ -69,15 +84,19 @@ export function ImageUploader({
     const uploaded: string[] = [];
     const failed: string[] = [];
     for (let i = 0; i < valid.length; i++) {
+      if (!isCurrent(epoch)) return;
       const file = valid[i];
       try {
-        const data = await uploadAdminMedia(file, ownerType);
+        const data = await uploadAdminMedia(file, ownerType, () => isCurrent(epoch));
+        if (!isCurrent(epoch)) return;
         uploaded.push(data.url);
       } catch (error) {
+        if (!isCurrent(epoch)) return;
         failed.push(`${file.name}：${error instanceof Error ? error.message : "上載未完成"}`);
       }
       setProgress({ done: i + 1, total: valid.length });
     }
+    if (!isCurrent(epoch)) return;
     setUploading(false);
     onUploadingChange?.(false);
     setProgress(null);

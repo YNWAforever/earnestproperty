@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useState } from "react";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { Button } from "@/components/ui/button";
@@ -33,9 +34,12 @@ const labels: Record<string, string> = {
 };
 export function WhatsappServicePolicyEditor({
   agents,
+  isWorkspaceCurrent,
 }: {
   agents: { id: string; name: string | null; active: boolean; roles: string[] }[];
+  isWorkspaceCurrent?: () => boolean;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const { user, loading } = useNeonAuth();
   const [editOpen, setEditOpen] = useState(false);
   const [policies, setPolicies] = useState<ServicePolicy[]>([]),
@@ -49,17 +53,17 @@ export function WhatsappServicePolicyEditor({
   useEffect(() => {
     if (loading || !user) return;
     let cancelled = false;
-    getWhatsappServicePolicies()
+    getWhatsappServicePolicies(isCurrent)
       .then((p) => {
-        if (!cancelled) setPolicies(p);
+        if (!cancelled && isCurrent()) setPolicies(p);
       })
       .catch(() => {
-        if (!cancelled) setError("尚未載入政策，請確認權限及遷移狀態。");
+        if (!cancelled && isCurrent()) setError("尚未載入政策，請確認權限及遷移狀態。");
       });
     return () => {
       cancelled = true;
     };
-  }, [user, loading]);
+  }, [user, loading, isCurrent]);
   const update = <K extends keyof ServiceRules>(key: K, value: ServiceRules[K]) =>
     setPolicy((p) => ({
       ...p,
@@ -81,15 +85,22 @@ export function WhatsappServicePolicyEditor({
     new Date(sample),
   );
   async function action(fn: () => Promise<void>) {
+    if (!isCurrent()) return;
     setBusy(true);
     setError("");
     try {
       await fn();
-      setPolicies(await getWhatsappServicePolicies());
+      if (!isCurrent()) return;
+      const workspaceResult = await getWhatsappServicePolicies(isCurrent);
+      if (!isCurrent()) return;
+      setPolicies(workspaceResult);
     } catch (e) {
+      if (!isCurrent()) return;
       setError(e instanceof Error ? e.message : "操作未完成；請核對政策資料。");
     } finally {
-      setBusy(false);
+      if (isCurrent()) {
+        setBusy(false);
+      }
     }
   }
   const effectivePolicy = policies
@@ -307,13 +318,17 @@ export function WhatsappServicePolicyEditor({
           disabled={busy}
           onClick={() =>
             void action(async () => {
-              setPolicy(
-                await saveWhatsappServicePolicy({
+              if (!isCurrent()) return;
+              const workspaceResult = await saveWhatsappServicePolicy(
+                {
                   rules: policy.rules,
                   afterHoursCopy: policy.copy.afterHours,
                   copyVersion: policy.copyVersion,
-                }),
+                },
+                isCurrent,
               );
+              if (!isCurrent()) return;
+              setPolicy(workspaceResult);
             })
           }
         >
@@ -358,12 +373,17 @@ export function WhatsappServicePolicyEditor({
               disabled={busy || !evidence || !effective}
               onClick={() =>
                 void action(async () => {
-                  await approveWhatsappServicePolicy({
-                    id: policy.id,
-                    version: policy.version,
-                    effectiveAt: effective,
-                    decisionEvidenceRef: evidence,
-                  });
+                  if (!isCurrent()) return;
+                  await approveWhatsappServicePolicy(
+                    {
+                      id: policy.id,
+                      version: policy.version,
+                      effectiveAt: effective,
+                      decisionEvidenceRef: evidence,
+                    },
+                    isCurrent,
+                  );
+                  if (!isCurrent()) return;
                   setPolicy(draftServicePolicy());
                 })
               }

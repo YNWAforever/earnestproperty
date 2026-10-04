@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { ServerFnResponseError } from "@/lib/neon/server-fn-response";
 import { safePerformanceCsvCell } from "@/lib/analytics/performance-csv";
 import type { FormEvent } from "react";
 import { Button } from "@/components/ui/button";
@@ -19,6 +20,10 @@ type Props = {
   onClose: () => void;
   onMore: () => void;
   onQualify: (input: { leadId: string; qualifiedAt: string; evidence: string }) => Promise<void>;
+  getPendingQualificationEvidence?: (leadId: string) => string | undefined;
+  getPendingQualityDecision?: (
+    record: PerformanceRecord,
+  ) => { quality: string; reason: string } | undefined;
   onCorrect: (input: {
     record: PerformanceRecord;
     quality: "production" | "test" | "spam" | "unknown";
@@ -54,40 +59,90 @@ export function PerformanceTable({
   onMore,
   onCorrect,
   onQualify,
+  getPendingQualificationEvidence,
+  getPendingQualityDecision,
 }: Props) {
   const [quality, setQuality] = useState<"production" | "test" | "spam" | "unknown">("unknown");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editorType, setEditorType] = useState<"quality" | "qualification" | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [qualificationEvidence, setQualificationEvidence] = useState("");
+  const editingRevision = useRef(0);
+  const submitting = useRef(false);
+  function isEditor(record: PerformanceRecord, type: typeof editorType) {
+    return editorOpen && editingKey === record.kind + ":" + record.id && editorType === type;
+  }
+  function toggleEditor(record: PerformanceRecord, type: "quality" | "qualification") {
+    editingRevision.current++;
+    setSaveError(null);
+    const key = record.kind + ":" + record.id;
+    if (editingKey === key && editorType === type) {
+      setEditorOpen((open) => !open);
+      return;
+    }
+    setEditingKey(key);
+    setEditorType(type);
+    setEditorOpen(true);
+    setQuality(record.quality as typeof quality);
+    setReason("");
+    setQualificationEvidence("");
+  }
   async function save(event: FormEvent, record: PerformanceRecord) {
     event.preventDefault();
-    if (editingId !== record.id) {
+    if (submitting.current) return;
+    if (!isEditor(record, "quality")) {
       setSaveError("請重新開啟此記錄的修正表單。");
+      return;
+    }
+    if (record.qualityRevisionId === undefined) {
+      setSaveError("請重新載入記錄後再修正品質。");
       return;
     }
     if (reason.trim().length < 8) {
       setSaveError("修正原因最少 8 個字。");
       return;
     }
+    const revision = editingRevision.current;
+    submitting.current = true;
     setSaving(record.id);
     setSaveError(null);
     try {
       await onCorrect({ record, quality, reason: reason.trim() });
-      setReason("");
-    } catch {
-      setSaveError("未能儲存品質修正，請重試。");
+      if (revision === editingRevision.current) setReason("");
+    } catch (error) {
+      if (revision === editingRevision.current)
+        setSaveError(
+          error instanceof Error && error.name === "QualityRequestChanged"
+            ? "上次品質修正尚未確認，請還原原品質及原因再重試。"
+            : error instanceof ServerFnResponseError && error.status === 409
+              ? "品質來源已變更，請核對最新記錄後再提交；你的草稿已保留。"
+              : "未能儲存品質修正，請重試。",
+        );
     } finally {
+      submitting.current = false;
       setSaving(null);
     }
   }
   async function qualify(event: FormEvent, record: PerformanceRecord) {
     event.preventDefault();
-    if (!record.leadId || editingId !== record.id || qualificationEvidence.trim().length < 8) {
+    if (submitting.current) return;
+    if (record.qualification) {
+      setSaveError("已讀回核實紀錄，毋須再次提交。");
+      return;
+    }
+    if (
+      !record.leadId ||
+      !isEditor(record, "qualification") ||
+      qualificationEvidence.trim().length < 8
+    ) {
       setSaveError("請提供至少 8 個字的核實依據。");
       return;
     }
+    const revision = editingRevision.current;
+    submitting.current = true;
     setSaving(record.id);
     setSaveError(null);
     try {
@@ -96,10 +151,16 @@ export function PerformanceTable({
         qualifiedAt: new Date().toISOString(),
         evidence: qualificationEvidence.trim(),
       });
-      setQualificationEvidence("");
-    } catch {
-      setSaveError("未能核實線索；請確認狀態、權限及是否已完成核實。");
+      if (revision === editingRevision.current) setQualificationEvidence("");
+    } catch (error) {
+      if (revision === editingRevision.current)
+        setSaveError(
+          error instanceof Error && error.name === "QualificationRequestChanged"
+            ? "上次核實請求尚未確認，請還原原核實依據再重試。"
+            : "未能核實線索；請核對狀態、權限及既有紀錄後重試。",
+        );
     } finally {
+      submitting.current = false;
       setSaving(null);
     }
   }
@@ -196,14 +257,12 @@ export function PerformanceTable({
                   {canCorrect || canQualify ? (
                     <td className="p-2">
                       {canCorrect && (record.kind === "inquiry" || record.eventKey) ? (
-                        <details>
+                        <details open={isEditor(record, "quality")}>
                           <summary
                             className="cursor-pointer"
-                            onClick={() => {
-                              setEditingId(record.id);
-                              setQuality(record.quality as typeof quality);
-                              setReason("");
-                              setQualificationEvidence("");
+                            onClick={(event) => {
+                              event.preventDefault();
+                              toggleEditor(record, "quality");
                             }}
                           >
                             修正品質
@@ -212,12 +271,27 @@ export function PerformanceTable({
                             onSubmit={(event) => void save(event, record)}
                             className="mt-2 space-y-2"
                           >
+                            {isEditor(record, "quality") && getPendingQualityDecision?.(record) ? (
+                              <div className="text-xs text-muted-foreground">
+                                <p>上次待確認的品質修正：</p>
+                                <p>{getPendingQualityDecision(record)?.quality}</p>
+                                <p
+                                  data-pending-quality-reason
+                                  className="whitespace-pre-wrap break-all"
+                                >
+                                  {getPendingQualityDecision(record)?.reason}
+                                </p>
+                              </div>
+                            ) : null}
                             <Label htmlFor={"quality-" + record.id}>品質狀態</Label>
                             <select
                               id={"quality-" + record.id}
                               className="h-9 w-full rounded border bg-background px-2"
                               value={quality}
-                              onChange={(e) => setQuality(e.target.value as typeof quality)}
+                              onChange={(e) => {
+                                editingRevision.current++;
+                                setQuality(e.target.value as typeof quality);
+                              }}
                             >
                               <option value="production">恢復有效</option>
                               <option value="test">標為測試</option>
@@ -230,13 +304,25 @@ export function PerformanceTable({
                               value={reason}
                               minLength={8}
                               required
-                              onChange={(e) => setReason(e.target.value)}
+                              onChange={(e) => {
+                                editingRevision.current++;
+                                setReason(e.target.value);
+                              }}
                               placeholder="記錄核實依據"
                             />
+                            {record.qualityRevisionId === undefined ? (
+                              <p className="text-xs text-muted-foreground">
+                                請重新載入記錄後再修正品質。
+                              </p>
+                            ) : null}
                             <Button
                               type="submit"
                               size="sm"
-                              disabled={saving === record.id || editingId !== record.id}
+                              disabled={
+                                saving !== null ||
+                                !isEditor(record, "quality") ||
+                                record.qualityRevisionId === undefined
+                              }
                             >
                               儲存修正
                             </Button>
@@ -246,12 +332,12 @@ export function PerformanceTable({
                         <span className="text-muted-foreground">缺少來源事件，需先核對證據</span>
                       ) : null}
                       {canQualify && record.leadId && record.kind === "inquiry" ? (
-                        <details className="mt-2">
+                        <details className="mt-2" open={isEditor(record, "qualification")}>
                           <summary
                             className="cursor-pointer"
-                            onClick={() => {
-                              setEditingId(record.id);
-                              setQualificationEvidence("");
+                            onClick={(event) => {
+                              event.preventDefault();
+                              toggleEditor(record, "qualification");
                             }}
                           >
                             核實合格線索
@@ -260,19 +346,60 @@ export function PerformanceTable({
                             onSubmit={(event) => void qualify(event, record)}
                             className="mt-2 space-y-2"
                           >
+                            {isEditor(record, "qualification") &&
+                            getPendingQualificationEvidence?.(record.leadId) ? (
+                              <div className="text-xs text-muted-foreground">
+                                <p>上次待確認的核實依據（重試沿用原時間）：</p>
+                                <p
+                                  role="note"
+                                  aria-label="上次待確認的核實依據"
+                                  className="break-words"
+                                >
+                                  {getPendingQualificationEvidence(record.leadId)}
+                                </p>
+                              </div>
+                            ) : null}
+                            {isEditor(record, "qualification") && record.qualification ? (
+                              <div className="text-xs text-muted-foreground">
+                                <p>已讀回核實紀錄，毋須再次提交。品質分類仍須另行核對。</p>
+                                <p role="note" aria-label="已核實依據" className="break-words">
+                                  {record.qualification.evidence}
+                                </p>
+                                <p>
+                                  原核實時間（香港）：
+                                  <time dateTime={record.qualification.qualifiedAt}>
+                                    {new Date(record.qualification.qualifiedAt).toLocaleString(
+                                      "zh-HK",
+                                      {
+                                        timeZone: "Asia/Hong_Kong",
+                                        hour12: false,
+                                      },
+                                    )}
+                                  </time>
+                                </p>
+                              </div>
+                            ) : null}
                             <Label htmlFor={"qualification-" + record.id}>核實依據</Label>
                             <Input
                               id={"qualification-" + record.id}
                               value={qualificationEvidence}
+                              readOnly={Boolean(record.qualification)}
                               minLength={8}
                               required
-                              onChange={(event) => setQualificationEvidence(event.target.value)}
+                              onChange={(event) => {
+                                editingRevision.current++;
+                                setQualificationEvidence(event.target.value);
+                              }}
                               placeholder="記錄實際聯絡與需求證據"
                             />
                             <Button
                               type="submit"
                               size="sm"
-                              disabled={saving === record.id || editingId !== record.id}
+                              disabled={
+                                saving !== null ||
+                                !isEditor(record, "qualification") ||
+                                Boolean(record.qualification)
+                              }
                             >
                               記錄合格線索
                             </Button>

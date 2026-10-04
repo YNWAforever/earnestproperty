@@ -8,6 +8,7 @@ import type {
 
 export type LinkBatchProgress = {
   batchId: string;
+  draftId?: string;
   rows: BatchRowDraft[];
   chunkIds: string[];
   completed: CommitChunkResult[];
@@ -44,25 +45,48 @@ export function knownFailedBatchRows(progress: LinkBatchProgress): BatchRowDraft
 export function batchResultCsv(
   progress: LinkBatchProgress,
   source?: BatchRowDraft["input"]["placementSource"],
+  category: "success" | "failure" = "success",
 ) {
   const byKey = new Map(progress.rows.map((row) => [row.rowKey, row]));
-  const header = ["public_listing_no", "deal_type", "source", "placement_id", "outcome", "link"];
+  const header =
+    category === "failure"
+      ? [
+          "row_key",
+          "public_listing_no",
+          "deal_type",
+          "source",
+          "placement_id",
+          "outcome",
+          "reason_code",
+        ]
+      : ["public_listing_no", "deal_type", "source", "placement_id", "outcome", "link"];
   const lines = batchRowsOf(progress).flatMap((result) => {
     const row = byKey.get(result.rowKey);
-    if (!row || !result.code || !["created", "reused"].includes(result.outcome)) return [];
+    if (!row) return [];
+    if (category === "failure") {
+      if (!["blocked", "failed"].includes(result.outcome)) return [];
+    } else if (!result.code || !["created", "reused"].includes(result.outcome)) return [];
     if (source && row.input.placementSource !== source) return [];
-    return [
-      [
-        row.input.publicListingNo,
-        row.input.dealType,
-        row.input.placementSource,
-        row.placementId,
-        result.outcome,
-        `/w/${result.code}`,
-      ]
-        .map((cell) => safeCsvCell(cell))
-        .join(","),
-    ];
+    const cells =
+      category === "failure"
+        ? [
+            result.rowKey,
+            row.input.publicListingNo,
+            row.input.dealType,
+            row.input.placementSource,
+            row.placementId,
+            result.outcome,
+            result.reasonCode,
+          ]
+        : [
+            row.input.publicListingNo,
+            row.input.dealType,
+            row.input.placementSource,
+            row.placementId,
+            result.outcome,
+            `/w/${result.code}`,
+          ];
+    return [cells.map((cell) => safeCsvCell(cell)).join(",")];
   });
   return `\ufeff${header.map((cell) => safeCsvCell(cell)).join(",")}\r\n${lines.join("\r\n")}${lines.length ? "\r\n" : ""}`;
 }
@@ -95,6 +119,7 @@ export async function runWhatsappLinkBatch(
   initial: LinkBatchProgress,
   api: LinkBatchApi,
   save: (progress: LinkBatchProgress) => void,
+  isCurrent: () => boolean = () => true,
 ): Promise<LinkBatchProgress> {
   let progress = initial;
   const chunks = Array.from({ length: Math.ceil(progress.rows.length / 50) }, (_, index) =>
@@ -102,6 +127,7 @@ export async function runWhatsappLinkBatch(
   );
   if (chunks.length !== progress.chunkIds.length) throw new Error("BATCH_CHUNK_IDS_INVALID");
   while (progress.nextChunk < chunks.length) {
+    if (!isCurrent()) return progress;
     const index = progress.nextChunk;
     const chunkId = progress.chunkIds[index];
     progress = { ...progress, uncertain: true };
@@ -113,6 +139,9 @@ export async function runWhatsappLinkBatch(
         previewToken: progress.preview.previewToken,
         rows: chunks[index],
       });
+      // The accepted receipt remains durable on the server. Leave the original
+      // uncertain journal for current-workspace readback, never overwrite a newer journal.
+      if (!isCurrent()) return progress;
       progress = {
         ...progress,
         completed: [...progress.completed, result],
@@ -122,8 +151,11 @@ export async function runWhatsappLinkBatch(
       save(progress);
       if (result.state === "rejected") return progress;
     } catch (error) {
+      if (!isCurrent()) return progress;
       try {
-        progress = reconcileLinkBatch(progress, (await api.read(progress.batchId)).operations);
+        const readback = await api.read(progress.batchId);
+        if (!isCurrent()) return progress;
+        progress = reconcileLinkBatch(progress, readback.operations);
         save(progress);
         if (progress.completed[index]) {
           if (progress.completed[index].state === "rejected") return progress;

@@ -82,6 +82,9 @@ export function selectPerformanceRecords(
     id: String(id),
     occurredAt: iso(occurredAt),
     quality: row.quality,
+    ...(Object.hasOwn(row, "qualityRevisionId")
+      ? { qualityRevisionId: row.qualityRevisionId }
+      : {}),
     staffId: row.staffId || row.assignedStaffId || null,
     inquiryId: row.inquiryId || null,
     leadId: row.leadId || row.crmLeadId || null,

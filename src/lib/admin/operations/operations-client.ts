@@ -1,3 +1,4 @@
+import { assertWorkspaceCurrent } from "../workspace-request.ts";
 import type {
   AuditPage,
   HealthData,
@@ -58,12 +59,15 @@ export async function requestControlPlane<T>(
   init: RequestInit = {},
   fetchImpl: typeof fetch = fetch,
   authHeaders: OperationsAuthHeaderProvider = withOperationsStaffAuth,
+  isWorkspaceCurrent?: () => boolean,
 ): Promise<{ data: T; requestId: string }> {
   const headers = new Headers(init.headers);
   headers.set("accept", "application/json");
   headers.delete("authorization");
   if (init.body !== undefined) headers.set("content-type", "application/json");
+  assertWorkspaceCurrent(isWorkspaceCurrent);
   const authenticated = await authHeaders({ headers });
+  assertWorkspaceCurrent(isWorkspaceCurrent);
 
   const response = await fetchImpl(`/api/admin/control-plane${path}`, {
     ...init,
@@ -108,33 +112,52 @@ export async function requestControlPlane<T>(
   return { data: body.data as T, requestId };
 }
 
-export function fetchOperationsHealth() {
-  return requestControlPlane<HealthData>("/health");
+export function fetchOperationsHealth(isWorkspaceCurrent?: () => boolean) {
+  return requestControlPlane<HealthData>(
+    "/health",
+    undefined,
+    undefined,
+    undefined,
+    isWorkspaceCurrent,
+  );
 }
 
 export function fetchOperationsJobs(
   query: { status?: JobStatus; jobType?: string; cursor?: string; limit?: number } = {},
+  isWorkspaceCurrent?: () => boolean,
 ) {
-  return requestControlPlane<JobsPage>(queryPath("/jobs", query));
+  return requestControlPlane<JobsPage>(
+    queryPath("/jobs", query),
+    undefined,
+    undefined,
+    undefined,
+    isWorkspaceCurrent,
+  );
 }
 
-export function retryOperationsJob(id: string) {
+export function retryOperationsJob(id: string, isWorkspaceCurrent?: () => boolean) {
   return requestControlPlane<{ id: string; status: JobStatus }>(
     `/jobs/${encodeURIComponent(id)}/retry`,
     {
       method: "POST",
       body: JSON.stringify({}),
     },
+    undefined,
+    undefined,
+    isWorkspaceCurrent,
   );
 }
 
-export function cancelOperationsJob(id: string) {
+export function cancelOperationsJob(id: string, isWorkspaceCurrent?: () => boolean) {
   return requestControlPlane<{ id: string; status: JobStatus }>(
     `/jobs/${encodeURIComponent(id)}/cancel`,
     {
       method: "POST",
       body: JSON.stringify({}),
     },
+    undefined,
+    undefined,
+    isWorkspaceCurrent,
   );
 }
 
@@ -146,28 +169,57 @@ export function fetchOperationsAudit(
     action?: string;
     requestId?: string;
   } = {},
+  isWorkspaceCurrent?: () => boolean,
 ) {
-  return requestControlPlane<AuditPage>(queryPath("/audit", query));
+  return requestControlPlane<AuditPage>(
+    queryPath("/audit", query),
+    undefined,
+    undefined,
+    undefined,
+    isWorkspaceCurrent,
+  );
 }
 
-export function fetchOperationsMigrations() {
-  return requestControlPlane<MigrationState[]>("/migrations");
+export function fetchOperationsMigrations(isWorkspaceCurrent?: () => boolean) {
+  return requestControlPlane<MigrationState[]>(
+    "/migrations",
+    undefined,
+    undefined,
+    undefined,
+    isWorkspaceCurrent,
+  );
 }
 
-export function planOperationsMigration(id: string) {
-  return requestControlPlane<MigrationPlan>(`/migrations/${encodeURIComponent(id)}/plan`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
+export function planOperationsMigration(id: string, isWorkspaceCurrent?: () => boolean) {
+  return requestControlPlane<MigrationPlan>(
+    `/migrations/${encodeURIComponent(id)}/plan`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+    undefined,
+    undefined,
+    isWorkspaceCurrent,
+  );
 }
 
-export function applyOperationsMigration(id: string, approvalToken: string) {
+export function applyOperationsMigration(
+  id: string,
+  approvalToken: string,
+  isWorkspaceCurrent?: () => boolean,
+) {
   return requestControlPlane<{
     migrationId: string;
     status: "succeeded";
     schemaFingerprint: string;
-  }>(`/migrations/${encodeURIComponent(id)}/apply`, {
-    method: "POST",
-    body: JSON.stringify({ approvalToken }),
-  });
+  }>(
+    `/migrations/${encodeURIComponent(id)}/apply`,
+    {
+      method: "POST",
+      body: JSON.stringify({ approvalToken }),
+    },
+    undefined,
+    undefined,
+    isWorkspaceCurrent,
+  );
 }

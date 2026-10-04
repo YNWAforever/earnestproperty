@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { LoaderCircle, RefreshCw, RotateCcw, XCircle } from "lucide-react";
 import { toast } from "sonner";
@@ -78,12 +79,15 @@ export function AdminOperationsJobs({
   active,
   pulse,
   onMutationComplete,
+  isWorkspaceCurrent,
 }: {
   capabilities: OperationsCapabilities;
   active: boolean;
   pulse: number;
   onMutationComplete: () => void | Promise<void>;
+  isWorkspaceCurrent?: () => boolean;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const [status, setStatus] = useState<"all" | JobStatus>("all");
   const [jobTypeDraft, setJobTypeDraft] = useState("");
   const [jobType, setJobType] = useState("");
@@ -95,6 +99,8 @@ export function AdminOperationsJobs({
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [pendingCommand, setPendingCommand] = useState<JobCommand | null>(null);
   const requestSequence = useRef(0);
+  const unconfirmedJob = useRef<string | null>(null);
+  const [readbackRequired, setReadbackRequired] = useState(false);
   const previousPulse = useRef(pulse);
 
   const loadJobs = useCallback(
@@ -103,38 +109,49 @@ export function AdminOperationsJobs({
       cursor,
       background = false,
     }: { mode?: JobRowMergeMode; cursor?: string; background?: boolean } = {}) => {
-      if (!active || !capabilities.jobsRead) return;
+      if (!active || !capabilities.jobsRead || !isCurrent()) return;
       const request = ++requestSequence.current;
       // A background tick must not set `loading`: the filter controls are
       // disabled on it, so a 30s poll interrupted typing mid-word.
       if (!background) setLoading(true);
       setError(null);
       try {
-        const result = await fetchOperationsJobs({
-          status: status === "all" ? undefined : status,
-          jobType: jobType || undefined,
-          cursor,
-          limit: 25,
-        });
-        if (request !== requestSequence.current) return;
+        const result = await fetchOperationsJobs(
+          {
+            status: status === "all" ? undefined : status,
+            jobType: jobType || undefined,
+            cursor,
+            limit: 25,
+          },
+          isCurrent,
+        );
+        if (request !== requestSequence.current || !isCurrent()) return;
+        if (
+          unconfirmedJob.current &&
+          result.data.rows.some((job) => job.id === unconfirmedJob.current)
+        ) {
+          unconfirmedJob.current = null;
+          setReadbackRequired(false);
+        }
         setRows((current) => mergeOperationsJobRows(current, result.data.rows, mode));
         // A refresh only knows about page 1, so it must not clobber the cursor
         // the operator has already paged past.
         if (mode !== "refresh") setNextCursor(result.data.nextCursor);
         setHasLoadedOnce(true);
       } catch (reason) {
-        if (request === requestSequence.current) setError(operationsErrorMessage(reason));
+        if (request === requestSequence.current && isCurrent())
+          setError(operationsErrorMessage(reason));
       } finally {
-        if (request === requestSequence.current && !background) setLoading(false);
+        if (request === requestSequence.current && isCurrent() && !background) setLoading(false);
       }
     },
-    [active, capabilities.jobsRead, jobType, status],
+    [active, capabilities.jobsRead, jobType, status, isCurrent],
   );
 
   useEffect(() => {
-    if (!active || !capabilities.jobsRead) return;
+    if (!active || !capabilities.jobsRead || !isCurrent()) return;
     void loadJobs();
-  }, [active, capabilities.jobsRead, loadJobs]);
+  }, [active, capabilities.jobsRead, loadJobs, isCurrent]);
 
   useEffect(() => {
     const priorPulse = previousPulse.current;
@@ -183,29 +200,45 @@ export function AdminOperationsJobs({
   };
 
   const runCommand = async () => {
-    if (!command || pendingCommand) return;
+    if (!command || pendingCommand || readbackRequired || !isCurrent()) return;
     const current = command;
+    // A read started before this command cannot confirm its eventual outcome.
+    requestSequence.current += 1;
+    setLoading(false);
+    setError(null);
     setPendingCommand(current);
     try {
-      if (current.action === "retry") await retryOperationsJob(current.job.id);
-      else await cancelOperationsJob(current.job.id);
+      if (current.action === "retry") await retryOperationsJob(current.job.id, isCurrent);
+      else await cancelOperationsJob(current.job.id, isCurrent);
+      if (!isCurrent()) return;
       setCommand(null);
       toast.success(current.action === "retry" ? "已重新排隊執行此工作。" : "已取消此工作。");
       await onMutationComplete();
+      if (!isCurrent()) return;
       await loadJobs();
     } catch (reason) {
+      if (!isCurrent()) return;
       setCommand(null);
       if (reason instanceof OperationsClientError && reason.status === 409) {
         // Previously this closed the dialog and set only a quiet status line, so
         // a rejected command looked exactly like a successful one.
         await loadJobs();
+        if (!isCurrent()) return;
         toast.error("此工作的狀態已改變，指令未有執行。已重新載入最新狀態。");
         setError("此工作的狀態已改變，指令未有執行。");
       } else {
-        toast.error(operationsErrorMessage(reason));
+        const definiteRejection =
+          reason instanceof OperationsClientError && [400, 401, 403, 404].includes(reason.status);
+        if (!definiteRejection) {
+          unconfirmedJob.current = current.job.id;
+          setReadbackRequired(true);
+        }
+        const message = operationsErrorMessage(reason);
+        setError(definiteRejection ? message : `${message} 請先重新載入原工作並核對，勿直接重試。`);
+        toast.error(message);
       }
     } finally {
-      setPendingCommand(null);
+      if (isCurrent()) setPendingCommand(null);
     }
   };
 
@@ -274,6 +307,11 @@ export function AdminOperationsJobs({
           {error}
         </p>
       ) : null}
+      {readbackRequired ? (
+        <p role="status" className="text-sm text-amber-800">
+          指令結果未明。重新載入原工作前，暫停提交其他工作指令。
+        </p>
+      ) : null}
 
       <Table>
         <TableHeader>
@@ -317,7 +355,7 @@ export function AdminOperationsJobs({
                             size="icon"
                             variant="ghost"
                             aria-label={`重試工作 ${job.id}`}
-                            disabled={pendingCommand !== null}
+                            disabled={pendingCommand !== null || readbackRequired}
                             onClick={() => setCommand({ action: "retry", job })}
                           >
                             <RotateCcw className="size-4" />
@@ -334,7 +372,7 @@ export function AdminOperationsJobs({
                             size="icon"
                             variant="ghost"
                             aria-label={`取消工作 ${job.id}`}
-                            disabled={pendingCommand !== null}
+                            disabled={pendingCommand !== null || readbackRequired}
                             onClick={() => setCommand({ action: "cancel", job })}
                           >
                             <XCircle className="size-4" />
@@ -389,6 +427,7 @@ export function AdminOperationsJobs({
         confirmLabel={command?.action === "retry" ? "重試" : "取消工作"}
         confirmVariant={command?.action === "cancel" ? "destructive" : "default"}
         isPending={pendingCommand !== null}
+        disabled={readbackRequired}
         onOpenChange={(open) => {
           if (!open) setCommand(null);
         }}

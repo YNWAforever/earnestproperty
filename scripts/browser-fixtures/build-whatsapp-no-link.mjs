@@ -7,7 +7,12 @@ import tailwind from "@tailwindcss/vite";
 const workspace = resolve(import.meta.dirname, "../..");
 assert.equal(resolve(process.cwd()), workspace, "Run fixture build from this checkout root");
 const root = resolve(workspace, "scripts/browser-fixtures/no-link");
-const output = resolve(workspace, ".audit/no-link-browser");
+const outputKind = process.argv[2];
+assert.ok(outputKind === undefined || outputKind === "mobile-ai", "Unknown owned fixture output");
+const output = resolve(
+  workspace,
+  outputKind === "mobile-ai" ? ".audit/no-link-browser-mobile-ai" : ".audit/no-link-browser",
+);
 assert.equal(
   dirname(output),
   resolve(workspace, ".audit"),
@@ -23,10 +28,22 @@ await build({
   resolve: {
     alias: [
       {
+        find: /^@\/lib\/analytics\/(sales-performance-client|reporting-client)$/,
+        replacement: resolve(root, "synthetic-analytics.ts"),
+      },
+      {
+        find: /^@\/lib\/admin\/final-fix-rollout$/,
+        replacement: resolve(root, "synthetic-flags.ts"),
+      },
+      {
         find: /^@\/lib\/neon\/(admin-data|whatsapp-assignment|staff-notifications|enquiry-resolution|forwarded-enquiries)$/,
         replacement: api,
       },
       { find: /^@\/(auth|hooks\/use-neon-auth)$/, replacement: auth },
+      {
+        find: /^@\/lib\/(neon\/admin-team|admin\/operations\/operations-client)$/,
+        replacement: api,
+      },
       { find: "@", replacement: resolve("src") },
     ],
   },

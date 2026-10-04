@@ -1,0 +1,309 @@
+{
+  "codeSha": "f8b8a58f7ac28dbe205d4dae72a98019ac9ed2ac",
+  "evidenceLayer": "actual-campaign-route-shell-staff-store-synthetic-auth-api-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realProvider": false,
+  "results": [
+    {
+      "name": "cancel confirmation preserves accepted history and submits once while pending",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "cancel late response cannot show success under another actor",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "cancel lost response restores original read gate after reload and never retries",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "cancel in-flight reload and nonterminal read keep the original journal and block sending",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "cancel storage failure submits no cancellation request",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "cancel definitive refusal keeps campaign status and clears only its operation journal",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "cancel corrupt journal is retained and blocks mutation only for its actor",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "lost queue response survives reload and only reads the original campaign",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "in-flight queue survives reload and blocks a new send before readback",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "unknown result stays with the original actor across account switches",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "late old actor queue response cannot show success in the new actor",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "unavailable operation storage blocks queue before any request",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "failed recovery read retains the gate through a second reload",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "successful queue stays distinct from delivery and clears only its actor journal",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "missing original campaign cannot clear the unresolved journal",
+      "status": "passed",
+      "width": 1440
+    },
+    {
+      "name": "cancel confirmation preserves accepted history and submits once while pending",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "cancel late response cannot show success under another actor",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "cancel lost response restores original read gate after reload and never retries",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "cancel in-flight reload and nonterminal read keep the original journal and block sending",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "cancel storage failure submits no cancellation request",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "cancel definitive refusal keeps campaign status and clears only its operation journal",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "cancel corrupt journal is retained and blocks mutation only for its actor",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "lost queue response survives reload and only reads the original campaign",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "in-flight queue survives reload and blocks a new send before readback",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "unknown result stays with the original actor across account switches",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "late old actor queue response cannot show success in the new actor",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "unavailable operation storage blocks queue before any request",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "failed recovery read retains the gate through a second reload",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "successful queue stays distinct from delivery and clears only its actor journal",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "missing original campaign cannot clear the unresolved journal",
+      "status": "passed",
+      "width": 1280
+    },
+    {
+      "name": "cancel confirmation preserves accepted history and submits once while pending",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "cancel late response cannot show success under another actor",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "cancel lost response restores original read gate after reload and never retries",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "cancel in-flight reload and nonterminal read keep the original journal and block sending",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "cancel storage failure submits no cancellation request",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "cancel definitive refusal keeps campaign status and clears only its operation journal",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "cancel corrupt journal is retained and blocks mutation only for its actor",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "lost queue response survives reload and only reads the original campaign",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "in-flight queue survives reload and blocks a new send before readback",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "unknown result stays with the original actor across account switches",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "late old actor queue response cannot show success in the new actor",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "unavailable operation storage blocks queue before any request",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "failed recovery read retains the gate through a second reload",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "successful queue stays distinct from delivery and clears only its actor journal",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "missing original campaign cannot clear the unresolved journal",
+      "status": "passed",
+      "width": 768
+    },
+    {
+      "name": "cancel confirmation preserves accepted history and submits once while pending",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "cancel late response cannot show success under another actor",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "cancel lost response restores original read gate after reload and never retries",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "cancel in-flight reload and nonterminal read keep the original journal and block sending",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "cancel storage failure submits no cancellation request",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "cancel definitive refusal keeps campaign status and clears only its operation journal",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "cancel corrupt journal is retained and blocks mutation only for its actor",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "lost queue response survives reload and only reads the original campaign",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "in-flight queue survives reload and blocks a new send before readback",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "unknown result stays with the original actor across account switches",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "late old actor queue response cannot show success in the new actor",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "unavailable operation storage blocks queue before any request",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "failed recovery read retains the gate through a second reload",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "successful queue stays distinct from delivery and clears only its actor journal",
+      "status": "passed",
+      "width": 390
+    },
+    {
+      "name": "missing original campaign cannot clear the unresolved journal",
+      "status": "passed",
+      "width": 390
+    }
+  ]
+}

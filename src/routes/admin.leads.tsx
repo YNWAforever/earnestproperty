@@ -1,4 +1,13 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { aiResultPresentation } from "@/lib/admin/ai-result-presentation";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   CheckCircle2,
@@ -12,6 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 
+import { staffSessionStore, useStaffSession } from "@/components/admin/staff-session";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { ForwardedEnquiryForm } from "@/components/admin/whatsapp/ForwardedEnquiryForm";
 import { ForwardedEnquiryEvidence } from "@/components/admin/whatsapp/ForwardedEnquiryEvidence";
@@ -167,6 +177,23 @@ export const Route = createFileRoute("/admin/leads")({
 
 function AdminLeads() {
   const { user } = useNeonAuth();
+  const { session } = useStaffSession(user?.id ?? null);
+  if (!user || session?.status !== "ok") {
+    return (
+      <AdminShell title="客戶查詢" description="集中處理買樓、租樓及業主估價查詢。">
+        {null}
+      </AdminShell>
+    );
+  }
+  // Scope resolution can change while Auth keeps the same user object. A new
+  // workspace drops private rows, selections, details and late read callbacks.
+  // Actor-keyed unsent forwarded drafts retain their existing storage boundary.
+  const identity = JSON.stringify([user.id, session.staffId, [...session.roles].sort()]);
+  return <AdminLeadsWorkspace key={identity} identity={identity} />;
+}
+
+function AdminLeadsWorkspace({ identity }: { identity: string }) {
+  const { user } = useNeonAuth();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -175,6 +202,9 @@ function AdminLeads() {
   const [agents, setAgents] = useState<AdminAgentRow[]>([]);
   const filters: LeadFilters = useMemo(() => ({ ...defaultFilters, ...search }), [search]);
   const [queryDraft, setQueryDraft] = useState(filters.query);
+  const [queryIsComposing, setQueryIsComposing] = useState(false);
+  const queryCompositionActive = useRef(false);
+  const queryResetRevision = useRef(0);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStage, setBulkStage] = useState("");
   const [bulkAgentId, setBulkAgentId] = useState("");
@@ -189,15 +219,26 @@ function AdminLeads() {
   }, [filters.query]);
 
   useEffect(() => {
-    if (queryDraft === filters.query) return;
+    if (queryIsComposing || queryDraft === filters.query) return;
+    const resetRevision = queryResetRevision.current;
     const timer = window.setTimeout(() => {
-      setFilters((current) => ({ ...current, query: queryDraft }), { replace: true });
+      // Composition and explicit reset can arrive before passive cleanup.
+      if (!queryCompositionActive.current && resetRevision === queryResetRevision.current)
+        setFilters((current) => ({ ...current, query: queryDraft }), { replace: true });
     }, 300);
     return () => window.clearTimeout(timer);
-    // setFilters is redeclared each render; depending on it would re-arm the
-    // timer continuously.
+    // Re-arm against the whole filter snapshot so pending text cannot restore
+    // an older stage/agent filter. setFilters is redeclared on every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queryDraft, filters.query]);
+  }, [queryDraft, filters, queryIsComposing]);
+  function resetFilters() {
+    // Invalidate an already queued callback before the effect cleans up.
+    queryResetRevision.current += 1;
+    queryCompositionActive.current = false;
+    setQueryIsComposing(false);
+    setQueryDraft(defaultFilters.query);
+    setFilters(defaultFilters);
+  }
   function setFilters(
     updater: LeadFilters | ((current: LeadFilters) => LeadFilters),
     options: { replace?: boolean } = {},
@@ -245,9 +286,40 @@ function AdminLeads() {
   const selectedIdRef = useRef<string | null>(null);
   const panelOpenRef = useRef(false);
 
-  const canApplyLeadDetail = useCallback((id: string) => {
-    return panelOpenRef.current && selectedIdRef.current === id;
+  const workspaceActiveRef = useRef(true);
+  const workspaceLifetimeRef = useRef(0);
+  useLayoutEffect(() => {
+    workspaceActiveRef.current = true;
+    workspaceLifetimeRef.current += 1;
+    return () => {
+      // Unmount cannot cancel an accepted write, but must stop its next phase.
+      // Layout cleanup also closes the window before deferred passive cleanup.
+      workspaceActiveRef.current = false;
+      workspaceLifetimeRef.current += 1;
+      listRequestRef.current += 1;
+      detailRequestRef.current += 1;
+      aiRequestRef.current += 1;
+      selectedIdRef.current = null;
+      panelOpenRef.current = false;
+    };
   }, []);
+  const isWorkspaceCurrent = useCallback(
+    (lifetime = workspaceLifetimeRef.current) => {
+      const snapshot = staffSessionStore.getSnapshot();
+      const session = snapshot.session;
+      return (
+        workspaceActiveRef.current &&
+        lifetime === workspaceLifetimeRef.current &&
+        session?.status === "ok" &&
+        JSON.stringify([snapshot.userId, session.staffId, [...session.roles].sort()]) === identity
+      );
+    },
+    [identity],
+  );
+  const canApplyLeadDetail = useCallback(
+    (id: string) => isWorkspaceCurrent() && panelOpenRef.current && selectedIdRef.current === id,
+    [isWorkspaceCurrent],
+  );
 
   function resetAiProfileState() {
     aiRequestRef.current += 1;
@@ -260,7 +332,7 @@ function AdminLeads() {
   }
 
   const refreshLeads = useCallback(async () => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
 
     const requestId = listRequestRef.current + 1;
     listRequestRef.current = requestId;
@@ -278,19 +350,20 @@ function AdminLeads() {
           optIn: filters.optIn,
         },
       });
-      if (requestId !== listRequestRef.current) return;
+      if (requestId !== listRequestRef.current || !isWorkspaceCurrent()) return;
       setRows(data.rows);
       setNextCursor(data.nextCursor);
       setTotalRows(data.total);
       setError(null);
     } catch (err) {
-      if (requestId !== listRequestRef.current) return;
+      if (requestId !== listRequestRef.current || !isWorkspaceCurrent()) return;
       setError(errorText(err));
     } finally {
-      if (requestId === listRequestRef.current) setLoadingRows(false);
+      if (requestId === listRequestRef.current && isWorkspaceCurrent()) setLoadingRows(false);
     }
   }, [
     user,
+    isWorkspaceCurrent,
     filters.cursor,
     filters.query,
     filters.stage,
@@ -302,6 +375,7 @@ function AdminLeads() {
 
   const loadLeadAiProfile = useCallback(
     async (id: string) => {
+      if (!isWorkspaceCurrent()) return null;
       const requestId = aiRequestRef.current + 1;
       aiRequestRef.current = requestId;
       setAiError(null);
@@ -310,6 +384,8 @@ function AdminLeads() {
       try {
         const profile = await fetchAdminLeadAiProfile({ data: { leadId: id } });
         if (requestId !== aiRequestRef.current || !canApplyLeadDetail(id)) return null;
+        if (profile.analysis?.status === "pending" && profile.analysis.runId)
+          aiRunRequestsRef.current.set(id, profile.analysis.runId);
         setAiProfile(profile as AdminLeadAiProfile);
         setAiError(null);
         return profile as AdminLeadAiProfile;
@@ -323,11 +399,12 @@ function AdminLeads() {
         if (requestId === aiRequestRef.current && canApplyLeadDetail(id)) setAiLoading(false);
       }
     },
-    [canApplyLeadDetail],
+    [canApplyLeadDetail, isWorkspaceCurrent],
   );
 
   const loadLeadDetail = useCallback(
     async (id: string, options: { resetNote?: boolean; closeOnError?: boolean } = {}) => {
+      if (!isWorkspaceCurrent()) return null;
       const requestId = detailRequestRef.current + 1;
       detailRequestRef.current = requestId;
       setDetailLoading(true);
@@ -368,7 +445,7 @@ function AdminLeads() {
         }
       }
     },
-    [canApplyLeadDetail, loadLeadAiProfile],
+    [canApplyLeadDetail, isWorkspaceCurrent, loadLeadAiProfile],
   );
 
   const reloadLeadContact = useCallback(
@@ -411,21 +488,21 @@ function AdminLeads() {
   }, [panelOpen]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
     let cancelled = false;
 
     fetchAdminAgents()
       .then((data) => {
-        if (!cancelled) setAgents(data as AdminAgentRow[]);
+        if (!cancelled && isWorkspaceCurrent()) setAgents(data as AdminAgentRow[]);
       })
       .catch((err) => {
-        if (!cancelled) setError(errorText(err));
+        if (!cancelled && isWorkspaceCurrent()) setError(errorText(err));
       });
 
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, isWorkspaceCurrent]);
 
   useEffect(() => {
     if (!selectedId || !panelOpen) return;
@@ -469,7 +546,8 @@ function AdminLeads() {
   }
 
   async function runBulkUpdate() {
-    if (!selectedVisibleIds.length) return;
+    if (!selectedVisibleIds.length || !isWorkspaceCurrent()) return;
+    const lifetime = workspaceLifetimeRef.current;
     const assignAgent = bulkAgentId !== "";
     setBulkPending(true);
     try {
@@ -483,9 +561,11 @@ function AdminLeads() {
         },
       })) as { ok?: boolean; error?: string; updated?: number; requested?: number };
 
+      if (!isWorkspaceCurrent(lifetime)) return;
       if (!result.ok) throw new Error(bulkErrorLabels[result.error ?? ""] ?? "批量更新失敗");
 
       await refreshLeads();
+      if (!isWorkspaceCurrent(lifetime)) return;
       setSelectedIds(new Set());
       setBulkStage("");
       setBulkAgentId("");
@@ -501,9 +581,9 @@ function AdminLeads() {
           : `已更新 ${updated}／${requested} 筆客戶查詢，其餘沒有權限修改`,
       );
     } catch (err) {
-      toast.error(errorText(err));
+      if (isWorkspaceCurrent(lifetime)) toast.error(errorText(err));
     } finally {
-      setBulkPending(false);
+      if (isWorkspaceCurrent(lifetime)) setBulkPending(false);
     }
   }
 
@@ -571,7 +651,8 @@ function AdminLeads() {
   }
 
   async function saveLead(nextDraft = draft, successMessage = "客戶查詢已更新") {
-    if (!detail || !nextDraft) return;
+    if (!detail || !nextDraft || !isWorkspaceCurrent()) return;
+    const lifetime = workspaceLifetimeRef.current;
 
     // Without this the inline error was decorative: 儲存 still wrote a reversed
     // or negative range straight through to the columns that drive segment
@@ -606,27 +687,31 @@ function AdminLeads() {
             completed_at: null,
           },
         });
+        if (!isWorkspaceCurrent(lifetime)) return;
         setNoteBody("");
         setNoteError(null);
       }
 
       const result = await updateAdminLead({ data: draftToInput(targetLeadId, nextDraft) });
+      if (!isWorkspaceCurrent(lifetime)) return;
       assertNoMutationError(result);
 
       await refreshLeads();
-      if (!canApplyLeadDetail(targetLeadId)) return;
+      if (!isWorkspaceCurrent(lifetime) || !canApplyLeadDetail(targetLeadId)) return;
 
       const refreshed = await loadLeadDetail(targetLeadId);
-      if (refreshed && canApplyLeadDetail(targetLeadId)) toast.success(successMessage);
+      if (isWorkspaceCurrent(lifetime) && refreshed && canApplyLeadDetail(targetLeadId))
+        toast.success(successMessage);
     } catch (err) {
-      if (canApplyLeadDetail(targetLeadId)) toast.error(errorText(err));
+      if (isWorkspaceCurrent(lifetime) && canApplyLeadDetail(targetLeadId))
+        toast.error(errorText(err));
     } finally {
-      setMutatingAction(null);
+      if (isWorkspaceCurrent(lifetime)) setMutatingAction(null);
     }
   }
 
   async function addNote() {
-    if (!detail) return;
+    if (!detail || !isWorkspaceCurrent()) return;
     const body = noteBody.trim();
     if (!body) {
       // A distant toast gave no pointer to the field itself. The inline error
@@ -696,7 +781,7 @@ function AdminLeads() {
   }
 
   async function refreshAiProfile() {
-    if (!detail) return;
+    if (!detail || !isWorkspaceCurrent()) return;
 
     const targetLeadId = detail.id;
     const requestId = aiRequestRef.current + 1;
@@ -741,7 +826,7 @@ function AdminLeads() {
   }
 
   async function decideAiTag(tagId: string, approve: boolean) {
-    if (!detail) return;
+    if (!detail || !isWorkspaceCurrent()) return;
 
     const targetLeadId = detail.id;
     setAiMutatingTagId(tagId);
@@ -794,6 +879,15 @@ function AdminLeads() {
               <Input
                 value={queryDraft}
                 onChange={(event) => setQueryDraft(event.target.value)}
+                onCompositionStart={() => {
+                  queryCompositionActive.current = true;
+                  setQueryIsComposing(true);
+                }}
+                onCompositionEnd={(event) => {
+                  queryCompositionActive.current = false;
+                  setQueryDraft(event.currentTarget.value);
+                  setQueryIsComposing(false);
+                }}
                 className="h-11 pl-9 lg:h-9"
                 placeholder="搜尋客戶、電話、放盤"
                 aria-label="搜尋客戶查詢"
@@ -837,7 +931,7 @@ function AdminLeads() {
               variant="ghost"
               size="sm"
               className="h-11 lg:h-9"
-              onClick={() => setFilters(defaultFilters)}
+              onClick={resetFilters}
             >
               <RotateCcw className="h-4 w-4" />
               重設
@@ -938,7 +1032,7 @@ function AdminLeads() {
           title="沒有符合條件的客戶查詢"
           description="搜尋及篩選已套用至全部可查看的查詢。可清除篩選再試。"
           action={
-            <Button variant="outline" size="sm" onClick={() => setFilters(defaultFilters)}>
+            <Button variant="outline" size="sm" onClick={resetFilters}>
               <RotateCcw className="h-4 w-4" />
               清除篩選
             </Button>
@@ -1126,6 +1220,7 @@ function AdminLeads() {
               agents={agents.map((agent) => ({ id: agent.id, name: agent.name, active: true }))}
               onCancel={() => setForwardOpen(false)}
               onSaved={(leadId) => {
+                if (!isWorkspaceCurrent()) return;
                 setForwardOpen(false);
                 void refreshLeads();
                 openLead(leadId);
@@ -1560,8 +1655,36 @@ function LeadDetailEditor({
 
         {aiProfile?.profile ? (
           <div className="mt-4 grid gap-3 text-sm">
+            <p>
+              {
+                aiResultPresentation({
+                  method: aiProfile.analysis?.resultKind,
+                  status: aiProfile.analysis?.status,
+                }).label
+              }
+            </p>
+            <p className="text-xs text-muted-foreground">
+              來源時間：
+              {aiProfile.analysis?.startedAt
+                ? formatDate(aiProfile.analysis.startedAt)
+                : "未提供"}{" "}
+              · 版本：{aiProfile.analysis?.schemaVersion ?? "未提供"} · 費用：
+              {
+                aiResultPresentation({
+                  costAmount: aiProfile.analysis?.usage?.costAmount,
+                  costCurrency: aiProfile.analysis?.usage?.costCurrency,
+                }).cost
+              }
+            </p>
+            {aiResultPresentation({ status: aiProfile.analysis?.status }).blocker && (
+              <p role="status" className="text-destructive">
+                {aiResultPresentation({ status: aiProfile.analysis?.status }).blocker}
+              </p>
+            )}
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant="default">AI 分數 {aiScoreLabel(aiProfile.profile.lead_score)}</Badge>
+              <Badge variant="default">
+                跟進排序參考 {aiScoreLabel(aiProfile.profile.lead_score)}
+              </Badge>
               {aiProfile.profile.urgency ? (
                 <Badge variant="outline">{formatAiUrgency(aiProfile.profile.urgency)}</Badge>
               ) : null}
@@ -1569,6 +1692,9 @@ function LeadDetailEditor({
                 <Badge variant="outline">{formatAiTimeline(aiProfile.profile.timeline)}</Badge>
               ) : null}
             </div>
+            <p className="text-xs text-muted-foreground">
+              按查詢完整度、跟進狀態及規則排序，並非成交率。過時內容只供歷史參考。
+            </p>
             {aiProfile.profile.summary ? (
               <p className="whitespace-pre-wrap">{aiProfile.profile.summary}</p>
             ) : null}
@@ -1580,7 +1706,7 @@ function LeadDetailEditor({
           </div>
         ) : aiError ? (
           <p className="mt-4 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm text-destructive">
-            載入 AI 分析 失敗，請重試。
+            {aiError}
           </p>
         ) : !aiLoading ? (
           <p className="mt-4 rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
@@ -1599,7 +1725,7 @@ function LeadDetailEditor({
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={aiTagVariant(tag.status)}>{tag.tag}</Badge>
                     <span className="text-xs text-muted-foreground">
-                      {formatAiTagStatus(tag.status)} · {Math.round(tag.confidence * 100)}%
+                      {formatAiTagStatus(tag.status)} · 模型自評（未校準）
                     </span>
                   </div>
                   {tag.reason ? (
@@ -1617,7 +1743,14 @@ function LeadDetailEditor({
                       type="button"
                       variant="outline"
                       size="sm"
-                      disabled={disabled || aiMutatingTagId === tag.id}
+                      disabled={
+                        disabled ||
+                        aiMutatingTagId === tag.id ||
+                        !aiResultPresentation({
+                          method: aiProfile.analysis?.resultKind,
+                          status: aiProfile.analysis?.status,
+                        }).canApply
+                      }
                       onClick={() => onAiTagDecision(tag.id, true)}
                     >
                       <CheckCircle2 className="h-4 w-4" />

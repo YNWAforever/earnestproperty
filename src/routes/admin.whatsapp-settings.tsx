@@ -1,3 +1,4 @@
+import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminShell } from "@/components/admin/AdminShell";
@@ -20,24 +21,40 @@ export const Route = createFileRoute("/admin/whatsapp-settings")({
 });
 
 function WhatsappSettings() {
+  const identity = useStaffWorkspaceIdentity(["admin", "manager"]);
+  if (!identity)
+    return (
+      <AdminShell
+        title="WhatsApp 同事映射"
+        description="核對實際 Inbox 帳戶、獨立通知目的地與核實證據。"
+      >
+        {null}
+      </AdminShell>
+    );
+  return <WhatsappSettingsWorkspace key={identity} identity={identity} />;
+}
+function WhatsappSettingsWorkspace({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const search = Route.useSearch();
   const { user, loading } = useNeonAuth();
+  const userId = user?.id ?? null;
   const [agents, setAgents] = useState<Awaited<ReturnType<typeof fetchAdminAgents>>>([]);
   const [error, setError] = useState("");
   useEffect(() => {
-    if (loading || !user) return;
+    if (loading || !userId || !isWorkspaceCurrent()) return;
     let live = true;
     fetchAdminAgents()
       .then((rows) => {
-        if (live) setAgents(rows);
+        if (live && isWorkspaceCurrent()) setAgents(rows);
       })
       .catch(() => {
-        if (live) setError("未能載入同事；需要管理員／經理權限及已套用的資料庫遷移。");
+        if (live && isWorkspaceCurrent())
+          setError("未能載入同事；需要管理員／經理權限及已套用的資料庫遷移。");
       });
     return () => {
       live = false;
     };
-  }, [user, loading]);
+  }, [userId, loading, isWorkspaceCurrent]);
   return (
     <AdminShell
       title="WhatsApp 同事映射"
@@ -64,13 +81,14 @@ function WhatsappSettings() {
         ) : null}
         {finalFixUiFlags.staffDirectorySetup && agents.length ? (
           <StaffMappingWizard
+            isWorkspaceCurrent={isWorkspaceCurrent}
             agents={agents}
             allowReviewedSave={finalFixUiFlags.staffReviewEnforcement}
             initialStaffId={search.staffId}
             initialStep={search.step}
           />
         ) : null}
-        <WhatsappServicePolicyEditor agents={agents} />
+        <WhatsappServicePolicyEditor isWorkspaceCurrent={isWorkspaceCurrent} agents={agents} />
       </div>
     </AdminShell>
   );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { AdminConfirmDialog } from "./AdminConfirmDialog";
 import { applyAdminPropertyBulk } from "@/lib/neon/admin-property-bulk";
@@ -13,6 +13,7 @@ export function AdminPropertyBulkActions({
   rows,
   agents,
   disabled,
+  isWorkspaceCurrent,
   onBusy,
   onSettled,
   onClear,
@@ -22,12 +23,25 @@ export function AdminPropertyBulkActions({
   rows: ManagedPropertySummary[];
   agents: { id: string; name: string | null; email: string | null }[];
   disabled: boolean;
+  isWorkspaceCurrent: () => boolean;
   onBusy: (busy: boolean) => void;
   onSettled: (results: BulkClientResult[]) => void;
   onClear: () => void;
   onReload: () => void;
   onWhatsappLinks: (rows: ManagedPropertySummary[]) => void;
 }) {
+  const active = useRef(false);
+  const lifetime = useRef(0);
+  useLayoutEffect(() => {
+    active.current = true;
+    const epoch = ++lifetime.current;
+    return () => {
+      active.current = false;
+      lifetime.current = epoch + 1;
+    };
+  }, []);
+  const isCurrent = (epoch: number) =>
+    active.current && lifetime.current === epoch && isWorkspaceCurrent();
   const [scope, setScope] = useState<Scope>("sale");
   const [actionType, setActionType] = useState("offline");
   const [agentId, setAgentId] = useState("");
@@ -83,7 +97,8 @@ export function AdminPropertyBulkActions({
   });
   const ready = previews.filter((p) => !p.reason);
   async function submit() {
-    if (!pending || busy) return;
+    const epoch = lifetime.current;
+    if (!pending || busy || !isCurrent(epoch)) return;
     setBusy(true);
     onBusy(true);
     setResults([]);
@@ -91,14 +106,20 @@ export function AdminPropertyBulkActions({
       const completed = await runPropertyBulkChunks(
         pending.input,
         (input) => applyAdminPropertyBulk({ data: input }),
-        setResults,
+        (results) => {
+          if (isCurrent(epoch)) setResults(results);
+        },
+        () => isCurrent(epoch),
       );
+      if (!isCurrent(epoch)) return;
       setNeedsReload(completed.some((r) => r.uncertain));
       setPending(null);
       onSettled(completed);
     } finally {
-      setBusy(false);
-      onBusy(false);
+      if (isCurrent(epoch)) {
+        setBusy(false);
+        onBusy(false);
+      }
     }
   }
   return (

@@ -1,0 +1,178 @@
+{
+  "codeSha": "a13e9187a76b0d3c379a43130a5ccc1975a00085",
+  "evidenceLayer": "actual-whatsapp-route-synthetic-auth-api-owned-loopback",
+  "realAuth": false,
+  "realDatabase": false,
+  "realProvider": false,
+  "realModel": false,
+  "results": [
+    {
+      "name": "AI read outage has recoverable error and retry retains draft",
+      "width": 1440,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "successful missing result stays empty without a fabricated error",
+      "width": 1440,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "late A rules cannot replace B suggestion draft or focus",
+      "width": 1440,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "late A error cannot replace B suggestion draft or focus",
+      "width": 1440,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "A B A rejects earlier request for the same conversation",
+      "width": 1440,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "suggestion apply requires explicit overwrite choice and never sends",
+      "width": 1440,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "reduced keyboard height and late suggestion keep composer focus and send reachable",
+      "width": 1440,
+      "height": 540,
+      "status": "passed"
+    },
+    {
+      "name": "AI read outage has recoverable error and retry retains draft",
+      "width": 1280,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "successful missing result stays empty without a fabricated error",
+      "width": 1280,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "late A rules cannot replace B suggestion draft or focus",
+      "width": 1280,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "late A error cannot replace B suggestion draft or focus",
+      "width": 1280,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "A B A rejects earlier request for the same conversation",
+      "width": 1280,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "suggestion apply requires explicit overwrite choice and never sends",
+      "width": 1280,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "reduced keyboard height and late suggestion keep composer focus and send reachable",
+      "width": 1280,
+      "height": 540,
+      "status": "passed"
+    },
+    {
+      "name": "AI read outage has recoverable error and retry retains draft",
+      "width": 768,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "successful missing result stays empty without a fabricated error",
+      "width": 768,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "late A rules cannot replace B suggestion draft or focus",
+      "width": 768,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "late A error cannot replace B suggestion draft or focus",
+      "width": 768,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "A B A rejects earlier request for the same conversation",
+      "width": 768,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "suggestion apply requires explicit overwrite choice and never sends",
+      "width": 768,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "reduced keyboard height and late suggestion keep composer focus and send reachable",
+      "width": 768,
+      "height": 540,
+      "status": "passed"
+    },
+    {
+      "name": "AI read outage has recoverable error and retry retains draft",
+      "width": 390,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "successful missing result stays empty without a fabricated error",
+      "width": 390,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "late A rules cannot replace B suggestion draft or focus",
+      "width": 390,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "late A error cannot replace B suggestion draft or focus",
+      "width": 390,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "A B A rejects earlier request for the same conversation",
+      "width": 390,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "suggestion apply requires explicit overwrite choice and never sends",
+      "width": 390,
+      "height": 900,
+      "status": "passed"
+    },
+    {
+      "name": "reduced keyboard height and late suggestion keep composer focus and send reachable",
+      "width": 390,
+      "height": 540,
+      "status": "passed"
+    }
+  ]
+}

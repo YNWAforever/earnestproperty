@@ -1,3 +1,4 @@
+import { dispatchWorkspaceRequest } from "../admin/workspace-request";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { withStaffAuthHeaders } from "@/auth";
@@ -41,10 +42,27 @@ const health = createServerFn({ method: "GET" }).handler(async () => {
     counts: Object.fromEntries(Object.entries(r.counts).map(([k, v]) => [k, Number(v ?? 0)])),
   };
 });
-export const fetchStaffEndpoints = async () => list(await withStaffAuthHeaders({}));
-export const updateStaffEndpoint = async (data: Parameters<typeof save>[0]["data"]) =>
-  save(await withStaffAuthHeaders({ data }));
-export const fetchStaffNotificationHealth = async () => health(await withStaffAuthHeaders({}));
+export const fetchStaffEndpoints = async (isWorkspaceCurrent?: () => boolean) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({}),
+    (prepared) => list(prepared),
+    isWorkspaceCurrent,
+  );
+export const updateStaffEndpoint = async (
+  data: Parameters<typeof save>[0]["data"],
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => save(prepared),
+    isWorkspaceCurrent,
+  );
+export const fetchStaffNotificationHealth = async (isWorkspaceCurrent?: () => boolean) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({}),
+    (prepared) => health(prepared),
+    isWorkspaceCurrent,
+  );
 
 const attention = createServerFn({ method: "GET" }).handler(async () => {
   const { requireStaffAccess } = await import("./auth.server");
@@ -52,7 +70,12 @@ const attention = createServerFn({ method: "GET" }).handler(async () => {
     await requireStaffAccess(getRequest(), ["admin", "manager"]),
   );
 });
-export const fetchStaffAttention = async () => attention(await withStaffAuthHeaders({}));
+export const fetchStaffAttention = async (isWorkspaceCurrent?: () => boolean) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({}),
+    (prepared) => attention(prepared),
+    isWorkspaceCurrent,
+  );
 
 const disable = createServerFn({ method: "POST" })
   .inputValidator(
@@ -65,8 +88,15 @@ const disable = createServerFn({ method: "POST" })
       await requireStaffAccess(getRequest(), ["admin", "manager"]),
     );
   });
-export const turnOffStaffEndpoint = async (data: Parameters<typeof disable>[0]["data"]) =>
-  disable(await withStaffAuthHeaders({ data }));
+export const turnOffStaffEndpoint = async (
+  data: Parameters<typeof disable>[0]["data"],
+  isWorkspaceCurrent?: () => boolean,
+) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => disable(prepared),
+    isWorkspaceCurrent,
+  );
 
 const reviewEvents = createServerFn({ method: "GET" }).handler(async () => {
   const { requireStaffAccess } = await import("./auth.server");
@@ -74,4 +104,9 @@ const reviewEvents = createServerFn({ method: "GET" }).handler(async () => {
     await requireStaffAccess(getRequest(), ["admin", "manager"]),
   );
 });
-export const fetchStaffEventReview = async () => reviewEvents(await withStaffAuthHeaders({}));
+export const fetchStaffEventReview = async (isWorkspaceCurrent?: () => boolean) =>
+  dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({}),
+    (prepared) => reviewEvents(prepared),
+    isWorkspaceCurrent,
+  );

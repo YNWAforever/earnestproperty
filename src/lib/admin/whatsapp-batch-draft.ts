@@ -118,3 +118,36 @@ export function clearDraft(
   if (actorScope.trim() && z.string().uuid().safeParse(draftId).success)
     storage.removeItem(keyOf(actorScope, draftId));
 }
+
+export function listDrafts(
+  actorScope: string,
+  storage: DraftStore & Pick<Storage, "length" | "key"> = localStorage,
+): WhatsappBatchDraft[] {
+  if (!actorScope.trim()) return [];
+  const prefix = `earnest:whatsapp-link-draft:v${draftVersion}:${encodeURIComponent(actorScope)}:`;
+  const drafts: WhatsappBatchDraft[] = [];
+  for (let index = 0; index < storage.length; index++) {
+    const key = storage.key(index);
+    if (!key?.startsWith(prefix)) continue;
+    const draft = loadDraft(actorScope, key.slice(prefix.length), storage);
+    if (draft?.rows.length) drafts.push(draft);
+  }
+  return drafts.sort((a, b) => b.savedAt.localeCompare(a.savedAt));
+}
+
+export function resolveBatchDraftId(
+  actorScope: string,
+  rows: BatchRowDraft[],
+  recordedId?: string,
+  storage: DraftStore & Pick<Storage, "length" | "key"> = localStorage,
+): string | null {
+  if (!actorScope.trim()) return null;
+  if (z.string().uuid().safeParse(recordedId).success) return recordedId!;
+  if (!rows.length) return null;
+  // Old progress has no lineage. Infer only an unambiguous exact row-key owner.
+  const candidates = listDrafts(actorScope, storage).filter((draft) => {
+    const keys = new Set(draft.rows.map((row) => row.rowKey));
+    return rows.every((row) => keys.has(row.rowKey));
+  });
+  return candidates.length === 1 ? candidates[0].draftId : null;
+}

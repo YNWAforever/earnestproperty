@@ -39,6 +39,8 @@ async function fixture() {
  CREATE TABLE performance_event_records(event_type text,inquiry_id uuid,lead_id uuid,
   transaction_id uuid,staff_id uuid,branch_id_at_event uuid,occurred_at timestamptz,
   quality text,event_key text);
+ -- This partial read fixture has no event corrections; the owned full-schema suite verifies history.
+ CREATE TABLE performance_event_quality_revisions(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,event_key text);
  CREATE TABLE transactions(id uuid PRIMARY KEY,price numeric,deal_type text,agent_id uuid,verification_state text,deal_date date);
  CREATE TABLE transaction_performance(transaction_id uuid PRIMARY KEY,version int,
   attribution_status text,lead_id uuid,confirmed_at timestamptz,commission_receivable numeric);

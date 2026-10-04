@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,10 +13,13 @@ import {
 export function StaffEndpointEditor({
   agents,
   selectedStaffId,
+  isWorkspaceCurrent,
 }: {
   agents: { id: string; name: string | null; active: boolean }[];
   selectedStaffId?: string;
+  isWorkspaceCurrent?: () => boolean;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const [events, setEvents] = useState<Awaited<ReturnType<typeof fetchStaffEventReview>>>([]);
   const [attention, setAttention] = useState<Awaited<ReturnType<typeof fetchStaffAttention>>>([]);
   const [rows, setRows] = useState<Awaited<ReturnType<typeof fetchStaffEndpoints>>>([]),
@@ -48,13 +52,13 @@ export function StaffEndpointEditor({
   useEffect(() => {
     let current = true;
     Promise.all([
-      fetchStaffEndpoints(),
-      fetchStaffNotificationHealth(),
-      fetchStaffAttention(),
-      fetchStaffEventReview(),
+      fetchStaffEndpoints(isCurrent),
+      fetchStaffNotificationHealth(isCurrent),
+      fetchStaffAttention(isCurrent),
+      fetchStaffEventReview(isCurrent),
     ])
       .then(([r, h, a, ev]) => {
-        if (current) {
+        if (current && isCurrent()) {
           setRows(r);
           setAttention(a);
           setEvents(ev);
@@ -62,12 +66,12 @@ export function StaffEndpointEditor({
         }
       })
       .catch(() => {
-        if (current) setError("未能載入，請核對管理權限及遷移。");
+        if (current && isCurrent()) setError("未能載入，請核對管理權限及遷移。");
       });
     return () => {
       current = false;
     };
-  }, []);
+  }, [isCurrent]);
   return (
     <section id="staff-notifications" aria-label="同事通知設定" className="space-y-3 border-t pt-4">
       <h2 className="font-semibold">同事通知及待處理工作</h2>
@@ -140,17 +144,24 @@ export function StaffEndpointEditor({
         <form
           className="mt-3 grid max-w-xl gap-2"
           onSubmit={async (e) => {
+            if (!isCurrent()) return;
             e.preventDefault();
             setBusy(true);
             setError("");
             try {
-              await updateStaffEndpoint({ ...form, ...(edit ?? {}) });
-              setRows(await fetchStaffEndpoints());
+              await updateStaffEndpoint({ ...form, ...(edit ?? {}) }, isCurrent);
+              if (!isCurrent()) return;
+              const workspaceResult = await fetchStaffEndpoints(isCurrent);
+              if (!isCurrent()) return;
+              setRows(workspaceResult);
               setEdit(null);
             } catch {
+              if (!isCurrent()) return;
               setError("未能儲存：請核對同事映射、目的地及版本，重新整理後再試。");
             } finally {
-              setBusy(false);
+              if (isCurrent()) {
+                setBusy(false);
+              }
             }
           }}
         >
@@ -272,14 +283,21 @@ export function StaffEndpointEditor({
               variant="outline"
               disabled={busy || !r.enabled}
               onClick={async () => {
+                if (!isCurrent()) return;
                 setBusy(true);
                 try {
-                  await turnOffStaffEndpoint({ id: r.id, expectedVersion: r.version });
-                  setRows(await fetchStaffEndpoints());
+                  await turnOffStaffEndpoint({ id: r.id, expectedVersion: r.version }, isCurrent);
+                  if (!isCurrent()) return;
+                  const workspaceResult = await fetchStaffEndpoints(isCurrent);
+                  if (!isCurrent()) return;
+                  setRows(workspaceResult);
                 } catch {
+                  if (!isCurrent()) return;
                   setError("關閉未完成，請重新整理版本後再試。");
                 } finally {
-                  setBusy(false);
+                  if (isCurrent()) {
+                    setBusy(false);
+                  }
                 }
               }}
             >

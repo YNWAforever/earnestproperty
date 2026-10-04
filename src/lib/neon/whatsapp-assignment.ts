@@ -1,3 +1,4 @@
+import { dispatchWorkspaceRequest } from "../admin/workspace-request";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
@@ -106,8 +107,13 @@ const reviewedSaveServer = createServerFn({ method: "POST" })
   });
 export async function saveReviewedWhatsappStaffChannel(
   data: Parameters<typeof reviewedSaveServer>[0]["data"],
+  isWorkspaceCurrent?: () => boolean,
 ) {
-  return reviewedSaveServer(await withStaffAuthHeaders({ data }));
+  return dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => reviewedSaveServer(prepared),
+    isWorkspaceCurrent,
+  );
 }
 const retireChannelServer = createServerFn({ method: "POST" })
   .inputValidator(
@@ -126,6 +132,11 @@ const retireChannelServer = createServerFn({ method: "POST" })
   });
 export async function retireWhatsappStaffChannel(
   data: Parameters<typeof retireChannelServer>[0]["data"],
+  isWorkspaceCurrent?: () => boolean,
 ) {
-  return retireChannelServer(await withStaffAuthHeaders({ data }));
+  return dispatchWorkspaceRequest(
+    () => withStaffAuthHeaders({ data }),
+    (prepared) => retireChannelServer(prepared),
+    isWorkspaceCurrent,
+  );
 }

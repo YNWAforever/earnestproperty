@@ -7,9 +7,21 @@ export async function runPropertyBulkChunks(
   input: BulkPropertyManagementInput,
   apply: (input: BulkPropertyManagementInput) => Promise<BulkPropertyResult[]>,
   progress?: (results: BulkClientResult[]) => void,
+  canContinue?: () => boolean,
 ): Promise<BulkClientResult[]> {
   const results: BulkClientResult[] = [];
   for (let i = 0; i < input.items.length; i += 5) {
+    if (canContinue && !canContinue()) {
+      results.push(
+        ...input.items.slice(i).map((item) => ({
+          propertyNo: item.propertyNo,
+          ok: false,
+          error: "尚未提交：職員身份或權限已變更，請重新核對。",
+        })),
+      );
+      progress?.([...results]);
+      return results;
+    }
     const items = input.items.slice(i, i + 5);
     try {
       const response = await apply({ ...input, items });

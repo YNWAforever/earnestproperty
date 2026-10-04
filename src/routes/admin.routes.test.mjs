@@ -597,7 +597,14 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   const listingEditRoute = read("src/routes/admin.listings_.$id.tsx");
   assert.match(listingEditRoute, /let cancelled = false/);
   assert.match(listingEditRoute, /setProperty\(null\)/);
-  assert.match(listingEditRoute, /if \(!cancelled\)/);
+  // Every settled read path must belong to both this request and the current staff workspace.
+  for (const setter of ["setProperty", "setError", "setFetching"]) {
+    assert.match(
+      listingEditRoute,
+      new RegExp(`if \\(!cancelled && isWorkspaceCurrent\\(\\)\\)\\s*${setter}\\(`),
+      `${setter} should discard cancelled or obsolete workspace reads`,
+    );
+  }
   assert.match(listingEditRoute, /cancelled = true/);
 
   const listingRoute = read("src/routes/admin.listings.tsx");

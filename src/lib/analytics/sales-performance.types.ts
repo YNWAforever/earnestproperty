@@ -76,11 +76,13 @@ export type PerformanceRecord = {
   id: string;
   occurredAt: string;
   quality: string;
+  qualityRevisionId?: string | null;
   staffId: string | null;
   inquiryId: string | null;
   leadId: string | null;
   transactionId: string | null;
   eventKey: string | null;
+  qualification?: { qualifiedAt: string; evidence: string; eventKey: string };
 };
 export type PerformanceRecordPage = { records: PerformanceRecord[]; nextCursor: string | null };
 

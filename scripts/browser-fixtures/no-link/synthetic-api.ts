@@ -64,9 +64,20 @@ const row = (id: string, name: string, external: string) => ({
 const rows = [row(ids.a, "合成客戶甲", "4033349"), row(ids.b, "合成客戶乙", "4033350")];
 const state = {
   calls: [] as { name: string; input: unknown }[],
+  membershipMode: "ok",
+  membershipRole: actor === "manager" ? "manager" : "agent",
+  membershipBinding: actor === "agent-b" ? ids.staffB : ids.staff,
+  pendingMembership: [] as { release: () => void }[],
+  refreshMembership: async (
+    _mode = "ok",
+    _role = actor === "manager" ? "manager" : "agent",
+    _binding = ids.staff,
+  ) => {},
   templateFailure: false,
   assignmentFailure: false,
   delayDetail: false,
+  failOverview: false,
+  failOverviewDenied: false,
   releaseLateDetail: null as null | (() => void),
   forwardMode: "ok",
   releaseForward: null as null | (() => void),
@@ -78,11 +89,34 @@ const state = {
   releaseResolution: null as null | (() => void),
   resolutionReadFailure: sessionStorage.getItem("no-link-fixture-resolution-error") === "true",
   retiredCandidate: false,
+  aiMode: sessionStorage.getItem("no-link-fixture-ai") ?? "empty",
+  pendingAi: [] as {
+    conversationId: string;
+    ordinal: number;
+    finish: (outcome: string) => void;
+  }[],
 };
 Object.assign(window, {
   noLinkFixture: { ...state, ids, actor, lastMessage: rows[0].messages.at(-1)!.text },
 });
 const fixture = () => (window as unknown as { noLinkFixture: typeof state }).noLinkFixture;
+fixture().refreshMembership = async (
+  mode = "ok",
+  role = actor === "manager" ? "manager" : "agent",
+  binding = ids.staff,
+) => {
+  Object.assign(fixture(), {
+    membershipMode: mode,
+    membershipRole: role,
+    membershipBinding: binding,
+  });
+  const { staffSessionStore } = await import("../../../src/components/admin/staff-session");
+  if (mode === "delayed") {
+    void staffSessionStore.refresh(actor);
+    return;
+  }
+  await staffSessionStore.refresh(actor);
+};
 const call = (name: string, input?: unknown) => fixture().calls.push({ name, input });
 function readable(id: string) {
   return ["agent-a", "manager"].includes(actor) && rows.some((r) => r.id === id);
@@ -92,12 +126,14 @@ function deny() {
 }
 export async function fetchStaffSession() {
   call("staffSession");
-  return actor === "viewer"
+  if (fixture().membershipMode === "delayed")
+    await new Promise<void>((release) => fixture().pendingMembership.push({ release }));
+  return actor === "viewer" || fixture().membershipMode === "denied"
     ? { status: "denied", reason: "not-staff" }
     : {
         status: "ok",
-        roles: [actor === "manager" ? "manager" : "agent"],
-        staffId: actor === "agent-b" ? ids.staffB : ids.staff,
+        roles: [fixture().membershipRole],
+        staffId: fixture().membershipBinding,
       };
 }
 export async function fetchAdminAgents() {
@@ -128,10 +164,28 @@ export async function fetchAdminWhatsappTemplates() {
 export async function fetchAdminPage({
   data,
 }: {
-  data: { resource: string; conversationId?: string; q?: string; cursor?: string };
+  data: { resource: string; conversationId?: string; q?: string; cursor?: string; stage?: string };
 }) {
   call("page", data);
   if (data.resource === "leads") {
+    if (sessionStorage.getItem("no-link-fixture-overview")) {
+      const items = ["new", "contacted", "closed_won"].map((stage, n) => ({
+        id: `40000000-0000-4000-8000-${String(n + 1).padStart(12, "0")}`,
+        name: "總覽合成查詢" + n,
+        stage,
+        intent: "buyer",
+        source: "website",
+        created_at: now,
+        assigned_agent_id: ids.staff,
+        phone: null,
+        email: null,
+        opt_in_whatsapp: false,
+      }));
+      const filtered = items.filter(
+        (r) => data.stage !== "open" || !["closed_won", "closed_lost"].includes(r.stage),
+      );
+      return { rows: filtered, total: filtered.length, nextCursor: null };
+    }
     const leads = forwardedRecords().filter(canReadForward).map(forwardLead);
     return { rows: leads, total: leads.length, nextCursor: null };
   }
@@ -171,9 +225,34 @@ export async function fetchAdminConversation({ data }: { data: { id: string } })
   }
   return readable(data.id) ? { ...rows.find((r) => r.id === data.id)!, messages: [] } : null;
 }
-export async function fetchAdminConversationAiAssist() {
-  call("ai-read");
-  return null;
+export async function fetchAdminConversationAiAssist({
+  data,
+}: {
+  data: { conversationId: string };
+}) {
+  call("ai-read", data);
+  const ordinal = fixture().calls.filter(
+    (c) => c.name === "ai-read" && (c.input as typeof data)?.conversationId === data.conversationId,
+  ).length;
+  let mode = fixture().aiMode;
+  if (mode === "delay") {
+    mode = await new Promise<string>((finish) => {
+      fixture().pendingAi.push({ conversationId: data.conversationId, ordinal, finish });
+    });
+  }
+  if (mode === "error") throw Error("Synthetic AI read unavailable; internal reference hidden");
+  if (!readable(data.conversationId)) deny();
+  if (mode === "empty") return null;
+  const label = data.conversationId === ids.a ? "甲" : "乙";
+  return {
+    method: "deterministic_rules",
+    checkedAt: now,
+    summary: `合成${label}規則摘要 ${ordinal}`,
+    detectedIntent: "buyer",
+    urgency: "normal",
+    suggestedReply: `合成${label}規則回覆 ${ordinal}\n請核對樓盤資料。Please verify the listing details.`,
+    handoffNote: "合成規則提示，只作草稿。",
+  };
 }
 export async function getWhatsappAssignment({ conversationId }: { conversationId: string }) {
   call("assignment", { conversationId });
@@ -496,6 +575,35 @@ export const rejectAdminAiTag = () => noMutation("rejectTag");
 export const createAdminLeadActivity = () => noMutation("leadActivity");
 export const bulkUpdateAdminLeads = () => noMutation("bulkLeads");
 export const updateAdminLead = () => noMutation("updateLead");
+export async function fetchAdminOverview() {
+  call("overview", {});
+  if (fixture().failOverviewDenied) throw new Response("Forbidden", { status: 403 });
+  if (fixture().failOverview) throw Error("Synthetic overview read failure");
+  return {
+    publicProperties: 2,
+    publicOffers: 3,
+    inventoryCheckedAt: now,
+    openLeads: 2,
+    openConversations: 2,
+    contacts: 3,
+    activeCampaigns: null,
+    scope: actor === "manager" ? "all" : "own",
+    checkedAt: now,
+  };
+}
+export async function listAdminTeam() {
+  return {
+    members: [],
+    counts: { active: 0, invited: 0, suspended: 0, attention: 0 },
+    nextCursor: null,
+  };
+}
+export async function fetchOperationsHealth() {
+  return { data: { status: "healthy", checks: [], checkedAt: now }, requestId: "synthetic-read" };
+}
+export async function fetchOperationsAudit() {
+  return { data: { rows: [], nextCursor: null }, requestId: "synthetic-read" };
+}
 export {
   fetchAdminCampaigns,
   fetchAdminBlastOptions,

@@ -1,0 +1,830 @@
+{
+  "createdAt": "2026-10-04T14:48:57.990836+00:00",
+  "assessorCodeSha": "b157b66cd4b061d0306c90a22a788384d4974216",
+  "appSubjectSha": "f985cad43c0c327201ebbd3b18bf414f655f37e7",
+  "assessorVsSubjectChangedFiles": [
+    "scripts/operations/release-readiness.mjs",
+    "scripts/operations/release-readiness.test.mjs"
+  ],
+  "source": [
+    {
+      "file": "scripts/operations/release-readiness.mjs",
+      "gitBlob": "55688381e7b20f0e173791730cef328a89dc129f",
+      "bytes": 21975,
+      "sha256": "b8a3a019dc0593800dbefe5d7f9fcf874015ec5c7cc9e7268e3af480ff554603"
+    },
+    {
+      "file": "scripts/operations/release-readiness.test.mjs",
+      "gitBlob": "38207ff453f810b41629726637e960215814cdef",
+      "bytes": 19349,
+      "sha256": "855a223aa15f3a4cd52e7603b97a7892a17a0567903576abac02c5d62aec3df8"
+    }
+  ],
+  "environment": "offline local packet checker; immutable Git schema manifest; actual prior owned CI evidence; true provider/Auth/model/prod separate",
+  "testLayers": {
+    "ep21-release-red": {
+      "tests": 116,
+      "pass": 106,
+      "fail": 10,
+      "skipped": 0
+    },
+    "ep21-release-green": {
+      "tests": 116,
+      "pass": 116,
+      "fail": 0,
+      "skipped": 0
+    },
+    "ep21-envelope-red": {
+      "tests": 120,
+      "pass": 116,
+      "fail": 4,
+      "skipped": 0
+    },
+    "ep21-envelope-green": {
+      "tests": 120,
+      "pass": 120,
+      "fail": 0,
+      "skipped": 0
+    },
+    "ep21-date-red": {
+      "tests": 121,
+      "pass": 120,
+      "fail": 1,
+      "skipped": 0
+    },
+    "ep21-date-green": {
+      "tests": 121,
+      "pass": 121,
+      "fail": 0,
+      "skipped": 0
+    },
+    "ep21-review-fix-red": {
+      "tests": 123,
+      "pass": 121,
+      "fail": 2,
+      "skipped": 0
+    },
+    "ep21-review-fix-green": {
+      "tests": 123,
+      "pass": 123,
+      "fail": 0,
+      "skipped": 0
+    }
+  },
+  "static": {
+    "lint": {
+      "exit": 0,
+      "errors": 0,
+      "baselineWarnings": 3,
+      "log": "ep21-final-lint.log"
+    },
+    "typecheck": {
+      "exit": 0,
+      "log": "ep21-typecheck.log"
+    },
+    "build": {
+      "exit": 0,
+      "log": "ep21-build.log",
+      "appRuntimeUnchanged": true
+    }
+  },
+  "cli": {
+    "command": "npm run ops:release-readiness -- --evidence ep21-release-evidence-packet.json --expected-commit f985cad43c0c327201ebbd3b18bf414f655f37e7",
+    "expectedExit": 2,
+    "actualExit": 2,
+    "assessment": {
+      "ready": false,
+      "productionAuthorized": false,
+      "assessment": "operator-evidence-packet-only",
+      "missing": [
+        "monitoringOwner"
+      ],
+      "gates": {
+        "G00": {
+          "localStatus": "BLOCKED",
+          "releaseStatus": "BLOCKED",
+          "blockers": []
+        },
+        "G01": {
+          "localStatus": "READY",
+          "releaseStatus": "READY",
+          "blockers": []
+        },
+        "G02": {
+          "localStatus": "READY",
+          "releaseStatus": "READY",
+          "blockers": []
+        },
+        "G03": {
+          "localStatus": "READY",
+          "releaseStatus": "READY",
+          "blockers": []
+        },
+        "G04": {
+          "localStatus": "BLOCKED",
+          "releaseStatus": "BLOCKED",
+          "blockers": []
+        },
+        "G05": {
+          "localStatus": "READY",
+          "releaseStatus": "NOT_READY",
+          "blockers": [
+            "release.evidenceLayer"
+          ]
+        },
+        "G06": {
+          "localStatus": "READY",
+          "releaseStatus": "NOT_READY",
+          "blockers": [
+            "release.evidenceLayer"
+          ]
+        },
+        "G07": {
+          "localStatus": "BLOCKED",
+          "releaseStatus": "BLOCKED",
+          "blockers": []
+        },
+        "G08": {
+          "localStatus": "NOT_READY",
+          "releaseStatus": "NOT_READY",
+          "blockers": []
+        },
+        "G09": {
+          "localStatus": "READY",
+          "releaseStatus": "NOT_READY",
+          "blockers": [
+            "release.evidenceLayer"
+          ]
+        },
+        "G10": {
+          "localStatus": "READY",
+          "releaseStatus": "READY",
+          "blockers": []
+        },
+        "G11": {
+          "localStatus": "NOT_READY",
+          "releaseStatus": "NOT_READY",
+          "blockers": []
+        }
+      },
+      "capabilities": {
+        "aiSafety": {
+          "status": "BLOCKED",
+          "gates": [
+            "G00",
+            "G01",
+            "G02",
+            "G09",
+            "G10",
+            "G11"
+          ],
+          "blockers": [
+            "monitoringOwner",
+            "G00:BLOCKED",
+            "G09:NOT_READY",
+            "G11:NOT_READY"
+          ]
+        },
+        "crmAi": {
+          "status": "BLOCKED",
+          "gates": [
+            "G00",
+            "G01",
+            "G02",
+            "G05",
+            "G09",
+            "G10",
+            "G11"
+          ],
+          "blockers": [
+            "monitoringOwner",
+            "G00:BLOCKED",
+            "G05:NOT_READY",
+            "G09:NOT_READY",
+            "G11:NOT_READY"
+          ]
+        },
+        "whatsapp": {
+          "status": "BLOCKED",
+          "gates": [
+            "G00",
+            "G01",
+            "G03",
+            "G04",
+            "G09",
+            "G10",
+            "G11"
+          ],
+          "blockers": [
+            "monitoringOwner",
+            "G00:BLOCKED",
+            "G04:BLOCKED",
+            "G09:NOT_READY",
+            "G11:NOT_READY"
+          ]
+        },
+        "propertyCore": {
+          "status": "BLOCKED",
+          "gates": [
+            "G00",
+            "G01",
+            "G06",
+            "G09",
+            "G10",
+            "G11"
+          ],
+          "blockers": [
+            "monitoringOwner",
+            "G00:BLOCKED",
+            "G06:NOT_READY",
+            "G09:NOT_READY",
+            "G11:NOT_READY"
+          ]
+        },
+        "property28hse": {
+          "status": "BLOCKED",
+          "gates": [
+            "G00",
+            "G01",
+            "G06",
+            "G08",
+            "G09",
+            "G10",
+            "G11"
+          ],
+          "blockers": [
+            "monitoringOwner",
+            "G00:BLOCKED",
+            "G06:NOT_READY",
+            "G08:NOT_READY",
+            "G09:NOT_READY",
+            "G11:NOT_READY"
+          ]
+        },
+        "propertyHk": {
+          "status": "BLOCKED",
+          "gates": [
+            "G00",
+            "G01",
+            "G06",
+            "G07",
+            "G09",
+            "G10",
+            "G11"
+          ],
+          "blockers": [
+            "monitoringOwner",
+            "G00:BLOCKED",
+            "G06:NOT_READY",
+            "G07:BLOCKED",
+            "G09:NOT_READY",
+            "G11:NOT_READY"
+          ]
+        }
+      }
+    },
+    "missingEnvelopeExit": 2,
+    "nullEnvelopeExit": 2
+  },
+  "migrationManifest": {
+    "names": [
+      "20260622060000_public_content.sql",
+      "20260623090000_neon_admin_crm_whatsapp.sql",
+      "20260624110000_ai_crm_live_agent.sql",
+      "20260626120000_live_agent_security.sql",
+      "20260626120100_crm_ai_profile_status.sql",
+      "20260626120200_woztell_member_identity.sql",
+      "20260709090000_cms_videos.sql",
+      "20260710090000_agent_profiles.sql",
+      "20260711090000_cms_content_revisions.sql",
+      "20260712120000_ai_content_proposals.sql",
+      "20260714180000_backend_control_plane.sql",
+      "20260801090000_staff_public_slug_unique.sql",
+      "20260802090000_listing_search_indexes.sql",
+      "20260802100000_agent_specialties.sql",
+      "20260816120000_staff_identity_actions.sql",
+      "20260817120000_dual_source_listing_sync.sql",
+      "20260817130000_youtube_channel_sync.sql",
+      "20260822120000_whatsapp_audience_segment_link.sql",
+      "20260830120000_listing_alerts.sql",
+      "20260830130000_estate_expansion.sql",
+      "20260830140000_transaction_provenance.sql",
+      "20260830150000_agent_languages.sql",
+      "20260830160000_branches_entity.sql",
+      "20260830170000_valuation_leads.sql",
+      "20260831090000_staff_viewer_role.sql",
+      "20260831180000_video_category.sql",
+      "20260901100000_estate_expansion_facts.sql",
+      "20260901110000_estate_expansion_publish.sql",
+      "20260902100000_estate_expansion_school_net_correction.sql",
+      "20260902110000_estate_expansion_facts_resolution.sql",
+      "20260905110000_cms_atomic_mutations.sql",
+      "20260905120000_campaign_dispatch_boundary.sql",
+      "20260905130000_outbound_intents.sql",
+      "20260905140000_media_upload_intents.sql",
+      "20260905150000_inquiry_submission_identity.sql",
+      "20260905151000_consent_evidence.sql",
+      "20260905180000_admin_message_paging.sql",
+      "20260905181000_cms_browse_order.sql",
+      "20260906020000_whatsapp_delivery_events.sql",
+      "20260906021000_estate_editorial_backfill.sql",
+      "20260906022000_estate_verified_details.sql",
+      "20260906040000_property_public_identity.sql",
+      "20260906090000_canonical_property_identity.sql",
+      "20260906100000_whatsapp_inbound_leads.sql",
+      "20260906110000_estate_listing_links.sql",
+      "20260906120000_admin_property_management.sql",
+      "20260907120000_propertyhk_ingestion_v2.sql",
+      "20260909120000_source_promotion_tiers.sql",
+      "20260912120000_whatsapp_enquiry_events.sql",
+      "20260912130000_whatsapp_enquiry_episodes.sql",
+      "20260912140000_whatsapp_assignment_evidence.sql",
+      "20260912150000_whatsapp_service_workflow.sql",
+      "20260912160000_staff_reference_snapshots.sql",
+      "20260912170000_staff_notifications.sql",
+      "20260925120000_rate_limit_bucket_cleanup.sql",
+      "20260927080000_staff_notification_receipt_times.sql",
+      "20260927083000_staff_notification_test_attempts.sql",
+      "20260927090000_whatsapp_link_batch_operations.sql",
+      "20260927093000_whatsapp_link_management_indexes.sql",
+      "20260927100000_whatsapp_redirect_bucket_retention.sql",
+      "20260927110000_staff_mapping_review_versions.sql",
+      "20260927120000_named_inbox_folders.sql",
+      "20260927130000_staff_notification_test_evidence.sql",
+      "20260927140000_whatsapp_link_reference_scope.sql",
+      "20260927150000_whatsapp_link_batch_mapping_guard.sql",
+      "20260927160000_transaction_sales_attribution.sql",
+      "20260927170000_performance_event_quality.sql",
+      "20260927171000_inquiry_quality.sql",
+      "20260927172000_media_asset_variants.sql",
+      "20260929100000_whatsapp_inbound_receipts.sql",
+      "20260929101000_whatsapp_receipt_identity.sql",
+      "20260929102000_whatsapp_portal_resolution.sql",
+      "20260929103000_whatsapp_no_link_episodes.sql",
+      "20260929104000_whatsapp_enquiry_access.sql",
+      "20260929105000_whatsapp_no_link_effects.sql",
+      "20260929106000_whatsapp_enquiry_resolution_guard.sql",
+      "20260929107000_whatsapp_forwarded_enquiries.sql",
+      "20260930090000_whatsapp_no_link_source_authority.sql",
+      "20261001090000_whatsapp_outbound_unknown_reservation.sql",
+      "20261001120000_property_sync_operations.sql",
+      "20261001130000_property_withdrawal_review.sql",
+      "20261003010000_ai_knowledge_durable_repair.sql",
+      "20261003020000_crm_analysis_contract.sql",
+      "20261003030000_crm_analysis_runs.sql",
+      "20261003040000_content_proposal_source_guard.sql"
+    ],
+    "sha256": "42c087012a528554e4a353c7ce1426e9ee5bb3c11feaa9cbd87452446b49bb5d",
+    "latestVersion": "20261003040000",
+    "commit": "f985cad43c0c327201ebbd3b18bf414f655f37e7",
+    "count": 85,
+    "digestMethod": "SHA256 of sorted filename + space + immutable Git blob SHA + newline"
+  },
+  "subjectCi": {
+    "conclusion": "success",
+    "created_at": "2026-10-04T13:30:11Z",
+    "event": "pull_request",
+    "head_sha": "f985cad43c0c327201ebbd3b18bf414f655f37e7",
+    "html_url": "https://github.com/YNWAforever/earnestproperty/actions/runs/37205841916",
+    "id": 37205841916,
+    "status": "completed",
+    "updated_at": "2026-10-04T13:42:59Z"
+  },
+  "subjectPreview": {
+    "sha": "f985cad43c0c327201ebbd3b18bf414f655f37e7",
+    "statuses": [
+      {
+        "context": "Vercel",
+        "created_at": "2026-10-04T13:31:07Z",
+        "state": "success",
+        "target_url": "https://vercel.com/ynwaforevers-projects/earnestproperty/CgNBHMLiq4xkW9TSD7yAJUo1yG2t",
+        "updated_at": "2026-10-04T13:31:07Z"
+      }
+    ]
+  },
+  "priorOwnedProof": {
+    "subjectSha": "f985cad43c0c327201ebbd3b18bf414f655f37e7",
+    "ciRun": 37205841916,
+    "uiPass": 736,
+    "sqlPass": 232,
+    "legacyNoLinkPass": 115,
+    "handoffPass": 14,
+    "fail": 0,
+    "skip": 0,
+    "formalBrowserStaging": "SKIPPED=BLOCKED",
+    "dumpBytes": 682065,
+    "realAuth": false,
+    "realProvider": false,
+    "combinedBrowserSql": false
+  },
+  "review": {
+    "model": "gpt-6-astra",
+    "mode": "one fresh read-only final review for EP21 in whole-branch context",
+    "critical": 0,
+    "important": 2,
+    "minor": 0,
+    "independentCheckerCases": 21,
+    "malformedShapeMutations": 2536,
+    "authorFixPass": 1,
+    "reReview": false,
+    "findings": [
+      {
+        "id": "I1",
+        "issue": "Zero completed sends could satisfy provider canary",
+        "red": "ep21-review-fix-red.log",
+        "green": "ep21-review-fix-green.log",
+        "resolution": "actualSends positive; completed receipt exact candidate and count, passed outcome and evidence URL"
+      },
+      {
+        "id": "I2",
+        "issue": "Schedule event alone could accept manually recovered rerun",
+        "red": "ep21-review-fix-red.log",
+        "green": "ep21-review-fix-green.log",
+        "resolution": "runAttempt1 and receiptAttempt1 plus original runId binding"
+      }
+    ],
+    "declinedRulings": [
+      {
+        "behavior": "Earlier EP13\u201320 product fixes",
+        "ruling": "Already reviewed completed scope; new checker reviewed in full branch context",
+        "costIfWrong": "Earlier fixes are not newly independently re-reviewed"
+      },
+      {
+        "behavior": "Live CI/preview, production, provider/model/Auth/receipts",
+        "ruling": "Candidate CI/preview independently read; all unknown real operational evidence remains blocked",
+        "costIfWrong": "Operator claims require separate factual verification"
+      },
+      {
+        "behavior": "Actual model cost/latency and per-rubric results",
+        "ruling": "Offline schema/declaration boundary retained; real runtime/usage/cost/15-runs are still an explicit gate",
+        "costIfWrong": "True model quality and costs remain unverified"
+      },
+      {
+        "behavior": "Individual raw sync stage results",
+        "ruling": "FullReadback attestation retains private receipt dependency; native first-attempt metadata and receipt binding now mandatory",
+        "costIfWrong": "Stage contents still require source owner readback"
+      },
+      {
+        "behavior": "Receipt signing, URL reachability and authenticity",
+        "ruling": "Offline packet tool performs no fetch or signing verification and never authorizes production",
+        "costIfWrong": "Packet truth cannot be established by structure alone"
+      },
+      {
+        "behavior": "Legacy generic packet",
+        "ruling": "Backward compatibility retained; remediation handoff mandates versioned contract and explicit candidate",
+        "costIfWrong": "Generic callers do not get new admin gates"
+      },
+      {
+        "behavior": "Historical counts and action reconciliation",
+        "ruling": "Old cells/root values frozen and independently compared; candidates and skipped formal gates not promoted",
+        "costIfWrong": "Full underlying action audit remains incomplete"
+      },
+      {
+        "behavior": "Assigning operational owners or production authority",
+        "ruling": "External handoff remains unassigned/blocked; no invented named owner or authorization",
+        "costIfWrong": "Release cannot proceed until actual owner/authority supplied"
+      },
+      {
+        "behavior": "Full suite/static/build/CLI evidence independence",
+        "ruling": "Author123 full-suite pass and named command logs separately recorded; reviewer21 checker cases/2536 malformed shapes pre-fix",
+        "costIfWrong": "Independent reviewer did not execute full product/CI matrix"
+      },
+      {
+        "behavior": "Unrelated lockfile/generated artifacts",
+        "ruling": "Explicit staging only two scripts and selected new reports; preserve all unrelated edits",
+        "costIfWrong": "Unrelated local work stays outside this PR delta"
+      }
+    ]
+  },
+  "canaryProposal": {
+    "executed": false,
+    "whatsapp": {
+      "testStaffCount": 1,
+      "testCustomerCount": 1,
+      "destinations": "NOT_SUPPLIED",
+      "tenantAccountBranchChannelFolder": "UNKNOWN",
+      "maxInbound": 1,
+      "maxConfirmedAssignment": 1,
+      "maxInternalAcknowledgement": 1,
+      "maxStaffPhoneTest": 1,
+      "maxHumanTestReply": 1,
+      "budgetAuthorized": false
+    },
+    "ai": {
+      "actualProvider": "UNKNOWN",
+      "actualModel": "UNKNOWN",
+      "usageCostEvidence": "UNAVAILABLE",
+      "cases": [
+        "EV04",
+        "EV05",
+        "EV09",
+        "EV11",
+        "EV12"
+      ],
+      "repeatsPerCase": 3,
+      "maxAttemptsPerRun": 1,
+      "maxGenerations": 15,
+      "proposedMaxUsd": 5,
+      "budgetAuthorized": false
+    }
+  },
+  "nativeSchedule": {
+    "baselineObserved": 1,
+    "repairedAccepted": 0,
+    "required": 3,
+    "agentTriggered": 0,
+    "manualOrRerunAccepted": 0
+  },
+  "effects": {
+    "providerCalls": 0,
+    "realSends": 0,
+    "modelSpendUsd": 0,
+    "productionMigrations": 0,
+    "manualDeployments": 0,
+    "merge": 0,
+    "newNativeScheduleRuns": 0
+  },
+  "formalStatus": "BLOCKED_RELEASE",
+  "taskStatusPromotion": false,
+  "plannedNewPromoted": false,
+  "sourceCandidatesPromoted": false,
+  "artifacts": [
+    {
+      "file": ".audit/remediation-20261003/ep21-build.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-build.log",
+      "bytes": 260576,
+      "sha256": "e00fcd450d523bb0ba156058210575c8e56b331d7ea66fe5bdbb76f5d3463dce"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-candidate-migration-manifest.json",
+      "bytes": 4580,
+      "sha256": "3249968eb47c2000704320446cdf4dab8f38bc9b9eac3cb4b0246773a560037d"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-cli-empty.exit",
+      "bytes": 3,
+      "sha256": "df4e26a04a444901b95afef44e4a96cfae34690fff2ad2c66389c70079cdff2b"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-cli-empty.log",
+      "bytes": 8829,
+      "sha256": "b716d2d3fa69a1caec870440ebc20e1187459ceb59cf1ac65625a29f24c6ab65"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-cli-null.exit",
+      "bytes": 3,
+      "sha256": "df4e26a04a444901b95afef44e4a96cfae34690fff2ad2c66389c70079cdff2b"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-cli-null.log",
+      "bytes": 6862,
+      "sha256": "c795245c60c02e3fb27a10f09945768b7d1e7563a20b8ee540d355d83a030cb7"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-cli-readback.exit",
+      "bytes": 3,
+      "sha256": "df4e26a04a444901b95afef44e4a96cfae34690fff2ad2c66389c70079cdff2b"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-cli-readback.json",
+      "bytes": 10768,
+      "sha256": "6b9f127e38908a50686119c6be6bf3a4e0b2810a428d02850757caadbc6b1ef0"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-cli-readback.log",
+      "bytes": 10970,
+      "sha256": "c486d82f7d718f9449d6185e899ed3a4ad436ef38a706edc070a4ebc1014a296"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-config-migration-dry-run.json",
+      "bytes": 5512,
+      "sha256": "18f0803d43a4f1d31619d1ab6e6d0328a29d40c5131468d44097a8c0a2cf4b5e"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-date-green.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-date-green.log",
+      "bytes": 11120,
+      "sha256": "75b207d70ffb9720fd3e9e02b1b3505cdb6640de4d2e72c08112249336e4fdf5"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-date-red.exit",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-date-red.log",
+      "bytes": 13262,
+      "sha256": "114f5eec09398344ec4d7895b295f119e63d6fc10f307ec45ccaa75f8bc86dfc"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-envelope-green.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-envelope-green.log",
+      "bytes": 11027,
+      "sha256": "373873bc37073c3e8a38563c9a962a966827eac64eb24b780ae127d9a3fcb4e1"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-envelope-red.exit",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-envelope-red.log",
+      "bytes": 16099,
+      "sha256": "7fddeb019d2a1dbc654aaf8c215796470c9de5dd7e716e4ba922e3245de39f20"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-evidence-packet.json",
+      "bytes": 10481,
+      "sha256": "7692d42e3bb586810834668aa55098c2be4caa3f649b0b4bfc4ecf7108bbdb73"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-final-cli-readback.exit",
+      "bytes": 3,
+      "sha256": "df4e26a04a444901b95afef44e4a96cfae34690fff2ad2c66389c70079cdff2b"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-final-cli-readback.json",
+      "bytes": 10768,
+      "sha256": "6b9f127e38908a50686119c6be6bf3a4e0b2810a428d02850757caadbc6b1ef0"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-final-cli-readback.log",
+      "bytes": 10970,
+      "sha256": "c486d82f7d718f9449d6185e899ed3a4ad436ef38a706edc070a4ebc1014a296"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-final-lint.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-final-lint.log",
+      "bytes": 883,
+      "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-final-review.json",
+      "bytes": 3696,
+      "sha256": "b88f94884283b4c9dffe2f7a49b676861cb196737fa4159449f2c1ed62f94088"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-historical-snapshot.json",
+      "bytes": 606,
+      "sha256": "275966bc54c8645b638dc51e6be948656f8a9febd11a56ff029271c5528513a0"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-lint.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-lint.log",
+      "bytes": 883,
+      "sha256": "aa162d955586ea4e38ed70cc5aef8da6f8ecd09c832ce5e81dcb4e01e5050dbd"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-null-envelope.json",
+      "bytes": 6,
+      "sha256": "abdfbffecbe18ed94df9829819e596ee285b52a94aa108514452a9121721c789"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-release-green.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-release-green.log",
+      "bytes": 10629,
+      "sha256": "abf5acba53b826da8a86283d3abbeb3bbbe4cf902ac089f7207a0d9a32e01b07"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-release-progress.md",
+      "bytes": 5522,
+      "sha256": "011575fb97890ec60dfeb20c5a2d9b94d7136b4854a8248d310edad5980b494c"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-release-red.exit",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-release-red.log",
+      "bytes": 21494,
+      "sha256": "9c98d474ff635ca3259c38c2a1c37046cbbccf0678e2c4d4013f475981ddad20"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-review-fix-green.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-review-fix-green.log",
+      "bytes": 11344,
+      "sha256": "1d8060465c2e60f73cebc519808aaf6e21f1f25f1dddfa3e3f82a5f1775bec15"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-review-fix-red.exit",
+      "bytes": 3,
+      "sha256": "f1b2f662800122bed0ff255693df89c4487fbdcf453d3524a42d4ec20c3d9c04"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-review-fix-red.log",
+      "bytes": 13356,
+      "sha256": "0241a6a8f5e6dc7c4e12702bdbe63525dfd01259a325ae71670007e27f6a05b7"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-review-source.diff",
+      "bytes": 31672,
+      "sha256": "a49c5037406c98cd1280ed0f1873c77adfb33b7f6e438fc2b496c75fd2ff45c6"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-subject-checks.json",
+      "bytes": 1549,
+      "sha256": "5168f000c18271d8363efa920dc90797c5d1d635e64f707269bd07808bbb7136"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-subject-ci.json",
+      "bytes": 297,
+      "sha256": "6ec98261149d2f112887aaf8700b4dc2beae7872a107f90565a41968ae606911"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-subject-statuses.json",
+      "bytes": 276,
+      "sha256": "4d8bee59d823162e46806970fc78e778ec7e1cae7e019663aa5469b20be6f674"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-test-layer-counts.json",
+      "bytes": 832,
+      "sha256": "3ebb414b68374423891fd9eb3e21525e0c8b1433830b181dae6ddebe4fc90e2c"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-typecheck.exit",
+      "bytes": 3,
+      "sha256": "13bf7b3039c63bf5a50491fa3cfd8eb4e699d1ba1436315aef9cbe5711530354"
+    },
+    {
+      "file": ".audit/remediation-20261003/ep21-typecheck.log",
+      "bytes": 33,
+      "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+    }
+  ],
+  "csvProof": {
+    "EarnestProperty_Remediation_Traceability_2026-10-03.csv": {
+      "rows": 22,
+      "oldColumnsUnchanged": 34,
+      "newColumns": [
+        "execution_2026_10_04_ep21_sha",
+        "execution_2026_10_04_ep21_environment",
+        "execution_2026_10_04_ep21_evidence",
+        "execution_2026_10_04_ep21_result",
+        "execution_2026_10_04_ep21_status"
+      ],
+      "oldBytesSha256": "47d5cd0750a75aeb216444c486c824b75694c4783422d512ea2da5df795c3971",
+      "oldCellsPreserved": true,
+      "baselineCounts": null,
+      "executionCountsUnchanged": {
+        "LOCAL_VERIFIED": 8,
+        "LOCAL_PARTIAL": 11,
+        "BLOCKED_ACCEPTANCE": 1,
+        "BLOCKED_EXTERNAL": 1,
+        "BLOCKED_RELEASE": 1
+      }
+    },
+    "EarnestProperty_UAT_Matrix_2026-10-03.csv": {
+      "rows": 82,
+      "oldColumnsUnchanged": 25,
+      "newColumns": [
+        "execution_2026_10_04_ep21_sha",
+        "execution_2026_10_04_ep21_environment",
+        "execution_2026_10_04_ep21_evidence",
+        "execution_2026_10_04_ep21_result",
+        "execution_2026_10_04_ep21_status"
+      ],
+      "oldBytesSha256": "f8c8e94c695bf213e0a9ce613e1320e2f518168bee4de1bfeca35e2540cf48f7",
+      "oldCellsPreserved": true,
+      "baselineCounts": {
+        "PASS": 29,
+        "BLOCKED": 22,
+        "FAIL": 9,
+        "NOT_APPLICABLE_NEW_CASE": 22
+      },
+      "executionCountsUnchanged": {
+        "PASS": 40,
+        "PARTIAL": 28,
+        "BLOCKED": 14
+      }
+    }
+  }
+}
