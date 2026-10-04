@@ -65,7 +65,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/daily-work-session-lifetime-summary.json",
+    ".audit/remediation-20261003/ep13-20-daily-work-session-lifetime-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -300,7 +300,7 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(page.getByRole("heading", { name: "未能核實職員權限" })).toBeVisible();
       await expect(page.getByLabel("原文／轉交內容", { exact: true })).toHaveCount(0);
       await page.screenshot({
-        path: `.audit/remediation-20261003/ep12-session-hidden-${width}.png`,
+        path: `.audit/remediation-20261003/ep13-20-ep12-session-hidden-${width}.png`,
         fullPage: true,
       });
       await page.evaluate(() => {
@@ -329,7 +329,7 @@ for (const width of [1440, 1280, 768, 390]) {
       expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
       await page.screenshot({
         animations: "disabled",
-        path: `.audit/remediation-20261003/ep12-session-draft-${width}.png`,
+        path: `.audit/remediation-20261003/ep13-20-ep12-session-draft-${width}.png`,
         fullPage: true,
       });
       expect(
@@ -360,7 +360,7 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(page.getByText("每日工作合成查詢6", { exact: true })).toHaveCount(0);
       expect(await calls(page, "leads")).toHaveLength(before + 1);
       await page.screenshot({
-        path: `.audit/remediation-20261003/ep12-session-restored-${width}.png`,
+        path: `.audit/remediation-20261003/ep13-20-ep12-session-restored-${width}.png`,
         fullPage: true,
       });
     });
