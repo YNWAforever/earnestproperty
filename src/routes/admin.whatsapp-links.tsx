@@ -1,3 +1,4 @@
+import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { AdminShell } from "@/components/admin/AdminShell";
@@ -19,6 +20,17 @@ export const Route = createFileRoute("/admin/whatsapp-links")({
 });
 
 function WhatsappLinks() {
+  const identity = useStaffWorkspaceIdentity(["admin", "manager"]);
+  if (!identity)
+    return (
+      <AdminShell title="WhatsApp 追蹤連結" description="核對投放位置及批次結果。">
+        <p role="status">正在核實管理員權限…</p>
+      </AdminShell>
+    );
+  return <WhatsappLinksWorkspace key={identity} identity={identity} />;
+}
+function WhatsappLinksWorkspace({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user, loading } = useNeonAuth();
   const [agents, setAgents] = useState<Awaited<ReturnType<typeof fetchAdminAgents>>>([]);
   const [seed, setSeed] = useState<LinkOfferSelection[]>([]);
@@ -75,6 +87,7 @@ function WhatsappLinks() {
         {!loading && user ? (
           <>
             <WhatsappLinkWizard
+              isWorkspaceCurrent={isWorkspaceCurrent}
               key={user.id}
               actorScope={user.id}
               enableBatchImport={finalFixUiFlags.linkBatchImport}

@@ -6,14 +6,21 @@ import { Toaster } from "sonner";
 import { Route as Blasts } from "../../../src/routes/admin.blasts";
 import { staffSessionStore } from "../../../src/components/admin/staff-session";
 import { changeActor } from "./auth";
-import "./synthetic-api";
+import { membership } from "./synthetic-api";
 import "../../../src/styles.css";
 declare global {
   interface Window {
-    campaignReviewFixture: { changeActor: (id: string) => Promise<void> };
+    campaignReviewFixture: {
+      changeActor: (id: string) => Promise<void>;
+      changeMembership: (role?: string, binding?: string) => Promise<void>;
+    };
   }
 }
 window.campaignReviewFixture = {
+  changeMembership: async (role = "manager", binding = membership.binding) => {
+    Object.assign(membership, { role, binding });
+    await staffSessionStore.refresh(staffSessionStore.getSnapshot().userId!);
+  },
   changeActor: async (id) => {
     changeActor(id);
     await staffSessionStore.refresh(id);

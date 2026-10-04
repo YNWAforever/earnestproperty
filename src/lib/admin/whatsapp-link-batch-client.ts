@@ -119,6 +119,7 @@ export async function runWhatsappLinkBatch(
   initial: LinkBatchProgress,
   api: LinkBatchApi,
   save: (progress: LinkBatchProgress) => void,
+  isCurrent: () => boolean = () => true,
 ): Promise<LinkBatchProgress> {
   let progress = initial;
   const chunks = Array.from({ length: Math.ceil(progress.rows.length / 50) }, (_, index) =>
@@ -126,6 +127,7 @@ export async function runWhatsappLinkBatch(
   );
   if (chunks.length !== progress.chunkIds.length) throw new Error("BATCH_CHUNK_IDS_INVALID");
   while (progress.nextChunk < chunks.length) {
+    if (!isCurrent()) return progress;
     const index = progress.nextChunk;
     const chunkId = progress.chunkIds[index];
     progress = { ...progress, uncertain: true };
@@ -137,6 +139,9 @@ export async function runWhatsappLinkBatch(
         previewToken: progress.preview.previewToken,
         rows: chunks[index],
       });
+      // The accepted receipt remains durable on the server. Leave the original
+      // uncertain journal for current-workspace readback, never overwrite a newer journal.
+      if (!isCurrent()) return progress;
       progress = {
         ...progress,
         completed: [...progress.completed, result],
@@ -146,8 +151,11 @@ export async function runWhatsappLinkBatch(
       save(progress);
       if (result.state === "rejected") return progress;
     } catch (error) {
+      if (!isCurrent()) return progress;
       try {
-        progress = reconcileLinkBatch(progress, (await api.read(progress.batchId)).operations);
+        const readback = await api.read(progress.batchId);
+        if (!isCurrent()) return progress;
+        progress = reconcileLinkBatch(progress, readback.operations);
         save(progress);
         if (progress.completed[index]) {
           if (progress.completed[index].state === "rejected") return progress;

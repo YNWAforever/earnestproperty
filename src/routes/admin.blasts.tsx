@@ -1,3 +1,4 @@
+import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import {
   type FormEvent,
   type ReactNode,
@@ -127,11 +128,18 @@ export const Route = createFileRoute("/admin/blasts")({
 });
 
 function AdminBlasts() {
-  const { user } = useNeonAuth();
-  return <AdminBlastsWorkspace key={user?.id ?? "guest"} />;
+  const identity = useStaffWorkspaceIdentity(["admin", "manager"]);
+  if (!identity)
+    return (
+      <AdminShell title="WhatsApp 群發" description="核對收件範圍及推廣操作結果。">
+        <Skeleton className="h-56 w-full" />
+      </AdminShell>
+    );
+  return <AdminBlastsWorkspace key={identity} identity={identity} />;
 }
 
-function AdminBlastsWorkspace() {
+function AdminBlastsWorkspace({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const activeRef = useRef(true);
   const queueJournalKey = user ? `earnest-campaign-queue:${encodeURIComponent(user.id)}` : null;
@@ -233,14 +241,14 @@ function AdminBlastsWorkspace() {
 
   const refreshAdminData = useCallback(
     async (settings: { clearRowPreviews?: boolean } = {}) => {
-      if (!user) return;
+      if (!user || !isWorkspaceCurrent()) return;
       setLoading(true);
       try {
         const [campaignRows, blastOptions] = await Promise.all([
           fetchAdminCampaigns(),
           fetchAdminBlastOptions(),
         ]);
-        if (!activeRef.current) return null;
+        if (!isWorkspaceCurrent()) return null;
         setRows(campaignRows as AdminCampaignRow[]);
         setOptions(blastOptions as AdminBlastOptions);
         setSelectedPreviewAudienceId((current) => {
@@ -259,7 +267,7 @@ function AdminBlastsWorkspace() {
         setLoading(false);
       }
     },
-    [user],
+    [user, isWorkspaceCurrent],
   );
 
   const activePreview = useMemo<PreviewContext | null>(() => {
@@ -319,28 +327,29 @@ function AdminBlastsWorkspace() {
 
     const timeout = window.setTimeout(
       () => {
-        previewAdminAudience({ data: activePreview.data })
+        previewAdminAudience({ data: activePreview.data }, isWorkspaceCurrent)
           .then((data) => {
-            if (requestId === previewRequestRef.current) {
+            if (isWorkspaceCurrent() && requestId === previewRequestRef.current) {
               setPreview(data as AdminAudiencePreview);
               setPreviewCheckedAt(Date.now());
             }
           })
           .catch((err) => {
-            if (requestId === previewRequestRef.current) {
+            if (isWorkspaceCurrent() && requestId === previewRequestRef.current) {
               setPreviewError(errorText(err));
               setPreview(null);
             }
           })
           .finally(() => {
-            if (requestId === previewRequestRef.current) setPreviewLoading(false);
+            if (isWorkspaceCurrent() && requestId === previewRequestRef.current)
+              setPreviewLoading(false);
           });
       },
       activePreview.debounce ? 300 : 0,
     );
 
     return () => window.clearTimeout(timeout);
-  }, [activePreview, user, previewRetry]);
+  }, [activePreview, user, previewRetry, isWorkspaceCurrent]);
 
   function openCampaignDialog() {
     const template =
@@ -363,6 +372,7 @@ function AdminBlastsWorkspace() {
   }
 
   async function handleSaveAudience(event: FormEvent<HTMLFormElement>) {
+    if (!isWorkspaceCurrent()) return;
     event.preventDefault();
     if (!audienceDraft) return;
     if (!audienceDraft.name.trim()) {
@@ -378,22 +388,31 @@ function AdminBlastsWorkspace() {
         description: nullIfBlank(audienceDraft.description ?? ""),
         filters: normalizeAudienceFilters(audienceDraft.filters),
       };
-      const result = (await saveAdminAudience({ data: payload })) as MutationResult;
+      const result = (await saveAdminAudience(
+        { data: payload },
+        isWorkspaceCurrent,
+      )) as MutationResult;
+      if (!isWorkspaceCurrent()) return;
       assertNoServerError(result);
       setSavedAudienceDraft(payload);
       if (result.id) setSelectedPreviewAudienceId(result.id);
       await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
       setAudienceDraft(null);
       setSavedAudienceDraft(null);
       toast.success("收件群組已儲存");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
   async function handleSaveCampaign(event: FormEvent<HTMLFormElement>) {
+    if (!isWorkspaceCurrent()) return;
     event.preventDefault();
     if (!campaignDraft) return;
     if (!campaignDraft.name.trim() || !campaignDraft.template_id || !campaignDraft.audience_id) {
@@ -412,18 +431,26 @@ function AdminBlastsWorkspace() {
       // `id` afterwards is the saved row's id, which is always truthy, so the
       // 已新增 branch was unreachable and creating a campaign said 已儲存.
       const isUpdate = Boolean(campaignDraft.id);
-      const result = (await saveAdminCampaign({ data: payload })) as MutationResult;
+      const result = (await saveAdminCampaign(
+        { data: payload },
+        isWorkspaceCurrent,
+      )) as MutationResult;
+      if (!isWorkspaceCurrent()) return;
       assertNoServerError(result);
       const id = result.id || campaignDraft.id;
       const savedDraft = { ...payload, id };
       setCampaignDraft(savedDraft);
       setSavedCampaignDraft(savedDraft);
       await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
       toast.success(isUpdate ? "Campaign 已儲存" : "Campaign 已新增");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -441,17 +468,22 @@ function AdminBlastsWorkspace() {
   }
 
   async function handleDeleteAudience() {
+    if (!isWorkspaceCurrent()) return;
     if (!pendingAudienceDelete) return;
     const target = pendingAudienceDelete;
     setMutatingAction(`audience-delete:${target.id}`);
     setConfirmError(null);
     try {
-      const result = (await deleteAdminAudience({ data: { id: target.id } })) as {
+      const result = (await deleteAdminAudience(
+        { data: { id: target.id } },
+        isWorkspaceCurrent,
+      )) as {
         ok?: boolean;
         error?: string;
         campaigns?: string[];
         detachedCampaigns?: number;
       };
+      if (!isWorkspaceCurrent()) return;
       if (!result.ok) {
         // AUDIENCE_IN_USE names the campaigns rather than failing vaguely: the
         // FK is ON DELETE SET NULL, so the operator needs to know exactly what
@@ -470,6 +502,7 @@ function AdminBlastsWorkspace() {
         return;
       }
       await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
       setPendingAudienceDelete(null);
       toast.success(
         result.detachedCampaigns
@@ -477,13 +510,17 @@ function AdminBlastsWorkspace() {
           : "收件群組已刪除",
       );
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
       setConfirmError(errorText(err));
     } finally {
-      setMutatingAction(null);
+      if (isWorkspaceCurrent()) {
+        setMutatingAction(null);
+      }
     }
   }
 
   async function handlePreviewCampaignAudience(campaign: AdminCampaignRow) {
+    if (!isWorkspaceCurrent()) return;
     if (!campaign.audience_id) {
       toast.error("此 campaign 未設定收件群組");
       return;
@@ -492,9 +529,13 @@ function AdminBlastsWorkspace() {
     const action = `preview:${campaign.id}`;
     setMutatingAction(action);
     try {
-      const data = (await previewAdminAudience({
-        data: { audience_id: campaign.audience_id },
-      })) as AdminAudiencePreview;
+      const data = (await previewAdminAudience(
+        {
+          data: { audience_id: campaign.audience_id },
+        },
+        isWorkspaceCurrent,
+      )) as AdminAudiencePreview;
+      if (!isWorkspaceCurrent()) return;
       setRowPreviews((current) => ({
         ...current,
         [campaign.id]: { preview: data, checkedAt: Date.now() },
@@ -503,6 +544,7 @@ function AdminBlastsWorkspace() {
       setPreview(data);
       toast.success("收件人預覽已更新");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
       setRowPreviews((current) => {
         const next = { ...current };
         delete next[campaign.id];
@@ -510,7 +552,9 @@ function AdminBlastsWorkspace() {
       });
       toast.error(errorText(err));
     } finally {
-      setMutatingAction(null);
+      if (isWorkspaceCurrent()) {
+        setMutatingAction(null);
+      }
     }
   }
 
@@ -574,16 +618,19 @@ function AdminBlastsWorkspace() {
     setMutatingAction(action);
     setConfirmError(null);
     try {
-      const result = (await sendAdminCampaignQueue({
-        data: { id: pendingSend.campaignId },
-      })) as MutationResult & {
+      const result = (await sendAdminCampaignQueue(
+        {
+          data: { id: pendingSend.campaignId },
+        },
+        isWorkspaceCurrent,
+      )) as MutationResult & {
         materialization?: Partial<AdminAudiencePreview>;
       };
       assertNoServerError(result);
-      if (!activeRef.current) return;
+      if (!isWorkspaceCurrent()) return;
 
       await refreshAdminData({ clearRowPreviews: true });
-      if (!activeRef.current) return;
+      if (!isWorkspaceCurrent()) return;
       sessionStorage.removeItem(queueJournalKey);
       setCampaignDraft(null);
       setPendingSend(null);
@@ -593,7 +640,7 @@ function AdminBlastsWorkspace() {
     } catch (err) {
       // Kept inside the dialog rather than behind it: the operator needs the
       // reason next to the action they just authorised.
-      if (!activeRef.current) return;
+      if (!isWorkspaceCurrent()) return;
       queueReadbackRef.current = pendingSend.campaignId;
       setQueueNeedsReadback(pendingSend.campaignId);
       setRowPreviews({});
@@ -613,7 +660,7 @@ function AdminBlastsWorkspace() {
     setConfirmError(null);
     try {
       const current = await refreshAdminData({ clearRowPreviews: true });
-      if (!activeRef.current) return;
+      if (!isWorkspaceCurrent()) return;
       if (!current?.some((row) => row.id === campaignId)) {
         setConfirmError("未能讀回此 Campaign，或權限已變更。未有重送加入佇列要求。");
         return;
@@ -626,7 +673,7 @@ function AdminBlastsWorkspace() {
       setPreviewCheckedAt(0);
       toast.success("已讀回目前 Campaign 狀態。沒有重送；如需繼續，請重新預覽並確認。");
     } catch {
-      if (activeRef.current)
+      if (isWorkspaceCurrent())
         setConfirmError("未能更新本機操作記錄，請聯絡支援；未有重送加入佇列要求。");
     } finally {
       sendingRef.current = false;
@@ -637,7 +684,7 @@ function AdminBlastsWorkspace() {
   function finishCancellationReadback(current: AdminCampaignRow[] | null | undefined) {
     const campaignId = cancelReadbackRef.current;
     if (
-      !activeRef.current ||
+      !isWorkspaceCurrent() ||
       !campaignId ||
       !cancelJournalKey ||
       !current?.some((row) => row.id === campaignId && row.status === "cancelled")
@@ -661,17 +708,17 @@ function AdminBlastsWorkspace() {
     setConfirmError(null);
     try {
       const current = await refreshAdminData({ clearRowPreviews: true });
-      if (!activeRef.current) return;
+      if (!isWorkspaceCurrent()) return;
       if (!finishCancellationReadback(current))
         setConfirmError(
           "未能確認取消：原 Campaign 未讀回已取消狀態，或權限已變更。未有重試取消或加入佇列。",
         );
     } catch {
-      if (activeRef.current)
+      if (isWorkspaceCurrent())
         setConfirmError("未能更新本機取消操作記錄，請聯絡支援；未有重試取消。");
     } finally {
       cancellingRef.current = false;
-      if (activeRef.current) setMutatingAction(null);
+      if (isWorkspaceCurrent()) setMutatingAction(null);
     }
   }
 
@@ -700,8 +747,11 @@ function AdminBlastsWorkspace() {
     setMutatingAction(action);
     setConfirmError(null);
     try {
-      const result = (await cancelAdminCampaign({ data: { id: campaignId } })) as MutationResult;
-      if (!activeRef.current) return;
+      const result = (await cancelAdminCampaign(
+        { data: { id: campaignId } },
+        isWorkspaceCurrent,
+      )) as MutationResult;
+      if (!isWorkspaceCurrent()) return;
       if (result.ok === false) {
         sessionStorage.removeItem(cancelJournalKey);
         cancelReadbackRef.current = null;
@@ -711,11 +761,11 @@ function AdminBlastsWorkspace() {
       }
       assertNoServerError(result);
       const current = await refreshAdminData({ clearRowPreviews: true });
-      if (!activeRef.current) return;
+      if (!isWorkspaceCurrent()) return;
       if (!finishCancellationReadback(current))
         setConfirmError("取消已確認，但未能讀回畫面。請先查回原 Campaign，不要重試取消。");
     } catch (err) {
-      if (!activeRef.current) return;
+      if (!isWorkspaceCurrent()) return;
       setConfirmError(
         cancelReadbackRef.current
           ? `取消結果未能確認，請先查回原 Campaign 狀態。${errorText(err)}`
@@ -723,7 +773,7 @@ function AdminBlastsWorkspace() {
       );
     } finally {
       cancellingRef.current = false;
-      if (activeRef.current) setMutatingAction(null);
+      if (isWorkspaceCurrent()) setMutatingAction(null);
     }
   }
 

@@ -13,7 +13,10 @@ declare global {
       cancelMode: string;
       releaseCancel: null | (() => void);
     };
-    campaignReviewFixture: { changeActor: (id: string) => Promise<void> };
+    campaignReviewFixture: {
+      changeActor: (id: string) => Promise<void>;
+      changeMembership: (role?: string, binding?: string) => Promise<void>;
+    };
   }
 }
 let server: Server, origin: string;
@@ -55,7 +58,7 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   if (server) await new Promise<void>((done) => server.close(() => done()));
   await writeFile(
-    ".audit/remediation-20261003/campaign-review-browser-summary.json",
+    ".audit/remediation-20261003/ep13-20-campaign-membership-browser-summary.json",
     JSON.stringify(
       {
         codeSha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
@@ -96,13 +99,13 @@ test.afterEach(async ({ page }, info) => {
       })),
     );
     await page.screenshot({
-      path: `.audit/remediation-20261003/campaign-overflow-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/ep13-20-campaign-overflow-${page.viewportSize()!.width}.png`,
     });
   }
   expect(fits).toBe(true);
   if (info.status === "passed" && info.title.startsWith("lost queue response")) {
     await page.screenshot({
-      path: `.audit/remediation-20261003/campaign-cancel-green-${page.viewportSize()!.width}.png`,
+      path: `.audit/remediation-20261003/ep13-20-campaign-cancel-green-${page.viewportSize()!.width}.png`,
     });
   }
 });
@@ -152,6 +155,38 @@ async function openCancel(page: Page) {
 for (const width of [1440, 1280, 768, 390])
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("membership narrowing removes private campaign rows", async ({ page }) => {
+      await open(page);
+      await page.evaluate(() => window.campaignReviewFixture.changeMembership("agent"));
+      await expect(row(page)).toHaveCount(0);
+      expect(await queueCalls(page)).toHaveLength(0);
+    });
+    test("membership change retains accepted cancellation without obsolete success toast", async ({
+      page,
+    }) => {
+      await open(page);
+      const dialog = await openCancel(page);
+      await page.evaluate(() => {
+        window.noLinkBlastFixture.cancelMode = "delay";
+      });
+      await dialog.getByRole("button", { name: "確認取消 Campaign", exact: true }).click();
+      await expect.poll(() => cancelCalls(page)).toHaveLength(1);
+      await page.evaluate(() => window.campaignReviewFixture.changeMembership("agent"));
+      await page.evaluate(() => window.noLinkBlastFixture.releaseCancel!());
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => JSON.parse(sessionStorage.getItem("no-link-fixture-campaigns")!)[0].cancelWrites,
+          ),
+        )
+        .toBe(1);
+      await page.evaluate(
+        () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+      );
+      await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+      await expect(row(page)).toHaveCount(0);
+    });
+
     test("cancel confirmation preserves accepted history and submits once while pending", async ({
       page,
     }) => {
@@ -196,7 +231,7 @@ for (const width of [1440, 1280, 768, 390])
       });
       expect(await cancelJournal(page)).toHaveLength(0);
       await page.screenshot({
-        path: `.audit/remediation-20261003/campaign-cancel-confirmed-${width}.png`,
+        path: `.audit/remediation-20261003/ep13-20-campaign-cancel-confirmed-${width}.png`,
       });
       await page.reload();
       await expect(row(page)).toContainText("已發送 1");
