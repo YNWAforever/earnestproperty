@@ -620,6 +620,18 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   assert.match(listingEditRoute, /AdminPropertyWorkspace/);
 });
 
+test("跟進工作台 flags a remembered lead that left the board and blocks its reanalysis", () => {
+  // No browser fixture renders this route; rowForOpenPanel's offBoard decision is unit-tested in
+  // background-refresh.test.ts, and this pins the panel's wiring to it.
+  const commandCenter = read("src/routes/admin.leads_.command-center.tsx");
+  assert.match(commandCenter, /const offBoard = panel\?\.offBoard \?\? false;/);
+  assert.match(
+    commandCenter,
+    /\{offBoard \? \([\s\S]*?此查詢已不在跟進工作台，資料可能不是最新。[\s\S]*?\) : null\}/,
+  );
+  assert.match(commandCenter, /disabled=\{busy \|\| offBoard\}[\s\S]*?重新 AI 分析/);
+});
+
 test("shared admin workflow components exist", () => {
   for (const file of [
     "src/components/admin/AdminToolbar.tsx",

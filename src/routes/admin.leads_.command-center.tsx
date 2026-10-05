@@ -236,14 +236,12 @@ function CommandCenter() {
 
   // A present row is always shown fresh (so a reanalysis appears at once); if a refresh drops
   // the selected lead, the panel stays open on the row it last showed instead of closing under
-  // the user. Closing the panel or selecting another row lets that row go.
+  // the user. Closing the panel or selecting another row lets that row go. Such an off-board row
+  // may be stale and a reanalysis could not show its result, so the panel says so and blocks it.
   const lastShownRef = useRef<CommandCenterRow | null>(null);
-  const selected = rowForOpenPanel(
-    data?.rows,
-    selectedId,
-    lastShownRef.current,
-    (row) => row.lead_id,
-  );
+  const panel = rowForOpenPanel(data?.rows, selectedId, lastShownRef.current, (row) => row.lead_id);
+  const selected = panel?.row ?? null;
+  const offBoard = panel?.offBoard ?? false;
   lastShownRef.current = selected;
 
   return (
@@ -418,7 +416,7 @@ function CommandCenter() {
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={busy}
+                disabled={busy || offBoard}
                 onClick={() => {
                   if (selected) void runAnalysis(selected);
                 }}
@@ -431,6 +429,11 @@ function CommandCenter() {
       >
         {selected ? (
           <div className="space-y-4 text-sm">
+            {offBoard ? (
+              <p className="text-xs text-muted-foreground">
+                此查詢已不在跟進工作台，資料可能不是最新。
+              </p>
+            ) : null}
             <section>
               <h3 className="text-xs font-semibold text-muted-foreground">AI 摘要</h3>
               <p className="mt-1">{selected.summary ?? "未分析"}</p>

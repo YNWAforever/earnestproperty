@@ -23,19 +23,34 @@ export function canApplyBackgroundRead(
 }
 
 /**
+ * What the page's shared error banner shows after a poll's list read succeeds: the banner is
+ * cleared only when it is the list's own earlier failure (`listError`), never an error another
+ * read on the page put up.
+ */
+export function errorAfterBackgroundListSuccess(
+  shown: string | null,
+  listError: string | null,
+): string | null {
+  return shown !== null && shown === listError ? null : shown;
+}
+
+/**
  * The row an open detail panel shows: the fresh row while the data still holds it (so a
- * reanalysis shows at once), otherwise the row it last showed for the same selection. A
- * background refresh that drops the selected row therefore never closes the panel under the
- * user; closing it or selecting another row is what lets the remembered row go.
+ * reanalysis shows at once), otherwise the row it last showed for the same selection, marked
+ * `offBoard` because it may be stale. A background refresh that drops the selected row therefore
+ * never closes the panel under the user; closing it or selecting another row lets the
+ * remembered row go.
  */
 export function rowForOpenPanel<T>(
   rows: readonly T[] | null | undefined,
   selectedId: string | null,
   lastShown: T | null,
   idOf: (row: T) => string,
-): T | null {
+): { row: T; offBoard: boolean } | null {
   if (selectedId === null) return null;
   const fresh = rows?.find((row) => idOf(row) === selectedId);
-  if (fresh) return fresh;
-  return lastShown !== null && idOf(lastShown) === selectedId ? lastShown : null;
+  if (fresh) return { row: fresh, offBoard: false };
+  return lastShown !== null && idOf(lastShown) === selectedId
+    ? { row: lastShown, offBoard: true }
+    : null;
 }

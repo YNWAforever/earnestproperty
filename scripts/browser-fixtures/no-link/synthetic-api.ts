@@ -75,9 +75,11 @@ const state = {
   ) => {},
   pushInbound: (_id: string, _text: string) => {},
   // "pending" holds every conversations-list read (answering with the rows as they were when it
-  // was asked) until the test calls the releases in pendingList.
-  listMode: "ok" as "ok" | "pending",
+  // was asked) until the test calls the releases in pendingList; "failure" makes it throw.
+  listMode: "ok" as "ok" | "pending" | "failure",
   pendingList: [] as (() => void)[],
+  // With sessionStorage no-link-fixture-agents=error, the staff list read waits here, then fails.
+  pendingAgents: [] as (() => void)[],
   // Rows per conversations-list page; null puts every row on one page.
   listPageSize: null as number | null,
   templateFailure: false,
@@ -180,6 +182,10 @@ export async function fetchStaffSession() {
       };
 }
 export async function fetchAdminAgents() {
+  if (sessionStorage.getItem("no-link-fixture-agents") === "error") {
+    await new Promise<void>((release) => fixture().pendingAgents.push(release));
+    throw Error("合成同事名單讀取失敗");
+  }
   return [
     { id: ids.staff, name: "合成同事甲", email: null, roles: ["agent"], active: true },
     { id: ids.staffB, name: "合成同事乙", email: null, roles: ["agent"], active: true },
@@ -249,6 +255,7 @@ export async function fetchAdminPage({
     };
     if (fixture().listMode === "pending")
       await new Promise<void>((release) => fixture().pendingList.push(release));
+    if (fixture().listMode === "failure") throw Error("合成對話列表讀取失敗");
     return page;
   }
   if (data.resource === "messages") {

@@ -41,7 +41,10 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { canApplyBackgroundRead } from "@/lib/admin/background-refresh";
+import {
+  canApplyBackgroundRead,
+  errorAfterBackgroundListSuccess,
+} from "@/lib/admin/background-refresh";
 import { MIN_VISIBLE_INTERVAL_MS, useVisibleInterval } from "@/lib/admin/use-visible-interval";
 import { BACKGROUND_READ_TIMEOUT_MS, withTimeout } from "@/lib/admin/with-timeout";
 import {
@@ -262,6 +265,16 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
     }
   }, [staffUserId, selectedId]);
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
+  // 我的接手工作 re-reads (and blocks its actions) on every change of its key, so the key follows
+  // user-started list reads only (load, 重新整理, paging, a save's readback). A poll still moves
+  // 最後更新; its stamp is remembered so the key skips it.
+  const backgroundListStampRef = useRef<number | null>(null);
+  const [handoffRefreshKey, setHandoffRefreshKey] = useState<number | null>(null);
+  useEffect(() => {
+    if (listUpdatedAt !== backgroundListStampRef.current) setHandoffRefreshKey(listUpdatedAt);
+  }, [listUpdatedAt]);
+  // What a failed list read put in the shared error banner: the only error a poll may clear.
+  const listErrorRef = useRef<string | null>(null);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
   const [aiAssistError, setAiAssistError] = useState<string | null>(null);
   const inboxQuery = typeof search.q === "string" ? search.q : "";
@@ -382,19 +395,23 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
       const input = {
         data: { resource: "conversations" as const, cursor, q: inboxQuery, status: inboxStatus },
       };
-      // A user read and a poll write the same state on success.
-      const apply = (data: {
-        rows: AdminConversationRow[];
-        nextCursor: string | null;
-        total: number;
-      }) => {
+      // A user read and a poll write the same list state on success. A poll's stamp is kept out
+      // of 我的接手工作's key, and it leaves any banner another read on the page put up.
+      const apply = (
+        data: { rows: AdminConversationRow[]; nextCursor: string | null; total: number },
+        background: boolean,
+      ) => {
         setRows(data.rows);
         setListCursor(cursor);
         listCursorRef.current = cursor;
         setNextListCursor(data.nextCursor);
         setListTotal(data.total);
-        setListUpdatedAt(Date.now());
-        setError(null);
+        const stamp = Date.now();
+        if (background) backgroundListStampRef.current = stamp;
+        setListUpdatedAt(stamp);
+        if (background)
+          setError((shown) => errorAfterBackgroundListSuccess(shown, listErrorRef.current));
+        else setError(null);
       };
 
       if (options.background) {
@@ -412,7 +429,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
             userReadInFlight: loadingRowsRef.current,
           };
           if (!isWorkspaceCurrent() || !canApplyBackgroundRead(started, current)) return false;
-          apply(data);
+          apply(data, true);
           return true;
         } catch {
           // A failed or timed-out poll keeps the list on screen and says nothing; the next
@@ -427,11 +444,13 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
       try {
         const data = await fetchAdminPage(input, isWorkspaceCurrent);
         if (!isWorkspaceCurrent() || requestId !== listRequestRef.current) return;
-        apply(data);
+        apply(data, false);
         return true;
       } catch (err) {
         if (!isWorkspaceCurrent() || requestId !== listRequestRef.current) return;
-        setError(errorText(err));
+        const message = errorText(err);
+        listErrorRef.current = message;
+        setError(message);
         return false;
       } finally {
         if (isWorkspaceCurrent() && requestId === listRequestRef.current) setLoadingRows(false);
@@ -1103,7 +1122,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
       {user ? (
         <StaffNotificationPanel
           key={user.id}
-          refreshKey={listUpdatedAt}
+          refreshKey={handoffRefreshKey}
           onOpen={(item) => {
             openConversation(item.conversationId);
             setEnquirySelections((current) => ({

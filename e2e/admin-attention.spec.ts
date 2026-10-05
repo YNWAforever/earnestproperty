@@ -20,12 +20,15 @@ type FixtureWindow = {
     attentionCounts: AttentionCounts;
     pendingAttention: (() => void)[];
     pushInbound: (id: string, text: string) => void;
-    listMode: "ok" | "pending";
+    listMode: "ok" | "pending" | "failure";
     pendingList: (() => void)[];
+    pendingAgents: (() => void)[];
     listPageSize: number | null;
   };
   noLinkOutboundFixture: { calls: unknown[] };
+  noLinkStaffWorkFixture: { calls: { name: string }[] };
   __sameDocument?: boolean;
+  __handoffChecking?: boolean;
 };
 const ids = {
   a: "10000000-0000-4000-8000-000000000001",
@@ -35,6 +38,7 @@ const POLL = 60_000;
 const TITLE = "Isolated synthetic inbox";
 const NEW_INBOUND = "合成新訊息：想約睇樓";
 const DRAFT = "合成草稿：請稍等，我查一查";
+const CHECKING_HANDOFFS = "正在核對接手工作，完成讀回前不能更新。";
 let server: Server, origin: string;
 const errors = new WeakMap<Page, string[]>();
 
@@ -224,6 +228,24 @@ const refreshButton = (page: Page) =>
 /** A row of the conversation list: one button holding the customer's name and latest message. */
 const listRow = (page: Page, text: string) => page.getByRole("button").filter({ hasText: text });
 
+/** 我的接手工作's reads (StaffNotificationPanel -> the fixture's fetchMyStaffNotifications). */
+const handoffReads = (page: Page) =>
+  page.evaluate(
+    () =>
+      (window as unknown as FixtureWindow).noLinkStaffWorkFixture.calls.filter(
+        (c) => c.name === "read",
+      ).length,
+  );
+
+/**
+ * No error surface anywhere, not only in the nav. The fixture renders the route without the
+ * app's <main>, so this checks the whole document (a superset of <main>).
+ */
+async function expectNoAlertOnPage(page: Page) {
+  await expect(page.locator('[role="alert"]')).toHaveCount(0);
+  await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
+}
+
 test("nav badges show waiting work and the link names stay exact", async ({ page }) => {
   await open(page);
 
@@ -372,6 +394,8 @@ test("a new inbound appears in the list after one poll, without a reload or a th
   const thread = await threadReads(page);
 
   await pushInbound(page, ids.b, NEW_INBOUND);
+  // Nothing shows the new message until the poll reads the list.
+  await expect(page.getByRole("button").filter({ hasText: NEW_INBOUND })).toHaveCount(0);
   await page.clock.runFor(POLL);
 
   await expect.poll(() => listReads(page)).toBe(list + 1);
@@ -480,4 +504,117 @@ test("a background list read that answers after the user paged leaves the new pa
   await expect(olderPage).toBeVisible();
   await expect(listRow(page, "合成客戶乙")).toBeVisible();
   await expect(listRow(page, "合成客戶甲")).toHaveCount(0);
+});
+
+test("a list poll leaves 我的接手工作 alone, while 重新整理 still re-reads it", async ({
+  page,
+}) => {
+  await open(page);
+  const handoffs = page.getByRole("region", { name: "我的接手工作" });
+  await expect(handoffs.getByText("此頁沒有你的接手工作。")).toBeVisible();
+  await expect(handoffs.getByText(CHECKING_HANDOFFS)).toHaveCount(0);
+  // Records whether the panel ever shows its "checking" line, however briefly.
+  await page.evaluate((text) => {
+    const w = window as unknown as FixtureWindow;
+    w.__handoffChecking = false;
+    new MutationObserver(() => {
+      if (document.body.textContent?.includes(text)) w.__handoffChecking = true;
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  }, CHECKING_HANDOFFS);
+  const updated = page.getByText(/^最後更新 /).filter({ visible: true });
+  const updatedBefore = await updated.textContent();
+  const reads = await handoffReads(page);
+  const list = await listReads(page);
+
+  await page.clock.runFor(POLL);
+  await expect.poll(() => listReads(page)).toBe(list + 1);
+  await nextTask(page);
+
+  // The poll still moves 最後更新, but the handoff panel neither re-reads nor shows "checking".
+  await expect(updated).not.toHaveText(updatedBefore!);
+  expect(await handoffReads(page)).toBe(reads);
+  expect(await page.evaluate(() => (window as unknown as FixtureWindow).__handoffChecking)).toBe(
+    false,
+  );
+
+  // A moment later (so its 最後更新 differs from the poll's), 重新整理 re-reads the panel.
+  await page.clock.runFor(1_000);
+  await refreshButton(page).click();
+  await expect.poll(() => handoffReads(page)).toBe(reads + 1);
+});
+
+test("a list poll clears the banner of a failed list read", async ({ page }) => {
+  await open(page);
+  await setFixture(page, { listMode: "failure" });
+  await refreshButton(page).click();
+  const banner = page.getByRole("alert").filter({ hasText: "合成對話列表讀取失敗" });
+  await expect(banner).toBeVisible();
+
+  await setFixture(page, { listMode: "ok" });
+  await page.clock.runFor(POLL);
+  await expect(banner).toHaveCount(0);
+  await expectNoAlertOnPage(page);
+});
+
+test("a list poll keeps an error banner that did not come from a list read", async ({ page }) => {
+  // The staff list read fails after the inbox list has loaded.
+  await page.addInitScript(() => sessionStorage.setItem("no-link-fixture-agents", "error"));
+  await open(page);
+  await page.evaluate(() =>
+    (window as unknown as FixtureWindow).noLinkFixture.pendingAgents
+      .splice(0)
+      .forEach((release) => release()),
+  );
+  const banner = page.getByRole("alert").filter({ hasText: "合成同事名單讀取失敗" });
+  await expect(banner).toBeVisible();
+  const list = await listReads(page);
+
+  await page.clock.runFor(POLL);
+  await expect.poll(() => listReads(page)).toBe(list + 1);
+  await nextTask(page);
+  await expect(banner).toBeVisible();
+});
+
+test("a failed background list read keeps the rows, raises nothing, and the next tick reads again", async ({
+  page,
+}) => {
+  await open(page);
+  const list = await listReads(page);
+  await setFixture(page, { listMode: "failure" });
+
+  await page.clock.runFor(POLL);
+  await expect.poll(() => listReads(page)).toBe(list + 1);
+  await nextTask(page);
+  await expectNoAlertOnPage(page);
+  await expect(listRow(page, "合成客戶甲")).toBeVisible();
+  await expect(listRow(page, "合成客戶乙")).toBeVisible();
+  await expect(refreshButton(page)).toBeEnabled();
+
+  await page.clock.runFor(POLL);
+  await expect.poll(() => listReads(page)).toBe(list + 2);
+  await nextTask(page);
+  await expectNoAlertOnPage(page);
+});
+
+test("a hung background list read is dropped after 30 s and the next tick reads again", async ({
+  page,
+}) => {
+  await open(page);
+  const list = await listReads(page);
+  await setFixture(page, { listMode: "pending" });
+
+  await page.clock.runFor(POLL);
+  await expect.poll(() => listReads(page)).toBe(list + 1);
+
+  // The read never answers: after 30 s it is given up, silently, with the list left as it was.
+  await page.clock.runFor(30_000);
+  await nextTask(page);
+  await expectNoAlertOnPage(page);
+  await expect(listRow(page, "合成客戶甲")).toBeVisible();
+  await expect(refreshButton(page)).toBeEnabled();
+  expect(await listReads(page)).toBe(list + 1);
+
+  // ...so polling did not stall behind it: the next tick, a period after the first, reads again.
+  await page.clock.runFor(POLL - 30_000);
+  await expect.poll(() => listReads(page)).toBe(list + 2);
 });

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { canApplyBackgroundRead, rowForOpenPanel } from "./background-refresh";
+import {
+  canApplyBackgroundRead,
+  errorAfterBackgroundListSuccess,
+  rowForOpenPanel,
+} from "./background-refresh";
 
 describe("canApplyBackgroundRead", () => {
   const started = { requestId: 4, cursor: null };
@@ -55,16 +59,39 @@ describe("rowForOpenPanel", () => {
   test("always shows the fresh row while it is in the data", () => {
     // A reanalysis refreshes the data; the panel must show the new row, not the one it opened on.
     const reanalysed = { lead_id: "a", summary: "合成新摘要" };
-    expect(rowForOpenPanel([reanalysed, b], "a", a, idOf)).toBe(reanalysed);
+    expect(rowForOpenPanel([reanalysed, b], "a", a, idOf)).toEqual({
+      row: reanalysed,
+      offBoard: false,
+    });
+    expect(rowForOpenPanel([reanalysed, b], "a", a, idOf)?.row).toBe(reanalysed);
   });
 
-  test("keeps the last shown row when a refresh drops the selected one", () => {
-    expect(rowForOpenPanel([b], "a", a, idOf)).toBe(a);
-    expect(rowForOpenPanel(null, "a", a, idOf)).toBe(a);
+  test("keeps the last shown row, marked off-board, when a refresh drops the selected one", () => {
+    // Off-board: the panel may be stale and its 重新 AI 分析 could not show the result.
+    expect(rowForOpenPanel([b], "a", a, idOf)).toEqual({ row: a, offBoard: true });
+    expect(rowForOpenPanel(null, "a", a, idOf)).toEqual({ row: a, offBoard: true });
   });
 
   test("never shows a remembered row for a different selection", () => {
     expect(rowForOpenPanel([b], "a", b, idOf)).toBeNull();
     expect(rowForOpenPanel([a], "b", null, idOf)).toBeNull();
+  });
+});
+
+describe("errorAfterBackgroundListSuccess", () => {
+  test("clears the banner a failed list read put up", () => {
+    expect(
+      errorAfterBackgroundListSuccess("合成對話列表讀取失敗", "合成對話列表讀取失敗"),
+    ).toBeNull();
+  });
+
+  test("keeps a banner from any other read on the page", () => {
+    expect(errorAfterBackgroundListSuccess("合成同事名單讀取失敗", null)).toBe(
+      "合成同事名單讀取失敗",
+    );
+    expect(errorAfterBackgroundListSuccess("合成同事名單讀取失敗", "合成對話列表讀取失敗")).toBe(
+      "合成同事名單讀取失敗",
+    );
+    expect(errorAfterBackgroundListSuccess(null, "合成對話列表讀取失敗")).toBeNull();
   });
 });
