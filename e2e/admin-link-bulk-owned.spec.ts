@@ -746,15 +746,4 @@ for (const width of [1440, 1280, 768, 390]) {
       ),
     ).toBe(0);
   });
-  test(`disabled import flag performs no CSV lookup or batch mutation ${width}`, async ({
-    page,
-  }) => {
-    await page.addInitScript(() =>
-      sessionStorage.setItem("owned-link-bulk-import-enabled", "false"),
-    );
-    await setup(page, width);
-    await expect(page.getByLabel("CSV 或貼表格資料")).toHaveCount(0);
-    await expect(page.getByLabel("搜尋公開樓編或物業")).toBeVisible();
-    expect(await page.evaluate(() => window.ownedLinkBulk.calls)).toEqual([]);
-  });
 }

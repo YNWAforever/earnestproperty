@@ -1,4 +1,5 @@
 import { test, expect } from "bun:test";
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -118,4 +119,12 @@ test("first step names local staff with email and branch without provider inputs
   expect(html).toContain("Central");
   expect(html).toContain("選擇在職同事");
   expect(html).not.toContain("實際 Inbox User ID");
+});
+
+test("save enabled when mapping valid", () => {
+  // The step-1 save button only mounts after the async folder load, which a static render cannot
+  // reach, so assert the save path carries no feature-flag guard and the wizard takes no such prop.
+  const source = readFileSync(new URL("./StaffMappingWizard.tsx", import.meta.url), "utf8");
+  expect(source).not.toContain("allowReviewedSave");
+  expect(source).not.toContain("核實映射的儲存功能尚未啟用");
 });

@@ -1081,3 +1081,9 @@ test("campaign status and delivery job are committed in one transaction", () => 
   assert.match(queue, /wakeAfterCommit\("general"\)/);
   assert.doesNotMatch(read("src/routes/api.admin.campaigns.$id.queue.ts"), /enqueueJob\(/);
 });
+
+test("WhatsApp settings screen has no build-time UI flag or save guard", () => {
+  const source = read("src/routes/admin.whatsapp-settings.tsx");
+  assert.doesNotMatch(source, /UiFlags|rollout/);
+  assert.doesNotMatch(source, /allowReviewedSave/);
+});
