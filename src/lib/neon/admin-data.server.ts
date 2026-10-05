@@ -3702,7 +3702,12 @@ export async function createWebsiteInquiry(input: {
   });
   // The alert job committed with the lead; wake only for a fresh insert, never a replay.
   if (result.leadAlertQueued) {
-    (await import("../control-plane/job-wake.server.ts")).wakeAfterCommit("general");
+    try {
+      wakeAfterCommit("general");
+    } catch {
+      // The enquiry and its alert job are committed; the cron lane will pick the job up.
+      console.warn("[website-inquiry] lead_alert_wake_failed");
+    }
   }
   return result;
 }

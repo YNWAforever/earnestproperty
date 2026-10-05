@@ -1140,7 +1140,6 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
           // These flip when the named batch makes the source create a lead and enqueue.
           await st.test(
             "valuation request and listing alert create no lead or job (FX-05c / FX-09)",
-            { todo: "FX-05c / FX-09 enqueue these sources in their own batches" },
             async () => {
               const leads = await leadCount();
               const jobs = await alertJobCount();
@@ -1166,13 +1165,20 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
                 consentedAt: new Date().toISOString(),
                 utm: {},
               });
-              assert.equal(await leadCount(), leads);
-              assert.equal(await alertJobCount(), jobs);
+              assert.equal(
+                await leadCount(),
+                leads,
+                "valuation/listing-alert now create leads: FX-05c / FX-09 must flip this assertion deliberately",
+              );
+              assert.equal(
+                await alertJobCount(),
+                jobs,
+                "valuation/listing-alert now enqueue alerts: FX-05c / FX-09 must flip this assertion deliberately",
+              );
             },
           );
           await st.test(
             "a WhatsApp inbound message creates a lead through the trigger but no job (FX-02)",
-            { todo: "FX-02 enqueues WhatsApp inbound leads in its own batch" },
             async () => {
               const jobs = await alertJobCount();
               const leads = await leadCount();
@@ -1185,7 +1191,11 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
                 [contact.id, `ext-${randomUUID()}`],
               );
               assert.equal(await leadCount(), leads + 1);
-              assert.equal(await alertJobCount(), jobs);
+              assert.equal(
+                await alertJobCount(),
+                jobs,
+                "WhatsApp inbound leads now enqueue alerts: FX-02 must flip this assertion deliberately",
+              );
             },
           );
         },
@@ -1237,10 +1247,11 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         "website enquiry wakes the general lane once, and a replay wakes nothing",
         async () => {
           const wakes = [];
+          let wakeImpl = (lane) => wakes.push(lane);
           await mockOwnedServerDb(mock, query, transaction);
           mock.module(new URL("src/lib/control-plane/job-wake.server.ts", repoRoot).href, {
             exports: {
-              wakeAfterCommit: (lane) => wakes.push(lane),
+              wakeAfterCommit: (lane) => wakeImpl(lane),
               laneForJob: () => "general",
             },
           });
@@ -1257,6 +1268,29 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
           const replay = await createWebsiteInquiry(input);
           assert.equal(replay.id, first.id);
           assert.deepEqual(wakes, ["general"], "a replay must not wake the lane");
+
+          // A wake that throws must never fail an already-committed enquiry.
+          const warn = mock.method(console, "warn", () => {});
+          wakeImpl = () => {
+            throw new Error("synthetic wake failure");
+          };
+          try {
+            const committed = await createWebsiteInquiry({ ...input, submissionId: randomUUID() });
+            assert.ok(committed.id, "the committed enquiry id is still returned");
+            assert.equal(committed.leadAlertQueued, true);
+            assert.equal((await alertJobs((await leadFor(committed.id)).id)).length, 1);
+            assert.equal(warn.mock.calls.length, 1);
+            assert.equal(
+              warn.mock.calls[0].arguments[0],
+              "[website-inquiry] lead_alert_wake_failed",
+            );
+            assert.doesNotMatch(
+              JSON.stringify(warn.mock.calls[0].arguments),
+              /synthetic|陳先生|9123/,
+            );
+          } finally {
+            warn.mock.restore();
+          }
         },
       );
     });

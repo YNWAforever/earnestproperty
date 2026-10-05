@@ -1137,6 +1137,7 @@ test("staff WhatsApp dispatch guards on owned Postgres", { timeout: 300000 }, as
       user: "postgres",
       database,
       max: 4,
+      connectionTimeoutMillis: 10000,
     });
     const query = async (statement, params = []) => (await owned.query(statement, params)).rows;
     const tx = async (statements) => {

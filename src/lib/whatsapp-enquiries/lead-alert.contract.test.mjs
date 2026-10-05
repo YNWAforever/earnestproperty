@@ -30,7 +30,7 @@ const EXTEND_MESSAGE =
   "Only live website intake may enqueue a lead alert. FX-02 (WhatsApp inbound), FX-05c and FX-09 extend this allowlist deliberately in their own batches; a backfill or import must never import it.";
 
 test("only allowlisted intake modules import the enqueue fragment", () => {
-  const importers = sourceFiles(["src", "scripts"], /\.(?:[cm]?[jt]sx?)$/)
+  const importers = sourceFiles(["src", "scripts", "workers"], /\.(?:[cm]?[jt]sx?)$/)
     .filter((f) => !/lead-alert-enqueue\.(?:js|d\.ts)$/.test(f))
     .filter((f) => !/\.test\.[cm]?[jt]sx?$/.test(f))
     .filter((f) =>
@@ -44,14 +44,17 @@ test("only allowlisted intake modules import the enqueue fragment", () => {
   assert.deepEqual(importers, ALLOWLISTED_IMPORTERS, EXTEND_MESSAGE);
 });
 
-test("no script or migration spells the alert job type outside the handler and registry", () => {
+test("no source, script, worker or migration spells the alert job type outside the handler and registry", () => {
   const allowed = new Set([
     "src/lib/neon/lead-alert-enqueue.js",
     "src/lib/neon/lead-alert-enqueue.d.ts",
     "src/lib/whatsapp-enquiries/lead-alert.server.ts",
     "src/lib/control-plane/job-handlers.server.ts",
   ]);
-  const offenders = sourceFiles(["scripts", "neon/migrations"], /\.(?:[cm]?[jt]sx?|sql)$/)
+  const offenders = sourceFiles(
+    ["src", "scripts", "workers", "neon/migrations"],
+    /\.(?:[cm]?[jt]sx?|sql)$/,
+  )
     .filter((f) => !/\.test\.[cm]?[jt]sx?$/.test(f))
     .map(rel)
     .filter((f) => !allowed.has(f))
