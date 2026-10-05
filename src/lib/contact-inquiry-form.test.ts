@@ -13,6 +13,7 @@ import {
   type RawContactInquiryInput,
   type SubmitGuard,
 } from "./contact-inquiry-form";
+import { publicFormErrorMessage } from "./public-form-submit";
 
 // Mirrors exactly the tryStart()/finally-finish() dance contact.tsx's own
 // handleSubmit performs around submitContactInquiry -- kept here rather than
@@ -31,6 +32,8 @@ async function guardedSubmit(
     guard.finish();
   }
 }
+
+const SERVER_COPY = "未能提交，請再試一次，或直接 WhatsApp 我們。";
 
 const validRaw: RawContactInquiryInput = {
   name: "陳先生",
@@ -146,7 +149,7 @@ describe("submitContactInquiry", () => {
     expect(calls).toBe(0);
   });
 
-  test("a server error is surfaced", async () => {
+  test("a resolved { error } result is a SERVER error with fixed copy, never the returned text", async () => {
     const submitFn = async () => ({ error: "network unreachable" });
 
     const outcome = await submitContactInquiry({
@@ -155,12 +158,12 @@ describe("submitContactInquiry", () => {
       submitFn,
     });
 
-    expect(outcome).toEqual({ status: "server-error", message: "network unreachable" });
+    expect(outcome).toEqual({ status: "server-error", code: "SERVER", message: SERVER_COPY });
   });
 
-  test("a thrown/rejected submitFn is caught and surfaced as a server error", async () => {
+  test("a thrown/rejected submitFn is caught and surfaced as a SERVER error with fixed copy", async () => {
     const submitFn = async () => {
-      throw new Error("fetch failed");
+      throw new Error("relation does not exist");
     };
 
     const outcome = await submitContactInquiry({
@@ -169,10 +172,71 @@ describe("submitContactInquiry", () => {
       submitFn,
     });
 
-    expect(outcome).toEqual({ status: "server-error", message: "fetch failed" });
+    expect(outcome).toEqual({ status: "server-error", code: "SERVER", message: SERVER_COPY });
   });
 
-  test("a successful submission reports success", async () => {
+  test("a thrown TypeError (fetch failure) is surfaced as a NETWORK error", async () => {
+    const submitFn = async () => {
+      throw new TypeError("Failed to fetch");
+    };
+
+    const outcome = await submitContactInquiry({
+      raw: validRaw,
+      consentWhatsapp: false,
+      submitFn,
+    });
+
+    expect(outcome).toEqual({
+      status: "server-error",
+      code: "NETWORK",
+      message: publicFormErrorMessage("NETWORK"),
+    });
+  });
+
+  test("submitFn resolving a 429 Response -> server-error RATE_LIMITED, never success", async () => {
+    // TanStack Start RESOLVES (does not reject) when a server fn throws a Response; the
+    // rate limiter does exactly that, so this is the real lost-lead path.
+    const submitFn = async () => new Response("Too Many Requests", { status: 429 });
+
+    const outcome = await submitContactInquiry({
+      raw: validRaw,
+      consentWhatsapp: false,
+      submitFn,
+    });
+
+    expect(outcome.status).not.toBe("success");
+    expect(outcome).toEqual({
+      status: "server-error",
+      code: "RATE_LIMITED",
+      message: publicFormErrorMessage("RATE_LIMITED"),
+    });
+  });
+
+  test("submitFn resolving {} -> server-error SERVER", async () => {
+    const submitFn = async () => ({});
+
+    const outcome = await submitContactInquiry({
+      raw: validRaw,
+      consentWhatsapp: false,
+      submitFn,
+    });
+
+    expect(outcome).toEqual({ status: "server-error", code: "SERVER", message: SERVER_COPY });
+  });
+
+  test("submitFn resolving { id: 'x' } -> { status: 'success', id: 'x' }", async () => {
+    const submitFn = async () => ({ id: "x" });
+
+    const outcome = await submitContactInquiry({
+      raw: validRaw,
+      consentWhatsapp: false,
+      submitFn,
+    });
+
+    expect(outcome).toEqual({ status: "success", id: "x" });
+  });
+
+  test("a successful submission reports success carrying the inquiry id", async () => {
     const submitFn = async () => ({ id: "inquiry-1" });
 
     const outcome = await submitContactInquiry({
@@ -181,7 +245,7 @@ describe("submitContactInquiry", () => {
       submitFn,
     });
 
-    expect(outcome).toEqual({ status: "success" });
+    expect(outcome).toEqual({ status: "success", id: "inquiry-1" });
   });
 });
 
@@ -219,7 +283,7 @@ describe("guard + submitContactInquiry composition (contact.tsx's actual duplica
 
     resolveFirst?.();
     const firstOutcome = await first;
-    expect(firstOutcome).toEqual({ status: "success" });
+    expect(firstOutcome).toEqual({ status: "success", id: "inquiry-1" });
     expect(calls).toBe(1);
   });
 
@@ -242,8 +306,8 @@ describe("guard + submitContactInquiry composition (contact.tsx's actual duplica
       submitFn,
     });
 
-    expect(firstOutcome).toEqual({ status: "success" });
-    expect(secondOutcome).toEqual({ status: "success" });
+    expect(firstOutcome).toEqual({ status: "success", id: "inquiry-1" });
+    expect(secondOutcome).toEqual({ status: "success", id: "inquiry-2" });
     expect(calls).toBe(2);
   });
 
@@ -268,7 +332,7 @@ describe("guard + submitContactInquiry composition (contact.tsx's actual duplica
       consentWhatsapp: false,
       submitFn,
     });
-    expect(succeeded).toEqual({ status: "success" });
+    expect(succeeded).toEqual({ status: "success", id: "inquiry-1" });
     expect(calls).toBe(1);
   });
 
@@ -281,7 +345,7 @@ describe("guard + submitContactInquiry composition (contact.tsx's actual duplica
     };
 
     const failed = await guardedSubmit(guard, { raw: validRaw, consentWhatsapp: false, submitFn });
-    expect(failed).toEqual({ status: "server-error", message: "network unreachable" });
+    expect(failed).toEqual({ status: "server-error", code: "SERVER", message: SERVER_COPY });
 
     shouldFail = false;
     const succeeded = await guardedSubmit(guard, {
@@ -289,6 +353,6 @@ describe("guard + submitContactInquiry composition (contact.tsx's actual duplica
       consentWhatsapp: false,
       submitFn,
     });
-    expect(succeeded).toEqual({ status: "success" });
+    expect(succeeded).toEqual({ status: "success", id: "inquiry-1" });
   });
 });
