@@ -50,6 +50,12 @@ export const fetchStaffSession = async () => ({
   roles: [state.role],
   staffId: state.actor,
 });
+export const fetchAdminAttentionCounts = async () => ({
+  unansweredConversations: 0,
+  unassignedLeads: 0,
+  staleNewLeads: 0,
+  leadsNeedingAttention: 0,
+});
 const call = (name: string, input: unknown) =>
   state.calls.push({ name, actor: state.actor, input });
 const runId = "70000000-0000-4000-8000-000000000001";

@@ -73,6 +73,35 @@ test("command center read model is guarded and set-based", () => {
   assert.match(client, /fetchCommandCenterServer[\s\S]*?requireStaff\(\["admin", "manager"\]\)/);
 });
 
+test("attention reads are staff-scoped server functions next to the overview", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const client = read("src/lib/neon/admin-data.ts");
+  const types = read("src/lib/neon/admin-data.types.ts");
+
+  for (const name of ["fetchAdminAttentionCounts", "fetchAdminTodayTasks"])
+    assert.match(client, new RegExp(`export\\s+async\\s+function\\s+${name}\\b`));
+  for (const name of ["getAdminAttentionCounts", "getAdminTodayTasks"])
+    assert.match(server, new RegExp(`export\\s+async\\s+function\\s+${name}\\b`));
+  assert.match(
+    client,
+    /fetchAdminAttentionCountsServer[\s\S]*?requireStaff\(\["admin", "manager", "agent"\]\)/,
+  );
+  assert.match(
+    client,
+    /fetchAdminTodayTasksServer[\s\S]*?requireStaff\(\["admin", "manager", "agent"\]\)/,
+  );
+
+  // PR #222 appends at the end of these files; the attention reads sit next to the overview.
+  const placed = server.indexOf("export async function getAdminAttentionCounts");
+  assert.ok(placed > server.indexOf("export async function getAdminOverview"));
+  assert.ok(placed < server.indexOf("export async function listAdminListings"));
+  assert.match(server, /wa_can_read_conversation\(\$1::uuid,\s*w\.id\)/);
+
+  assert.match(types, /export\s+type\s+AdminAttentionCounts\b/);
+  assert.match(types, /export\s+type\s+AdminTodayTask\b/);
+  assert.match(types, /leadsNeedingAttention:\s*number/);
+});
+
 test("property mutation keeps Copilot content fields explicit and scoped", () => {
   const server = read("src/lib/neon/admin-data.server.ts");
   const types = read("src/lib/neon/admin-data.types.ts");

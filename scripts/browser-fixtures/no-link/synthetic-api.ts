@@ -78,6 +78,29 @@ const state = {
   delayDetail: false,
   failOverview: false,
   failOverviewDenied: false,
+  attentionMode: "ok" as "ok" | "failure" | "pending",
+  attentionCounts: {
+    unansweredConversations: 2,
+    unassignedLeads: 0,
+    staleNewLeads: 0,
+    leadsNeedingAttention: 0,
+  },
+  pendingAttention: [] as (() => void)[],
+  todayTasks: [
+    {
+      kind: "conversation" as const,
+      id: ids.a,
+      title: "合成客戶甲",
+      waitingSince: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+    },
+    {
+      // Resolves in the daily-work fixture's fetchAdminLead.
+      kind: "lead" as const,
+      id: "40000000-0000-4000-8000-000000000002",
+      title: "每日工作合成查詢1",
+      waitingSince: new Date(Date.now() - 150 * 60 * 1000).toISOString(),
+    },
+  ],
   releaseLateDetail: null as null | (() => void),
   forwardMode: "ok",
   releaseForward: null as null | (() => void),
@@ -590,6 +613,18 @@ export async function fetchAdminOverview() {
     scope: actor === "manager" ? "all" : "own",
     checkedAt: now,
   };
+}
+// Reads fixture(), not state: window.noLinkFixture is a copy that tests mutate.
+export async function fetchAdminAttentionCounts() {
+  call("attention");
+  if (fixture().attentionMode === "pending")
+    await new Promise<void>((release) => fixture().pendingAttention.push(release));
+  if (fixture().attentionMode === "failure") throw Error("Synthetic attention read failure");
+  return { ...fixture().attentionCounts };
+}
+export async function fetchAdminTodayTasks() {
+  call("todayTasks");
+  return fixture().todayTasks;
 }
 export async function listAdminTeam() {
   return {

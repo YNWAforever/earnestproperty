@@ -402,6 +402,28 @@ export async function fetchAdminOverview() {
   return callStaffServerFn(async () => fetchAdminOverviewServer(await withStaffAuthHeaders()));
 }
 
+const fetchAdminAttentionCountsServer = createServerFn({ method: "GET" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager", "agent"]);
+  const data = await import("./admin-data.server");
+  return data.getAdminAttentionCounts(staff);
+});
+
+export async function fetchAdminAttentionCounts() {
+  return callStaffServerFn(async () =>
+    fetchAdminAttentionCountsServer(await withStaffAuthHeaders()),
+  );
+}
+
+const fetchAdminTodayTasksServer = createServerFn({ method: "GET" }).handler(async () => {
+  const staff = await requireStaff(["admin", "manager", "agent"]);
+  const data = await import("./admin-data.server");
+  return data.getAdminTodayTasks(staff);
+});
+
+export async function fetchAdminTodayTasks() {
+  return callStaffServerFn(async () => fetchAdminTodayTasksServer(await withStaffAuthHeaders()));
+}
+
 const fetchAdminListingsServer = createServerFn({ method: "GET" }).handler(async () => {
   const staff = await requireStaff(["admin", "manager", "agent"]);
   const data = await import("./admin-data.server");

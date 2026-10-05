@@ -152,6 +152,12 @@ export async function fetchStaffSession() {
     ? { status: "denied", reason: "not-staff" }
     : { status: "ok", roles: [state.role], staffId: state.binding };
 }
+export const fetchAdminAttentionCounts = async () => ({
+  unansweredConversations: 0,
+  unassignedLeads: 0,
+  staleNewLeads: 0,
+  leadsNeedingAttention: 0,
+});
 export const fetchAdminAgents = async () => {
   call("agents");
   return [{ id: staff, name: "合成代理甲", email: null }];
