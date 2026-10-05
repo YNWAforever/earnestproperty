@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
@@ -33,6 +33,21 @@ function deferred<T>() {
     reject = fail;
   });
   return { promise, resolve, reject };
+}
+
+type Deferred = ReturnType<typeof deferred<AdminAttentionCounts>>;
+
+const EMPTY_SNAPSHOT = { identity: null, counts: null, checkedAt: null };
+
+/** A fetcher whose every read stays pending until the test settles it. */
+function pendingReads() {
+  const reads: Deferred[] = [];
+  const fetcher = () => {
+    const read = deferred<AdminAttentionCounts>();
+    reads.push(read);
+    return read.promise;
+  };
+  return { reads, fetcher };
 }
 
 describe("attention badges and copy", () => {
@@ -76,6 +91,18 @@ describe("attention badges and copy", () => {
 });
 
 describe("admin attention store", () => {
+  // A failed read logs one constant tag and the error's name. Record the warnings so the test
+  // output stays clean and each failure test can check exactly what was logged.
+  const realWarn = console.warn;
+  let warnings: unknown[][] = [];
+  beforeEach(() => {
+    warnings = [];
+    console.warn = (...args: unknown[]) => void warnings.push(args);
+  });
+  afterEach(() => {
+    console.warn = realWarn;
+  });
+
   test("concurrent refreshes share one request", async () => {
     let calls = 0;
     const read = deferred<AdminAttentionCounts>();
@@ -109,6 +136,8 @@ describe("admin attention store", () => {
     expect(store.getSnapshot().identity).toBe("id-1");
     expect(store.getSnapshot().counts).toEqual(counts(1, 2, 3));
     expect(store.getSnapshot().checkedAt).toBe(before.checkedAt);
+    // Logged once, by tag and error name only: never the message, a response body or counts.
+    expect(warnings).toEqual([["ADMIN_ATTENTION_READ_FAILED", "Error"]]);
   });
 
   test("a hung read times out like any failure: last counts kept, the next refresh asks again", async () => {
@@ -132,6 +161,7 @@ describe("admin attention store", () => {
     hang = false;
     await store.refresh("id-1");
     expect(calls).toBe(3);
+    expect(warnings).toEqual([["ADMIN_ATTENTION_READ_FAILED", "TimeoutError"]]);
   });
 
   test("counts never cross identities", async () => {
@@ -162,6 +192,61 @@ describe("admin attention store", () => {
     reads.get("C")!.reject(new Error("合成讀取失敗"));
     await c;
     expect(store.getSnapshot()).toEqual({ identity: "C", counts: null, checkedAt: null });
+    expect(warnings).toEqual([["ADMIN_ATTENTION_READ_FAILED", "Error"]]);
+  });
+
+  test("identity flapping A → B → A: A's first read answering last never overwrites the newer A counts", async () => {
+    let time = 0;
+    const { reads, fetcher } = pendingReads();
+    const store = createAdminAttentionStore(fetcher, () => time);
+
+    const firstA = store.refresh("A");
+    const b = store.refresh("B");
+    const secondA = store.refresh("A");
+    expect(reads).toHaveLength(3);
+
+    time = 1_000;
+    reads[2].resolve(counts(5, 0, 0));
+    await secondA;
+    const newest = { identity: "A", counts: counts(5, 0, 0), checkedAt: 1_000 };
+    expect(store.getSnapshot()).toEqual(newest);
+
+    // The overtaken reads answer late: B's belongs to another identity, A's first is older.
+    time = 2_000;
+    reads[1].resolve(counts(7, 7, 7));
+    reads[0].resolve(counts(1, 1, 1));
+    await Promise.all([firstA, b]);
+    expect(store.getSnapshot()).toEqual(newest);
+    expect(warnings).toEqual([]);
+  });
+
+  test("a read pending across reset() publishes nothing", async () => {
+    const { reads, fetcher } = pendingReads();
+    const store = createAdminAttentionStore(fetcher);
+
+    const abandoned = store.refresh("A");
+    store.reset();
+    let notified = 0;
+    store.subscribe(() => {
+      notified += 1;
+    });
+    reads[0].resolve(counts(3, 0, 0));
+    await abandoned;
+    expect(store.getSnapshot()).toEqual(EMPTY_SNAPSHOT);
+    expect(notified).toBe(0);
+
+    // The same identity returning while its abandoned read is still pending gets a read of its
+    // own instead of joining one that can no longer publish.
+    const abandonedAgain = store.refresh("A");
+    store.reset();
+    const fresh = store.refresh("A");
+    expect(reads).toHaveLength(3);
+    reads[1].resolve(counts(8, 0, 0));
+    await abandonedAgain;
+    expect(store.getSnapshot()).toEqual({ identity: "A", counts: null, checkedAt: null });
+    reads[2].resolve(counts(4, 0, 0));
+    await fresh;
+    expect(store.getSnapshot().counts).toEqual(counts(4, 0, 0));
   });
 
   test("refreshIfStale reuses counts younger than 60 s", async () => {

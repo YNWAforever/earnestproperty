@@ -392,6 +392,11 @@ async function callStaffServerFn<T>(call: () => Promise<T>) {
   }
 }
 
+// A background read must never reload the page under the user, nor clear the reload guard.
+async function callStaffServerFnInBackground<T>(call: () => Promise<T>) {
+  return unwrapServerFnResponse(call());
+}
+
 const fetchAdminOverviewServer = createServerFn({ method: "GET" }).handler(async () => {
   const staff = await requireStaff(["admin", "manager", "agent"]);
   const data = await import("./admin-data.server");
@@ -409,7 +414,7 @@ const fetchAdminAttentionCountsServer = createServerFn({ method: "GET" }).handle
 });
 
 export async function fetchAdminAttentionCounts() {
-  return callStaffServerFn(async () =>
+  return callStaffServerFnInBackground(async () =>
     fetchAdminAttentionCountsServer(await withStaffAuthHeaders()),
   );
 }

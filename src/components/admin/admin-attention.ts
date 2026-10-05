@@ -72,21 +72,29 @@ export function withAttentionTitle(title: string, total: number): string {
   return total > 0 ? `(${badgeText(total)}) ${base}` : base;
 }
 
+/** A failed read is logged by its error's name only (e.g. TimeoutError), never its message. */
+function errorName(error: unknown): string {
+  return error instanceof Error ? error.name : "UnknownError";
+}
+
 /**
  * The waiting-work counts behind the nav badges and the tab title, shared by every AdminShell
  * (each admin page renders its own) so a page change never repeats a fresh read.
  *
  * - One read in flight per identity; a second refresh joins it.
- * - Counts are published only for the identity they were read for, so one account's counts are
- *   never shown to another; a new identity starts empty at once.
- * - A failed or timed-out read keeps the last counts and never throws, alerts or logs.
+ * - Counts are published only by a read of the current generation, which `reset()` and every
+ *   change of identity end: one account's counts are never shown to another, a new identity
+ *   starts empty at once, and an overtaken or abandoned read can never overwrite newer counts.
+ * - A failed or timed-out read keeps the last counts and never throws or alerts. It logs one
+ *   constant tag and the error's name, never counts, a message or a response body.
  */
 export function createAdminAttentionStore(
   fetcher: () => Promise<AdminAttentionCounts>,
   now: () => number = () => Date.now(),
 ) {
   let state: AdminAttentionSnapshot = EMPTY;
-  let inFlight: { identity: string; promise: Promise<void> } | null = null;
+  let generation = 0;
+  let inFlight: { generation: number; promise: Promise<void> } | null = null;
   const listeners = new Set<() => void>();
 
   function publish(next: AdminAttentionSnapshot) {
@@ -106,25 +114,28 @@ export function createAdminAttentionStore(
   }
 
   function refresh(identity: string): Promise<void> {
-    if (inFlight?.identity === identity) return inFlight.promise;
-    if (state.identity !== identity) publish({ identity, counts: null, checkedAt: null });
+    if (state.identity !== identity) {
+      generation += 1;
+      publish({ identity, counts: null, checkedAt: null });
+    }
+    if (inFlight?.generation === generation) return inFlight.promise;
+    const readGeneration = generation;
     // The executor runs the fetcher synchronously; a synchronous throw becomes a rejection.
     const request = new Promise<AdminAttentionCounts>((resolve) => resolve(fetcher()));
     const promise: Promise<void> = request
       .then(
         (counts) => {
-          if (state.identity === identity || state.identity === null) {
-            publish({ identity, counts, checkedAt: now() });
-          }
+          if (readGeneration === generation) publish({ identity, counts, checkedAt: now() });
         },
-        () => {
-          // Keep the last counts. The error is not logged: it may quote customer data.
+        (error: unknown) => {
+          // Keep the last counts. The message is not logged: it may quote customer data.
+          console.warn("ADMIN_ATTENTION_READ_FAILED", errorName(error));
         },
       )
       .finally(() => {
         if (inFlight?.promise === promise) inFlight = null;
       });
-    inFlight = { identity, promise };
+    inFlight = { generation: readGeneration, promise };
     return promise;
   }
 
@@ -140,6 +151,8 @@ export function createAdminAttentionStore(
   }
 
   function reset() {
+    // A read still in flight belongs to the old generation, so it can no longer publish.
+    generation += 1;
     if (state !== EMPTY) publish(EMPTY);
   }
 

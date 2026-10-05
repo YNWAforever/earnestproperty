@@ -119,6 +119,22 @@ async function open(page: Page) {
   await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toBeVisible();
   // Exactly one read on load: nothing else in the shell or the page asks for the counts.
   await expect.poll(() => callCount(page, "attention")).toBe(1);
+  // From here on only runFor moves the page's clock, so a "not yet" check never depends on how
+  // long a step took in real time. A second ahead of the page's own time, so pausing never has
+  // to step back; the next poll is still about a minute away.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1_000));
+}
+
+/** Lets the page finish one task (its timers are paused, so this is not a setTimeout). */
+function nextTask(page: Page) {
+  return page.evaluate(
+    () =>
+      new Promise<void>((done) => {
+        const channel = new MessageChannel();
+        channel.port1.onmessage = () => done();
+        channel.port2.postMessage(null);
+      }),
+  );
 }
 
 function callCount(page: Page, name: string, resource?: string) {
@@ -273,7 +289,7 @@ test("a slow count read is never doubled, and a hung one is dropped after 30 s",
       release(),
     ),
   );
-  await page.evaluate(() => new Promise((done) => setTimeout(done, 0)));
+  await nextTask(page);
   await expect(inboxBadge(page)).toHaveText("4");
   await expect(page).toHaveTitle(`(4) ${TITLE}`);
   expect(await callCount(page, "attention")).toBe(before + 2);

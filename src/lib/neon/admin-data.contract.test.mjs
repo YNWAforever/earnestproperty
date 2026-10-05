@@ -102,6 +102,32 @@ test("attention reads are staff-scoped server functions next to the overview", (
   assert.match(types, /leadsNeedingAttention:\s*number/);
 });
 
+test("background attention reads never reload the page under the user", () => {
+  const source = read("src/lib/neon/admin-data.ts");
+  const file = ts.createSourceFile("admin-data.ts", source, ts.ScriptTarget.Latest, true);
+  const body = (name) => {
+    const declaration = file.statements.find(
+      (statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === name,
+    );
+    assert.ok(declaration?.body, `admin-data.ts should declare ${name}`);
+    return { declaration, text: declaration.body.getText(file) };
+  };
+
+  // A background poll that fails must not reload the page (a half-typed reply would be lost),
+  // and its success must not clear the reload guard that foreground reads rely on.
+  const background = body("callStaffServerFnInBackground");
+  assert.doesNotMatch(background.text, /reloadOnStaleServerFunction|clearStorageFlag/);
+  assert.match(background.text, /unwrapServerFnResponse\(call\(\)\)/);
+  assert.ok(
+    !ts.getModifiers(background.declaration)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword),
+    "callStaffServerFnInBackground stays private to admin-data.ts",
+  );
+
+  const counts = body("fetchAdminAttentionCounts").text;
+  assert.match(counts, /\bcallStaffServerFnInBackground\(/);
+  assert.doesNotMatch(counts, /\bcallStaffServerFn\(/);
+});
+
 test("property mutation keeps Copilot content fields explicit and scoped", () => {
   const server = read("src/lib/neon/admin-data.server.ts");
   const types = read("src/lib/neon/admin-data.types.ts");
