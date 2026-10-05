@@ -1004,7 +1004,11 @@ function PropertyPage() {
                   <CardTitle className="text-base">{decision.inquiryLabel}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <PropertyInquiryForm propertyId={property.id} listingNo={publicListingNo} />
+                  <PropertyInquiryForm
+                    key={property.id}
+                    propertyId={property.id}
+                    listingNo={publicListingNo}
+                  />
                 </CardContent>
               </Card>
             </>
