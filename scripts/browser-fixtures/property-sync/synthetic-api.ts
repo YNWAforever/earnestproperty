@@ -56,6 +56,12 @@ export const fetchAdminAttentionCounts = async () => ({
   staleNewLeads: 0,
   leadsNeedingAttention: 0,
 });
+// No route in this fixture polls; exported so every owned fixture serves the same API.
+const noPolledRead = async (): Promise<never> => {
+  throw Error("This fixture renders no polled view");
+};
+export const fetchAdminPageInBackground = noPolledRead;
+export const fetchCommandCenterInBackground = noPolledRead;
 const call = (name: string, input: unknown) =>
   state.calls.push({ name, actor: state.actor, input });
 const runId = "70000000-0000-4000-8000-000000000001";

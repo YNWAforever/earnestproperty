@@ -41,6 +41,9 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
+import { canApplyBackgroundRead } from "@/lib/admin/background-refresh";
+import { MIN_VISIBLE_INTERVAL_MS, useVisibleInterval } from "@/lib/admin/use-visible-interval";
+import { BACKGROUND_READ_TIMEOUT_MS, withTimeout } from "@/lib/admin/with-timeout";
 import {
   fetchAdminAgents,
   fetchAdminConversation,
@@ -48,6 +51,7 @@ import {
   fetchAdminOutboundIntent,
   fetchAdminOutboundReservation,
   fetchAdminPage,
+  fetchAdminPageInBackground,
   fetchAdminWhatsappTemplates,
   fetchAdminWoztellStatus,
   runAdminWoztellBackfill,
@@ -195,6 +199,9 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   const [woztellEnabled, setWoztellEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
+  // Lets the list poll see a user-started list read (重新整理, paging, a save's readback).
+  const loadingRowsRef = useRef(loadingRows);
+  loadingRowsRef.current = loadingRows;
   const [enquirySelections, setEnquirySelections] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminConversationDetail | null>(null);
@@ -367,20 +374,20 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
     }
   }, [isWorkspaceCurrent]);
   const refreshConversations = useCallback(
-    async (cursor: string | null = listCursorRef.current) => {
+    async (
+      cursor: string | null = listCursorRef.current,
+      options: { background?: boolean } = {},
+    ) => {
       if (!user || !isWorkspaceCurrent()) return;
-
-      const requestId = listRequestRef.current + 1;
-      listRequestRef.current = requestId;
-      setLoadingRows(true);
-      try {
-        const data = await fetchAdminPage(
-          {
-            data: { resource: "conversations", cursor, q: inboxQuery, status: inboxStatus },
-          },
-          isWorkspaceCurrent,
-        );
-        if (!isWorkspaceCurrent() || requestId !== listRequestRef.current) return;
+      const input = {
+        data: { resource: "conversations" as const, cursor, q: inboxQuery, status: inboxStatus },
+      };
+      // A user read and a poll write the same state on success.
+      const apply = (data: {
+        rows: AdminConversationRow[];
+        nextCursor: string | null;
+        total: number;
+      }) => {
         setRows(data.rows);
         setListCursor(cursor);
         listCursorRef.current = cursor;
@@ -388,6 +395,39 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         setListTotal(data.total);
         setListUpdatedAt(Date.now());
         setError(null);
+      };
+
+      if (options.background) {
+        // A poll never takes the request slot or the loading flag (see canApplyBackgroundRead):
+        // it applies only if no user read started or is running since, on the same page.
+        const started = { requestId: listRequestRef.current, cursor };
+        try {
+          const data = await withTimeout(
+            fetchAdminPageInBackground(input, isWorkspaceCurrent),
+            BACKGROUND_READ_TIMEOUT_MS,
+          );
+          const current = {
+            requestId: listRequestRef.current,
+            cursor: listCursorRef.current,
+            userReadInFlight: loadingRowsRef.current,
+          };
+          if (!isWorkspaceCurrent() || !canApplyBackgroundRead(started, current)) return false;
+          apply(data);
+          return true;
+        } catch {
+          // A failed or timed-out poll keeps the list on screen and says nothing; the next
+          // tick, or 重新整理, reads again.
+          return false;
+        }
+      }
+
+      const requestId = listRequestRef.current + 1;
+      listRequestRef.current = requestId;
+      setLoadingRows(true);
+      try {
+        const data = await fetchAdminPage(input, isWorkspaceCurrent);
+        if (!isWorkspaceCurrent() || requestId !== listRequestRef.current) return;
+        apply(data);
         return true;
       } catch (err) {
         if (!isWorkspaceCurrent() || requestId !== listRequestRef.current) return;
@@ -568,6 +608,14 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
     if (!user) return;
     void refreshConversations(null);
   }, [refreshConversations, user]);
+
+  // The list (not the open thread) refreshes once a minute while the tab is visible, on the page
+  // the user is on. It never touches the selection, the thread, drafts or the URL.
+  useVisibleInterval(() => {
+    // A user-started list read (重新整理, paging, a save's readback) owns the slot; skip this tick.
+    if (loadingRowsRef.current) return undefined;
+    return refreshConversations(undefined, { background: true });
+  }, MIN_VISIBLE_INTERVAL_MS);
 
   useEffect(() => {
     if (!user) return;
@@ -1050,7 +1098,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   return (
     <AdminShell
       title="WhatsApp 收件匣"
-      description="查看客戶訊息、分配負責同事及回覆；按「重新整理」讀取新訊息。"
+      description="查看客戶訊息、分配負責同事及回覆；對話列表每分鐘自動更新，亦可按「重新整理」即時讀取。"
     >
       {user ? (
         <StaffNotificationPanel

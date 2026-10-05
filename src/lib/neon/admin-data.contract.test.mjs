@@ -128,6 +128,38 @@ test("background attention reads never reload the page under the user", () => {
   assert.doesNotMatch(counts, /\bcallStaffServerFn\(/);
 });
 
+test("background inbox and command-center polls never reload the page under the user", () => {
+  const source = read("src/lib/neon/admin-data.ts");
+  const file = ts.createSourceFile("admin-data.ts", source, ts.ScriptTarget.Latest, true);
+  const functions = file.statements.filter(ts.isFunctionDeclaration);
+  const index = (name) => functions.findIndex((statement) => statement.name?.text === name);
+  const body = (name) => {
+    const declaration = functions[index(name)];
+    assert.ok(declaration?.body, `admin-data.ts should declare ${name}`);
+    assert.ok(
+      ts.getModifiers(declaration)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword),
+      `${name} is exported`,
+    );
+    return declaration.body.getText(file);
+  };
+
+  for (const name of ["fetchAdminPageInBackground", "fetchCommandCenterInBackground"]) {
+    const text = body(name);
+    assert.match(text, /\bcallStaffServerFnInBackground\(/, name);
+    assert.doesNotMatch(text, /\bcallStaffServerFn\(/, name);
+  }
+  // The foreground reads keep their reload-on-stale behaviour.
+  for (const name of ["fetchAdminPage", "fetchCommandCenter"])
+    assert.match(body(name), /\bcallStaffServerFn\(/, name);
+
+  // PR #222 appends after fetchAdminPage at the end of the file, so the background page read
+  // sits with the other background reads next to the overview, and the command-center one
+  // directly after its foreground twin.
+  assert.ok(index("fetchAdminPageInBackground") > index("fetchAdminTodayTasks"));
+  assert.ok(index("fetchAdminPageInBackground") < index("fetchAdminListings"));
+  assert.equal(index("fetchCommandCenterInBackground"), index("fetchCommandCenter") + 1);
+});
+
 test("property mutation keeps Copilot content fields explicit and scoped", () => {
   const server = read("src/lib/neon/admin-data.server.ts");
   const types = read("src/lib/neon/admin-data.types.ts");

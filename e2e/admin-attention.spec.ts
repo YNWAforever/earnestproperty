@@ -19,12 +19,22 @@ type FixtureWindow = {
     attentionMode: "ok" | "failure" | "pending";
     attentionCounts: AttentionCounts;
     pendingAttention: (() => void)[];
+    pushInbound: (id: string, text: string) => void;
+    listMode: "ok" | "pending";
+    pendingList: (() => void)[];
+    listPageSize: number | null;
   };
   noLinkOutboundFixture: { calls: unknown[] };
+  __sameDocument?: boolean;
 };
-const ids = { a: "10000000-0000-4000-8000-000000000001" };
+const ids = {
+  a: "10000000-0000-4000-8000-000000000001",
+  b: "10000000-0000-4000-8000-000000000002",
+};
 const POLL = 60_000;
 const TITLE = "Isolated synthetic inbox";
+const NEW_INBOUND = "合成新訊息：想約睇樓";
+const DRAFT = "合成草稿：請稍等，我查一查";
 let server: Server, origin: string;
 const errors = new WeakMap<Page, string[]>();
 
@@ -120,9 +130,9 @@ async function open(page: Page) {
   // Exactly one read on load: nothing else in the shell or the page asks for the counts.
   await expect.poll(() => callCount(page, "attention")).toBe(1);
   // From here on only runFor moves the page's clock, so a "not yet" check never depends on how
-  // long a step took in real time. A second ahead of the page's own time, so pausing never has
-  // to step back; the next poll is still about a minute away.
-  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1_000));
+  // long a step took in real time. Five seconds ahead of the page's own time, so pausing never
+  // has to step back even on a starved worker; the next poll is still about a minute away.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 5_000));
 }
 
 /** Lets the page finish one task (its timers are paused, so this is not a setTimeout). */
@@ -180,6 +190,39 @@ async function expectNoAlertOrToast(page: Page) {
   await expect(nav(page).locator('[role="alert"]')).toHaveCount(0);
   await expect(page.locator("[data-sonner-toast]")).toHaveCount(0);
 }
+
+const listReads = (page: Page) => callCount(page, "page", "conversations");
+
+/** The reads behind the open thread; a list poll must leave every one of them alone. */
+async function threadReads(page: Page) {
+  return {
+    detail: await callCount(page, "detail"),
+    messages: await callCount(page, "page", "messages"),
+    ai: await callCount(page, "ai-read"),
+  };
+}
+
+function pushInbound(page: Page, id: string, text: string) {
+  return page.evaluate(
+    ({ id, text }) => (window as unknown as FixtureWindow).noLinkFixture.pushInbound(id, text),
+    { id, text },
+  );
+}
+
+/** Answers every held conversations-list read (see the fixture's listMode "pending"). */
+function releaseListReads(page: Page) {
+  return page.evaluate(() =>
+    (window as unknown as FixtureWindow).noLinkFixture.pendingList
+      .splice(0)
+      .forEach((release) => release()),
+  );
+}
+
+const reply = (page: Page) => page.getByLabel("WhatsApp 回覆").filter({ visible: true });
+const refreshButton = (page: Page) =>
+  page.getByRole("button", { name: "重新整理", exact: true }).filter({ visible: true });
+/** A row of the conversation list: one button holding the customer's name and latest message. */
+const listRow = (page: Page, text: string) => page.getByRole("button").filter({ hasText: text });
 
 test("nav badges show waiting work and the link names stay exact", async ({ page }) => {
   await open(page);
@@ -298,17 +341,143 @@ test("a slow count read is never doubled, and a hung one is dropped after 30 s",
 test("polling pauses while hidden and resumes once when visible", async ({ page }) => {
   await open(page);
   const before = await callCount(page, "attention");
+  const listBefore = await listReads(page);
 
   await setVisibility(page, "hidden");
   await page.clock.runFor(3 * POLL);
   expect(await callCount(page, "attention")).toBe(before);
+  expect(await listReads(page)).toBe(listBefore);
 
   // Returning after a missed tick reads once at once, without advancing the clock.
   await setVisibility(page, "visible");
   await expect.poll(() => callCount(page, "attention")).toBe(before + 1);
+  await expect.poll(() => listReads(page)).toBe(listBefore + 1);
 
   await page.clock.runFor(POLL - 1_000);
   expect(await callCount(page, "attention")).toBe(before + 1);
+  expect(await listReads(page)).toBe(listBefore + 1);
   await page.clock.runFor(1_000);
   await expect.poll(() => callCount(page, "attention")).toBe(before + 2);
+  await expect.poll(() => listReads(page)).toBe(listBefore + 2);
+});
+
+test("a new inbound appears in the list after one poll, without a reload or a thread re-read", async ({
+  page,
+}) => {
+  await open(page);
+  await page.evaluate(() => {
+    (window as unknown as FixtureWindow).__sameDocument = true;
+  });
+  const list = await listReads(page);
+  const thread = await threadReads(page);
+
+  await pushInbound(page, ids.b, NEW_INBOUND);
+  await page.clock.runFor(POLL);
+
+  await expect.poll(() => listReads(page)).toBe(list + 1);
+  await expect(page.getByRole("button").filter({ hasText: NEW_INBOUND })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as FixtureWindow).__sameDocument)).toBe(true);
+  expect(await threadReads(page)).toEqual(thread);
+  expect(await listReads(page)).toBe(list + 1);
+});
+
+for (const viewport of [
+  { width: 1440, height: 900 },
+  { width: 390, height: 844 },
+]) {
+  test.describe(`${viewport.width} × ${viewport.height}`, () => {
+    test.use({ viewport });
+
+    test("draft, selected conversation and thread scroll survive two poll cycles", async ({
+      page,
+    }) => {
+      await open(page);
+      await reply(page).fill(DRAFT);
+      // Located as in admin-whatsapp-mobile.spec.ts: the scroller around the newest message.
+      const last = page
+        .locator("p.whitespace-pre-wrap.break-words")
+        .filter({ hasText: "合成訊息 30" })
+        .filter({ visible: true })
+        .last();
+      await expect(last).toBeVisible();
+      const timeline = last.locator("xpath=ancestor::div[contains(@class,'overflow-y-auto')][1]");
+      await timeline.evaluate((element) => {
+        element.scrollTop = 120;
+        element.dispatchEvent(new Event("scroll", { bubbles: true }));
+      });
+      const scrollTop = await timeline.evaluate((element) => element.scrollTop);
+      expect(scrollTop).toBe(120);
+      const list = await listReads(page);
+      const thread = await threadReads(page);
+
+      await page.clock.runFor(POLL);
+      await expect.poll(() => listReads(page)).toBe(list + 1);
+      await nextTask(page);
+      await page.clock.runFor(POLL);
+      await expect.poll(() => listReads(page)).toBe(list + 2);
+      await nextTask(page);
+
+      await expect(reply(page)).toHaveValue(DRAFT);
+      expect(new URL(page.url()).searchParams.get("conversation")).toBe(ids.a);
+      expect(await timeline.evaluate((element) => element.scrollTop)).toBe(scrollTop);
+      expect(await threadReads(page)).toEqual(thread);
+      if (viewport.width === 1440)
+        await expect(listRow(page, "合成客戶甲")).toHaveAttribute("aria-current", "true");
+    });
+  });
+}
+
+test("重新整理 overtakes a background list read in flight, whose late answer is dropped", async ({
+  page,
+}) => {
+  await open(page);
+  const list = await listReads(page);
+  await setFixture(page, { listMode: "pending" });
+
+  await page.clock.runFor(POLL);
+  await expect.poll(() => listReads(page)).toBe(list + 1);
+  // The poll never shows a loading state, so 重新整理 stays available while it waits.
+  await expect(refreshButton(page)).toBeEnabled();
+
+  await setFixture(page, { listMode: "ok" });
+  await pushInbound(page, ids.b, NEW_INBOUND);
+  await refreshButton(page).click();
+  await expect.poll(() => listReads(page)).toBe(list + 2);
+  await expect(listRow(page, NEW_INBOUND)).toBeVisible();
+
+  // The poll answers last, with the rows from before the new message: they are not applied.
+  await releaseListReads(page);
+  await nextTask(page);
+  await expect(listRow(page, NEW_INBOUND)).toBeVisible();
+  await expect(refreshButton(page)).toBeEnabled();
+  await expect(refreshButton(page).locator(".animate-spin")).toHaveCount(0);
+  await expectNoAlertOrToast(page);
+});
+
+test("a background list read that answers after the user paged leaves the new page", async ({
+  page,
+}) => {
+  await open(page);
+  await setFixture(page, { listPageSize: 1 });
+  await refreshButton(page).click();
+  const nextPage = page.getByRole("button", { name: "下一頁", exact: true });
+  await expect(nextPage).toBeEnabled();
+  const list = await listReads(page);
+
+  await setFixture(page, { listMode: "pending" });
+  await page.clock.runFor(POLL);
+  await expect.poll(() => listReads(page)).toBe(list + 1);
+
+  await setFixture(page, { listMode: "ok" });
+  await nextPage.click();
+  const olderPage = page.getByText("你正查看較舊頁面。按「第一頁」查看最新活動。");
+  await expect(olderPage).toBeVisible();
+  await expect(listRow(page, "合成客戶乙")).toBeVisible();
+
+  // The poll was reading the first page; it answers after the user moved on and is dropped.
+  await releaseListReads(page);
+  await nextTask(page);
+  await expect(olderPage).toBeVisible();
+  await expect(listRow(page, "合成客戶乙")).toBeVisible();
+  await expect(listRow(page, "合成客戶甲")).toHaveCount(0);
 });

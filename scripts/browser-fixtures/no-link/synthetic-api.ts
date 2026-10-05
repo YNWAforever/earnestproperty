@@ -73,6 +73,13 @@ const state = {
     _role = actor === "manager" ? "manager" : "agent",
     _binding = ids.staff,
   ) => {},
+  pushInbound: (_id: string, _text: string) => {},
+  // "pending" holds every conversations-list read (answering with the rows as they were when it
+  // was asked) until the test calls the releases in pendingList.
+  listMode: "ok" as "ok" | "pending",
+  pendingList: [] as (() => void)[],
+  // Rows per conversations-list page; null puts every row on one page.
+  listPageSize: null as number | null,
   templateFailure: false,
   assignmentFailure: false,
   delayDetail: false,
@@ -139,6 +146,19 @@ fixture().refreshMembership = async (
     return;
   }
   await staffSessionStore.refresh(actor);
+};
+// A customer message arriving while the page is open: the next list read returns it.
+fixture().pushInbound = (id: string, text: string) => {
+  const target = rows.find((r) => r.id === id);
+  if (!target) throw Error("Unknown synthetic conversation");
+  const created_at = new Date().toISOString();
+  Object.assign(target, {
+    last_text: text,
+    last_message_at: created_at,
+    last_inbound_at: created_at,
+    last_direction: "inbound",
+  });
+  target.messages.push({ ...message(target.messages.length + 1, id), text, created_at });
 };
 const call = (name: string, input?: unknown) => fixture().calls.push({ name, input });
 function readable(id: string) {
@@ -220,11 +240,16 @@ export async function fetchAdminPage({
             [r.name, r.external_listing_id, r.public_listing_no].some((s) => s.includes(data.q!)),
         )
       : [];
-    return {
-      rows: allowed.map((r) => ({ ...r, messages: undefined })),
+    const size = fixture().listPageSize ?? Math.max(allowed.length, 1);
+    const offset = Number(data.cursor ?? 0);
+    const page = {
+      rows: allowed.slice(offset, offset + size).map((r) => ({ ...r, messages: undefined })),
       total: allowed.length,
-      nextCursor: null,
+      nextCursor: offset + size < allowed.length ? String(offset + size) : null,
     };
+    if (fixture().listMode === "pending")
+      await new Promise<void>((release) => fixture().pendingList.push(release));
+    return page;
   }
   if (data.resource === "messages") {
     if (!readable(data.conversationId!)) return deny();
@@ -613,6 +638,12 @@ export async function fetchAdminOverview() {
     scope: actor === "manager" ? "all" : "own",
     checkedAt: now,
   };
+}
+// A poll reads through the same synthetic handler, and so the same call counters, as 重新整理.
+export const fetchAdminPageInBackground = fetchAdminPage;
+export async function fetchCommandCenterInBackground(): Promise<never> {
+  call("commandCenter");
+  throw Error("No synthetic fixture renders the command center");
 }
 // Reads fixture(), not state: window.noLinkFixture is a copy that tests mutate.
 export async function fetchAdminAttentionCounts() {

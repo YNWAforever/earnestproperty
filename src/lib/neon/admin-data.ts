@@ -429,6 +429,22 @@ export async function fetchAdminTodayTasks() {
   return callStaffServerFn(async () => fetchAdminTodayTasksServer(await withStaffAuthHeaders()));
 }
 
+/** `fetchAdminPage` for a background poll: the same read, but a failure never reloads the page. */
+export async function fetchAdminPageInBackground<R extends AdminPageResource>(
+  options: {
+    data: AdminPageInput & { resource: R };
+  },
+  isWorkspaceCurrent?: () => boolean,
+): Promise<CursorPage<AdminPageRows[R]>> {
+  return (await callStaffServerFnInBackground(async () =>
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => fetchAdminPageServer(prepared),
+      isWorkspaceCurrent,
+    ),
+  )) as CursorPage<AdminPageRows[R]>;
+}
+
 const fetchAdminListingsServer = createServerFn({ method: "GET" }).handler(async () => {
   const staff = await requireStaff(["admin", "manager", "agent"]);
   const data = await import("./admin-data.server");
@@ -676,6 +692,13 @@ const fetchCommandCenterServer = createServerFn({ method: "GET" }).handler(async
 
 export async function fetchCommandCenter() {
   return callStaffServerFn(async () => fetchCommandCenterServer(await withStaffAuthHeaders()));
+}
+
+/** `fetchCommandCenter` for a background poll: a failure never reloads the page. */
+export async function fetchCommandCenterInBackground() {
+  return callStaffServerFnInBackground(async () =>
+    fetchCommandCenterServer(await withStaffAuthHeaders()),
+  );
 }
 
 const completeAdminLeadActivityServer = createServerFn({ method: "POST" })

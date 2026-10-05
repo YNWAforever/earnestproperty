@@ -14,7 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { analyzeAdminLeadAiProfile, fetchCommandCenter } from "@/lib/neon/admin-data";
+import { canApplyBackgroundRead, rowForOpenPanel } from "@/lib/admin/background-refresh";
+import { MIN_VISIBLE_INTERVAL_MS, useVisibleInterval } from "@/lib/admin/use-visible-interval";
+import { BACKGROUND_READ_TIMEOUT_MS, withTimeout } from "@/lib/admin/with-timeout";
+import {
+  analyzeAdminLeadAiProfile,
+  fetchCommandCenter,
+  fetchCommandCenterInBackground,
+} from "@/lib/neon/admin-data";
 import type {
   CommandCenterData,
   CommandCenterFilterKey,
@@ -149,28 +156,65 @@ function CommandCenter() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const requestIdRef = useRef(0);
+  // Let the poll see a user-started read (重新整理, a reanalysis) and stay out of its way.
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
 
-  const refresh = useCallback(async () => {
-    if (!user) return;
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
-    setLoading(true);
-    try {
-      const result = (await fetchCommandCenter()) as CommandCenterData;
-      if (requestId !== requestIdRef.current) return;
-      setData(result);
-      setError(null);
-    } catch (err) {
-      if (requestId !== requestIdRef.current) return;
-      setError(errorText(err));
-    } finally {
-      if (requestId === requestIdRef.current) setLoading(false);
-    }
-  }, [user]);
+  const refresh = useCallback(
+    async (options: { background?: boolean } = {}) => {
+      if (!user) return;
+      if (options.background) {
+        // A poll never takes the request slot or the loading flag (see canApplyBackgroundRead),
+        // and a failed or timed-out one keeps the board as it is, without a banner.
+        const started = { requestId: requestIdRef.current, cursor: null };
+        try {
+          const result = (await withTimeout(
+            fetchCommandCenterInBackground(),
+            BACKGROUND_READ_TIMEOUT_MS,
+          )) as CommandCenterData;
+          const current = {
+            requestId: requestIdRef.current,
+            cursor: null,
+            userReadInFlight: loadingRef.current,
+          };
+          if (!canApplyBackgroundRead(started, current)) return;
+          setData(result);
+          setError(null);
+        } catch {
+          // The next tick, or 重新整理, reads again.
+        }
+        return;
+      }
+      const requestId = requestIdRef.current + 1;
+      requestIdRef.current = requestId;
+      setLoading(true);
+      try {
+        const result = (await fetchCommandCenter()) as CommandCenterData;
+        if (requestId !== requestIdRef.current) return;
+        setData(result);
+        setError(null);
+      } catch (err) {
+        if (requestId !== requestIdRef.current) return;
+        setError(errorText(err));
+      } finally {
+        if (requestId === requestIdRef.current) setLoading(false);
+      }
+    },
+    [user],
+  );
 
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // The board refreshes once a minute while the tab is visible. The queue, the open panel and the
+  // URL stay as the user left them.
+  useVisibleInterval(() => {
+    if (loadingRef.current || busyRef.current) return undefined;
+    return refresh({ background: true });
+  }, MIN_VISIBLE_INTERVAL_MS);
 
   async function runAnalysis(row: CommandCenterRow) {
     setBusy(true);
@@ -190,10 +234,17 @@ function CommandCenter() {
     [data, filter],
   );
 
-  const selected = useMemo(
-    () => data?.rows.find((row) => row.lead_id === selectedId) ?? null,
-    [data, selectedId],
+  // A present row is always shown fresh (so a reanalysis appears at once); if a refresh drops
+  // the selected lead, the panel stays open on the row it last showed instead of closing under
+  // the user. Closing the panel or selecting another row lets that row go.
+  const lastShownRef = useRef<CommandCenterRow | null>(null);
+  const selected = rowForOpenPanel(
+    data?.rows,
+    selectedId,
+    lastShownRef.current,
+    (row) => row.lead_id,
   );
+  lastShownRef.current = selected;
 
   return (
     <AdminShell

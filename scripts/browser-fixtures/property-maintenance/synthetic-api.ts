@@ -158,6 +158,12 @@ export const fetchAdminAttentionCounts = async () => ({
   staleNewLeads: 0,
   leadsNeedingAttention: 0,
 });
+// No route in this fixture polls; exported so every owned fixture serves the same API.
+const noPolledRead = async (): Promise<never> => {
+  throw Error("This fixture renders no polled view");
+};
+export const fetchAdminPageInBackground = noPolledRead;
+export const fetchCommandCenterInBackground = noPolledRead;
 export const fetchAdminAgents = async () => {
   call("agents");
   return [{ id: staff, name: "合成代理甲", email: null }];

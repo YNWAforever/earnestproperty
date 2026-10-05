@@ -181,9 +181,8 @@ export function useAdminAttention(identity: string | null): AdminAttentionCounts
     }
     void adminAttentionStore.refreshIfStale(identity);
   }, [identity]);
-  useVisibleInterval(
-    () => (identity ? adminAttentionStore.refresh(identity) : undefined),
-    ATTENTION_POLL_MS,
-  );
+  useVisibleInterval(() => {
+    return identity ? adminAttentionStore.refresh(identity) : undefined;
+  }, ATTENTION_POLL_MS);
   return snapshot.identity === identity ? snapshot.counts : null;
 }
