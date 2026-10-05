@@ -434,14 +434,21 @@ test("correction when the handoff matched an existing customer relinks to a new 
        VALUES ('Existing customer', '9123 4567', '85291234567', 'website', '2026-01-01T00:00:00Z')
        RETURNING id`,
     );
+    // The visitor opts in on both submits; the snapshot proves the matched customer's consent
+    // (seeded false) is never raised.
     const session = await openSession();
-    await live.requestLiveAgentHandoff(handoffInput(session, { phone: "9123 4567" }));
+    await live.requestLiveAgentHandoff(
+      handoffInput(session, { phone: "9123 4567", opt_in_whatsapp: true }),
+    );
     const linked = await sessionRow(session.sessionId);
     assert.equal(linked.contact_id, existing.id);
     const existingBefore = await query("SELECT * FROM crm_contacts WHERE id=$1", [existing.id]);
+    assert.equal(existingBefore[0].opt_in_whatsapp, false);
 
     assert.deepEqual(
-      await live.requestLiveAgentHandoff(handoffInput(session, { phone: "6123 4567" })),
+      await live.requestLiveAgentHandoff(
+        handoffInput(session, { phone: "6123 4567", opt_in_whatsapp: true }),
+      ),
       { ok: true, status: "handoff_requested" },
     );
 
@@ -502,12 +509,17 @@ test("corrected number that belongs to another customer links read-only and note
       [other.id],
     );
     const otherBefore = await query("SELECT * FROM crm_contacts WHERE id=$1", [other.id]);
+    assert.equal(otherBefore[0].opt_in_whatsapp, false);
     const conversationBefore = await query("SELECT * FROM whatsapp_conversations WHERE id=$1", [
       conversation.id,
     ]);
 
+    // The visitor opts in on both submits; the snapshot proves the matched customer's consent
+    // (seeded false) is never raised.
     const session = await openSession();
-    await live.requestLiveAgentHandoff(handoffInput(session, { phone: "9876 5432" }));
+    await live.requestLiveAgentHandoff(
+      handoffInput(session, { phone: "9876 5432", opt_in_whatsapp: true }),
+    );
     const first = await sessionRow(session.sessionId);
     assert.notEqual(first.contact_id, other.id);
 
@@ -517,6 +529,7 @@ test("corrected number that belongs to another customer links read-only and note
           phone: "6123 4567",
           name: "Typo visitor",
           email: "typo@example.invalid",
+          opt_in_whatsapp: true,
         }),
       ),
       { ok: true, status: "handoff_requested" },
