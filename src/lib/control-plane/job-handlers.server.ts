@@ -1,3 +1,5 @@
+import { LEAD_ALERT_JOB_TYPE } from "../neon/lead-alert-enqueue.js";
+
 export type JobHandler<T = unknown> = {
   jobType: string;
   payloadVersion: number;
@@ -485,6 +487,29 @@ for (const jobType of [
             ? await api.reconcileStaffNotification(payload.notificationId)
             : await api.checkStaffAcknowledgement(payload.notificationId);
       return { summary };
+    },
+  });
+}
+
+// FX-05b: one staff WhatsApp alert per new lead (general lane via laneForJob).
+for (const jobType of [LEAD_ALERT_JOB_TYPE, `${LEAD_ALERT_JOB_TYPE}.reconcile`]) {
+  registerJobHandler({
+    jobType,
+    payloadVersion: 1,
+    parsePayload: (input) => idPayload(input, "leadId"),
+    async run(payload, context) {
+      await context.checkpoint();
+      if (!context.workerId)
+        throw Object.assign(new Error("Lead alert requires a leased job"), {
+          code: "JOB_LEASE_REQUIRED",
+        });
+      const api = await import("../whatsapp-enquiries/lead-alert.server.ts");
+      if (jobType === LEAD_ALERT_JOB_TYPE)
+        return api.handleLeadStaffAlert(
+          { leadId: payload.leadId },
+          { jobId: context.jobId, workerId: context.workerId, checkpoint: context.checkpoint },
+        );
+      return { summary: await api.reconcileLeadStaffAlert(payload.leadId) };
     },
   });
 }
