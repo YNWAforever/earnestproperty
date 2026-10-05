@@ -121,9 +121,11 @@ test("first step names local staff with email and branch without provider inputs
   expect(html).not.toContain("實際 Inbox User ID");
 });
 
-test("save enabled when mapping valid", () => {
+test("reviewed mapping save has no feature-flag guard", () => {
   // The step-1 save button only mounts after the async folder load, which a static render cannot
   // reach, so assert the save path carries no feature-flag guard and the wizard takes no such prop.
+  // Behavioural proof: e2e/admin-staff-setup.spec.ts "four steps save no send and fresh mapping
+  // readback keeps phone separate" saves a valid mapping with no flag set.
   const source = readFileSync(new URL("./StaffMappingWizard.tsx", import.meta.url), "utf8");
   expect(source).not.toContain("allowReviewedSave");
   expect(source).not.toContain("核實映射的儲存功能尚未啟用");
