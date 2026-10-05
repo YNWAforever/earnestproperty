@@ -80,6 +80,7 @@ import type {
 
 import {
   type LeadStage,
+  stageFilterOptions,
   stageOptions,
   stageLabels,
   intentLabels,
@@ -900,7 +901,7 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部階段</SelectItem>
-                {stageOptions.map((stage) => (
+                {stageFilterOptions.map((stage) => (
                   <SelectItem key={stage.value} value={stage.value}>
                     {stage.label}
                   </SelectItem>

@@ -107,6 +107,7 @@ test("Overview reads operational sources independently without polling", () => {
 
   for (const source of [
     "fetchAdminOverview",
+    "fetchAdminTodayTasks",
     "listAdminTeam",
     "fetchOperationsHealth",
     "fetchOperationsAudit",
@@ -118,11 +119,17 @@ test("Overview reads operational sources independently without polling", () => {
     "待處理邀請",
     "開放查詢",
     "系統健康",
+    "今日待辦",
     "需要跟進",
     "最近職員活動",
   ]) {
     assert.match(overview, new RegExp(label));
   }
+  assert.match(overview, /aria-label=\{tileName\}/);
+  assert.match(
+    overview,
+    /isAdmin \?[\s\S]{0,40}<OperationalCard[\s\S]{0,40}id="overview-attention"/,
+  );
   assert.match(overview, /role="alert"/);
   assert.match(overview, /重新整理/);
   assert.match(overview, /entry\.action\.startsWith\("staff\."\)/);
