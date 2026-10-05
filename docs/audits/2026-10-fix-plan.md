@@ -83,7 +83,7 @@
 | Batch | What it fixes | Findings | Sev | Effort | Migration? | Depends on | Status |
 |---|---|---|---|---|---|---|---|
 | FX-00 | Release safety: deploys wait for migrations; safer migrate script; staging e2e wired | R-NEW-01, C-13, R-NEW-03, A-01 | P1 | M | no | staging + Neon branch | [ ] |
-| FX-01 | Public forms show success and error messages, and never report a dropped submit as success | H-02, C-18, C-19 | **P0** | M | no | — | [ ] |
+| FX-01 | Public forms show success and error messages, and never report a dropped submit as success | H-02, C-18, C-19 | **P0** | M | no | — | [x] PR open |
 | FX-02 | Valuation and listing-alert enquiries become CRM leads | C-01 | **P0** | M | yes (additive + backfill) | D5 | [ ] |
 | FX-03 | Chatbot handoff requires a valid phone and keeps the conversation | C-06, E-07, C-11, E-06 | **P0** | M | no | — | [ ] |
 | FX-04 | Staff see new work without refreshing | L-01, G-01, G-16, G-17, L-06 | **P0** | M | no | — | [ ] |
