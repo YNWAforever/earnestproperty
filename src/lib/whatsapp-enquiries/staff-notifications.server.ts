@@ -11,6 +11,7 @@ import {
   type StaffAlertTemplate,
   type StaffTemplateResponse,
 } from "../woztell/staff-alert-template.ts";
+import { staffDestinationNotACustomer } from "./staff-recipient-guard.ts";
 type Ports = { query: typeof queryRows; transaction: typeof transactionRows };
 const defaults: Ports = { query: queryRows, transaction: transactionRows };
 export type StaffNotificationRuntime = {
@@ -20,15 +21,21 @@ export type StaffNotificationRuntime = {
   /** Owner-approved template used outside the 24-hour window; null = 模板未設定. */
   template: StaffAlertTemplate | null;
 };
-export function staffNotificationRuntime(): StaffNotificationRuntime {
+/** The staff WhatsApp gate shared by lead alerts, staff WhatsApp readiness and the
+ * staff template runtime card: `EP_WA_STAFF_NOTIFICATIONS_ENABLED` only, independent
+ * of `EP_WA_ENQUIRY_MODE` (transport capability and channel are checked by callers). */
+export function staffWhatsappAlertRuntime(): StaffNotificationRuntime {
   return {
-    enabled:
-      process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true" &&
-      process.env.EP_WA_ENQUIRY_MODE === "active",
+    enabled: process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true",
     generationId: process.env.EP_WA_ACTIVATION_ID ?? null,
     channelId: process.env.EP_WA_COMPANY_CHANNEL_ID ?? null,
     template: parseStaffAlertTemplate(process.env.EP_WA_STAFF_ALERT_TEMPLATE),
   };
+}
+/** Enquiry notifications additionally need WhatsApp enquiry automation active. */
+export function staffNotificationRuntime(): StaffNotificationRuntime {
+  const runtime = staffWhatsappAlertRuntime();
+  return { ...runtime, enabled: runtime.enabled && process.env.EP_WA_ENQUIRY_MODE === "active" };
 }
 type Result = {
   state: "accepted" | "failed" | "unknown" | "suppressed";
@@ -226,7 +233,7 @@ export async function dispatchStaffNotification(
       if (!live.enabled || live.generationId !== runtime.generationId)
         throw new Error("dispatch_disabled");
       const [valid] = await query(
-        `SELECT n.id ${joins} JOIN staff_notification_attempts t ON t.notification_id=n.id JOIN staff_notification_endpoints ep ON ep.id=t.endpoint_id JOIN ops_jobs j ON j.id=t.job_id WHERE n.id=$1::uuid AND ${eligibility} AND m.inbox_user_id=$7 AND m.folder_id=$8 AND t.id=$4::uuid AND t.claim_id=$5::uuid AND t.dispatch_state='dispatching' AND ep.staff_id=n.recipient_staff_id AND ep.channel_id=w.channel_id AND ep.transport=t.transport AND ep.version=t.endpoint_version AND ep.enabled AND ep.permission_granted AND ep.retired_at IS NULL AND ep.verified_at IS NOT NULL AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb AND (t.transport<>'staff_whatsapp' OR (ep.destination_reference<>w.woztell_member_id AND (ep.last_inbound_at BETWEEN now()-interval '24 hours' AND now() OR $9::boolean))) AND j.status='running' AND j.lease_owner=$6 AND j.lease_expires_at>now()`,
+        `SELECT n.id ${joins} JOIN staff_notification_attempts t ON t.notification_id=n.id JOIN staff_notification_endpoints ep ON ep.id=t.endpoint_id JOIN ops_jobs j ON j.id=t.job_id WHERE n.id=$1::uuid AND ${eligibility} AND m.inbox_user_id=$7 AND m.folder_id=$8 AND t.id=$4::uuid AND t.claim_id=$5::uuid AND t.dispatch_state='dispatching' AND ep.staff_id=n.recipient_staff_id AND ep.channel_id=w.channel_id AND ep.transport=t.transport AND ep.version=t.endpoint_version AND ep.enabled AND ep.permission_granted AND ep.retired_at IS NULL AND ep.verified_at IS NOT NULL AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb AND (t.transport<>'staff_whatsapp' OR (ep.destination_reference<>w.woztell_member_id AND ${staffDestinationNotACustomer("ep")} AND (ep.last_inbound_at BETWEEN now()-interval '24 hours' AND now() OR $9::boolean))) AND j.status='running' AND j.lease_owner=$6 AND j.lease_expires_at>now()`,
         [
           notificationId,
           runtime.generationId,
@@ -359,7 +366,7 @@ export async function getStaffNotificationHealth(
   if (!(await staffNotificationSchemaAvailable(query)))
     return { schemaAvailable: false, counts: {} };
   const [counts] = await query(
-    `SELECT (SELECT count(*)::int FROM staff_notification_intents WHERE help_requested_at IS NOT NULL AND work_state IN ('pending','acknowledged')) AS help_requested,(SELECT count(*)::int FROM staff_notification_intents WHERE work_state='pending') AS unacknowledged,(SELECT count(*)::int FROM staff_notification_attempts WHERE dispatch_state='unknown') AS unknown,(SELECT count(*)::int FROM staff_notification_attempts WHERE dispatch_state IN ('failed','suppressed')) AS failed_or_suppressed,(SELECT count(*)::int FROM staff_notification_attempts WHERE lead_id IS NOT NULL AND dispatch_state IN ('failed','suppressed')) AS lead_alerts_blocked,(SELECT count(*)::int FROM staff_notification_routing_exceptions WHERE state='open') AS routing_exceptions,(SELECT count(*)::int FROM staff_notification_routing_exceptions WHERE state='open' AND attended_staff_id IS NULL) AS unattended_blockers,(SELECT count(*)::int FROM staff_notification_internal_events WHERE association_state='review') AS association_review,(SELECT EXTRACT(EPOCH FROM now()-min(created_at))::int FROM staff_notification_attempts WHERE dispatch_state='queued') AS oldest_queued_seconds`,
+    `SELECT (SELECT count(*)::int FROM staff_notification_intents WHERE help_requested_at IS NOT NULL AND work_state IN ('pending','acknowledged')) AS help_requested,(SELECT count(*)::int FROM staff_notification_intents WHERE work_state='pending') AS unacknowledged,(SELECT count(*)::int FROM staff_notification_attempts WHERE dispatch_state='unknown') AS unknown,(SELECT count(*)::int FROM staff_notification_attempts WHERE dispatch_state IN ('failed','suppressed')) AS failed_or_suppressed,(SELECT count(DISTINCT a.lead_id)::int FROM staff_notification_attempts a WHERE a.lead_id IS NOT NULL AND a.dispatch_state IN ('failed','suppressed') AND a.created_at>now()-interval '7 days' AND NOT EXISTS(SELECT 1 FROM staff_notification_attempts b WHERE b.lead_id=a.lead_id AND b.dispatch_state IN ('accepted','delivered'))) AS lead_alerts_blocked,(SELECT count(*)::int FROM staff_notification_routing_exceptions WHERE state='open') AS routing_exceptions,(SELECT count(*)::int FROM staff_notification_routing_exceptions WHERE state='open' AND attended_staff_id IS NULL) AS unattended_blockers,(SELECT count(*)::int FROM staff_notification_internal_events WHERE association_state='review') AS association_review,(SELECT EXTRACT(EPOCH FROM now()-min(created_at))::int FROM staff_notification_attempts WHERE dispatch_state='queued') AS oldest_queued_seconds`,
   );
   return { schemaAvailable: true, counts };
 }

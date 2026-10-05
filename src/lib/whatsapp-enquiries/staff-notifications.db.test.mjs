@@ -70,7 +70,7 @@ async function seedNotificationFixture(query, tx, { staff, conv, contact, policy
     `CREATE TABLE staff_users(id uuid PRIMARY KEY,active boolean DEFAULT true,name_zh text,name_en text,auth_user_id text,email text)`,
     `CREATE TABLE staff_roles(staff_user_id uuid,role text)`,
     `CREATE TABLE properties(id uuid PRIMARY KEY,agent_id uuid,deal_type text)`,
-    `CREATE TABLE crm_contacts(id uuid PRIMARY KEY,name text,opted_out_whatsapp boolean DEFAULT false,whatsapp_member_id text)`,
+    `CREATE TABLE crm_contacts(id uuid PRIMARY KEY,name text,opted_out_whatsapp boolean DEFAULT false,whatsapp_member_id text,normalized_phone text)`,
     `CREATE TABLE crm_leads(id uuid PRIMARY KEY)`,
     `CREATE TABLE crm_activities(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),lead_id uuid,contact_id uuid,staff_user_id uuid,activity_type text,body text,due_at timestamptz)`,
     `CREATE TABLE whatsapp_conversations(id uuid PRIMARY KEY,contact_id uuid,assigned_agent_id uuid,channel_id text,woztell_member_id text,last_inbound_at timestamptz,last_message_at timestamptz,updated_at timestamptz DEFAULT now())`,
@@ -1409,6 +1409,53 @@ test("staff WhatsApp dispatch guards on owned Postgres", { timeout: 300000 }, as
           assert.deepEqual(await attempts(n.id, "staff_whatsapp"), [
             { dispatch_state: "accepted", safe_error: null },
           ]);
+        },
+      );
+      // F2: the enquiry path shares the lead-alert customer guard. A staff phone that
+      // is ANOTHER customer's member id or phone (typed differently) is never sent.
+      await t.test(
+        "a staff WhatsApp destination that is another customer's number is never sent",
+        async () => {
+          await query(
+            "UPDATE staff_notification_endpoints SET destination_reference='+852 9123 4567',last_inbound_at=now() WHERE staff_id=$1 AND transport='staff_whatsapp'",
+            [ids.staff],
+          );
+          const cases = [
+            [
+              "an unrelated conversation's member id",
+              "INSERT INTO whatsapp_conversations(id,channel_id,woztell_member_id) VALUES(gen_random_uuid(),'fixture','85291234567')",
+              "DELETE FROM whatsapp_conversations WHERE woztell_member_id='85291234567'",
+            ],
+            [
+              "an unrelated contact's phone",
+              "INSERT INTO crm_contacts(id,name,normalized_phone) VALUES(gen_random_uuid(),'合成客戶','91234567')",
+              "DELETE FROM crm_contacts WHERE normalized_phone='91234567'",
+            ],
+          ];
+          try {
+            for (const [label, seed, cleanup] of cases) {
+              await query(seed);
+              try {
+                const before = sends.length;
+                const { n, options } = await leasedNotification();
+                const result = await dispatch(n, options, true);
+                assert.equal(sends.length, before, label);
+                assert.deepEqual(
+                  await attempts(n.id, "staff_whatsapp"),
+                  [{ dispatch_state: "suppressed", safe_error: "dispatch_eligibility_changed" }],
+                  label,
+                );
+                assert.equal(result.blocked, 1, label);
+              } finally {
+                await query(cleanup);
+              }
+            }
+          } finally {
+            await query(
+              "UPDATE staff_notification_endpoints SET destination_reference='staff-device' WHERE staff_id=$1 AND transport='staff_whatsapp'",
+              [ids.staff],
+            );
+          }
         },
       );
     } finally {

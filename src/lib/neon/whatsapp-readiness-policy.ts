@@ -86,21 +86,25 @@ function withRepairActions(capability: Capability, staffId: string): Capability 
 
 export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappReadiness {
   const { mapping, runtime, inboxEndpoint, staffEndpoint } = input;
-  const base: string[] = [];
-  if (!input.active) base.push("staff_inactive");
+  const staff: string[] = [];
+  if (!input.active) staff.push("staff_inactive");
   if (!input.roles.some((role) => role === "admin" || role === "manager" || role === "agent"))
-    base.push("role_ineligible");
-  if (!runtime.assignmentEnabled || !runtime.channelId) base.push("runtime_disabled");
-  if (!runtime.inboxProviderVerified) base.push("provider_unverified");
-  if (!mapping) base.push("mapping_missing");
+    staff.push("role_ineligible");
+  // Enquiry automation (EP_WA_ENQUIRY_MODE) and the Inbox provider gate assignment and
+  // the Inbox note only. Staff WhatsApp uses the lead-alert gate below.
+  const enquiryRuntime: string[] = [];
+  if (!runtime.assignmentEnabled || !runtime.channelId) enquiryRuntime.push("runtime_disabled");
+  if (!runtime.inboxProviderVerified) enquiryRuntime.push("provider_unverified");
+  const mappingReasons: string[] = [];
+  if (!mapping) mappingReasons.push("mapping_missing");
   else {
-    if (mapping.channelId !== runtime.channelId) base.push("channel_mismatch");
-    if (mapping.retiredAt) base.push("mapping_retired");
+    if (mapping.channelId !== runtime.channelId) mappingReasons.push("channel_mismatch");
+    if (mapping.retiredAt) mappingReasons.push("mapping_retired");
     if (
       mapping.reviewEnforced &&
       (mapping.reviewBasis !== "provider_verified" || !mapping.reviewEvidenceId)
     )
-      base.push("mapping_unverified");
+      mappingReasons.push("mapping_unverified");
     if (
       !mapping.eligible ||
       !mapping.verifiedAt ||
@@ -108,8 +112,9 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
       !mapping.inboxUserId ||
       !mapping.folderId
     )
-      base.push("mapping_unverified");
+      mappingReasons.push("mapping_unverified");
   }
+  const base = [...staff, ...enquiryRuntime, ...mappingReasons];
   const assignment = blocked(...base);
   const inboxReasons = [
     ...base,
@@ -121,11 +126,14 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
     inboxReasons.push("endpoint_unverified");
   if (mapping?.reviewEnforced && inboxEndpoint?.mappingVersion !== mapping.version)
     inboxReasons.push("mapping_changed");
+  // Same gate as lead alerts: the staff switch, the channel, the transport capability
+  // (and the template outside the window), independent of enquiry mode.
   const staffReasons = [
-    ...base,
+    ...staff,
+    ...mappingReasons,
     ...endpointReasons(staffEndpoint, "staff_whatsapp", runtime.channelId),
   ];
-  if (!runtime.notificationsEnabled) staffReasons.push("runtime_disabled");
+  if (!runtime.notificationsEnabled || !runtime.channelId) staffReasons.push("runtime_disabled");
   if (!runtime.staffTransportVerified) staffReasons.push("provider_unverified");
   if (mapping?.reviewEnforced && staffEndpoint?.mappingVersion !== mapping.version)
     staffReasons.push("mapping_changed");
@@ -189,8 +197,9 @@ export function assessWhatsappRuntime(input: {
     assignment,
     customerReply,
     staffWhatsappText,
+    // Lead alerts send only the template, gated by the staff switch alone (not mode).
     staffWhatsappTemplate: blocked(
-      ...(!active || !input.staffWhatsappEnabled ? ["runtime_disabled"] : []),
+      ...(!input.staffWhatsappEnabled || !input.channelId ? ["runtime_disabled"] : []),
       ...(!input.staffTransportVerified ? ["provider_unverified"] : []),
       ...(!input.templateConfigured ? ["template_unverified"] : []),
     ),

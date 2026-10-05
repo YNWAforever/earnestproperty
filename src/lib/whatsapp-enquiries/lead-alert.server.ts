@@ -8,10 +8,11 @@ import { retryableJobError } from "../control-plane/job-handlers.server.ts";
 import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transport.server.ts";
 import { buildStaffTemplateResponse } from "../woztell/staff-alert-template.ts";
 import {
-  staffNotificationRuntime,
+  staffWhatsappAlertRuntime,
   type StaffNotificationRuntime,
   type StaffNotificationTransport,
 } from "./staff-notifications.server.ts";
+import { staffDestinationKey, staffDestinationNotACustomer } from "./staff-recipient-guard.ts";
 
 /**
  * FX-05b: one staff WhatsApp alert per new lead.
@@ -48,24 +49,18 @@ type Summary = { accepted: number; unknown: number; blocked: number };
 type SendResult = Awaited<ReturnType<NonNullable<StaffNotificationTransport["sendStaffWhatsApp"]>>>;
 
 /** Lead alerts are gated by the one staff switch only; website leads are not
- * WhatsApp enquiries, so `EP_WA_ENQUIRY_MODE` / the activation do not apply. */
+ * WhatsApp enquiries, so `EP_WA_ENQUIRY_MODE` / the activation do not apply. The
+ * same gate drives staff WhatsApp readiness and the runtime card. */
 export function leadAlertRuntime(): StaffNotificationRuntime {
-  return {
-    ...staffNotificationRuntime(),
-    enabled: process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true",
-  };
+  return staffWhatsappAlertRuntime();
 }
 
 /** An endpoint a lead alert may use (aliases: ep endpoint, m mapping, s staff). */
 const ENDPOINT_ELIGIBLE = `ep.transport='staff_whatsapp' AND ep.enabled AND ep.verified_at IS NOT NULL AND ep.permission_granted AND ep.retired_at IS NULL AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb AND m.eligible AND m.verified_at IS NOT NULL AND m.retired_at IS NULL AND (ep.mapping_version IS NULL OR ep.mapping_version=m.version) AND s.active AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))`;
 const ENDPOINT_JOINS = `JOIN staff_users s ON s.id=ep.staff_id JOIN whatsapp_staff_channels m ON m.staff_id=ep.staff_id AND m.channel_id=ep.channel_id`;
-/** D-11: a staff destination is never a customer's WhatsApp member or phone.
- * One fragment for plan, claim and beforeSend. Phones compare by digits only: the
- * destination's digits (at least 8) against the customer's full digits, the last 8
- * digits, and 852 + the last 8 ("+852 9123 4567" = "85291234567" = "91234567"). */
-const DEST_DIGITS = "regexp_replace(ep.destination_reference,'\\D','','g')";
-const CUSTOMER_DIGITS = "regexp_replace(c.normalized_phone,'\\D','','g')";
-const NOT_A_CUSTOMER = `NOT EXISTS(SELECT 1 FROM whatsapp_conversations w WHERE w.channel_id=ep.channel_id AND w.woztell_member_id=ep.destination_reference) AND NOT EXISTS(SELECT 1 FROM crm_contacts c WHERE c.whatsapp_member_id=ep.destination_reference OR c.normalized_phone=ep.destination_reference OR (length(${DEST_DIGITS})>=8 AND ${DEST_DIGITS} IN (${CUSTOMER_DIGITS},right(${CUSTOMER_DIGITS},8),'852'||right(${CUSTOMER_DIGITS},8))))`;
+/** D-11: the one customer-recipient guard shared by every staff send path, used
+ * here for plan, claim and beforeSend (see staff-recipient-guard.ts). */
+const NOT_A_CUSTOMER = staffDestinationNotACustomer("ep");
 /** The attempt `t` still targets exactly the endpoint it froze. */
 const SAME_ENDPOINT = `ep.id=t.endpoint_id AND ep.version=t.endpoint_version AND ep.destination_reference=t.destination_reference_snapshot AND ep.channel_id=t.channel_id_snapshot`;
 const LEASE_IS_MINE = `j.status='running' AND j.lease_owner=$LEASE_OWNER AND j.lease_expires_at>now()`;
@@ -75,9 +70,21 @@ function attemptKey(parts: string[]) {
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 
+/** Plan copy table: 網站查詢 · 樓盤查詢 {listing_no} (樓盤查詢 when the number is unknown). */
 function sourceLabel(lead: Record<string, unknown>) {
-  if (lead.source === "website") return lead.property_id ? "物業查詢" : "網站查詢";
-  return "新查詢";
+  if (lead.source !== "website") return "新查詢";
+  if (!lead.property_id) return "網站查詢";
+  const listingNo = String(lead.listing_no ?? "").trim();
+  return listingNo ? `樓盤查詢 ${listingNo}` : "樓盤查詢";
+}
+
+/** Ids and an error code only: the original failure is never silent and carries no PII. */
+function warnFailure(event: string, leadId: string, jobId: string, error: unknown) {
+  const code =
+    error && typeof error === "object" && "code" in error && typeof error.code === "string"
+      ? error.code
+      : null;
+  console.warn(`[lead-alert] ${event}`, { leadId, jobId, code });
 }
 
 /** Expired leases only become unknown; never an automatic resend. */
@@ -121,11 +128,12 @@ export async function handleLeadStaffAlert(
   let transport: StaffNotificationTransport | null = null;
   let lead: Record<string, unknown> | undefined;
   let origin: string | null;
+  let queued: Record<string, unknown>[];
   try {
     await context.checkpoint();
     summary.unknown += (await reconcile(leadId, query, context)).unknown;
     [lead] = await query(
-      "SELECT l.id,l.source,l.property_id,c.name FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id WHERE l.id=$1::uuid",
+      "SELECT l.id,l.source,l.property_id,p.listing_no,c.name FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE l.id=$1::uuid",
       [leadId],
     );
     // lead_missing: attempt.lead_id references crm_leads, so no row can be kept;
@@ -171,6 +179,11 @@ export async function handleLeadStaffAlert(
       return { summary };
     }
     await plan(leadId, runtime.channelId!, transaction, summary);
+    // Still before any claim: a failed read leaves the planned rows queued.
+    queued = await query(
+      "SELECT id FROM staff_notification_attempts WHERE lead_id=$1::uuid AND dispatch_state='queued' ORDER BY created_at,id",
+      [leadId],
+    );
   } catch (error) {
     if (
       error &&
@@ -179,6 +192,7 @@ export async function handleLeadStaffAlert(
       error.code === "JOB_OWNERSHIP_LOST"
     )
       throw error;
+    warnFailure("plan_failed", leadId, context.jobId, error);
     throw retryableJobError(
       "LEAD_ALERT_PLAN_FAILED",
       "Lead alert planning failed; rows remain queued.",
@@ -191,10 +205,6 @@ export async function handleLeadStaffAlert(
     link: `${origin}/admin/leads?lead=${leadId}`,
   });
   const message = `新查詢：${sourceLabel(lead)}`; // evidence only; the template is always sent
-  const queued = await query(
-    "SELECT id FROM staff_notification_attempts WHERE lead_id=$1::uuid AND dispatch_state='queued' ORDER BY created_at,id",
-    [leadId],
-  );
   for (const attempt of queued) {
     await context.checkpoint();
     const claim = randomUUID();
@@ -216,9 +226,10 @@ export async function handleLeadStaffAlert(
           params: [attempt.id, claim, LEAD_ALERT_RECONCILE_JOB],
         },
       ]);
-    } catch {
+    } catch (error) {
       // The claim may or may not have committed. Retrying is safe: the next run
       // reconciles a committed-but-unacknowledged dispatch to unknown, never resends.
+      warnFailure("claim_failed", leadId, context.jobId, error);
       throw retryableJobError(
         "LEAD_ALERT_CLAIM_FAILED",
         "Lead alert claim failed; retry reconciles it.",
@@ -308,8 +319,9 @@ async function plan(
     { statement: "SELECT id FROM crm_leads WHERE id=$1::uuid FOR UPDATE", params: [leadId] },
     {
       // (a) the assigned agent's endpoint; (b) every duty manager's unless (a) is
-      // sendable. One row per member id. A refused assigned endpoint (a customer
-      // number, or present but ineligible) keeps its visible row AND falls back.
+      // sendable. One row per phone: "+852 9123 4567" and "85291234567" are one
+      // destination. A refused assigned endpoint (a customer number, or present but
+      // ineligible) keeps its visible row AND falls back.
       statement: `WITH eligible AS (
           SELECT ep.id,ep.version,ep.staff_id,ep.destination_reference,s.is_duty_manager,(${NOT_A_CUSTOMER}) AS not_customer
           FROM staff_notification_endpoints ep ${ENDPOINT_JOINS}
@@ -326,7 +338,7 @@ async function plan(
           UNION ALL
           SELECT * FROM eligible WHERE is_duty_manager AND NOT EXISTS(SELECT 1 FROM assigned WHERE not_customer)
         ), destinations AS (
-          SELECT DISTINCT ON (destination_reference) * FROM chosen ORDER BY destination_reference,id
+          SELECT DISTINCT ON (${staffDestinationKey("destination_reference")}) * FROM chosen ORDER BY ${staffDestinationKey("destination_reference")},id
         ), planned AS (
           INSERT INTO staff_notification_attempts(lead_id,transport,endpoint_id,endpoint_version,attempt_key,dispatch_state,safe_error,finished_at)
           SELECT $1::uuid,'staff_whatsapp',d.id,d.version,encode(sha256(convert_to(format('["%s","%s"]',$1::text,d.id::text),'UTF8')),'hex'),

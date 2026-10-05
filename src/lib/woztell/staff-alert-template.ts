@@ -60,7 +60,7 @@ export function sanitizeTemplateParam(
 }
 
 const FALLBACK: Record<StaffAlertTemplateParam, string> = {
-  name: "客戶",
+  name: "未提供姓名",
   source: "新查詢",
   link: "請登入後台查看",
 };

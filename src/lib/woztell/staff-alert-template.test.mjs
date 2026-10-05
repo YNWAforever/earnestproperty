@@ -125,3 +125,12 @@ test("builds the Meta body components in configured order", () => {
   });
   for (const parameter of empty.components[0].parameters) assert.ok(parameter.text.trim());
 });
+
+test("the lead alert name fallback is 未提供姓名 (M-4 copy table)", () => {
+  const response = buildStaffTemplateResponse(parseStaffAlertTemplate(approved), {
+    name: " ",
+    source: "網站查詢",
+    link: "https://earnest.example.invalid/admin/leads",
+  });
+  assert.equal(response.components[0].parameters[0].text, "未提供姓名");
+});

@@ -4,7 +4,7 @@ import { queryRows } from "./db.server.ts";
 import type { StaffAccess } from "./auth.server.ts";
 import { assessStaffReadiness, assessWhatsappRuntime } from "./whatsapp-readiness-policy.ts";
 import type { StaffReadinessInput, StaffWhatsappReadiness } from "./whatsapp-readiness.types.ts";
-import { staffNotificationRuntime } from "../whatsapp-enquiries/staff-notifications.server.ts";
+import { staffWhatsappAlertRuntime } from "../whatsapp-enquiries/staff-notifications.server.ts";
 import { createInboxApi } from "../woztell/inbox-api.server.ts";
 import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transport.server.ts";
 
@@ -22,7 +22,8 @@ async function authorize(actor: Actor, query: Query) {
   if (!allowed) throw new Response("Forbidden", { status: 403 });
 }
 export function currentWhatsappReadinessRuntime(): Runtime {
-  const notification = staffNotificationRuntime();
+  // The lead-alert gate (switch only); enquiry automation is `assignmentEnabled`.
+  const notification = staffWhatsappAlertRuntime();
   let inboxProviderVerified = false,
     staffTransportVerified = false;
   try {

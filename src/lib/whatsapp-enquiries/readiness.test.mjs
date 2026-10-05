@@ -207,3 +207,61 @@ test("runtime card shows the staff template as ready only when one is configured
   });
   assert.deepEqual(reason(off.staffWhatsappTemplate), ["runtime_disabled", "provider_unverified"]);
 });
+
+test("staff WhatsApp follows the lead-alert switch, not enquiry mode (F3)", () => {
+  // Enquiry automation off; the staff switch on; a template configured.
+  const runtime = {
+    ...base.runtime,
+    assignmentEnabled: false,
+    inboxProviderVerified: false,
+    templateContractVerified: true,
+  };
+  const outside = { ...base.staffEndpoint, lastInboundAt: null };
+  const readiness = evaluate({ runtime, staffEndpoint: outside });
+  assert.equal(readiness.staffWhatsapp.state, "ready");
+  assert.deepEqual(reason(readiness.staffWhatsapp), []);
+  // Enquiry-only capabilities keep their own gate.
+  assert.ok(reason(readiness.assignment).includes("runtime_disabled"));
+  assert.ok(reason(readiness.inboxPrivateNote).includes("runtime_disabled"));
+  // The switch still decides, and the channel is still required.
+  assert.deepEqual(
+    reason(
+      evaluate({ runtime: { ...runtime, notificationsEnabled: false }, staffEndpoint: outside })
+        .staffWhatsapp,
+    ),
+    ["runtime_disabled"],
+  );
+  assert.ok(
+    reason(
+      evaluate({ runtime: { ...runtime, channelId: null }, staffEndpoint: outside }).staffWhatsapp,
+    ).includes("runtime_disabled"),
+  );
+
+  const card = assessWhatsappRuntime({
+    mode: "off",
+    serviceEnabled: false,
+    channelId: "company",
+    inboxProviderVerified: false,
+    staffTransportVerified: true,
+    staffWhatsappEnabled: true,
+    templateConfigured: true,
+    checkedAt: now,
+  });
+  assert.equal(card.staffWhatsappTemplate.state, "ready");
+  // Enquiry-notification TEXT stays tied to enquiry mode.
+  assert.ok(reason(card.staffWhatsappText).includes("runtime_disabled"));
+  assert.ok(
+    reason(
+      assessWhatsappRuntime({
+        mode: "off",
+        serviceEnabled: false,
+        channelId: null,
+        inboxProviderVerified: true,
+        staffTransportVerified: true,
+        staffWhatsappEnabled: true,
+        templateConfigured: true,
+        checkedAt: now,
+      }).staffWhatsappTemplate,
+    ).includes("runtime_disabled"),
+  );
+});

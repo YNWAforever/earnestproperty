@@ -357,7 +357,8 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
               [dutyB.destination, "accepted", null],
             ].sort(),
           );
-          assert.equal((await health()).lead_alerts_blocked, before + 1);
+          // M-2: the fallback reached a duty manager, so this lead is not "blocked".
+          assert.equal((await health()).lead_alerts_blocked, before);
         },
       );
 
@@ -386,7 +387,8 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
             [[agent.endpoint.id, "assigned_destination_unavailable"]],
           );
           assert.equal(rows.length, 2);
-          assert.equal((await health()).lead_alerts_blocked, before + 1);
+          // M-2: an accepted fallback means the lead was alerted; it is not counted.
+          assert.equal((await health()).lead_alerts_blocked, before);
           // Frozen: a rerun adds nothing and sends nothing.
           await run(leadId, jobId, provider);
           assert.equal((await attempts(leadId)).length, 2);
@@ -543,6 +545,126 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
           const [row] = await attempts(leadId);
           assert.equal(row.dispatch_state, "suppressed");
         });
+        // F1: member ids compare by digits too. A WhatsApp-only customer has no
+        // normalized_phone, only a member id such as "85291234567".
+        for (const [label, seedCustomer] of [
+          [
+            "a WhatsApp-only conversation member id",
+            (channel) =>
+              query(
+                "INSERT INTO whatsapp_conversations(channel_id,woztell_member_id) VALUES($1,'85291234567')",
+                [channel],
+              ),
+          ],
+          [
+            "a CRM contact member id with no phone",
+            () =>
+              query(
+                "INSERT INTO crm_contacts(name,whatsapp_member_id,normalized_phone) VALUES('合成客戶','85291234567',NULL)",
+              ),
+          ],
+        ]) {
+          await st.test(`(c) typed "+852 9123 4567" against ${label} is refused`, async () => {
+            const channel = scenario();
+            // Only the member id may match: drop the phone rows earlier subtests left.
+            await query("DELETE FROM crm_contacts WHERE normalized_phone IN ($1,$2)", [
+              "85291234567",
+              "91234567",
+            ]);
+            await staffWithEndpoint(channel, {
+              duty: true,
+              roles: ["manager"],
+              destination: "+852 9123 4567",
+            });
+            await seedCustomer(channel);
+            try {
+              const leadId = await seedLead(query);
+              const provider = fakeProvider();
+              await run(leadId, await leasedJob(query, leadId), provider);
+              assert.equal(provider.calls.length, 0);
+              assert.deepEqual(
+                (await attempts(leadId)).map((r) => [r.dispatch_state, r.safe_error]),
+                [["suppressed", "destination_is_customer"]],
+              );
+            } finally {
+              await query("DELETE FROM crm_contacts WHERE whatsapp_member_id='85291234567'");
+            }
+          });
+        }
+        await st.test(
+          '(d) M-3: a country-code variant "8613812345678" matches customer "13812345678" by the last 8 digits',
+          async () => {
+            const channel = scenario();
+            await staffWithEndpoint(channel, {
+              duty: true,
+              roles: ["manager"],
+              destination: "8613812345678",
+            });
+            await query(
+              "INSERT INTO crm_contacts(name,normalized_phone) VALUES('合成客戶','13812345678')",
+            );
+            try {
+              const leadId = await seedLead(query);
+              const provider = fakeProvider();
+              await run(leadId, await leasedJob(query, leadId), provider);
+              assert.equal(provider.calls.length, 0);
+              assert.deepEqual(
+                (await attempts(leadId)).map((r) => [r.dispatch_state, r.safe_error]),
+                [["suppressed", "destination_is_customer"]],
+              );
+            } finally {
+              await query("DELETE FROM crm_contacts WHERE normalized_phone='13812345678'");
+            }
+          },
+        );
+      });
+
+      await t.test(
+        "one phone typed two ways is one destination (F1 dedupe by digits)",
+        async () => {
+          const channel = scenario();
+          const tail = String(scenarioCount).padStart(3, "0");
+          const spaced = await staffWithEndpoint(channel, {
+            duty: true,
+            roles: ["manager"],
+            destination: `+852 5${tail} 7788`,
+          });
+          const compact = await staffWithEndpoint(channel, {
+            duty: true,
+            roles: ["agent"],
+            destination: `8525${tail}7788`,
+          });
+          const leadId = await seedLead(query);
+          const provider = fakeProvider();
+          const result = await run(leadId, await leasedJob(query, leadId), provider);
+          assert.deepEqual(result, { summary: { accepted: 1, unknown: 0, blocked: 0 } });
+          assert.equal(provider.calls.length, 1);
+          assert.ok([spaced.destination, compact.destination].includes(provider.calls[0].memberId));
+          assert.equal((await attempts(leadId)).length, 1);
+        },
+      );
+
+      await t.test("lead_alerts_blocked counts recent leads, not attempts (M-2)", async () => {
+        const channel = scenario();
+        // Two duty managers, both customer numbers: one lead, two refused rows.
+        for (const role of ["manager", "agent"]) {
+          const duty = await staffWithEndpoint(channel, { duty: true, roles: [role] });
+          await query(
+            "INSERT INTO whatsapp_conversations(channel_id,woztell_member_id) VALUES($1,$2)",
+            [channel, duty.destination],
+          );
+        }
+        const before = (await health()).lead_alerts_blocked;
+        const leadId = await seedLead(query);
+        await run(leadId, await leasedJob(query, leadId), fakeProvider());
+        assert.equal((await attempts(leadId)).length, 2);
+        assert.equal((await health()).lead_alerts_blocked, before + 1);
+        // Older than 7 days: no longer counted.
+        await query(
+          "UPDATE staff_notification_attempts SET created_at=now()-interval '8 days' WHERE lead_id=$1",
+          [leadId],
+        );
+        assert.equal((await health()).lead_alerts_blocked, before);
       });
 
       await t.test("the D-11 guard also runs inside the claim", async () => {
@@ -613,6 +735,41 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         assert.doesNotMatch(serialized, /"TEXT"/);
         assert.doesNotMatch(serialized, /cust-/);
       });
+
+      await t.test(
+        "template copy: 樓盤查詢 with the listing number, 未提供姓名 for no name (M-4)",
+        async () => {
+          const channel = scenario();
+          await staffWithEndpoint(channel, { duty: true, roles: ["manager"] });
+          const listingNo = `FX05B-${randomUUID().slice(0, 8)}`;
+          const insertProperty = (no) =>
+            query(
+              "INSERT INTO properties(listing_no,canonical_property_no,title_zh,deal_type,district_slug,status,price) VALUES($1,$1,'提醒測試盤','sale','sham-tseng','active',10000000) RETURNING id",
+              [no],
+            );
+          const [property] = await insertProperty(listingNo);
+          const propertyLead = await seedLead(query, { name: "" });
+          await query("UPDATE crm_leads SET property_id=$2 WHERE id=$1", [
+            propertyLead,
+            property.id,
+          ]);
+          const provider = fakeProvider();
+          await run(propertyLead, await leasedJob(query, propertyLead), provider);
+          assert.deepEqual(
+            provider.calls[0].response[0].components[0].parameters.map((p) => p.text).slice(0, 2),
+            ["未提供姓名", `樓盤查詢 ${listingNo}`],
+          );
+          // A property enquiry whose listing number is blank still says 樓盤查詢.
+          const [unnumbered] = await insertProperty("   ");
+          const otherLead = await seedLead(query, { name: "陳大文" });
+          await query("UPDATE crm_leads SET property_id=$2 WHERE id=$1", [
+            otherLead,
+            unnumbered.id,
+          ]);
+          await run(otherLead, await leasedJob(query, otherLead), provider);
+          assert.equal(provider.calls[1].response[0].components[0].parameters[1].text, "樓盤查詢");
+        },
+      );
 
       await t.test("inside 24h still sends the template, never text", async () => {
         const channel = scenario();
@@ -820,7 +977,7 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         assert.equal(provider.calls.length, 1);
       });
 
-      await t.test("a claim-transaction failure is retryable and never sends twice", async () => {
+      await t.test("a claim-transaction failure is retryable and never sends twice", async (st) => {
         const channel = scenario();
         await staffWithEndpoint(channel, { duty: true, roles: ["manager"] });
         const leadId = await seedLead(query);
@@ -830,14 +987,21 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         const lossy = async (statements) => {
           const rows = await transaction(statements);
           if (statements.some((s) => s.statement.includes("'dispatching'")))
-            throw new Error("synthetic connection reset");
+            throw Object.assign(new Error("synthetic connection reset 陳大文"), { code: "08006" });
           return rows;
         };
+        const warn = st.mock.method(console, "warn", () => {});
         await assert.rejects(run(leadId, jobId, provider, { transaction: lossy }), (error) => {
           assert.equal(error.code, "LEAD_ALERT_CLAIM_FAILED");
           assert.equal(error.retryable, true);
           return true;
         });
+        // M-1: the original failure is visible (ids and code only, no PII).
+        assert.deepEqual(
+          warn.mock.calls.map((c) => c.arguments),
+          [["[lead-alert] claim_failed", { leadId, jobId, code: "08006" }]],
+        );
+        warn.mock.restore();
         assert.equal(provider.calls.length, 0);
         assert.deepEqual(
           (await attempts(leadId)).map((r) => r.dispatch_state),
@@ -856,6 +1020,69 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         );
         await run(leadId, jobId, provider, { workerId: "worker-2" });
         assert.equal(provider.calls.length, 0);
+      });
+
+      await t.test(
+        "a planning failure is retryable, logged and sends nothing (M-1)",
+        async (st) => {
+          const channel = scenario();
+          await staffWithEndpoint(channel, { duty: true, roles: ["manager"] });
+          const leadId = await seedLead(query);
+          const jobId = await leasedJob(query, leadId);
+          const provider = fakeProvider();
+          const failing = async (statements) => {
+            if (statements.some((s) => s.statement.includes("WITH eligible AS")))
+              throw Object.assign(new Error("synthetic serialization failure"), { code: "40001" });
+            return transaction(statements);
+          };
+          const warn = st.mock.method(console, "warn", () => {});
+          await assert.rejects(run(leadId, jobId, provider, { transaction: failing }), (error) => {
+            assert.equal(error.code, "LEAD_ALERT_PLAN_FAILED");
+            assert.equal(error.retryable, true);
+            return true;
+          });
+          assert.deepEqual(
+            warn.mock.calls.map((c) => c.arguments),
+            [["[lead-alert] plan_failed", { leadId, jobId, code: "40001" }]],
+          );
+          warn.mock.restore();
+          assert.equal(provider.calls.length, 0);
+          assert.deepEqual(await attempts(leadId), []);
+          // The retry plans and sends once.
+          await run(leadId, jobId, provider);
+          assert.equal(provider.calls.length, 1);
+        },
+      );
+
+      await t.test("a failed read of the planned rows is retryable (M-6)", async (st) => {
+        const channel = scenario();
+        await staffWithEndpoint(channel, { duty: true, roles: ["manager"] });
+        const leadId = await seedLead(query);
+        const jobId = await leasedJob(query, leadId);
+        const provider = fakeProvider();
+        const flaky = async (statement, params) => {
+          if (statement.includes("dispatch_state='queued' ORDER BY created_at"))
+            throw Object.assign(new Error("synthetic read failure"), { code: "57P01" });
+          return query(statement, params);
+        };
+        const warn = st.mock.method(console, "warn", () => {});
+        await assert.rejects(run(leadId, jobId, provider, { query: flaky }), (error) => {
+          assert.equal(error.code, "LEAD_ALERT_PLAN_FAILED");
+          assert.equal(error.retryable, true);
+          return true;
+        });
+        assert.deepEqual(
+          warn.mock.calls.map((c) => c.arguments),
+          [["[lead-alert] plan_failed", { leadId, jobId, code: "57P01" }]],
+        );
+        warn.mock.restore();
+        assert.equal(provider.calls.length, 0);
+        assert.deepEqual(
+          (await attempts(leadId)).map((r) => r.dispatch_state),
+          ["queued"],
+        );
+        await run(leadId, jobId, provider);
+        assert.equal(provider.calls.length, 1);
       });
 
       await t.test("provider refusal is recorded as failed and not retried", async () => {
@@ -1135,11 +1362,11 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
       });
 
       await t.test(
-        "sources not yet creating leads enqueue none (FX-02 / FX-05c / FX-09 hooks)",
+        "sources not yet creating leads enqueue none (FX-02 / FX-09 hooks)",
         async (st) => {
           // These flip when the named batch makes the source create a lead and enqueue.
           await st.test(
-            "valuation request and listing alert create no lead or job (FX-05c / FX-09)",
+            "valuation request and listing alert create no lead or job (FX-02)",
             async () => {
               const leads = await leadCount();
               const jobs = await alertJobCount();
@@ -1168,17 +1395,17 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
               assert.equal(
                 await leadCount(),
                 leads,
-                "valuation/listing-alert now create leads: FX-05c / FX-09 must flip this assertion deliberately",
+                "valuation/listing-alert now create leads: FX-02 must flip this assertion deliberately",
               );
               assert.equal(
                 await alertJobCount(),
                 jobs,
-                "valuation/listing-alert now enqueue alerts: FX-05c / FX-09 must flip this assertion deliberately",
+                "valuation/listing-alert now enqueue alerts: FX-02 must flip this assertion deliberately",
               );
             },
           );
           await st.test(
-            "a WhatsApp inbound message creates a lead through the trigger but no job (FX-02)",
+            "a WhatsApp inbound message creates a lead through the trigger but no job (FX-09)",
             async () => {
               const jobs = await alertJobCount();
               const leads = await leadCount();
@@ -1194,7 +1421,7 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
               assert.equal(
                 await alertJobCount(),
                 jobs,
-                "WhatsApp inbound leads now enqueue alerts: FX-02 must flip this assertion deliberately",
+                "WhatsApp inbound leads now enqueue alerts: FX-09 must flip this assertion deliberately",
               );
             },
           );

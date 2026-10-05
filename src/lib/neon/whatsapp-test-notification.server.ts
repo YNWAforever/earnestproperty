@@ -13,6 +13,7 @@ import { createInboxApi } from "../woztell/inbox-api.server.ts";
 import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transport.server.ts";
 import { buildStaffTemplateResponse } from "../woztell/staff-alert-template.ts";
 import { staffNotificationRuntime } from "../whatsapp-enquiries/staff-notifications.server.ts";
+import { staffDestinationNotACustomer } from "../whatsapp-enquiries/staff-recipient-guard.ts";
 import { resolveSiteOrigin } from "../../../scripts/site-origin.mjs";
 
 type Actor = Pick<StaffAccess, "staffId" | "roles">;
@@ -183,6 +184,7 @@ export async function enqueueStaffTestNotification(
           AND (p.transport<>'inbox_private_note' OR (e.destination_reference=m.inbox_user_id AND $8::text IS NOT NULL
             AND NOT EXISTS(SELECT 1 FROM whatsapp_conversations w WHERE w.channel_id=e.channel_id AND w.woztell_member_id=$8)))
           AND (p.transport<>'staff_whatsapp' OR e.last_inbound_at BETWEEN now()-interval '24 hours' AND now() OR $10::boolean)
+          AND (p.transport<>'staff_whatsapp' OR ${staffDestinationNotACustomer("e")})
           AND NOT EXISTS(SELECT 1 FROM staff_notification_test_attempts t WHERE t.actor_staff_id=$2::uuid
             AND t.endpoint_id=e.id AND t.created_at>now()-interval '1 minute')
           FOR UPDATE OF s,e,m
@@ -435,6 +437,7 @@ export async function dispatchStaffTestNotification(
          AND (t.transport<>'inbox_private_note' OR (e.destination_reference=m.inbox_user_id AND $5::text IS NOT NULL
            AND NOT EXISTS(SELECT 1 FROM whatsapp_conversations w WHERE w.channel_id=e.channel_id AND w.woztell_member_id=$5)))
          AND (t.transport<>'staff_whatsapp' OR e.last_inbound_at BETWEEN now()-interval '24 hours' AND now() OR $7::boolean)
+         AND (t.transport<>'staff_whatsapp' OR ${staffDestinationNotACustomer("e")})
          AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))
          AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=a.id AND r.role IN ('admin','manager'))`,
       [

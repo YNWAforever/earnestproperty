@@ -5,6 +5,7 @@ import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { isolateSignedStaffEvent } from "./staff-event-isolation.server.ts";
 import { saveStaffEndpoint } from "../neon/staff-endpoints.server.ts";
+import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transport.server.ts";
 import {
   enqueueStaffTestNotification,
   previewStaffTestNotification,
@@ -81,6 +82,7 @@ async function fixture(envPatch = {}, lastInboundAgo = "0 hours") {
       CREATE TABLE whatsapp_staff_channels(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),staff_id uuid,channel_id text,inbox_user_id text,folder_id text,eligible boolean,verification_ref text,verified_at timestamptz,retired_at timestamptz);
       CREATE TABLE staff_notification_endpoints(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),staff_id uuid,channel_id text,transport text,destination_reference text,version integer DEFAULT 1,verification_ref text,enabled boolean,verified_at timestamptz,retired_at timestamptz,permission_granted boolean,permission_ref text,quiet_hours_policy jsonb,last_inbound_at timestamptz,template_name text,template_language text,template_verified_at timestamptz,updated_at timestamptz);
       CREATE TABLE whatsapp_conversations(channel_id text,woztell_member_id text);
+      CREATE TABLE crm_contacts(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text,normalized_phone text,whatsapp_member_id text);
       CREATE TABLE ops_jobs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),job_type text,payload_version integer,payload jsonb,status text,max_attempts integer,idempotency_key text UNIQUE,actor_staff_id uuid,lease_owner text,lease_expires_at timestamptz,created_at timestamptz DEFAULT now());
       CREATE TABLE ops_audit_logs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),actor_staff_id uuid,permission text,action text,resource_type text,resource_id text,outcome text,request_id uuid,metadata jsonb,created_at timestamptz DEFAULT now());
       CREATE TABLE audit_logs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),actor_id uuid,action text,subject_type text,subject_id uuid,metadata jsonb);
@@ -607,5 +609,118 @@ test("staff test template without an https origin is blocked before any claim", 
     } finally {
       await restore();
     }
+  }
+});
+
+// F2: the test notification shares the lead-alert customer guard, at enqueue and at
+// the dispatch boundary. Fake provider `send` only; no network.
+function fakeSend(calls) {
+  return async (input) => {
+    calls.push(input);
+    return { ok: true, body: { ok: 1, messageId: "synthetic-op" } };
+  };
+}
+const customerCases = [
+  [
+    "a WhatsApp member id",
+    "INSERT INTO whatsapp_conversations(channel_id,woztell_member_id) VALUES('company','85291234567')",
+  ],
+  ["a CRM phone", "INSERT INTO crm_contacts(name,normalized_phone) VALUES('合成客戶','91234567')"],
+];
+
+test("a test notification to another customer's number is refused at enqueue", async () => {
+  for (const [label, seed] of customerCases) {
+    const { query, transaction, restore } = await fixture({
+      EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate,
+    });
+    try {
+      await query(
+        "UPDATE staff_notification_endpoints SET destination_reference='+852 9123 4567' WHERE id=$1",
+        [endpointId],
+      );
+      await query(seed);
+      const input = { staffId, transport: "staff_whatsapp", endpointVersion: 3 };
+      const preview = await previewStaffTestNotification(input, actor, query);
+      await assert.rejects(
+        enqueueStaffTestNotification(
+          { ...input, previewToken: preview.previewToken, requestId: randomUUID() },
+          actor,
+          { query, transaction },
+        ),
+        (error) => error instanceof Response && error.status === 409,
+        label,
+      );
+      assert.equal(
+        (await query("SELECT count(*)::int AS n FROM staff_notification_test_attempts"))[0].n,
+        0,
+        label,
+      );
+      assert.equal((await query("SELECT count(*)::int AS n FROM ops_jobs"))[0].n, 0, label);
+    } finally {
+      await restore();
+    }
+  }
+});
+
+test("a test notification is blocked at the dispatch boundary when the number becomes a customer's", async () => {
+  for (const [label, seed] of customerCases) {
+    const { query, transaction, restore } = await fixture({
+      EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate,
+    });
+    try {
+      await query(
+        "UPDATE staff_notification_endpoints SET destination_reference='+852 9123 4567' WHERE id=$1",
+        [endpointId],
+      );
+      const { queued, context } = await queueTest(query, transaction);
+      await query(seed);
+      const calls = [];
+      const { inspectWhatsappStaffReadinessForDispatch } =
+        await import("../neon/whatsapp-readiness.server.ts");
+      const result = await dispatchStaffTestNotification(queued.attemptId, context, {
+        query,
+        inspect: (id) => inspectWhatsappStaffReadinessForDispatch(id, { query }),
+        staff: () => createStaffWhatsAppTransport(fakeSend(calls)),
+      });
+      assert.deepEqual(result, { summary: { blocked: 1 } }, label);
+      assert.equal(calls.length, 0, label);
+      const [saved] = await query(
+        "SELECT state,safe_error FROM staff_notification_test_attempts WHERE id=$1",
+        [queued.attemptId],
+      );
+      assert.deepEqual({ ...saved }, { state: "blocked", safe_error: "preflight_blocked" }, label);
+    } finally {
+      await restore();
+    }
+  }
+});
+
+// F3: staff WhatsApp readiness follows the lead-alert switch, not EP_WA_ENQUIRY_MODE.
+test("with enquiry mode off, the staff switch and a template make the test notification send the template", async () => {
+  const { query, transaction, restore } = await fixture(
+    { EP_WA_ENQUIRY_MODE: undefined, EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate },
+    "25 hours",
+  );
+  try {
+    const { listWhatsappStaffReadiness, inspectWhatsappStaffReadinessForDispatch } =
+      await import("../neon/whatsapp-readiness.server.ts");
+    const [readiness] = await listWhatsappStaffReadiness(actor, { staffId, query });
+    assert.equal(readiness.staffWhatsapp.state, "ready", JSON.stringify(readiness.staffWhatsapp));
+    // Enquiry automation stays off: assignment and the Inbox note remain blocked.
+    assert.equal(readiness.assignment.state, "blocked");
+    assert.equal(readiness.inboxPrivateNote.state, "blocked");
+    const { queued, context } = await queueTest(query, transaction);
+    const calls = [];
+    const result = await dispatchStaffTestNotification(queued.attemptId, context, {
+      query,
+      inspect: (id) => inspectWhatsappStaffReadinessForDispatch(id, { query }),
+      staff: () => createStaffWhatsAppTransport(fakeSend(calls)),
+    });
+    assert.deepEqual(result, { summary: { accepted: 1 } });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].memberId, "85291234567");
+    assert.deepEqual(calls[0].response, [expectedTestTemplate]);
+  } finally {
+    await restore();
   }
 });
