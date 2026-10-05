@@ -24,6 +24,7 @@ const member: AdminTeamMember = {
   email: "tai.man@example.com",
   roles: ["agent"],
   accessState: "active" as const,
+  isDutyManager: false,
   invitationState: "sent" as const,
   invitationRetryAfter: null,
   invitationExpiresAt: null,
@@ -360,5 +361,70 @@ describe("Admin Team account linking", () => {
     expect(teamDialogCopy("link", ["admin", "agent"]).requiresConfirmation).toBe(true);
     expect(teamDialogCopy("link", ["agent"]).requiresConfirmation).toBe(false);
     expect(teamDialogCopy("link").description).toContain("相同電郵");
+  });
+});
+
+describe("Admin Team duty manager", () => {
+  const dutyMember = { ...member, isDutyManager: true };
+  const dutyDetail = { ...detail, member: dutyMember };
+  const panel = (props: Record<string, unknown>) =>
+    render(
+      createElement(AdminTeamDetailPanel, {
+        detail: dutyDetail,
+        canManage: true,
+        onAction: () => undefined,
+        onDutyManagerChange: () => undefined,
+        ...props,
+      } as never),
+    );
+
+  test("duty manager switch renders checked for a duty manager", () => {
+    const view = panel({});
+    const toggle = view("button[role='switch']#team-duty-manager");
+    expect(toggle).toHaveLength(1);
+    expect(toggle.attr("aria-checked")).toBe("true");
+    expect(toggle.attr("disabled")).toBeUndefined();
+    expect(view("label[for='team-duty-manager']").text()).toBe("值班經理");
+    expect(view.text()).toContain(
+      "未指派的新客戶查詢會以 WhatsApp 通知值班經理。此成員需要已核實的同事手機通知設定。",
+    );
+    const off = render(
+      createElement(AdminTeamDetailPanel, {
+        detail,
+        canManage: true,
+        onAction: () => undefined,
+        onDutyManagerChange: () => undefined,
+      }),
+    );
+    expect(off("button[role='switch']#team-duty-manager").attr("aria-checked")).toBe("false");
+  });
+
+  test("it is disabled for non-admins and suspended members", () => {
+    expect(panel({ canManage: false })("#team-duty-manager").attr("disabled")).toBeDefined();
+    const suspended = {
+      ...dutyDetail,
+      member: { ...dutyMember, accessState: "suspended" as const },
+    };
+    expect(panel({ detail: suspended })("#team-duty-manager").attr("disabled")).toBeDefined();
+    expect(panel({ pending: true })("#team-duty-manager").attr("disabled")).toBeDefined();
+  });
+
+  test("the table shows the 值班經理 badge", () => {
+    const withBadge = render(
+      createElement(AdminTeamTable, {
+        members: [dutyMember],
+        selectedMemberId: null,
+        onSelect: () => undefined,
+      }),
+    );
+    expect(withBadge("tbody td").first().text()).toContain("值班經理");
+    const without = render(
+      createElement(AdminTeamTable, {
+        members: [member],
+        selectedMemberId: null,
+        onSelect: () => undefined,
+      }),
+    );
+    expect(without.text()).not.toContain("值班經理");
   });
 });

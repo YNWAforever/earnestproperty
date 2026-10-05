@@ -1,5 +1,6 @@
 import { Ellipsis, ChevronRight } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AdminTeamMember } from "@/lib/neon/admin-team.types";
 
@@ -45,6 +46,7 @@ export function AdminTeamMemberCard({
             {teamRoleLabel(role)}
           </span>
         ))}
+        {member.isDutyManager ? <Badge variant="secondary">值班經理</Badge> : null}
         <AdminTeamStatusBadge kind="access" value={member.accessState} />
         <AdminTeamStatusBadge kind="invitation" value={member.invitationState} />
         {member.needsAttention ? <AdminTeamStatusBadge kind="attention" value /> : null}

@@ -1293,6 +1293,136 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
           }
         },
       );
+
+      await t.test(
+        "toggling duty manager is audited and immediately changes the alert destination for the next lead",
+        async (st) => {
+          const { createStaffLifecycleService } = await import("../neon/staff-lifecycle.server.ts");
+          const channel = scenario();
+          const admin = await seedStaff(query, { roles: ["admin"] });
+          const actor = {
+            staffId: admin,
+            authUserId: `lead-alert-${admin}`,
+            email: null,
+            name: "Admin",
+            roles: ["admin"],
+            bootstrap: false,
+            matchedProfileOnly: false,
+          };
+          const service = createStaffLifecycleService({
+            organizationId: "synthetic",
+            provider: {},
+            queryRows: (statement, params) => query(statement, params),
+            updateStaffRoles: async () => assert.fail("not used"),
+            setStaffActive: async () => assert.fail("not used"),
+            writeAudit: async () => assert.fail("duty manager audit is in-statement"),
+          });
+          const request = new Request("https://earnest.example.invalid/admin/team");
+          const target = await staffWithEndpoint(channel, { duty: false, roles: ["agent"] });
+          const version = async (id) =>
+            new Date(
+              (await query("SELECT updated_at FROM staff_users WHERE id=$1", [id]))[0].updated_at,
+            ).toISOString();
+          const auditRows = (id) =>
+            query(
+              "SELECT actor_staff_id,permission,action,resource_type,outcome,request_id,metadata FROM ops_audit_logs WHERE resource_id=$1 AND action='staff.duty_manager_changed' ORDER BY created_at, id",
+              [id],
+            );
+          const alertTo = async () => {
+            const leadId = await seedLead(query);
+            const provider = fakeProvider();
+            await run(leadId, await leasedJob(query, leadId), provider);
+            return provider.calls.map((c) => c.memberId);
+          };
+
+          // Before: nobody is on duty for this channel -> nothing is sent.
+          assert.deepEqual(await alertTo(), []);
+
+          await st.test(
+            "marking sends the next lead to the member, with one audit row",
+            async () => {
+              const result = await service.changeStaffDutyManager(
+                {
+                  staffId: target.staffId,
+                  isDutyManager: true,
+                  expectedVersion: await version(target.staffId),
+                },
+                actor,
+                request,
+              );
+              assert.equal(result.isDutyManager, true);
+              assert.deepEqual(await alertTo(), [target.destination]);
+              const audit = await auditRows(target.staffId);
+              assert.equal(audit.length, 1);
+              assert.equal(audit[0].actor_staff_id, admin);
+              assert.equal(audit[0].permission, "staff.manage");
+              assert.equal(audit[0].resource_type, "staff_user");
+              assert.equal(audit[0].outcome, "success");
+              assert.equal(audit[0].request_id, result.requestId);
+              assert.deepEqual(audit[0].metadata, { before: false, after: true });
+            },
+          );
+
+          await st.test("a stale version is 409, writes nothing, and changes nothing", async () => {
+            const stale = await version(target.staffId);
+            await query(
+              "UPDATE staff_users SET updated_at = updated_at + interval '1 second' WHERE id=$1",
+              [target.staffId],
+            );
+            const failure = await service
+              .changeStaffDutyManager(
+                { staffId: target.staffId, isDutyManager: false, expectedVersion: stale },
+                actor,
+                request,
+              )
+              .catch((e) => e);
+            assert.ok(failure instanceof Response);
+            assert.equal(failure.status, 409);
+            assert.equal(await failure.text(), "STAFF_CHANGED");
+            assert.equal((await auditRows(target.staffId)).length, 1);
+            assert.equal(
+              (
+                await query("SELECT is_duty_manager FROM staff_users WHERE id=$1", [target.staffId])
+              )[0].is_duty_manager,
+              true,
+            );
+          });
+
+          await st.test("unmarking stops the next lead and is audited", async () => {
+            const result = await service.changeStaffDutyManager(
+              {
+                staffId: target.staffId,
+                isDutyManager: false,
+                expectedVersion: await version(target.staffId),
+              },
+              actor,
+              request,
+            );
+            assert.equal(result.isDutyManager, false);
+            assert.deepEqual(await alertTo(), []);
+            const audit = await auditRows(target.staffId);
+            assert.equal(audit.length, 2);
+            assert.deepEqual(audit[1].metadata, { before: true, after: false });
+          });
+
+          await st.test("a suspended member cannot be marked and nothing is audited", async () => {
+            const suspended = await seedStaff(query, { active: false });
+            const failure = await service
+              .changeStaffDutyManager(
+                {
+                  staffId: suspended,
+                  isDutyManager: true,
+                  expectedVersion: await version(suspended),
+                },
+                actor,
+                request,
+              )
+              .catch((e) => e);
+            assert.equal(failure.status, 409);
+            assert.equal((await auditRows(suspended)).length, 0);
+          });
+        },
+      );
     });
   } finally {
     applyEnv(savedEnv);

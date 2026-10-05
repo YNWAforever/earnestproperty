@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { createAdminTeamReadModel, decodeAdminTeamCursor } from "./admin-team.server.ts";
 import {
+  changeStaffDutyManagerSchema,
   changeStaffRolesSchema,
   createAdminTeamServerBoundary,
   inviteStaffMemberSchema,
@@ -44,6 +45,7 @@ function fixture({ detailRow = {} } = {}) {
             branch_id: null,
             roles: ["admin", "manager"],
             active: true,
+            is_duty_manager: true,
             created_at: "2026-08-16T00:00:00.123Z",
             updated_at: "2026-08-16T01:00:00.456Z",
             created_at_cursor: "2026-08-16T00:00:00.123456Z",
@@ -139,6 +141,7 @@ test("listAdminTeam projects safe filtered members, counts, and a keyset cursor"
     email: "Ada@Example.Test",
     roles: ["admin", "manager"],
     accessState: "active",
+    isDutyManager: true,
     invitationState: "sent",
     invitationRetryAfter: null,
     invitationExpiresAt: FUTURE_INVITATION_EXPIRY,
@@ -431,4 +434,61 @@ test("linkStaffIdentity is admin-only and runs through the lifecycle boundary", 
   assert.equal(result.ok, true);
   assert.equal(linkStaffIdentitySchema.safeParse({ staffId: "not-a-uuid" }).success, false);
   assert.equal(linkStaffIdentitySchema.safeParse({ staffId, extra: true }).success, false);
+});
+
+test("changeStaffDutyManager requires admin and a strict payload", async () => {
+  const request = new Request("https://earnest.test/admin/team");
+  const version = "2026-08-16T01:00:00.456Z";
+  let lifecycleLoaded = false;
+  const denied = createAdminTeamServerBoundary({
+    requireStaffAccess: async (_request, allowedRoles) => {
+      assert.deepEqual(allowedRoles, ["admin"]);
+      throw new Response("Forbidden", { status: 403 });
+    },
+    loadLifecycleService: async () => {
+      lifecycleLoaded = true;
+      return assert.fail("lifecycle service must not load for a non-admin");
+    },
+  });
+  await assert.rejects(
+    () =>
+      denied.changeStaffDutyManager(
+        { staffId, isDutyManager: true, expectedVersion: version },
+        request,
+      ),
+    (error) => error instanceof Response && error.status === 403,
+  );
+  assert.equal(lifecycleLoaded, false);
+
+  const calls = [];
+  const allowed = createAdminTeamServerBoundary({
+    requireStaffAccess: async () => actor,
+    loadLifecycleService: async () => ({
+      changeStaffDutyManager: async (input, who) => {
+        calls.push({ input, who });
+        return { isDutyManager: input.isDutyManager, requestId: "r-1" };
+      },
+    }),
+  });
+  const input = { staffId, isDutyManager: true, expectedVersion: version };
+  assert.deepEqual(await allowed.changeStaffDutyManager(input, request), {
+    isDutyManager: true,
+    requestId: "r-1",
+  });
+  assert.equal(calls[0].who, actor);
+
+  assert.equal(changeStaffDutyManagerSchema.safeParse(input).success, true);
+  assert.equal(changeStaffDutyManagerSchema.safeParse({ ...input, extra: 1 }).success, false);
+  assert.equal(
+    changeStaffDutyManagerSchema.safeParse({ ...input, staffId: "nope" }).success,
+    false,
+  );
+  assert.equal(
+    changeStaffDutyManagerSchema.safeParse({ ...input, isDutyManager: "yes" }).success,
+    false,
+  );
+  assert.equal(
+    changeStaffDutyManagerSchema.safeParse({ ...input, expectedVersion: "yesterday" }).success,
+    false,
+  );
 });
