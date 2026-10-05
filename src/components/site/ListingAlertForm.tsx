@@ -20,11 +20,12 @@ const UTM_PARAM_KEYS = [
 
 const ALERT_FORM_STATUS_ID = "alert-form-status";
 
-// Best-effort UTM capture from the current URL -- this repo has no existing
-// UTM utility to reuse (confirmed via repo-wide grep), so this stays a small
-// self-contained read rather than a new analytics subsystem. Safe to call
-// during SSR: `window` is guarded, and this only ever actually runs from a
-// client event handler (the form's onSubmit) in practice.
+// Best-effort UTM capture from the current URL. `src/lib/analytics/events.ts`
+// exports a `collectUtmParams` too, but with different rules (it keeps only
+// approved campaign tokens), which is why this local copy is kept: it reads
+// the five standard utm_* parameters directly. Safe to call during SSR:
+// `window` is guarded, and this only ever actually runs from a client event
+// handler (the form's onSubmit) in practice.
 function collectUtmParams(): Record<string, string> {
   if (typeof window === "undefined") return {};
   const params = new URLSearchParams(window.location.search);

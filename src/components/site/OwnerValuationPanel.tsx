@@ -25,11 +25,10 @@ const UTM_PARAM_KEYS = [
 
 // Best-effort UTM capture from the current URL -- mirrors ListingAlertForm's own
 // collectUtmParams (not analytics/events.ts's exported one, which only keeps
-// approved campaign tokens; this repo has no shared UTM utility,
-// confirmed via repo-wide grep, so each form keeps this small self-contained
-// copy rather than introducing cross-feature coupling for five lines of
-// logic). Safe to call during SSR: `window` is guarded, and this only
-// actually runs from a client event handler (the form's onSubmit) in
+// approved campaign tokens and so has different rules; each form keeps this
+// small self-contained copy rather than introducing cross-feature coupling for
+// five lines of logic). Safe to call during SSR: `window` is guarded, and this
+// only actually runs from a client event handler (the form's onSubmit) in
 // practice.
 function collectUtmParams(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -47,9 +46,9 @@ function collectUtmParams(): Record<string, string> {
  * WhatsApp deep-link beside it -- not replacing it. Same "offer a structured
  * path without removing the WhatsApp-first option" pattern already
  * established by /listings' zero-results notify-me form (ListingAlertForm in
- * listings.tsx). The consent checkbox starts unchecked (useState(false)) and
- * is never preselected by any prop or effect -- this is a repo-wide,
- * plan-mandated invariant, not a per-form style choice.
+ * src/components/site/ListingAlertForm.tsx). The consent checkbox starts
+ * unchecked (useState(false)) and is never preselected by any prop or effect
+ * -- this is a repo-wide, plan-mandated invariant, not a per-form style choice.
  */
 export function ValuationLeadForm({ estateId }: { estateId?: string }) {
   const [name, setName] = useState("");
