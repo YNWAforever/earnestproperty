@@ -155,6 +155,7 @@ jobs:
       - run: npm run test:admin-performance:db
       - run: npm run test:admin-link-bulk:db
       - run: npm run test:operations:owned:db
+      - run: npm run test:lead-alert:owned:db
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:
