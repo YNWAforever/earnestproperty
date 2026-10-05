@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assessStaffReadiness } from "../neon/whatsapp-readiness-policy.ts";
+import { assessStaffReadiness, assessWhatsappRuntime } from "../neon/whatsapp-readiness-policy.ts";
 
 const now = "2026-09-27T08:00:00.000Z";
 const base = {
@@ -166,7 +166,7 @@ test("outside the window is ready when a template is configured", () => {
   assert.deepEqual(reason(off.staffWhatsapp), ["runtime_disabled"]);
 });
 
-test("outside the window is blocked with 訊息模板合約未核實 when none is", () => {
+test("outside the window is blocked with 模板未設定 when none is", () => {
   const blocked = evaluate({
     staffEndpoint: { ...base.staffEndpoint, lastInboundAt: null },
     runtime: { ...base.runtime, templateContractVerified: false },
@@ -176,7 +176,34 @@ test("outside the window is blocked with 訊息模板合約未核實 when none i
     "outside_message_window",
     "template_unverified",
   ]);
-  assert.ok(blocked.staffWhatsapp.reasons.some((item) => item.message === "訊息模板合約未核實"));
+  assert.ok(blocked.staffWhatsapp.reasons.some((item) => item.message === "模板未設定"));
   // Inside the window plain text stays ready without a template.
   assert.equal(evaluate({}).staffWhatsapp.state, "ready");
+});
+
+test("runtime card shows the staff template as ready only when one is configured", () => {
+  const input = {
+    mode: "active",
+    serviceEnabled: true,
+    channelId: "company",
+    inboxProviderVerified: true,
+    staffTransportVerified: true,
+    staffWhatsappEnabled: true,
+    checkedAt: now,
+  };
+  const configured = assessWhatsappRuntime({ ...input, templateConfigured: true });
+  assert.equal(configured.staffWhatsappTemplate.state, "ready");
+  assert.deepEqual(reason(configured.staffWhatsappTemplate), []);
+  const missing = assessWhatsappRuntime({ ...input, templateConfigured: false });
+  assert.equal(missing.staffWhatsappTemplate.state, "blocked");
+  assert.deepEqual(reason(missing.staffWhatsappTemplate), ["template_unverified"]);
+  assert.equal(missing.staffWhatsappTemplate.reasons[0].message, "模板未設定");
+  // A configured template never bypasses the switch or the transport evidence.
+  const off = assessWhatsappRuntime({
+    ...input,
+    staffWhatsappEnabled: false,
+    staffTransportVerified: false,
+    templateConfigured: true,
+  });
+  assert.deepEqual(reason(off.staffWhatsappTemplate), ["runtime_disabled", "provider_unverified"]);
 });

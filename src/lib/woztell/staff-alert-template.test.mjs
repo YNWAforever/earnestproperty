@@ -68,6 +68,11 @@ test("template params are single-line, trimmed, capped and never empty", () => {
   assert.equal(sanitizeTemplateParam(undefined, "客戶"), "客戶");
   assert.equal(sanitizeTemplateParam(" \n\t ", "客戶"), "客戶");
   assert.equal(sanitizeTemplateParam("\u0000\u0007", "客戶"), "客戶");
+  // Format characters: zero-width space and a bidi override cannot hide or reorder text.
+  assert.equal(sanitizeTemplateParam("陳​先生", "客戶"), "陳 先生");
+  assert.equal(sanitizeTemplateParam("‮evil‬", "客戶"), "evil");
+  assert.equal(sanitizeTemplateParam("​‮﻿", "客戶"), "客戶");
+  assert.doesNotMatch(sanitizeTemplateParam("a​​​​b", "客戶"), /\p{Cf}/u);
   for (const value of ["a     b", "a\t\t\t\tb", "a     b", "a    b", "a" + " ".repeat(59) + "b"]) {
     const clean = sanitizeTemplateParam(value, "客戶");
     assert.doesNotMatch(clean, / {4}/, JSON.stringify(value));

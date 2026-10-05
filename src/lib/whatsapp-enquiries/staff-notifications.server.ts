@@ -201,8 +201,9 @@ export async function dispatchStaffNotification(
     const insideWindow =
       !!ep?.last_inbound_at &&
       new Date(String(ep.last_inbound_at)).getTime() > Date.now() - 86400000;
-    // Outside the window only the approved template may be sent; never free TEXT.
-    // It names the readiness window block more precisely but never hides another one.
+    // A configured template is always the payload. TEXT goes out only when no template
+    // exists, and then the SQL boundary still demands an open window ($9 = false).
+    // The reason names the readiness window block more precisely but never hides another.
     if (
       transport === "staff_whatsapp" &&
       !insideWindow &&
@@ -235,6 +236,7 @@ export async function dispatchStaffNotification(
           options.job!.workerId,
           n.inbox_user_id,
           n.folder_id,
+          // $9: the payload is a template, so the 24-hour window does not apply.
           runtime.template !== null,
         ],
       );
@@ -288,14 +290,13 @@ export async function dispatchStaffNotification(
               channelId: String(n.channel_id),
               memberId: String(ep!.destination_reference),
               message,
-              template:
-                insideWindow || !runtime.template
-                  ? null
-                  : buildStaffTemplateResponse(runtime.template, {
-                      name: "WhatsApp 客戶",
-                      source: "WhatsApp 查詢",
-                      link: workLink!,
-                    }),
+              template: !runtime.template
+                ? null
+                : buildStaffTemplateResponse(runtime.template, {
+                    name: "WhatsApp 客戶",
+                    source: "WhatsApp 查詢",
+                    link: workLink!,
+                  }),
               beforeSend: boundary,
             });
     } catch (error) {

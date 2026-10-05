@@ -1318,6 +1318,98 @@ test("staff WhatsApp dispatch guards on owned Postgres", { timeout: 300000 }, as
         await dispatch(n, options, true);
         assert.equal(sends.length, 1);
       });
+
+      await t.test("a configured template is sent even inside the window, never TEXT", async () => {
+        await query(
+          "UPDATE staff_notification_endpoints SET last_inbound_at=now() WHERE staff_id=$1 AND transport='staff_whatsapp'",
+          [ids.staff],
+        );
+        const before = sends.length;
+        const { n, options } = await leasedNotification();
+        await dispatch(n, options, true);
+        assert.equal(sends.length, before + 1);
+        assert.equal(sends.at(-1).template?.type, "TEMPLATE");
+        assert.equal(sends.at(-1).template.elementName, "staff_lead_alert");
+      });
+
+      await t.test("no template and a window that closes at claim time sends nothing", async () => {
+        await query(
+          "UPDATE staff_notification_endpoints SET last_inbound_at=now() WHERE staff_id=$1 AND transport='staff_whatsapp'",
+          [ids.staff],
+        );
+        const before = sends.length;
+        const { n, options } = await leasedNotification();
+        // The JS window check sees an open window; it closes between claim and send.
+        const closing = async (statements) => {
+          const rows = await tx(statements);
+          const claim = statements.find((s) =>
+            s.statement.includes("SET dispatch_state='dispatching'"),
+          );
+          const [claimed] = claim
+            ? await query("SELECT transport FROM staff_notification_attempts WHERE id=$1", [
+                claim.params[0],
+              ])
+            : [];
+          if (claimed?.transport === "staff_whatsapp")
+            await query(
+              "UPDATE staff_notification_endpoints SET last_inbound_at=now()-interval '25 hours' WHERE staff_id=$1 AND transport='staff_whatsapp'",
+              [ids.staff],
+            );
+          return rows;
+        };
+        await dispatchStaffNotification(
+          n.id,
+          options,
+          { query, transaction: closing },
+          runtime(false),
+          adapter,
+        );
+        assert.equal(sends.length, before);
+        assert.deepEqual(await attempts(n.id, "staff_whatsapp"), [
+          { dispatch_state: "suppressed", safe_error: "dispatch_eligibility_changed" },
+        ]);
+      });
+      await t.test(
+        "template configured and a window that closes at claim time sends the template, never TEXT",
+        async () => {
+          await query(
+            "UPDATE staff_notification_endpoints SET last_inbound_at=now() WHERE staff_id=$1 AND transport='staff_whatsapp'",
+            [ids.staff],
+          );
+          const before = sends.length;
+          const { n, options } = await leasedNotification();
+          // The JS window check sees an open window; it closes between claim and send.
+          const closing = async (statements) => {
+            const rows = await tx(statements);
+            const claim = statements.find((s) =>
+              s.statement.includes("SET dispatch_state='dispatching'"),
+            );
+            const [claimed] = claim
+              ? await query("SELECT transport FROM staff_notification_attempts WHERE id=$1", [
+                  claim.params[0],
+                ])
+              : [];
+            if (claimed?.transport === "staff_whatsapp")
+              await query(
+                "UPDATE staff_notification_endpoints SET last_inbound_at=now()-interval '25 hours' WHERE staff_id=$1 AND transport='staff_whatsapp'",
+                [ids.staff],
+              );
+            return rows;
+          };
+          await dispatchStaffNotification(
+            n.id,
+            options,
+            { query, transaction: closing },
+            runtime(true),
+            adapter,
+          );
+          assert.equal(sends.length, before + 1);
+          assert.equal(sends.at(-1).template?.type, "TEMPLATE");
+          assert.deepEqual(await attempts(n.id, "staff_whatsapp"), [
+            { dispatch_state: "accepted", safe_error: null },
+          ]);
+        },
+      );
     } finally {
       await owned.end();
     }

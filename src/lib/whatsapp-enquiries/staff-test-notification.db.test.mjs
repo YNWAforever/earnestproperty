@@ -528,3 +528,84 @@ test("without a template it is still refused outside 24h", async () => {
     await restore();
   }
 });
+
+const expectedTestTemplate = {
+  type: "TEMPLATE",
+  elementName: "staff_lead_alert",
+  languageCode: "zh_HK",
+  components: [
+    {
+      type: "body",
+      parameters: [
+        { type: "text", text: "測試" },
+        { type: "text", text: "測試通知" },
+        { type: "text", text: "https://earnest.example.invalid/admin/whatsapp-settings" },
+      ],
+    },
+  ],
+};
+
+test("a configured template is sent even inside the window, never TEXT", async () => {
+  const { query, transaction, restore } = await fixture({
+    EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate,
+  });
+  try {
+    const { queued, context } = await queueTest(query, transaction);
+    const calls = [];
+    const { inspectWhatsappStaffReadinessForDispatch } =
+      await import("../neon/whatsapp-readiness.server.ts");
+    const result = await dispatchStaffTestNotification(queued.attemptId, context, {
+      query,
+      inspect: (id) => inspectWhatsappStaffReadinessForDispatch(id, { query }),
+      staff: fakeStaffTransport(calls),
+    });
+    assert.deepEqual(result, { summary: { accepted: 1 } });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].template, expectedTestTemplate);
+  } finally {
+    await restore();
+  }
+});
+
+test("staff test template without an https origin is blocked before any claim", async () => {
+  for (const origin of [undefined, "http://earnest.example.invalid"]) {
+    const { query, transaction, restore } = await fixture(
+      {
+        EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate,
+        VITE_SITE_URL: origin,
+        VERCEL_PROJECT_PRODUCTION_URL: undefined,
+      },
+      "25 hours",
+    );
+    try {
+      const { queued, context } = await queueTest(query, transaction);
+      let providerCalls = 0;
+      const { inspectWhatsappStaffReadinessForDispatch } =
+        await import("../neon/whatsapp-readiness.server.ts");
+      const result = await dispatchStaffTestNotification(queued.attemptId, context, {
+        query,
+        inspect: (id) => inspectWhatsappStaffReadinessForDispatch(id, { query }),
+        staff: () => ({
+          verificationRef: "synthetic",
+          sendStaffWhatsApp: async () => {
+            providerCalls++;
+            return { state: "accepted" };
+          },
+        }),
+      });
+      assert.deepEqual(result, { summary: { blocked: 1 } }, String(origin));
+      assert.equal(providerCalls, 0, String(origin));
+      const [saved] = await query(
+        "SELECT state,safe_error,claim_id FROM staff_notification_test_attempts WHERE id=$1",
+        [queued.attemptId],
+      );
+      assert.deepEqual(
+        { ...saved },
+        { state: "blocked", safe_error: "work_origin_unconfigured", claim_id: null },
+        String(origin),
+      );
+    } finally {
+      await restore();
+    }
+  }
+});

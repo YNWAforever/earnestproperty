@@ -41,6 +41,7 @@ export async function getServiceHealth(
     inboxProviderVerified: current.inboxProviderVerified,
     staffTransportVerified: current.staffTransportVerified,
     staffWhatsappEnabled: current.notificationsEnabled,
+    templateConfigured: current.templateContractVerified,
     checkedAt: new Date().toISOString(),
   });
   const emptyCounts = {

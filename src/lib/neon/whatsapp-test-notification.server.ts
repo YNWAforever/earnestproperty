@@ -369,7 +369,7 @@ export async function dispatchStaffTestNotification(
   const query = deps.query ?? queryRows;
   const inspect = deps.inspect ?? inspectWhatsappStaffReadinessForDispatch;
   const [attempt] = await query(
-    `SELECT t.*,p.message,e.channel_id,e.destination_reference,e.last_inbound_at,
+    `SELECT t.*,p.message,e.channel_id,e.destination_reference,
        m.inbox_user_id,m.folder_id
      FROM staff_notification_test_attempts t JOIN staff_notification_test_previews p ON p.id=t.preview_id
      JOIN staff_notification_endpoints e ON e.id=t.endpoint_id
@@ -377,6 +377,18 @@ export async function dispatchStaffTestNotification(
     [attemptId],
   );
   if (!attempt || attempt.state !== "queued") return { summary: { skipped: 1 } };
+  // Read once so the SQL boundary and the payload agree on whether a template is sent.
+  const template =
+    attempt.transport === "staff_whatsapp" ? staffNotificationRuntime().template : null;
+  const origin = resolveSiteOrigin();
+  if (template && !origin?.startsWith("https://")) {
+    // The template carries a work link; without an https origin it is never sent.
+    await query(
+      "UPDATE staff_notification_test_attempts SET state='blocked',safe_error='work_origin_unconfigured',finished_at=now() WHERE id=$1::uuid AND state='queued'",
+      [attemptId],
+    );
+    return { summary: { blocked: 1 } };
+  }
   const readiness = await inspect(String(attempt.staff_id));
   const capability =
     attempt.transport === "staff_whatsapp" ? readiness?.staffWhatsapp : readiness?.inboxPrivateNote;
@@ -396,8 +408,6 @@ export async function dispatchStaffTestNotification(
     [attemptId, claim],
   );
   if (!claimed) return { summary: { skipped: 1 } };
-  // Read once so the SQL boundary and the payload agree on whether a template exists.
-  const template = staffNotificationRuntime().template;
   let boundaryPassed = false;
   const boundary = async () => {
     await context.checkpoint();
@@ -434,6 +444,7 @@ export async function dispatchStaffTestNotification(
         context.workerId,
         member,
         currentWhatsappReadinessRuntime().channelId,
+        // $7: the payload is a template, so the 24-hour window does not apply.
         template !== null,
       ],
     );
@@ -460,25 +471,18 @@ export async function dispatchStaffTestNotification(
       });
     } else {
       const api = (deps.staff ?? createStaffWhatsAppTransport)();
-      const insideWindow =
-        !!attempt.last_inbound_at &&
-        new Date(String(attempt.last_inbound_at)).getTime() > Date.now() - 86400000;
-      const origin = resolveSiteOrigin();
       result = await api.sendStaffWhatsApp!({
         channelId: String(attempt.channel_id),
         memberId: String(attempt.destination_reference),
         message: String(attempt.message),
-        // Outside the window the owner verifies the very template lead alerts use.
-        template:
-          insideWindow || !template
-            ? null
-            : buildStaffTemplateResponse(template, {
-                name: "測試",
-                source: "測試通知",
-                link: origin
-                  ? new URL("/admin/whatsapp-settings", origin).toString()
-                  : "/admin/whatsapp-settings",
-              }),
+        // With a template configured the owner verifies the very template alerts use.
+        template: !template
+          ? null
+          : buildStaffTemplateResponse(template, {
+              name: "測試",
+              source: "測試通知",
+              link: new URL("/admin/whatsapp-settings", origin!).toString(),
+            }),
         beforeSend: boundary,
       });
     }

@@ -162,6 +162,7 @@ export async function readWhatsappRuntimeStatus(
     inboxProviderVerified: runtime.inboxProviderVerified,
     staffTransportVerified: runtime.staffTransportVerified,
     staffWhatsappEnabled: runtime.notificationsEnabled,
+    templateConfigured: runtime.templateContractVerified,
     checkedAt: options.checkedAt ?? new Date().toISOString(),
   });
 }

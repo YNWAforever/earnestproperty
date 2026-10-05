@@ -20,7 +20,7 @@ const messages: Record<string, string> = {
   endpoint_disabled: "通知目的地已停用",
   permission_missing: "通知權限未核實",
   outside_message_window: "已超出 24 小時訊息窗口",
-  template_unverified: "訊息模板合約未核實",
+  template_unverified: "模板未設定",
   runtime_disabled: "通知運作模式未啟用",
   schema_unavailable: "資料表尚未就緒",
   provider_unverified: "供應商能力未核實",
@@ -166,6 +166,8 @@ export function assessWhatsappRuntime(input: {
   inboxProviderVerified: boolean;
   staffTransportVerified: boolean;
   staffWhatsappEnabled: boolean;
+  /** EP_WA_STAFF_ALERT_TEMPLATE parses to an approved template. */
+  templateConfigured: boolean;
   checkedAt: string;
 }): WhatsappRuntimeStatus {
   const active = input.mode === "active" && input.serviceEnabled;
@@ -187,7 +189,11 @@ export function assessWhatsappRuntime(input: {
     assignment,
     customerReply,
     staffWhatsappText,
-    staffWhatsappTemplate: blocked("template_unverified"),
+    staffWhatsappTemplate: blocked(
+      ...(!active || !input.staffWhatsappEnabled ? ["runtime_disabled"] : []),
+      ...(!input.staffTransportVerified ? ["provider_unverified"] : []),
+      ...(!input.templateConfigured ? ["template_unverified"] : []),
+    ),
     approvedPolicyVersion: null,
     checkedAt: input.checkedAt,
   };

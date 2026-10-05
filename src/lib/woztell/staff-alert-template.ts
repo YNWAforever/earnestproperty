@@ -44,7 +44,7 @@ export function parseStaffAlertTemplate(raw: string | undefined): StaffAlertTemp
 
 /** WhatsApp refuses a parameter with a newline, a tab or more than four spaces
  * in a row, and an empty one. Customer-typed text is reduced to one line, every
- * whitespace or control run becomes a single space, and the result is capped
+ * whitespace, control or format (zero-width, bidi) run becomes a single space, and the result is capped
  * (in code points) and never empty. */
 export function sanitizeTemplateParam(
   value: string | null | undefined,
@@ -52,7 +52,7 @@ export function sanitizeTemplateParam(
   max = 60,
 ): string {
   const clean = (text: string) =>
-    Array.from(text.replace(/[\s\p{Cc}]+/gu, " ").trim())
+    Array.from(text.replace(/[\s\p{Cc}\p{Cf}]+/gu, " ").trim())
       .slice(0, Math.max(1, max))
       .join("")
       .trim();
