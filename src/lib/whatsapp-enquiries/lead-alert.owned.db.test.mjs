@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { mock } from "node:test";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { withOwnedPostgres } from "../../../scripts/acceptance/owned-postgres-test.mjs";
+import {
+  withOwnedPostgres,
+  mockOwnedServerDb,
+  repoRoot,
+} from "../../../scripts/acceptance/owned-postgres-test.mjs";
 
 // Every owned lead-alert test shares ONE container (86 migrations each is a load
 // flake). Subtests isolate their data: each scenario has its own channel, staff,
@@ -1028,6 +1032,233 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
           /\bSET\s+(?:(?!\bWHERE\b|\bFROM\b)[^;`])*\blead_id\s*=/i,
         );
       });
+
+      // ---------------------------------------------------------------- Task 4
+      const { persistWebsiteInquiry } = await import("../neon/website-inquiry.js");
+      const { persistValuationLead } = await import("../neon/valuation-leads.js");
+      const { persistListingAlert } = await import("../neon/listing-alerts.js");
+      const alertJobs = (leadId) =>
+        query(
+          "SELECT job_type,payload_version,payload,status,max_attempts,idempotency_key FROM ops_jobs WHERE job_type='lead.staff.alert' AND payload->>'leadId'=$1",
+          [leadId],
+        );
+      const alertJobCount = async () =>
+        Number(
+          (await query("SELECT count(*) AS n FROM ops_jobs WHERE job_type='lead.staff.alert'"))[0]
+            .n,
+        );
+      const leadCount = async () =>
+        Number((await query("SELECT count(*) AS n FROM crm_leads"))[0].n);
+      const intake = (overrides = {}) => ({
+        name: "陳先生",
+        phone: "9123 4567",
+        normalizedPhone: `852${Math.floor(10000000 + Math.random() * 89999999)}`,
+        email: null,
+        message: "想睇樓",
+        listingNo: null,
+        propertyId: null,
+        consentWhatsapp: false,
+        ...overrides,
+      });
+      const leadFor = async (inquiryId) =>
+        (
+          await query(
+            "SELECT l.id, l.assigned_agent_id FROM inquiries i JOIN crm_leads l ON l.id=i.crm_lead_id OR (i.crm_lead_id IS NULL AND l.contact_id=i.crm_contact_id) WHERE i.id=$1",
+            [inquiryId],
+          )
+        )[0];
+      const expectOneAlert = async (leadId) => {
+        const jobs = await alertJobs(leadId);
+        assert.equal(jobs.length, 1, "exactly one alert job per lead");
+        assert.equal(jobs[0].idempotency_key, `lead-alert:${leadId}`);
+        assert.deepEqual(jobs[0].payload, { leadId });
+        assert.equal(jobs[0].max_attempts, 3);
+        assert.equal(jobs[0].payload_version, 1);
+        assert.equal(jobs[0].status, "queued");
+        // The general lane: laneForJob is pure string logic, read it from source.
+        const wakeSource = readFileSync(
+          new URL("../control-plane/job-wake.server.ts", import.meta.url),
+          "utf8",
+        );
+        assert.match(wakeSource, /woztell\.enquiry\./);
+        assert.doesNotMatch(
+          wakeSource,
+          /lead\.staff\.alert/,
+          "the alert job stays on the general lane",
+        );
+      };
+
+      await t.test("each source path enqueues exactly one alert job", async () => {
+        const jobsBefore = await alertJobCount();
+        // Contact form: no listing.
+        const contact = await persistWebsiteInquiry(query, intake({ submissionId: randomUUID() }));
+        assert.equal(contact.leadAlertQueued, true);
+        await expectOneAlert((await leadFor(contact.id)).id);
+
+        // Property enquiry: active listing with an active agent.
+        const agentId = await seedStaff(query, { roles: ["agent"] });
+        const listingNo = `FX05B-${randomUUID().slice(0, 8)}`;
+        const [property] = await query(
+          "INSERT INTO properties(listing_no,canonical_property_no,title_zh,deal_type,district_slug,status,price,agent_id) VALUES($1,$1,'提醒測試盤','sale','sham-tseng','active',10000000,$2) RETURNING id",
+          [listingNo, agentId],
+        );
+        const enquiry = await persistWebsiteInquiry(
+          query,
+          intake({ submissionId: randomUUID(), listingNo, propertyId: property.id }),
+        );
+        assert.equal(enquiry.leadAlertQueued, true);
+        const enquiryLead = await leadFor(enquiry.id);
+        assert.equal(enquiryLead.assigned_agent_id, agentId);
+        await expectOneAlert(enquiryLead.id);
+
+        // The same submissionId replayed: still one lead, one job, not queued again.
+        const replayInput = intake({ submissionId: randomUUID() });
+        const first = await persistWebsiteInquiry(query, replayInput);
+        const leadsAfterFirst = await leadCount();
+        const jobsAfterFirst = await alertJobCount();
+        const replay = await persistWebsiteInquiry(query, replayInput);
+        assert.equal(replay.id, first.id);
+        assert.equal(replay.leadAlertQueued, false);
+        assert.equal(await leadCount(), leadsAfterFirst);
+        assert.equal(await alertJobCount(), jobsAfterFirst);
+        await expectOneAlert((await leadFor(first.id)).id);
+
+        // Legacy path with no submissionId: one job per lead.
+        const legacyA = await persistWebsiteInquiry(query, intake());
+        const legacyB = await persistWebsiteInquiry(query, intake());
+        assert.equal(legacyA.leadAlertQueued, true);
+        assert.equal(legacyB.leadAlertQueued, true);
+        await expectOneAlert((await leadFor(legacyA.id)).id);
+        await expectOneAlert((await leadFor(legacyB.id)).id);
+
+        assert.equal(await alertJobCount(), jobsBefore + 5);
+      });
+
+      await t.test(
+        "sources not yet creating leads enqueue none (FX-02 / FX-05c / FX-09 hooks)",
+        async (st) => {
+          // These flip when the named batch makes the source create a lead and enqueue.
+          await st.test(
+            "valuation request and listing alert create no lead or job (FX-05c / FX-09)",
+            { todo: "FX-05c / FX-09 enqueue these sources in their own batches" },
+            async () => {
+              const leads = await leadCount();
+              const jobs = await alertJobCount();
+              await persistValuationLead(query, {
+                name: "估價客戶",
+                phone: "91234567",
+                email: null,
+                propertyAddress: "測試大廈",
+                estateId: null,
+                notes: null,
+                consentText: "synthetic",
+                consentVersion: "1",
+                consentedAt: new Date().toISOString(),
+                utm: {},
+              });
+              await persistListingAlert(query, {
+                name: "提醒客戶",
+                phone: "91234568",
+                email: null,
+                filters: {},
+                consentText: "synthetic",
+                consentVersion: "1",
+                consentedAt: new Date().toISOString(),
+                utm: {},
+              });
+              assert.equal(await leadCount(), leads);
+              assert.equal(await alertJobCount(), jobs);
+            },
+          );
+          await st.test(
+            "a WhatsApp inbound message creates a lead through the trigger but no job (FX-02)",
+            { todo: "FX-02 enqueues WhatsApp inbound leads in its own batch" },
+            async () => {
+              const jobs = await alertJobCount();
+              const leads = await leadCount();
+              const [contact] = await query(
+                "INSERT INTO crm_contacts(name,phone,normalized_phone) VALUES('入站客戶','synthetic',$1) RETURNING id",
+                [`wa-${randomUUID()}`],
+              );
+              await query(
+                "INSERT INTO whatsapp_messages(contact_id,direction,message_type,text,external_message_id) VALUES($1,'inbound','text','hello',$2)",
+                [contact.id, `ext-${randomUUID()}`],
+              );
+              assert.equal(await leadCount(), leads + 1);
+              assert.equal(await alertJobCount(), jobs);
+            },
+          );
+        },
+      );
+
+      await t.test("backfilled lead enqueues none", async () => {
+        const jobs = await alertJobCount();
+        // The shape the FX-02 backfill and migration reconciles use.
+        const leadId = await seedLead(query);
+        assert.equal((await alertJobs(leadId)).length, 0);
+        // Re-run the history INSERT ... SELECT from 20260906100000_whatsapp_inbound_leads.sql:26-31.
+        // The ensure_whatsapp_inbound_lead trigger already made this contact's lead; drop it so
+        // the history statement has a contact to reconcile.
+        const [contact] = await query(
+          "INSERT INTO crm_contacts(name,phone,normalized_phone) VALUES('歷史客戶','synthetic',$1) RETURNING id",
+          [`hist-${randomUUID()}`],
+        );
+        await query(
+          "INSERT INTO whatsapp_messages(contact_id,direction,message_type,text,external_message_id) VALUES($1,'inbound','text','old',$2)",
+          [contact.id, `hist-${randomUUID()}`],
+        );
+        await query("DELETE FROM crm_leads WHERE contact_id=$1", [contact.id]);
+        const backfilled = await query(
+          `INSERT INTO crm_leads(contact_id,assigned_agent_id,stage,intent,source,note,created_at,updated_at)
+           SELECT c.id,c.assigned_agent_id,'new','unknown','whatsapp',
+             'WhatsApp 入站查詢；詳情見對話紀錄。',min(m.created_at),max(m.created_at)
+           FROM whatsapp_messages m JOIN crm_contacts c ON c.id=m.contact_id
+           WHERE m.direction::text='inbound'
+             AND NOT EXISTS (SELECT 1 FROM crm_leads l WHERE l.contact_id=c.id)
+           GROUP BY c.id,c.assigned_agent_id
+           RETURNING id`,
+        );
+        assert.ok(backfilled.length >= 1, "the history statement inserted a lead");
+        assert.equal(await alertJobCount(), jobs);
+        const triggers = await query(
+          `SELECT t.tgname, pg_get_functiondef(p.oid) AS body
+           FROM pg_trigger t JOIN pg_proc p ON p.oid=t.tgfoid
+           WHERE t.tgrelid='crm_leads'::regclass AND NOT t.tgisinternal`,
+        );
+        for (const trigger of triggers)
+          assert.doesNotMatch(
+            trigger.body,
+            /ops_jobs/,
+            `trigger ${trigger.tgname} must not enqueue`,
+          );
+      });
+
+      await t.test(
+        "website enquiry wakes the general lane once, and a replay wakes nothing",
+        async () => {
+          const wakes = [];
+          await mockOwnedServerDb(mock, query, transaction);
+          mock.module(new URL("src/lib/control-plane/job-wake.server.ts", repoRoot).href, {
+            exports: {
+              wakeAfterCommit: (lane) => wakes.push(lane),
+              laneForJob: () => "general",
+            },
+          });
+          const { createWebsiteInquiry } = await import("../neon/admin-data.server.ts");
+          const input = {
+            submissionId: randomUUID(),
+            name: "陳先生",
+            phone: "9123 4567",
+            message: "想睇樓",
+            consentWhatsapp: false,
+          };
+          const first = await createWebsiteInquiry(input);
+          assert.deepEqual(wakes, ["general"]);
+          const replay = await createWebsiteInquiry(input);
+          assert.equal(replay.id, first.id);
+          assert.deepEqual(wakes, ["general"], "a replay must not wake the lane");
+        },
+      );
     });
   } finally {
     applyEnv(savedEnv);

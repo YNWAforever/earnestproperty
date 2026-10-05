@@ -3689,7 +3689,7 @@ export async function createWebsiteInquiry(input: {
   const optInWhatsapp = input.consentWhatsapp === true;
   const requestedPropertyId = input.property_id ?? null;
   const requestedListingNo = input.listingNo?.trim() || null;
-  return persistWebsiteInquiry(queryRows, {
+  const result = await persistWebsiteInquiry(queryRows, {
     submissionId: input.submissionId,
     name: input.name,
     phone: input.phone,
@@ -3700,6 +3700,11 @@ export async function createWebsiteInquiry(input: {
     propertyId: requestedPropertyId,
     consentWhatsapp: optInWhatsapp,
   });
+  // The alert job committed with the lead; wake only for a fresh insert, never a replay.
+  if (result.leadAlertQueued) {
+    (await import("../control-plane/job-wake.server.ts")).wakeAfterCommit("general");
+  }
+  return result;
 }
 
 const INQUIRY_STATUSES = ["new", "contacted", "qualified", "closed", "spam"] as const;
