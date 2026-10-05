@@ -27,6 +27,7 @@ import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import {
+  adminAttentionIdentity,
   attentionBadge,
   attentionBadges,
   badgeText,
@@ -452,10 +453,7 @@ export function AdminShell({
   // read them; anyone else (or an unresolved staff lookup) gets a null identity and no request.
   // The identity names whose counts these are, so a change of user, staff record or roles
   // never shows the previous one's counts.
-  const identity =
-    staffReady && staffRoles.some((role) => STAFF.includes(role))
-      ? JSON.stringify([user?.id, staffSession.staffId, [...staffRoles].sort()])
-      : null;
+  const identity = adminAttentionIdentity(user?.id ?? null, staffSession);
   const attention = useAdminAttention(identity);
   // Each admin route sets its own title; re-apply the count prefix after every navigation.
   useEffect(() => {

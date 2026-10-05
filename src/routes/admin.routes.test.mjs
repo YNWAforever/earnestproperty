@@ -639,6 +639,62 @@ test("跟進工作台 flags a remembered lead that left the board and blocks its
   assert.match(commandCenter, /disabled=\{busy \|\| offBoard\}[\s\S]*?重新 AI 分析/);
 });
 
+test("跟進工作台 polls only for the roles its read accepts, and stops after a refusal", () => {
+  // No browser fixture renders this route; createBackgroundReadGate is unit-tested in
+  // background-refresh.test.ts, and this pins the board's poll to it.
+  const commandCenter = read("src/routes/admin.leads_.command-center.tsx");
+  assert.match(commandCenter, /createBackgroundReadGate\(BACKGROUND_READ_ROLES\.commandCenter\)/);
+  // Roles come from the shared staff session the shell already loaded: no request of its own.
+  assert.match(commandCenter, /useStaffSession\(user\?\.id \?\? null\)/);
+  assert.match(
+    commandCenter,
+    /useVisibleInterval\(\(\) => \{\s*if \(!pollGate\.allows\(staffRoles\)[^)]*\) return undefined;[\s\S]*?background: true[\s\S]*?MIN_VISIBLE_INTERVAL_MS\)/,
+  );
+  assert.match(commandCenter, /catch \(err\) \{\s*pollGate\.backgroundFailed\(err\);/);
+  assert.match(
+    commandCenter,
+    /setData\(result\);\s*setError\(null\);\s*pollGate\.foregroundSucceeded\(\);/,
+  );
+});
+
+test("WhatsApp inbox polls only for roles its list read accepts and forgets the list error on success", () => {
+  const whatsapp = read("src/routes/admin.whatsapp.tsx");
+  assert.match(whatsapp, /createBackgroundReadGate\(BACKGROUND_READ_ROLES\.inboxList\)/);
+  assert.match(
+    whatsapp,
+    /useVisibleInterval\(\(\) => \{[\s\S]*?if \(!pollGate\.allows\(staffRoles\)\) return undefined;[\s\S]*?background: true[\s\S]*?MIN_VISIBLE_INTERVAL_MS\)/,
+  );
+  assert.match(whatsapp, /catch \(err\) \{\s*pollGate\.backgroundFailed\(err\);/);
+  // F4: a user list read that succeeds also forgets the list's earlier failure, so a poll can
+  // never clear a later banner from another read whose text happens to be identical.
+  assert.match(
+    whatsapp,
+    /\} else \{\s*listErrorRef\.current = null;\s*setError\(null\);\s*pollGate\.foregroundSucceeded\(\);\s*\}/,
+  );
+});
+
+test("WhatsApp inbox re-reads the nav counts after the user's own list reads, never after a poll", () => {
+  const whatsapp = read("src/routes/admin.whatsapp.tsx");
+  const shell = read("src/components/admin/AdminShell.tsx");
+  // The same identity the shell's badges use, so the refresh lands on the counts on screen.
+  assert.match(
+    shell,
+    /const identity = adminAttentionIdentity\(user\?\.id \?\? null, staffSession\);/,
+  );
+  assert.match(whatsapp, /adminAttentionIdentity\(user\?\.id \?\? null, staffSession\)/);
+  // Keyed on handoffRefreshKey, which only user-started list reads move (a poll's stamp is
+  // skipped), and outside saveConversationUpdate, which stays untouched.
+  assert.match(
+    whatsapp,
+    /useEffect\(\(\) => \{[\s\S]{0,400}?adminAttentionStore\.refresh\(attentionIdentity\)[\s\S]{0,40}?\}, \[handoffRefreshKey, attentionIdentity\]\);/,
+  );
+  const save = whatsapp.slice(
+    whatsapp.indexOf("async function saveConversationUpdate("),
+    whatsapp.indexOf("async function sendReply("),
+  );
+  assert.doesNotMatch(save, /adminAttentionStore/);
+});
+
 test("shared admin workflow components exist", () => {
   for (const file of [
     "src/components/admin/AdminToolbar.tsx",

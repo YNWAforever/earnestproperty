@@ -24,6 +24,7 @@ type FixtureWindow = {
     pendingList: (() => void)[];
     pendingAgents: (() => void)[];
     listPageSize: number | null;
+    refreshMembership: (mode?: string, role?: string, binding?: string) => Promise<void>;
   };
   noLinkOutboundFixture: { calls: unknown[] };
   noLinkStaffWorkFixture: { calls: { name: string }[] };
@@ -381,6 +382,90 @@ test("polling pauses while hidden and resumes once when visible", async ({ page 
   await page.clock.runFor(1_000);
   await expect.poll(() => callCount(page, "attention")).toBe(before + 2);
   await expect.poll(() => listReads(page)).toBe(listBefore + 2);
+});
+
+test("a visible tab nobody uses stops polling after 30 min, and one click reads once each", async ({
+  page,
+}) => {
+  await open(page);
+  const attentionBefore = await callCount(page, "attention");
+  const listBefore = await listReads(page);
+
+  // No input at all: the polls run for the first half hour, then go dormant.
+  await page.clock.runFor(30 * POLL + POLL);
+  await nextTask(page);
+  const attention = await callCount(page, "attention");
+  const list = await listReads(page);
+  expect(attention).toBeGreaterThan(attentionBefore);
+  expect(list).toBeGreaterThan(listBefore);
+
+  await page.clock.runFor(10 * POLL);
+  await nextTask(page);
+  expect(await callCount(page, "attention")).toBe(attention);
+  expect(await listReads(page)).toBe(list);
+
+  // Someone comes back: the first click reads the counts and the list once each, at once.
+  await page.getByRole("heading", { level: 1 }).filter({ visible: true }).first().click();
+  await expect.poll(() => callCount(page, "attention")).toBe(attention + 1);
+  await expect.poll(() => listReads(page)).toBe(list + 1);
+  await nextTask(page);
+  expect(await callCount(page, "attention")).toBe(attention + 1);
+  expect(await listReads(page)).toBe(list + 1);
+  await expectNoAlertOnPage(page);
+});
+
+test("a viewer's inbox makes no background list read", async ({ page }) => {
+  await open(page);
+  const list = await listReads(page);
+  const attention = await callCount(page, "attention");
+
+  // The fixture's staff session now answers with the viewer role: the inbox remounts for the new
+  // identity and makes its one-off list read, which the list read's server refuses for a viewer.
+  await page.evaluate(() =>
+    (window as unknown as FixtureWindow).noLinkFixture.refreshMembership("ok", "viewer"),
+  );
+  await expect.poll(() => listReads(page)).toBe(list + 1);
+  await nextTask(page);
+
+  await page.clock.runFor(3 * POLL);
+  await nextTask(page);
+  expect(await listReads(page)).toBe(list + 1);
+  // A viewer reads no counts either (unchanged behaviour).
+  expect(await callCount(page, "attention")).toBe(attention);
+});
+
+test("重新整理 re-reads the badges at once, while a list poll adds no count read", async ({
+  page,
+}) => {
+  await open(page);
+  const attention = await callCount(page, "attention");
+  const list = await listReads(page);
+
+  // One minute: the list poll and the counts' own tick each read once, and nothing more.
+  await page.clock.runFor(POLL);
+  await expect.poll(() => listReads(page)).toBe(list + 1);
+  await expect.poll(() => callCount(page, "attention")).toBe(attention + 1);
+  await nextTask(page);
+  expect(await callCount(page, "attention")).toBe(attention + 1);
+
+  await setFixture(page, {
+    attentionCounts: {
+      unansweredConversations: 3,
+      unassignedLeads: 0,
+      staleNewLeads: 0,
+      leadsNeedingAttention: 0,
+    },
+  });
+  // A moment later, so this read's 最後更新 differs from the poll's.
+  await page.clock.runFor(1_000);
+  await refreshButton(page).click();
+  await expect.poll(() => listReads(page)).toBe(list + 2);
+  // Without waiting for the counts' next tick.
+  await expect.poll(() => callCount(page, "attention")).toBe(attention + 2);
+  await expect(inboxBadge(page)).toHaveText("3");
+  await expect(page).toHaveTitle(`(3) ${TITLE}`);
+  await nextTask(page);
+  expect(await callCount(page, "attention")).toBe(attention + 2);
 });
 
 test("a new inbound appears in the list after one poll, without a reload or a thread re-read", async ({

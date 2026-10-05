@@ -9,12 +9,18 @@ import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { AdminToolbar } from "@/components/admin/AdminToolbar";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { COMMAND_CENTER_ROW_LIMIT } from "@/lib/neon/command-center";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { canApplyBackgroundRead, rowForOpenPanel } from "@/lib/admin/background-refresh";
+import {
+  BACKGROUND_READ_ROLES,
+  canApplyBackgroundRead,
+  createBackgroundReadGate,
+  rowForOpenPanel,
+} from "@/lib/admin/background-refresh";
 import { MIN_VISIBLE_INTERVAL_MS, useVisibleInterval } from "@/lib/admin/use-visible-interval";
 import { BACKGROUND_READ_TIMEOUT_MS, withTimeout } from "@/lib/admin/with-timeout";
 import {
@@ -161,6 +167,12 @@ function CommandCenter() {
   loadingRef.current = loading;
   const busyRef = useRef(busy);
   busyRef.current = busy;
+  // The poll reads only for the roles the board's read accepts, taken from the staff session the
+  // shell already loaded (no request of its own), and stops after a refused background read
+  // until a user read succeeds.
+  const { session: staffSession } = useStaffSession(user?.id ?? null);
+  const staffRoles = staffSession?.status === "ok" ? staffSession.roles : null;
+  const [pollGate] = useState(() => createBackgroundReadGate(BACKGROUND_READ_ROLES.commandCenter));
 
   const refresh = useCallback(
     async (options: { background?: boolean } = {}) => {
@@ -182,7 +194,8 @@ function CommandCenter() {
           if (!canApplyBackgroundRead(started, current)) return;
           setData(result);
           setError(null);
-        } catch {
+        } catch (err) {
+          pollGate.backgroundFailed(err);
           // The next tick, or 重新整理, reads again.
         }
         return;
@@ -195,6 +208,7 @@ function CommandCenter() {
         if (requestId !== requestIdRef.current) return;
         setData(result);
         setError(null);
+        pollGate.foregroundSucceeded();
       } catch (err) {
         if (requestId !== requestIdRef.current) return;
         setError(errorText(err));
@@ -202,7 +216,7 @@ function CommandCenter() {
         if (requestId === requestIdRef.current) setLoading(false);
       }
     },
-    [user],
+    [user, pollGate],
   );
 
   useEffect(() => {
@@ -212,7 +226,7 @@ function CommandCenter() {
   // The board refreshes once a minute while the tab is visible. The queue, the open panel and the
   // URL stay as the user left them.
   useVisibleInterval(() => {
-    if (loadingRef.current || busyRef.current) return undefined;
+    if (!pollGate.allows(staffRoles) || loadingRef.current || busyRef.current) return undefined;
     return refresh({ background: true });
   }, MIN_VISIBLE_INTERVAL_MS);
 

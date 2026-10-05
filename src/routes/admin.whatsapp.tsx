@@ -4,6 +4,7 @@ import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContex
 import { NoLinkInboxSummary } from "@/components/admin/whatsapp/NoLinkInbox";
 import { EnquiryOnlyPanel } from "@/components/admin/whatsapp/EnquiryOnlyPanel";
 import { useStaffSession } from "@/components/admin/staff-session";
+import { adminAttentionIdentity, adminAttentionStore } from "@/components/admin/admin-attention";
 import { WhatsappAiSuggestions } from "@/components/admin/WhatsappAiSuggestions";
 import { mergeMessagePages } from "@/lib/neon/admin-pagination";
 import { WhatsappConsentDialog } from "@/components/admin/WhatsappConsentDialog";
@@ -42,7 +43,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import {
+  BACKGROUND_READ_ROLES,
   canApplyBackgroundRead,
+  createBackgroundReadGate,
   errorAfterBackgroundListSuccess,
 } from "@/lib/admin/background-refresh";
 import { MIN_VISIBLE_INTERVAL_MS, useVisibleInterval } from "@/lib/admin/use-visible-interval";
@@ -182,6 +185,10 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   const { user } = useNeonAuth();
   const { session: staffSession } = useStaffSession(user?.id ?? null);
   const canBackfill = staffSession?.status === "ok" && staffSession.roles.includes("admin");
+  // The list poll reads only for the roles the list read accepts (a viewer's would be refused
+  // every minute), and stops after a refused background read until a user list read succeeds.
+  const staffRoles = staffSession?.status === "ok" ? staffSession.roles : null;
+  const [pollGate] = useState(() => createBackgroundReadGate(BACKGROUND_READ_ROLES.inboxList));
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const isDesktop = useDesktopBreakpoint();
@@ -273,6 +280,20 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   useEffect(() => {
     if (listUpdatedAt !== backgroundListStampRef.current) setHandoffRefreshKey(listUpdatedAt);
   }, [listUpdatedAt]);
+  // The user's own work changes what is waiting (a reply sent, a conversation updated, or
+  // 重新整理 showing new messages), so a user-started list read also re-reads the nav badges at
+  // once rather than up to a minute later. A poll never moves this key, so it adds no count read,
+  // and the page's first load leaves the counts to the shell's own read.
+  const attentionIdentity = adminAttentionIdentity(user?.id ?? null, staffSession);
+  const firstListLoadRef = useRef(true);
+  useEffect(() => {
+    if (handoffRefreshKey === null) return;
+    if (firstListLoadRef.current) {
+      firstListLoadRef.current = false;
+      return;
+    }
+    if (attentionIdentity) void adminAttentionStore.refresh(attentionIdentity);
+  }, [handoffRefreshKey, attentionIdentity]);
   // What a failed list read put in the shared error banner: the only error a poll may clear.
   const listErrorRef = useRef<string | null>(null);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
@@ -409,9 +430,13 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         const stamp = Date.now();
         if (background) backgroundListStampRef.current = stamp;
         setListUpdatedAt(stamp);
-        if (background)
+        if (background) {
           setError((shown) => errorAfterBackgroundListSuccess(shown, listErrorRef.current));
-        else setError(null);
+        } else {
+          listErrorRef.current = null;
+          setError(null);
+          pollGate.foregroundSucceeded();
+        }
       };
 
       if (options.background) {
@@ -431,9 +456,10 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
           if (!isWorkspaceCurrent() || !canApplyBackgroundRead(started, current)) return false;
           apply(data, true);
           return true;
-        } catch {
+        } catch (err) {
+          pollGate.backgroundFailed(err);
           // A failed or timed-out poll keeps the list on screen and says nothing; the next
-          // tick, or 重新整理, reads again.
+          // tick, or 重新整理, reads again (a refused one waits for a user list read).
           return false;
         }
       }
@@ -456,7 +482,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         if (isWorkspaceCurrent() && requestId === listRequestRef.current) setLoadingRows(false);
       }
     },
-    [user, inboxQuery, inboxStatus, isWorkspaceCurrent],
+    [user, inboxQuery, inboxStatus, isWorkspaceCurrent, pollGate],
   );
 
   const loadConversationAiAssist = useCallback(
@@ -631,6 +657,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   // The list (not the open thread) refreshes once a minute while the tab is visible, on the page
   // the user is on. It never touches the selection, the thread, drafts or the URL.
   useVisibleInterval(() => {
+    if (!pollGate.allows(staffRoles)) return undefined;
     // A user-started list read (重新整理, paging, a save's readback) owns the slot; skip this tick.
     if (loadingRowsRef.current) return undefined;
     return refreshConversations(undefined, { background: true });

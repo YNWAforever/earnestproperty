@@ -3,7 +3,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { MIN_VISIBLE_INTERVAL_MS, useVisibleInterval } from "@/lib/admin/use-visible-interval";
 import { BACKGROUND_READ_TIMEOUT_MS, withTimeout } from "@/lib/admin/with-timeout";
 import { fetchAdminAttentionCounts } from "@/lib/neon/admin-data";
-import type { AdminAttentionCounts } from "@/lib/neon/admin-data.types";
+import type { AdminAttentionCounts, StaffSession } from "@/lib/neon/admin-data.types";
 
 /** The nav badges and the tab title refresh once a minute while the tab is visible. */
 export const ATTENTION_POLL_MS = MIN_VISIBLE_INTERVAL_MS; // 60_000
@@ -70,6 +70,24 @@ const TITLE_PREFIX = /^\(\d+\+?\) /;
 export function withAttentionTitle(title: string, total: number): string {
   const base = title.replace(TITLE_PREFIX, "");
   return total > 0 ? `(${badgeText(total)}) ${base}` : base;
+}
+
+/** The roles whose staff read the counts; anyone else (a viewer) makes no request. */
+const ATTENTION_ROLES: readonly string[] = ["admin", "manager", "agent"];
+
+/**
+ * Whose counts the nav shows: the signed-in user, staff record and roles, serialised, so a change
+ * of any of them never shows the previous one's counts. Null for anyone who must not read them
+ * (signed out, staff lookup pending or denied, viewer). Shared by the shell's badges and the pages
+ * that refresh them after the user's own work, so both name the same counts.
+ */
+export function adminAttentionIdentity(
+  userId: string | null,
+  session: StaffSession | null,
+): string | null {
+  if (session?.status !== "ok" || !session.roles.some((role) => ATTENTION_ROLES.includes(role)))
+    return null;
+  return JSON.stringify([userId, session.staffId, [...session.roles].sort()]);
 }
 
 /** A failed read is logged by its error's name only (e.g. TimeoutError), never its message. */

@@ -54,3 +54,55 @@ export function rowForOpenPanel<T>(
     ? { row: lastShown, offBoard: true }
     : null;
 }
+
+/**
+ * The staff roles each polled read accepts: the same lists its server function passes to
+ * `requireStaff` (`fetchAdminPageServer`, `fetchCommandCenterServer` in admin-data.ts). A poll
+ * for any other role would only be refused, every minute.
+ */
+export const BACKGROUND_READ_ROLES = {
+  inboxList: ["admin", "manager", "agent"],
+  commandCenter: ["admin", "manager"],
+} as const;
+
+function errorStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const status = (error as { status?: unknown }).status;
+  if (typeof status === "number") return status;
+  if (typeof status === "string") {
+    const parsed = Number(status);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+/**
+ * Whether a read failed because the caller was refused (401 or 403): a `ServerFnResponseError`,
+ * or any error carrying that status, as `isStaffAuthorizationError` in admin-data.ts classifies
+ * it. Kept here, free of server-function imports, so this module stays pure.
+ */
+export function isAuthorizationRefusal(error: unknown): boolean {
+  const status = errorStatus(error);
+  return status === 401 || status === 403;
+}
+
+/**
+ * Decides whether a page's poll may read in the background. It reads only for the roles the
+ * read accepts (roles not known yet: no read), and once a background read is refused (401/403)
+ * it stops until a user-started read on the page succeeds. Nothing here shows anything: the
+ * page's own load and 重新整理 keep their existing error handling.
+ */
+export function createBackgroundReadGate(acceptedRoles: readonly string[]) {
+  let refused = false;
+  return {
+    allows(roles: readonly string[] | null | undefined): boolean {
+      return !refused && !!roles && roles.some((role) => acceptedRoles.includes(role));
+    },
+    backgroundFailed(error: unknown): void {
+      if (isAuthorizationRefusal(error)) refused = true;
+    },
+    foregroundSucceeded(): void {
+      refused = false;
+    },
+  };
+}

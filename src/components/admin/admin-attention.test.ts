@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   ATTENTION_POLL_MS,
+  adminAttentionIdentity,
   attentionBadge,
   attentionBadges,
   badgeText,
@@ -87,6 +88,27 @@ describe("attention badges and copy", () => {
     expect(leadsBadgeDescription(counts(0, 1, 2, 2))).toBe(
       "未指派 1 宗；逾 2 小時未跟進的新查詢 2 宗",
     );
+  });
+});
+
+describe("adminAttentionIdentity", () => {
+  const ok = (roles: ("admin" | "manager" | "agent" | "viewer")[]) =>
+    ({ status: "ok", staffId: "staff-1", email: null, name: null, roles }) as const;
+
+  test("names the user, staff record and sorted roles of staff who read the counts", () => {
+    expect(adminAttentionIdentity("user-1", ok(["manager", "agent"]))).toBe(
+      JSON.stringify(["user-1", "staff-1", ["agent", "manager"]]),
+    );
+    expect(adminAttentionIdentity("user-1", ok(["viewer", "agent"]))).toBe(
+      JSON.stringify(["user-1", "staff-1", ["agent", "viewer"]]),
+    );
+  });
+
+  test("is null for a viewer, a denied or unknown session", () => {
+    expect(adminAttentionIdentity("user-1", ok(["viewer"]))).toBeNull();
+    expect(adminAttentionIdentity("user-1", ok([]))).toBeNull();
+    expect(adminAttentionIdentity("user-1", { status: "denied", reason: "forbidden" })).toBeNull();
+    expect(adminAttentionIdentity("user-1", null)).toBeNull();
   });
 });
 
