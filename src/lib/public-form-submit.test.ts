@@ -1,13 +1,24 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
 import { ServerFnResponseError } from "@/lib/neon/server-fn-response";
 
 import { publicFormErrorMessage, submitPublicForm } from "./public-form-submit";
 
 const RATE_LIMITED_COPY = "提交次數太多，請一分鐘後再試，或直接 WhatsApp 我們。";
-const VALIDATION_COPY = "資料格式有誤，請檢查姓名及電話後再試。";
+const VALIDATION_COPY = "資料格式有誤，請檢查你填寫的資料後再試。";
 const NETWORK_COPY = "網絡連線出現問題，請檢查網絡後再試，或直接 WhatsApp 我們。";
 const SERVER_COPY = "未能提交，請再試一次，或直接 WhatsApp 我們。";
+const LOG_TAG = "PUBLIC_FORM_SUBMIT_FAILED";
+
+// Every failure branch logs via console.error. Silence it for the whole file so test output
+// stays pristine; the logging describe block below asserts on this spy.
+let errorSpy: ReturnType<typeof spyOn<Console, "error">>;
+beforeEach(() => {
+  errorSpy = spyOn(console, "error").mockImplementation(() => {});
+});
+afterEach(() => {
+  errorSpy.mockRestore();
+});
 
 describe("submitPublicForm: resolved Response (TanStack resolves rejected server fns)", () => {
   test("resolved 429 Response -> RATE_LIMITED with exact copy", async () => {
@@ -172,5 +183,71 @@ describe("publicFormErrorMessage", () => {
     expect(publicFormErrorMessage("VALIDATION")).toBe(VALIDATION_COPY);
     expect(publicFormErrorMessage("NETWORK")).toBe(NETWORK_COPY);
     expect(publicFormErrorMessage("SERVER")).toBe(SERVER_COPY);
+  });
+});
+
+describe("submitPublicForm: failure diagnostics (never swallow the cause)", () => {
+  test("resolved 429 Response logs the tag with code and status exactly once", async () => {
+    await submitPublicForm(async () => new Response("Too Many Requests", { status: 429 }));
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      LOG_TAG,
+      expect.objectContaining({ code: "RATE_LIMITED", status: 429, cause: "Response" }),
+    );
+  });
+
+  test("thrown TypeError logs the tag with code, name and the thrown value exactly once", async () => {
+    const thrown = new TypeError("Failed to fetch");
+    await submitPublicForm(async () => {
+      throw thrown;
+    });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      LOG_TAG,
+      expect.objectContaining({ code: "NETWORK", name: "TypeError", cause: thrown }),
+    );
+  });
+
+  test("thrown error carrying an HTTP status logs that status", async () => {
+    await submitPublicForm(async () => {
+      throw new ServerFnResponseError("Too Many Requests", 429);
+    });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy).toHaveBeenCalledWith(
+      LOG_TAG,
+      expect.objectContaining({ code: "RATE_LIMITED", status: 429 }),
+    );
+  });
+
+  test("id-less resolved value logs a short description, never the value itself", async () => {
+    await submitPublicForm(async () => ({ error: "boom", phone: "91234567" }));
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const [tag, detail] = errorSpy.mock.calls[0] as [string, Record<string, unknown>];
+    expect(tag).toBe(LOG_TAG);
+    expect(detail.code).toBe("SERVER");
+    expect(detail.cause).toBe("object without a string id");
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("91234567");
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("boom");
+  });
+
+  test("resolved null / undefined log a short typeof description", async () => {
+    await submitPublicForm(async () => null);
+    await submitPublicForm(async () => undefined);
+    expect(errorSpy).toHaveBeenCalledTimes(2);
+    expect(errorSpy.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ cause: "null" }));
+    expect(errorSpy.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ cause: "undefined" }));
+  });
+
+  test("the visitor-facing message is unchanged by logging", async () => {
+    const outcome = await submitPublicForm(async () => {
+      throw new Error("relation does not exist");
+    });
+    expect(outcome).toEqual({ status: "error", code: "SERVER", message: SERVER_COPY });
+  });
+
+  test("a confirmed save does not log", async () => {
+    const outcome = await submitPublicForm(async () => ({ id: "abc" }));
+    expect(outcome).toEqual({ status: "success", id: "abc" });
+    expect(errorSpy).not.toHaveBeenCalled();
   });
 });

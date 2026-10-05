@@ -35,7 +35,7 @@
 | Key | Text |
 |---|---|
 | `RATE_LIMITED` | 提交次數太多，請一分鐘後再試，或直接 WhatsApp 我們。 |
-| `VALIDATION` | 資料格式有誤，請檢查姓名及電話後再試。 |
+| `VALIDATION` | 資料格式有誤，請檢查你填寫的資料後再試。 |
 | `NETWORK` | 網絡連線出現問題，請檢查網絡後再試，或直接 WhatsApp 我們。 |
 | `SERVER` | 未能提交，請再試一次，或直接 WhatsApp 我們。 |
 | contact success | 已收到查詢，我們會盡快聯絡你。 |

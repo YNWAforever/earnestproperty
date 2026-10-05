@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 
 import {
   buildWebsiteInquiryPayload,
@@ -14,6 +14,17 @@ import {
   type SubmitGuard,
 } from "./contact-inquiry-form";
 import { publicFormErrorMessage } from "./public-form-submit";
+
+// submitPublicForm logs every failure outcome via console.error (tag PUBLIC_FORM_SUBMIT_FAILED).
+// The failure cases below are intentional, so silence it to keep test output pristine; the
+// logging contract itself is asserted in public-form-submit.test.ts.
+let errorSpy: ReturnType<typeof spyOn<Console, "error">>;
+beforeEach(() => {
+  errorSpy = spyOn(console, "error").mockImplementation(() => {});
+});
+afterEach(() => {
+  errorSpy.mockRestore();
+});
 
 // Mirrors exactly the tryStart()/finally-finish() dance contact.tsx's own
 // handleSubmit performs around submitContactInquiry -- kept here rather than
