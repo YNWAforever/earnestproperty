@@ -1,4 +1,4 @@
-import { LEAD_ALERT_JOB_TYPE } from "../neon/lead-alert-enqueue.js";
+import { LEAD_ALERT_JOB_TYPE, LEAD_ALERT_RECONCILE_JOB_TYPE } from "../neon/lead-alert-enqueue.js";
 
 export type JobHandler<T = unknown> = {
   jobType: string;
@@ -492,7 +492,7 @@ for (const jobType of [
 }
 
 // FX-05b: one staff WhatsApp alert per new lead (general lane via laneForJob).
-for (const jobType of [LEAD_ALERT_JOB_TYPE, `${LEAD_ALERT_JOB_TYPE}.reconcile`]) {
+for (const jobType of [LEAD_ALERT_JOB_TYPE, LEAD_ALERT_RECONCILE_JOB_TYPE]) {
   registerJobHandler({
     jobType,
     payloadVersion: 1,

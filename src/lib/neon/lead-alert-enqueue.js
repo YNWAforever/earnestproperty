@@ -6,3 +6,5 @@
  * backfill and import code must never import it.
  */
 export const LEAD_ALERT_JOB_TYPE = "lead.staff.alert";
+/** Turns a lost-lease dispatch into `unknown`; never resends. */
+export const LEAD_ALERT_RECONCILE_JOB_TYPE = "lead.staff.alert.reconcile";
