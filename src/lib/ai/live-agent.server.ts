@@ -214,9 +214,13 @@ export async function requestLiveAgentHandoff(input: {
   // The claim locks the still-open session before any contact or lead write.
   // A concurrent request that loses the claim has no rows to feed into the
   // dependent CTEs, so it cannot create an orphan lead or duplicate follow-up.
+  // The typed phone is unverified web input: a matched contact is linked read-only, and an
+  // existing WhatsApp conversation is never linked or changed. A possible match only becomes a
+  // lead note so staff can check it. The ON CONFLICT self-assignment exists only so RETURNING
+  // yields a row a concurrent insert created; it changes no column and never escalates opt-in.
   const rows = await queryRows<{ id: unknown }>(
     `WITH claimed AS MATERIALIZED (
-       SELECT id, contact_id, lead_id, conversation_id
+       SELECT id, contact_id, lead_id
        FROM live_agent_sessions
        WHERE id=$1
          AND access_token=$2
@@ -233,36 +237,21 @@ export async function requestLiveAgentHandoff(input: {
        ORDER BY (c.id=s.contact_id) DESC, (c.normalized_phone=$5) DESC, c.id
        LIMIT 1 FOR UPDATE OF c
      ),
-     updated_contact AS (
-       UPDATE crm_contacts c
-       SET name=COALESCE(c.name, $3),
-           phone=COALESCE(c.phone, $4),
-           email=COALESCE(c.email, $6),
-           updated_at=now()
-       FROM candidate_contact candidate
-       WHERE c.id=candidate.id
-       RETURNING c.id
-     ),
+     matched_contact AS (SELECT id FROM candidate_contact),
      inserted_contact AS (
        INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
        SELECT $3, $4, $5, $6, 'live_agent', $7 FROM claimed
-       WHERE NOT EXISTS (SELECT 1 FROM updated_contact)
-       ON CONFLICT (normalized_phone) DO UPDATE SET
-         name=COALESCE(crm_contacts.name, EXCLUDED.name),
-         phone=COALESCE(crm_contacts.phone, EXCLUDED.phone),
-         email=COALESCE(crm_contacts.email, EXCLUDED.email),
-         opt_in_whatsapp=crm_contacts.opt_in_whatsapp,
-         updated_at=now()
-       RETURNING id
+       WHERE NOT EXISTS (SELECT 1 FROM matched_contact)
+       ON CONFLICT (normalized_phone) DO UPDATE SET opt_in_whatsapp=crm_contacts.opt_in_whatsapp
+       RETURNING id, (xmax = 0) AS created
      ),
      resolved_contact AS (
-       SELECT id FROM updated_contact
+       SELECT id FROM matched_contact
        UNION ALL SELECT id FROM inserted_contact
      ),
      updated_lead AS (
        UPDATE crm_leads l
        SET contact_id=c.id,
-           stage='contacted',
            intent=$8,
            budget_min=$9,
            budget_max=$10,
@@ -278,7 +267,7 @@ export async function requestLiveAgentHandoff(input: {
        INSERT INTO crm_leads (
          contact_id, stage, intent, budget_min, budget_max, preferred_estates, source, note
        )
-       SELECT c.id, 'contacted', $8, $9, $10, $11::text[], 'live_agent', $12
+       SELECT c.id, 'new', $8, $9, $10, $11::text[], 'live_agent', $12
        FROM claimed s CROSS JOIN resolved_contact c
        WHERE NOT EXISTS (SELECT 1 FROM updated_lead)
        RETURNING id
@@ -287,31 +276,19 @@ export async function requestLiveAgentHandoff(input: {
        SELECT id FROM updated_lead
        UNION ALL SELECT id FROM inserted_lead
      ),
-     candidate_conversation AS (
+     possible_conversation AS (
        SELECT w.id
-       FROM claimed s CROSS JOIN resolved_contact c
-       JOIN whatsapp_conversations w
-         ON (w.id=s.conversation_id OR w.contact_id=c.id)
+       FROM resolved_contact c
+       JOIN whatsapp_conversations w ON w.contact_id=c.id
        WHERE w.channel_id IS NOT NULL
          AND w.woztell_member_id IS NOT NULL
-       ORDER BY CASE WHEN w.id=s.conversation_id THEN 0 ELSE 1 END, w.updated_at DESC
+       ORDER BY w.updated_at DESC
        LIMIT 1
-     ),
-     updated_conversation AS (
-       UPDATE whatsapp_conversations w
-       SET contact_id=c.id,
-           status='pending',
-           last_message_at=COALESCE(w.last_message_at, now()),
-           updated_at=now()
-       FROM candidate_conversation candidate CROSS JOIN resolved_contact c
-       WHERE w.id=candidate.id
-       RETURNING w.id
      ),
      transitioned AS (
        UPDATE live_agent_sessions s
        SET contact_id=c.id,
            lead_id=l.id,
-           conversation_id=(SELECT id FROM updated_conversation),
            status='handoff_requested',
            intent=$8,
            budget_min=$9,
@@ -330,6 +307,13 @@ export async function requestLiveAgentHandoff(input: {
        FROM transitioned t CROSS JOIN resolved_contact c CROSS JOIN resolved_lead l
        RETURNING id
      ),
+     possible_match_note AS (
+       INSERT INTO crm_activities (lead_id, contact_id, activity_type, body)
+       SELECT l.id, c.id, 'note', '可能與現有 WhatsApp 對話相關（對話編號 ' || w.id::text || '）'
+       FROM transitioned t CROSS JOIN resolved_contact c CROSS JOIN resolved_lead l
+         CROSS JOIN possible_conversation w
+       RETURNING id
+     ),
      handoff_message AS (
        INSERT INTO live_agent_messages (session_id, direction, message_text, safety_flags, shown_publicly)
        SELECT id, 'system', $13, ARRAY['handoff_requested']::text[], false
@@ -342,7 +326,8 @@ export async function requestLiveAgentHandoff(input: {
          jsonb_build_object(
            'contactId', c.id,
            'leadId', l.id,
-           'conversationId', (SELECT id FROM updated_conversation),
+           'contactCreated', COALESCE((SELECT created FROM inserted_contact), false),
+           'possibleConversationId', (SELECT id FROM possible_conversation),
            'hasPhone', $14::boolean,
            'sourcePath', $15::text
          )
@@ -355,7 +340,7 @@ export async function requestLiveAgentHandoff(input: {
       accessToken,
       name,
       phone,
-      leadInput.normalized_phone,
+      phoneCheck.normalized,
       email,
       leadInput.opt_in_whatsapp,
       intent,
