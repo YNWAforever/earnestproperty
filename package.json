@@ -119,6 +119,7 @@
     "test:admin-campaign:db": "node --experimental-test-module-mocks --test src/lib/neon/campaign-recovery-owned.db.test.mjs",
     "test:admin-performance:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-performance-readback.spec.ts",
     "test:admin-link-bulk:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-link-bulk-owned.spec.ts",
+    "test:public-forms:ui": "playwright test --config playwright.admin-owned.config.ts e2e/public-form-feedback.spec.ts",
     "test:admin-link-bulk:db": "node --experimental-test-module-mocks --test src/lib/whatsapp-enquiries/link-bulk-owned.db.test.mjs",
     "test:admin-performance:db": "node --experimental-test-module-mocks --test src/lib/analytics/performance-readback-owned.db.test.mjs",
     "test:operations:owned:db": "node --experimental-test-module-mocks --test src/lib/control-plane/operations-recovery-owned.db.test.mjs",

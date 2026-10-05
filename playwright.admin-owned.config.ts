@@ -12,6 +12,7 @@ export default defineConfig({
     "admin-campaign-review.spec.ts",
     "admin-performance-readback.spec.ts",
     "admin-link-bulk-owned.spec.ts",
+    "public-form-feedback.spec.ts",
   ],
   workers: 1,
   fullyParallel: false,
