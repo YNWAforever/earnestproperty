@@ -411,7 +411,9 @@ export async function requestLiveAgentHandoff(input: {
 // Only a contact this handoff created (that nothing else references and no staff audit touched)
 // has its phone updated. A pre-existing contact is never modified: the lead is relinked instead, to a
 // contact that already owns the new number (read-only) or to a new one. A WhatsApp conversation
-// is never written or linked; a possible match only becomes a lead note.
+// is never written or linked; a possible match only becomes a lead note. The loser of two
+// concurrent identical corrections re-checks rows the winner changed and finds nothing to change,
+// so it writes no contact update, note or audit.
 async function correctHandoffPhone(input: {
   sessionId: string;
   accessToken: string;
@@ -485,6 +487,7 @@ async function correctHandoffPhone(input: {
        FROM owned o
        WHERE c.id=o.id
          AND NOT EXISTS (SELECT 1 FROM existing_for_new)
+         AND c.normalized_phone IS DISTINCT FROM $5::text
        RETURNING c.id
      ),
      inserted_contact AS (
@@ -542,10 +545,11 @@ async function correctHandoffPhone(input: {
          CROSS JOIN LATERAL (
            SELECT '可能與現有 WhatsApp 對話相關（對話編號 ' || w.id::text || '）' AS body
          ) n
-       WHERE NOT EXISTS (
-         SELECT 1 FROM crm_activities a
-         WHERE a.lead_id=t.lead_id AND a.activity_type='note' AND a.body=n.body
-       )
+       WHERE (EXISTS (SELECT 1 FROM updated_owned) OR r.id IS DISTINCT FROM t.contact_id)
+         AND NOT EXISTS (
+           SELECT 1 FROM crm_activities a
+           WHERE a.lead_id=t.lead_id AND a.activity_type='note' AND a.body=n.body
+         )
        RETURNING id
      ),
      correction_audit AS (
@@ -560,6 +564,7 @@ async function correctHandoffPhone(input: {
            'possibleConversationId', (SELECT id FROM possible_conversation)
          )
        FROM target t CROSS JOIN resolved r
+       WHERE EXISTS (SELECT 1 FROM updated_owned) OR r.id IS DISTINCT FROM t.contact_id
        RETURNING id
      )
      SELECT id FROM correction_audit`,

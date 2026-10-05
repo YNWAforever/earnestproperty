@@ -402,6 +402,15 @@ test("correction while uncontacted updates the contact this handoff created", as
         possibleConversationId: null,
       },
     ]);
+
+    // Resubmitting the corrected number changes nothing, so it writes no row and no second audit.
+    // (The concurrent version of this, which needs two connections, is in the local-db suite.)
+    const afterCorrection = await snapshot();
+    assert.deepEqual(
+      await live.requestLiveAgentHandoff(handoffInput(session, { phone: "+852 6123 4567" })),
+      { ok: true, status: "handoff_requested" },
+    );
+    assert.deepEqual(await snapshot(), afterCorrection);
   } finally {
     await db.close();
   }

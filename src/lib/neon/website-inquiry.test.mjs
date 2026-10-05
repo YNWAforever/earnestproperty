@@ -280,6 +280,21 @@ test("live-agent never writes a matched or pre-existing contact", () => {
   assert.match(owned[1], /whatsapp_member_id\s+IS\s+NULL/);
 });
 
+// The behaviour needs two real connections (live-agent.handoff.local-db.test.mjs, opt-in); this
+// keeps the predicates from silently disappearing in CI.
+test("live-agent phone correction that changes nothing writes no contact update, note or audit", () => {
+  const source = readLiveAgentSource();
+  const changed =
+    /EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+updated_owned\s*\)\s+OR\s+r\.id\s+IS\s+DISTINCT\s+FROM\s+t\.contact_id/;
+
+  const [updateClause] = liveAgentCteClauses(source, "updated_owned");
+  assert.match(updateClause, /c\.normalized_phone\s+IS\s+DISTINCT\s+FROM\s+\$5::text/);
+  const [noteClause] = liveAgentCteClauses(source, "possible_note");
+  assert.match(noteClause, changed);
+  const [auditClause] = liveAgentCteClauses(source, "correction_audit");
+  assert.match(auditClause, changed);
+});
+
 test("website inquiry SQL resolves active listings and active staff before inserting", () => {
   const source = readFileSync(new URL("./admin-data.server.ts", import.meta.url), "utf8");
   const inquiryStart = source.indexOf("export async function createWebsiteInquiry");
