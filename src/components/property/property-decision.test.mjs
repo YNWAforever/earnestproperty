@@ -153,13 +153,19 @@ test("property route keeps the full decision and discovery feature set", () => {
     "hasMap",
     "txns.length > 0",
     "similar.length > 0",
-    "handleSubmit",
+    "<PropertyInquiryForm",
     'type="application/ld+json"',
     "RealEstateListing",
     'property: "og:image"',
   ]) {
     assert.equal(route.includes(contract), true, `property route must preserve ${contract}`);
   }
+
+  // The enquiry form moved out of the route into its own component; focusInquiry() in the
+  // route still depends on its `id="name"` input and the submit handler must stay wired.
+  const inquiryForm = readFileSync(new URL("./PropertyInquiryForm.tsx", import.meta.url), "utf8");
+  assert.match(inquiryForm, /async function handleSubmit/);
+  assert.match(inquiryForm, /<Input id="name" name="name"/);
 
   assert.match(actions, /calculateMortgage\(\{ price \}\)/);
   assert.match(actions, /decision\.hasMortgagePrice && price !== null/);

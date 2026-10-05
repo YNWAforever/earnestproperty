@@ -31,7 +31,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -45,6 +44,7 @@ import { SkeletonBlock } from "@/components/layout/SkeletonBlock";
 import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import { Container } from "@/components/layout/Container";
 import { PageHero } from "@/components/site/PageHero";
+import { ListingAlertForm } from "@/components/site/ListingAlertForm";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import { listingSearchSeo } from "@/lib/listing-seo";
@@ -68,8 +68,6 @@ import {
   type PublicWaAction,
 } from "@/lib/whatsapp-enquiries/public-context";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
-import { createListingAlert } from "@/lib/neon/admin-data";
-import { LISTING_ALERT_CONSENT_TEXT } from "@/lib/neon/listing-alerts.js";
 
 const PAGE_SIZE = 12;
 
@@ -970,162 +968,6 @@ function SavedSearchesPanel({
         </PopoverContent>
       </Popover>
     </div>
-  );
-}
-
-const UTM_PARAM_KEYS = [
-  "utm_source",
-  "utm_medium",
-  "utm_campaign",
-  "utm_term",
-  "utm_content",
-] as const;
-
-// Best-effort UTM capture from the current URL -- this repo has no existing
-// UTM utility to reuse (confirmed via repo-wide grep), so this stays a small
-// self-contained read rather than a new analytics subsystem. Safe to call
-// during SSR: `window` is guarded, and this only ever actually runs from a
-// client event handler (the form's onSubmit) in practice.
-function collectUtmParams(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  const params = new URLSearchParams(window.location.search);
-  const utm: Record<string, string> = {};
-  for (const key of UTM_PARAM_KEYS) {
-    const value = params.get(key);
-    if (value) utm[key] = value.slice(0, 200);
-  }
-  return utm;
-}
-
-/**
- * /listings' zero-results "notify me" offer -- a genuinely new, server-
- * recorded lead path (listing_alerts), distinct from SearchFallbackCTA's
- * WhatsApp hand-off above it, which records nothing if the visitor never
- * sends that message. Submits the CURRENT validated search params as the
- * alert's filter JSON, same shape SavedSearchesPanel's saveSearch() already
- * uses (`{ ...search }`).
- *
- * The consent checkbox starts unchecked (useState(false)) and is never
- * preselected by any prop or effect -- this is a repo-wide, plan-mandated
- * invariant, not a per-form style choice.
- */
-function ListingAlertForm({ search }: { search: ReturnType<typeof Route.useSearch> }) {
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [consent, setConsent] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!consent) {
-      toast.error("請先剔選同意通知先可以提交");
-      return;
-    }
-    setSubmitting(true);
-    const result = await createListingAlert({
-      data: {
-        name,
-        phone,
-        email,
-        filters: { ...search },
-        consent,
-        utm: collectUtmParams(),
-      },
-    }).catch((err) => ({
-      error: err instanceof Error ? err.message : String(err),
-    }));
-    setSubmitting(false);
-    if (result && "error" in result && result.error) {
-      toast.error("提交失敗：" + result.error);
-      return;
-    }
-    setSubmitted(true);
-    toast.success("已設定通知，有符合條件嘅新盤會盡快聯絡你。");
-    track(
-      {
-        name: "zero_results_notify",
-        payload: {
-          dealType: search.deal,
-          districtSlug: search.district,
-          source: "listings-zero-results",
-        },
-      },
-      buildContext({ districtSlug: search.district }),
-    );
-  }
-
-  if (submitted) {
-    return (
-      <div className="rounded-lg border border-dashed bg-card p-6 text-center">
-        <p className="text-sm font-medium text-primary">已設定通知</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          有符合呢個搜尋條件嘅新放盤，我們會盡快聯絡你。
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="rounded-lg border bg-card p-6">
-      <h2 className="text-base font-semibold text-primary">未有符合嘅放盤？等新盤通知你</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        留低聯絡方法，有符合呢個搜尋條件嘅新放盤，我們會盡快通知你。
-      </p>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        <div>
-          <Label htmlFor="alert-name">姓名 *</Label>
-          <Input
-            id="alert-name"
-            required
-            maxLength={120}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="陳先生"
-          />
-        </div>
-        <div>
-          <Label htmlFor="alert-phone">電話 *</Label>
-          <Input
-            id="alert-phone"
-            required
-            type="tel"
-            maxLength={30}
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="9123 4567"
-          />
-        </div>
-        <div className="sm:col-span-2">
-          <Label htmlFor="alert-email">電郵</Label>
-          <Input
-            id="alert-email"
-            type="email"
-            maxLength={254}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </div>
-      </div>
-      <div className="mt-3 flex items-start gap-2">
-        <Checkbox
-          id="alert-consent"
-          checked={consent}
-          onCheckedChange={(checked) => setConsent(checked === true)}
-          className="mt-0.5"
-        />
-        <Label
-          htmlFor="alert-consent"
-          className="text-xs font-normal leading-snug text-muted-foreground"
-        >
-          {LISTING_ALERT_CONSENT_TEXT}
-        </Label>
-      </div>
-      <Button type="submit" className="mt-4 w-full sm:w-auto" disabled={submitting || !consent}>
-        {submitting ? "提交中…" : "設定通知"}
-      </Button>
-    </form>
   );
 }
 

@@ -15,7 +15,6 @@ import {
 import { useState } from "react";
 import { createFileRoute, Link, notFound, redirect, useRouter } from "@tanstack/react-router";
 import { z } from "zod";
-import { toast } from "sonner";
 import {
   MapPin,
   Bed,
@@ -35,10 +34,6 @@ import {
   TrainFront,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -59,7 +54,6 @@ import {
   type SimilarListing,
   type EstateTransaction,
 } from "@/lib/queries";
-import { createWebsiteInquiry } from "@/lib/neon/admin-data";
 import { fetchNeonBranches } from "@/lib/neon/public-data";
 import type { NeonBranchRecord } from "@/lib/neon/public-data.types";
 import {
@@ -77,11 +71,9 @@ import {
   PropertyDecisionActions,
   PropertyMobileContactSummary,
 } from "@/components/property/PropertyDecisionActions";
+import { PropertyInquiryForm } from "@/components/property/PropertyInquiryForm";
 import { PropertyMediaContactLayout } from "@/components/property/property-media-contact-layout.js";
-import {
-  buildPropertyInquiryPayload,
-  getPropertyDecision,
-} from "@/components/property/property-decision.js";
+import { getPropertyDecision } from "@/components/property/property-decision.js";
 import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
 import { resolveEstateTransport } from "@/content/estate-pages";
 import { listingSeo } from "@/lib/listing-seo";
@@ -280,18 +272,6 @@ function PropertyErrorComponent() {
   );
 }
 
-const inquirySchema = z.object({
-  name: z.string().trim().min(1, "請輸入姓名").max(120, "姓名過長"),
-  phone: z
-    .string()
-    .trim()
-    .min(8, "請輸入有效電話")
-    .max(30, "電話過長")
-    .regex(/^[\d+\-\s()]+$/, "電話格式不正確"),
-  email: z.string().trim().max(255).email("電郵格式不正確").optional().or(z.literal("")),
-  message: z.string().trim().max(1000, "訊息過長").optional(),
-});
-
 function toEmbed(u: string) {
   // YouTube
   const yt = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{11})/);
@@ -341,8 +321,6 @@ function PropertyPage() {
   const realImages = images.filter((src): src is string => Boolean(src));
   const imageVariant = (src: string | null) => (src ? property.image_variants?.[src] : null);
   const [activeImg, setActiveImg] = useState(0);
-  const [submitting, setSubmitting] = useState(false);
-  const [consentWhatsapp, setConsentWhatsapp] = useState(false);
   const { favourited, toggle: toggleFavourited } = useFavourite(
     publicPropertyNo(property),
     property.listing_aliases,
@@ -420,43 +398,6 @@ function PropertyPage() {
       e.preventDefault();
       stepImage(1);
     }
-  }
-
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const raw = {
-      name: String(fd.get("name") ?? ""),
-      phone: String(fd.get("phone") ?? ""),
-      email: String(fd.get("email") ?? ""),
-      message: String(fd.get("message") ?? ""),
-    };
-    const parsed = inquirySchema.safeParse(raw);
-    if (!parsed.success) {
-      toast.error(parsed.error.issues[0]?.message ?? "請檢查輸入");
-      return;
-    }
-    setSubmitting(true);
-    const result = await createWebsiteInquiry({
-      data: buildPropertyInquiryPayload({
-        form: {
-          name: parsed.data.name,
-          phone: parsed.data.phone,
-          email: parsed.data.email || "",
-          message: parsed.data.message || "",
-        },
-        propertyId: property.id,
-        consentWhatsapp,
-      }),
-    }).catch((err) => ({ error: err instanceof Error ? err.message : String(err) }));
-    setSubmitting(false);
-    if ("error" in result && result.error) {
-      toast.error("提交失敗：" + result.error);
-      return;
-    }
-    toast.success("已收到查詢，經紀會盡快與你聯絡。");
-    (e.target as HTMLFormElement).reset();
-    setConsentWhatsapp(false);
   }
 
   function focusInquiry() {
@@ -1063,59 +1004,7 @@ function PropertyPage() {
                   <CardTitle className="text-base">{decision.inquiryLabel}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <form onSubmit={handleSubmit} className="space-y-3">
-                    <div>
-                      <Label htmlFor="name">姓名 *</Label>
-                      <Input id="name" name="name" required maxLength={120} placeholder="陳先生" />
-                    </div>
-                    <div>
-                      <Label htmlFor="phone">電話 *</Label>
-                      <Input
-                        id="phone"
-                        name="phone"
-                        required
-                        type="tel"
-                        maxLength={30}
-                        placeholder="9123 4567"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="email">電郵</Label>
-                      <Input id="email" name="email" type="email" maxLength={255} />
-                    </div>
-                    <div>
-                      <Label htmlFor="message">訊息</Label>
-                      <Textarea
-                        id="message"
-                        name="message"
-                        maxLength={1000}
-                        rows={3}
-                        placeholder={
-                          publicListingNo ? `想查詢編號 ${publicListingNo}` : "想查詢此樓盤"
-                        }
-                      />
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <Checkbox
-                        id="consentWhatsapp"
-                        checked={consentWhatsapp}
-                        onCheckedChange={(checked) => setConsentWhatsapp(checked === true)}
-                        className="mt-0.5"
-                      />
-                      <Label
-                        htmlFor="consentWhatsapp"
-                        className="text-xs font-normal leading-snug text-muted-foreground"
-                      >
-                        我同意透過 WhatsApp 接收樓盤資訊及推廣訊息。
-                      </Label>
-                    </div>
-                    <Button type="submit" className="w-full" disabled={submitting}>
-                      {submitting ? "提交中…" : "提交查詢"}
-                    </Button>
-                    <p className="text-xs text-muted-foreground">
-                      按提交即表示同意我們透過上述聯絡方式回覆查詢。
-                    </p>
-                  </form>
+                  <PropertyInquiryForm propertyId={property.id} listingNo={publicListingNo} />
                 </CardContent>
               </Card>
             </>

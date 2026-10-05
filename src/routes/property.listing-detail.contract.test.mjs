@@ -328,7 +328,7 @@ test("sidebar and mobileContact both swap to PropertyUnavailableNotice when isUn
   const sidebarBody = routeSource.slice(sidebarStart, sidebarEnd);
   assert.match(sidebarBody, /isUnavailable \? \(\s*<PropertyUnavailableNotice/);
   assert.match(sidebarBody, /<PropertyDecisionActions/);
-  assert.match(sidebarBody, /<form onSubmit={handleSubmit}/);
+  assert.match(sidebarBody, /<PropertyInquiryForm propertyId=\{property\.id\}/);
 
   const mobileStart = routeSource.indexOf("mobileContact={");
   const mobileEnd = routeSource.indexOf("details={", mobileStart);
