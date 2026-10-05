@@ -39,3 +39,10 @@ test("estate.$slug.tsx no longer imports the retired shamTsengSchoolNet constant
     "must use getSchoolNet(code) from school-nets.ts instead",
   );
 });
+
+test("estate.$slug.tsx keys OwnerValuationPanel by estate so one estate's result never shows on another", () => {
+  // The route component stays mounted when the visitor navigates between estates; without a
+  // key the valuation form's success panel or inline error line from estate A would carry
+  // over to estate B.
+  assert.match(source, /<OwnerValuationPanel\b[^>]*\bkey=\{estate\.id\}/);
+});

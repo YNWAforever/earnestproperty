@@ -486,5 +486,17 @@ test("ListingAlertForm renders inside the zero-results branch, alongside the exi
   );
 
   assert.match(zeroResultsBlock, /<SearchFallbackCTA/);
-  assert.match(zeroResultsBlock, /<ListingAlertForm search=\{search\} \/>/);
+  assert.match(zeroResultsBlock, /<ListingAlertForm\b[^>]*\bsearch=\{search\}/);
+});
+
+test("ListingAlertForm is keyed by the current search so a result for search A never shows on search B", () => {
+  // The route component stays mounted while the visitor changes filters from one zero-result
+  // search to another; without a key the form's `submitted` panel (已設定通知) or its inline
+  // error line from the first search would carry over to the second.
+  const zeroResultsStart = source.indexOf("rows.length === 0 ? (");
+  const zeroResultsBlock = source.slice(
+    zeroResultsStart,
+    source.indexOf(') : viewMode === "grid"', zeroResultsStart),
+  );
+  assert.match(zeroResultsBlock, /<ListingAlertForm\b[^>]*\bkey=\{JSON\.stringify\(search\)\}/);
 });

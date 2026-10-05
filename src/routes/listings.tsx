@@ -1147,7 +1147,7 @@ function ListingsPage() {
                   source: "listings-zero-results",
                 }}
               />
-              <ListingAlertForm search={search} />
+              <ListingAlertForm key={JSON.stringify(search)} search={search} />
             </div>
           ) : viewMode === "grid" ? (
             <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
