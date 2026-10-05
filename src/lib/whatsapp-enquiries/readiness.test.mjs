@@ -59,7 +59,7 @@ const base = {
     notificationsEnabled: true,
     inboxProviderVerified: true,
     staffTransportVerified: true,
-    templateContractVerified: false,
+    templateContractVerified: true,
   },
   checkedAt: now,
 };
@@ -120,16 +120,21 @@ test("readiness blocks revoked, wrong-channel and unverified evidence", () => {
   );
 });
 
-test("session text remains ready even when template is unverified; expired window blocks", () => {
+test("staff WhatsApp needs the approved template even inside the window; expired window blocks", () => {
+  // Lead alerts only ever send the template, so readiness must not say ready without one.
+  const noTemplate = { ...base.runtime, templateContractVerified: false };
   const configured = evaluate({
+    runtime: noTemplate,
     staffEndpoint: {
       ...base.staffEndpoint,
       templateName: "approved_name",
       templateLanguage: "zh_HK",
     },
   });
-  assert.equal(configured.staffWhatsapp.state, "ready");
+  assert.equal(configured.staffWhatsapp.state, "blocked");
+  assert.deepEqual(reason(configured.staffWhatsapp), ["template_unverified"]);
   const expired = evaluate({
+    runtime: noTemplate,
     staffEndpoint: {
       ...base.staffEndpoint,
       lastInboundAt: "2026-09-25T07:00:00.000Z",
@@ -177,8 +182,13 @@ test("outside the window is blocked with 模板未設定 when none is", () => {
     "template_unverified",
   ]);
   assert.ok(blocked.staffWhatsapp.reasons.some((item) => item.message === "模板未設定"));
-  // Inside the window plain text stays ready without a template.
-  assert.equal(evaluate({}).staffWhatsapp.state, "ready");
+  // Inside the window it is still blocked: every lead alert needs the template.
+  assert.deepEqual(
+    reason(
+      evaluate({ runtime: { ...base.runtime, templateContractVerified: false } }).staffWhatsapp,
+    ),
+    ["template_unverified"],
+  );
 });
 
 test("runtime card shows the staff template as ready only when one is configured", () => {

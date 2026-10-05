@@ -28,7 +28,7 @@ const approvedTemplate = JSON.stringify({
 const baseEnv = {
   EP_WA_ENQUIRY_MODE: "active",
   EP_WA_STAFF_NOTIFICATIONS_ENABLED: "true",
-  EP_WA_STAFF_ALERT_TEMPLATE: undefined,
+  EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate,
   VITE_SITE_URL: "https://earnest.example.invalid",
   EP_WA_COMPANY_CHANNEL_ID: "company",
   WOZTELL_CHANNEL_ID: "company",
@@ -214,7 +214,7 @@ test("test notification preview is isolated, revoked endpoint blocks, and reques
             notificationsEnabled: true,
             inboxProviderVerified: true,
             staffTransportVerified: true,
-            templateContractVerified: false,
+            templateContractVerified: true,
           },
         }),
       );
@@ -481,8 +481,11 @@ test("staff test notification outside 24h sends the configured template", async 
   }
 });
 
-test("without a template it is still refused outside 24h", async () => {
-  const { query, transaction, restore } = await fixture({}, "25 hours");
+test("without a template it is refused, inside or outside 24h, and never sends", async () => {
+  const { query, transaction, restore } = await fixture(
+    { EP_WA_STAFF_ALERT_TEMPLATE: undefined },
+    "25 hours",
+  );
   try {
     const input = { staffId, transport: "staff_whatsapp", endpointVersion: 3 };
     const preview = await previewStaffTestNotification(input, actor, query);
@@ -490,11 +493,18 @@ test("without a template it is still refused outside 24h", async () => {
     assert.equal(preview.previewToken, null);
     assert.ok(preview.reasons.includes("outside_message_window"));
     assert.ok(preview.reasons.includes("template_unverified"));
-    // Queue while the window is open, then let it close before dispatch.
+    // Lead alerts only send the template, so an open window is not enough either.
     await query("UPDATE staff_notification_endpoints SET last_inbound_at=now() WHERE id=$1", [
       endpointId,
     ]);
+    const inside = await previewStaffTestNotification(input, actor, query);
+    assert.equal(inside.ready, false);
+    assert.deepEqual(inside.reasons, ["template_unverified"]);
+    // Queue while a template is configured, then remove it and let the window close before
+    // dispatch: the SQL boundary still refuses to send TEXT outside the window.
+    process.env.EP_WA_STAFF_ALERT_TEMPLATE = approvedTemplate;
     const { queued, context } = await queueTest(query, transaction);
+    delete process.env.EP_WA_STAFF_ALERT_TEMPLATE;
     await query(
       "UPDATE staff_notification_endpoints SET last_inbound_at=now()-interval '25 hours' WHERE id=$1",
       [endpointId],

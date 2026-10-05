@@ -149,9 +149,11 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
     ) {
       // Outside the window only the approved staff template (EP_WA_STAFF_ALERT_TEMPLATE)
       // can be sent; per-endpoint template columns are unused legacy.
-      if (!runtime.templateContractVerified)
-        staffReasons.push("outside_message_window", "template_unverified");
+      if (!runtime.templateContractVerified) staffReasons.push("outside_message_window");
     }
+    // Lead alerts only ever send the approved template, so staff WhatsApp is not ready
+    // without one, even while a reply window is open.
+    if (!runtime.templateContractVerified) staffReasons.push("template_unverified");
   }
   return {
     staffId: input.staffId,

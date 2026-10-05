@@ -16,7 +16,7 @@ const runtime = {
   notificationsEnabled: true,
   inboxProviderVerified: true,
   staffTransportVerified: true,
-  templateContractVerified: false,
+  templateContractVerified: true,
 };
 test("readiness reads every staff member with real enum roles and masks destination", async () => {
   const db = new PGlite();
