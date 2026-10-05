@@ -54,6 +54,7 @@ mock.module(knowledgeUrl, {
   },
 });
 const live = await import("./live-agent.server.ts");
+const adminData = await import("../neon/admin-data.server.ts");
 
 async function freshDb() {
   db = new PGlite({ extensions: { vector, pgcrypto } });
@@ -722,6 +723,189 @@ test("message to a closed session is still rejected", async () => {
     );
     assert.equal(modelCalls, 0);
     assert.deepEqual(await sessionMessages(session.sessionId), []);
+  } finally {
+    await db.close();
+  }
+});
+
+async function insertStaffMember(email, role) {
+  const [staff] = await query(
+    "INSERT INTO staff_users (email, name_en) VALUES ($1, 'Synthetic staff') RETURNING id",
+    [email],
+  );
+  await query("INSERT INTO staff_roles (staff_user_id, role) VALUES ($1, $2)", [staff.id, role]);
+  return {
+    staffId: staff.id,
+    authUserId: `synthetic-auth-${staff.id}`,
+    email: null,
+    name: null,
+    roles: [role],
+    bootstrap: false,
+  };
+}
+
+// PGlite's clock has millisecond resolution, so the rows of one flow can share a created_at while
+// their ids are random. Re-stamp them one second apart in insertion order (ctid, test-only) so
+// the expected order below does not depend on the production tie-break.
+async function spaceOutMessages(sessionId) {
+  await query(
+    `WITH ordered AS (
+       SELECT id, row_number() OVER (ORDER BY created_at, ctid) AS n
+       FROM live_agent_messages
+       WHERE session_id=$1
+     )
+     UPDATE live_agent_messages m
+     SET created_at = '2026-01-01T00:00:00Z'::timestamptz + (ordered.n * interval '1 second')
+     FROM ordered
+     WHERE m.id = ordered.id`,
+    [sessionId],
+  );
+}
+
+const readTranscript = (leadId, actor) => adminData.fetchLeadLiveAgentTranscript({ leadId }, actor);
+const projectTranscript = (messages) =>
+  messages.map((message) => ({ role: message.role, text: message.text }));
+const isForbidden = (error) => error instanceof Response && error.status === 403;
+
+test("transcript is readable by the assigned agent and managers, in order, and refused to other agents", async () => {
+  await freshDb();
+  try {
+    const session = await openSession();
+    await live.answerLiveAgentMessage({ ...session, message: "想問屋苑" });
+    await live.requestLiveAgentHandoff(handoffInput(session));
+    await live.answerLiveAgentMessage({ ...session, message: "仲有我想要高層" });
+    const { lead_id: leadId } = await sessionRow(session.sessionId);
+    await spaceOutMessages(session.sessionId);
+
+    const agentA = await insertStaffMember("synthetic-agent-a@example.invalid", "agent");
+    const agentB = await insertStaffMember("synthetic-agent-b@example.invalid", "agent");
+    const manager = await insertStaffMember("synthetic-manager@example.invalid", "manager");
+    await query("UPDATE crm_leads SET assigned_agent_id=$2 WHERE id=$1", [leadId, agentA.staffId]);
+    const messagesBefore = await query("SELECT * FROM live_agent_messages ORDER BY id");
+    const auditsBefore = await query("SELECT * FROM audit_logs ORDER BY id");
+
+    const [systemRow] = await query(
+      "SELECT message_text FROM live_agent_messages WHERE session_id=$1 AND direction='system'",
+      [session.sessionId],
+    );
+    const expected = [
+      { role: "visitor", text: "想問屋苑" },
+      { role: "assistant", text: "合成答案" },
+      { role: "system", text: systemRow.message_text },
+      { role: "visitor", text: "仲有我想要高層" },
+      { role: "assistant", text: "已轉交代理，我哋會盡快聯絡你。" },
+    ];
+
+    const asAgent = await readTranscript(leadId, agentA);
+    assert.deepEqual(projectTranscript(asAgent), expected);
+    assert.deepEqual(projectTranscript(await readTranscript(leadId, manager)), expected);
+    for (const message of asAgent) {
+      assert.ok(!Number.isNaN(Date.parse(message.created_at)));
+    }
+    assert.deepEqual(
+      asAgent.map((message) => message.created_at),
+      [...asAgent.map((message) => message.created_at)].sort(),
+    );
+    await assert.rejects(readTranscript(leadId, agentB), isForbidden);
+
+    await query("UPDATE crm_leads SET assigned_agent_id=NULL WHERE id=$1", [leadId]);
+    const leadsUnassigned = await query("SELECT * FROM crm_leads ORDER BY id");
+    await assert.rejects(readTranscript(leadId, agentA), isForbidden);
+    assert.deepEqual(projectTranscript(await readTranscript(leadId, manager)), expected);
+
+    // Reading writes nothing: no message, lead or audit row changed.
+    assert.deepEqual(await query("SELECT * FROM live_agent_messages ORDER BY id"), messagesBefore);
+    assert.deepEqual(await query("SELECT * FROM crm_leads ORDER BY id"), leadsUnassigned);
+    assert.deepEqual(await query("SELECT * FROM audit_logs ORDER BY id"), auditsBefore);
+  } finally {
+    await db.close();
+  }
+});
+
+test("transcript only reads the lead's own sessions and keeps staff messages", async () => {
+  await freshDb();
+  try {
+    const first = await openSession();
+    await live.requestLiveAgentHandoff(handoffInput(first));
+    const { lead_id: leadId } = await sessionRow(first.sessionId);
+    const other = await openSession();
+    await live.requestLiveAgentHandoff(handoffInput(other, { phone: "6123 4567" }));
+    await query("DELETE FROM live_agent_messages");
+    await query(
+      `INSERT INTO live_agent_messages (session_id, direction, message_text, created_at)
+       VALUES ($1, 'staff', '同事跟進', '2026-02-01T00:00:00Z'),
+              ($2, 'visitor', '別人的對話', '2026-02-01T00:00:01Z')`,
+      [first.sessionId, other.sessionId],
+    );
+
+    const manager = await insertStaffMember("synthetic-manager@example.invalid", "manager");
+    const messages = await readTranscript(leadId, manager);
+    assert.deepEqual(projectTranscript(messages), [{ role: "staff", text: "同事跟進" }]);
+    assert.equal(messages[0].created_at, "2026-02-01T00:00:00.000Z");
+  } finally {
+    await db.close();
+  }
+});
+
+test("transcript returns at most the latest 100 messages, oldest first", async () => {
+  await freshDb();
+  try {
+    const session = await openSession();
+    await live.requestLiveAgentHandoff(handoffInput(session));
+    const { lead_id: leadId } = await sessionRow(session.sessionId);
+    await query("DELETE FROM live_agent_messages WHERE session_id=$1", [session.sessionId]);
+    await query(
+      `INSERT INTO live_agent_messages (session_id, direction, message_text, created_at)
+       SELECT $1::uuid,
+              'visitor',
+              'm' || lpad(n::text, 3, '0'),
+              '2026-03-01T00:00:00Z'::timestamptz + (n * interval '1 second')
+       FROM generate_series(1, 120) AS n`,
+      [session.sessionId],
+    );
+
+    const manager = await insertStaffMember("synthetic-manager@example.invalid", "manager");
+    const messages = await readTranscript(leadId, manager);
+    assert.equal(messages.length, 100);
+    assert.equal(messages[0].text, "m021");
+    assert.equal(messages[99].text, "m120");
+    assert.deepEqual(
+      messages.map((message) => message.text),
+      Array.from({ length: 100 }, (_, i) => `m${String(i + 21).padStart(3, "0")}`),
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+test("transcript rows that share a created_at come back in a stable id order", async () => {
+  await freshDb();
+  try {
+    const session = await openSession();
+    await live.requestLiveAgentHandoff(handoffInput(session));
+    const { lead_id: leadId } = await sessionRow(session.sessionId);
+    await query("DELETE FROM live_agent_messages WHERE session_id=$1", [session.sessionId]);
+    // Ids are listed out of order on purpose; the tie-break must sort them, not insertion order.
+    for (const [id, text] of [
+      ["00000000-0000-4000-8000-000000000003", "third"],
+      ["00000000-0000-4000-8000-000000000001", "first"],
+      ["00000000-0000-4000-8000-000000000002", "second"],
+    ]) {
+      await query(
+        `INSERT INTO live_agent_messages (id, session_id, direction, message_text, created_at)
+         VALUES ($1, $2, 'visitor', $3, '2026-04-01T00:00:00Z')`,
+        [id, session.sessionId, text],
+      );
+    }
+
+    const manager = await insertStaffMember("synthetic-manager@example.invalid", "manager");
+    const first = await readTranscript(leadId, manager);
+    const second = await readTranscript(leadId, manager);
+    assert.deepEqual(
+      first.map((message) => message.text),
+      ["first", "second", "third"],
+    );
+    assert.deepEqual(second, first);
   } finally {
     await db.close();
   }
