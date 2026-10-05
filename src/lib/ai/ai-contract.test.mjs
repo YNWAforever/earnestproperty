@@ -84,7 +84,12 @@ test("AI modules expose the expected public and server-only contracts", () => {
     ],
     [
       "src/lib/ai/live-agent.ts",
-      ["canUseChunkForPublicAnswer", "buildLiveAgentLeadInput", "shouldOfferHumanHandoff"],
+      [
+        "canUseChunkForPublicAnswer",
+        "buildLiveAgentLeadInput",
+        "shouldOfferHumanHandoff",
+        "validateHandoffPhone",
+      ],
     ],
     [
       "src/lib/ai/live-agent.server.ts",

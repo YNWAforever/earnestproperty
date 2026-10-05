@@ -5,7 +5,13 @@ import { leadBudgetError } from "@/lib/admin/lead-budget";
 
 import type { LiveAgentMessage, LiveAgentSession } from "./ai-types";
 import { answerFromPublicKnowledge } from "./knowledge.server";
-import { buildLiveAgentLeadInput, shouldOfferHumanHandoff } from "./live-agent.ts";
+import {
+  buildLiveAgentLeadInput,
+  liveAgentPhoneErrorMessage,
+  shouldOfferHumanHandoff,
+  validateHandoffPhone,
+  type LiveAgentPhoneErrorCode,
+} from "./live-agent.ts";
 
 type LiveAgentSessionRow = {
   id: unknown;
@@ -39,11 +45,13 @@ type PublicLiveAgentSession = Pick<LiveAgentSession, "id" | "status">;
 
 export class LiveAgentPublicError extends Error {
   status: number;
+  code?: LiveAgentPhoneErrorCode;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, code?: LiveAgentPhoneErrorCode) {
     super(message);
     this.name = "LiveAgentPublicError";
     this.status = status;
+    if (code !== undefined) this.code = code;
   }
 }
 
@@ -177,6 +185,16 @@ export async function requestLiveAgentHandoff(input: {
     leadBudgetError(budgetMin, budgetMax)
   ) {
     throw new LiveAgentPublicError("Invalid handoff budget.", 400);
+  }
+  // A handoff promises an agent follow-up, so a visitor with no usable phone must be rejected
+  // before the session lookup or any CRM write.
+  const phoneCheck = validateHandoffPhone(input.phone);
+  if (!phoneCheck.ok) {
+    throw new LiveAgentPublicError(
+      liveAgentPhoneErrorMessage(phoneCheck.code),
+      400,
+      phoneCheck.code,
+    );
   }
   const session = await getLiveAgentSessionForHandoff(sessionId, accessToken);
   if (session.status === "handoff_requested") {
