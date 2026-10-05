@@ -406,9 +406,10 @@ export async function requestLiveAgentHandoff(input: {
 }
 
 // One atomic statement. `target` locks the session and its lead and is empty when staff have
-// acted on the lead or the phone is unchanged; every write below depends on it, so a refused
-// correction writes nothing. Only a contact this handoff created (and nothing else references) has
-// its phone updated. A pre-existing contact is never modified: the lead is relinked instead, to a
+// acted on the lead (including a staff audit on its contact that names the lead in metadata) or
+// the phone is unchanged; every write below depends on it, so a refused correction writes nothing.
+// Only a contact this handoff created (that nothing else references and no staff audit touched)
+// has its phone updated. A pre-existing contact is never modified: the lead is relinked instead, to a
 // contact that already owns the new number (read-only) or to a new one. A WhatsApp conversation
 // is never written or linked; a possible match only becomes a lead note.
 async function correctHandoffPhone(input: {
@@ -435,7 +436,9 @@ async function correctHandoffPhone(input: {
            SELECT 1 FROM crm_activities a WHERE a.lead_id=l.id AND a.staff_user_id IS NOT NULL
          )
          AND NOT EXISTS (
-           SELECT 1 FROM audit_logs g WHERE g.subject_id=l.id AND g.actor_id IS NOT NULL
+           SELECT 1 FROM audit_logs g
+           WHERE (g.subject_id=l.id OR g.metadata->>'leadId'=l.id::text)
+             AND g.actor_id IS NOT NULL
          )
          AND NOT COALESCE(
            c.normalized_phone=$5::text OR
@@ -461,6 +464,9 @@ async function correctHandoffPhone(input: {
          AND NOT EXISTS (SELECT 1 FROM crm_leads ol WHERE ol.contact_id=c.id AND ol.id<>t.lead_id)
          AND NOT EXISTS (
            SELECT 1 FROM live_agent_sessions os WHERE os.contact_id=c.id AND os.id<>t.id
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM audit_logs g WHERE g.subject_id=c.id AND g.actor_id IS NOT NULL
          )
      ),
      existing_for_new AS MATERIALIZED (
