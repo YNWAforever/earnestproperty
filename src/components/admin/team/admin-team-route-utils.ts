@@ -91,6 +91,21 @@ export function resetAdminTeamPage<T extends { cursor?: string }>(search: T): Om
   return firstPage;
 }
 
+export function dutyManagerMessage(
+  next: boolean,
+  failure?: unknown,
+): { kind: "success" | "error"; text: string } {
+  if (failure === undefined)
+    return { kind: "success", text: next ? "已設為值班經理。" : "已取消值班經理。" };
+  return {
+    kind: "error",
+    text:
+      serverErrorStatus(failure) === 409
+        ? "此成員資料已被其他同事更新，請重新載入後再試。"
+        : "未能更新值班經理設定，請稍後再試。",
+  };
+}
+
 export function teamMutationFailure(value: unknown): string | null {
   if (
     value &&

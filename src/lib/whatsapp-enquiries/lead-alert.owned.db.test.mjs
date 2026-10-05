@@ -1405,6 +1405,48 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
             assert.deepEqual(audit[1].metadata, { before: true, after: false });
           });
 
+          await st.test(
+            "the version read through the production read path round-trips (stale then 409)",
+            async () => {
+              await mockOwnedServerDb(mock, query, transaction).catch((error) => {
+                // The shared db module may already be mocked by an earlier subtest.
+                if (error?.code !== "ERR_INVALID_STATE") throw error;
+              });
+              // The read model joins Neon Auth's user table, which owned Postgres lacks.
+              await query("CREATE SCHEMA IF NOT EXISTS neon_auth");
+              await query(
+                'CREATE TABLE IF NOT EXISTS neon_auth."user" (id text PRIMARY KEY, email text, "emailVerified" boolean)',
+              );
+              const { getAdminTeamMember } = await import("../neon/admin-team.server.ts");
+              const read = await getAdminTeamMember({ staffId: target.staffId }, actor);
+              assert.match(read.version, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+              // Make sure the row has sub-second precision, then re-read it.
+              await query(
+                "UPDATE staff_users SET updated_at = date_trunc('second', now()) + interval '456789 microseconds' WHERE id=$1",
+                [target.staffId],
+              );
+              const fresh = await getAdminTeamMember({ staffId: target.staffId }, actor);
+              assert.match(fresh.version, /\.456Z$/);
+              const result = await service.changeStaffDutyManager(
+                { staffId: target.staffId, isDutyManager: true, expectedVersion: fresh.version },
+                actor,
+                request,
+              );
+              assert.equal(result.isDutyManager, true);
+              const again = await service
+                .changeStaffDutyManager(
+                  { staffId: target.staffId, isDutyManager: false, expectedVersion: fresh.version },
+                  actor,
+                  request,
+                )
+                .catch((e) => e);
+              assert.equal(again.status, 409);
+              await query("UPDATE staff_users SET is_duty_manager=false WHERE id=$1", [
+                target.staffId,
+              ]);
+            },
+          );
+
           await st.test("a suspended member cannot be marked and nothing is audited", async () => {
             const suspended = await seedStaff(query, { active: false });
             const failure = await service

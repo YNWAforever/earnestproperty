@@ -19,6 +19,7 @@ import { teamRoleLabel } from "@/components/admin/team/AdminTeamStatusBadge";
 import { AdminTeamTable } from "@/components/admin/team/AdminTeamTable";
 import {
   createLatestRequestGuard,
+  dutyManagerMessage,
   mergeAdminTeamPages,
   resetAdminTeamPage,
   serverErrorStatus,
@@ -375,13 +376,9 @@ function AdminTeam() {
           expectedVersion: detail.version,
         },
       });
-      toast.success(next ? "已設為值班經理。" : "已取消值班經理。");
+      toast.success(dutyManagerMessage(next).text);
     } catch (reason) {
-      toast.error(
-        serverErrorStatus(reason) === 409
-          ? "此成員資料已被其他同事更新，請重新載入後再試。"
-          : "未能更新值班經理設定，請稍後再試。",
-      );
+      toast.error(dutyManagerMessage(next, reason).text);
     } finally {
       setDutyBusy(false);
     }

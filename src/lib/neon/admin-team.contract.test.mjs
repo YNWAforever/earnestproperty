@@ -492,3 +492,19 @@ test("changeStaffDutyManager requires admin and a strict payload", async () => {
     false,
   );
 });
+
+test("member detail keeps millisecond precision when the driver returns timestamptz as a Date", async () => {
+  const updated = new Date("2026-08-16T01:00:00.456Z");
+  const { model } = fixture({ detailRow: { updated_at: updated, created_at: updated } });
+  const detail = await model.getAdminTeamMember({ staffId }, actor);
+  assert.equal(detail.version, "2026-08-16T01:00:00.456Z");
+  assert.equal(detail.member.updatedAt, "2026-08-16T01:00:00.456Z");
+  // The SQL-emitted exact string is preferred over any JS Date handling.
+  const exact = fixture({
+    detailRow: { updated_at: updated, version: "2026-08-16T01:00:00.789Z" },
+  });
+  assert.equal(
+    (await exact.model.getAdminTeamMember({ staffId }, actor)).version,
+    "2026-08-16T01:00:00.789Z",
+  );
+});

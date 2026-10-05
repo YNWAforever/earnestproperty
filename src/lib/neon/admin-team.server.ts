@@ -60,7 +60,7 @@ function invalid(message = "Invalid Team query."): never {
 
 function dateString(value: unknown) {
   if (value === null || value === undefined) return null;
-  const date = new Date(String(value));
+  const date = value instanceof Date ? value : new Date(String(value));
   return Number.isNaN(date.valueOf()) ? null : date.toISOString();
 }
 
@@ -361,6 +361,7 @@ export function createAdminTeamReadModel(
         `SELECT s.id::text AS id,
                 COALESCE(NULLIF(s.name_zh, ''), NULLIF(s.name_en, '')) AS name,
                 s.email, s.auth_user_id, s.branch_id, s.active, s.is_duty_manager, s.created_at, s.updated_at,
+                to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS version,
                 COALESCE(array_to_json(array_agg(r.role) FILTER (WHERE r.role IS NOT NULL)), '[]'::json) AS roles,
                 latest_action.action AS latest_action, latest_action.state AS latest_action_state,
                 latest_action.safe_error_code AS latest_safe_error_code,
@@ -443,7 +444,7 @@ export function createAdminTeamReadModel(
           retryAfter: dateString(row.latest_retry_after),
         },
         recentActivity,
-        version: member.updatedAt,
+        version: typeof row.version === "string" && row.version ? row.version : member.updatedAt,
       };
     },
   };

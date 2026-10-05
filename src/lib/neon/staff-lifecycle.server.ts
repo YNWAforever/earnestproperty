@@ -705,7 +705,7 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         `WITH changed AS (
            UPDATE staff_users SET is_duty_manager = $2, updated_at = now()
             WHERE id = $1::uuid AND active
-              AND date_trunc('milliseconds', updated_at) = $3::timestamptz
+              AND to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') = $3
             RETURNING id, is_duty_manager
          ),
          audit AS (

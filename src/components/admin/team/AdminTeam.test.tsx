@@ -12,6 +12,7 @@ import {
   createLatestRequestGuard,
   mergeAdminTeamPages,
   resetAdminTeamPage,
+  dutyManagerMessage,
   serverErrorStatus,
   teamActionPayload,
   teamMutationFailure,
@@ -426,5 +427,20 @@ describe("Admin Team duty manager", () => {
       }),
     );
     expect(without.text()).not.toContain("值班經理");
+  });
+});
+
+describe("duty manager messages", () => {
+  test("success and failure copy follow the table", () => {
+    expect(dutyManagerMessage(true)).toEqual({ kind: "success", text: "已設為值班經理。" });
+    expect(dutyManagerMessage(false)).toEqual({ kind: "success", text: "已取消值班經理。" });
+    expect(dutyManagerMessage(true, Object.assign(new Error("x"), { status: 409 }))).toEqual({
+      kind: "error",
+      text: "此成員資料已被其他同事更新，請重新載入後再試。",
+    });
+    expect(dutyManagerMessage(true, new Error("boom"))).toEqual({
+      kind: "error",
+      text: "未能更新值班經理設定，請稍後再試。",
+    });
   });
 });
