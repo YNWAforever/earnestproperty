@@ -14,7 +14,6 @@ const runtime = {
   channelId: "company",
   assignmentEnabled: true,
   notificationsEnabled: true,
-  staffWhatsAppEnabled: true,
   inboxProviderVerified: true,
   staffTransportVerified: true,
   templateContractVerified: false,

@@ -57,7 +57,6 @@ const base = {
     channelId: "company",
     assignmentEnabled: true,
     notificationsEnabled: true,
-    staffWhatsAppEnabled: true,
     inboxProviderVerified: true,
     staffTransportVerified: true,
     templateContractVerified: false,
@@ -141,4 +140,43 @@ test("session text remains ready even when template is unverified; expired windo
   });
   assert.ok(reason(expired.staffWhatsapp).includes("outside_message_window"));
   assert.ok(reason(expired.staffWhatsapp).includes("template_unverified"));
+});
+
+test("outside the window is ready when a template is configured", () => {
+  const outside = {
+    ...base.staffEndpoint,
+    lastInboundAt: "2026-09-25T07:00:00.000Z",
+  };
+  const ready = evaluate({
+    staffEndpoint: outside,
+    runtime: { ...base.runtime, templateContractVerified: true },
+  });
+  assert.equal(ready.staffWhatsapp.state, "ready");
+  assert.deepEqual(reason(ready.staffWhatsapp), []);
+  const neverReplied = evaluate({
+    staffEndpoint: { ...outside, lastInboundAt: null },
+    runtime: { ...base.runtime, templateContractVerified: true },
+  });
+  assert.equal(neverReplied.staffWhatsapp.state, "ready");
+  // The switch alone decides; there is no second staff WhatsApp switch.
+  const off = evaluate({
+    staffEndpoint: outside,
+    runtime: { ...base.runtime, templateContractVerified: true, notificationsEnabled: false },
+  });
+  assert.deepEqual(reason(off.staffWhatsapp), ["runtime_disabled"]);
+});
+
+test("outside the window is blocked with 訊息模板合約未核實 when none is", () => {
+  const blocked = evaluate({
+    staffEndpoint: { ...base.staffEndpoint, lastInboundAt: null },
+    runtime: { ...base.runtime, templateContractVerified: false },
+  });
+  assert.equal(blocked.staffWhatsapp.state, "blocked");
+  assert.deepEqual(reason(blocked.staffWhatsapp), [
+    "outside_message_window",
+    "template_unverified",
+  ]);
+  assert.ok(blocked.staffWhatsapp.reasons.some((item) => item.message === "訊息模板合約未核實"));
+  // Inside the window plain text stays ready without a template.
+  assert.equal(evaluate({}).staffWhatsapp.state, "ready");
 });

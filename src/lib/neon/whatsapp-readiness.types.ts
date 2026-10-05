@@ -70,7 +70,6 @@ export type StaffReadinessInput = {
     channelId: string | null;
     assignmentEnabled: boolean;
     notificationsEnabled: boolean;
-    staffWhatsAppEnabled: boolean;
     inboxProviderVerified: boolean;
     staffTransportVerified: boolean;
     templateContractVerified: boolean;

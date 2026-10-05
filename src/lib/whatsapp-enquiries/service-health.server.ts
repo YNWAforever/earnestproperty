@@ -40,7 +40,7 @@ export async function getServiceHealth(
     channelId: current.channelId,
     inboxProviderVerified: current.inboxProviderVerified,
     staffTransportVerified: current.staffTransportVerified,
-    staffWhatsappEnabled: current.staffWhatsAppEnabled && current.notificationsEnabled,
+    staffWhatsappEnabled: current.notificationsEnabled,
     checkedAt: new Date().toISOString(),
   });
   const emptyCounts = {

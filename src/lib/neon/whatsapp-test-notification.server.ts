@@ -11,6 +11,9 @@ import {
 import { maskStaffDestination } from "./whatsapp-readiness-policy.ts";
 import { createInboxApi } from "../woztell/inbox-api.server.ts";
 import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transport.server.ts";
+import { buildStaffTemplateResponse } from "../woztell/staff-alert-template.ts";
+import { staffNotificationRuntime } from "../whatsapp-enquiries/staff-notifications.server.ts";
+import { resolveSiteOrigin } from "../../../scripts/site-origin.mjs";
 
 type Actor = Pick<StaffAccess, "staffId" | "roles">;
 type Transport = "inbox_private_note" | "staff_whatsapp";
@@ -179,7 +182,7 @@ export async function enqueueStaffTestNotification(
             WHERE a.id=$2::uuid AND a.active AND ar.role IN ('admin','manager'))
           AND (p.transport<>'inbox_private_note' OR (e.destination_reference=m.inbox_user_id AND $8::text IS NOT NULL
             AND NOT EXISTS(SELECT 1 FROM whatsapp_conversations w WHERE w.channel_id=e.channel_id AND w.woztell_member_id=$8)))
-          AND (p.transport<>'staff_whatsapp' OR e.last_inbound_at BETWEEN now()-interval '24 hours' AND now())
+          AND (p.transport<>'staff_whatsapp' OR e.last_inbound_at BETWEEN now()-interval '24 hours' AND now() OR $10::boolean)
           AND NOT EXISTS(SELECT 1 FROM staff_notification_test_attempts t WHERE t.actor_staff_id=$2::uuid
             AND t.endpoint_id=e.id AND t.created_at>now()-interval '1 minute')
           FOR UPDATE OF s,e,m
@@ -207,6 +210,7 @@ export async function enqueueStaffTestNotification(
         payloadHash,
         member,
         currentWhatsappReadinessRuntime().channelId,
+        staffNotificationRuntime().template !== null,
       ],
     },
   ]);
@@ -365,7 +369,7 @@ export async function dispatchStaffTestNotification(
   const query = deps.query ?? queryRows;
   const inspect = deps.inspect ?? inspectWhatsappStaffReadinessForDispatch;
   const [attempt] = await query(
-    `SELECT t.*,p.message,e.channel_id,e.destination_reference,e.template_name,e.template_language,
+    `SELECT t.*,p.message,e.channel_id,e.destination_reference,e.last_inbound_at,
        m.inbox_user_id,m.folder_id
      FROM staff_notification_test_attempts t JOIN staff_notification_test_previews p ON p.id=t.preview_id
      JOIN staff_notification_endpoints e ON e.id=t.endpoint_id
@@ -392,6 +396,8 @@ export async function dispatchStaffTestNotification(
     [attemptId, claim],
   );
   if (!claimed) return { summary: { skipped: 1 } };
+  // Read once so the SQL boundary and the payload agree on whether a template exists.
+  const template = staffNotificationRuntime().template;
   let boundaryPassed = false;
   const boundary = async () => {
     await context.checkpoint();
@@ -418,7 +424,7 @@ export async function dispatchStaffTestNotification(
          AND m.version=t.mapping_version AND (e.mapping_version IS NULL OR e.mapping_version=t.mapping_version)
          AND (t.transport<>'inbox_private_note' OR (e.destination_reference=m.inbox_user_id AND $5::text IS NOT NULL
            AND NOT EXISTS(SELECT 1 FROM whatsapp_conversations w WHERE w.channel_id=e.channel_id AND w.woztell_member_id=$5)))
-         AND (t.transport<>'staff_whatsapp' OR e.last_inbound_at BETWEEN now()-interval '24 hours' AND now())
+         AND (t.transport<>'staff_whatsapp' OR e.last_inbound_at BETWEEN now()-interval '24 hours' AND now() OR $7::boolean)
          AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))
          AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=a.id AND r.role IN ('admin','manager'))`,
       [
@@ -428,6 +434,7 @@ export async function dispatchStaffTestNotification(
         context.workerId,
         member,
         currentWhatsappReadinessRuntime().channelId,
+        template !== null,
       ],
     );
     if (!valid) throw new Error("TEST_DESTINATION_CHANGED");
@@ -453,12 +460,25 @@ export async function dispatchStaffTestNotification(
       });
     } else {
       const api = (deps.staff ?? createStaffWhatsAppTransport)();
+      const insideWindow =
+        !!attempt.last_inbound_at &&
+        new Date(String(attempt.last_inbound_at)).getTime() > Date.now() - 86400000;
+      const origin = resolveSiteOrigin();
       result = await api.sendStaffWhatsApp!({
         channelId: String(attempt.channel_id),
         memberId: String(attempt.destination_reference),
         message: String(attempt.message),
-        templateName: null,
-        templateLanguage: null,
+        // Outside the window the owner verifies the very template lead alerts use.
+        template:
+          insideWindow || !template
+            ? null
+            : buildStaffTemplateResponse(template, {
+                name: "測試",
+                source: "測試通知",
+                link: origin
+                  ? new URL("/admin/whatsapp-settings", origin).toString()
+                  : "/admin/whatsapp-settings",
+              }),
         beforeSend: boundary,
       });
     }

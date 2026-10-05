@@ -5,14 +5,20 @@ import { resolveSiteOrigin } from "../../../scripts/site-origin.mjs";
 import { queryRows, transactionRows } from "../neon/db.server.ts";
 import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transport.server.ts";
 import { createInboxApi } from "../woztell/inbox-api.server.ts";
+import {
+  buildStaffTemplateResponse,
+  parseStaffAlertTemplate,
+  type StaffAlertTemplate,
+  type StaffTemplateResponse,
+} from "../woztell/staff-alert-template.ts";
 type Ports = { query: typeof queryRows; transaction: typeof transactionRows };
 const defaults: Ports = { query: queryRows, transaction: transactionRows };
 export type StaffNotificationRuntime = {
   enabled: boolean;
   generationId: string | null;
   channelId: string | null;
-  staffWhatsAppEnabled: boolean;
-  ackEscalationEnabled: boolean;
+  /** Owner-approved template used outside the 24-hour window; null = 模板未設定. */
+  template: StaffAlertTemplate | null;
 };
 export function staffNotificationRuntime(): StaffNotificationRuntime {
   return {
@@ -21,8 +27,7 @@ export function staffNotificationRuntime(): StaffNotificationRuntime {
       process.env.EP_WA_ENQUIRY_MODE === "active",
     generationId: process.env.EP_WA_ACTIVATION_ID ?? null,
     channelId: process.env.EP_WA_COMPANY_CHANNEL_ID ?? null,
-    staffWhatsAppEnabled: process.env.EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED === "true",
-    ackEscalationEnabled: process.env.EP_WA_STAFF_ACK_ESCALATION_ENABLED === "true",
+    template: parseStaffAlertTemplate(process.env.EP_WA_STAFF_ALERT_TEMPLATE),
   };
 }
 type Result = {
@@ -44,8 +49,8 @@ export type StaffNotificationTransport = {
     channelId: string;
     memberId: string;
     message: string;
-    templateName: string | null;
-    templateLanguage: string | null;
+    /** Sent instead of TEXT when present; TEXT is valid only inside the 24-hour window. */
+    template: StaffTemplateResponse | null;
     beforeSend: () => Promise<void>;
   }) => Promise<Result>;
 };
@@ -123,10 +128,13 @@ export async function dispatchStaffNotification(
       // An unreadable capability is blocked, never treated as ready.
     }
   }
-  const transports = [
-    "inbox_private_note",
-    ...(runtime.staffWhatsAppEnabled ? ["staff_whatsapp"] : []),
-  ];
+  // Staff WhatsApp is planned only for a recipient with a live destination, so
+  // the single switch never turns into suppressed rows for unmapped staff.
+  const [liveStaffEndpoint] = await query(
+    "SELECT id FROM staff_notification_endpoints WHERE staff_id=$1::uuid AND channel_id=$2 AND transport='staff_whatsapp' AND enabled AND retired_at IS NULL",
+    [n.recipient_staff_id, n.channel_id],
+  );
+  const transports = ["inbox_private_note", ...(liveStaffEndpoint ? ["staff_whatsapp"] : [])];
   let accepted = 0,
     blocked = 0,
     unknown = 0;
@@ -190,13 +198,18 @@ export async function dispatchStaffNotification(
       inquiry_id: n.inquiry_id,
     });
     if (!workLink) reason = "work_origin_unconfigured";
+    const insideWindow =
+      !!ep?.last_inbound_at &&
+      new Date(String(ep.last_inbound_at)).getTime() > Date.now() - 86400000;
+    // Outside the window only the approved template may be sent; never free TEXT.
+    // It names the readiness window block more precisely but never hides another one.
     if (
       transport === "staff_whatsapp" &&
-      ep?.template_name &&
-      (!ep.last_inbound_at ||
-        new Date(String(ep.last_inbound_at)).getTime() < Date.now() - 86400000)
+      !insideWindow &&
+      !runtime.template &&
+      (!reason || reason === "outside_message_window" || reason === "template_unverified")
     )
-      reason = "staff_template_contract_unverified";
+      reason = "template_not_configured";
     if (reason) {
       await query(
         "UPDATE staff_notification_attempts SET dispatch_state='suppressed',safe_error=$2 WHERE id=$1::uuid AND dispatch_state='queued'",
@@ -209,14 +222,10 @@ export async function dispatchStaffNotification(
     const boundary = async () => {
       await options.checkpoint();
       const live = ports === defaults ? staffNotificationRuntime() : runtime;
-      if (
-        !live.enabled ||
-        live.generationId !== runtime.generationId ||
-        (transport === "staff_whatsapp" && !live.staffWhatsAppEnabled)
-      )
+      if (!live.enabled || live.generationId !== runtime.generationId)
         throw new Error("dispatch_disabled");
       const [valid] = await query(
-        `SELECT n.id ${joins} JOIN staff_notification_attempts t ON t.notification_id=n.id JOIN staff_notification_endpoints ep ON ep.id=t.endpoint_id JOIN ops_jobs j ON j.id=t.job_id WHERE n.id=$1::uuid AND ${eligibility} AND m.inbox_user_id=$7 AND m.folder_id=$8 AND t.id=$4::uuid AND t.claim_id=$5::uuid AND t.dispatch_state='dispatching' AND ep.staff_id=n.recipient_staff_id AND ep.channel_id=w.channel_id AND ep.transport=t.transport AND ep.version=t.endpoint_version AND ep.enabled AND ep.permission_granted AND ep.retired_at IS NULL AND ep.verified_at IS NOT NULL AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb AND (t.transport<>'staff_whatsapp' OR (ep.destination_reference<>w.woztell_member_id AND (ep.last_inbound_at BETWEEN now()-interval '24 hours' AND now() OR (ep.template_name IS NOT NULL AND ep.template_language IS NOT NULL AND ep.template_verified_at IS NOT NULL)))) AND j.status='running' AND j.lease_owner=$6 AND j.lease_expires_at>now()`,
+        `SELECT n.id ${joins} JOIN staff_notification_attempts t ON t.notification_id=n.id JOIN staff_notification_endpoints ep ON ep.id=t.endpoint_id JOIN ops_jobs j ON j.id=t.job_id WHERE n.id=$1::uuid AND ${eligibility} AND m.inbox_user_id=$7 AND m.folder_id=$8 AND t.id=$4::uuid AND t.claim_id=$5::uuid AND t.dispatch_state='dispatching' AND ep.staff_id=n.recipient_staff_id AND ep.channel_id=w.channel_id AND ep.transport=t.transport AND ep.version=t.endpoint_version AND ep.enabled AND ep.permission_granted AND ep.retired_at IS NULL AND ep.verified_at IS NOT NULL AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb AND (t.transport<>'staff_whatsapp' OR (ep.destination_reference<>w.woztell_member_id AND (ep.last_inbound_at BETWEEN now()-interval '24 hours' AND now() OR $9::boolean))) AND j.status='running' AND j.lease_owner=$6 AND j.lease_expires_at>now()`,
         [
           notificationId,
           runtime.generationId,
@@ -226,6 +235,7 @@ export async function dispatchStaffNotification(
           options.job!.workerId,
           n.inbox_user_id,
           n.folder_id,
+          runtime.template !== null,
         ],
       );
       if (!valid) throw new Error("dispatch_eligibility_changed");
@@ -278,12 +288,14 @@ export async function dispatchStaffNotification(
               channelId: String(n.channel_id),
               memberId: String(ep!.destination_reference),
               message,
-              templateName:
-                ep!.last_inbound_at &&
-                new Date(String(ep!.last_inbound_at)).getTime() > Date.now() - 86400000
+              template:
+                insideWindow || !runtime.template
                   ? null
-                  : (ep!.template_name as string | null),
-              templateLanguage: ep!.template_language as string | null,
+                  : buildStaffTemplateResponse(runtime.template, {
+                      name: "WhatsApp 客戶",
+                      source: "WhatsApp 查詢",
+                      link: workLink!,
+                    }),
               beforeSend: boundary,
             });
     } catch (error) {

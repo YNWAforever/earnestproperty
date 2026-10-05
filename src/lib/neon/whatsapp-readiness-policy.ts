@@ -125,8 +125,7 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
     ...base,
     ...endpointReasons(staffEndpoint, "staff_whatsapp", runtime.channelId),
   ];
-  if (!runtime.notificationsEnabled || !runtime.staffWhatsAppEnabled)
-    staffReasons.push("runtime_disabled");
+  if (!runtime.notificationsEnabled) staffReasons.push("runtime_disabled");
   if (!runtime.staffTransportVerified) staffReasons.push("provider_unverified");
   if (mapping?.reviewEnforced && staffEndpoint?.mappingVersion !== mapping.version)
     staffReasons.push("mapping_changed");
@@ -140,15 +139,10 @@ export function assessStaffReadiness(input: StaffReadinessInput): StaffWhatsappR
       lastInbound > now ||
       now - lastInbound >= 24 * 60 * 60 * 1000
     ) {
-      staffReasons.push("outside_message_window");
-      // The approved template name alone cannot establish the payload contract.
-      if (
-        !runtime.templateContractVerified ||
-        !staffEndpoint.templateName ||
-        !staffEndpoint.templateLanguage ||
-        !staffEndpoint.templateVerifiedAt
-      )
-        staffReasons.push("template_unverified");
+      // Outside the window only the approved staff template (EP_WA_STAFF_ALERT_TEMPLATE)
+      // can be sent; per-endpoint template columns are unused legacy.
+      if (!runtime.templateContractVerified)
+        staffReasons.push("outside_message_window", "template_unverified");
     }
   }
   return {

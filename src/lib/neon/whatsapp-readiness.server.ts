@@ -41,11 +41,10 @@ export function currentWhatsappReadinessRuntime(): Runtime {
     channelId: notification.channelId,
     assignmentEnabled: process.env.EP_WA_ENQUIRY_MODE === "active",
     notificationsEnabled: notification.enabled,
-    staffWhatsAppEnabled: notification.staffWhatsAppEnabled,
     inboxProviderVerified,
     staffTransportVerified:
       staffTransportVerified && process.env.WOZTELL_CHANNEL_ID === notification.channelId,
-    templateContractVerified: false,
+    templateContractVerified: notification.template !== null,
   };
 }
 const obj = (v: unknown): Record<string, unknown> | null =>
@@ -162,7 +161,7 @@ export async function readWhatsappRuntimeStatus(
     channelId: runtime.channelId,
     inboxProviderVerified: runtime.inboxProviderVerified,
     staffTransportVerified: runtime.staffTransportVerified,
-    staffWhatsappEnabled: runtime.staffWhatsAppEnabled && runtime.notificationsEnabled,
+    staffWhatsappEnabled: runtime.notificationsEnabled,
     checkedAt: options.checkedAt ?? new Date().toISOString(),
   });
 }
