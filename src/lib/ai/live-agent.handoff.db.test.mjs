@@ -123,6 +123,9 @@ test("concurrent double-submit still creates exactly one lead, follow-up and aud
     ]);
     afterQuery = null;
 
+    // Two pre-reads met at the barrier, and the loser re-read the session in the fallback, where
+    // the same phone makes its correction a no-op.
+    assert.equal(arrivals, 3);
     assert.deepEqual(results, [
       { ok: true, status: "handoff_requested" },
       { ok: true, status: "handoff_requested" },
@@ -312,6 +315,413 @@ test("a new number creates a contact and records contactCreated in the handoff a
     const metadata = await handoffAudit(session.sessionId);
     assert.equal(metadata.contactCreated, true);
     assert.equal(metadata.possibleConversationId, null);
+  } finally {
+    await db.close();
+  }
+});
+
+// Ordered rows of every table a correction or a post-handoff message could touch. Session rows
+// keep updated_at too, so a refused correction cannot even bump the session.
+async function snapshot() {
+  return {
+    contacts: await query("SELECT * FROM crm_contacts ORDER BY id"),
+    leads: await query("SELECT * FROM crm_leads ORDER BY id"),
+    sessions: await query(
+      `SELECT id, status, contact_id, lead_id, conversation_id, updated_at
+       FROM live_agent_sessions
+       ORDER BY id`,
+    ),
+    activities: await query("SELECT * FROM crm_activities ORDER BY id"),
+    aiAudits: await query("SELECT * FROM ai_audit_logs ORDER BY id"),
+    conversations: await query("SELECT * FROM whatsapp_conversations ORDER BY id"),
+  };
+}
+
+async function correctionAudits(sessionId) {
+  const rows = await query(
+    `SELECT actor_type, subject_type, metadata FROM ai_audit_logs
+     WHERE action='live_agent.handoff.phone_corrected' AND subject_id=$1
+     ORDER BY created_at`,
+    [sessionId],
+  );
+  for (const row of rows) {
+    assert.equal(row.actor_type, "visitor");
+    assert.equal(row.subject_type, "live_agent_session");
+    // The audit identifies contacts by id only; it never stores a raw or normalised phone.
+    assert.doesNotMatch(
+      JSON.stringify(row.metadata).replace(/\s|-/g, ""),
+      /91234567|61234567|98765432|51234567/,
+    );
+  }
+  return rows.map((row) => row.metadata);
+}
+
+async function insertStaff() {
+  const [staff] = await query(
+    `INSERT INTO staff_users (email, name_en)
+     VALUES ('synthetic-agent@example.invalid', 'Synthetic agent')
+     RETURNING id`,
+  );
+  await query("INSERT INTO staff_roles (staff_user_id, role) VALUES ($1, 'agent')", [staff.id]);
+  return staff.id;
+}
+
+test("correction while uncontacted updates the contact this handoff created", async () => {
+  await freshDb();
+  try {
+    const session = await openSession();
+    await live.requestLiveAgentHandoff(handoffInput(session, { phone: "9123 4567" }));
+    const before = await sessionRow(session.sessionId);
+
+    assert.deepEqual(
+      await live.requestLiveAgentHandoff(handoffInput(session, { phone: "6123 4567" })),
+      { ok: true, status: "handoff_requested" },
+    );
+
+    const after = await sessionRow(session.sessionId);
+    assert.equal(after.contact_id, before.contact_id);
+    assert.equal(after.lead_id, before.lead_id);
+    const [lead] = await query("SELECT contact_id FROM crm_leads WHERE id=$1", [before.lead_id]);
+    assert.equal(lead.contact_id, before.contact_id);
+    assert.equal(await count("SELECT count(*)::int AS n FROM crm_leads"), 1);
+    assert.equal(await count("SELECT count(*)::int AS n FROM crm_contacts"), 1);
+
+    const [contact] = await query("SELECT phone, normalized_phone FROM crm_contacts WHERE id=$1", [
+      before.contact_id,
+    ]);
+    assert.equal(contact.normalized_phone, "85261234567");
+    assert.equal(contact.phone, "6123 4567");
+
+    assert.deepEqual(await correctionAudits(session.sessionId), [
+      {
+        leadId: before.lead_id,
+        fromContactId: before.contact_id,
+        toContactId: before.contact_id,
+        mode: "updated_contact",
+        possibleConversationId: null,
+      },
+    ]);
+  } finally {
+    await db.close();
+  }
+});
+
+test("same phone resubmitted is a no-op", async () => {
+  await freshDb();
+  try {
+    const session = await openSession();
+    await live.requestLiveAgentHandoff(handoffInput(session, { phone: "91234567" }));
+    const before = await snapshot();
+
+    assert.deepEqual(
+      await live.requestLiveAgentHandoff(handoffInput(session, { phone: "+852 9123 4567" })),
+      { ok: true, status: "handoff_requested" },
+    );
+
+    assert.deepEqual(await snapshot(), before);
+    assert.deepEqual(await correctionAudits(session.sessionId), []);
+  } finally {
+    await db.close();
+  }
+});
+
+test("correction when the handoff matched an existing customer relinks to a new contact and leaves that customer unchanged", async () => {
+  await freshDb();
+  try {
+    const [existing] = await query(
+      `INSERT INTO crm_contacts (name, phone, normalized_phone, source, updated_at)
+       VALUES ('Existing customer', '9123 4567', '85291234567', 'website', '2026-01-01T00:00:00Z')
+       RETURNING id`,
+    );
+    const session = await openSession();
+    await live.requestLiveAgentHandoff(handoffInput(session, { phone: "9123 4567" }));
+    const linked = await sessionRow(session.sessionId);
+    assert.equal(linked.contact_id, existing.id);
+    const existingBefore = await query("SELECT * FROM crm_contacts WHERE id=$1", [existing.id]);
+
+    assert.deepEqual(
+      await live.requestLiveAgentHandoff(handoffInput(session, { phone: "6123 4567" })),
+      { ok: true, status: "handoff_requested" },
+    );
+
+    const after = await sessionRow(session.sessionId);
+    assert.notEqual(after.contact_id, existing.id);
+    assert.equal(after.lead_id, linked.lead_id);
+    assert.equal(after.conversation_id, null);
+    const [created] = await query(
+      "SELECT phone, normalized_phone, source FROM crm_contacts WHERE id=$1",
+      [after.contact_id],
+    );
+    assert.equal(created.normalized_phone, "85261234567");
+    assert.equal(created.phone, "6123 4567");
+    assert.equal(created.source, "live_agent");
+
+    const [lead] = await query("SELECT contact_id FROM crm_leads WHERE id=$1", [after.lead_id]);
+    assert.equal(lead.contact_id, after.contact_id);
+    assert.deepEqual(
+      await query("SELECT * FROM crm_contacts WHERE id=$1", [existing.id]),
+      existingBefore,
+    );
+
+    const followUps = await query(
+      "SELECT contact_id FROM crm_activities WHERE lead_id=$1 AND activity_type='follow_up'",
+      [after.lead_id],
+    );
+    assert.deepEqual(
+      followUps.map((row) => row.contact_id),
+      [after.contact_id],
+    );
+
+    assert.deepEqual(await correctionAudits(session.sessionId), [
+      {
+        leadId: after.lead_id,
+        fromContactId: existing.id,
+        toContactId: after.contact_id,
+        mode: "relinked",
+        possibleConversationId: null,
+      },
+    ]);
+  } finally {
+    await db.close();
+  }
+});
+
+test("corrected number that belongs to another customer links read-only and notes the conversation", async () => {
+  await freshDb();
+  try {
+    const [other] = await query(
+      `INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, updated_at)
+       VALUES ('Other customer', '6123 4567', '85261234567', NULL, 'website', '2026-01-01T00:00:00Z')
+       RETURNING id`,
+    );
+    const [conversation] = await query(
+      `INSERT INTO whatsapp_conversations (contact_id, channel_id, woztell_member_id, status, updated_at)
+       VALUES ($1, 'synthetic-channel', 'synthetic-member', 'open', '2026-01-02T03:04:05Z')
+       RETURNING id`,
+      [other.id],
+    );
+    const otherBefore = await query("SELECT * FROM crm_contacts WHERE id=$1", [other.id]);
+    const conversationBefore = await query("SELECT * FROM whatsapp_conversations WHERE id=$1", [
+      conversation.id,
+    ]);
+
+    const session = await openSession();
+    await live.requestLiveAgentHandoff(handoffInput(session, { phone: "9876 5432" }));
+    const first = await sessionRow(session.sessionId);
+    assert.notEqual(first.contact_id, other.id);
+
+    assert.deepEqual(
+      await live.requestLiveAgentHandoff(
+        handoffInput(session, {
+          phone: "6123 4567",
+          name: "Typo visitor",
+          email: "typo@example.invalid",
+        }),
+      ),
+      { ok: true, status: "handoff_requested" },
+    );
+
+    const after = await sessionRow(session.sessionId);
+    assert.equal(after.contact_id, other.id);
+    assert.equal(after.conversation_id, null);
+    const [lead] = await query("SELECT contact_id FROM crm_leads WHERE id=$1", [after.lead_id]);
+    assert.equal(lead.contact_id, other.id);
+
+    assert.deepEqual(
+      await query("SELECT * FROM crm_contacts WHERE id=$1", [other.id]),
+      otherBefore,
+    );
+    assert.deepEqual(
+      await query("SELECT * FROM whatsapp_conversations WHERE id=$1", [conversation.id]),
+      conversationBefore,
+    );
+
+    const notes = await query(
+      "SELECT body, contact_id FROM crm_activities WHERE lead_id=$1 AND activity_type='note'",
+      [after.lead_id],
+    );
+    assert.deepEqual(
+      notes.map((row) => [row.body, row.contact_id]),
+      [[`可能與現有 WhatsApp 對話相關（對話編號 ${conversation.id}）`, other.id]],
+    );
+
+    // existing_for_new won, so the contact the first handoff created was relinked away from,
+    // never updated to the other customer's number and never deleted.
+    const [firstContact] = await query(
+      "SELECT phone, normalized_phone FROM crm_contacts WHERE id=$1",
+      [first.contact_id],
+    );
+    assert.equal(firstContact.normalized_phone, "85298765432");
+    assert.equal(firstContact.phone, "9876 5432");
+
+    assert.deepEqual(await correctionAudits(session.sessionId), [
+      {
+        leadId: after.lead_id,
+        fromContactId: first.contact_id,
+        toContactId: other.id,
+        mode: "relinked",
+        possibleConversationId: conversation.id,
+      },
+    ]);
+  } finally {
+    await db.close();
+  }
+});
+
+test("a second correction never updates the pre-existing customer the first correction linked to", async () => {
+  await freshDb();
+  try {
+    // No conversation, lead or session references this customer, so only the handoff audit's
+    // contactId tells it apart from the contact the handoff created.
+    const [other] = await query(
+      `INSERT INTO crm_contacts (name, phone, normalized_phone, source, updated_at)
+       VALUES ('Other customer', '6123 4567', '85261234567', 'website', '2026-01-01T00:00:00Z')
+       RETURNING id`,
+    );
+    const otherBefore = await query("SELECT * FROM crm_contacts WHERE id=$1", [other.id]);
+
+    const session = await openSession();
+    await live.requestLiveAgentHandoff(handoffInput(session, { phone: "9876 5432" }));
+    const first = await sessionRow(session.sessionId);
+    await live.requestLiveAgentHandoff(handoffInput(session, { phone: "6123 4567" }));
+    assert.equal((await sessionRow(session.sessionId)).contact_id, other.id);
+
+    await live.requestLiveAgentHandoff(handoffInput(session, { phone: "5123 4567" }));
+
+    const after = await sessionRow(session.sessionId);
+    assert.notEqual(after.contact_id, other.id);
+    assert.notEqual(after.contact_id, first.contact_id);
+    const [created] = await query("SELECT normalized_phone FROM crm_contacts WHERE id=$1", [
+      after.contact_id,
+    ]);
+    assert.equal(created.normalized_phone, "85251234567");
+    assert.deepEqual(
+      await query("SELECT * FROM crm_contacts WHERE id=$1", [other.id]),
+      otherBefore,
+    );
+    assert.deepEqual(
+      (await correctionAudits(session.sessionId)).map((metadata) => metadata.mode),
+      ["relinked", "relinked"],
+    );
+  } finally {
+    await db.close();
+  }
+});
+
+const STAFF_SIGNALS = [
+  [
+    "stage contacted",
+    ({ leadId }) => query("UPDATE crm_leads SET stage='contacted' WHERE id=$1", [leadId]),
+  ],
+  [
+    "assigned agent",
+    ({ leadId, staffId }) =>
+      query("UPDATE crm_leads SET assigned_agent_id=$2 WHERE id=$1", [leadId, staffId]),
+  ],
+  [
+    "staff note",
+    ({ leadId, staffId }) =>
+      query(
+        `INSERT INTO crm_activities (lead_id, staff_user_id, activity_type, body)
+         VALUES ($1, $2, 'note', 'Synthetic staff note')`,
+        [leadId, staffId],
+      ),
+  ],
+  [
+    "staff audit",
+    ({ leadId, staffId }) =>
+      query(
+        `INSERT INTO audit_logs (actor_id, action, subject_type, subject_id)
+         VALUES ($1, 'lead.update', 'lead', $2)`,
+        [staffId, leadId],
+      ),
+  ],
+];
+
+for (const [label, staffActs] of STAFF_SIGNALS) {
+  test(`correction is refused without any write once staff have acted (${label})`, async () => {
+    await freshDb();
+    try {
+      const session = await openSession();
+      await live.requestLiveAgentHandoff(handoffInput(session, { phone: "9123 4567" }));
+      const { lead_id: leadId } = await sessionRow(session.sessionId);
+      const staffId = await insertStaff();
+      await staffActs({ leadId, staffId });
+      const before = await snapshot();
+
+      assert.deepEqual(
+        await live.requestLiveAgentHandoff(handoffInput(session, { phone: "6123 4567" })),
+        { ok: true, status: "handoff_requested" },
+      );
+
+      assert.deepEqual(await snapshot(), before);
+    } finally {
+      await db.close();
+    }
+  });
+}
+
+async function sessionMessages(sessionId) {
+  // PGlite's clock has millisecond resolution, so two inserts can share a created_at. ctid breaks
+  // the tie in insertion order on this append-only table.
+  return query(
+    `SELECT direction, message_text, citations, safety_flags, shown_publicly, created_at
+     FROM live_agent_messages
+     WHERE session_id=$1
+     ORDER BY created_at, ctid`,
+    [sessionId],
+  );
+}
+
+test("message after handoff is stored, answered with fixed copy and never calls the model", async () => {
+  await freshDb();
+  try {
+    const session = await openSession();
+    const first = await live.answerLiveAgentMessage({ ...session, message: "想問屋苑" });
+    assert.equal(modelCalls, 1, "positive control: the mocked model answers before the handoff");
+    assert.equal(first.message.direction, "assistant");
+
+    await live.requestLiveAgentHandoff(handoffInput(session));
+    const leadsBefore = await query("SELECT * FROM crm_leads ORDER BY id");
+    const activitiesBefore = await query("SELECT * FROM crm_activities ORDER BY id");
+
+    const result = await live.answerLiveAgentMessage({ ...session, message: "仲有我想要高層" });
+
+    assert.equal(modelCalls, 1);
+    assert.equal(result.message.message_text, "已轉交代理，我哋會盡快聯絡你。");
+    assert.equal(result.message.direction, "assistant");
+    assert.equal(result.handoffSuggested, false);
+
+    const messages = await sessionMessages(session.sessionId);
+    const [visitor, reply] = messages.slice(-2);
+    assert.equal(visitor.direction, "visitor");
+    assert.equal(visitor.message_text, "仲有我想要高層");
+    assert.equal(reply.direction, "assistant");
+    assert.equal(reply.message_text, "已轉交代理，我哋會盡快聯絡你。");
+    assert.deepEqual(reply.citations, []);
+    assert.deepEqual(reply.safety_flags, ["handoff_requested"]);
+    assert.equal(reply.shown_publicly, true);
+    assert.ok(reply.created_at >= visitor.created_at);
+
+    assert.deepEqual(await query("SELECT * FROM crm_leads ORDER BY id"), leadsBefore);
+    assert.deepEqual(await query("SELECT * FROM crm_activities ORDER BY id"), activitiesBefore);
+  } finally {
+    await db.close();
+  }
+});
+
+test("message to a closed session is still rejected", async () => {
+  await freshDb();
+  try {
+    const session = await openSession();
+    await query("UPDATE live_agent_sessions SET status='closed' WHERE id=$1", [session.sessionId]);
+
+    await assert.rejects(
+      live.answerLiveAgentMessage({ ...session, message: "仲有我想要高層" }),
+      (error) => error instanceof live.LiveAgentPublicError && error.status === 400,
+    );
+    assert.equal(modelCalls, 0);
+    assert.deepEqual(await sessionMessages(session.sessionId), []);
   } finally {
     await db.close();
   }

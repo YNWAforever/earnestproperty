@@ -43,6 +43,9 @@ type LiveAgentMessageRow = {
 
 type PublicLiveAgentSession = Pick<LiveAgentSession, "id" | "status">;
 
+// Fixed reply once an agent owns the conversation: the model is not consulted after a handoff.
+const LIVE_AGENT_HANDED_OFF_REPLY = "已轉交代理，我哋會盡快聯絡你。";
+
 export class LiveAgentPublicError extends Error {
   status: number;
   code?: LiveAgentPhoneErrorCode;
@@ -117,6 +120,26 @@ export async function answerLiveAgentMessage(input: {
      VALUES ($1,'visitor',$2,true)`,
     [session.id, visitorMessage],
   );
+
+  if (session.status === "handoff_requested") {
+    // The visitor's message is kept for the agent, and the fixed acknowledgement is a separate
+    // insert so it sorts after it. No model call and no CRM lead or activity write.
+    const rows = await queryRows<LiveAgentMessageRow>(
+      `INSERT INTO live_agent_messages (
+         session_id, direction, message_text, citations, safety_flags, shown_publicly
+       )
+       VALUES ($1,'assistant',$2,'[]'::jsonb,ARRAY['handoff_requested']::text[],true)
+       RETURNING *`,
+      [session.id, LIVE_AGENT_HANDED_OFF_REPLY],
+    );
+    await queryRows("UPDATE live_agent_sessions SET updated_at = now() WHERE id = $1", [
+      session.id,
+    ]);
+    return {
+      message: mapMessage(requireRow(rows[0], "Unable to create live-agent reply.")),
+      handoffSuggested: false,
+    };
+  }
 
   const answer = await answerFromPublicKnowledge({ question: visitorMessage });
   const handoffSuggested = shouldOfferHumanHandoff({
@@ -197,16 +220,29 @@ export async function requestLiveAgentHandoff(input: {
     );
   }
   const session = await getLiveAgentSessionForHandoff(sessionId, accessToken);
-  if (session.status === "handoff_requested") {
-    return { ok: true, status: "handoff_requested" as const };
-  }
   const leadInput = buildLiveAgentLeadInput({
     ...input,
     source_path: session.source_path,
   });
   const name = cleanNullableText(leadInput.name, 160);
-  const phone = cleanNullableText(leadInput.phone, 80);
+  // The validated phone is never blank, so the fallback only narrows the type.
+  const phone = cleanNullableText(leadInput.phone, 80) ?? phoneCheck.normalized;
   const email = cleanNullableText(leadInput.email, 200);
+  const correction = {
+    sessionId: session.id,
+    accessToken,
+    name,
+    phone,
+    normalizedPhone: phoneCheck.normalized,
+    email,
+    optInWhatsapp: leadInput.opt_in_whatsapp,
+  };
+  if (session.status === "handoff_requested") {
+    // A repeat submit is a phone correction while staff have not acted yet; otherwise it is the
+    // same idempotent OK with no write.
+    await correctHandoffPhone(correction);
+    return { ok: true, status: "handoff_requested" as const };
+  }
   const intent = cleanNullableText(leadInput.intent, 80) ?? "buyer";
   const preferredEstates = leadInput.preferred_estates.map((estate) => estate.slice(0, 120));
   const note = `Live agent handoff from ${leadInput.source_path ?? "public site"}`;
@@ -362,9 +398,175 @@ export async function requestLiveAgentHandoff(input: {
     if (current.status !== "handoff_requested") {
       throw new LiveAgentPublicError("Live-agent session is not open.", 400);
     }
+    // A racing request with a different phone becomes a correction; the same phone is a no-op.
+    await correctHandoffPhone(correction);
   }
 
   return { ok: true, status: "handoff_requested" as const };
+}
+
+// One atomic statement. `target` locks the session and its lead and is empty when staff have
+// acted on the lead or the phone is unchanged; every write below depends on it, so a refused
+// correction writes nothing. Only a contact this handoff created (and nothing else references) has
+// its phone updated. A pre-existing contact is never modified: the lead is relinked instead, to a
+// contact that already owns the new number (read-only) or to a new one. A WhatsApp conversation
+// is never written or linked; a possible match only becomes a lead note.
+async function correctHandoffPhone(input: {
+  sessionId: string;
+  accessToken: string;
+  name: string | null;
+  phone: string;
+  normalizedPhone: string;
+  email: string | null;
+  optInWhatsapp: boolean;
+}): Promise<void> {
+  await queryRows(
+    `WITH target AS MATERIALIZED (
+       SELECT s.id, s.contact_id, s.lead_id
+       FROM live_agent_sessions s
+       JOIN crm_leads l ON l.id=s.lead_id
+       LEFT JOIN crm_contacts c ON c.id=s.contact_id
+       WHERE s.id=$1
+         AND s.access_token=$2
+         AND s.status='handoff_requested'
+         AND l.stage='new'
+         AND l.assigned_agent_id IS NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM crm_activities a WHERE a.lead_id=l.id AND a.staff_user_id IS NOT NULL
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM audit_logs g WHERE g.subject_id=l.id AND g.actor_id IS NOT NULL
+         )
+         AND NOT COALESCE(
+           c.normalized_phone=$5::text OR
+             (length($5::text)=11 AND left($5::text,3)='852'
+               AND c.normalized_phone=right($5::text,8)),
+           false
+         )
+       FOR UPDATE OF s, l
+     ),
+     owned AS (
+       SELECT c.id
+       FROM target t
+       JOIN crm_contacts c ON c.id=t.contact_id
+       WHERE c.whatsapp_member_id IS NULL
+         AND (
+           SELECT h.metadata->>'contactCreated'='true' AND h.metadata->>'contactId'=c.id::text
+           FROM ai_audit_logs h
+           WHERE h.action='live_agent.handoff' AND h.subject_id=t.id
+           ORDER BY h.created_at DESC
+           LIMIT 1
+         )
+         AND NOT EXISTS (SELECT 1 FROM whatsapp_conversations w WHERE w.contact_id=c.id)
+         AND NOT EXISTS (SELECT 1 FROM crm_leads ol WHERE ol.contact_id=c.id AND ol.id<>t.lead_id)
+         AND NOT EXISTS (
+           SELECT 1 FROM live_agent_sessions os WHERE os.contact_id=c.id AND os.id<>t.id
+         )
+     ),
+     existing_for_new AS MATERIALIZED (
+       SELECT c.id
+       FROM target t
+       JOIN crm_contacts c ON c.id IS DISTINCT FROM t.contact_id
+         AND (c.normalized_phone=$5::text OR
+           (length($5::text)=11 AND left($5::text,3)='852'
+             AND c.normalized_phone=right($5::text,8)))
+       ORDER BY (c.normalized_phone=$5::text) DESC, c.id
+       LIMIT 1 FOR UPDATE OF c
+     ),
+     updated_owned AS (
+       UPDATE crm_contacts c
+       SET phone=$4::text, normalized_phone=$5::text, updated_at=now()
+       FROM owned o
+       WHERE c.id=o.id
+         AND NOT EXISTS (SELECT 1 FROM existing_for_new)
+       RETURNING c.id
+     ),
+     inserted_contact AS (
+       INSERT INTO crm_contacts (name, phone, normalized_phone, email, source, opt_in_whatsapp)
+       SELECT $3::text, $4::text, $5::text, $6::text, 'live_agent', $7::boolean FROM target
+       WHERE NOT EXISTS (SELECT 1 FROM updated_owned)
+         AND NOT EXISTS (SELECT 1 FROM existing_for_new)
+       ON CONFLICT (normalized_phone) DO UPDATE SET opt_in_whatsapp=crm_contacts.opt_in_whatsapp
+       RETURNING id
+     ),
+     resolved AS (
+       SELECT id FROM updated_owned
+       UNION ALL SELECT id FROM existing_for_new
+       UNION ALL SELECT id FROM inserted_contact
+     ),
+     relinked_lead AS (
+       UPDATE crm_leads l
+       SET contact_id=r.id, updated_at=now()
+       FROM target t CROSS JOIN resolved r
+       WHERE l.id=t.lead_id
+         AND l.contact_id IS DISTINCT FROM r.id
+       RETURNING l.id
+     ),
+     relinked_session AS (
+       UPDATE live_agent_sessions s
+       SET contact_id=r.id, updated_at=now()
+       FROM target t CROSS JOIN resolved r
+       WHERE s.id=t.id
+         AND s.contact_id IS DISTINCT FROM r.id
+       RETURNING s.id
+     ),
+     moved_activities AS (
+       UPDATE crm_activities a
+       SET contact_id=r.id
+       FROM target t CROSS JOIN resolved r
+       WHERE a.lead_id=t.lead_id
+         AND a.staff_user_id IS NULL
+         AND r.id IS DISTINCT FROM t.contact_id
+         AND a.contact_id IS DISTINCT FROM r.id
+       RETURNING a.id
+     ),
+     possible_conversation AS (
+       SELECT w.id
+       FROM resolved r
+       JOIN whatsapp_conversations w ON w.contact_id=r.id
+       WHERE w.channel_id IS NOT NULL
+         AND w.woztell_member_id IS NOT NULL
+       ORDER BY w.updated_at DESC
+       LIMIT 1
+     ),
+     possible_note AS (
+       INSERT INTO crm_activities (lead_id, contact_id, activity_type, body)
+       SELECT t.lead_id, r.id, 'note', n.body
+       FROM target t CROSS JOIN resolved r CROSS JOIN possible_conversation w
+         CROSS JOIN LATERAL (
+           SELECT '可能與現有 WhatsApp 對話相關（對話編號 ' || w.id::text || '）' AS body
+         ) n
+       WHERE NOT EXISTS (
+         SELECT 1 FROM crm_activities a
+         WHERE a.lead_id=t.lead_id AND a.activity_type='note' AND a.body=n.body
+       )
+       RETURNING id
+     ),
+     correction_audit AS (
+       INSERT INTO ai_audit_logs (actor_type, action, subject_type, subject_id, metadata)
+       SELECT 'visitor', 'live_agent.handoff.phone_corrected', 'live_agent_session', t.id,
+         jsonb_build_object(
+           'leadId', t.lead_id,
+           'fromContactId', t.contact_id,
+           'toContactId', r.id,
+           'mode', CASE WHEN EXISTS (SELECT 1 FROM updated_owned)
+             THEN 'updated_contact' ELSE 'relinked' END,
+           'possibleConversationId', (SELECT id FROM possible_conversation)
+         )
+       FROM target t CROSS JOIN resolved r
+       RETURNING id
+     )
+     SELECT id FROM correction_audit`,
+    [
+      input.sessionId,
+      input.accessToken,
+      input.name,
+      input.phone,
+      input.normalizedPhone,
+      input.email,
+      input.optInWhatsapp,
+    ],
+  );
 }
 
 async function getLiveAgentSessionForMessage(sessionId: string, accessToken: string) {
@@ -373,7 +575,7 @@ async function getLiveAgentSessionForMessage(sessionId: string, accessToken: str
      FROM live_agent_sessions
      WHERE id = $1
        AND access_token = $2
-       AND status IN ('open', 'qualified')
+       AND status IN ('open', 'qualified', 'handoff_requested')
      LIMIT 1`,
     [sessionId, accessToken],
   );
