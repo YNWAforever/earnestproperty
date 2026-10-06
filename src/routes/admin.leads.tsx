@@ -128,7 +128,7 @@ const bulkErrorLabels: Record<string, string> = {
   NO_LEADS_SELECTED: "請先選擇至少一筆客戶查詢。",
   TOO_MANY_LEADS_SELECTED: "一次最多只可更新 200 筆客戶查詢，請分批處理。",
   NO_CHANGES_REQUESTED: "請選擇要套用的階段或負責代理。",
-  ASSIGNEE_INACTIVE: "該同事已停用，不能指派客戶查詢給他／她。",
+  ASSIGNEE_INACTIVE: "所選同事已停用，不能指派客戶查詢。請選擇其他同事。",
 };
 
 // Filters used to live in local useState, so reload, browser Back from a lead,
