@@ -38,7 +38,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # The production bundle outgrew Node's ~2 GB default heap on the GitHub
+      # runner (OOM after the four admin screens were enabled in #224). Vercel
+      # builds with more memory, so only CI needs the larger heap.
       - run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
 
       # Full non-":db" test:* matrix from package.json. The three ":db"-suffixed
       # scripts (test:mls:db, test:control-plane:db, test:youtube-sync:db) need a
