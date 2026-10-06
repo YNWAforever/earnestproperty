@@ -185,7 +185,7 @@ export async function ingestWoztellEvent(
         (normalized_phone=$1) DESC NULLS LAST, id
       LIMIT 1
     ), updated_contact AS (
-      UPDATE crm_contacts c SET name=COALESCE(c.name,$3),whatsapp_profile_name=CASE WHEN $16::boolean THEN COALESCE($3,c.whatsapp_profile_name) ELSE COALESCE(c.whatsapp_profile_name,$3) END,phone=COALESCE(c.phone,$4),
+      UPDATE crm_contacts c SET name=COALESCE(c.name,$3),whatsapp_profile_name=CASE WHEN $16::boolean AND $9::text='inbound' AND $6::timestamptz>=COALESCE(c.last_inbound_at,'-infinity'::timestamptz) THEN COALESCE($3,c.whatsapp_profile_name) ELSE COALESCE(c.whatsapp_profile_name,$3) END,phone=COALESCE(c.phone,$4),
         normalized_phone=COALESCE(c.normalized_phone,$1),whatsapp_member_id=COALESCE(c.whatsapp_member_id,$2),
         opted_out_whatsapp=c.opted_out_whatsapp OR $5,last_inbound_at=GREATEST(c.last_inbound_at,$6::timestamptz),updated_at=now()
       FROM valid v WHERE c.id=v.id RETURNING c.id

@@ -756,6 +756,68 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
         assert.equal(await contactText(C2), other);
       });
 
+      await t.test(
+        "profile name: an outbound event or a replayed older inbound never overwrites a newer one",
+        async () => {
+          const member = "synthetic-fx09-member-profile-order";
+          const newest = await ingest(inbound(member, "Newest Name", "最新"), "live_webhook");
+          assert.ok(newest.contactId);
+          const newestClock = clock;
+          assert.deepEqual(await names(newest.contactId), {
+            name: "Newest Name",
+            whatsapp_profile_name: "Newest Name",
+          });
+
+          // A live outbound event (bot reply) that carries memberExtra.
+          const outbound = normalizeWoztellEvent({
+            type: "BOT",
+            app: "synthetic-fx09-app",
+            channel: "synthetic-fx09-channel",
+            member,
+            memberExtra: { name: "Outbound Side Name" },
+            messageEvent: {
+              type: "TEXT",
+              messageId: "synthetic-fx09-profile-out-1",
+              timestamp: String(++clock),
+              data: { text: "自動回覆" },
+            },
+          });
+          assert.equal(outbound.direction, "outbound");
+          const out = await ingest(outbound, "live_webhook");
+          assert.equal(out.contactId, newest.contactId);
+          assert.equal(out.messageInserted, true);
+          assert.deepEqual(await names(newest.contactId), {
+            name: "Newest Name",
+            whatsapp_profile_name: "Newest Name",
+          });
+
+          // A stored receipt replayed later as live_webhook, older than the newest inbound.
+          const replay = normalizeWoztellEvent({
+            timestamp: String(newestClock - 60),
+            type: "TEXT",
+            data: { text: "舊收據重送" },
+            member,
+            channel: "synthetic-fx09-channel",
+            app: "synthetic-fx09-app",
+            memberExtra: { name: "Stale Name" },
+          });
+          const replayed = await ingest(replay, "live_webhook");
+          assert.equal(replayed.contactId, newest.contactId);
+          assert.equal(replayed.messageInserted, true);
+          assert.deepEqual(await names(newest.contactId), {
+            name: "Newest Name",
+            whatsapp_profile_name: "Newest Name",
+          });
+
+          // A newer live inbound still refreshes it.
+          await ingest(inbound(member, "Fresh Name", "再嚟"), "live_webhook");
+          assert.deepEqual(await names(newest.contactId), {
+            name: "Newest Name",
+            whatsapp_profile_name: "Fresh Name",
+          });
+        },
+      );
+
       // Task 5 / C-10: a customer whose leads are all closed gets a new lead when
       // they message again, and a closed conversation reopens. Every message goes
       // through real ingest. Message times follow the database clock so that a
