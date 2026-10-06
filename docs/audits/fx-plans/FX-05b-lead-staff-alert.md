@@ -473,7 +473,7 @@ These are gated. Claude does none of them.
    - Send back its exact **element name** and language (`zh_HK`), and confirm the parameter order `name, source, link`.
 2. **Pre-flight read-only checks** on production. The owner runs them or names the record:
    - (a) `SELECT count(*) FROM staff_notification_endpoints WHERE transport='staff_whatsapp' AND enabled AND retired_at IS NULL` should be 0. The single switch is already `true` (fact 9), so any enabled endpoint starts receiving staff WhatsApp after deploy.
-   - (b) Confirm `OPS_EVENT_WAKE_ENABLED=true` and `OPS_WAKE_URL` are set, or ship FX-07 first. Otherwise alert jobs may sit queued (fact 5).
+   - (b) Confirm `OPS_WAKE_URL` is set, or ship FX-07 first. Otherwise alert jobs may sit queued (fact 5). FX-07 removed `OPS_EVENT_WAKE_ENABLED`; the wake is on whenever `OPS_WAKE_URL` is set.
 3. **Migration.**
    - Apply `20261006110000_duty_manager.sql` on a Neon branch and verify the columns, the constraint and the index.
    - Then apply it to production with explicit approval **before** merging.
@@ -511,7 +511,7 @@ Each has a recommended default.
 
 - **The migration is not "additive column only".** It also needs `staff_notification_attempts.notification_id DROP NOT NULL`, plus `lead_id`, a CHECK and a partial index (fact 7, Task 1). All are backward compatible.
 - **A new env var is required.** `EP_WA_STAFF_ALERT_TEMPLATE` is one setting; the plan said "adds 0". The net change is still −1.
-- **FX-05b effectively depends on FX-07** (or on `OPS_EVENT_WAKE_ENABLED=true` in production). Otherwise a queued alert may never run.
+- **FX-05b effectively depends on FX-07** (which removes `OPS_EVENT_WAKE_ENABLED` and wakes whenever `OPS_WAKE_URL` is set). Otherwise a queued alert may never run.
 - **Valuation and listing-alert forms create no lead on `main`.** FX-05b alone covers the website and property sources. Valuation, alert, live agent and WhatsApp inbound are hooks for FX-02, FX-05c and FX-09.
 - **Removing `_WHATSAPP_ALERTS_ENABLED` turns staff WhatsApp on in production at deploy.** `NOTIFICATIONS_ENABLED` is already `true` there. This is safe only while no `staff_whatsapp` endpoint is enabled; see pre-flight 2(a). Ack escalation is dead code, so removing its switch changes nothing.
 - **R-20 also blocks the staff test notification** (fact 11), so it is fixed here too.
