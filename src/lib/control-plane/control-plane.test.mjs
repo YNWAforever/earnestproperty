@@ -8,6 +8,7 @@ import { errorResponse, mapControlPlaneError, successResponse } from "./errors.t
 import { createOperationContext } from "./request-context.ts";
 import { sanitizeAuditMetadata } from "./audit.server.ts";
 import { aggregateHealth } from "./health.server.ts";
+import { assessJobQueueHealth, jobQueueThresholds } from "./job-queue-health.ts";
 import { issueMigrationApproval, verifyMigrationApproval } from "./migration-approval.ts";
 import { computeMigrationChecksum, listRegisteredMigrations } from "./migration-registry.server.ts";
 import { applyMigration, planMigration } from "./migrations.server.ts";
@@ -179,6 +180,104 @@ test("required failed checks make health failed while optional failures degrade"
   assert.equal(
     aggregateHealth([{ key: "database", required: true, status: "failed" }]).status,
     "failed",
+  );
+});
+
+// FX-07 owner decision 4: 10-minute sweep 08:00-21:50 HKT, hourly overnight.
+// HKT is UTC+8 with no DST, so 08:00 HKT = 00:00Z and 22:00 HKT = 14:00Z.
+const hkt = (date, time) => new Date(`${date}T${time}:00+08:00`);
+const minutesBefore = (now, minutes) => new Date(now.getTime() - minutes * 60_000).toISOString();
+const jobFacts = (now, overrides = {}) => ({
+  overdueQueued: 0,
+  expiredLeases: 0,
+  serviceHeartbeatAt: minutesBefore(now, 2),
+  generalHeartbeatAt: minutesBefore(now, 2),
+  wakeConfigured: true,
+  ...overrides,
+});
+
+test("job queue thresholds follow the HKT clock at the 07:59/08:00 and 21:59/22:00 boundaries", () => {
+  const day = { overdueGraceMinutes: 15, heartbeatStaleMinutes: 30 };
+  const night = { overdueGraceMinutes: 75, heartbeatStaleMinutes: 90 };
+  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "07:59")), night);
+  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "08:00")), day);
+  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "21:59")), day);
+  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "22:00")), night);
+  assert.deepEqual(jobQueueThresholds(hkt("2026-10-07", "03:00")), night);
+  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "12:00")), day);
+  // The choice is made in Asia/Hong_Kong, not in the host's or UTC's calendar.
+  assert.deepEqual(jobQueueThresholds(new Date("2026-10-05T23:59:00Z")), night);
+  assert.deepEqual(jobQueueThresholds(new Date("2026-10-06T00:00:00Z")), day);
+});
+
+test("the first night tick: a 21:50 HKT heartbeat is not stale at 22:30 HKT", () => {
+  const now = hkt("2026-10-06", "22:30");
+  const check = assessJobQueueHealth(
+    jobFacts(now, {
+      serviceHeartbeatAt: hkt("2026-10-06", "21:50").toISOString(),
+      generalHeartbeatAt: hkt("2026-10-06", "21:50").toISOString(),
+    }),
+    now,
+  );
+  assert.equal(check.status, "healthy");
+  assert.equal(check.facts.oldestHeartbeatMinutes, 40);
+  // A night heartbeat is stale only past 90 minutes.
+  const late = hkt("2026-10-06", "23:21");
+  assert.equal(
+    assessJobQueueHealth(jobFacts(late, { generalHeartbeatAt: minutesBefore(late, 91) }), late)
+      .status,
+    "degraded",
+  );
+});
+
+test("fresh heartbeats and nothing overdue is healthy", () => {
+  const now = hkt("2026-10-06", "11:00");
+  const check = assessJobQueueHealth(jobFacts(now), now);
+  assert.equal(check.key, "jobs.queue");
+  assert.equal(check.required, false);
+  assert.equal(check.status, "healthy");
+  assert.deepEqual(check.facts, { overdueQueued: 0, expiredLeases: 0, oldestHeartbeatMinutes: 2 });
+  assert.ok(Object.values(check.details).every((value) => value === true));
+});
+
+test("heartbeat older than 30 min → degraded", () => {
+  const now = hkt("2026-10-06", "11:00");
+  for (const lane of ["serviceHeartbeatAt", "generalHeartbeatAt"]) {
+    const stale = assessJobQueueHealth(jobFacts(now, { [lane]: minutesBefore(now, 31) }), now);
+    assert.equal(stale.status, "degraded", lane);
+    assert.equal(stale.facts.oldestHeartbeatMinutes, 31);
+    assert.equal(
+      assessJobQueueHealth(jobFacts(now, { [lane]: minutesBefore(now, 29) }), now).status,
+      "healthy",
+      lane,
+    );
+  }
+});
+
+test("overdue work and expired leases degrade the job queue check", () => {
+  const now = hkt("2026-10-06", "11:00");
+  const overdue = assessJobQueueHealth(jobFacts(now, { overdueQueued: 1 }), now);
+  assert.equal(overdue.status, "degraded");
+  assert.equal(overdue.facts.overdueQueued, 1);
+  assert.equal(assessJobQueueHealth(jobFacts(now, { expiredLeases: 2 }), now).status, "degraded");
+});
+
+test("a missing heartbeat or wake URL is degraded, never failed", () => {
+  const now = hkt("2026-10-06", "11:00");
+  for (const overrides of [
+    { serviceHeartbeatAt: null },
+    { generalHeartbeatAt: null },
+    { wakeConfigured: false },
+  ]) {
+    const check = assessJobQueueHealth(jobFacts(now, overrides), now);
+    assert.equal(check.status, "degraded", JSON.stringify(overrides));
+    assert.equal(check.required, false);
+    assert.equal(aggregateHealth([check]).status, "degraded");
+  }
+  assert.equal(
+    assessJobQueueHealth(jobFacts(now, { serviceHeartbeatAt: null }), now).facts
+      .oldestHeartbeatMinutes,
+    null,
   );
 });
 

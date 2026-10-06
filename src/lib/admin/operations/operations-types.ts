@@ -10,6 +10,7 @@ export type HealthData = {
     required: boolean;
     status: HealthStatus;
     details?: Record<string, boolean>;
+    facts?: Record<string, number | null>;
   }>;
   checkedAt: string;
   capabilities: OperationsCapabilities;

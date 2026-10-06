@@ -1,6 +1,7 @@
 // Explicit .js extension: plain-JS module with a .d.ts sibling, so the
 // node --test suite imports it without a build step.
 import { MIGRATION_VERSIONS, pendingMigrations } from "./migration-versions.js";
+import { assessJobQueueHealth, jobQueueThresholds } from "./job-queue-health.ts";
 
 export type HealthStatus = "healthy" | "degraded" | "failed";
 
@@ -9,6 +10,8 @@ export type HealthCheck = {
   required: boolean;
   status: HealthStatus;
   details?: Record<string, boolean>;
+  /** Counts and ages shown on the row instead of the configured summary. */
+  facts?: Record<string, number | null>;
 };
 
 export type ControlPlaneHealth = {
@@ -126,7 +129,9 @@ function environmentChecks(): HealthCheck[] {
   ];
 }
 
-export async function runControlPlaneHealthChecks(): Promise<ControlPlaneHealth> {
+export async function runControlPlaneHealthChecks({
+  now = new Date(),
+}: { now?: Date } = {}): Promise<ControlPlaneHealth> {
   const checks: HealthCheck[] = [];
   try {
     const { queryRows } = await import("../neon/db.server.ts");
@@ -201,6 +206,46 @@ export async function runControlPlaneHealthChecks(): Promise<ControlPlaneHealth>
       status: pending.size === 0 ? "healthy" : "degraded",
       details: migrationDetails,
     });
+
+    // FX-07: background work is overdue, or a lane's scheduled worker has gone
+    // quiet. Counts every job type, not only woztell.% (L-03). The grace comes
+    // from the HKT-clock helper, so future-scheduled jobs and retry backoffs are
+    // excluded by construction and the hourly night cadence does not cry wolf.
+    const thresholds = jobQueueThresholds(now);
+    try {
+      const [queue] = await queryRows<{
+        overdue_queued: unknown;
+        expired_leases: unknown;
+        service_seen_at: unknown;
+        general_seen_at: unknown;
+      }>(
+        `SELECT
+           count(*) FILTER (WHERE status='queued' AND run_after < now() - make_interval(mins => $1::int))::int AS overdue_queued,
+           count(*) FILTER (WHERE status='running' AND lease_expires_at < now() - make_interval(mins => $1::int))::int AS expired_leases,
+           (SELECT seen_at FROM whatsapp_service_worker_heartbeats WHERE worker_id='service-v2') AS service_seen_at,
+           (SELECT seen_at FROM whatsapp_service_worker_heartbeats WHERE worker_id='general-v1') AS general_seen_at
+         FROM ops_jobs`,
+        [thresholds.overdueGraceMinutes],
+      );
+      const seenAt = (value: unknown) => (value ? new Date(String(value)).toISOString() : null);
+      checks.push(
+        assessJobQueueHealth(
+          {
+            overdueQueued: Number(queue?.overdue_queued ?? 0),
+            expiredLeases: Number(queue?.expired_leases ?? 0),
+            serviceHeartbeatAt: seenAt(queue?.service_seen_at),
+            generalHeartbeatAt: seenAt(queue?.general_seen_at),
+            wakeConfigured: present(process.env.OPS_WAKE_URL),
+          },
+          now,
+          thresholds,
+        ),
+      );
+    } catch {
+      // A database without the service-workflow migration has no heartbeat
+      // table. That degrades this row; it must not fail the database checks.
+      checks.push({ key: "jobs.queue", required: false, status: "degraded" });
+    }
   } catch {
     checks.push({ key: "database", required: true, status: "failed" });
   }

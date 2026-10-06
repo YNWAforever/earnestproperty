@@ -31,7 +31,47 @@ test("an idle worker without due work does not raise an alarm", () => {
       oldestDueAt: null,
       overdueJobs: 0,
       expiredLeases: 0,
-      heartbeatAt: null,
+      heartbeatAt: "2026-09-26T23:58:00Z",
+      lagSeconds: 300,
+    }),
+    [],
+  );
+});
+
+test("stale heartbeat raises SERVICE_WORKER_STALE even when idle", () => {
+  const idle = {
+    // 11:00 HKT: the day threshold (30 min) applies.
+    now: "2026-09-27T03:00:00Z",
+    oldestDueAt: null,
+    overdueJobs: 0,
+    expiredLeases: 0,
+    lagSeconds: 300,
+  };
+  assert.deepEqual(dueWorkHealth({ ...idle, heartbeatAt: "2026-09-27T02:29:00Z" }), [
+    "SERVICE_WORKER_STALE",
+  ]);
+  assert.deepEqual(dueWorkHealth({ ...idle, heartbeatAt: null }), ["SERVICE_WORKER_STALE"]);
+  assert.deepEqual(dueWorkHealth({ ...idle, heartbeatAt: "2026-09-27T02:31:00Z" }), []);
+  // 23:00 HKT: the hourly night cadence tolerates 90 minutes.
+  assert.deepEqual(
+    dueWorkHealth({ ...idle, now: "2026-09-27T15:00:00Z", heartbeatAt: "2026-09-27T13:50:00Z" }),
+    [],
+  );
+  // An explicit threshold wins over the clock.
+  assert.deepEqual(
+    dueWorkHealth({ ...idle, heartbeatAt: "2026-09-27T02:49:00Z", heartbeatStaleAfterMinutes: 10 }),
+    ["SERVICE_WORKER_STALE"],
+  );
+});
+
+test("a fresh heartbeat with no work raises nothing", () => {
+  assert.deepEqual(
+    dueWorkHealth({
+      now: "2026-09-27T03:00:00Z",
+      oldestDueAt: null,
+      overdueJobs: 0,
+      expiredLeases: 0,
+      heartbeatAt: "2026-09-27T02:55:00Z",
       lagSeconds: 300,
     }),
     [],
@@ -51,5 +91,6 @@ test("overdue work and expired lease raise distinct alarms", () => {
     "SERVICE_LEASE_EXPIRED",
     "SERVICE_DUE_WORK_OVERDUE",
     "SERVICE_WORKER_NOT_OBSERVED",
+    "SERVICE_WORKER_STALE",
   ]);
 });

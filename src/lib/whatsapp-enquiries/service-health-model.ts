@@ -1,4 +1,5 @@
 import type { StaffWhatsappReadiness } from "../neon/whatsapp-readiness.types.ts";
+import { heartbeatIsStale, jobQueueThresholds } from "../control-plane/job-queue-health.ts";
 
 export type StaffCoverage = {
   scope: string;
@@ -41,8 +42,9 @@ export function dueWorkHealth(input: {
   expiredLeases: number;
   heartbeatAt: string | null;
   lagSeconds: number | null;
+  /** Defaults to the HKT-clock threshold for `now` (FX-07 owner decision 4). */
+  heartbeatStaleAfterMinutes?: number;
 }) {
-  if (input.overdueJobs === 0 && input.expiredLeases === 0) return [] as string[];
   const reasons: string[] = [];
   if (input.expiredLeases > 0) reasons.push("SERVICE_LEASE_EXPIRED");
   const oldest = input.oldestDueAt ? Date.parse(input.oldestDueAt) : Number.NaN;
@@ -51,5 +53,11 @@ export function dueWorkHealth(input: {
   if (input.overdueJobs > 0 && Number.isFinite(oldest) && Date.parse(input.now) - oldest > lag)
     reasons.push("SERVICE_DUE_WORK_OVERDUE");
   if (input.overdueJobs > 0 && !input.heartbeatAt) reasons.push("SERVICE_WORKER_NOT_OBSERVED");
+  // With a scheduled sweep, a stale or missing service-lane heartbeat means the
+  // worker is not reaching us, even when there is no work right now.
+  const now = new Date(input.now);
+  const staleAfter =
+    input.heartbeatStaleAfterMinutes ?? jobQueueThresholds(now).heartbeatStaleMinutes;
+  if (heartbeatIsStale(input.heartbeatAt, now, staleAfter)) reasons.push("SERVICE_WORKER_STALE");
   return reasons;
 }

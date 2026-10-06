@@ -21,6 +21,7 @@ const healthLabels: Record<string, string> = {
   "ai.copilot": "CMS 內容副駕",
   woztell: "WozTell",
   cron: "排程工作",
+  "jobs.queue": "背景工作排程",
   migrationApproval: "遷移審批",
 };
 
@@ -59,8 +60,26 @@ function configuredSummary(details: Record<string, boolean> | undefined) {
   return present === values.length ? "已完成設定" : `${values.length} 項設定中已完成 ${present} 項`;
 }
 
+// The jobs.queue facts line. Unknown fact keys are not rendered.
+function factsSummary(check: HealthData["checks"][number]) {
+  const facts = check.facts;
+  if (!facts) return null;
+  const parts: string[] = [];
+  if (typeof facts.overdueQueued === "number")
+    parts.push(`逾時未執行的工作：${facts.overdueQueued}`);
+  if (typeof facts.expiredLeases === "number") parts.push(`過期租約：${facts.expiredLeases}`);
+  if ("oldestHeartbeatMinutes" in facts)
+    parts.push(
+      typeof facts.oldestHeartbeatMinutes === "number"
+        ? `工作程序最後回報：${facts.oldestHeartbeatMinutes} 分鐘前`
+        : "工作程序最後回報：未有記錄",
+    );
+  if (check.details?.wakeConfigured === false) parts.push("未設定即時喚醒");
+  return parts.join(" · ");
+}
+
 function HealthCheckRow({ check }: { check: HealthData["checks"][number] }) {
-  const detailSummary = configuredSummary(check.details);
+  const detailSummary = check.facts ? factsSummary(check) : configuredSummary(check.details);
 
   return (
     <li className="flex min-h-16 items-center justify-between gap-3 border-b py-3 last:border-b-0">

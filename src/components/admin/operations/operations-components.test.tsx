@@ -214,3 +214,75 @@ test("Agent overview omits job and migration summaries", () => {
   expect(html).not.toContain("背景工作概況");
   expect(html).not.toContain("遷移狀態");
 });
+
+test("jobs.queue row shows 背景工作排程 with overdue count and heartbeat age", () => {
+  const html = renderToStaticMarkup(
+    <AdminOperationsOverview
+      health={{
+        status: "degraded",
+        checks: [
+          {
+            key: "jobs.queue",
+            required: false,
+            status: "degraded",
+            details: {
+              wakeConfigured: false,
+              serviceHeartbeatFresh: false,
+              generalHeartbeatFresh: true,
+              noOverdueJobs: false,
+              noExpiredLeases: true,
+            },
+            facts: { overdueQueued: 1, expiredLeases: 0, oldestHeartbeatMinutes: 31 },
+          },
+        ],
+        checkedAt: "2026-10-06T03:00:00.000Z",
+        capabilities: agentCapabilities,
+      }}
+      jobsSummary={null}
+      migrations={null}
+      stale={false}
+      error={null}
+      onRefresh={() => undefined}
+      onOpenJobs={() => undefined}
+    />,
+  );
+
+  expect(html).toContain("背景工作排程");
+  expect(html).toContain("逾時未執行的工作：1");
+  expect(html).toContain("過期租約：0");
+  expect(html).toContain("工作程序最後回報：31 分鐘前");
+  expect(html).toContain("未設定即時喚醒");
+  expect(html).toContain("降級");
+  // Facts replace the configured-count summary, and raw keys never reach the DOM.
+  expect(html).not.toContain("項設定中已完成");
+  expect(html).not.toMatch(/overdueQueued|oldestHeartbeatMinutes|wakeConfigured/);
+});
+
+test("jobs.queue row says 未有記錄 when a lane has never reported", () => {
+  const html = renderToStaticMarkup(
+    <AdminOperationsOverview
+      health={{
+        status: "degraded",
+        checks: [
+          {
+            key: "jobs.queue",
+            required: false,
+            status: "degraded",
+            details: { wakeConfigured: true },
+            facts: { overdueQueued: 0, expiredLeases: 0, oldestHeartbeatMinutes: null },
+          },
+        ],
+        checkedAt: "2026-10-06T03:00:00.000Z",
+        capabilities: agentCapabilities,
+      }}
+      jobsSummary={null}
+      migrations={null}
+      stale={false}
+      error={null}
+      onRefresh={() => undefined}
+      onOpenJobs={() => undefined}
+    />,
+  );
+  expect(html).toContain("工作程序最後回報：未有記錄");
+  expect(html).not.toContain("未設定即時喚醒");
+});

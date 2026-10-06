@@ -220,3 +220,130 @@ test("FX-07 receipt retry backoff is shared by recovery and nextDueAt", async (t
     });
   });
 });
+
+test("FX-07 jobs.queue health reports overdue work and silent lanes, and only those", async (t) => {
+  // EP-19 leaves its process-wide module mocks in place; release them before re-mocking the DB.
+  mock.reset();
+  const env = {
+    CONTROL_PLANE_APPROVAL_SECRET: "synthetic-approval-secret",
+    OPS_WAKE_URL: "https://wake.fixture.invalid/wake",
+  };
+  const saved = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, env);
+  t.after(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+  await withOwnedPostgres(async ({ query, transaction }) => {
+    await mockOwnedServerDb(t.mock, query, transaction);
+    const { runControlPlaneHealthChecks } = await import("./health.server.ts");
+    const { recordWorkerHeartbeat } = await import("./worker-heartbeat.server.ts");
+    const { jobQueueThresholds } = await import("./job-queue-health.ts");
+    // Offsets follow the same HKT-clock thresholds the check picks for the current time.
+    const { overdueGraceMinutes, heartbeatStaleMinutes } = jobQueueThresholds(new Date());
+    const health = () => runControlPlaneHealthChecks({ now: new Date() });
+    const jobsQueue = (result) => result.checks.find((check) => check.key === "jobs.queue");
+    let seq = 0;
+    const seedJob = (assignments) =>
+      query(
+        `INSERT INTO ops_jobs(job_type,payload_version,payload,status,idempotency_key,run_after,attempt_count,lease_owner,lease_expires_at)
+         VALUES('ai.knowledge.repair',1,'{"batchId":"2026100601"}'::jsonb,$1,$2,$3::timestamptz,$4,$5,$6::timestamptz)`,
+        [
+          assignments.status ?? "queued",
+          `qa-fx07-health-${++seq}`,
+          assignments.runAfter,
+          assignments.attemptCount ?? 0,
+          assignments.leaseExpiresAt ? "qa-fx07-worker" : null,
+          assignments.leaseExpiresAt ?? null,
+        ],
+      );
+    const minutesFromDb = async (minutes) =>
+      (await query("SELECT now() + make_interval(mins => $1::int) AS at", [minutes]))[0].at;
+    const reset = async () => {
+      await query("DELETE FROM ops_jobs WHERE idempotency_key LIKE 'qa-fx07-health-%'");
+      await query("DELETE FROM whatsapp_service_worker_heartbeats");
+      assert.equal(await recordWorkerHeartbeat("service-v2", ["synthetic.capability@1"]), true);
+      assert.equal(await recordWorkerHeartbeat("general-v1", []), true);
+    };
+
+    await t.test("idle with fresh lane heartbeats is healthy", async () => {
+      await reset();
+      const result = await health();
+      const check = jobsQueue(result);
+      assert.equal(check.status, "healthy", JSON.stringify(check));
+      assert.equal(check.required, false);
+      assert.deepEqual(check.facts, {
+        overdueQueued: 0,
+        expiredLeases: 0,
+        oldestHeartbeatMinutes: 0,
+      });
+      const beats = await query(
+        "SELECT worker_id, capabilities FROM whatsapp_service_worker_heartbeats ORDER BY worker_id",
+      );
+      assert.deepEqual(beats, [
+        { worker_id: "general-v1", capabilities: [] },
+        { worker_id: "service-v2", capabilities: ["synthetic.capability@1"] },
+      ]);
+    });
+
+    await t.test("queued job past run_after → degraded", async () => {
+      await reset();
+      await seedJob({ runAfter: await minutesFromDb(-(overdueGraceMinutes + 5)) });
+      const result = await health();
+      const check = jobsQueue(result);
+      assert.equal(check.status, "degraded");
+      assert.equal(check.facts.overdueQueued, 1);
+      assert.equal(result.status, "degraded");
+      assert.ok(
+        result.checks.every((item) => item.status !== "failed"),
+        JSON.stringify(result),
+      );
+    });
+
+    await t.test("future-scheduled, just-due and backing-off jobs are not overdue", async () => {
+      await reset();
+      await seedJob({ runAfter: await minutesFromDb(60) });
+      await seedJob({ runAfter: await minutesFromDb(-1) });
+      await seedJob({ runAfter: await minutesFromDb(2), attemptCount: 1 });
+      // A lease that expired a minute ago is the sweep's job, not an alarm.
+      await seedJob({
+        status: "running",
+        runAfter: await minutesFromDb(-2),
+        attemptCount: 1,
+        leaseExpiresAt: await minutesFromDb(-1),
+      });
+      const check = jobsQueue(await health());
+      assert.equal(check.status, "healthy", JSON.stringify(check));
+      assert.equal(check.facts.overdueQueued, 0);
+      assert.equal(check.facts.expiredLeases, 0);
+    });
+
+    await t.test("a lease expired beyond the grace → degraded", async () => {
+      await reset();
+      await seedJob({
+        status: "running",
+        runAfter: await minutesFromDb(-(overdueGraceMinutes + 10)),
+        attemptCount: 1,
+        leaseExpiresAt: await minutesFromDb(-(overdueGraceMinutes + 5)),
+      });
+      const check = jobsQueue(await health());
+      assert.equal(check.status, "degraded");
+      assert.equal(check.facts.expiredLeases, 1);
+    });
+
+    await t.test("heartbeat older than 30 min → degraded", async () => {
+      await reset();
+      await query(
+        "UPDATE whatsapp_service_worker_heartbeats SET seen_at=now()-make_interval(mins => $1::int) WHERE worker_id='general-v1'",
+        [heartbeatStaleMinutes + 1],
+      );
+      const check = jobsQueue(await health());
+      assert.equal(check.status, "degraded");
+      assert.equal(check.details.generalHeartbeatFresh, false);
+      assert.equal(check.details.serviceHeartbeatFresh, true);
+      assert.equal(check.facts.oldestHeartbeatMinutes, heartbeatStaleMinutes + 1);
+    });
+  });
+});
