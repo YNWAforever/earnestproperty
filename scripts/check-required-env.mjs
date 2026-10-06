@@ -120,12 +120,17 @@ if (isVercelDeploy) {
     }
   }
   if (process.env.EP_WA_TRACKED_LINKS_ENABLED === "true") {
-    const channel = process.env.EP_WA_COMPANY_CHANNEL_ID;
-    if (!channel || channel.length > 160) {
-      problems.push("EP_WA_COMPANY_CHANNEL_ID is not set or is longer than 160 characters");
+    // Blank counts as missing, as for WOZTELL_* above. The runtime (companyChannel,
+    // usableCompanyPhone) reads both values raw with no trim, so a padded value is
+    // unusable there and is flagged here too, rather than trimmed into a pass.
+    const channel = process.env.EP_WA_COMPANY_CHANNEL_ID ?? "";
+    if (!channel.trim() || channel !== channel.trim() || channel.length > 160) {
+      problems.push(
+        "EP_WA_COMPANY_CHANNEL_ID is not set, has surrounding whitespace, or is longer than 160 characters",
+      );
     }
     const phone = process.env.EP_WA_COMPANY_PHONE ?? "";
-    if (!/^[1-9]\d{7,14}$/.test(phone) || whatsappPhoneProblem(phone) !== null) {
+    if (!phone.trim() || !/^[1-9]\d{7,14}$/.test(phone) || whatsappPhoneProblem(phone) !== null) {
       problems.push("EP_WA_COMPANY_PHONE is not a usable company WhatsApp number");
     }
   }

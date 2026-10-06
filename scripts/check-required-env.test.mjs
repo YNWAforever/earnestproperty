@@ -76,6 +76,19 @@ const trackedGaps = [
     phone: "+85291234567",
   },
   { name: "EP_WA_COMPANY_PHONE", env: without("EP_WA_COMPANY_PHONE") },
+  // Whitespace: blank counts as missing (as for WOZTELL_*), and because the runtime
+  // reads these values raw (no trim), a padded value is unusable and is flagged too.
+  { name: "EP_WA_COMPANY_CHANNEL_ID", env: { ...COMPLETE, EP_WA_COMPANY_CHANNEL_ID: "   " } },
+  {
+    name: "EP_WA_COMPANY_CHANNEL_ID",
+    env: { ...COMPLETE, EP_WA_COMPANY_CHANNEL_ID: " fx10a-company-channel " },
+  },
+  { name: "EP_WA_COMPANY_PHONE", env: { ...COMPLETE, EP_WA_COMPANY_PHONE: "   " } },
+  {
+    name: "EP_WA_COMPANY_PHONE",
+    env: { ...COMPLETE, EP_WA_COMPANY_PHONE: " 85291234567 " },
+    phone: "85291234567 ",
+  },
 ];
 
 test("production: WOZTELL_ENABLED=true without an intake variable blocks the build", () => {
@@ -95,6 +108,7 @@ test("production: tracked links on without a usable company phone or channel blo
     assert.ok(r.stderr.includes(name), `${name} named in stderr`);
     if (phone) assert.ok(!r.stderr.includes(phone), `${name}: stderr leaks the phone`);
     assert.ok(!r.output.includes("c".repeat(161)), "channel value not printed");
+    assert.ok(!r.output.includes("fx10a-company-channel"), `${name}: channel value not printed`);
   }
 });
 
