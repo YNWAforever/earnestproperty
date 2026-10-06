@@ -158,7 +158,8 @@ test(
         )
       )[0];
       assert.equal(contact.opt_in_whatsapp, false);
-      assert.equal(contact.opted_out_whatsapp, true);
+      // FX-08 / D4: history_import never opts a contact out.
+      assert.equal(contact.opted_out_whatsapp, false);
       assert.equal(new Date(contact.last_inbound_at).getTime(), 1700000100000);
     } finally {
       await sql.query("DELETE FROM whatsapp_messages WHERE woztell_member_id=$1", [member]);

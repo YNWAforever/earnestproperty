@@ -147,6 +147,7 @@ jobs:
       - run: npm run test:crm-analysis:db
       - run: npm run test:conversation-assist:db
       - run: npm run test:whatsapp-setup:db
+      - run: npm run test:woztell:owned:db
       - run: npm run test:propertyhk-reconciliation:owned:db
       - run: npm run test:property-withdrawal:owned:db
       - run: npm run test:property-maintenance:owned:db
