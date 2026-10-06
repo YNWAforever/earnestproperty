@@ -66,6 +66,16 @@ async function fixture(fn) {
         "utf8",
       ),
     );
+    // FX-06: the current wa_can_read_conversation (managers org-wide).
+    await db.exec(
+      readFileSync(
+        new URL(
+          "../../../neon/migrations/20261007100000_wa_access_unassigned.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     await query("INSERT INTO staff_users VALUES($1,true,$3),($2,true,$3)", [
       ids.s1,
       ids.s2,

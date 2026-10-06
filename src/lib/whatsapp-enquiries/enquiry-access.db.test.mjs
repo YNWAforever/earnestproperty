@@ -38,6 +38,16 @@ async function withDb(fn) {
         "utf8",
       ),
     );
+    // FX-06: the current wa_can_read_conversation (managers org-wide).
+    await db.exec(
+      readFileSync(
+        new URL(
+          "../../../neon/migrations/20261007100000_wa_access_unassigned.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     for (const [id, branch, role, active] of [
       [ids.s1, ids.branchA, "agent", true],
       [ids.s2, ids.branchB, "agent", true],
@@ -67,7 +77,15 @@ test("direct SQL list/detail predicates reject wrong branch, viewer and inactive
       (await query("SELECT wa_can_read_enquiry($1,$2) AS allowed", [id, ids.inquiry]))[0].allowed;
     assert.equal(await read(ids.admin), true);
     assert.equal(await read(ids.managerB), true);
-    assert.equal(await read(ids.managerA), false);
+    // FX-06 (owner decision): managers read every enquiry, so wrong-branch manager A
+    // now reads it. Correction below stays branch-scoped.
+    assert.equal(await read(ids.managerA), true);
+    assert.equal(
+      (
+        await query("SELECT wa_can_correct_enquiry($1,$2) AS allowed", [ids.managerA, ids.inquiry])
+      )[0].allowed,
+      false,
+    );
     assert.equal(await read(ids.s2), true);
     assert.equal(await read(ids.s1), true);
     assert.equal(await read(ids.viewer), false);
@@ -83,6 +101,16 @@ test("direct SQL list/detail predicates reject wrong branch, viewer and inactive
       )[0].allowed,
       true,
     );
+    // FX-06: the whole conversation is readable by every active manager, company-wide.
+    // The conversation is assigned to S1 (branch A), so manager B is the wrong branch.
+    const readConversation = async (id) =>
+      (await query("SELECT wa_can_read_conversation($1,$2) AS allowed", [id, ids.conversation]))[0]
+        .allowed;
+    assert.equal(await readConversation(ids.managerB), true);
+    assert.equal(await readConversation(ids.managerA), true);
+    assert.equal(await readConversation(ids.admin), true);
+    assert.equal(await readConversation(ids.viewer), false);
+    assert.equal(await readConversation(ids.inactive), false);
   });
 });
 
