@@ -7,12 +7,25 @@ Set these variables in the Vercel environment used by the deployment:
 ```text
 WOZTELL_ENABLED=true
 WOZTELL_BOT_ACCESS_TOKEN=<server-side bot access token>
+WOZTELL_APP_ID=<WozTell app id>
 WOZTELL_CHANNEL_ID=<WozTell channel id>
 WOZTELL_CHANNEL_SECRET=<server-side webhook signing secret>
 ```
 
 Keep the token and channel secret server-side. Do not use `NEXT_PUBLIC_` names
 for either secret.
+
+## Tracked `/w/` links
+
+Tracked WhatsApp links need these as well:
+
+```text
+EP_WA_TRACKED_LINKS_ENABLED=true
+EP_WA_COMPANY_PHONE=<digits only, the company WhatsApp, never a staff phone>
+EP_WA_COMPANY_CHANNEL_ID=<WozTell channel id of the company WhatsApp>
+```
+
+A production build fails when `WOZTELL_ENABLED=true` or `EP_WA_TRACKED_LINKS_ENABLED=true` and these are missing; preview builds only warn.
 
 ## Webhook
 
@@ -21,6 +34,8 @@ Register this endpoint in the WozTell channel settings:
 ```text
 https://earnestproperty.vercel.app/api/woztell/webhook
 ```
+
+Keep this URL on `earnestproperty.vercel.app` until FX-13 ships the `/api/*` host-redirect exclusion.
 
 The handler verifies `X-Woztell-Signature` against the raw request body before
 parsing JSON. It stores contacts, conversations, and messages using the

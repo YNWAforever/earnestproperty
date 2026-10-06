@@ -17,6 +17,7 @@ import type { PropertyGroupFilters, PropertyGroupPage } from "@/lib/neon/admin-p
 import { propertyStatusLabels, canSelectProperty } from "@/lib/admin/property-management-ui";
 import { AdminPropertyTable } from "@/components/admin/AdminPropertyTable";
 import { AdminPropertyBulkActions } from "@/components/admin/AdminPropertyBulkActions";
+import { staffActionErrorText } from "@/components/admin/admin-error-text";
 
 function parseListingSearch(search: Record<string, unknown>): PropertyGroupFilters {
   const result: PropertyGroupFilters = {};
@@ -375,7 +376,7 @@ function AdminListingsWorkspace({ identity }: { identity: string }) {
                   })
                   .catch((cause) => {
                     if (isWorkspaceCurrent(epoch))
-                      setError(cause instanceof Error ? cause.message : "未能擷取符合篩選的樓盤");
+                      setError(staffActionErrorText(cause, "未能擷取符合篩選的樓盤"));
                   })
                   .finally(() => {
                     if (isWorkspaceCurrent(epoch)) setLinkBusy(false);

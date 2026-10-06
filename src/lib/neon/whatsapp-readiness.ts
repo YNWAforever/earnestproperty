@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 
 const staff = createServerFn({ method: "GET" })
   .inputValidator(z.object({ staffId: z.string().uuid().optional() }).strict())
@@ -18,8 +18,8 @@ const runtime = createServerFn({ method: "GET" }).handler(async () => {
 });
 
 export async function getWhatsappStaffReadiness(data: { staffId?: string } = {}) {
-  return staff(await withStaffAuthHeaders({ data }));
+  return callStaffServerFn(staff, { data });
 }
 export async function getWhatsappRuntimeStatus() {
-  return runtime(await withStaffAuthHeaders({}));
+  return callStaffServerFn(runtime, {});
 }

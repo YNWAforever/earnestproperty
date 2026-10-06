@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 import { z } from "zod";
 
 const filterSchema = z
@@ -29,6 +29,6 @@ const preview = createServerFn({ method: "POST" })
     );
   });
 export const getWebsiteTrackingCoverage = async (filters: z.infer<typeof filterSchema> = {}) =>
-  coverage(await withStaffAuthHeaders({ data: filters }));
+  callStaffServerFn(coverage, { data: filters });
 export const previewCoverageBackfill = async (propertyIds: string[]) =>
-  preview(await withStaffAuthHeaders({ data: { propertyIds } }));
+  callStaffServerFn(preview, { data: { propertyIds } });
