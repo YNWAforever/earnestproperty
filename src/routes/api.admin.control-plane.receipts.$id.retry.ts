@@ -14,7 +14,7 @@ const idSchema = z.string().uuid();
 const CONFLICT = { status: 409, code: "CONFLICT_DUPLICATE" } as const;
 
 function conflictError() {
-  return Object.assign(new Error("The receipt cannot be retried from its current state."), {
+  return Object.assign(new Error("此訊息仍在處理中，請稍後再試。"), {
     code: CONFLICT.code,
   });
 }
@@ -39,16 +39,18 @@ export const Route = createFileRoute("/api/admin/control-plane/receipts/$id/retr
           return successResponse(result, context.requestId);
         } catch (error) {
           if (actor) {
+            // Never store arbitrary caller text as the audited resource.
+            const auditedId = idSchema.safeParse(params.id).success ? params.id : "invalid";
             try {
               await writeAudit({
                 actor,
                 permission: "system.jobs.retry",
                 action: "whatsapp.receipt.retry",
                 resourceType: "whatsapp_inbound_receipt",
-                resourceId: params.id,
+                resourceId: auditedId,
                 outcome: "failure",
                 context,
-                metadata: { receiptId: params.id },
+                metadata: { receiptId: auditedId },
               });
             } catch {
               // Preserve the command failure when audit storage is unavailable.

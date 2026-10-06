@@ -28,6 +28,7 @@ import {
   RECEIPT_KIND_LABELS,
   RECEIPT_NEEDS_ROUTING_HELP,
   receiptBadgeVariant,
+  receiptAttemptsLabel,
   receiptConversationHref,
   receiptReasonLabel,
   receiptReference,
@@ -90,7 +91,7 @@ export function ReceiptsTable({
                   </p>
                 ) : null}
               </TableCell>
-              <TableCell className="tabular-nums">{row.attemptCount}</TableCell>
+              <TableCell className="tabular-nums">{receiptAttemptsLabel(row)}</TableCell>
               <TableCell>{row.nextRetryAt ? formatDate(row.nextRetryAt) : "—"}</TableCell>
               <TableCell>{receiptReasonLabel(row.blockReason)}</TableCell>
               <TableCell>

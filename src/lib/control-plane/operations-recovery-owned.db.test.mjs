@@ -617,6 +617,57 @@ test("FX-07 receipts: observe-only retry, listing and C-09 labelling", async (t)
     });
 
     await t.test(
+      "a receipt inside the in-flight grace is not retryable or listed as retryable",
+      async () => {
+        await reset();
+        const stored = await storeInboundReceipt(syntheticReceipt("synthetic-ops-grace"), {
+          query,
+        });
+        await query(
+          "UPDATE whatsapp_inbound_receipts SET projection_state='failed', block_reason='PROJECTION_FAILED' WHERE id=$1",
+          [stored.receiptId],
+        );
+        const run = recorder();
+        assert.equal(
+          await retryInboundReceipt(
+            stored.receiptId,
+            admin,
+            { requestId: randomUUID() },
+            { query, project: run.project },
+          ),
+          null,
+        );
+        assert.equal(run.calls.length, 0);
+        assert.equal((await auditRows(stored.receiptId)).length, 0);
+        assert.equal((await receiptRow(stored.receiptId)).attempt_count, 1);
+        const listed = await listInboundReceiptProblems(admin, { query });
+        const row = listed.rows.find((item) => item.id === stored.receiptId);
+        assert.equal(row.kind, "retry_scheduled");
+        assert.equal(row.canRetry, false);
+        // Once the grace has passed the same receipt becomes retryable.
+        await query(
+          "UPDATE whatsapp_inbound_receipts SET updated_at=now()-interval '3 minutes' WHERE id=$1",
+          [stored.receiptId],
+        );
+        assert.equal(
+          (await listInboundReceiptProblems(admin, { query })).rows.find(
+            (item) => item.id === stored.receiptId,
+          ).canRetry,
+          true,
+        );
+        assert.deepEqual(
+          await retryInboundReceipt(
+            stored.receiptId,
+            admin,
+            { requestId: randomUUID() },
+            { query, project: run.project },
+          ),
+          { receiptId: stored.receiptId, projectionState: "projected" },
+        );
+      },
+    );
+
+    await t.test(
       "list shows retry, exhausted, review and 需要分派 receipts without message content",
       async () => {
         await reset();

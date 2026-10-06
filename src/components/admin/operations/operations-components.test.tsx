@@ -6,6 +6,7 @@ import { AdminOperationsOverview } from "./AdminOperationsOverview";
 import { AdminOperationsReceipts, ReceiptsTable } from "./AdminOperationsReceipts";
 import {
   canShowReceiptRetry,
+  receiptAttemptsLabel,
   receiptReasonLabel,
   receiptRetryErrorMessage,
   receiptRetryToast,
@@ -487,4 +488,14 @@ test("the receipts panel never polls", () => {
   // It reuses the page pulse and the shared 409 / audit-backed command only.
   expect(receiptsSource).toContain("retryOperationsReceipt");
   expect(receiptsSource).not.toMatch(/\bpayload\b|authorization|normalized_event|member_?id/i);
+});
+
+test("attempts past the cap display as 20+ for exhausted rows only", () => {
+  expect(receiptAttemptsLabel(receiptRow({ kind: "retry_exhausted", attemptCount: 23 }))).toBe(
+    "20+",
+  );
+  expect(receiptAttemptsLabel(receiptRow({ kind: "retry_exhausted", attemptCount: 20 }))).toBe(
+    "20",
+  );
+  expect(receiptAttemptsLabel(receiptRow({ attemptCount: 3 }))).toBe("3");
 });

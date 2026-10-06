@@ -4,8 +4,10 @@ import { randomUUID } from "node:crypto";
 import { deriveInboundIdentity, eventForReceiptProjection } from "./inbound-identity.ts";
 import { queryRows } from "../neon/db.server.ts";
 import {
+  RECEIPT_CLAIM_SET_SQL,
   RECEIPT_DUE_AT_SQL,
   RECEIPT_ELIGIBLE_SQL,
+  RECEIPT_INFLIGHT_GRACE_SQL,
   RECEIPT_MAX_ATTEMPTS,
   RECEIPT_RETRYABLE_SQL,
 } from "./receipt-retry-policy.ts";
@@ -211,7 +213,7 @@ export async function recoverPendingInboundReceipts(
        ORDER BY received_at,id LIMIT $1 FOR UPDATE SKIP LOCKED
      )
      UPDATE whatsapp_inbound_receipts r
-     SET lease_until=now()+interval '60 seconds',attempt_count=r.attempt_count+1,updated_at=now()
+     SET ${RECEIPT_CLAIM_SET_SQL}
      FROM claimed WHERE r.id=claimed.id
      RETURNING r.id,r.identity_key,r.normalized_event,r.event_kind,r.capture_mode,r.origin`,
     [limit],
@@ -267,35 +269,31 @@ export async function listInboundReceiptProblems(
      WHERE r.projection_state IN ('pending','blocked_schema','failed')
         OR r.block_reason='REVIEW_REQUIRED'
         OR (r.capture_mode='active' AND r.projection_state='projected' AND r.attempt_count>1)`;
-  const [rows, countRows] = await Promise.all([
-    query(
-      `WITH classified AS (${classified})
-       SELECT c.id, c.problem_kind AS kind, c.projection_state, c.capture_mode, c.attempt_count,
-              c.block_reason, c.received_at,
-              CASE WHEN c.problem_kind='retry_scheduled' THEN ${RECEIPT_DUE_AT_SQL("c")} END AS next_retry_at,
-              w.id AS conversation_id,
-              (c.problem_kind IN ('retry_scheduled','retry_exhausted')
-                 AND c.origin='live_webhook' AND c.event_kind='customer_message') AS can_retry
-       FROM classified c
-       LEFT JOIN whatsapp_conversations w
-         ON w.channel_id=c.channel_id AND w.woztell_member_id=c.member_id
-       WHERE c.problem_kind IS NOT NULL
-       ORDER BY c.received_at DESC, c.id
-       LIMIT $2`,
-      [sinceDays, limit],
-    ),
-    query(
-      `WITH classified AS (${classified})
-       SELECT problem_kind AS kind, count(*)::int AS n FROM classified
-       WHERE problem_kind IS NOT NULL GROUP BY problem_kind`,
-      [sinceDays],
-    ),
-  ]);
+  // One query: the per-kind totals are a window count taken before LIMIT, so no second scan.
+  const rows = await query(
+    `WITH classified AS (${classified})
+     SELECT c.id, c.problem_kind AS kind, c.projection_state, c.capture_mode, c.attempt_count,
+            c.block_reason, c.received_at,
+            CASE WHEN c.problem_kind='retry_scheduled' THEN ${RECEIPT_DUE_AT_SQL("c")} END AS next_retry_at,
+            w.id AS conversation_id,
+            (c.problem_kind IN ('retry_scheduled','retry_exhausted')
+               AND c.origin='live_webhook' AND c.event_kind='customer_message'
+               AND (c.lease_until IS NULL OR c.lease_until <= now())
+               AND ${RECEIPT_INFLIGHT_GRACE_SQL("c")}) AS can_retry,
+            (count(*) OVER (PARTITION BY c.problem_kind))::int AS kind_total
+     FROM classified c
+     LEFT JOIN whatsapp_conversations w
+       ON w.channel_id=c.channel_id AND w.woztell_member_id=c.member_id
+     WHERE c.problem_kind IS NOT NULL
+     ORDER BY c.received_at DESC, c.id
+     LIMIT $2`,
+    [sinceDays, limit],
+  );
   const counts = Object.fromEntries(PROBLEM_KINDS.map((kind) => [kind, 0])) as Record<
     InboundReceiptProblemKind,
     number
   >;
-  for (const row of countRows) counts[row.kind as InboundReceiptProblemKind] = Number(row.n);
+  for (const row of rows) counts[row.kind as InboundReceiptProblemKind] = Number(row.kind_total);
   const iso = (value: unknown) =>
     value === null || value === undefined ? null : new Date(value as string | Date).toISOString();
   return {
@@ -344,10 +342,11 @@ export async function retryInboundReceipt(
          AND block_reason IS DISTINCT FROM 'REVIEW_REQUIRED'
          AND origin='live_webhook' AND event_kind='customer_message'
          AND (lease_until IS NULL OR lease_until <= now())
+         AND ${RECEIPT_INFLIGHT_GRACE_SQL("whatsapp_inbound_receipts")}
        FOR UPDATE SKIP LOCKED
      ), claimed AS (
        UPDATE whatsapp_inbound_receipts r
-       SET lease_until=now()+interval '60 seconds',attempt_count=r.attempt_count+1,updated_at=now()
+       SET ${RECEIPT_CLAIM_SET_SQL}
        FROM target WHERE r.id=target.id
        RETURNING r.id,r.identity_key,r.normalized_event,r.event_kind,r.capture_mode,r.origin,
                  r.projection_state AS previous_state,r.attempt_count

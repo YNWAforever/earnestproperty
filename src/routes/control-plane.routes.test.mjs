@@ -148,6 +148,8 @@ test("receipt routes enforce jobs.read and jobs.retry, validate ids and bodies, 
   assert.match(catchBlock, /writeAudit\(/);
   assert.match(catchBlock, /outcome: "failure"/);
   assert.match(retrySource, /retryInboundReceipt\(/);
+  assert.match(retrySource, /"invalid"/);
+  assert.match(retrySource, /此訊息仍在處理中，請稍後再試。/);
   // The list never reaches message content.
   assert.doesNotMatch(listSource, /normalized_event|member_id|phone/);
 });

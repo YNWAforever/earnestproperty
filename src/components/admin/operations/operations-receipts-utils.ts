@@ -46,6 +46,10 @@ export const canShowReceiptRetry = (
 ) =>
   jobsRetry && row.canRetry && (row.kind === "retry_scheduled" || row.kind === "retry_exhausted");
 
+/** Manual retries can push attempts past the automatic cap; show that as 20+ (display only). */
+export const receiptAttemptsLabel = (row: Pick<InboundReceiptProblem, "kind" | "attemptCount">) =>
+  row.kind === "retry_exhausted" && row.attemptCount > 20 ? "20+" : String(row.attemptCount);
+
 export const receiptRetryToast = (projectionState: string) =>
   projectionState === "projected"
     ? { kind: "success" as const, message: "已補錄這則來訊。" }
