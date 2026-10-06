@@ -25,6 +25,7 @@ export const state = {
   commitMode: "ok",
   readFailure: false,
   deniedReference: false,
+  searchDenied: false,
   blockedTail: 0,
   releaseCommit: null as null | (() => void),
 };

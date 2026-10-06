@@ -38,7 +38,12 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      # The production bundle outgrew Node's ~2 GB default heap on the GitHub
+      # runner (OOM after the four admin screens were enabled in #224). Vercel
+      # builds with more memory, so only CI needs the larger heap.
       - run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
 
       # Full non-":db" test:* matrix from package.json. The three ":db"-suffixed
       # scripts (test:mls:db, test:control-plane:db, test:youtube-sync:db) need a
@@ -81,6 +86,7 @@ jobs:
       - run: npm run test:admin-campaign-review:ui
       - run: npm run test:admin-performance:ui
       - run: npm run test:admin-link-bulk:ui
+      - run: npm run test:public-forms:ui
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
@@ -99,6 +105,7 @@ jobs:
       - run: npm run test:command-center
       - run: npm run test:staff-notifications
       - run: npm run test:whatsapp-enquiries
+      - run: npm run test:staff-server-fn
       - run: npm run test:no-link
       - run: npm run test:woztell
       - run: npm run test:whatsapp-safety:ui
@@ -157,6 +164,7 @@ jobs:
       - run: npm run test:admin-performance:db
       - run: npm run test:admin-link-bulk:db
       - run: npm run test:operations:owned:db
+      - run: npm run test:lead-alert:owned:db
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:

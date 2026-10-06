@@ -427,11 +427,17 @@ test("lib/share.ts exports the reusable shareUrl helper and property.$listingNo.
   assert.doesNotMatch(propertyPageSource, /await navigator\.clipboard\.writeText\(url\);/);
 });
 
+// ListingAlertForm lives in its own component file (so a browser fixture can render it
+// against synthetic server functions); the route only imports and renders it.
+const alertFormSource = readFileSync(
+  new URL("../components/site/ListingAlertForm.tsx", import.meta.url),
+  "utf8",
+).replace(/\r\n/g, "\n");
+
 test("the zero-results notify-me form's consent checkbox is never preselected", () => {
-  const formStart = source.indexOf("function ListingAlertForm(");
+  const formStart = alertFormSource.indexOf("function ListingAlertForm(");
   assert.notEqual(formStart, -1, "ListingAlertForm must exist");
-  const formEnd = source.indexOf("\nfunction ListingsPendingComponent", formStart);
-  const formSource = source.slice(formStart, formEnd);
+  const formSource = alertFormSource.slice(formStart);
 
   // The literal default value, not just "a checkbox exists somewhere" --
   // useState(false), never useState(true) and never seeded from a prop.
@@ -453,17 +459,20 @@ test("the zero-results notify-me form's consent checkbox is never preselected", 
 });
 
 test("the notify-me form submits the CURRENT validated search filters, and is wired to the real server fn (not a stub)", () => {
-  assert.match(source, /import \{ createListingAlert \} from "@\/lib\/neon\/admin-data";/);
+  assert.match(alertFormSource, /import \{ createListingAlert \} from "@\/lib\/neon\/admin-data";/);
   assert.match(
-    source,
+    alertFormSource,
     /import \{ LISTING_ALERT_CONSENT_TEXT \} from "@\/lib\/neon\/listing-alerts\.js";/,
   );
+  assert.match(
+    source,
+    /import \{ ListingAlertForm \} from "@\/components\/site\/ListingAlertForm";/,
+  );
 
-  const formStart = source.indexOf("function ListingAlertForm(");
-  const formEnd = source.indexOf("\nfunction ListingsPendingComponent", formStart);
-  const formSource = source.slice(formStart, formEnd);
+  const formStart = alertFormSource.indexOf("function ListingAlertForm(");
+  const formSource = alertFormSource.slice(formStart);
 
-  assert.match(formSource, /await createListingAlert\(\{/);
+  assert.match(formSource, /submitPublicForm\(\(\) =>\s+createListingAlert\(\{/);
   assert.match(formSource, /filters: \{ \.\.\.search \}/);
   assert.match(formSource, /consent,/);
 });
@@ -477,5 +486,17 @@ test("ListingAlertForm renders inside the zero-results branch, alongside the exi
   );
 
   assert.match(zeroResultsBlock, /<SearchFallbackCTA/);
-  assert.match(zeroResultsBlock, /<ListingAlertForm search=\{search\} \/>/);
+  assert.match(zeroResultsBlock, /<ListingAlertForm\b[^>]*\bsearch=\{search\}/);
+});
+
+test("ListingAlertForm is keyed by the current search so a result for search A never shows on search B", () => {
+  // The route component stays mounted while the visitor changes filters from one zero-result
+  // search to another; without a key the form's `submitted` panel (已設定通知) or its inline
+  // error line from the first search would carry over to the second.
+  const zeroResultsStart = source.indexOf("rows.length === 0 ? (");
+  const zeroResultsBlock = source.slice(
+    zeroResultsStart,
+    source.indexOf(') : viewMode === "grid"', zeroResultsStart),
+  );
+  assert.match(zeroResultsBlock, /<ListingAlertForm\b[^>]*\bkey=\{JSON\.stringify\(search\)\}/);
 });

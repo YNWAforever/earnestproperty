@@ -38,7 +38,8 @@ export async function resolveWhatsappLinkImport(input: {
   };
 }
 export async function searchWhatsappLinkOffers() {
-  return offers;
+  // TanStack Start RESOLVES a thrown Response (server-fn-response.ts); mimic that exactly.
+  return state.searchDenied ? new Response("Forbidden", { status: 403 }) : offers;
 }
 export async function getWhatsappTrackingLinksPage() {
   return { items: [], total: 0, nextCursor: null };

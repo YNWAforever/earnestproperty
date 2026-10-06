@@ -120,6 +120,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20261003020000_crm_analysis_contract.sql",
   "20261003030000_crm_analysis_runs.sql",
   "20261003040000_content_proposal_source_guard.sql",
+  "20261006110000_duty_manager.sql",
   "20261008100000_whatsapp_opt_out_evidence.sql",
   "20261008110000_outbound_unknown_resolution.sql",
 ]);

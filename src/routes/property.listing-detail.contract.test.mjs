@@ -328,13 +328,22 @@ test("sidebar and mobileContact both swap to PropertyUnavailableNotice when isUn
   const sidebarBody = routeSource.slice(sidebarStart, sidebarEnd);
   assert.match(sidebarBody, /isUnavailable \? \(\s*<PropertyUnavailableNotice/);
   assert.match(sidebarBody, /<PropertyDecisionActions/);
-  assert.match(sidebarBody, /<form onSubmit={handleSubmit}/);
+  assert.match(sidebarBody, /<PropertyInquiryForm\b[\s\S]*?propertyId=\{property\.id\}/);
 
   const mobileStart = routeSource.indexOf("mobileContact={");
   const mobileEnd = routeSource.indexOf("details={", mobileStart);
   const mobileBody = routeSource.slice(mobileStart, mobileEnd);
   assert.match(mobileBody, /isUnavailable \? \(\s*<PropertyUnavailableNotice/);
   assert.match(mobileBody, /<PropertyMobileContactSummary/);
+});
+
+test("the enquiry form is keyed by property id so one listing's result line never leaks onto the next", () => {
+  // PropertyInquiryForm owns its status / typed values / consent state. TanStack reuses the
+  // route component when only $listingNo changes, so without a key a success or error line from
+  // listing A would still show on listing B's form.
+  const element = routeSource.match(/<PropertyInquiryForm\b[\s\S]*?\/>/);
+  assert.ok(element, "property route must render <PropertyInquiryForm />");
+  assert.match(element[0], /\bkey=\{property\.id\}/);
 });
 
 test("PropertyUnavailableNotice links to /listings filtered by the listing's own deal type and estate", () => {

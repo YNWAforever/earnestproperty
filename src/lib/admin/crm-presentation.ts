@@ -13,10 +13,15 @@ export const stageOptions: { value: LeadStage; label: string }[] = [
   { value: "closed_won", label: "已成交" },
   { value: "closed_lost", label: "已結束（未成交）" },
 ];
+// The leads list filter only: "open" is a query over stages, never a stage a lead can be set to.
+export const stageFilterOptions: { value: LeadStage | "open"; label: string }[] = [
+  { value: "open", label: "開放（未完成）" },
+  ...stageOptions,
+];
 export const stageLabels: Record<string, string> = Object.fromEntries(
   stageOptions.map(({ value, label }) => [value, label]),
 );
-stageLabels.open = "開放查詢";
+stageLabels.open = stageFilterOptions[0].label;
 export const intentLabels: Record<string, string> = {
   unknown: "待確認",
   buyer: "買樓",

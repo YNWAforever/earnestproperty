@@ -19,6 +19,14 @@
 //
 // Only runs for actual Vercel builds (VERCEL_ENV set) so local `npm run build`
 // and `npm run build:dev` are unaffected.
+//
+// WhatsApp intake (FX-10a, C-07/C-08): when WOZTELL_ENABLED=true the webhook
+// answers 503 to everything without WOZTELL_APP_ID, WOZTELL_CHANNEL_ID and
+// WOZTELL_CHANNEL_SECRET; when EP_WA_TRACKED_LINKS_ENABLED=true every tracked
+// /w/ link needs EP_WA_COMPANY_CHANNEL_ID and a usable EP_WA_COMPANY_PHONE.
+// Gaps block production builds. Preview builds only warn, because previews
+// legitimately run with partial or no WhatsApp configuration and must stay
+// deployable for review. Messages name variables only, never their values.
 
 import { whatsappPhoneProblem } from "../src/config/whatsapp-phone.js";
 import { resolveSiteOrigin } from "./site-origin.mjs";
@@ -28,6 +36,7 @@ const REQUIRED_FOR_WHATSAPP_CTAS = [
   "VITE_CONTACT_PHONE_DISPLAY",
   "VITE_CONTACT_PHONE_TEL",
 ];
+const WHATSAPP_INTEGRATION = ["WOZTELL_APP_ID", "WOZTELL_CHANNEL_ID", "WOZTELL_CHANNEL_SECRET"];
 
 const vercelEnv = process.env.VERCEL_ENV;
 const isVercelDeploy = vercelEnv === "production" || vercelEnv === "preview";
@@ -98,5 +107,50 @@ if (isVercelDeploy) {
       ].join("\n"),
     );
     process.exit(1);
+  }
+}
+
+if (isVercelDeploy) {
+  // Names only: never print a value, since these include secrets and the
+  // company phone number.
+  const problems = [];
+  if (process.env.WOZTELL_ENABLED === "true") {
+    for (const name of WHATSAPP_INTEGRATION) {
+      if (!process.env[name]?.trim()) problems.push(`${name} is not set (WOZTELL_ENABLED=true)`);
+    }
+  }
+  if (process.env.EP_WA_TRACKED_LINKS_ENABLED === "true") {
+    // Blank counts as missing, as for WOZTELL_* above. The runtime (companyChannel,
+    // usableCompanyPhone) reads both values raw with no trim, so a padded value is
+    // unusable there and is flagged here too, rather than trimmed into a pass.
+    const channel = process.env.EP_WA_COMPANY_CHANNEL_ID ?? "";
+    if (!channel.trim() || channel !== channel.trim() || channel.length > 160) {
+      problems.push(
+        "EP_WA_COMPANY_CHANNEL_ID is not set, has surrounding whitespace, or is longer than 160 characters",
+      );
+    }
+    const phone = process.env.EP_WA_COMPANY_PHONE ?? "";
+    if (!phone.trim() || !/^[1-9]\d{7,14}$/.test(phone) || whatsappPhoneProblem(phone) !== null) {
+      problems.push("EP_WA_COMPANY_PHONE is not a usable company WhatsApp number");
+    }
+  }
+
+  if (problems.length > 0 && vercelEnv === "production") {
+    console.error(
+      [
+        "",
+        "Build blocked (production): the WhatsApp intake configuration is incomplete:",
+        ...problems.map((problem) => `  - ${problem}`),
+        "Without these, WhatsApp intake answers 503 or tracked /w/ links fall back untracked.",
+        "Set them in the Vercel project settings (see docs/woztell-activation.md) and redeploy.",
+        "",
+      ].join("\n"),
+    );
+    process.exit(1);
+  }
+  if (problems.length > 0) {
+    console.warn(
+      `[check-required-env] warning (preview): the WhatsApp intake configuration is incomplete: ${problems.join("; ")}. A production build with this configuration would be blocked.`,
+    );
   }
 }

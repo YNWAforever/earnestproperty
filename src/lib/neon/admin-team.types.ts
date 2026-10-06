@@ -11,6 +11,7 @@ export type AdminTeamMember = {
   email: string | null;
   roles: StaffRole[];
   accessState: AdminTeamAccessState;
+  isDutyManager: boolean;
   invitationState: AdminTeamInvitationState;
   invitationRetryAfter: string | null;
   invitationExpiresAt: string | null;
@@ -63,6 +64,11 @@ export type InviteStaffMemberInput = { email: string; name?: string | null; role
 export type ResendStaffInvitationInput = { staffId: string };
 export type SendStaffPasswordResetInput = { staffId: string };
 export type ChangeStaffRolesInput = { staffId: string; roles: StaffRole[] };
+export type ChangeStaffDutyManagerInput = {
+  staffId: string;
+  isDutyManager: boolean;
+  expectedVersion: string;
+};
 export type LinkStaffIdentityInput = { staffId: string };
 export type ChangeStaffActiveInput = {
   staffId: string;

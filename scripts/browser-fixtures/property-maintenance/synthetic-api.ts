@@ -152,6 +152,18 @@ export async function fetchStaffSession() {
     ? { status: "denied", reason: "not-staff" }
     : { status: "ok", roles: [state.role], staffId: state.binding };
 }
+export const fetchAdminAttentionCounts = async () => ({
+  unansweredConversations: 0,
+  unassignedLeads: 0,
+  staleNewLeads: 0,
+  leadsNeedingAttention: 0,
+});
+// No route in this fixture polls; exported so every owned fixture serves the same API.
+const noPolledRead = async (): Promise<never> => {
+  throw Error("This fixture renders no polled view");
+};
+export const fetchAdminPageInBackground = noPolledRead;
+export const fetchCommandCenterInBackground = noPolledRead;
 export const fetchAdminAgents = async () => {
   call("agents");
   return [{ id: staff, name: "合成代理甲", email: null }];

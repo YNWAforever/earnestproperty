@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 const action = z
   .object({
     notificationId: z.string().uuid(),
@@ -46,8 +46,8 @@ const help = createServerFn({ method: "POST" })
     );
   });
 export const fetchMyStaffNotifications = async (data: Parameters<typeof list>[0]["data"]) =>
-  list(await withStaffAuthHeaders({ data }));
+  callStaffServerFn(list, { data });
 export const confirmStaffNotification = async (data: z.infer<typeof action>) =>
-  ack(await withStaffAuthHeaders({ data }));
+  callStaffServerFn(ack, { data });
 export const askStaffNotificationHelp = async (data: z.infer<typeof action> & { reason: string }) =>
-  help(await withStaffAuthHeaders({ data }));
+  callStaffServerFn(help, { data });

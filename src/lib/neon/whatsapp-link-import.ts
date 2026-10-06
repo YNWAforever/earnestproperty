@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 import { z } from "zod";
 
 const source = z.enum(["website", "28hse", "youtube", "other"]);
@@ -37,4 +37,4 @@ const lookup = createServerFn({ method: "POST" })
     return (await import("./whatsapp-link-import.server")).resolveLinkImportContext(data);
   });
 export const resolveWhatsappLinkImport = async (data: z.infer<typeof input>) =>
-  lookup(await withStaffAuthHeaders({ data }));
+  callStaffServerFn(lookup, { data });

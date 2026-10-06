@@ -2,8 +2,9 @@ import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "@/lib/neon/staff-server-fn";
 import { searchWhatsappLinkOffers } from "@/lib/neon/whatsapp-enquiries";
+import { staffActionErrorText } from "@/components/admin/admin-error-text";
 import {
   previewWhatsappLinkBatch,
   commitWhatsappLinkChunk,
@@ -43,7 +44,6 @@ export function WhatsappLinkWizard({
   agents,
   actorScope,
   onCreated,
-  enableBatchImport = true,
   seedScope,
   onSeedConsumed,
   isWorkspaceCurrent,
@@ -52,7 +52,6 @@ export function WhatsappLinkWizard({
   agents: Staff[];
   actorScope: string;
   onCreated: () => void;
-  enableBatchImport?: boolean;
   seedScope?: string;
   onSeedConsumed?: () => void;
   isWorkspaceCurrent?: () => boolean;
@@ -271,7 +270,7 @@ export function WhatsappLinkWizard({
     try {
       await task();
     } catch (cause) {
-      if (isCurrent()) setError(cause instanceof Error ? cause.message : "操作未完成，請重試。");
+      if (isCurrent()) setError(staffActionErrorText(cause, "操作未完成，請重試。"));
     } finally {
       if (isCurrent()) setBusy(false);
     }
@@ -619,23 +618,21 @@ export function WhatsappLinkWizard({
               公司一般查詢
             </label>
           </fieldset>
-          {enableBatchImport ? (
-            <WhatsappBatchImport
-              disabled={busy || !canReplace}
-              onImported={(result) => {
-                setImportedRows(result.rows);
-                setSelected(result.offers);
-                setMode("sales");
-                setRouting("reception");
-                setVerified(false);
-                setProgress(null);
-                sessionStorage.removeItem(linkBatchProgressKey(actorScope));
-                setIncomingPending(false);
-                onSeedConsumed?.();
-                setStep(2);
-              }}
-            />
-          ) : null}
+          <WhatsappBatchImport
+            disabled={busy || !canReplace}
+            onImported={(result) => {
+              setImportedRows(result.rows);
+              setSelected(result.offers);
+              setMode("sales");
+              setRouting("reception");
+              setVerified(false);
+              setProgress(null);
+              sessionStorage.removeItem(linkBatchProgressKey(actorScope));
+              setIncomingPending(false);
+              onSeedConsumed?.();
+              setStep(2);
+            }}
+          />
           {mode === "sales" ? (
             <>
               <form
@@ -644,9 +641,7 @@ export function WhatsappLinkWizard({
                   event.preventDefault();
                   void run(async () =>
                     setFound(
-                      await searchWhatsappLinkOffers(
-                        await withStaffAuthHeaders({ data: { q: query } }),
-                      ),
+                      await callStaffServerFn(searchWhatsappLinkOffers, { data: { q: query } }),
                     ),
                   );
                 }}

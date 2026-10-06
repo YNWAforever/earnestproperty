@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   AlertTriangle,
   Building2,
+  ClipboardList,
   ContactRound,
   HeartPulse,
   MessageCircle,
@@ -13,6 +14,7 @@ import {
 
 import { AdminShell } from "@/components/admin/AdminShell";
 import { useStaffSession } from "@/components/admin/staff-session";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,7 +24,9 @@ import {
   fetchOperationsHealth,
 } from "@/lib/admin/operations/operations-client";
 import type { AuditPage, HealthData } from "@/lib/admin/operations/operations-types";
-import { fetchAdminOverview } from "@/lib/neon/admin-data";
+import { formatHkDateTime } from "@/lib/format";
+import { fetchAdminOverview, fetchAdminTodayTasks } from "@/lib/neon/admin-data";
+import type { AdminTodayTask } from "@/lib/neon/admin-data.types";
 import { listAdminTeam } from "@/lib/neon/admin-team";
 import type { AdminTeamList } from "@/lib/neon/admin-team.types";
 
@@ -109,19 +113,28 @@ function AdminHome() {
       ? JSON.stringify([user.id, session.staffId, [...session.roles].sort()])
       : undefined;
   const readOverview = useCallback(() => fetchAdminOverview(), []);
+  const readToday = useCallback(() => fetchAdminTodayTasks(), []);
   const readTeam = useCallback(() => listAdminTeam({ data: { limit: 50 } }), []);
   const readHealth = useCallback(async () => (await fetchOperationsHealth()).data, []);
   const readActivity = useCallback(async () => (await fetchOperationsAudit({ limit: 5 })).data, []);
   const [overview, refreshOverview] = useOverviewRead<Overview>(identity, readOverview);
+  const [today, refreshToday] = useOverviewRead<AdminTodayTask[]>(identity, readToday);
   const [team, refreshTeam] = useOverviewRead<AdminTeamList>(identity, readTeam);
   const [health, refreshHealth] = useOverviewRead<HealthData>(identity, readHealth);
   const [activity, refreshActivity] = useOverviewRead<AuditPage>(identity, readActivity);
+  const isAdmin = session?.status === "ok" && session.roles.includes("admin");
   const attention = team.data?.members.filter((member) => member.needsAttention) ?? [];
   const staffActivity =
     activity.data?.rows.filter((entry) => entry.action.startsWith("staff.")) ?? [];
 
   const refreshAll = () => {
-    void Promise.all([refreshOverview(), refreshTeam(), refreshHealth(), refreshActivity()]);
+    void Promise.all([
+      refreshOverview(),
+      refreshToday(),
+      refreshTeam(),
+      refreshHealth(),
+      refreshActivity(),
+    ]);
   };
 
   return (
@@ -223,32 +236,55 @@ function AdminHome() {
 
       <section className="mt-5 grid gap-4 lg:grid-cols-2">
         <OperationalCard
-          id="overview-attention"
-          title="需要跟進"
-          description="失敗、逾期或需要處理的帳戶邀請會保留在團隊工作台。"
-          icon={AlertTriangle}
-          loading={team.loading}
-          error={team.error}
-          checkedAt={team.checkedAt}
+          id="overview-today"
+          title="今日待辦"
+          description="等候回覆的 WhatsApp 對話，以及逾 2 小時未有跟進的新查詢；最多顯示 10 項。"
+          icon={ClipboardList}
+          loading={today.loading}
+          error={today.error}
+          checkedAt={today.checkedAt}
         >
-          {attention.length ? (
+          {today.data?.length ? (
             <ul className="space-y-2 text-sm">
-              {attention.slice(0, 5).map((member) => (
-                <li
-                  className="flex items-center justify-between gap-3 rounded-md bg-amber-50 px-3 py-2"
-                  key={member.id}
-                >
-                  <span className="font-medium text-slate-900">
-                    {member.name?.trim() || "未命名成員"}
-                  </span>
-                  <span className="text-xs text-muted-foreground">需要檢查邀請或帳戶狀態</span>
+              {today.data.slice(0, 10).map((task) => (
+                <li key={`${task.kind}-${task.id}`}>
+                  <TodayTaskLink task={task} />
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-muted-foreground">目前沒有需要立即處理的團隊項目。</p>
+            <p className="text-sm text-muted-foreground">目前沒有待辦事項。</p>
           )}
         </OperationalCard>
+        {isAdmin ? (
+          <OperationalCard
+            id="overview-attention"
+            title="需要跟進"
+            description="失敗、逾期或需要處理的帳戶邀請會保留在團隊工作台。"
+            icon={AlertTriangle}
+            loading={team.loading}
+            error={team.error}
+            checkedAt={team.checkedAt}
+          >
+            {attention.length ? (
+              <ul className="space-y-2 text-sm">
+                {attention.slice(0, 5).map((member) => (
+                  <li
+                    className="flex items-center justify-between gap-3 rounded-md bg-amber-50 px-3 py-2"
+                    key={member.id}
+                  >
+                    <span className="font-medium text-slate-900">
+                      {member.name?.trim() || "未命名成員"}
+                    </span>
+                    <span className="text-xs text-muted-foreground">需要檢查邀請或帳戶狀態</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">目前沒有需要立即處理的團隊項目。</p>
+            )}
+          </OperationalCard>
+        ) : null}
         <OperationalCard
           id="overview-activity"
           title="最近職員活動"
@@ -281,6 +317,35 @@ function AdminHome() {
         </OperationalCard>
       </section>
     </AdminShell>
+  );
+}
+
+const todayTaskLabels: Record<AdminTodayTask["kind"], string> = {
+  conversation: "待回覆",
+  lead: "新查詢未跟進",
+};
+
+function TodayTaskLink({ task }: { task: AdminTodayTask }) {
+  const className =
+    "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-slate-50 px-3 py-2 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const content = (
+    <>
+      <Badge variant="secondary">{todayTaskLabels[task.kind]}</Badge>
+      <span className="min-w-0 break-words font-medium text-slate-900">{task.title}</span>
+      <span className="text-xs text-muted-foreground">
+        自 {formatHkDateTime(task.waitingSince) ?? "—"}
+      </span>
+    </>
+  );
+
+  return task.kind === "conversation" ? (
+    <Link className={className} to="/admin/whatsapp" search={{ conversation: task.id }}>
+      {content}
+    </Link>
+  ) : (
+    <Link className={className} to="/admin/leads" search={{ lead: task.id }}>
+      {content}
+    </Link>
   );
 }
 
@@ -322,8 +387,11 @@ function OverviewMetricCard({
   error: string | null;
   checkedAt?: string;
 }) {
+  const shownValue = typeof value === "number" ? value.toLocaleString() : (value ?? "—");
+  const tileName = `${label}：${loading && value === undefined ? "載入中" : shownValue}`;
+
   return (
-    <Link to={to} search={search}>
+    <Link to={to} search={search} aria-label={tileName}>
       <Card className="h-full border-slate-200 bg-card transition hover:border-primary/50 hover:shadow-sm focus-within:ring-2 focus-within:ring-ring">
         <CardContent className="flex items-start justify-between gap-3 p-4">
           <div>
@@ -331,9 +399,7 @@ function OverviewMetricCard({
             {loading && value === undefined ? (
               <Skeleton className="mt-2 h-7 w-16" />
             ) : (
-              <p className="mt-1 text-2xl font-semibold text-slate-950">
-                {typeof value === "number" ? value.toLocaleString() : (value ?? "—")}
-              </p>
+              <p className="mt-1 text-2xl font-semibold text-slate-950">{shownValue}</p>
             )}
             {error ? (
               <p className="mt-2 text-xs text-destructive" role="alert">

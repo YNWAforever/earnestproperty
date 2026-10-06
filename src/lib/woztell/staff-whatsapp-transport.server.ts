@@ -19,18 +19,21 @@ export function createStaffWhatsAppTransport(
     async sendStaffWhatsApp(scope) {
       try {
         if (
-          process.env.EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED !== "true" ||
+          process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED !== "true" ||
           scope.channelId !== process.env.WOZTELL_CHANNEL_ID
         )
           throw new Error("STAFF_WHATSAPP_SCOPE_UNVERIFIED");
-        if (scope.templateName) throw new Error("STAFF_TEMPLATE_CONTRACT_UNVERIFIED");
         await scope.beforeSend();
       } catch {
         throw Object.assign(new Error("STAFF_NOTIFICATION_PREFLIGHT_BLOCKED"), {
           code: "STAFF_NOTIFICATION_PREFLIGHT_BLOCKED",
         });
       }
-      const response = [{ type: "TEXT", text: scope.message }];
+      // Outside the 24-hour window the caller passes the approved template; TEXT is
+      // only ever sent when no template was asked for.
+      const response: Record<string, unknown>[] = scope.template
+        ? [scope.template]
+        : [{ type: "TEXT", text: scope.message }];
       const result = await send({ memberId: scope.memberId, response });
       const parsed = parseWoztellProviderResult("body" in result ? result.body : null, {
         expectedResponseCount: 1,

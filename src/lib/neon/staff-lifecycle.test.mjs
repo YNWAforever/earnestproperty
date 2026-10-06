@@ -1082,3 +1082,56 @@ test("linking refuses without a registered account, for an already-linked member
     (error) => error instanceof Response && error.status === 403,
   );
 });
+
+test("duty manager change writes the flag and its audit row in one statement", async () => {
+  const statements = [];
+  const { service, calls } = fixture({
+    queryRows: async (statement, params = []) => {
+      statements.push({ statement, params });
+      return [{ id: targetId, is_duty_manager: true }];
+    },
+  });
+  const version = "2026-08-16T01:00:00.456Z";
+  const result = await service.changeStaffDutyManager(
+    { staffId: targetId, isDutyManager: true, expectedVersion: version },
+    admin,
+    request,
+  );
+  assert.deepEqual(result, {
+    isDutyManager: true,
+    requestId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  });
+  assert.equal(statements.length, 1, "exactly one statement");
+  const { statement, params } = statements[0];
+  assert.match(statement, /UPDATE staff_users SET is_duty_manager/);
+  assert.match(statement, /INSERT INTO ops_audit_logs/);
+  assert.match(statement, /staff\.duty_manager_changed/);
+  assert.deepEqual(params, [targetId, true, version, admin.staffId, result.requestId]);
+  assert.equal(calls.transactions.length, 0);
+  assert.equal(calls.audit.length, 0, "the audit row is not a separate best-effort write");
+});
+
+test("duty manager change is admin-only and a stale version returns 409 and writes nothing", async () => {
+  let queries = 0;
+  const { service } = fixture({
+    queryRows: async () => {
+      queries += 1;
+      return [];
+    },
+  });
+  const input = {
+    staffId: targetId,
+    isDutyManager: true,
+    expectedVersion: "2026-08-16T01:00:00.456Z",
+  };
+  await assert.rejects(
+    () => service.changeStaffDutyManager(input, manager, request),
+    (error) => error instanceof Response && error.status === 403,
+  );
+  assert.equal(queries, 0, "a non-admin never reaches the database");
+  const stale = await service.changeStaffDutyManager(input, admin, request).catch((e) => e);
+  assert.ok(stale instanceof Response);
+  assert.equal(stale.status, 409);
+  assert.equal(await stale.text(), "STAFF_CHANGED");
+  assert.equal(queries, 1);
+});

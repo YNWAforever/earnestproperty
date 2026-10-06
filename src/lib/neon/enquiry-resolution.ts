@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 
 const input = z
   .object({
@@ -22,7 +22,7 @@ const correct = createServerFn({ method: "POST" })
     return resolveEnquiry(data, actor);
   });
 export const correctWhatsappEnquiry = async (data: z.infer<typeof input>) =>
-  correct(await withStaffAuthHeaders({ data }));
+  callStaffServerFn(correct, { data });
 
 const detail = createServerFn({ method: "GET" })
   .inputValidator(z.object({ inquiryId: z.string().uuid() }).strict())
@@ -39,4 +39,4 @@ const detail = createServerFn({ method: "GET" })
     return { access, messages, context };
   });
 export const fetchWhatsappEnquiryDetail = async (inquiryId: string) =>
-  detail(await withStaffAuthHeaders({ data: { inquiryId } }));
+  callStaffServerFn(detail, { data: { inquiryId } });
