@@ -280,6 +280,10 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
   // addNote refreshes `detail` without touching the draft, which would otherwise
   // launder a colleague's newer version onto a stale draft.
   const [draftVersion, setDraftVersion] = useState<string | null>(null);
+  // The draft as loaded, for the dirty check. Not leadToDraft(detail) for the
+  // same reason: after addNote brings in a colleague's change, an untouched
+  // draft must not look edited.
+  const [draftBaseline, setDraftBaseline] = useState<LeadDraft | null>(null);
   const [conflictLeadId, setConflictLeadId] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -431,7 +435,9 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
 
         const lead = data as AdminLeadDetail;
         setDetail(lead);
-        setDraft(leadToDraft(lead));
+        const loaded = leadToDraft(lead);
+        setDraft(loaded);
+        setDraftBaseline(loaded);
         setDraftVersion(lead.version);
         setConflictLeadId(null);
         if (options.resetNote) setNoteBody("");
@@ -626,6 +632,7 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
       setSelectedId(null);
       setDetail(null);
       setDraft(null);
+      setDraftBaseline(null);
       setDraftVersion(null);
       setConflictLeadId(null);
       setDetailError(null);
@@ -649,12 +656,12 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
   // `handlePanelOpenChange(false)` used to run unconditionally, so Esc, an
   // overlay click, or opening another row silently discarded typed edits
   // (budget, 負責代理, 備註, 意圖) and an unwritten follow-up note. `draft` is
-  // compared against the loaded server value, not a captured-at-open baseline,
-  // since the panel already has that value in `detail`.
+  // compared against `draftBaseline`, the draft as loadLeadDetail set it, not
+  // against `detail`, which addNote can refresh to a colleague's newer row.
   const isLeadDetailDirty = Boolean(
     draft &&
     detail &&
-    (JSON.stringify(draft) !== JSON.stringify(leadToDraft(detail)) || noteBody.trim() !== ""),
+    (JSON.stringify(draft) !== JSON.stringify(draftBaseline) || noteBody.trim() !== ""),
   );
   const { requestClose: requestPanelClose, dialog: unsavedLeadDialog } = useDirtyCloseGuard({
     isDirty: isLeadDetailDirty,

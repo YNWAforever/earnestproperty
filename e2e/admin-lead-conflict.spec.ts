@@ -157,6 +157,24 @@ test("adding a note after a colleague saved does not launder the version", async
   await context.close();
 });
 
+test("a note that brings in a colleague's change does not make an untouched editor look dirty", async ({
+  browser,
+}) => {
+  const { context, a, b } = await twoTabs(browser);
+  await pickAgent(b, "合成同事乙");
+  await save(b).click();
+  await expect(toastOk(b)).toBeVisible();
+
+  await expect(a.getByText("目前沒有未儲存修改")).toBeVisible();
+  await a.getByLabel("新增內部跟進紀錄", { exact: true }).fill("A 的跟進");
+  await a.getByRole("button", { name: "只儲存跟進紀錄" }).click();
+  await expect(a.getByText("跟進紀錄已新增")).toBeVisible();
+  await expect(a.getByText("目前沒有未儲存修改")).toBeVisible();
+  await expect(a.getByText("有未儲存的修改")).toHaveCount(0);
+  expect(await updates(a)).toHaveLength(0);
+  await context.close();
+});
+
 test("a pending note written before the 409 is reported as saved", async ({ browser }) => {
   const { context, a, b } = await twoTabs(browser);
   await pickAgent(a, "合成同事乙");
