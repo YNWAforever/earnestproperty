@@ -196,18 +196,50 @@ const jobFacts = (now, overrides = {}) => ({
   ...overrides,
 });
 
-test("job queue thresholds follow the HKT clock at the 07:59/08:00 and 21:59/22:00 boundaries", () => {
+test("job queue thresholds: health day starts at 08:30 HKT and night at 22:00 HKT", () => {
   const day = { overdueGraceMinutes: 15, heartbeatStaleMinutes: 30 };
   const night = { overdueGraceMinutes: 75, heartbeatStaleMinutes: 90 };
+  // The cadence turns to every 10 minutes at 08:00, but health keeps the night
+  // tolerances for one more day stale window so the 07:00 heartbeat is fair.
   assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "07:59")), night);
-  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "08:00")), day);
+  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "08:00")), night);
+  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "08:29")), night);
+  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "08:30")), day);
+  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "12:00")), day);
   assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "21:59")), day);
   assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "22:00")), night);
   assert.deepEqual(jobQueueThresholds(hkt("2026-10-07", "03:00")), night);
-  assert.deepEqual(jobQueueThresholds(hkt("2026-10-06", "12:00")), day);
   // The choice is made in Asia/Hong_Kong, not in the host's or UTC's calendar.
-  assert.deepEqual(jobQueueThresholds(new Date("2026-10-05T23:59:00Z")), night);
-  assert.deepEqual(jobQueueThresholds(new Date("2026-10-06T00:00:00Z")), day);
+  assert.deepEqual(jobQueueThresholds(new Date("2026-10-06T00:29:00Z")), night);
+  assert.deepEqual(jobQueueThresholds(new Date("2026-10-06T00:30:00Z")), day);
+});
+
+test("a 07:00 HKT heartbeat is not stale at 08:00:45 or 08:29 HKT", () => {
+  const beat = new Date("2026-10-06T07:00:20+08:00").toISOString();
+  for (const now of [new Date("2026-10-06T08:00:45+08:00"), hkt("2026-10-06", "08:29")]) {
+    const check = assessJobQueueHealth(
+      jobFacts(now, { serviceHeartbeatAt: beat, generalHeartbeatAt: beat }),
+      now,
+    );
+    assert.equal(check.status, "healthy", now.toISOString());
+  }
+});
+
+test("a missed morning sweep is caught at 08:30", () => {
+  const beat = new Date("2026-10-06T07:00:20+08:00").toISOString();
+  const now = hkt("2026-10-06", "08:30");
+  const check = assessJobQueueHealth(
+    jobFacts(now, { serviceHeartbeatAt: beat, generalHeartbeatAt: beat }),
+    now,
+  );
+  assert.equal(check.status, "degraded");
+  assert.equal(check.details.serviceHeartbeatFresh, false);
+  assert.equal(check.details.generalHeartbeatFresh, false);
+});
+
+test("the overdue grace is 75 minutes at 08:15 and 15 minutes at 08:30", () => {
+  assert.equal(jobQueueThresholds(hkt("2026-10-06", "08:15")).overdueGraceMinutes, 75);
+  assert.equal(jobQueueThresholds(hkt("2026-10-06", "08:30")).overdueGraceMinutes, 15);
 });
 
 test("the first night tick: a 21:50 HKT heartbeat is not stale at 22:30 HKT", () => {

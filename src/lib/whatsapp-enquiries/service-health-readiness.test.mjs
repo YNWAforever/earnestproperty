@@ -64,6 +64,20 @@ test("stale heartbeat raises SERVICE_WORKER_STALE even when idle", () => {
   );
 });
 
+test("the 07:00 HKT heartbeat is not stale just after the 08:00 HKT cadence switch", () => {
+  assert.deepEqual(
+    dueWorkHealth({
+      now: "2026-10-06T08:00:45+08:00",
+      oldestDueAt: null,
+      overdueJobs: 0,
+      expiredLeases: 0,
+      heartbeatAt: "2026-10-06T07:00:20+08:00",
+      lagSeconds: 300,
+    }),
+    [],
+  );
+});
+
 test("a fresh heartbeat with no work raises nothing", () => {
   assert.deepEqual(
     dueWorkHealth({
@@ -90,7 +104,7 @@ test("overdue work and expired lease raise distinct alarms", () => {
   assert.deepEqual(reasons, [
     "SERVICE_LEASE_EXPIRED",
     "SERVICE_DUE_WORK_OVERDUE",
-    "SERVICE_WORKER_NOT_OBSERVED",
+    // A missing heartbeat is stale; NOT_OBSERVED would only repeat it.
     "SERVICE_WORKER_STALE",
   ]);
 });

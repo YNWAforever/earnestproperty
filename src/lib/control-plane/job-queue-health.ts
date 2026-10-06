@@ -19,19 +19,29 @@ export const NIGHT_JOB_QUEUE_THRESHOLDS: JobQueueThresholds = Object.freeze({
   overdueGraceMinutes: 75,
   heartbeatStaleMinutes: 90,
 });
-const DAY_START_HOUR_HKT = 8;
-const NIGHT_START_HOUR_HKT = 22;
+// Decision 4's day window, shifted by one stale window after the first
+// 10-minute tick so the 07:00 heartbeat is not judged by the day threshold.
+// The cadence itself is unchanged: every 10 minutes from 08:00 HKT.
+export const DAY_START_MINUTE_HKT = 8 * 60 + 30;
+export const NIGHT_START_MINUTE_HKT = 22 * 60;
 
-const hktHour = new Intl.DateTimeFormat("en-GB", {
+const hktClock = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Asia/Hong_Kong",
   hour: "2-digit",
+  minute: "2-digit",
   hourCycle: "h23",
 });
 
+function hktMinuteOfDay(now: Date) {
+  const parts = hktClock.formatToParts(now);
+  const value = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  return value("hour") * 60 + value("minute");
+}
+
 /** The one place that picks day or night tolerances, from `now` in Asia/Hong_Kong. */
 export function jobQueueThresholds(now: Date): JobQueueThresholds {
-  const hour = Number(hktHour.format(now));
-  return hour >= DAY_START_HOUR_HKT && hour < NIGHT_START_HOUR_HKT
+  const minute = hktMinuteOfDay(now);
+  return minute >= DAY_START_MINUTE_HKT && minute < NIGHT_START_MINUTE_HKT
     ? { ...DAY_JOB_QUEUE_THRESHOLDS }
     : { ...NIGHT_JOB_QUEUE_THRESHOLDS };
 }

@@ -345,5 +345,89 @@ test("FX-07 jobs.queue health reports overdue work and silent lanes, and only th
       assert.equal(check.details.serviceHeartbeatFresh, true);
       assert.equal(check.facts.oldestHeartbeatMinutes, heartbeatStaleMinutes + 1);
     });
+
+    await t.test("an unreadable job queue degrades only its own row and is logged", async () => {
+      await reset();
+      const errors = t.mock.method(console, "error", () => undefined);
+      await query(
+        "ALTER TABLE whatsapp_service_worker_heartbeats RENAME TO qa_fx07_heartbeats_hidden",
+      );
+      try {
+        const result = await health();
+        const check = jobsQueue(result);
+        assert.equal(check.status, "degraded");
+        assert.equal(check.required, false);
+        assert.deepEqual(check.details, { readable: false });
+        assert.equal(check.facts, undefined);
+        for (const key of ["database.tables", "database.columns"])
+          assert.equal(result.checks.find((item) => item.key === key)?.status, "healthy", key);
+        assert.ok(
+          errors.mock.calls.some((call) =>
+            String(call.arguments[0]).includes("JOBS_QUEUE_UNREADABLE"),
+          ),
+        );
+      } finally {
+        await query(
+          "ALTER TABLE qa_fx07_heartbeats_hidden RENAME TO whatsapp_service_worker_heartbeats",
+        );
+        errors.mock.restore();
+      }
+    });
   });
+});
+
+test("a wrong or missing bearer writes no lane heartbeat on either drain route", async (t) => {
+  // No database: the routes must return before touching it. The heartbeat
+  // writer is mocked to count calls and to stop the drain with a sentinel.
+  mock.reset();
+  const calls = [];
+  t.mock.module(new URL("./worker-heartbeat.server.ts", import.meta.url).href, {
+    exports: {
+      recordWorkerHeartbeat: async (id) => {
+        calls.push(id);
+        throw new Error("SYNTHETIC_HEARTBEAT_SENTINEL");
+      },
+    },
+  });
+  const { drainServiceJobs } = await import("../../routes/api.admin.whatsapp.service-worker.ts");
+  const { Route: generalRoute } = await import("../../routes/api.admin.control-plane.worker.ts");
+  const handlers = generalRoute.options.server.handlers;
+  const drains = [
+    ["service-v2", drainServiceJobs],
+    ["general-v1", handlers.POST],
+    ["general-v1", handlers.GET],
+  ];
+  const original = process.env.CRON_SECRET;
+  t.after(() => {
+    if (original === undefined) delete process.env.CRON_SECRET;
+    else process.env.CRON_SECRET = original;
+  });
+  process.env.CRON_SECRET = "synthetic-cron-secret";
+  for (const [lane, drain] of drains) {
+    for (const headers of [
+      {},
+      { authorization: "Bearer wrong" },
+      { authorization: "synthetic-cron-secret" },
+    ]) {
+      const response = await drain({
+        request: new Request("https://fixture.invalid/drain", { method: "POST", headers }),
+      });
+      assert.equal(response.status, 401, `${lane} ${JSON.stringify(headers)}`);
+    }
+    assert.deepEqual(calls, [], `${lane} wrote a heartbeat without the bearer`);
+  }
+  // Positive control: the right bearer reaches the (mocked) writer once per call.
+  for (const [lane, drain] of drains) {
+    calls.length = 0;
+    await assert.rejects(
+      drain({
+        request: new Request("https://fixture.invalid/drain", {
+          method: "POST",
+          headers: { authorization: "Bearer synthetic-cron-secret" },
+        }),
+      }),
+      /SYNTHETIC_HEARTBEAT_SENTINEL/,
+    );
+    assert.deepEqual(calls, [lane]);
+  }
 });

@@ -114,7 +114,7 @@ export function WhatsappServiceHealth({
             {health.oldestDueAt ?? "沒有"} · 下次排程：{health.nextWakeAt ?? "沒有"}
           </p>
           <p className="text-sm">
-            工作程序最後回報：{health.heartbeatAt ?? "未有證據"} · 最近成功：
+            工作程序最後回報：{health.heartbeatAt ?? "未有記錄"} · 最近成功：
             {health.lastSuccessAt ?? "未有證據"}
           </p>
           <p className="text-sm">

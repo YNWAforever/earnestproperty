@@ -79,7 +79,11 @@ function factsSummary(check: HealthData["checks"][number]) {
 }
 
 function HealthCheckRow({ check }: { check: HealthData["checks"][number] }) {
-  const detailSummary = check.facts ? factsSummary(check) : configuredSummary(check.details);
+  const detailSummary = check.facts
+    ? factsSummary(check)
+    : check.key === "jobs.queue" && check.details?.readable === false
+      ? "未能讀取工作排程狀態"
+      : configuredSummary(check.details);
 
   return (
     <li className="flex min-h-16 items-center justify-between gap-3 border-b py-3 last:border-b-0">

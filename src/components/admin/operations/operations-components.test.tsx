@@ -286,3 +286,32 @@ test("jobs.queue row says 未有記錄 when a lane has never reported", () => {
   expect(html).toContain("工作程序最後回報：未有記錄");
   expect(html).not.toContain("未設定即時喚醒");
 });
+
+test("an unreadable jobs.queue row says so in zh-HK", () => {
+  const html = renderToStaticMarkup(
+    <AdminOperationsOverview
+      health={{
+        status: "degraded",
+        checks: [
+          { key: "jobs.queue", required: false, status: "degraded", details: { readable: false } },
+        ],
+        checkedAt: "2026-10-06T03:00:00.000Z",
+        capabilities: agentCapabilities,
+      }}
+      jobsSummary={null}
+      migrations={null}
+      stale={false}
+      error={null}
+      onRefresh={() => undefined}
+      onOpenJobs={() => undefined}
+    />,
+  );
+  expect(html).toContain("背景工作排程");
+  expect(html).toContain("未能讀取工作排程狀態");
+  expect(html).not.toContain("項設定中已完成");
+});
+
+test("the WhatsApp card uses the same 未有記錄 copy for a missing heartbeat", () => {
+  const card = readFileSync(new URL("./WhatsappServiceHealth.tsx", import.meta.url), "utf8");
+  expect(card).toContain('工作程序最後回報：{health.heartbeatAt ?? "未有記錄"}');
+});

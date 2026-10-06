@@ -12,12 +12,14 @@
    - The worker's `scheduled()` handles both cron strings identically, by sweeping both lanes.
    - Health thresholds follow the HKT clock, computed from `now()` in `Asia/Hong_Kong`:
 
-     | | Day (08:00–21:59) | Night |
+     | | Day (08:30–21:59 for health thresholds; cadence day is still 08:00–21:50) | Night |
      |---|---|---|
      | Stale heartbeat | > 30 min | > 90 min |
      | Overdue job | `run_after` < now − 15 min | `run_after` < now − 75 min |
 
      Put the threshold choice in one pure helper with unit tests at the 07:59/08:00 and 21:59/22:00 boundaries. Also test the first night tick, so a heartbeat from 21:50 HKT is not stale at 22:30 HKT.
+
+     *Clarification (Task 4 fix round 1, controller ruling):* the **health** day thresholds start at **08:30** HKT (minute-of-day in [510, 1320)), not 08:00. The cron cadence is unchanged (every 10 minutes from 08:00). This shifts the day window by one day stale window after the first 10-minute tick, so the 07:00 hourly heartbeat is not judged by the 30-minute day threshold at 08:00 (a daily false 降級 on a page that does not poll). The boundary tests are 07:59/08:00/08:29 → night, 08:30 → day, 21:59 → day, 22:00 → night. A 07:00 heartbeat is not stale at 08:00:45 or 08:29, and a missed morning sweep is caught at 08:30.
    - Tests and docs use these two cron strings. Open question 1 (cadence) is resolved by this decision.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to carry this plan out task by task. Steps use checkbox (`- [ ]`) syntax. Every behaviour change gets a failing test first.

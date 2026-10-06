@@ -241,10 +241,16 @@ export async function runControlPlaneHealthChecks({
           thresholds,
         ),
       );
-    } catch {
+    } catch (error) {
       // A database without the service-workflow migration has no heartbeat
       // table. That degrades this row; it must not fail the database checks.
-      checks.push({ key: "jobs.queue", required: false, status: "degraded" });
+      console.error("[health] JOBS_QUEUE_UNREADABLE", error instanceof Error ? error.message : "");
+      checks.push({
+        key: "jobs.queue",
+        required: false,
+        status: "degraded",
+        details: { readable: false },
+      });
     }
   } catch {
     checks.push({ key: "database", required: true, status: "failed" });
