@@ -7,6 +7,18 @@
    - 重試 does an observe-only retry, the same as `recoverPendingInboundReceipts`. It is admin or manager only, and audited.
    - **No live re-route.** That stays an owner follow-up (see Out of scope).
 3. **One switch fewer.** `OPS_EVENT_WAKE_ENABLED` goes. The wake is on whenever `OPS_WAKE_URL` is set.
+4. **Cadence (overrides every "10-minute" / `*/10 * * * *` mention below).** The sweep runs every 10 minutes from 08:00 to 22:00 HKT and hourly overnight, so Neon can sleep most of the night.
+   - Cron triggers are in UTC, and HKT is UTC+8: `"triggers": { "crons": ["*/10 0-13 * * *", "0 14-23 * * *"] }`. That gives 08:00–21:50 HKT every 10 minutes and 22:00–07:00 HKT hourly.
+   - The worker's `scheduled()` handles both cron strings identically, by sweeping both lanes.
+   - Health thresholds follow the HKT clock, computed from `now()` in `Asia/Hong_Kong`:
+
+     | | Day (08:00–21:59) | Night |
+     |---|---|---|
+     | Stale heartbeat | > 30 min | > 90 min |
+     | Overdue job | `run_after` < now − 15 min | `run_after` < now − 75 min |
+
+     Put the threshold choice in one pure helper with unit tests at the 07:59/08:00 and 21:59/22:00 boundaries. Also test the first night tick, so a heartbeat from 21:50 HKT is not stale at 22:30 HKT.
+   - Tests and docs use these two cron strings. Open question 1 (cadence) is resolved by this decision.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to carry this plan out task by task. Steps use checkbox (`- [ ]`) syntax. Every behaviour change gets a failing test first.
 
