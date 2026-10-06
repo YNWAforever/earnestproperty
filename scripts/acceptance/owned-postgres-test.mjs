@@ -73,15 +73,17 @@ export async function withOwnedPostgres(run) {
       user: "postgres",
       database: "postgres",
       max: 8,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 10000,
       statement_timeout: 30000,
     });
-    for (let attempt = 0; ; attempt++) {
+    // Wait for a real SELECT 1 (not just an open port) under a bounded deadline.
+    const readyDeadline = Date.now() + 60000;
+    for (;;) {
       try {
         await pool.query("SELECT 1");
         break;
       } catch (error) {
-        if (attempt === 60) throw error;
+        if (Date.now() > readyDeadline) throw error;
         await delay(200);
       }
     }

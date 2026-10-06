@@ -4,6 +4,7 @@ import { Activity, KeyRound, Link2, Mail, PauseCircle, RotateCcw, ShieldCheck } 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -44,12 +45,16 @@ export function AdminTeamDetailPanel({
   currentUserEmail = null,
   successors = [],
   onAction,
+  onDutyManagerChange,
+  pending = false,
 }: {
   detail: AdminTeamMemberDetail;
   canManage: boolean;
   currentUserEmail?: string | null;
   successors?: Array<{ id: string; label: string }>;
   onAction: (action: TeamMemberAction, options?: TeamMemberActionOptions) => void;
+  onDutyManagerChange?: (next: boolean) => void;
+  pending?: boolean;
 }) {
   const { member } = detail;
   const name = member.name?.trim() || "未命名成員";
@@ -143,6 +148,21 @@ export function AdminTeamDetailPanel({
               <Label htmlFor={`team-role-${role}`}>{teamRoleLabel(role)}</Label>
             </div>
           ))}
+        </div>
+        <div className="mt-4 border-t pt-4">
+          <div className="flex items-center justify-between gap-3">
+            <Label htmlFor="team-duty-manager">值班經理</Label>
+            <Switch
+              aria-describedby="team-duty-manager-help"
+              checked={member.isDutyManager}
+              disabled={!canManage || !active || pending}
+              id="team-duty-manager"
+              onCheckedChange={(next) => onDutyManagerChange?.(next)}
+            />
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground" id="team-duty-manager-help">
+            未指派的新客戶查詢會以 WhatsApp 通知值班經理。此成員需要已核實的同事手機通知設定。
+          </p>
         </div>
         {canManage ? (
           <Button

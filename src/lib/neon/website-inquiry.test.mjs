@@ -115,7 +115,7 @@ test("website inquiry persistence resolves assignment and writes through one ato
     assigned_agent_id: "caller-assigned-agent",
   });
 
-  assert.deepEqual(result, { id: "inquiry-1" });
+  assert.deepEqual(result, { id: "inquiry-1", leadAlertQueued: false });
   assert.equal(calls.length, 1, "resolution and all writes must share one query call");
   assert.match(calls[0].sql, /WITH[\s\S]*resolved_listing/i);
   assert.match(calls[0].sql, /p\.status = 'active'/);
@@ -125,6 +125,35 @@ test("website inquiry persistence resolves assignment and writes through one ato
   assertInsertUsesRoutingIntent(calls[0].sql, "inquiries");
   assert.equal(calls[0].params.includes("caller-agent"), false);
   assert.equal(calls[0].params.includes("caller-assigned-agent"), false);
+});
+
+test("website inquiry enqueues its lead alert in the same statement", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const calls = [];
+  const query = async (sql, params) => {
+    calls.push({ sql, params });
+    return [{ id: "inquiry-1", lead_alert_queued: true }];
+  };
+  const result = await persistWebsiteInquiry(query, {
+    name: "陳先生",
+    phone: "9123 4567",
+    normalizedPhone: "85291234567",
+    email: null,
+    message: null,
+    listingNo: null,
+    propertyId: null,
+    consentWhatsapp: false,
+  });
+  assert.deepEqual(result, { id: "inquiry-1", leadAlertQueued: true });
+  assert.equal(calls.length, 1, "the alert job must not need a second statement");
+  const sql = calls[0].sql;
+  assert.match(sql, /lead_alert AS \(\s*INSERT INTO ops_jobs/);
+  assert.ok(
+    sql.indexOf("'lead-alert:'||id") > sql.indexOf("new_lead AS"),
+    "the alert key is derived from the inserted lead",
+  );
+  assert.match(sql, /FROM new_lead\s+ON CONFLICT \(idempotency_key\) DO NOTHING/);
+  assert.match(sql, /\(SELECT count\(\*\) FROM lead_alert\) > 0 AS lead_alert_queued/);
 });
 
 test("website inquiry persistence awaits and propagates an injected query failure", async () => {

@@ -19,6 +19,7 @@ import { teamRoleLabel } from "@/components/admin/team/AdminTeamStatusBadge";
 import { AdminTeamTable } from "@/components/admin/team/AdminTeamTable";
 import {
   createLatestRequestGuard,
+  dutyManagerMessage,
   mergeAdminTeamPages,
   resetAdminTeamPage,
   serverErrorStatus,
@@ -42,6 +43,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import {
   changeStaffActive,
+  changeStaffDutyManager,
   changeStaffRoles,
   getAdminTeamMember,
   inviteStaffMember,
@@ -147,6 +149,7 @@ function AdminTeam() {
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [confirmText, setConfirmText] = useState("");
   const [mutating, setMutating] = useState(false);
+  const [dutyBusy, setDutyBusy] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
@@ -359,6 +362,28 @@ function AdminTeam() {
     setPendingOptions(options);
     setConfirmError(null);
     setConfirmText("");
+  };
+
+  // Reversible and audited server-side, so no confirm dialog: flip, toast, reload.
+  const changeDutyManager = async (next: boolean) => {
+    if (!detail || dutyBusy) return;
+    setDutyBusy(true);
+    try {
+      await changeStaffDutyManager({
+        data: {
+          staffId: detail.member.id,
+          isDutyManager: next,
+          expectedVersion: detail.version,
+        },
+      });
+      toast.success(dutyManagerMessage(next).text);
+    } catch (reason) {
+      toast.error(dutyManagerMessage(next, reason).text);
+    } finally {
+      setDutyBusy(false);
+    }
+    await loadDetail(detail.member.id);
+    await loadTeam(true);
   };
 
   const confirm = async () => {
@@ -645,6 +670,8 @@ function AdminTeam() {
             currentUserEmail={user?.email ?? null}
             detail={detail}
             onAction={beginAction}
+            onDutyManagerChange={(next) => void changeDutyManager(next)}
+            pending={dutyBusy}
             successors={directory.members
               .filter((member) => member.id !== detail.member.id && member.accessState === "active")
               .map((member) => ({
