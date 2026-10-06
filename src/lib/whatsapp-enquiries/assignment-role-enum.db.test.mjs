@@ -57,6 +57,16 @@ test("assignment context authorizes real staff_role enum and assigned conversati
       assert.ok(end > start, `incomplete ${functionName} migration function`);
       await db.exec(aclMigration.slice(start, end + 3));
     }
+    // FX-06: the current wa_can_read_conversation lets managers read org-wide.
+    await db.exec(
+      await readFile(
+        new URL(
+          "../../../neon/migrations/20261007100000_wa_access_unassigned.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     for (const [id, active, role] of [
       [admin, true, "admin"],
       [manager, true, "manager"],
@@ -111,10 +121,15 @@ test("assignment context authorizes real staff_role enum and assigned conversati
       assert.equal(context.assignment_version, 0);
       assert.equal(context.assigned_agent_id, agent);
     }
-    await assert.rejects(
-      readAssignmentContext(otherConversation, { staffId: manager, roles: ["manager"] }, ports),
-      (error) => error instanceof Response && error.status === 403,
-      "a manager cannot read a conversation assigned to another branch",
+    const otherBranchContext = await readAssignmentContext(
+      otherConversation,
+      { staffId: manager, roles: ["manager"] },
+      ports,
+    );
+    assert.equal(
+      otherBranchContext.assigned_agent_id,
+      outsider,
+      "a manager can read a conversation assigned to another branch (FX-06, org-wide)",
     );
     await assert.rejects(
       readAssignmentContext(
