@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import test, { mock } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   withOwnedPostgres,
   mockOwnedServerDb,
@@ -71,7 +72,14 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
   });
   try {
     await withOwnedPostgres(async ({ pool, query, transaction }) => {
-      await mockOwnedServerDb(mock, query, transaction);
+      // A subtest can set onQuery to see the exact statement text a server
+      // function sends. Every query still runs on the owned pool.
+      let onQuery = null;
+      const recordingQuery = async (sql, params = []) => {
+        onQuery?.(sql, params);
+        return query(sql, params);
+      };
+      await mockOwnedServerDb(mock, recordingQuery, transaction);
       const server = await import("./admin-data.server.ts");
       const { staffReassignStatements } = await import("./staff-ownership.ts");
       const { ingestWoztellEvent } = await import("../woztell/woztell-ingest.server.ts");
@@ -160,6 +168,86 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
         assert.equal(row.stage, "contacted");
         assert.equal((await auditCount(L1)) - before, 1);
       });
+
+      await t.test(
+        "two connections save at the same expected_version: exactly one wins",
+        async () => {
+          await resetL1();
+          const before = await auditCount(L1);
+          const detail = await read(L1, admin);
+          const missing = id(98);
+          // Capture the real statement and its params by saving a missing id,
+          // which writes nothing. $8 is the lead id.
+          const capture = async (overrides, who) => {
+            let captured = null;
+            onQuery = (sql, params) => {
+              if (/UPDATE crm_leads l SET/.test(sql)) captured = { sql, params: [...params] };
+            };
+            try {
+              const res = await server.updateAdminLead(
+                draftFrom(detail, { ...overrides, id: missing }),
+                who,
+              );
+              assert.deepEqual(res, { ok: false, error: "Not found" });
+            } finally {
+              onQuery = null;
+            }
+            assert.ok(captured, "the save statement must be captured");
+            assert.equal(captured.params[7], missing);
+            captured.params[7] = L1;
+            assert.equal(captured.params[8], detail.version);
+            return captured;
+          };
+          const a = await capture({ assigned_agent_id: AGENT_B }, admin);
+          const b = await capture({ stage: "viewing" }, manager);
+          assert.equal(a.sql, b.sql);
+
+          const ca = await pool.connect();
+          const cb = await pool.connect();
+          let ra;
+          let rb;
+          try {
+            const [{ pid }] = (await cb.query("SELECT pg_backend_pid() AS pid")).rows;
+            await ca.query("BEGIN");
+            await cb.query("BEGIN");
+            ra = (await ca.query(a.sql, a.params)).rows[0];
+            const pending = cb.query(b.sql, b.params);
+            // B must be waiting on A's row lock before A commits.
+            let waiting = false;
+            for (let i = 0; i < 100 && !waiting; i++) {
+              const [row] = await query(
+                "SELECT wait_event_type FROM pg_stat_activity WHERE pid=$1",
+                [pid],
+              );
+              waiting = row?.wait_event_type === "Lock";
+              if (!waiting) await delay(50);
+            }
+            assert.ok(waiting, "the second save must block on the first");
+            await ca.query("COMMIT");
+            rb = (await pending).rows[0];
+            await cb.query("COMMIT");
+          } finally {
+            await ca.query("ROLLBACK").catch(() => {});
+            await cb.query("ROLLBACK").catch(() => {});
+            ca.release();
+            cb.release();
+          }
+          assert.ok(ra.new_version, "the first save wins");
+          assert.equal(rb.new_version, null, "the second save writes nothing");
+          assert.notEqual(rb.current_version, detail.version);
+          assert.equal(rb.current_version, ra.new_version);
+          // The TS layer turns that row into LEAD_CHANGED.
+          await rejectsWith(
+            server.updateAdminLead(draftFrom(detail, { stage: "viewing" }), manager),
+            409,
+            "LEAD_CHANGED",
+          );
+          const row = await leadRow(L1);
+          assert.equal(row.assigned_agent_id, AGENT_B);
+          assert.equal(row.stage, "contacted");
+          assert.equal((await auditCount(L1)) - before, 1);
+        },
+      );
 
       await t.test("own consecutive saves succeed", async () => {
         await resetL1();
