@@ -8,7 +8,7 @@ export function wakeAfterCommit(lane: JobLane) {
     enabled: wakeEnabledFromEnv(process.env),
     waitUntil,
     run: async (selected) => {
-      const schedulerUrl = process.env.OPS_WAKE_URL;
+      const schedulerUrl = process.env.OPS_WAKE_URL?.trim();
       const secret = process.env.CRON_SECRET;
       if (schedulerUrl && secret) {
         try {

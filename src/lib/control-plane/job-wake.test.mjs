@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createJobWake, signalJobWake, wakeEnabledFromEnv } from "./job-wake.js";
 
 test("disabled wake does not schedule or run any work", async () => {
@@ -147,7 +148,10 @@ test("wakes when OPS_WAKE_URL set without flag", () => {
 
 test("the wake flag is gone from code, scripts and env docs", () => {
   const hits = [];
-  for (const path of ["src", "scripts", "workers", ".env.example", "CLAUDE.md", "README.md"]) {
+  const root = new URL("../../../", import.meta.url);
+  for (const name of ["src", "scripts", "workers", ".env.example", "CLAUDE.md", "README.md"]) {
+    const path = fileURLToPath(new URL(name, root));
+    assert.ok(existsSync(path), `${name} must exist so the scan cannot pass vacuously`);
     scan(path, hits);
   }
   assert.deepEqual(hits, []);
@@ -164,4 +168,26 @@ test("test harnesses blank OPS_WAKE_URL so no test can signal a real worker", ()
   const assignment = readFileSync("src/lib/whatsapp-enquiries/assignment.test.mjs", "utf8");
   assert.match(assignment, /process\.env\.OPS_WAKE_URL\s*=\s*""/);
   assert.match(assignment, /finally\s*\{[\s\S]*OPS_WAKE_URL/);
+});
+
+test("a test run never enables the wake, even with OPS_WAKE_URL set", () => {
+  const url = "https://alarm.example";
+  assert.equal(wakeEnabledFromEnv({ OPS_WAKE_URL: url, NODE_TEST_CONTEXT: "child" }), false);
+  assert.equal(wakeEnabledFromEnv({ OPS_WAKE_URL: url, NODE_ENV: "test" }), false);
+  assert.equal(wakeEnabledFromEnv({ OPS_WAKE_URL: url, NODE_ENV: "production" }), true);
+  // The real node --test process: the check the server uses must be false.
+  assert.ok(process.env.NODE_TEST_CONTEXT, "node --test sets NODE_TEST_CONTEXT");
+  const previous = process.env.OPS_WAKE_URL;
+  process.env.OPS_WAKE_URL = url;
+  try {
+    assert.equal(wakeEnabledFromEnv(process.env), false);
+  } finally {
+    if (previous === undefined) delete process.env.OPS_WAKE_URL;
+    else process.env.OPS_WAKE_URL = previous;
+  }
+});
+
+test("job-wake.server.ts trims OPS_WAKE_URL before use", () => {
+  const source = readFileSync(new URL("./job-wake.server.ts", import.meta.url), "utf8");
+  assert.match(source, /process\.env\.OPS_WAKE_URL\?\.trim\(\)/);
 });

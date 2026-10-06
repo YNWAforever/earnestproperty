@@ -1,5 +1,5 @@
 export type JobLane = "service" | "general";
-/** True only when OPS_WAKE_URL is a non-blank string; the former wake flag is ignored. */
+/** True only when OPS_WAKE_URL is non-blank and this is not a test run (NODE_TEST_CONTEXT / NODE_ENV=test). */
 export function wakeEnabledFromEnv(env: Record<string, string | undefined>): boolean;
 export function createJobWake(ports: {
   enabled: boolean;
