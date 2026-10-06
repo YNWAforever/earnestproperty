@@ -42,6 +42,23 @@ export function trackingEnabled() {
 }
 const GENERAL_ENQUIRY_TEXT = "您好，我想向晉誠地產查詢。樓盤供應請向職員確認。";
 /**
+ * The one strict validity check for a company WhatsApp number taken from env:
+ * bare digits /^[1-9]\d{7,14}$/ AND whatsappPhoneProblem(value) === null (rejects the
+ * .env.example placeholder, branch landlines and repeated digits). Returns the phone
+ * or null. Never throws. Callers pass env values only, never link, request or DB data.
+ */
+export function usableCompanyPhone(value: unknown): string | null {
+  try {
+    return typeof value === "string" &&
+      /^[1-9]\d{7,14}$/.test(value) &&
+      whatsappPhoneProblem(value) === null
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+/**
  * The only place a fallback WhatsApp target is chosen. Reads env only:
  * EP_WA_COMPANY_PHONE if valid, else VITE_CONTACT_WHATSAPP_PHONE if valid, else "/contact".
  * Valid = /^[1-9]\d{7,14}$/ AND whatsappPhoneProblem(value) === null. Never throws.
@@ -52,13 +69,9 @@ export function companyFallbackLocation(
   env: Record<string, string | undefined> = process.env,
 ): string {
   try {
-    for (const phone of [env?.EP_WA_COMPANY_PHONE, env?.VITE_CONTACT_WHATSAPP_PHONE]) {
-      if (
-        typeof phone === "string" &&
-        /^[1-9]\d{7,14}$/.test(phone) &&
-        whatsappPhoneProblem(phone) === null
-      )
-        return companyWhatsappHref(phone, GENERAL_ENQUIRY_TEXT);
+    for (const candidate of [env?.EP_WA_COMPANY_PHONE, env?.VITE_CONTACT_WHATSAPP_PHONE]) {
+      const phone = usableCompanyPhone(candidate);
+      if (phone) return companyWhatsappHref(phone, GENERAL_ENQUIRY_TEXT);
     }
   } catch {
     // Fall through: /contact is always safe.
@@ -455,19 +468,22 @@ async function trackedRedirectOrThrow(
       capacity,
     ) === "link_limited"
   ) {
-    const action = resolvePublicWaAction(
-      {
-        propertyId: String(row.property_id ?? ""),
-        publicListingNo: String(row.public_listing_no ?? ""),
-        dealType: row.deal_type === "rent" ? "rent" : "sale",
-        title,
-      },
-      null,
-      process.env.EP_WA_COMPANY_PHONE,
-    );
-    const location = row.property_id
-      ? action.href
-      : (fallback().headers.get("Location") ?? "/contact");
+    // Same strict check as the fallback: an invalid company phone (placeholder,
+    // landline, spaced/+ form) never becomes a wa.me target here.
+    const limitedPhone = usableCompanyPhone(process.env.EP_WA_COMPANY_PHONE);
+    const location =
+      row.property_id && limitedPhone
+        ? resolvePublicWaAction(
+            {
+              propertyId: String(row.property_id ?? ""),
+              publicListingNo: String(row.public_listing_no ?? ""),
+              dealType: row.deal_type === "rent" ? "rent" : "sale",
+              title,
+            },
+            null,
+            limitedPhone,
+          ).href
+        : companyFallbackLocation();
     console.warn("WA_REDIRECT_LINK_LIMITED", JSON.stringify({ linkId: String(row.id) }));
     return new Response(null, {
       status: 302,
@@ -475,8 +491,10 @@ async function trackedRedirectOrThrow(
     });
   }
   progress.stage = "phone";
-  const phone = process.env.EP_WA_COMPANY_PHONE ?? "";
-  companyWhatsappHref(phone, "");
+  // Strict check before the open INSERT: an invalid company phone throws, so the
+  // wrapper's catch sends the customer to companyFallbackLocation() with no orphan open.
+  const phone = usableCompanyPhone(process.env.EP_WA_COMPANY_PHONE);
+  if (!phone) throw new Error("WA_COMPANY_PHONE_REQUIRED");
   const reference = mintReference(),
     snapshot = { ...linkDto(row), propertyResponsibleStaffIdAtIntake };
   let aliasContext = {};

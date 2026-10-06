@@ -411,3 +411,120 @@ test("prefetch, disabled tracking and the happy path are unchanged", async (t) =
     assert.equal(errors.mock.callCount(), 0);
   });
 });
+
+// FX-10a final M1: the happy path and the link-limited branch must apply the same
+// strict company-phone check as companyFallbackLocation (regex + whatsappPhoneProblem).
+// A placeholder or landline in EP_WA_COMPANY_PHONE must never become a wa.me target.
+test("a placeholder company phone on the happy path ends at the safe company fallback", async (t) => {
+  for (const [vite, expected] of [
+    ["85291234567", "https://wa.me/85291234567?"],
+    [undefined, "/contact"],
+  ]) {
+    for (const bad of ["85200000000", "85226882988"]) {
+      await withTrackedEnv(
+        t,
+        { EP_WA_COMPANY_PHONE: bad, VITE_CONTACT_WHATSAPP_PHONE: vite },
+        async ({ errors }) => {
+          const { query, calls } = registeredQuery();
+          const r = await trackedRedirect(
+            new Request("https://fixture/w/abcdefghijklmnop?phone=85299999999"),
+            "abcdefghijklmnop",
+            query,
+          );
+          const label = `${bad}/${vite}`;
+          assert.equal(r.status, 302, label);
+          const location = r.headers.get("location");
+          if (expected === "/contact") assert.equal(location, "/contact", label);
+          else assert.ok(location.startsWith(expected), `${label}: ${location}`);
+          assert.ok(!location.includes(bad), label);
+          assert.ok(!location.includes("99999999"), label);
+          assert.ok(!location.includes("EPWA"), label);
+          assert.equal(r.headers.get("x-wa-tracking"), "untracked", label);
+          assert.equal(
+            calls.filter((x) => x.sql.includes("INSERT INTO whatsapp_link_opens")).length,
+            0,
+            label,
+          );
+          assert.equal(errors.mock.callCount(), 1, label);
+          assert.deepEqual(JSON.parse(errors.mock.calls[0].arguments[1]), {
+            reason: "company_phone_invalid",
+            stage: "phone",
+            errorName: "Error",
+          });
+        },
+      );
+    }
+  }
+});
+
+test("a placeholder company phone on the link-limited branch ends at the safe company fallback", async (t) => {
+  const limitedQuery = () => {
+    let rateCalls = 0;
+    const calls = [];
+    const { query: base } = registeredQuery();
+    const query = async (sql, params) => {
+      calls.push({ sql, params });
+      if (sql.includes("request_count")) {
+        rateCalls++;
+        return [{ request_count: rateCalls === 1 ? 1 : 100000 }];
+      }
+      return base(sql, params);
+    };
+    return { query, calls };
+  };
+  // Control: a real company number keeps the contextual listing message.
+  await withTrackedEnv(t, {}, async () => {
+    const warn = t.mock.method(console, "warn", () => {});
+    try {
+      const { query } = limitedQuery();
+      const r = await trackedRedirect(
+        new Request("https://fixture/w/abcdefghijklmnop"),
+        "abcdefghijklmnop",
+        query,
+      );
+      assert.equal(r.status, 302);
+      assert.ok(r.headers.get("location").startsWith("https://wa.me/85212345678?"));
+      assert.equal(r.headers.get("x-wa-tracking"), "untracked");
+    } finally {
+      warn.mock.restore();
+    }
+  });
+  for (const [vite, expected] of [
+    ["85291234567", "https://wa.me/85291234567?"],
+    [undefined, "/contact"],
+  ]) {
+    for (const bad of ["85200000000", "+852 0000 0000", "85226882988"]) {
+      await withTrackedEnv(
+        t,
+        { EP_WA_COMPANY_PHONE: bad, VITE_CONTACT_WHATSAPP_PHONE: vite },
+        async () => {
+          const warn = t.mock.method(console, "warn", () => {});
+          try {
+            const { query, calls } = limitedQuery();
+            const r = await trackedRedirect(
+              new Request("https://fixture/w/abcdefghijklmnop?phone=85299999999"),
+              "abcdefghijklmnop",
+              query,
+            );
+            const label = `${bad}/${vite}`;
+            assert.equal(r.status, 302, label);
+            const location = r.headers.get("location");
+            if (expected === "/contact") assert.equal(location, "/contact", label);
+            else assert.ok(location.startsWith(expected), `${label}: ${location}`);
+            assert.ok(!location.includes("85200000000"), label);
+            assert.ok(!location.includes("85226882988"), label);
+            assert.ok(!location.includes("99999999"), label);
+            assert.equal(r.headers.get("x-wa-tracking"), "untracked", label);
+            assert.equal(
+              calls.filter((x) => x.sql.includes("INSERT INTO whatsapp_link_opens")).length,
+              0,
+              label,
+            );
+          } finally {
+            warn.mock.restore();
+          }
+        },
+      );
+    }
+  }
+});
