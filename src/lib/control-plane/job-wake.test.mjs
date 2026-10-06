@@ -76,6 +76,10 @@ test("job drains have one 10-minute Cloudflare sweep and no Vercel schedule", ()
   assert.match(worker, /async scheduled\(/);
   assert.match(worker, /sweepLanes\(/);
   assert.match(worker, /createLaneDrain\(/);
+  assert.match(worker, /getByName\(lane\)\.signal\(\)/);
+  assert.match(worker, /authorization.*Bearer/);
+  // The cron sweeps; it must never signal(), which would reset the failure backoff every tick.
+  assert.doesNotMatch(worker.slice(worker.indexOf("async scheduled(")), /\.signal\(\)/);
   assert.match(vercel, /crons:\s*\[\s*\]/);
   assert.doesNotMatch(vercel, /path:\s*"\/api\/admin\/(control-plane\/worker|jobs\/send-queue)"/);
 });

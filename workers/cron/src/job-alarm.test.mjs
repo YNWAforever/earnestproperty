@@ -302,3 +302,27 @@ test("drain refuses redirects so Authorization is never replayed elsewhere", asy
   }
   assert.equal(seen.length, before, "an invalid origin is never fetched");
 });
+
+test("drain allows plain http only for a loopback app origin", async () => {
+  const seen = [];
+  const fetcher = async (url) => {
+    seen.push(String(url));
+    return Response.json({ nextDueAt: null });
+  };
+  const drain = (origin) =>
+    createLaneDrain({ origin, path: "/api/admin/control-plane/worker", secret: "s", fetcher });
+
+  for (const origin of ["http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000"]) {
+    assert.equal(await drain(origin)(), null, origin);
+  }
+  assert.deepEqual(seen, [
+    "http://localhost:3000/api/admin/control-plane/worker",
+    "http://127.0.0.1:3000/api/admin/control-plane/worker",
+    "http://[::1]:3000/api/admin/control-plane/worker",
+  ]);
+
+  for (const origin of ["http://10.0.0.1", "http://localhost.example.com", "http://0.0.0.0"]) {
+    await assert.rejects(drain(origin)(), /JOB_DRAIN_ORIGIN_INVALID/, origin);
+  }
+  assert.equal(seen.length, 3, "a non-loopback http origin is never fetched");
+});

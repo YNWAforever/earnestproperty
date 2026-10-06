@@ -2,6 +2,8 @@ const MIN_DELAY_MS = 1_000;
 const FAILURE_RETRY_MS = 60_000;
 const MAX_FAILURES = 7;
 const DRAIN_CODE = /^JOB_DRAIN_[A-Z0-9_]+$/;
+// Plain http is accepted only for a local app (`wrangler dev`); `URL.hostname` keeps IPv6 brackets.
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export const JOB_LANES = Object.freeze(["service", "general"]);
 
@@ -97,7 +99,7 @@ function drainBase(origin) {
     return null;
   }
   const allowed =
-    url.protocol === "https:" || (url.protocol === "http:" && url.hostname === "localhost");
+    url.protocol === "https:" || (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname));
   if (!allowed || url.username || url.password || url.pathname !== "/" || url.search || url.hash) {
     return null;
   }

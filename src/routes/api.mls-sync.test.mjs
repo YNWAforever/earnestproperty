@@ -60,5 +60,8 @@ test("Cloudflare wakes the appropriate job lane after a signal, a due alarm or t
   assert.match(worker, /secret: this\.env\.CRON_SECRET/);
   assert.match(alarm, /Bearer \$\{secret\}/);
   assert.doesNotMatch(worker + alarm, /\/api\/admin\/jobs\/send-queue/);
-  assert.match(config, /"crons"\s*:\s*\["\*\/10 0-13 \* \* \*", "0 14-23 \* \* \*"\]/);
+  const { crons } = JSON.parse(
+    config.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"),
+  ).triggers;
+  assert.deepEqual(crons, ["*/10 0-13 * * *", "0 14-23 * * *"]);
 });

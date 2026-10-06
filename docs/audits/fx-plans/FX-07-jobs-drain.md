@@ -217,7 +217,7 @@ It never touches `generation` or `failures`.
 - [ ] **Step 3:** run:
   - `npm run test:job-wake`
   - `npx tsc --noEmit -p workers/cron/tsconfig.json`
-  - `npx wrangler deploy --dry-run --config workers/cron/wrangler.jsonc --outdir .audit/cron-dry-run` (builds locally, deploys nothing)
+  - `npx wrangler deploy --dry-run --config workers/cron/wrangler.jsonc --outdir ../../.audit/cron-dry-run` (builds locally, deploys nothing; `--outdir` resolves relative to `workers/cron/`, so this lands in the root `.audit/`, which ESLint ignores)
   - `npm run lint`
 - [ ] **Step 4: commit.**
   ```
