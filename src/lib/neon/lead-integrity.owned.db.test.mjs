@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test, { mock } from "node:test";
 import {
   withOwnedPostgres,
   mockOwnedServerDb,
 } from "../../../scripts/acceptance/owned-postgres-test.mjs";
+import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
+
+const PROFILE_NAME_MIGRATION = "20261009100000_contact_profile_name.sql";
 
 // FX-09 lead integrity. One owned container for the whole file: Tasks 2, 4 and
 // 5 add subtests below. Synthetic data only. Nothing talks to WozTell, Neon
@@ -526,6 +530,140 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
           admin,
         );
         assert.deepEqual(missing, { ok: false, error: "Not found" });
+      });
+
+      // Task 4 / D-06: the WhatsApp profile name never overwrites the CRM name.
+      const { normalizeWoztellEvent } = await import("../woztell/woztell.server.ts");
+      const K = id(30);
+      const LK = id(31);
+      const MEMBER_K = "synthetic-fx09-member-k";
+      let clock = 1791000000;
+      const inbound = (memberId, memberName, text) =>
+        normalizeWoztellEvent({
+          timestamp: String(++clock),
+          type: "TEXT",
+          data: { text },
+          member: memberId,
+          channel: "synthetic-fx09-channel",
+          app: "synthetic-fx09-app",
+          ...(memberName === null ? {} : { memberExtra: { name: memberName } }),
+        });
+      const ingest = (event, origin) =>
+        ingestWoztellEvent(event, origin, undefined, { mode: "off", signedEvent: true });
+      const names = async (contactId) =>
+        (
+          await query("SELECT name,whatsapp_profile_name FROM crm_contacts WHERE id=$1", [
+            contactId,
+          ])
+        )[0];
+      const contactText = async (contactId) =>
+        (await query("SELECT c::text AS row FROM crm_contacts c WHERE id=$1", [contactId]))[0].row;
+
+      await t.test("migration A is additive and re-runnable", async () => {
+        const [column] = await query(
+          `SELECT data_type,is_nullable FROM information_schema.columns
+           WHERE table_name='crm_contacts' AND column_name='whatsapp_profile_name'`,
+        );
+        assert.deepEqual(column, { data_type: "text", is_nullable: "YES" });
+        assert.ok(MIGRATION_VERSIONS.includes(PROFILE_NAME_MIGRATION));
+
+        const digest = async () =>
+          (
+            await query(
+              "SELECT md5(string_agg(c::text, '|' ORDER BY c.id)) AS d, count(*)::int AS n FROM crm_contacts c",
+            )
+          )[0];
+        const before = await digest();
+        assert.ok(before.n > 0, "the digest must cover existing rows");
+        const sql = readFileSync(
+          new URL("../../../neon/migrations/" + PROFILE_NAME_MIGRATION, import.meta.url),
+          "utf8",
+        );
+        await transaction([{ statement: sql }]);
+        assert.deepEqual(await digest(), before);
+      });
+
+      await t.test("inbound message keeps staff-edited name, stores profile name", async () => {
+        await query(
+          "INSERT INTO crm_contacts(id,name,whatsapp_member_id,source) VALUES($1,NULL,$2,'whatsapp')",
+          [K, MEMBER_K],
+        );
+        await query(
+          "INSERT INTO crm_leads(id,contact_id,assigned_agent_id,stage,intent) VALUES($1,$2,$3,'contacted','buyer')",
+          [LK, K, AGENT_A],
+        );
+
+        const first = await ingest(inbound(MEMBER_K, "Chan T", "你好"), "live_webhook");
+        assert.equal(first.contactId, K);
+        assert.deepEqual(await names(K), { name: "Chan T", whatsapp_profile_name: "Chan T" });
+
+        await query("SELECT * FROM wa_update_lead_contact($1,$2,$3,$4)", [
+          MANAGER,
+          LK,
+          "陳太",
+          null,
+        ]);
+        assert.deepEqual(await names(K), { name: "陳太", whatsapp_profile_name: "Chan T" });
+
+        const second = await ingest(inbound(MEMBER_K, "Chan Tai", "想睇樓"), "live_webhook");
+        assert.equal(second.contactId, K);
+        assert.equal(second.messageInserted, true);
+        assert.deepEqual(await names(K), { name: "陳太", whatsapp_profile_name: "Chan Tai" });
+      });
+
+      await t.test(
+        "history import never replays an old profile name or overwrites the CRM name",
+        async () => {
+          const old = await ingest(inbound(MEMBER_K, "Old Name", "舊訊息"), "history_import");
+          assert.equal(old.contactId, K);
+          assert.deepEqual(await names(K), { name: "陳太", whatsapp_profile_name: "Chan Tai" });
+
+          const fresh = await ingest(
+            inbound("synthetic-fx09-member-history", "Old Name", "歷史訊息"),
+            "history_import",
+          );
+          assert.ok(fresh.contactId);
+          assert.notEqual(fresh.contactId, K);
+          assert.deepEqual(await names(fresh.contactId), {
+            name: "Old Name",
+            whatsapp_profile_name: "Old Name",
+          });
+
+          for (const origin of ["history_import", "live_webhook"]) {
+            const nameless = await ingest(inbound(MEMBER_K, null, "冇名 " + origin), origin);
+            assert.equal(nameless.contactId, K);
+            assert.deepEqual(await names(K), { name: "陳太", whatsapp_profile_name: "Chan Tai" });
+          }
+        },
+      );
+
+      await t.test(
+        "a staff-cleared name is refilled from the profile name on the next message",
+        async () => {
+          await query("SELECT * FROM wa_update_lead_contact($1,$2,$3,$4)", [MANAGER, LK, "", null]);
+          assert.deepEqual(await names(K), { name: null, whatsapp_profile_name: "Chan Tai" });
+          await ingest(inbound(MEMBER_K, "Chan Tai", "再問下"), "live_webhook");
+          assert.deepEqual(await names(K), { name: "Chan Tai", whatsapp_profile_name: "Chan Tai" });
+        },
+      );
+
+      await t.test("wrong recipient: a profile name never lands on another contact", async () => {
+        const C1 = id(40);
+        const C2 = id(41);
+        await query(
+          `INSERT INTO crm_contacts(id,name,whatsapp_member_id,source,whatsapp_profile_name)
+           VALUES($1,'客一','synthetic-fx09-member-r1','whatsapp',NULL),
+                 ($2,'客二','synthetic-fx09-member-r2','whatsapp','Second Profile')`,
+          [C1, C2],
+        );
+        const other = await contactText(C2);
+        const res = await ingest(
+          inbound("synthetic-fx09-member-r1", "First Profile", "第一位"),
+          "live_webhook",
+        );
+        assert.equal(res.contactId, C1);
+        assert.deepEqual(await names(C1), { name: "客一", whatsapp_profile_name: "First Profile" });
+        assert.equal(await contactText(C2), other);
       });
     });
   } finally {

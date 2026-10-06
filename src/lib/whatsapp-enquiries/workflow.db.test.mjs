@@ -95,6 +95,7 @@ test(
         `CREATE TABLE crm_leads(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),contact_id uuid REFERENCES crm_contacts(id),assigned_agent_id uuid,stage text,intent text,source text,note text,created_at timestamptz,updated_at timestamptz)`,
         `CREATE TABLE whatsapp_conversations(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),contact_id uuid REFERENCES crm_contacts(id),woztell_member_id text,channel_id text,last_message_at timestamptz,last_inbound_at timestamptz,updated_at timestamptz DEFAULT now(),assigned_agent_id uuid,UNIQUE(woztell_member_id,channel_id))`,
         `CREATE TABLE whatsapp_messages(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),conversation_id uuid REFERENCES whatsapp_conversations(id),contact_id uuid REFERENCES crm_contacts(id),direction whatsapp_message_direction,message_type text,text text,external_message_id text UNIQUE,woztell_member_id text,channel_id text,payload jsonb DEFAULT '{}'::jsonb,status text,error text,sent_by uuid,created_at timestamptz DEFAULT now())`,
+        `ALTER TABLE crm_contacts ADD COLUMN whatsapp_profile_name text`,
       ])
         await query(statement);
       // Use real queue, outbox and lead-trigger migrations, not mocks of transaction behaviour.
