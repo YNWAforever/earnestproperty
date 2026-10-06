@@ -59,6 +59,13 @@ import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { useDirtyCloseGuard, useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { assignableAgents, bulkAssignableAgents } from "@/lib/admin/lead-assignment";
 import { leadBudgetError } from "@/lib/admin/lead-budget";
+import { LeadConflictNotice } from "@/components/admin/leads/LeadConflictNotice";
+import {
+  LEAD_CHANGED_MESSAGE,
+  LEAD_CHANGED_NOTE_SAVED_MESSAGE,
+  isLeadChangedError,
+  leadSaveErrorMessage,
+} from "@/lib/admin/lead-save-errors";
 import {
   analyzeAdminLeadAiProfile,
   approveAdminAiTag,
@@ -269,6 +276,11 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminLeadDetail | null>(null);
   const [draft, setDraft] = useState<LeadDraft | null>(null);
+  // The version the draft was loaded from (or last saved as). Not `detail.version`:
+  // addNote refreshes `detail` without touching the draft, which would otherwise
+  // launder a colleague's newer version onto a stale draft.
+  const [draftVersion, setDraftVersion] = useState<string | null>(null);
+  const [conflictLeadId, setConflictLeadId] = useState<string | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [noteBody, setNoteBody] = useState("");
@@ -420,6 +432,8 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
         const lead = data as AdminLeadDetail;
         setDetail(lead);
         setDraft(leadToDraft(lead));
+        setDraftVersion(lead.version);
+        setConflictLeadId(null);
         if (options.resetNote) setNoteBody("");
         void loadLeadAiProfile(id);
         return lead;
@@ -612,6 +626,8 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
       setSelectedId(null);
       setDetail(null);
       setDraft(null);
+      setDraftVersion(null);
+      setConflictLeadId(null);
       setDetailError(null);
       setNoteBody("");
       resetAiProfileState();
@@ -654,7 +670,7 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
   }
 
   async function saveLead(nextDraft = draft, successMessage = "客戶查詢已更新") {
-    if (!detail || !nextDraft || !isWorkspaceCurrent()) return;
+    if (!detail || !nextDraft || draftVersion === null || !isWorkspaceCurrent()) return;
     const lifetime = workspaceLifetimeRef.current;
 
     // Without this the inline error was decorative: 儲存 still wrote a reversed
@@ -667,6 +683,7 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
     }
 
     const targetLeadId = detail.id;
+    let noteWritten = false;
     setMutatingAction("save");
     try {
       // 儲存 used to submit only the field draft while reporting 「客戶查詢已更新」,
@@ -691,15 +708,21 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
           },
         });
         if (!isWorkspaceCurrent(lifetime)) return;
+        noteWritten = true;
         setNoteBody("");
         setNoteError(null);
       }
 
       const result = await updateAdminLead({
-        data: draftToInput(targetLeadId, nextDraft, detail.version),
+        data: draftToInput(targetLeadId, nextDraft, draftVersion),
       });
       if (!isWorkspaceCurrent(lifetime)) return;
       assertNoMutationError(result);
+      if (!result.ok) throw new Error("更新失敗");
+      setDraftVersion(result.version);
+      setDetail((current) =>
+        current?.id === targetLeadId ? { ...current, version: result.version } : current,
+      );
 
       await refreshLeads();
       if (!isWorkspaceCurrent(lifetime) || !canApplyLeadDetail(targetLeadId)) return;
@@ -708,8 +731,12 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
       if (isWorkspaceCurrent(lifetime) && refreshed && canApplyLeadDetail(targetLeadId))
         toast.success(successMessage);
     } catch (err) {
-      if (isWorkspaceCurrent(lifetime) && canApplyLeadDetail(targetLeadId))
-        toast.error(errorText(err));
+      if (isWorkspaceCurrent(lifetime) && canApplyLeadDetail(targetLeadId)) {
+        if (isLeadChangedError(err)) {
+          setConflictLeadId(targetLeadId);
+          toast.error(noteWritten ? LEAD_CHANGED_NOTE_SAVED_MESSAGE : LEAD_CHANGED_MESSAGE);
+        } else toast.error(leadSaveErrorMessage(err));
+      }
     } finally {
       if (isWorkspaceCurrent(lifetime)) setMutatingAction(null);
     }
@@ -1178,6 +1205,12 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
       >
         {detailLoading && !detail ? <Skeleton className="h-72 w-full" /> : null}
         {detailError ? <AdminError message={detailError} /> : null}
+        {conflictLeadId === detail?.id ? (
+          <LeadConflictNotice
+            reloading={detailLoading}
+            onReload={() => void loadLeadDetail(detail.id, { closeOnError: false })}
+          />
+        ) : null}
         {detail && draft ? (
           <LeadDetailEditor
             lead={detail}
