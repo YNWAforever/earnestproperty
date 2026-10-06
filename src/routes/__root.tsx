@@ -33,6 +33,7 @@ import { LiveAgentLauncher } from "@/components/live-agent/LiveAgentLauncher";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { StickyWhatsAppBar } from "@/components/site/StickyWhatsAppBar";
+import { Toaster } from "@/components/ui/sonner";
 import { pageSeo, SITE_NAME, SITE_OG_IMAGE, SITE_THEME_COLOR, SITE_URL } from "@/content/seo";
 import { jsonLdScript, organizationSchema } from "@/lib/schema";
 
@@ -169,6 +170,12 @@ function RootComponent() {
       {showLiveAgentWidget ? <LiveAgentLauncher /> : null}
       {!isAnalyticsPrivatePath(location.pathname) ? (
         <AnalyticsProvider pathname={location.pathname} documentIsolationApproved />
+      ) : null}
+      {/* Public pages only: the private (admin/auth/account) branch already gets
+          a toaster from NeonAuthUIProvider inside PrivateAuthProvider, and a
+          second one would show every toast twice. */}
+      {!isAnalyticsPrivatePath(location.pathname) ? (
+        <Toaster position="top-center" richColors />
       ) : null}
     </>
   );

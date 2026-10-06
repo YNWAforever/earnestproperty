@@ -4,6 +4,7 @@ import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContex
 import { NoLinkInboxSummary } from "@/components/admin/whatsapp/NoLinkInbox";
 import { EnquiryOnlyPanel } from "@/components/admin/whatsapp/EnquiryOnlyPanel";
 import { useStaffSession } from "@/components/admin/staff-session";
+import { adminAttentionIdentity, adminAttentionStore } from "@/components/admin/admin-attention";
 import { WhatsappAiSuggestions } from "@/components/admin/WhatsappAiSuggestions";
 import { mergeMessagePages } from "@/lib/neon/admin-pagination";
 import { WhatsappConsentDialog } from "@/components/admin/WhatsappConsentDialog";
@@ -42,12 +43,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import {
+  BACKGROUND_READ_ROLES,
+  canApplyBackgroundRead,
+  createBackgroundReadGate,
+  errorAfterBackgroundListSuccess,
+} from "@/lib/admin/background-refresh";
+import { MIN_VISIBLE_INTERVAL_MS, useVisibleInterval } from "@/lib/admin/use-visible-interval";
+import { BACKGROUND_READ_TIMEOUT_MS, withTimeout } from "@/lib/admin/with-timeout";
+import {
   fetchAdminAgents,
   fetchAdminConversation,
   fetchAdminConversationAiAssist,
   fetchAdminOutboundIntent,
   fetchAdminOutboundReservation,
   fetchAdminPage,
+  fetchAdminPageInBackground,
   fetchAdminWhatsappTemplates,
   fetchAdminWoztellStatus,
   runAdminWoztellBackfill,
@@ -175,6 +185,10 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   const { user } = useNeonAuth();
   const { session: staffSession } = useStaffSession(user?.id ?? null);
   const canBackfill = staffSession?.status === "ok" && staffSession.roles.includes("admin");
+  // The list poll reads only for the roles the list read accepts (a viewer's would be refused
+  // every minute), and stops after a refused background read until a user list read succeeds.
+  const staffRoles = staffSession?.status === "ok" ? staffSession.roles : null;
+  const [pollGate] = useState(() => createBackgroundReadGate(BACKGROUND_READ_ROLES.inboxList));
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const isDesktop = useDesktopBreakpoint();
@@ -195,6 +209,9 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   const [woztellEnabled, setWoztellEnabled] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loadingRows, setLoadingRows] = useState(false);
+  // Lets the list poll see a user-started list read (重新整理, paging, a save's readback).
+  const loadingRowsRef = useRef(loadingRows);
+  loadingRowsRef.current = loadingRows;
   const [enquirySelections, setEnquirySelections] = useState<Record<string, string>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<AdminConversationDetail | null>(null);
@@ -255,6 +272,30 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
     }
   }, [staffUserId, selectedId]);
   const [listUpdatedAt, setListUpdatedAt] = useState<number | null>(null);
+  // 我的接手工作 re-reads (and blocks its actions) on every change of its key, so the key follows
+  // user-started list reads only (load, 重新整理, paging, a save's readback). A poll still moves
+  // 最後更新; its stamp is remembered so the key skips it.
+  const backgroundListStampRef = useRef<number | null>(null);
+  const [handoffRefreshKey, setHandoffRefreshKey] = useState<number | null>(null);
+  useEffect(() => {
+    if (listUpdatedAt !== backgroundListStampRef.current) setHandoffRefreshKey(listUpdatedAt);
+  }, [listUpdatedAt]);
+  // The user's own work changes what is waiting (a reply sent, a conversation updated, or
+  // 重新整理 showing new messages), so a user-started list read also re-reads the nav badges at
+  // once rather than up to a minute later. A poll never moves this key, so it adds no count read,
+  // and the page's first load leaves the counts to the shell's own read.
+  const attentionIdentity = adminAttentionIdentity(user?.id ?? null, staffSession);
+  const firstListLoadRef = useRef(true);
+  useEffect(() => {
+    if (handoffRefreshKey === null) return;
+    if (firstListLoadRef.current) {
+      firstListLoadRef.current = false;
+      return;
+    }
+    if (attentionIdentity) void adminAttentionStore.refresh(attentionIdentity);
+  }, [handoffRefreshKey, attentionIdentity]);
+  // What a failed list read put in the shared error banner: the only error a poll may clear.
+  const listErrorRef = useRef<string | null>(null);
   const [aiAssistLoading, setAiAssistLoading] = useState(false);
   const [aiAssistError, setAiAssistError] = useState<string | null>(null);
   const inboxQuery = typeof search.q === "string" ? search.q : "";
@@ -367,37 +408,81 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
     }
   }, [isWorkspaceCurrent]);
   const refreshConversations = useCallback(
-    async (cursor: string | null = listCursorRef.current) => {
+    async (
+      cursor: string | null = listCursorRef.current,
+      options: { background?: boolean } = {},
+    ) => {
       if (!user || !isWorkspaceCurrent()) return;
-
-      const requestId = listRequestRef.current + 1;
-      listRequestRef.current = requestId;
-      setLoadingRows(true);
-      try {
-        const data = await fetchAdminPage(
-          {
-            data: { resource: "conversations", cursor, q: inboxQuery, status: inboxStatus },
-          },
-          isWorkspaceCurrent,
-        );
-        if (!isWorkspaceCurrent() || requestId !== listRequestRef.current) return;
+      const input = {
+        data: { resource: "conversations" as const, cursor, q: inboxQuery, status: inboxStatus },
+      };
+      // A user read and a poll write the same list state on success. A poll's stamp is kept out
+      // of 我的接手工作's key, and it leaves any banner another read on the page put up.
+      const apply = (
+        data: { rows: AdminConversationRow[]; nextCursor: string | null; total: number },
+        background: boolean,
+      ) => {
         setRows(data.rows);
         setListCursor(cursor);
         listCursorRef.current = cursor;
         setNextListCursor(data.nextCursor);
         setListTotal(data.total);
-        setListUpdatedAt(Date.now());
-        setError(null);
+        const stamp = Date.now();
+        if (background) backgroundListStampRef.current = stamp;
+        setListUpdatedAt(stamp);
+        if (background) {
+          setError((shown) => errorAfterBackgroundListSuccess(shown, listErrorRef.current));
+        } else {
+          listErrorRef.current = null;
+          setError(null);
+          pollGate.foregroundSucceeded();
+        }
+      };
+
+      if (options.background) {
+        // A poll never takes the request slot or the loading flag (see canApplyBackgroundRead):
+        // it applies only if no user read started or is running since, on the same page.
+        const started = { requestId: listRequestRef.current, cursor };
+        try {
+          const data = await withTimeout(
+            fetchAdminPageInBackground(input, isWorkspaceCurrent),
+            BACKGROUND_READ_TIMEOUT_MS,
+          );
+          const current = {
+            requestId: listRequestRef.current,
+            cursor: listCursorRef.current,
+            userReadInFlight: loadingRowsRef.current,
+          };
+          if (!isWorkspaceCurrent() || !canApplyBackgroundRead(started, current)) return false;
+          apply(data, true);
+          return true;
+        } catch (err) {
+          pollGate.backgroundFailed(err);
+          // A failed or timed-out poll keeps the list on screen and says nothing; the next
+          // tick, or 重新整理, reads again (a refused one waits for a user list read).
+          return false;
+        }
+      }
+
+      const requestId = listRequestRef.current + 1;
+      listRequestRef.current = requestId;
+      setLoadingRows(true);
+      try {
+        const data = await fetchAdminPage(input, isWorkspaceCurrent);
+        if (!isWorkspaceCurrent() || requestId !== listRequestRef.current) return;
+        apply(data, false);
         return true;
       } catch (err) {
         if (!isWorkspaceCurrent() || requestId !== listRequestRef.current) return;
-        setError(errorText(err));
+        const message = errorText(err);
+        listErrorRef.current = message;
+        setError(message);
         return false;
       } finally {
         if (isWorkspaceCurrent() && requestId === listRequestRef.current) setLoadingRows(false);
       }
     },
-    [user, inboxQuery, inboxStatus, isWorkspaceCurrent],
+    [user, inboxQuery, inboxStatus, isWorkspaceCurrent, pollGate],
   );
 
   const loadConversationAiAssist = useCallback(
@@ -568,6 +653,15 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
     if (!user) return;
     void refreshConversations(null);
   }, [refreshConversations, user]);
+
+  // The list (not the open thread) refreshes once a minute while the tab is visible, on the page
+  // the user is on. It never touches the selection, the thread, drafts or the URL.
+  useVisibleInterval(() => {
+    if (!pollGate.allows(staffRoles)) return undefined;
+    // A user-started list read (重新整理, paging, a save's readback) owns the slot; skip this tick.
+    if (loadingRowsRef.current) return undefined;
+    return refreshConversations(undefined, { background: true });
+  }, MIN_VISIBLE_INTERVAL_MS);
 
   useEffect(() => {
     if (!user) return;
@@ -1050,12 +1144,12 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   return (
     <AdminShell
       title="WhatsApp 收件匣"
-      description="查看客戶訊息、分配負責同事及回覆；按「重新整理」讀取新訊息。"
+      description="查看客戶訊息、分配負責同事及回覆；對話列表每分鐘自動更新，亦可按「重新整理」即時讀取。"
     >
       {user ? (
         <StaffNotificationPanel
           key={user.id}
-          refreshKey={listUpdatedAt}
+          refreshKey={handoffRefreshKey}
           onOpen={(item) => {
             openConversation(item.conversationId);
             setEnquirySelections((current) => ({

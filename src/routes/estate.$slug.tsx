@@ -724,7 +724,7 @@ function EstatePage() {
         </Container>
       )}
 
-      <OwnerValuationPanel context={ctaContext} estateId={estate.id} />
+      <OwnerValuationPanel key={estate.id} context={ctaContext} estateId={estate.id} />
       <TrustProofPanel />
 
       {visibleFaqs.length > 0 && (

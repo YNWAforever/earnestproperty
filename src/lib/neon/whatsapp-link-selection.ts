@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 import { propertyGroupFiltersSchema } from "./admin-properties.types";
 
 const snapshot = createServerFn({ method: "POST" })
@@ -12,4 +12,4 @@ const snapshot = createServerFn({ method: "POST" })
   });
 
 export const snapshotWhatsappLinkOffers = async (filters: Parameters<typeof snapshot>[0]["data"]) =>
-  snapshot(await withStaffAuthHeaders({ data: filters }));
+  callStaffServerFn(snapshot, { data: filters });

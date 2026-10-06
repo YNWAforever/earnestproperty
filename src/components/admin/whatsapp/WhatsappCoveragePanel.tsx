@@ -7,6 +7,7 @@ import {
   linkBatchProgressKey,
   type LinkBatchProgress,
 } from "@/lib/admin/whatsapp-link-batch-client";
+import { staffActionErrorText } from "@/components/admin/admin-error-text";
 
 export function WhatsappCoveragePanel({
   actorScope,
@@ -40,7 +41,7 @@ export function WhatsappCoveragePanel({
         }
       })
       .catch((cause) => {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "覆蓋資料未能載入");
+        if (!cancelled) setError(staffActionErrorText(cause, "覆蓋資料未能載入"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -71,7 +72,7 @@ export function WhatsappCoveragePanel({
       sessionStorage.setItem(linkBatchProgressKey(actorScope), JSON.stringify(progress));
       window.location.reload();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "補建預覽未完成");
+      setError(staffActionErrorText(cause, "補建預覽未完成"));
     } finally {
       setBusy(false);
     }

@@ -26,6 +26,7 @@ import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { ForwardedEnquiryForm } from "@/components/admin/whatsapp/ForwardedEnquiryForm";
 import { ForwardedEnquiryEvidence } from "@/components/admin/whatsapp/ForwardedEnquiryEvidence";
 import { RelatedLeadConversations } from "@/components/admin/whatsapp/RelatedLeadConversations";
+import { LeadChatTranscript } from "@/components/admin/LeadChatTranscript";
 import { LeadContactEditor } from "@/components/admin/whatsapp/LeadContactEditor";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
@@ -88,6 +89,7 @@ import type {
 
 import {
   type LeadStage,
+  stageFilterOptions,
   stageOptions,
   stageLabels,
   intentLabels,
@@ -941,7 +943,7 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部階段</SelectItem>
-                {stageOptions.map((stage) => (
+                {stageFilterOptions.map((stage) => (
                   <SelectItem key={stage.value} value={stage.value}>
                     {stage.label}
                   </SelectItem>
@@ -1672,6 +1674,8 @@ function LeadDetailEditor({
           )}
         </div>
       </section>
+
+      {lead.source === "live_agent" ? <LeadChatTranscript key={lead.id} leadId={lead.id} /> : null}
 
       <section className="rounded-lg border p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">

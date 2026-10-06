@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { WhatsappCoveragePanel } from "./WhatsappCoveragePanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "@/lib/neon/staff-server-fn";
 import { saveWhatsappTrackingLink } from "@/lib/neon/whatsapp-enquiries";
 import { getWhatsappTrackingLinksPage } from "@/lib/neon/whatsapp-link-management";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/lib/admin/whatsapp-link-export-api";
 import type { LinkPageFilter } from "@/lib/neon/whatsapp-link-management.types";
 import type { TrackingLink } from "@/lib/neon/whatsapp-enquiries.types";
+import { staffActionErrorText } from "@/components/admin/admin-error-text";
 
 type Page = Awaited<ReturnType<typeof getWhatsappTrackingLinksPage>>;
 type Item = Page["items"][number];
@@ -60,7 +61,7 @@ export function WhatsappLinksTable({
       .catch((cause) => {
         if (!cancelled) {
           setPage(null);
-          setError(cause instanceof Error ? cause.message : "連結未能載入");
+          setError(staffActionErrorText(cause, "連結未能載入"));
         }
       })
       .finally(() => {
@@ -77,7 +78,7 @@ export function WhatsappLinksTable({
     try {
       await task();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "操作未完成，請重試。");
+      setError(staffActionErrorText(cause, "操作未完成，請重試。"));
     } finally {
       setBusy(false);
     }
@@ -117,15 +118,9 @@ export function WhatsappLinksTable({
       placementVerifiedAt: _verifiedAt,
       ...fields
     } = input;
-    await saveWhatsappTrackingLink(
-      await withStaffAuthHeaders({
-        data: {
-          ...fields,
-          id,
-          expectedVersion: version,
-        },
-      }),
-    );
+    await callStaffServerFn(saveWhatsappTrackingLink, {
+      data: { ...fields, id, expectedVersion: version },
+    });
     setEditing(null);
     setNotice("已儲存新版本；短連結不變。");
     reload();

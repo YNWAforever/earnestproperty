@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "../neon/staff-server-fn";
 import { z } from "zod";
 import { exportInput } from "./whatsapp-link-export";
 
@@ -25,6 +25,6 @@ const page = createServerFn({ method: "GET" })
     );
   });
 export const prepareWhatsappLinkExport = async (data: z.infer<typeof exportInput>) =>
-  prepare(await withStaffAuthHeaders({ data }));
+  callStaffServerFn(prepare, { data });
 export const getWhatsappLinkExportPage = async (data: { snapshotId: string; offset: number }) =>
-  page(await withStaffAuthHeaders({ data }));
+  callStaffServerFn(page, { data });
