@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import ts from "typescript";
+import { campaignHasDeliveryHistorySql } from "./campaign-retry.ts";
 
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -113,6 +114,7 @@ test("campaign save rejects delivery statuses before any database write", async 
     "queryRows",
     "writeAudit",
     "stringOrEmpty",
+    "campaignHasDeliveryHistorySql",
     executable + "\nreturn saveAdminCampaign;",
   )(
     () => {},
@@ -123,6 +125,7 @@ test("campaign save rejects delivery statuses before any database write", async 
     },
     async () => {},
     String,
+    campaignHasDeliveryHistorySql,
   );
   const input = {
     name: "Campaign",
@@ -147,6 +150,12 @@ test("campaign save rejects delivery statuses before any database write", async 
     queries[1].sql,
     /WHERE id=\$6\s+AND status IN \('draft', 'review', 'scheduled'\)/,
     "a concurrent queue or send must prevent an edit",
+  );
+  // FX-10b: once a recipient may have been reached, template and audience are frozen.
+  assert.match(
+    queries[1].sql,
+    /AND \(NOT EXISTS \(SELECT 1 FROM whatsapp_campaign_recipients history[\s\S]*OR \(template_id IS NOT DISTINCT FROM \$2 AND audience_id IS NOT DISTINCT FROM \$3\)\)/,
+    "a campaign with delivery history keeps its template and audience",
   );
 });
 

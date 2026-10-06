@@ -209,7 +209,38 @@ export type AdminCampaignRow = {
   failed: number;
   blocked: number;
   pending: number;
+  /** FX-10b: failed rows a retry may re-queue (retry-safe code, never dispatched). */
+  retryable_failed?: number;
+  /** FX-10b: rows held back by a systemic stop (queued / WOZTELL_CAMPAIGN_PAUSED). */
+  paused?: number;
+  /** FX-10b: some recipient may have reached WhatsApp; template and audience are frozen. */
+  delivery_started?: boolean;
 };
+
+export type AdminCampaignRetryPreview = {
+  campaignId: string;
+  status: string;
+  /** Exactly what requeueFailedCampaignRecipients would move now. */
+  retryable: number;
+  /** Retry-safe failure, but consent or identity now fails. */
+  excludedOptedOut: number;
+  /** Retry-safe failure, but not the primary row for its phone. */
+  excludedDuplicatePhone: number;
+  unknownTotal: number;
+  /** At most 100, oldest dispatch first. No phone or member id. */
+  unknown: { recipientId: string; name: string | null; dispatchedAt: string | null }[];
+};
+
+export type AdminCampaignRequeueResult =
+  | { ok: true; requeued: number; excludedUnknown: number; excludedOther: number }
+  | {
+      ok: false;
+      error:
+        | "Campaign not found"
+        | "CAMPAIGN_STILL_SENDING"
+        | "CAMPAIGN_NOT_RETRYABLE"
+        | "NOTHING_TO_RETRY";
+    };
 
 export type AdminAgentRow = {
   id: string;

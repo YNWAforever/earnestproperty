@@ -34,6 +34,8 @@ import type {
   AdminCmsVideoInput,
   AdminAudienceInput,
   AdminCampaignInput,
+  AdminCampaignRequeueResult,
+  AdminCampaignRetryPreview,
   AdminCampaignRow,
   AdminConversationAiAssist,
   AdminConversationRow,
@@ -85,6 +87,7 @@ import {
   resolveWhatsappStatus,
 } from "./command-center";
 import { campaignRecipientPrimarySql, marketingIdentitySafeSql } from "./phone-identity.ts";
+import { campaignHasDeliveryHistorySql, retryableFailedRecipientSql } from "./campaign-retry.ts";
 import { persistWebsiteInquiry } from "./website-inquiry.js";
 import {
   persistListingAlert,
@@ -3210,7 +3213,10 @@ export async function listAdminCampaigns(): Promise<AdminCampaignRow[]> {
       count(r.id) FILTER (WHERE r.status = 'cancelled')::int AS cancelled,
       count(r.id) FILTER (WHERE r.status = 'sending' AND r.dispatch_started_at IS NOT NULL)::int AS dispatching,
       count(r.id) FILTER (WHERE r.status = 'blocked')::int AS blocked,
-      count(r.id) FILTER (WHERE r.status IN ('queued', 'sending') AND r.dispatch_started_at IS NULL)::int AS pending
+      count(r.id) FILTER (WHERE r.status IN ('queued', 'sending') AND r.dispatch_started_at IS NULL)::int AS pending,
+      count(r.id) FILTER (WHERE ${retryableFailedRecipientSql("r")})::int AS retryable_failed,
+      count(r.id) FILTER (WHERE r.status = 'queued' AND r.error = 'WOZTELL_CAMPAIGN_PAUSED')::int AS paused,
+      ${campaignHasDeliveryHistorySql("c")} AS delivery_started
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_templates t ON t.id = c.template_id
     LEFT JOIN whatsapp_audiences a ON a.id = c.audience_id
@@ -3388,11 +3394,17 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
     input.scheduled_at,
   ];
 
+  // Once any recipient may have reached WhatsApp, the template and audience
+  // are frozen (FX-10b): a paused or retried campaign must resume as the same
+  // message to the same people. Renames and status moves stay allowed.
   const rows = input.id
     ? await queryRows(
         `UPDATE whatsapp_campaigns SET name=$1, template_id=$2, audience_id=$3,
           status=$4::whatsapp_campaign_status, scheduled_at=$5, updated_at=now()
-         WHERE id=$6 AND status IN ('draft', 'review', 'scheduled') RETURNING id`,
+         WHERE id=$6 AND status IN ('draft', 'review', 'scheduled')
+           AND (NOT ${campaignHasDeliveryHistorySql("whatsapp_campaigns")}
+             OR (template_id IS NOT DISTINCT FROM $2 AND audience_id IS NOT DISTINCT FROM $3))
+         RETURNING id`,
         [...params, input.id],
       )
     : await queryRows(
@@ -3402,7 +3414,18 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
         [...params, actor.staffId],
       );
 
-  if (input.id && !rows[0]) return { id: "", error: "Not found" };
+  if (input.id && !rows[0]) {
+    const editable = await queryRows(
+      `SELECT ${campaignHasDeliveryHistorySql("c")} AS has_history
+       FROM whatsapp_campaigns c
+       WHERE c.id=$1 AND c.status IN ('draft', 'review', 'scheduled')`,
+      [input.id],
+    );
+    if (editable[0]?.has_history === true) {
+      return { id: "", error: "CAMPAIGN_HAS_DELIVERY_HISTORY" };
+    }
+    return { id: "", error: "Not found" };
+  }
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, input.id ? "campaign.update" : "campaign.create", "campaign", id);
   return { id };
@@ -3414,7 +3437,8 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
 
   const campaigns = await queryRows(
     `
-    SELECT c.id, a.id AS resolved_audience_id, a.filters
+    SELECT c.id, a.id AS resolved_audience_id, a.filters,
+      ${campaignHasDeliveryHistorySql("c")} AS has_history
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_audiences a ON a.id = c.audience_id
     WHERE c.id = $1
@@ -3432,6 +3456,9 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
     .map((row) => stringOrEmpty(row.id))
     .filter(Boolean);
   const uniqueEligibleContactIds = Array.from(new Set(eligibleContactIds));
+  // A campaign that may already have reached anyone resumes with its original
+  // recipients only: new audience matches are never added to it (FX-10b).
+  const hasHistory = campaign.has_history === true;
 
   if (uniqueEligibleContactIds.length > 0) {
     await queryRows(
@@ -3439,28 +3466,36 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
       INSERT INTO whatsapp_campaign_recipients (campaign_id, contact_id, status)
       SELECT $1::uuid, contact_id, 'queued'
       FROM unnest($2::uuid[]) AS contact_ids(contact_id)
-      -- 'sent'/'sending' are obviously not re-queueable. WOZTELL_DELIVERY_UNKNOWN
-      -- is the subtle one: it means the provider took the message but never
+      WHERE NOT $3::boolean OR EXISTS (
+        SELECT 1 FROM whatsapp_campaign_recipients x
+        WHERE x.campaign_id = $1::uuid AND x.contact_id = contact_ids.contact_id
+      )
+      -- 'sent'/'sending' are obviously not re-queueable, nor is any row whose
+      -- dispatch was reserved. 'failed' is kept too: a retry-safe refusal goes
+      -- back to the queue only through requeueFailedCampaignRecipients, which
+      -- re-checks consent and is audited. WOZTELL_DELIVERY_UNKNOWN is the
+      -- subtle one: it means the provider took the message but never
       -- confirmed the outcome (a 5xx/timeout, or a 'sending' row reconciled
       -- after 15 minutes -- see campaign-delivery.server.ts). The customer may
       -- well have received it, so re-queueing that recipient risks a second,
-      -- billable WhatsApp message to a real person. Treat it as terminal;
-      -- genuine provider rejections (WOZTELL_PROVIDER_REJECTED) still re-queue.
+      -- billable WhatsApp message to a real person. Treat it as terminal.
       ON CONFLICT (campaign_id, contact_id) DO UPDATE SET
         status = CASE
-          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending')
+          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending', 'failed')
+            OR whatsapp_campaign_recipients.dispatch_started_at IS NOT NULL
             OR whatsapp_campaign_recipients.error = 'WOZTELL_DELIVERY_UNKNOWN'
             THEN whatsapp_campaign_recipients.status
           ELSE EXCLUDED.status
         END,
         error = CASE
-          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending')
+          WHEN whatsapp_campaign_recipients.status IN ('sent', 'sending', 'failed')
+            OR whatsapp_campaign_recipients.dispatch_started_at IS NOT NULL
             OR whatsapp_campaign_recipients.error = 'WOZTELL_DELIVERY_UNKNOWN'
             THEN whatsapp_campaign_recipients.error
           ELSE NULL
         END
       `,
-      [campaignId, uniqueEligibleContactIds],
+      [campaignId, uniqueEligibleContactIds, hasHistory],
     );
   }
   await queryRows(
@@ -3469,6 +3504,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
     SET status = 'blocked', error = 'No longer eligible for audience'
     WHERE r.campaign_id = $1
       AND r.status = 'queued'
+      AND r.dispatch_started_at IS NULL
       AND r.contact_id <> ALL($2::uuid[])
     `,
     [campaignId, uniqueEligibleContactIds],
@@ -3638,6 +3674,214 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
     queueRunAt: rowDate(flipped[0].reviewed_at),
     jobId: stringOrEmpty(flipped[0].job_id),
     jobStatus: stringOrEmpty(flipped[0].job_status),
+  };
+}
+
+const CAMPAIGN_RETRY_STATUSES = ["failed", "completed", "review"];
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function requireCampaignRetryRole(actor: StaffAccess) {
+  if (!actor?.roles?.some((role) => role === "admin" || role === "manager")) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+}
+
+// Consent and identity as main checks them today (queueAdminCampaign and
+// beginCampaignDispatch). FX-08 (#228) adds opt-out evidence columns; its
+// rebase may extend this predicate.
+function campaignRetryConsentSql(contactAlias: string) {
+  return `(${contactAlias}.opt_in_whatsapp = true
+    AND ${contactAlias}.opted_out_whatsapp = false
+    AND NULLIF(${contactAlias}.normalized_phone, '') IS NOT NULL
+    AND ${marketingIdentitySafeSql(contactAlias)})`;
+}
+
+// True while a recipient is on the wire or a delivery job still holds a live
+// lease on the campaign. A late result from either must land before a retry.
+const CAMPAIGN_RETRY_BUSY_SQL = `(EXISTS (
+    SELECT 1 FROM whatsapp_campaign_recipients s
+    WHERE s.campaign_id = $1::uuid AND s.status = 'sending'
+  ) OR EXISTS (
+    SELECT 1 FROM ops_jobs j
+    WHERE j.job_type = 'woztell.campaign.deliver' AND j.payload->>'campaignId' = $1::text
+      AND j.status = 'running' AND j.lease_expires_at > clock_timestamp()
+  ))`;
+
+/**
+ * What a retry of this campaign would do, for the 重新發送 confirmation.
+ * `retryable` is exactly what requeueFailedCampaignRecipients would move now.
+ * No phone, member id or normalized_phone is selected; a name that looks like
+ * a phone number is withheld.
+ */
+export async function fetchCampaignRetryPreview(
+  campaignId: string,
+  actor: StaffAccess,
+): Promise<AdminCampaignRetryPreview> {
+  requireCampaignRetryRole(actor);
+  const empty: AdminCampaignRetryPreview = {
+    campaignId,
+    status: "",
+    retryable: 0,
+    excludedOptedOut: 0,
+    excludedDuplicatePhone: 0,
+    unknownTotal: 0,
+    unknown: [],
+  };
+  if (!UUID_PATTERN.test(campaignId)) return empty;
+  const [summaryRows, unknownRows] = await Promise.all([
+    queryRows(
+      `
+      WITH candidate AS (
+        SELECT
+          ${campaignRetryConsentSql("contact")} AS consent_ok,
+          ${campaignRecipientPrimarySql("r", "contact")} AS primary_row
+        FROM whatsapp_campaign_recipients r
+        JOIN crm_contacts contact ON contact.id = r.contact_id
+        WHERE r.campaign_id = $1::uuid AND ${retryableFailedRecipientSql("r")}
+      )
+      SELECT
+        c.status,
+        CASE WHEN c.status IN ('failed', 'completed', 'review') AND NOT ${CAMPAIGN_RETRY_BUSY_SQL}
+          THEN (SELECT count(*) FROM candidate WHERE consent_ok AND primary_row)
+          ELSE 0 END::int AS retryable,
+        (SELECT count(*) FROM candidate WHERE NOT consent_ok)::int AS excluded_opted_out,
+        (SELECT count(*) FROM candidate WHERE consent_ok AND NOT primary_row)::int
+          AS excluded_duplicate_phone,
+        (SELECT count(*) FROM whatsapp_campaign_recipients u
+          WHERE u.campaign_id = $1::uuid AND u.error = 'WOZTELL_DELIVERY_UNKNOWN')::int
+          AS unknown_total
+      FROM whatsapp_campaigns c
+      WHERE c.id = $1::uuid
+      `,
+      [campaignId],
+    ),
+    queryRows(
+      `
+      SELECT r.id,
+        CASE WHEN regexp_replace(contact.name, '[[:space:]().+-]', '', 'g') ~ '[0-9]{6,}'
+          THEN NULL ELSE contact.name END AS name,
+        r.dispatch_started_at
+      FROM whatsapp_campaign_recipients r
+      JOIN crm_contacts contact ON contact.id = r.contact_id
+      WHERE r.campaign_id = $1::uuid AND r.error = 'WOZTELL_DELIVERY_UNKNOWN'
+      ORDER BY r.dispatch_started_at ASC NULLS LAST, r.id ASC
+      LIMIT 100
+      `,
+      [campaignId],
+    ),
+  ]);
+  const summary = summaryRows[0];
+  if (!summary) return empty;
+  return {
+    campaignId,
+    status: stringOrEmpty(summary.status),
+    retryable: Number(summary.retryable ?? 0),
+    excludedOptedOut: Number(summary.excluded_opted_out ?? 0),
+    excludedDuplicatePhone: Number(summary.excluded_duplicate_phone ?? 0),
+    unknownTotal: Number(summary.unknown_total ?? 0),
+    unknown: unknownRows.map((row) => ({
+      recipientId: stringOrEmpty(row.id),
+      name: stringOrNull(row.name),
+      dispatchedAt: dateOrNull(row.dispatch_started_at),
+    })),
+  };
+}
+
+/**
+ * Puts the definitely refused recipients of this campaign back in the queue
+ * and returns the campaign to 待審核 (FX-10b). It never sends, never enqueues a
+ * job and never wakes the runner: a manager or admin must queue it again
+ * through the normal 「發送…」 approval (queueAdminCampaign).
+ *
+ * Only rows matching retryableFailedRecipientSql (failed, never dispatched,
+ * a retry-safe code) whose contact still passes consent, identity and the
+ * one-row-per-phone rule move. Never: new audience members, 結果未明
+ * (WOZTELL_DELIVERY_UNKNOWN), sent/sending rows, or a row with a dispatch
+ * reservation. The campaign row lock serialises concurrent calls, and the
+ * write re-reads in a fresh snapshot, so a repeat finds NOTHING_TO_RETRY.
+ */
+export async function requeueFailedCampaignRecipients(
+  input: { campaignId: string },
+  actor: StaffAccess,
+): Promise<AdminCampaignRequeueResult> {
+  requireCampaignRetryRole(actor);
+  const campaignId = String(input?.campaignId ?? "");
+  if (!UUID_PATTERN.test(campaignId)) return { ok: false, error: "Campaign not found" };
+  const results = await transactionRows([
+    {
+      // The lock. The statement below starts a fresh snapshot after it.
+      statement: "SELECT id, status FROM whatsapp_campaigns WHERE id = $1::uuid FOR UPDATE",
+      params: [campaignId],
+    },
+    {
+      statement: `
+      WITH c AS (
+        SELECT c.id, c.status FROM whatsapp_campaigns c WHERE c.id = $1::uuid
+      ), busy AS (
+        SELECT ${CAMPAIGN_RETRY_BUSY_SQL} AS busy
+      ), pick AS (
+        SELECT r.id
+        FROM whatsapp_campaign_recipients r
+        JOIN c ON c.id = r.campaign_id
+        JOIN crm_contacts contact ON contact.id = r.contact_id, busy
+        WHERE c.status IN ('failed', 'completed', 'review') AND NOT busy.busy
+          AND ${retryableFailedRecipientSql("r")}
+          AND ${campaignRetryConsentSql("contact")}
+          AND ${campaignRecipientPrimarySql("r", "contact")}
+        FOR UPDATE OF r
+      ), requeued AS (
+        UPDATE whatsapp_campaign_recipients r
+        SET status = 'queued', error = NULL, queued_at = NULL,
+            claim_job_id = NULL, claim_worker_id = NULL, claim_attempt = NULL,
+            dispatch_job_id = NULL, dispatch_worker_id = NULL, dispatch_attempt = NULL
+        FROM pick
+        WHERE r.id = pick.id AND ${retryableFailedRecipientSql("r")}
+        RETURNING r.id
+      ), flipped AS (
+        UPDATE whatsapp_campaigns w SET status = 'review', updated_at = now()
+        FROM c
+        WHERE w.id = c.id AND EXISTS (SELECT 1 FROM requeued)
+        RETURNING w.id, c.status AS previous_status
+      ), excluded AS (
+        SELECT
+          count(*) FILTER (WHERE x.error = 'WOZTELL_DELIVERY_UNKNOWN')::int AS unknown,
+          count(*) FILTER (
+            WHERE x.status = 'failed' AND x.error IS DISTINCT FROM 'WOZTELL_DELIVERY_UNKNOWN'
+          )::int AS other
+        FROM whatsapp_campaign_recipients x
+        WHERE x.campaign_id = $1::uuid AND x.id NOT IN (SELECT id FROM requeued)
+      ), audited AS (
+        INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+        SELECT $2::uuid, 'campaign.requeue_failed', 'campaign', f.id,
+          jsonb_build_object(
+            'requeued', (SELECT count(*) FROM requeued),
+            'previousStatus', f.previous_status,
+            'excludedUnknown', e.unknown,
+            'excludedOther', e.other
+          )
+        FROM flipped f CROSS JOIN excluded e
+        RETURNING id
+      )
+      SELECT c.status, busy.busy, (SELECT count(*) FROM requeued)::int AS requeued,
+        e.unknown, e.other
+      FROM c, busy, excluded e
+      `,
+      params: [campaignId, actor.staffId],
+    },
+  ]);
+  const row = (results[1] as Record<string, unknown>[] | undefined)?.[0];
+  if (!row) return { ok: false, error: "Campaign not found" };
+  if (row.busy === true) return { ok: false, error: "CAMPAIGN_STILL_SENDING" };
+  if (!CAMPAIGN_RETRY_STATUSES.includes(stringOrEmpty(row.status))) {
+    return { ok: false, error: "CAMPAIGN_NOT_RETRYABLE" };
+  }
+  const requeued = Number(row.requeued ?? 0);
+  if (requeued === 0) return { ok: false, error: "NOTHING_TO_RETRY" };
+  return {
+    ok: true,
+    requeued,
+    excludedUnknown: Number(row.unknown ?? 0),
+    excludedOther: Number(row.other ?? 0),
   };
 }
 

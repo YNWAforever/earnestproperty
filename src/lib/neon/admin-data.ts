@@ -1798,6 +1798,50 @@ export async function cancelAdminCampaign(
   );
 }
 
+// FX-10b: re-send only the definitely refused recipients of a campaign. The
+// requeue returns the campaign to 待審核; sending still needs 「發送…」.
+const fetchCampaignRetryPreviewServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchCampaignRetryPreview(data.id, staff);
+  });
+
+export async function fetchCampaignRetryPreview(
+  options: { data: { id: string } },
+  isWorkspaceCurrent?: () => boolean,
+) {
+  return callStaffServerFn(async () =>
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => fetchCampaignRetryPreviewServer(prepared),
+      isWorkspaceCurrent,
+    ),
+  );
+}
+
+const requeueFailedCampaignRecipientsServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { campaignId: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.requeueFailedCampaignRecipients({ campaignId: data.campaignId }, staff);
+  });
+
+export async function requeueFailedCampaignRecipients(
+  options: { data: { campaignId: string } },
+  isWorkspaceCurrent?: () => boolean,
+) {
+  return callStaffServerFn(async () =>
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => requeueFailedCampaignRecipientsServer(prepared),
+      isWorkspaceCurrent,
+    ),
+  );
+}
+
 const fetchAdminPageServer = createServerFn({ method: "GET" })
   .inputValidator(parseAdminPageInput)
   .handler(async ({ data }) => {
