@@ -44,7 +44,7 @@ Findings: C-05, G-02, D-06, C-10 (= D-08).
 
   The final SELECT reports `current_version`, `assignee_ok` and `new_version`. TypeScript maps the result to 409 `LEAD_CHANGED`, 400 `ASSIGNEE_INACTIVE`, or `{ ok: true, version, changed }`.
 
-  A save that changes nothing writes nothing and returns the unchanged version. So a double-click, or a second 儲存 with no edits, can never 409 (Review Focus 1).
+  A repeat save at the current version with no edits writes nothing and returns that version. A save at a stale version always 409s, even when it would change nothing, so a stale draft can never pick up a fresh version (Review Focus 1).
 - **The rule for who bumps `updated_at`** (decided here; the fix plan was silent):
   - Every writer that changes a `crm_leads` row bumps `updated_at` in the same statement.
   - Writers that do not touch `crm_leads` never bump it.
@@ -721,7 +721,18 @@ export function LeadConflictNotice(props: { reloading: boolean; onReload: () => 
 6. **Canary (read-only, first 48 h):**
    - `/admin/leads` loads and saves for an agent and a manager.
    - In Vercel logs, `LEAD_CHANGED` warnings are rare. **The same staff member getting two in a row on the same lead within a minute is a 409-loop signal: roll back the PR.**
-   - `SELECT count(*) FROM crm_leads WHERE source='whatsapp' AND created_at > <deploy>` is in line with inbound volume. No contact has more than one open lead: `SELECT contact_id FROM crm_leads WHERE stage NOT IN ('closed_won','closed_lost') AND source='whatsapp' GROUP BY 1 HAVING count(*)>1` returns 0 new rows.
+   - `SELECT count(*) FROM crm_leads WHERE source='whatsapp' AND created_at > <deploy>` is in line with inbound volume.
+   - **Duplicate-lead check.** A contact with more than one open lead is not by itself a regression. A manager can legitimately move an old closed lead back to an open stage after the trigger has already opened a new one for the customer's latest message (final review M4). The bug signal is narrower: two trigger-created leads, both still `source='whatsapp'` and stage `new`, for one contact, at least one of them created after the deploy. This must return 0 rows:
+
+     ```sql
+     SELECT contact_id, count(*) AS new_whatsapp_leads, max(created_at) AS latest
+     FROM crm_leads
+     WHERE source = 'whatsapp' AND stage = 'new'
+     GROUP BY contact_id
+     HAVING count(*) > 1 AND max(created_at) > '<deploy>'::timestamptz;
+     ```
+
+     Any row here means the trigger opened a second lead while one was still open: roll back. Contacts with several open leads in other stages are expected after a staff reopen. Review them by hand, do not roll back for them.
    - `audit_logs` `lead.update` rows carry `changed`/`before`/`after`.
    - Then update the Status column in the audit doc and `CHANGELOG.md`.
 
