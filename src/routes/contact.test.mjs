@@ -9,29 +9,36 @@ function read(path) {
   return readFileSync(join(root, path), "utf8");
 }
 
-test("/contact route wires the new enquiry-type/preferred-contact fields and the duplicate-submit guard", () => {
+test("/contact route renders ContactInquiryForm, which wires the enquiry-type/preferred-contact fields and the duplicate-submit guard", () => {
   const routePath = "src/routes/contact.tsx";
   assert.equal(existsSync(join(root, routePath)), true, `${routePath} should exist`);
 
   const route = read(routePath);
   assert.match(route, /createFileRoute\("\/contact"\)/);
+  assert.match(route, /<ContactInquiryForm \/>/);
+
+  // The form itself (state, handler and fields) lives in ContactInquiryForm.tsx so it can be
+  // exercised in a browser fixture; the route only renders it.
+  const formPath = "src/components/site/ContactInquiryForm.tsx";
+  assert.equal(existsSync(join(root, formPath)), true, `${formPath} should exist`);
+  const form = read(formPath);
 
   // The pure logic lives in contact-inquiry-form.ts, not duplicated inline --
-  // this asserts the route actually wires to it, not that it reimplements
+  // this asserts the component actually wires to it, not that it reimplements
   // the same schema/guard locally.
-  assert.match(route, /from "@\/lib\/contact-inquiry-form"/);
-  assert.match(route, /createSubmitGuard/);
-  assert.match(route, /submitContactInquiry/);
-  assert.match(route, /ENQUIRY_TYPE_OPTIONS/);
-  assert.match(route, /PREFERRED_CONTACT_OPTIONS/);
+  assert.match(form, /from "@\/lib\/contact-inquiry-form"/);
+  assert.match(form, /createSubmitGuard/);
+  assert.match(form, /submitContactInquiry/);
+  assert.match(form, /ENQUIRY_TYPE_OPTIONS/);
+  assert.match(form, /PREFERRED_CONTACT_OPTIONS/);
 
   // The guard must be checked before any React state is touched inside
   // handleSubmit -- i.e. the tryStart() check appears before the first
   // setSubmitting(true) call, and finish() is called (in a finally block,
   // so it always releases regardless of outcome).
-  const handlerStart = route.indexOf("async function handleSubmit");
+  const handlerStart = form.indexOf("async function handleSubmit");
   assert.notEqual(handlerStart, -1, "handleSubmit must exist");
-  const handlerBody = route.slice(handlerStart, route.indexOf("\n  }\n", handlerStart));
+  const handlerBody = form.slice(handlerStart, form.indexOf("\n  }\n", handlerStart));
   const tryStartIndex = handlerBody.indexOf(".tryStart()");
   const firstSetSubmittingTrue = handlerBody.indexOf("setSubmitting(true)");
   assert.notEqual(tryStartIndex, -1, "handleSubmit must call the guard's tryStart()");
@@ -63,12 +70,12 @@ test("PICS copy renders near the form and links to a real /privacy route", () =>
   // The PICS paragraph must sit before the <form> opens, not folded into the
   // marketing-consent checkbox or the operational-reply disclaimer.
   const picsIndex = route.indexOf("私隱政策");
-  const formOpenIndex = route.indexOf("<form onSubmit={handleSubmit}");
+  const formOpenIndex = route.indexOf("<ContactInquiryForm />");
   assert.ok(picsIndex > -1 && formOpenIndex > -1 && picsIndex < formOpenIndex);
 });
 
 test("direct-marketing consent stays structurally separate from the operational-reply disclaimer", () => {
-  const route = read("src/routes/contact.tsx");
+  const route = read("src/components/site/ContactInquiryForm.tsx");
 
   // The marketing checkbox: unchecked by default, a real opt-in control.
   assert.match(route, /consentWhatsapp,\s*setConsentWhatsapp\]\s*=\s*useState\(false\)/);
@@ -91,7 +98,7 @@ test("direct-marketing consent stays structurally separate from the operational-
 });
 
 test("enquiryType and preferredContact are required selects, not optional decoration", () => {
-  const route = read("src/routes/contact.tsx");
+  const route = read("src/components/site/ContactInquiryForm.tsx");
   assert.match(
     route,
     /<Select\s+value=\{enquiryType\}\s+onValueChange=\{setEnquiryType\}\s+name="enquiryType"\s+required/,

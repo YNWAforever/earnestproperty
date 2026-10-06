@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { WebsiteInquiryInput } from "@/lib/neon/admin-data";
+import { submitPublicForm, type PublicFormErrorCode } from "@/lib/public-form-submit";
 
 // "查詢類型" -- lets the form route an enquiry to the right kind of
 // follow-up (buy / rent / owner valuation / general) without forcing the
@@ -107,12 +108,13 @@ export function buildWebsiteInquiryPayload(
 
 export type ContactSubmitOutcome =
   | { status: "validation-error"; message: string }
-  | { status: "server-error"; message: string }
-  | { status: "success" };
+  | { status: "server-error"; code: PublicFormErrorCode; message: string }
+  | { status: "success"; id: string };
 
-export type ContactSubmitFn = (
-  payload: WebsiteInquiryInput,
-) => Promise<{ id: string } | { error: string }>;
+// `unknown`, not `{ id } | { error }`: TanStack Start resolves a rejected server fn with a
+// `Response` (e.g. 429), so the resolved value cannot be trusted to have either shape.
+// `submitPublicForm` classifies whatever comes back.
+export type ContactSubmitFn = (payload: WebsiteInquiryInput) => Promise<unknown>;
 
 export interface SubmitGuard {
   tryStart(): boolean;
@@ -171,11 +173,9 @@ export async function submitContactInquiry({
     };
   }
   const payload = buildWebsiteInquiryPayload(parsed.data, consentWhatsapp);
-  const result = await submitFn(payload).catch((err) => ({
-    error: err instanceof Error ? err.message : String(err),
-  }));
-  if ("error" in result && result.error) {
-    return { status: "server-error", message: result.error };
+  const result = await submitPublicForm(() => submitFn(payload));
+  if (result.status === "error") {
+    return { status: "server-error", code: result.code, message: result.message };
   }
-  return { status: "success" };
+  return { status: "success", id: result.id };
 }

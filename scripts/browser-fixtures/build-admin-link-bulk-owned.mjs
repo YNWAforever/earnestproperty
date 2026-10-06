@@ -28,10 +28,6 @@ await build({
         find: /^@\/lib\/analytics\/(sales-performance-client|reporting-client)$/,
         replacement: resolve(shared, "synthetic-analytics.ts"),
       },
-      {
-        find: /^@\/lib\/admin\/final-fix-rollout$/,
-        replacement: resolve(root, "synthetic-flags.ts"),
-      },
       { find: /^@\/(auth|hooks\/use-neon-auth)$/, replacement: resolve(root, "auth.ts") },
       { find: "@", replacement: resolve(workspace, "src") },
     ],

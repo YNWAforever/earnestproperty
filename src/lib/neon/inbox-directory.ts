@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 
 const listServer = createServerFn({ method: "GET" })
   .inputValidator(
@@ -19,7 +19,7 @@ const listServer = createServerFn({ method: "GET" })
     return (await import("./inbox-directory.server")).listInboxCandidates(data, actor);
   });
 export async function getInboxCandidates(data: Parameters<typeof listServer>[0]["data"]) {
-  return listServer(await withStaffAuthHeaders({ data }));
+  return callStaffServerFn(listServer, { data });
 }
 const foldersServer = createServerFn({ method: "GET" }).handler(async () => {
   const { requireStaffAccess } = await import("./auth.server");
@@ -27,7 +27,7 @@ const foldersServer = createServerFn({ method: "GET" }).handler(async () => {
   return (await import("./inbox-directory.server")).listInboxFolders(actor);
 });
 export async function getInboxFolders() {
-  return foldersServer(await withStaffAuthHeaders({}));
+  return callStaffServerFn(foldersServer, {});
 }
 const verifyServer = createServerFn({ method: "POST" })
   .inputValidator(
@@ -46,7 +46,7 @@ const verifyServer = createServerFn({ method: "POST" })
     return (await import("./inbox-directory.server")).verifyInboxSelection(data, actor);
   });
 export async function verifyInboxCandidate(data: Parameters<typeof verifyServer>[0]["data"]) {
-  return verifyServer(await withStaffAuthHeaders({ data }));
+  return callStaffServerFn(verifyServer, { data });
 }
 const saveFolderServer = createServerFn({ method: "POST" })
   .inputValidator(
@@ -65,5 +65,5 @@ const saveFolderServer = createServerFn({ method: "POST" })
     return (await import("./inbox-directory.server")).saveInboxFolder(data, actor);
   });
 export async function saveNamedInboxFolder(data: Parameters<typeof saveFolderServer>[0]["data"]) {
-  return saveFolderServer(await withStaffAuthHeaders({ data }));
+  return callStaffServerFn(saveFolderServer, { data });
 }

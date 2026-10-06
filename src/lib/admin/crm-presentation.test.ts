@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import {
   stageOptions,
+  stageFilterOptions,
+  stageLabels,
   quickLeadFilter,
   labeledFilterOptions,
   aiScoreLabel,
@@ -15,6 +17,12 @@ test("all server stages use the approved shared display labels", () => {
     closed_won: "已成交",
     closed_lost: "已結束（未成交）",
   });
+});
+test("the stage filter offers 開放（未完成） for stage=open, but stage edits never can", () => {
+  expect(stageFilterOptions[0]).toEqual({ value: "open", label: "開放（未完成）" });
+  expect(stageFilterOptions.slice(1)).toEqual(stageOptions);
+  expect(stageOptions.some(({ value }) => (value as string) === "open")).toBe(false);
+  expect(stageLabels.open).toBe("開放（未完成）");
 });
 test("quick filters use server enums and restart paging while retaining other filters and detail", () => {
   const current = {

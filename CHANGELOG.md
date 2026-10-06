@@ -1,4 +1,30 @@
-# CHANGELOG — 客戶批註修訂 (Wang-Ye-27072026)
+# CHANGELOG
+
+## 2026-10 — Pre-handover fixes (see `docs/audits/2026-10-final-audit.md`, `docs/audits/2026-10-fix-plan.md`)
+
+### FX-01 — Public enquiry forms always show a truthful result (P0: H-02, C-18, C-19)
+
+- **Fixed: a rate-limited submit was shown as success and the enquiry was lost.** TanStack Start
+  resolves a server-function call with the `Response` its handler threw, such as the rate limiter's 429.
+  `submitPublicForm` (`src/lib/public-form-submit.ts`) now treats a resolved `Response`, or any result
+  without an `id`, as a failure.
+- **Fixed: visitors saw no result at all.** The contact, property enquiry, 放盤估價 and 新盤通知 forms
+  now show an inline zh-HK result under the submit button (`FormStatus`: `role="alert"` for errors,
+  `role="status"` for success). Typed values are kept on every error. Raw server text is never shown.
+  A sonner `<Toaster/>` is now mounted on public pages, so 「已複製連結」 is visible.
+- **Form state resets per context.** The property form resets per listing, the 新盤通知 form per
+  search, and the estate-page 放盤估價 form per estate, so a result for one listing or search never
+  shows on another.
+- Failed submits log `PUBLIC_FORM_SUBMIT_FAILED` (code, status, error name) to the browser console. The
+  form payload is never logged.
+- The four forms were moved into components (`ContactInquiryForm`, `PropertyInquiryForm`,
+  `ValuationLeadForm`, `ListingAlertForm`). A real-browser regression suite
+  (`npm run test:public-forms:ui`, 28 tests at 390px and 1440px) runs in CI on a synthetic fixture with
+  no database.
+
+---
+
+# 客戶批註修訂 (Wang-Ye-27072026)
 
 Point-by-point against `docs/client-feedback/Wang-Ye-27072026.docx`.
 

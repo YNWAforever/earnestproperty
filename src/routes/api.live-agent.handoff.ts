@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { createFileRoute } from "@tanstack/react-router";
 
+import { liveAgentPhoneErrorMessage, validateHandoffPhone } from "@/lib/ai/live-agent";
 import { readPublicJsonBody } from "@/lib/ai/read-public-json-body";
 import { leadBudgetError } from "@/lib/admin/lead-budget";
 
@@ -49,6 +50,14 @@ export const Route = createFileRoute("/api/live-agent/handoff")({
         if (leadBudgetError(budgetMin, budgetMax)) {
           return Response.json({ error: "Invalid handoff budget" }, { status: 400 });
         }
+        const rawPhone = typeof body.phone === "string" ? body.phone : null;
+        const phoneCheck = validateHandoffPhone(rawPhone);
+        if (!phoneCheck.ok) {
+          return Response.json(
+            { error: liveAgentPhoneErrorMessage(phoneCheck.code), code: phoneCheck.code },
+            { status: 400 },
+          );
+        }
         try {
           await enforceRateLimit({
             key: `live-agent:handoff:ip:${clientIpFromRequest(request)}`,
@@ -60,7 +69,7 @@ export const Route = createFileRoute("/api/live-agent/handoff")({
             sessionId,
             accessToken,
             name: typeof body.name === "string" ? body.name : null,
-            phone: typeof body.phone === "string" ? body.phone : null,
+            phone: rawPhone,
             email: typeof body.email === "string" ? body.email : null,
             intent: typeof body.intent === "string" ? body.intent : null,
             budget_min: budgetMin,
@@ -76,7 +85,10 @@ export const Route = createFileRoute("/api/live-agent/handoff")({
           if (err instanceof Response) return err;
           if (err instanceof LiveAgentPublicError) {
             const status = err.status;
-            return Response.json({ error: err.message }, { status });
+            return Response.json(
+              err.code ? { error: err.message, code: err.code } : { error: err.message },
+              { status },
+            );
           }
           // Log before swallowing. A 500 here means a real visitor asked for a
           // human and did not get one, and the cause was previously discarded

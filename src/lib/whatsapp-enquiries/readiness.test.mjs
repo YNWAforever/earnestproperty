@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assessStaffReadiness } from "../neon/whatsapp-readiness-policy.ts";
+import { assessStaffReadiness, assessWhatsappRuntime } from "../neon/whatsapp-readiness-policy.ts";
 
 const now = "2026-09-27T08:00:00.000Z";
 const base = {
@@ -57,10 +57,9 @@ const base = {
     channelId: "company",
     assignmentEnabled: true,
     notificationsEnabled: true,
-    staffWhatsAppEnabled: true,
     inboxProviderVerified: true,
     staffTransportVerified: true,
-    templateContractVerified: false,
+    templateContractVerified: true,
   },
   checkedAt: now,
 };
@@ -121,16 +120,21 @@ test("readiness blocks revoked, wrong-channel and unverified evidence", () => {
   );
 });
 
-test("session text remains ready even when template is unverified; expired window blocks", () => {
+test("staff WhatsApp needs the approved template even inside the window; expired window blocks", () => {
+  // Lead alerts only ever send the template, so readiness must not say ready without one.
+  const noTemplate = { ...base.runtime, templateContractVerified: false };
   const configured = evaluate({
+    runtime: noTemplate,
     staffEndpoint: {
       ...base.staffEndpoint,
       templateName: "approved_name",
       templateLanguage: "zh_HK",
     },
   });
-  assert.equal(configured.staffWhatsapp.state, "ready");
+  assert.equal(configured.staffWhatsapp.state, "blocked");
+  assert.deepEqual(reason(configured.staffWhatsapp), ["template_unverified"]);
   const expired = evaluate({
+    runtime: noTemplate,
     staffEndpoint: {
       ...base.staffEndpoint,
       lastInboundAt: "2026-09-25T07:00:00.000Z",
@@ -141,4 +145,133 @@ test("session text remains ready even when template is unverified; expired windo
   });
   assert.ok(reason(expired.staffWhatsapp).includes("outside_message_window"));
   assert.ok(reason(expired.staffWhatsapp).includes("template_unverified"));
+});
+
+test("outside the window is ready when a template is configured", () => {
+  const outside = {
+    ...base.staffEndpoint,
+    lastInboundAt: "2026-09-25T07:00:00.000Z",
+  };
+  const ready = evaluate({
+    staffEndpoint: outside,
+    runtime: { ...base.runtime, templateContractVerified: true },
+  });
+  assert.equal(ready.staffWhatsapp.state, "ready");
+  assert.deepEqual(reason(ready.staffWhatsapp), []);
+  const neverReplied = evaluate({
+    staffEndpoint: { ...outside, lastInboundAt: null },
+    runtime: { ...base.runtime, templateContractVerified: true },
+  });
+  assert.equal(neverReplied.staffWhatsapp.state, "ready");
+  // The switch alone decides; there is no second staff WhatsApp switch.
+  const off = evaluate({
+    staffEndpoint: outside,
+    runtime: { ...base.runtime, templateContractVerified: true, notificationsEnabled: false },
+  });
+  assert.deepEqual(reason(off.staffWhatsapp), ["runtime_disabled"]);
+});
+
+test("outside the window is blocked with 模板未設定 when none is", () => {
+  const blocked = evaluate({
+    staffEndpoint: { ...base.staffEndpoint, lastInboundAt: null },
+    runtime: { ...base.runtime, templateContractVerified: false },
+  });
+  assert.equal(blocked.staffWhatsapp.state, "blocked");
+  assert.deepEqual(reason(blocked.staffWhatsapp), [
+    "outside_message_window",
+    "template_unverified",
+  ]);
+  assert.ok(blocked.staffWhatsapp.reasons.some((item) => item.message === "模板未設定"));
+  // Inside the window it is still blocked: every lead alert needs the template.
+  assert.deepEqual(
+    reason(
+      evaluate({ runtime: { ...base.runtime, templateContractVerified: false } }).staffWhatsapp,
+    ),
+    ["template_unverified"],
+  );
+});
+
+test("runtime card shows the staff template as ready only when one is configured", () => {
+  const input = {
+    mode: "active",
+    serviceEnabled: true,
+    channelId: "company",
+    inboxProviderVerified: true,
+    staffTransportVerified: true,
+    staffWhatsappEnabled: true,
+    checkedAt: now,
+  };
+  const configured = assessWhatsappRuntime({ ...input, templateConfigured: true });
+  assert.equal(configured.staffWhatsappTemplate.state, "ready");
+  assert.deepEqual(reason(configured.staffWhatsappTemplate), []);
+  const missing = assessWhatsappRuntime({ ...input, templateConfigured: false });
+  assert.equal(missing.staffWhatsappTemplate.state, "blocked");
+  assert.deepEqual(reason(missing.staffWhatsappTemplate), ["template_unverified"]);
+  assert.equal(missing.staffWhatsappTemplate.reasons[0].message, "模板未設定");
+  // A configured template never bypasses the switch or the transport evidence.
+  const off = assessWhatsappRuntime({
+    ...input,
+    staffWhatsappEnabled: false,
+    staffTransportVerified: false,
+    templateConfigured: true,
+  });
+  assert.deepEqual(reason(off.staffWhatsappTemplate), ["runtime_disabled", "provider_unverified"]);
+});
+
+test("staff WhatsApp follows the lead-alert switch, not enquiry mode (F3)", () => {
+  // Enquiry automation off; the staff switch on; a template configured.
+  const runtime = {
+    ...base.runtime,
+    assignmentEnabled: false,
+    inboxProviderVerified: false,
+    templateContractVerified: true,
+  };
+  const outside = { ...base.staffEndpoint, lastInboundAt: null };
+  const readiness = evaluate({ runtime, staffEndpoint: outside });
+  assert.equal(readiness.staffWhatsapp.state, "ready");
+  assert.deepEqual(reason(readiness.staffWhatsapp), []);
+  // Enquiry-only capabilities keep their own gate.
+  assert.ok(reason(readiness.assignment).includes("runtime_disabled"));
+  assert.ok(reason(readiness.inboxPrivateNote).includes("runtime_disabled"));
+  // The switch still decides, and the channel is still required.
+  assert.deepEqual(
+    reason(
+      evaluate({ runtime: { ...runtime, notificationsEnabled: false }, staffEndpoint: outside })
+        .staffWhatsapp,
+    ),
+    ["runtime_disabled"],
+  );
+  assert.ok(
+    reason(
+      evaluate({ runtime: { ...runtime, channelId: null }, staffEndpoint: outside }).staffWhatsapp,
+    ).includes("runtime_disabled"),
+  );
+
+  const card = assessWhatsappRuntime({
+    mode: "off",
+    serviceEnabled: false,
+    channelId: "company",
+    inboxProviderVerified: false,
+    staffTransportVerified: true,
+    staffWhatsappEnabled: true,
+    templateConfigured: true,
+    checkedAt: now,
+  });
+  assert.equal(card.staffWhatsappTemplate.state, "ready");
+  // Enquiry-notification TEXT stays tied to enquiry mode.
+  assert.ok(reason(card.staffWhatsappText).includes("runtime_disabled"));
+  assert.ok(
+    reason(
+      assessWhatsappRuntime({
+        mode: "off",
+        serviceEnabled: false,
+        channelId: null,
+        inboxProviderVerified: true,
+        staffTransportVerified: true,
+        staffWhatsappEnabled: true,
+        templateConfigured: true,
+        checkedAt: now,
+      }).staffWhatsappTemplate,
+    ).includes("runtime_disabled"),
+  );
 });

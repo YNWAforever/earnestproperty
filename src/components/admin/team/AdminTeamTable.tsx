@@ -1,5 +1,6 @@
 import { ChevronRight } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { AdminTeamMember } from "@/lib/neon/admin-team.types";
 
@@ -60,13 +61,16 @@ export function AdminTeamTable({
                 key={member.id}
               >
                 <td className="px-4 py-3">
-                  <button
-                    className="text-left font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    onClick={() => onSelect(member.id)}
-                    type="button"
-                  >
-                    {memberName(member)}
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      className="text-left font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      onClick={() => onSelect(member.id)}
+                      type="button"
+                    >
+                      {memberName(member)}
+                    </button>
+                    {member.isDutyManager ? <Badge variant="secondary">值班經理</Badge> : null}
+                  </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {member.email ?? "未提供電郵"}
                   </p>

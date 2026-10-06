@@ -90,7 +90,6 @@ test("EP-06 owned setup saves provider evidence, version and audit; capabilities
         channelId: "synthetic-owned-channel",
         assignmentEnabled: true,
         notificationsEnabled: false,
-        staffWhatsAppEnabled: false,
         inboxProviderVerified: true,
         staffTransportVerified: false,
         templateContractVerified: false,

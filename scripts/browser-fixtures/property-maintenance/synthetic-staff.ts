@@ -48,12 +48,6 @@ const actors = [
 ];
 export const fetchAdminAgents = async () =>
   location.pathname.includes("whatsapp-settings") ? actors : propertyAgents();
-export const finalFixUiFlags = {
-  staffDirectorySetup: true,
-  staffReviewEnforcement: true,
-  linkBatchImport: false,
-  salesPerformanceReporting: false,
-};
 const ready = { state: "ready", reasons: [] };
 const blocked = {
   state: "blocked",

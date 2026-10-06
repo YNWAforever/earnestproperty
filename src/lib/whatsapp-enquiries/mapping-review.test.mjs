@@ -26,7 +26,6 @@ const base = {
     channelId: "company",
     assignmentEnabled: true,
     notificationsEnabled: false,
-    staffWhatsAppEnabled: false,
     inboxProviderVerified: true,
     staffTransportVerified: false,
     templateContractVerified: false,

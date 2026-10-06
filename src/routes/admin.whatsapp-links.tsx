@@ -7,7 +7,6 @@ import { fetchAdminAgents } from "@/lib/neon/admin-data";
 import { WhatsappLinkWizard } from "@/components/admin/whatsapp/WhatsappLinkWizard";
 import { WhatsappLinksTable } from "@/components/admin/whatsapp/WhatsappLinksTable";
 import { linkSeedKey, type LinkOfferSelection } from "@/lib/admin/whatsapp-link-selection";
-import { finalFixUiFlags } from "@/lib/admin/final-fix-rollout";
 
 export const Route = createFileRoute("/admin/whatsapp-links")({
   component: WhatsappLinks,
@@ -90,7 +89,6 @@ function WhatsappLinksWorkspace({ identity }: { identity: string }) {
               isWorkspaceCurrent={isWorkspaceCurrent}
               key={user.id}
               actorScope={user.id}
-              enableBatchImport={finalFixUiFlags.linkBatchImport}
               seed={seed}
               seedScope={seedScope}
               onSeedConsumed={() => {

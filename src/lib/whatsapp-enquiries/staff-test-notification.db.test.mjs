@@ -5,6 +5,7 @@ import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { isolateSignedStaffEvent } from "./staff-event-isolation.server.ts";
 import { saveStaffEndpoint } from "../neon/staff-endpoints.server.ts";
+import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transport.server.ts";
 import {
   enqueueStaffTestNotification,
   previewStaffTestNotification,
@@ -19,29 +20,47 @@ const staffId = "00000000-0000-4000-8000-000000000002";
 const endpointId = "00000000-0000-4000-8000-000000000003";
 const actor = { staffId: actorId, roles: ["admin"] };
 
-test("test notification preview is isolated, revoked endpoint blocks, and request/rate identities persist", async () => {
+const approvedTemplate = JSON.stringify({
+  name: "staff_lead_alert",
+  language: "zh_HK",
+  params: ["name", "source", "link"],
+});
+const baseEnv = {
+  EP_WA_ENQUIRY_MODE: "active",
+  EP_WA_STAFF_NOTIFICATIONS_ENABLED: "true",
+  EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate,
+  VITE_SITE_URL: "https://earnest.example.invalid",
+  EP_WA_COMPANY_CHANNEL_ID: "company",
+  WOZTELL_CHANNEL_ID: "company",
+  EP_WA_STAFF_WHATSAPP_VERIFICATION_REF: "synthetic",
+  EP_WA_STAFF_CORRELATION_VERIFICATION_REF: "synthetic",
+  EP_WA_STAFF_ASSOCIATION_REVIEW_REF: "synthetic",
+  EP_WA_STAFF_REPLY_CONTEXT_PATH: "/synthetic",
+  EP_WA_INBOX_VERIFICATION_REF: "synthetic",
+  WOZTELL_APP_ID: "synthetic",
+  EP_WA_INBOX_INTEGRATION_ID: "synthetic",
+  EP_WA_INBOX_SIGNATURE: "synthetic",
+  EP_WA_INBOX_LIST_THREADS_URL: "https://api.inbox.woztell.sanuker.com/test/threads",
+  EP_WA_INBOX_LIST_USERS_URL: "https://api.inbox.woztell.sanuker.com/test/users",
+  EP_WA_INBOX_ASSIGN_URL: "https://api.inbox.woztell.sanuker.com/test/assign",
+  EP_WA_INBOX_INTERNAL_MESSAGE_URL: "https://api.inbox.woztell.sanuker.com/test/notes",
+};
+
+async function fixture(envPatch = {}, lastInboundAgo = "0 hours") {
   const db = new PGlite();
-  const env = {
-    EP_WA_ENQUIRY_MODE: "active",
-    EP_WA_STAFF_NOTIFICATIONS_ENABLED: "true",
-    EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED: "true",
-    EP_WA_COMPANY_CHANNEL_ID: "company",
-    WOZTELL_CHANNEL_ID: "company",
-    EP_WA_STAFF_WHATSAPP_VERIFICATION_REF: "synthetic",
-    EP_WA_STAFF_CORRELATION_VERIFICATION_REF: "synthetic",
-    EP_WA_STAFF_ASSOCIATION_REVIEW_REF: "synthetic",
-    EP_WA_STAFF_REPLY_CONTEXT_PATH: "/synthetic",
-    EP_WA_INBOX_VERIFICATION_REF: "synthetic",
-    WOZTELL_APP_ID: "synthetic",
-    EP_WA_INBOX_INTEGRATION_ID: "synthetic",
-    EP_WA_INBOX_SIGNATURE: "synthetic",
-    EP_WA_INBOX_LIST_THREADS_URL: "https://api.inbox.woztell.sanuker.com/test/threads",
-    EP_WA_INBOX_LIST_USERS_URL: "https://api.inbox.woztell.sanuker.com/test/users",
-    EP_WA_INBOX_ASSIGN_URL: "https://api.inbox.woztell.sanuker.com/test/assign",
-    EP_WA_INBOX_INTERNAL_MESSAGE_URL: "https://api.inbox.woztell.sanuker.com/test/notes",
-  };
+  const env = { ...baseEnv, ...envPatch };
   const old = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
-  Object.assign(process.env, env);
+  const apply = (values) => {
+    for (const [key, value] of Object.entries(values)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
+  apply(env);
+  const restore = async () => {
+    apply(old);
+    await db.close();
+  };
   const query = async (statement, params = []) => (await db.query(statement, params)).rows;
   const transaction = async (statements) => {
     await db.exec("BEGIN");
@@ -63,6 +82,7 @@ test("test notification preview is isolated, revoked endpoint blocks, and reques
       CREATE TABLE whatsapp_staff_channels(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),staff_id uuid,channel_id text,inbox_user_id text,folder_id text,eligible boolean,verification_ref text,verified_at timestamptz,retired_at timestamptz);
       CREATE TABLE staff_notification_endpoints(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),staff_id uuid,channel_id text,transport text,destination_reference text,version integer DEFAULT 1,verification_ref text,enabled boolean,verified_at timestamptz,retired_at timestamptz,permission_granted boolean,permission_ref text,quiet_hours_policy jsonb,last_inbound_at timestamptz,template_name text,template_language text,template_verified_at timestamptz,updated_at timestamptz);
       CREATE TABLE whatsapp_conversations(channel_id text,woztell_member_id text);
+      CREATE TABLE crm_contacts(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text,normalized_phone text,whatsapp_member_id text);
       CREATE TABLE ops_jobs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),job_type text,payload_version integer,payload jsonb,status text,max_attempts integer,idempotency_key text UNIQUE,actor_staff_id uuid,lease_owner text,lease_expires_at timestamptz,created_at timestamptz DEFAULT now());
       CREATE TABLE ops_audit_logs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),actor_staff_id uuid,permission text,action text,resource_type text,resource_id text,outcome text,request_id uuid,metadata jsonb,created_at timestamptz DEFAULT now());
       CREATE TABLE audit_logs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),actor_id uuid,action text,subject_type text,subject_id uuid,metadata jsonb);
@@ -87,9 +107,19 @@ test("test notification preview is isolated, revoked endpoint blocks, and reques
     );
     await query(
       `INSERT INTO staff_notification_endpoints(id,staff_id,channel_id,transport,destination_reference,version,enabled,verified_at,permission_granted,permission_ref,quiet_hours_policy,last_inbound_at,updated_at)
-      VALUES($1,$2,'company','staff_whatsapp','85291234567',3,true,now(),true,'synthetic','{"approved":true,"allowAllHours":true}',now(),now())`,
-      [endpointId, staffId],
+      VALUES($1,$2,'company','staff_whatsapp','85291234567',3,true,now(),true,'synthetic','{"approved":true,"allowAllHours":true}',now()-$3::interval,now())`,
+      [endpointId, staffId, lastInboundAgo],
     );
+  } catch (error) {
+    await restore();
+    throw error;
+  }
+  return { db, query, transaction, restore };
+}
+
+test("test notification preview is isolated, revoked endpoint blocks, and request/rate identities persist", async () => {
+  const { db, query, transaction, restore } = await fixture();
+  try {
     const input = { staffId, transport: "staff_whatsapp", endpointVersion: 3 };
     await assert.rejects(
       previewStaffTestNotification(input, { staffId, roles: ["agent"] }, query),
@@ -182,10 +212,9 @@ test("test notification preview is isolated, revoked endpoint blocks, and reques
             channelId: "company",
             assignmentEnabled: true,
             notificationsEnabled: true,
-            staffWhatsAppEnabled: true,
             inboxProviderVerified: true,
             staffTransportVerified: true,
-            templateContractVerified: false,
+            templateContractVerified: true,
           },
         }),
       );
@@ -374,10 +403,334 @@ test("test notification preview is isolated, revoked endpoint blocks, and reques
       ),
     );
   } finally {
-    for (const [key, value] of Object.entries(old)) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
+    await restore();
+  }
+});
+
+async function queueTest(query, transaction) {
+  const input = { staffId, transport: "staff_whatsapp", endpointVersion: 3 };
+  const preview = await previewStaffTestNotification(input, actor, query);
+  assert.equal(preview.ready, true, JSON.stringify(preview.reasons));
+  const queued = await enqueueStaffTestNotification(
+    { ...input, previewToken: preview.previewToken, requestId: randomUUID() },
+    actor,
+    { query, transaction },
+  );
+  assert.equal(queued.state, "queued");
+  await query(
+    "UPDATE ops_jobs SET status='running',lease_owner='synthetic-worker',lease_expires_at=now()+interval '5 minutes' WHERE id=$1",
+    [queued.jobId],
+  );
+  return {
+    queued,
+    context: { jobId: queued.jobId, workerId: "synthetic-worker", checkpoint: async () => {} },
+  };
+}
+function fakeStaffTransport(calls) {
+  return () => ({
+    verificationRef: "synthetic",
+    sendStaffWhatsApp: async (scope) => {
+      await scope.beforeSend();
+      calls.push(scope);
+      return { state: "accepted", evidenceKind: "provider_accepted", providerOperationId: "op" };
+    },
+  });
+}
+
+test("staff test notification outside 24h sends the configured template", async () => {
+  const { query, transaction, restore } = await fixture(
+    { EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate },
+    "25 hours",
+  );
+  try {
+    const { queued, context } = await queueTest(query, transaction);
+    const calls = [];
+    const { inspectWhatsappStaffReadinessForDispatch } =
+      await import("../neon/whatsapp-readiness.server.ts");
+    const result = await dispatchStaffTestNotification(queued.attemptId, context, {
+      query,
+      // Readiness reads the live runtime, so the configured template is what makes it ready.
+      inspect: (id) => inspectWhatsappStaffReadinessForDispatch(id, { query }),
+      staff: fakeStaffTransport(calls),
+    });
+    assert.deepEqual(result, { summary: { accepted: 1 } });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].memberId, "85291234567");
+    assert.deepEqual(calls[0].template, {
+      type: "TEMPLATE",
+      elementName: "staff_lead_alert",
+      languageCode: "zh_HK",
+      components: [
+        {
+          type: "body",
+          parameters: [
+            { type: "text", text: "測試" },
+            { type: "text", text: "測試通知" },
+            { type: "text", text: "https://earnest.example.invalid/admin/whatsapp-settings" },
+          ],
+        },
+      ],
+    });
+    const [saved] = await query(
+      "SELECT state,safe_error FROM staff_notification_test_attempts WHERE id=$1",
+      [queued.attemptId],
+    );
+    assert.deepEqual({ ...saved }, { state: "accepted", safe_error: null });
+  } finally {
+    await restore();
+  }
+});
+
+test("without a template it is refused, inside or outside 24h, and never sends", async () => {
+  const { query, transaction, restore } = await fixture(
+    { EP_WA_STAFF_ALERT_TEMPLATE: undefined },
+    "25 hours",
+  );
+  try {
+    const input = { staffId, transport: "staff_whatsapp", endpointVersion: 3 };
+    const preview = await previewStaffTestNotification(input, actor, query);
+    assert.equal(preview.ready, false);
+    assert.equal(preview.previewToken, null);
+    assert.ok(preview.reasons.includes("outside_message_window"));
+    assert.ok(preview.reasons.includes("template_unverified"));
+    // Lead alerts only send the template, so an open window is not enough either.
+    await query("UPDATE staff_notification_endpoints SET last_inbound_at=now() WHERE id=$1", [
+      endpointId,
+    ]);
+    const inside = await previewStaffTestNotification(input, actor, query);
+    assert.equal(inside.ready, false);
+    assert.deepEqual(inside.reasons, ["template_unverified"]);
+    // Queue while a template is configured, then remove it and let the window close before
+    // dispatch: the SQL boundary still refuses to send TEXT outside the window.
+    process.env.EP_WA_STAFF_ALERT_TEMPLATE = approvedTemplate;
+    const { queued, context } = await queueTest(query, transaction);
+    delete process.env.EP_WA_STAFF_ALERT_TEMPLATE;
+    await query(
+      "UPDATE staff_notification_endpoints SET last_inbound_at=now()-interval '25 hours' WHERE id=$1",
+      [endpointId],
+    );
+    const calls = [];
+    const { inspectWhatsappStaffReadinessForDispatch } =
+      await import("../neon/whatsapp-readiness.server.ts");
+    const result = await dispatchStaffTestNotification(queued.attemptId, context, {
+      query,
+      // Stale readiness claims a template; the SQL boundary still refuses without one.
+      inspect: (id) =>
+        inspectWhatsappStaffReadinessForDispatch(id, {
+          query,
+          runtime: {
+            channelId: "company",
+            assignmentEnabled: true,
+            notificationsEnabled: true,
+            inboxProviderVerified: true,
+            staffTransportVerified: true,
+            templateContractVerified: true,
+          },
+        }),
+      staff: fakeStaffTransport(calls),
+    });
+    assert.deepEqual(result, { summary: { blocked: 1 } });
+    assert.equal(calls.length, 0);
+    const [saved] = await query(
+      "SELECT state,safe_error FROM staff_notification_test_attempts WHERE id=$1",
+      [queued.attemptId],
+    );
+    assert.deepEqual({ ...saved }, { state: "blocked", safe_error: "preflight_blocked" });
+  } finally {
+    await restore();
+  }
+});
+
+const expectedTestTemplate = {
+  type: "TEMPLATE",
+  elementName: "staff_lead_alert",
+  languageCode: "zh_HK",
+  components: [
+    {
+      type: "body",
+      parameters: [
+        { type: "text", text: "測試" },
+        { type: "text", text: "測試通知" },
+        { type: "text", text: "https://earnest.example.invalid/admin/whatsapp-settings" },
+      ],
+    },
+  ],
+};
+
+test("a configured template is sent even inside the window, never TEXT", async () => {
+  const { query, transaction, restore } = await fixture({
+    EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate,
+  });
+  try {
+    const { queued, context } = await queueTest(query, transaction);
+    const calls = [];
+    const { inspectWhatsappStaffReadinessForDispatch } =
+      await import("../neon/whatsapp-readiness.server.ts");
+    const result = await dispatchStaffTestNotification(queued.attemptId, context, {
+      query,
+      inspect: (id) => inspectWhatsappStaffReadinessForDispatch(id, { query }),
+      staff: fakeStaffTransport(calls),
+    });
+    assert.deepEqual(result, { summary: { accepted: 1 } });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].template, expectedTestTemplate);
+  } finally {
+    await restore();
+  }
+});
+
+test("staff test template without an https origin is blocked before any claim", async () => {
+  for (const origin of [undefined, "http://earnest.example.invalid"]) {
+    const { query, transaction, restore } = await fixture(
+      {
+        EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate,
+        VITE_SITE_URL: origin,
+        VERCEL_PROJECT_PRODUCTION_URL: undefined,
+      },
+      "25 hours",
+    );
+    try {
+      const { queued, context } = await queueTest(query, transaction);
+      let providerCalls = 0;
+      const { inspectWhatsappStaffReadinessForDispatch } =
+        await import("../neon/whatsapp-readiness.server.ts");
+      const result = await dispatchStaffTestNotification(queued.attemptId, context, {
+        query,
+        inspect: (id) => inspectWhatsappStaffReadinessForDispatch(id, { query }),
+        staff: () => ({
+          verificationRef: "synthetic",
+          sendStaffWhatsApp: async () => {
+            providerCalls++;
+            return { state: "accepted" };
+          },
+        }),
+      });
+      assert.deepEqual(result, { summary: { blocked: 1 } }, String(origin));
+      assert.equal(providerCalls, 0, String(origin));
+      const [saved] = await query(
+        "SELECT state,safe_error,claim_id FROM staff_notification_test_attempts WHERE id=$1",
+        [queued.attemptId],
+      );
+      assert.deepEqual(
+        { ...saved },
+        { state: "blocked", safe_error: "work_origin_unconfigured", claim_id: null },
+        String(origin),
+      );
+    } finally {
+      await restore();
     }
-    await db.close();
+  }
+});
+
+// F2: the test notification shares the lead-alert customer guard, at enqueue and at
+// the dispatch boundary. Fake provider `send` only; no network.
+function fakeSend(calls) {
+  return async (input) => {
+    calls.push(input);
+    return { ok: true, body: { ok: 1, messageId: "synthetic-op" } };
+  };
+}
+const customerCases = [
+  [
+    "a WhatsApp member id",
+    "INSERT INTO whatsapp_conversations(channel_id,woztell_member_id) VALUES('company','85291234567')",
+  ],
+  ["a CRM phone", "INSERT INTO crm_contacts(name,normalized_phone) VALUES('合成客戶','91234567')"],
+];
+
+test("a test notification to another customer's number is refused at enqueue", async () => {
+  for (const [label, seed] of customerCases) {
+    const { query, transaction, restore } = await fixture({
+      EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate,
+    });
+    try {
+      await query(
+        "UPDATE staff_notification_endpoints SET destination_reference='+852 9123 4567' WHERE id=$1",
+        [endpointId],
+      );
+      await query(seed);
+      const input = { staffId, transport: "staff_whatsapp", endpointVersion: 3 };
+      const preview = await previewStaffTestNotification(input, actor, query);
+      await assert.rejects(
+        enqueueStaffTestNotification(
+          { ...input, previewToken: preview.previewToken, requestId: randomUUID() },
+          actor,
+          { query, transaction },
+        ),
+        (error) => error instanceof Response && error.status === 409,
+        label,
+      );
+      assert.equal(
+        (await query("SELECT count(*)::int AS n FROM staff_notification_test_attempts"))[0].n,
+        0,
+        label,
+      );
+      assert.equal((await query("SELECT count(*)::int AS n FROM ops_jobs"))[0].n, 0, label);
+    } finally {
+      await restore();
+    }
+  }
+});
+
+test("a test notification is blocked at the dispatch boundary when the number becomes a customer's", async () => {
+  for (const [label, seed] of customerCases) {
+    const { query, transaction, restore } = await fixture({
+      EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate,
+    });
+    try {
+      await query(
+        "UPDATE staff_notification_endpoints SET destination_reference='+852 9123 4567' WHERE id=$1",
+        [endpointId],
+      );
+      const { queued, context } = await queueTest(query, transaction);
+      await query(seed);
+      const calls = [];
+      const { inspectWhatsappStaffReadinessForDispatch } =
+        await import("../neon/whatsapp-readiness.server.ts");
+      const result = await dispatchStaffTestNotification(queued.attemptId, context, {
+        query,
+        inspect: (id) => inspectWhatsappStaffReadinessForDispatch(id, { query }),
+        staff: () => createStaffWhatsAppTransport(fakeSend(calls)),
+      });
+      assert.deepEqual(result, { summary: { blocked: 1 } }, label);
+      assert.equal(calls.length, 0, label);
+      const [saved] = await query(
+        "SELECT state,safe_error FROM staff_notification_test_attempts WHERE id=$1",
+        [queued.attemptId],
+      );
+      assert.deepEqual({ ...saved }, { state: "blocked", safe_error: "preflight_blocked" }, label);
+    } finally {
+      await restore();
+    }
+  }
+});
+
+// F3: staff WhatsApp readiness follows the lead-alert switch, not EP_WA_ENQUIRY_MODE.
+test("with enquiry mode off, the staff switch and a template make the test notification send the template", async () => {
+  const { query, transaction, restore } = await fixture(
+    { EP_WA_ENQUIRY_MODE: undefined, EP_WA_STAFF_ALERT_TEMPLATE: approvedTemplate },
+    "25 hours",
+  );
+  try {
+    const { listWhatsappStaffReadiness, inspectWhatsappStaffReadinessForDispatch } =
+      await import("../neon/whatsapp-readiness.server.ts");
+    const [readiness] = await listWhatsappStaffReadiness(actor, { staffId, query });
+    assert.equal(readiness.staffWhatsapp.state, "ready", JSON.stringify(readiness.staffWhatsapp));
+    // Enquiry automation stays off: assignment and the Inbox note remain blocked.
+    assert.equal(readiness.assignment.state, "blocked");
+    assert.equal(readiness.inboxPrivateNote.state, "blocked");
+    const { queued, context } = await queueTest(query, transaction);
+    const calls = [];
+    const result = await dispatchStaffTestNotification(queued.attemptId, context, {
+      query,
+      inspect: (id) => inspectWhatsappStaffReadinessForDispatch(id, { query }),
+      staff: () => createStaffWhatsAppTransport(fakeSend(calls)),
+    });
+    assert.deepEqual(result, { summary: { accepted: 1 } });
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].memberId, "85291234567");
+    assert.deepEqual(calls[0].response, [expectedTestTemplate]);
+  } finally {
+    await restore();
   }
 });

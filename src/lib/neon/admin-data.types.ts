@@ -591,6 +591,22 @@ export type CommandCenterData = {
   woztell_enabled: boolean;
 };
 
+/** Waiting work within the caller's read scope (agents see only their own rows). */
+export type AdminAttentionCounts = {
+  unansweredConversations: number;
+  unassignedLeads: number;
+  staleNewLeads: number;
+  /** Distinct open leads that are unassigned or stale-new; a lead that is both counts once. */
+  leadsNeedingAttention: number;
+};
+
+export type AdminTodayTask = {
+  kind: "conversation" | "lead";
+  id: string;
+  title: string;
+  waitingSince: string; // ISO timestamp
+};
+
 export type StaffAccessRole = "admin" | "manager" | "agent" | "viewer";
 
 /**
@@ -636,4 +652,11 @@ export type StaffAccessSummary = {
   isProtected: boolean;
   owned: StaffOwnedCounts;
   ownedTotal: number;
+};
+
+/** One message of the public website chat, as staff read it on a live_agent lead. */
+export type AdminLeadTranscriptMessage = {
+  role: "visitor" | "assistant" | "staff" | "system";
+  text: string;
+  created_at: string;
 };

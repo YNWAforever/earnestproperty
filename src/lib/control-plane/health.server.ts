@@ -66,7 +66,7 @@ function present(value: string | undefined) {
   return Boolean(value?.trim());
 }
 
-function environmentChecks(): HealthCheck[] {
+export function environmentChecks(): HealthCheck[] {
   // Split into two checks. A single "ai" key that only inspected OPENCODE_GO_*
   // reported healthy while AI_GATEWAY_API_KEY was unset -- and the gateway is
   // what backs generateAiText/embedAiTexts (src/lib/ai/config.server.ts), so
@@ -86,12 +86,14 @@ function environmentChecks(): HealthCheck[] {
     enabled: process.env.WOZTELL_ENABLED === "true",
     accessToken: present(process.env.WOZTELL_BOT_ACCESS_TOKEN),
     channelId: present(process.env.WOZTELL_CHANNEL_ID),
+    appId: present(process.env.WOZTELL_APP_ID),
     channelSecret: present(process.env.WOZTELL_CHANNEL_SECRET),
   };
   const cronSecret = present(process.env.CRON_SECRET);
   const approvalSecret = present(process.env.CONTROL_PLANE_APPROVAL_SECRET);
 
-  const woztellComplete = woztell.accessToken && woztell.channelId && woztell.channelSecret;
+  const woztellComplete =
+    woztell.accessToken && woztell.appId && woztell.channelId && woztell.channelSecret;
   return [
     {
       // Backs generateAiText/embedAiTexts. Unset => every AI call is AI_DISABLED.
