@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
-import test from "node:test";
+import test, { mock } from "node:test";
 import { withOwnedPostgres, repoRoot } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import { MIGRATION_VERSIONS, pendingMigrations } from "../control-plane/migration-versions.js";
 import { formatDriftReport } from "../../../scripts/neon/check-migration-drift.mjs";
@@ -23,6 +23,10 @@ const functionBlock = (sql, name) => {
 const MANAGER_BRANCH_RULE =
   "     OR (EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=a.id AND r.role::text='manager')\n" +
   "       AND a.branch_id IS NOT NULL AND a.branch_id=assignee.branch_id)\n";
+const ENQUIRY_MANAGER_BRANCH_RULE =
+  "     OR (EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=a.id AND r.role::text='manager')\n" +
+  "       AND a.branch_id IS NOT NULL\n" +
+  "       AND a.branch_id=COALESCE(owner.branch_id,assignee.branch_id))\n";
 const MANAGER_ORG_WIDE_RULE =
   "     OR EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=a.id AND r.role::text='manager')\n";
 
@@ -41,6 +45,10 @@ const ids = {
   convA: id(21),
   convB: id(22),
   enquiryB: id(30),
+  convExplicit: id(23),
+  convReference: id(24),
+  enquiryExplicit: id(31),
+  enquiryReference: id(32),
 };
 
 test(
@@ -49,6 +57,9 @@ test(
   async (t) => {
     const previousWake = process.env.OPS_EVENT_WAKE_ENABLED;
     delete process.env.OPS_EVENT_WAKE_ENABLED;
+    const network = mock.method(globalThis, "fetch", () => {
+      throw Error("Provider/network request forbidden in FX-06 owned acceptance");
+    });
     try {
       await withOwnedPostgres(async ({ query, transaction }) => {
         await query(
@@ -85,11 +96,34 @@ test(
           "INSERT INTO inquiries(id,source,name,status,conversation_id,association_review,provider_thread_review) VALUES($1,'whatsapp','合成客戶','new',$2,false,false)",
           [ids.enquiryB, ids.convB],
         );
+        // Reply-scope fixtures: both conversations belong to agent B (branch B).
+        await query(
+          "INSERT INTO whatsapp_conversations(id,assigned_agent_id,confirmed_staff_id) VALUES($1,$3,$3),($2,$3,$3)",
+          [ids.convExplicit, ids.convReference, ids.agentB],
+        );
+        await query(
+          "INSERT INTO inquiries(id,source,name,status,conversation_id,attribution_method,association_review,provider_thread_review) VALUES($1,'whatsapp','合成明示客戶','new',$2,'explicit_customer_statement',false,false),($3,'whatsapp','合成參考客戶','new',$4,'reference',false,false)",
+          [ids.enquiryExplicit, ids.convExplicit, ids.enquiryReference, ids.convReference],
+        );
         const canRead = async (actor, conversation) =>
           (
             await query("SELECT wa_can_read_conversation($1::uuid,$2::uuid) AS allowed", [
               actor,
               conversation,
+            ])
+          )[0].allowed;
+        const canReadEnquiry = async (actor, inquiry) =>
+          (
+            await query("SELECT wa_can_read_enquiry($1::uuid,$2::uuid) AS allowed", [
+              actor,
+              inquiry,
+            ])
+          )[0].allowed;
+        const canCorrect = async (actor, inquiry) =>
+          (
+            await query("SELECT wa_can_correct_enquiry($1::uuid,$2::uuid) AS allowed", [
+              actor,
+              inquiry,
             ])
           )[0].allowed;
         const canReply = async (actor, inquiry) =>
@@ -178,6 +212,79 @@ test(
           assert.equal(await canReply(ids.agentB, ids.enquiryB), true);
         });
 
+        await t.test("manager without branch reads any enquiry", async () => {
+          for (const inquiry of [ids.enquiryB, ids.enquiryExplicit, ids.enquiryReference])
+            assert.equal(await canReadEnquiry(ids.managerNoBranch, inquiry), true);
+        });
+
+        await t.test("other-branch manager reads enquiry", async () => {
+          assert.equal(await canReadEnquiry(ids.managerA, ids.enquiryB), true);
+          assert.equal(await canReadEnquiry(ids.admin, ids.enquiryB), true);
+        });
+
+        await t.test("manager still cannot correct other-branch enquiry", async () => {
+          const forwardStatements = read("neon/migrations/" + FORWARD).replace(/^--.*$/gm, "");
+          assert.doesNotMatch(forwardStatements, /wa_can_correct_enquiry/);
+          assert.equal(await canCorrect(ids.managerA, ids.enquiryB), false);
+          assert.equal(await canCorrect(ids.managerNoBranch, ids.enquiryB), false);
+          assert.equal(await canCorrect(ids.admin, ids.enquiryB), true);
+        });
+
+        await t.test("agent unchanged for enquiries", async () => {
+          assert.equal(await canReadEnquiry(ids.agentA, ids.enquiryB), false);
+          assert.equal(await canReadEnquiry(ids.agentA, ids.enquiryReference), false);
+          assert.equal(await canReadEnquiry(ids.agentB, ids.enquiryB), true);
+          assert.equal(await canReadEnquiry(ids.inactiveManager, ids.enquiryB), false);
+          assert.equal(await canReadEnquiry(ids.viewer, ids.enquiryB), false);
+        });
+
+        await t.test("no-branch manager reply scope through enqueueOutboundIntent", async () => {
+          const { enqueueOutboundIntent } = await import("../woztell/outbound-intent.server.ts");
+          let request = 100;
+          const send = (conversationId, enquiryId) =>
+            enqueueOutboundIntent(
+              {
+                requestId: id(request++),
+                conversationId,
+                ...(enquiryId ? { enquiryId } : {}),
+                kind: "text",
+                payload: { text: "合成回覆" },
+              },
+              ids.managerNoBranch,
+              null,
+              query,
+            );
+          const rejected = (error) => error.code === "OUTBOUND_CONFLICT_OR_NOT_FOUND";
+          // (a) no enquiry on the conversation: queued.
+          assert.equal((await send(ids.unassigned)).state, "queued");
+          // (b) open explicit customer statement without a link-open: still needs
+          // wa_can_reply_enquiry (assigned + confirmed), with or without enquiryId.
+          await assert.rejects(send(ids.convExplicit), rejected);
+          await assert.rejects(send(ids.convExplicit, ids.enquiryExplicit), rejected);
+          // (c) open reference enquiry: queued (owner-approved scope).
+          assert.equal((await send(ids.convReference)).state, "queued");
+          assert.equal((await send(ids.convReference, ids.enquiryReference)).state, "queued");
+          const intents = await query(
+            "SELECT conversation_id,enquiry_id,state FROM whatsapp_outbound_intents WHERE actor_staff_id=$1 ORDER BY id",
+            [ids.managerNoBranch],
+          );
+          assert.deepEqual(intents, [
+            { conversation_id: ids.unassigned, enquiry_id: null, state: "queued" },
+            {
+              conversation_id: ids.convReference,
+              enquiry_id: ids.enquiryReference,
+              state: "queued",
+            },
+            {
+              conversation_id: ids.convReference,
+              enquiry_id: ids.enquiryReference,
+              state: "queued",
+            },
+          ]);
+          // Queued only; nothing reached a provider.
+          assert.equal(network.mock.callCount(), 0);
+        });
+
         await t.test("revert restores the branch rule", async () => {
           assert.equal(await canRead(ids.managerA, ids.convB), true);
           try {
@@ -186,11 +293,15 @@ test(
             assert.equal(await canRead(ids.managerNoBranch, ids.unassigned), false);
             assert.equal(await canRead(ids.managerA, ids.convA), true);
             assert.equal(await canRead(ids.agentA, ids.unassigned), false);
+            assert.equal(await canReadEnquiry(ids.managerA, ids.enquiryB), false);
+            assert.equal(await canReadEnquiry(ids.managerNoBranch, ids.enquiryB), false);
+            assert.equal(await canReadEnquiry(ids.agentB, ids.enquiryB), true);
           } finally {
             await query(read("neon/migrations/" + FORWARD));
           }
           assert.equal(await canRead(ids.managerA, ids.convB), true);
           assert.equal(await canRead(ids.managerNoBranch, ids.unassigned), true);
+          assert.equal(await canReadEnquiry(ids.managerA, ids.enquiryB), true);
         });
 
         await t.test("revert file is ignored by the migration runner and drift check", async () => {
@@ -227,27 +338,35 @@ test(
         await t.test(
           "forward and revert bodies differ from the previous body only in the manager rule",
           () => {
-            const previous = functionBlock(
-              read("neon/migrations/" + PREVIOUS),
-              "wa_can_read_conversation",
-            );
-            const forward = functionBlock(
-              read("neon/migrations/" + FORWARD),
-              "wa_can_read_conversation",
-            );
-            const revert = functionBlock(read(REVERT_PATH), "wa_can_read_conversation");
-            assert.ok(previous.includes(MANAGER_BRANCH_RULE));
-            assert.equal(forward, previous.replace(MANAGER_BRANCH_RULE, MANAGER_ORG_WIDE_RULE));
-            assert.equal(revert, previous);
-            for (const file of ["neon/migrations/" + FORWARD, REVERT_PATH]) {
-              const sql = read(file);
-              assert.equal((sql.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length, 1, file);
+            const previousSql = read("neon/migrations/" + PREVIOUS);
+            const forwardSql = read("neon/migrations/" + FORWARD);
+            const revertSql = read(REVERT_PATH);
+            for (const [name, rule] of [
+              ["wa_can_read_conversation", MANAGER_BRANCH_RULE],
+              ["wa_can_read_enquiry", ENQUIRY_MANAGER_BRANCH_RULE],
+            ]) {
+              const previous = functionBlock(previousSql, name);
+              assert.ok(previous.includes(rule), name);
+              assert.equal(
+                functionBlock(forwardSql, name),
+                previous.replace(rule, MANAGER_ORG_WIDE_RULE),
+                name,
+              );
+              assert.equal(functionBlock(revertSql, name), previous, name);
+            }
+            for (const [file, sql] of [
+              [FORWARD, forwardSql],
+              [REVERT_PATH, revertSql],
+            ]) {
+              assert.equal((sql.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length, 2, file);
+              assert.doesNotMatch(sql.replace(/^--.*$/gm, ""), /wa_can_correct_enquiry/, file);
               assert.doesNotMatch(sql, /\b(ALTER|DROP|INSERT|UPDATE|DELETE|TRUNCATE)\b/i, file);
             }
           },
         );
       });
     } finally {
+      network.mock.restore();
       if (previousWake === undefined) delete process.env.OPS_EVENT_WAKE_ENABLED;
       else process.env.OPS_EVENT_WAKE_ENABLED = previousWake;
     }

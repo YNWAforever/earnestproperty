@@ -122,7 +122,7 @@
     "test:admin-link-bulk:db": "node --experimental-test-module-mocks --test src/lib/whatsapp-enquiries/link-bulk-owned.db.test.mjs",
     "test:admin-performance:db": "node --experimental-test-module-mocks --test src/lib/analytics/performance-readback-owned.db.test.mjs",
     "test:operations:owned:db": "node --experimental-test-module-mocks --test src/lib/control-plane/operations-recovery-owned.db.test.mjs",
-    "test:whatsapp-access:db": "node --test src/lib/whatsapp-enquiries/enquiry-access.owned.db.test.mjs",
+    "test:whatsapp-access:db": "node --experimental-test-module-mocks --test src/lib/whatsapp-enquiries/enquiry-access.owned.db.test.mjs",
     "test:admin-golden:db": "node --experimental-test-module-mocks --test scripts/acceptance/admin-golden-journeys.test.mjs",
     "test:admin-overview:db": "node --experimental-test-module-mocks --test src/lib/neon/admin-overview-owned.db.test.mjs"
   },

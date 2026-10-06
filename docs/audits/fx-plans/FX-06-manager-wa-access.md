@@ -9,10 +9,16 @@
 - **2026-10-06 follow-up:** managers both **see and act** org-wide. `wa_can_read_conversation` is also the gate for:
   - status change (`admin-data.server.ts:3118-3142`);
   - assignment (`whatsapp-enquiries/assignment.server.ts:58,64`);
-  - replies on conversations with no linked enquiry (`woztell/outbound-intent.server.ts:85`).
+  - replies (`woztell/outbound-intent.server.ts` enqueue/readback/dispatch, and the `wa_guard_outbound_reservation` trigger).
 
   Widening the read gate therefore widens these three as well, and the owner approved that.
-  `wa_can_reply_enquiry` (`20260929105000_whatsapp_no_link_effects.sql`) is **unchanged**. Replying on a linked enquiry still requires `c.assigned_agent_id = actor` and `c.confirmed_staff_id = actor`.
+- **2026-10-06 final review, exact reply scope (accepted as the code behaves):** a manager may queue and send replies org-wide on:
+  - conversations with no open enquiry;
+  - conversations whose open enquiry has attribution `reference` or `unknown`;
+  - conversations whose open enquiry is `explicit_customer_statement` with a `link_open_id`.
+
+  Only an open `explicit_customer_statement` enquiry with `link_open_id IS NULL` still requires `wa_can_reply_enquiry`. That function is in `20260929105000_whatsapp_no_link_effects.sql` and is **unchanged**: the conversation must have `c.assigned_agent_id = actor` and `c.confirmed_staff_id = actor`, and the actor must be an admin or the owning agent. Replies always go to the conversation's own member.
+- **2026-10-06 final review, enquiry read:** managers **read** WhatsApp enquiries org-wide. `wa_can_read_enquiry` loses its manager branch condition in the same migration. `wa_can_correct_enquiry` stays **branch-scoped**, and `wa_can_reply_enquiry` is unchanged.
 
 **Spec.**
 - Audit B-01: `git show fix/fx-01-public-form-feedback:docs/audits/2026-10-final-audit.md`, line ~164.
@@ -29,6 +35,7 @@ SELECT a.active AND (
 ## Global Constraints
 - **The migration is a function replace only.** No table change, no data rewrite.
   - The new body is the old body with the manager branch condition removed: `OR EXISTS(… role='manager')`.
+  - Fix round 1 (owner decision): the same file also replaces `wa_can_read_enquiry` in the same way. `wa_can_correct_enquiry` is not touched.
   - Keep `a.active`, `STABLE`, the signature, the `COALESCE(…, false)` wrapper, the admin branch and the agent branch exactly as they are.
 - **Revert file.** It restores the previous body verbatim. It must **never** be applied by the migration runner or flagged by the drift check.
   - Check `scripts/neon/apply-migrations.mjs`, `scripts/neon/check-migration-drift.mjs` and `src/lib/control-plane/migration-versions.js` to see how files are discovered.
@@ -90,3 +97,6 @@ SELECT a.active AND (
 1. Apply `20261007100000_wa_access_unassigned.sql` on a Neon branch, verify, then apply it to production with explicit approval.
 2. Sign in to staging as a manager with no branch. Confirm an unassigned conversation appears and can be assigned.
 3. **Rollback:** apply the revert file. This needs approval.
+   - The revert restores both `wa_can_read_enquiry` and `wa_can_read_conversation`.
+   - It leaves the `app_migrations` row for `20261007100000_wa_access_unassigned.sql` in place. The drift check therefore still reports up to date, and `npm run neon:migrate` will not re-apply the forward file.
+   - To restore the new behaviour after a revert, re-apply the forward file by hand.
