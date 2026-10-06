@@ -170,3 +170,33 @@ test("recording 拒收推廣 stamps staff_recorded evidence; recording consent k
   // A non-near-miss reference carries no message uuid.
   assert.equal(statements[0].params[6], null);
 });
+
+test("a near-miss: reference that is not near-miss:<uuid> is refused with 400 and no query", async () => {
+  let writes = 0;
+  const query = async () => {
+    writes++;
+    return [{ evidence_ok: true, id: "contact", opted_in: false }];
+  };
+  for (const evidenceRef of [
+    "near-miss:",
+    "near-miss:abc",
+    "near-miss:11111111-1111-4111-8111-11111111111",
+    "near-miss:11111111-1111-4111-8111-111111111111/x",
+    "NEAR-MISS:11111111-1111-4111-8111-11111111111z",
+  ])
+    await assert.rejects(
+      setWhatsappMarketingConsent(
+        {
+          contactId: "11111111-1111-4111-8111-111111111111",
+          optedIn: false,
+          evidenceSource: "customer_opt_out",
+          evidenceRef,
+        },
+        { staffId: "33333333-3333-4333-8333-333333333333", roles: ["admin"] },
+        query,
+      ),
+      (error) => error instanceof Response && error.status === 400,
+      evidenceRef,
+    );
+  assert.equal(writes, 0);
+});

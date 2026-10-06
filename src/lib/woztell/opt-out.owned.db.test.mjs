@@ -57,6 +57,12 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 180000 }, async (t) =
           )
         )[0];
       const iso = (seconds) => new Date(seconds * 1000).toISOString();
+      // Simulates Task 3's manager clear: the flag goes false, the evidence is kept.
+      const clear = (member, staffId) =>
+        query(
+          "UPDATE crm_contacts SET opted_out_whatsapp=false,opted_out_cleared_at=now(),opted_out_cleared_by=$2 WHERE whatsapp_member_id=$1",
+          [member, staffId],
+        );
       const assertNoEvidence = (row) => {
         for (const column of [
           "opted_out_at",
@@ -97,6 +103,12 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 180000 }, async (t) =
           );
           const sql = readFileSync(new URL("neon/migrations/" + MIGRATION, repoRoot), "utf8");
           assert.doesNotMatch(sql, /SET[^;]*\bopted_out_whatsapp\s*=/i);
+          // Bounded lock wait inside the runner's transaction, and a documented rollback window.
+          assert.match(sql, /^SET LOCAL lock_timeout = '5s';$/m);
+          assert.match(sql, /rollback window/i);
+          // apply-migrations.mjs splits on ';' and quotes even inside comments.
+          for (const line of sql.split("\n").filter((l) => l.trim().startsWith("--")))
+            assert.doesNotMatch(line, /[;']/, line);
           const updated = (results) =>
             [results]
               .flat()
@@ -255,15 +267,17 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 180000 }, async (t) =
           await ingest(x);
           assert.equal((await contact(member)).opted_out_whatsapp, true);
           await query(
-            "UPDATE crm_contacts SET opted_out_whatsapp=false,opted_out_cleared_at=now() WHERE whatsapp_member_id=$1",
-            [member],
+            "INSERT INTO staff_users(id,auth_user_id,name_zh) VALUES($1,'synthetic-optout-clearer','合成清除者')",
+            [id(51)],
           );
+          await clear(member, id(51));
           const again = await ingest(x);
           assert.equal(again.messageInserted, false);
           const cleared = await contact(member);
           assert.equal(cleared.opted_out_whatsapp, false);
           assert.equal(cleared.opted_out_message_id, "synthetic-msg-6x");
           assert.notEqual(cleared.opted_out_cleared_at, null);
+          assert.equal(cleared.opted_out_cleared_by, id(51));
           await ingest(
             event({ messageId: "synthetic-msg-6y", member, phone, text: "退訂", at: BASE + 70 }),
           );
@@ -272,6 +286,112 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 180000 }, async (t) =
           assert.equal(reopted.opted_out_message_id, "synthetic-msg-6y");
           assert.equal(reopted.opted_out_at.toISOString(), iso(BASE + 70));
           assert.equal(reopted.opted_out_source, "customer_message");
+          // A new opt-out starts a fresh episode: the previous clear markers are reset.
+          assert.equal(reopted.opted_out_cleared_at, null);
+          assert.equal(reopted.opted_out_cleared_by, null);
+        },
+      );
+
+      await t.test(
+        "a history-imported copy never swallows the live opt-out for the same message",
+        async () => {
+          const member = "synthetic-optout-11";
+          const stop = event({
+            messageId: "synthetic-msg-11",
+            member,
+            phone: "85291230011",
+            text: "退訂",
+            at: BASE + 130,
+          });
+          const imported = await ingest(stop, "history_import");
+          assert.equal(imported.messageInserted, true);
+          assert.equal((await contact(member)).opted_out_whatsapp, false);
+          const live = await ingest(stop);
+          assert.equal(live.messageInserted, false);
+          const row = await contact(member);
+          assert.equal(row.opted_out_whatsapp, true);
+          assert.equal(row.opted_out_message_id, "synthetic-msg-11");
+          assert.equal(row.opted_out_text, "退訂");
+          assert.equal(row.opted_out_source, "customer_message");
+          assert.equal(row.opted_out_at.toISOString(), iso(BASE + 130));
+        },
+      );
+
+      await t.test(
+        "a redelivered live opt-out is applied once; evidence is unchanged",
+        async () => {
+          const member = "synthetic-optout-12";
+          const stop = event({
+            messageId: "synthetic-msg-12",
+            member,
+            phone: "85291230012",
+            text: "STOP",
+            at: BASE + 140,
+          });
+          await ingest(stop);
+          const first = await contact(member);
+          assert.equal(first.opted_out_whatsapp, true);
+          const again = await ingest(stop);
+          assert.equal(again.messageInserted, false);
+          assert.deepEqual(await contact(member), first);
+        },
+      );
+
+      await t.test(
+        "a redelivery with no messageId (synthesized and legacy ids) stays cleared",
+        async () => {
+          // Synthesized id: the same body always yields the same digest id.
+          const member = "synthetic-optout-13";
+          const phone = "85291230013";
+          const stop = event({ member, phone, text: "退訂", at: BASE + 150 });
+          assert.equal(stop.legacyExternalMessageId !== null, true);
+          await ingest(stop);
+          assert.equal((await contact(member)).opted_out_message_id, stop.externalMessageId);
+          await clear(member, id(51));
+          assert.equal((await ingest(stop)).messageInserted, false);
+          assert.equal((await contact(member)).opted_out_whatsapp, false);
+
+          // Legacy pre-digest id: a row stored by pre-FX-08 code (which always applied
+          // the opt-out) under the bare legacy key, legacy-stamped and then cleared.
+          const legacyMember = "synthetic-optout-14";
+          const legacyPhone = "85291230014";
+          await ingest(
+            event({
+              messageId: "synthetic-msg-14a",
+              member: legacyMember,
+              phone: legacyPhone,
+              text: "你好",
+              at: BASE + 155,
+            }),
+          );
+          const legacy = event({
+            member: legacyMember,
+            phone: legacyPhone,
+            text: "退訂",
+            at: BASE + 160,
+          });
+          const legacyContact = await contact(legacyMember);
+          await query(
+            `INSERT INTO whatsapp_messages(conversation_id,contact_id,direction,message_type,text,external_message_id,woztell_member_id,channel_id,status,created_at)
+             SELECT id,$1,'inbound','TEXT','退訂',$2,$3,$4,'received',$5::timestamptz
+             FROM whatsapp_conversations WHERE woztell_member_id=$3`,
+            [
+              legacyContact.id,
+              legacy.legacyExternalMessageId,
+              legacyMember,
+              CHANNEL,
+              iso(BASE + 160),
+            ],
+          );
+          await query(
+            "UPDATE crm_contacts SET opted_out_at=$2::timestamptz,opted_out_source='legacy',opted_out_cleared_at=now(),opted_out_cleared_by=$3 WHERE id=$1",
+            [legacyContact.id, iso(BASE + 160), id(51)],
+          );
+          assert.equal((await ingest(legacy)).messageInserted, false);
+          const after = await contact(legacyMember);
+          assert.equal(after.opted_out_whatsapp, false);
+          assert.equal(after.opted_out_source, "legacy");
+          assert.equal(after.opted_out_message_id, null);
         },
       );
 
@@ -374,6 +494,36 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 180000 }, async (t) =
             [target.id],
           );
           assert.equal(noAudit, 0);
+          // An ineligible caller always gets 403, never the 400 existence signal:
+          // an inactive manager, and an unknown contact.
+          await query(
+            "INSERT INTO staff_users(id,auth_user_id,name_zh,active) VALUES($1,'synthetic-optout-inactive','合成離職',false)",
+            [id(52)],
+          );
+          await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [id(52)]);
+          for (const [who, contactId] of [
+            [{ staffId: id(52), roles: ["manager"] }, target.id],
+            [actor, id(99)],
+          ])
+            for (const ref of [foreign, await message("synthetic-msg-9")])
+              await assert.rejects(
+                setWhatsappMarketingConsent(
+                  {
+                    contactId,
+                    optedIn: false,
+                    evidenceSource: "customer_opt_out",
+                    evidenceRef: `near-miss:${ref}`,
+                  },
+                  who,
+                ),
+                (error) => error instanceof Response && error.status === 403,
+              );
+          assert.deepEqual(await contact(own), target);
+          // A stale clear marker from an earlier episode is reset by a new opt-out.
+          await query(
+            "UPDATE crm_contacts SET opted_out_cleared_at=now(),opted_out_cleared_by=$2 WHERE id=$1",
+            [target.id, id(50)],
+          );
           await setWhatsappMarketingConsent(
             {
               contactId: target.id,
@@ -389,6 +539,8 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 180000 }, async (t) =
           assert.equal(confirmed.opted_out_message_id, "synthetic-msg-9");
           assert.equal(confirmed.opted_out_text, "我要退訂");
           assert.notEqual(confirmed.opted_out_at, null);
+          assert.equal(confirmed.opted_out_cleared_at, null);
+          assert.equal(confirmed.opted_out_cleared_by, null);
           const [audit] = await query(
             "SELECT metadata FROM audit_logs WHERE subject_id=$1 AND action='contact.marketing_consent'",
             [target.id],
@@ -416,6 +568,39 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 180000 }, async (t) =
             assert.deepEqual(consented[column], confirmed[column], column);
         },
       );
+
+      await t.test("evidence text is bounded at 500 characters (near-miss confirm)", async () => {
+        const { setWhatsappMarketingConsent } = await import("../neon/whatsapp-consent.server.ts");
+        const member = "synthetic-optout-15";
+        const long = "我要退訂" + "長".repeat(700);
+        await ingest(
+          event({
+            messageId: "synthetic-msg-15",
+            member,
+            phone: "85291230015",
+            text: long,
+            at: BASE + 170,
+          }),
+        );
+        const before = await contact(member);
+        assert.equal(before.opted_out_whatsapp, false);
+        const [{ id: messageUuid, text: stored }] = await query(
+          "SELECT id,text FROM whatsapp_messages WHERE external_message_id='synthetic-msg-15'",
+        );
+        assert.equal(stored, long);
+        await setWhatsappMarketingConsent(
+          {
+            contactId: before.id,
+            optedIn: false,
+            evidenceSource: "customer_opt_out",
+            evidenceRef: `near-miss:${messageUuid}`,
+          },
+          { staffId: id(50), roles: ["manager"] },
+        );
+        const row = await contact(member);
+        assert.equal(row.opted_out_text.length, 500);
+        assert.equal(row.opted_out_text, long.slice(0, 500));
+      });
     });
     assert.equal(network.mock.callCount(), 0);
   } finally {

@@ -25,6 +25,14 @@ export async function setWhatsappMarketingConsent(
     throw new Response("Opt-in requires affirmative evidence.", { status: 400 });
   }
   // Owner decision 7: confirming a near-miss names the customer's own inbound message.
+  if (
+    /^near-miss:/i.test(input.evidenceRef) &&
+    !/^near-miss:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      input.evidenceRef,
+    )
+  ) {
+    throw new Response("NEAR_MISS_REFERENCE_INVALID", { status: 400 });
+  }
   const nearMiss =
     /^near-miss:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
       input.evidenceRef,
@@ -43,13 +51,17 @@ export async function setWhatsappMarketingConsent(
       SELECT m.external_message_id, left(m.text, 500) AS text FROM whatsapp_messages m
       WHERE m.id = $7::uuid AND m.contact_id = $1::uuid AND m.direction = 'inbound'
     ), guard AS (
-      SELECT ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM near_miss)) AS ok
+      -- Evaluated only for an eligible caller and contact, so an ineligible caller
+      -- always gets 403 and never learns whether the message exists.
+      SELECT ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM near_miss)) AS ok FROM eligible
     ), changed AS (
       UPDATE crm_contacts c SET opt_in_whatsapp = $2, opted_out_whatsapp = NOT $2,
         opted_out_at = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN now() ELSE c.opted_out_at END,
         opted_out_source = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN 'staff_recorded' ELSE c.opted_out_source END,
         opted_out_message_id = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN (SELECT external_message_id FROM near_miss) ELSE c.opted_out_message_id END,
         opted_out_text = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN (SELECT text FROM near_miss) ELSE c.opted_out_text END,
+        opted_out_cleared_at = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN NULL ELSE c.opted_out_cleared_at END,
+        opted_out_cleared_by = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN NULL ELSE c.opted_out_cleared_by END,
         updated_at = now()
       FROM eligible e, guard g WHERE c.id = e.id AND g.ok RETURNING c.id, c.opt_in_whatsapp AS opted_in
     ), evidence AS (
