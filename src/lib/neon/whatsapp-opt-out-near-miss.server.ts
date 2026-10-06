@@ -9,7 +9,8 @@ import { queryRows } from "./db.server.ts";
 // is persisted as an audit_logs row whose messageAt (the dismissed message's own created_at,
 // not the click time) is a read-time cut-off, so a later request still shows. No migration.
 
-export type OptOutNearMiss = { messageId: string; text: string; at: string } | null;
+/** `exact`: the message is a whole D4 stop word (history-imported), not a "maybe" near-miss. */
+export type OptOutNearMiss = { messageId: string; text: string; at: string; exact: boolean } | null;
 
 /**
  * What the review flag shows. On a contact that is NOT opted out an exact D4 word is flagged
@@ -20,6 +21,9 @@ export type OptOutNearMiss = { messageId: string; text: string; at: string } | n
 export function isOptOutReviewFlag(text: string | null | undefined, optedOut: boolean) {
   return isOptOutNearMiss(text) || (!optedOut && isOptOutText(text));
 }
+
+/** Dismissing an exact stop word needs a written reason (at least this many characters). */
+export const EXACT_DISMISS_REASON_MIN = 5;
 
 const uuid = z.string().uuid();
 
@@ -59,7 +63,13 @@ export async function readOptOutNearMiss(
   );
   const flagged = rows.find((row) => isOptOutReviewFlag(row.text, row.opted_out === true));
   return flagged
-    ? { messageId: String(flagged.id), text: String(flagged.text), at: iso(flagged.created_at) }
+    ? {
+        messageId: String(flagged.id),
+        text: String(flagged.text),
+        at: iso(flagged.created_at),
+        // A message is never both an exact word and a near-miss.
+        exact: isOptOutText(flagged.text),
+      }
     : null;
 }
 
@@ -118,6 +128,10 @@ export async function dismissOptOutNearMiss(
   // silently move the cut-off.
   if (!found.message_ok || !isOptOutReviewFlag(found.text, found.opted_out === true)) {
     throw new Response("NEAR_MISS_MESSAGE_NOT_FOUND", { status: 404 });
+  }
+  // A plain stop word is not a "maybe": hiding it needs a written reason.
+  if (isOptOutText(found.text) && (input.reason ?? "").length < EXACT_DISMISS_REASON_MIN) {
+    throw new Response("NEAR_MISS_REASON_REQUIRED", { status: 400 });
   }
   // 2. Write, re-checking the same guard: one audit row per message (idempotent). The
   //    dismissal lives only in audit_logs. crm_contacts is never written.

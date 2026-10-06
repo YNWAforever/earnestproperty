@@ -32,6 +32,7 @@ import { ResolveUnknownOutboundDialog } from "@/components/admin/whatsapp/Resolv
 import {
   MANAGER_RESOLVED_READBACK_NOTICE,
   outboundReadbackOutcome,
+  shouldClearDraftAfterReadback,
 } from "@/components/admin/whatsapp/safety-copy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -932,7 +933,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         if (outcome === "pending")
           throw new Error("傳送結果仍未確認，請稍後核對或聯絡支援。沒有重送要求。");
         clearOutboundRequestId(actorId, targetId, kind);
-        if (kind === "text" && outcome === "sent_or_queued") {
+        if (kind === "text" && shouldClearDraftAfterReadback(result.intent.state)) {
           setReplyDrafts((current) =>
             current[targetId]?.trim() === saved.original[0]
               ? { ...current, [targetId]: "" }

@@ -1,10 +1,41 @@
 import { test, expect } from "bun:test";
 import {
   MANAGER_RESOLVED_READBACK_NOTICE,
+  dismissReasonError,
   nearMissConsentPreset,
+  optOutReviewFlagCopy,
   outboundReadbackOutcome,
   resolveUnknownSuccessNotice,
+  shouldClearDraftAfterReadback,
 } from "./safety-copy";
+
+test("R1: a confirmed-sent draft is cleared; a confirmed-not-sent draft is kept", () => {
+  expect(shouldClearDraftAfterReadback("resolved_sent")).toBe(true);
+  expect(shouldClearDraftAfterReadback("queued")).toBe(true);
+  expect(shouldClearDraftAfterReadback("accepted")).toBe(true);
+  expect(shouldClearDraftAfterReadback("resolved_not_sent")).toBe(false);
+  expect(shouldClearDraftAfterReadback("failed")).toBe(false);
+  expect(shouldClearDraftAfterReadback("cancelled")).toBe(false);
+  expect(shouldClearDraftAfterReadback("unknown")).toBe(false);
+});
+
+test("R2: an exact stop word gets its own badge and line; a near-miss keeps the original copy", () => {
+  expect(optOutReviewFlagCopy({ text: "退訂", at: "時間", exact: true })).toEqual({
+    badge: "客戶要求退訂",
+    line: "客戶曾傳送退訂字眼「退訂」（由舊紀錄匯入，系統未有自動退訂），請核實。",
+  });
+  expect(optOutReviewFlagCopy({ text: "我要退訂", at: "時間", exact: false })).toEqual({
+    badge: "可能要求退訂",
+    line: "客戶於 時間 傳送「我要退訂」，可能想停止接收訊息。系統未有自動退訂，請核實。",
+  });
+});
+
+test("R2: dismissing an exact stop word needs a reason of at least 5 characters", () => {
+  for (const reason of ["", "   ", "短短", "1234"])
+    expect(dismissReasonError(reason, true)).toBe("請填寫原因");
+  expect(dismissReasonError("客戶其後已重新同意", true)).toBeNull();
+  expect(dismissReasonError("", false)).toBeNull();
+});
 
 test("a manager's resolution is a final readback outcome for the sender's tab", () => {
   expect(outboundReadbackOutcome("resolved_sent")).toBe("manager_resolved");

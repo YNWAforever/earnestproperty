@@ -414,7 +414,7 @@ export type AdminConversationDetail = AdminConversationRow & {
     error: string | null;
     resolvable: boolean;
   } | null;
-  opt_out_near_miss?: { messageId: string; text: string; at: string } | null;
+  opt_out_near_miss?: { messageId: string; text: string; at: string; exact?: boolean } | null;
 };
 
 export type AdminConversationUpdateInput = {

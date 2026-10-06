@@ -419,6 +419,7 @@ test("readOptOutNearMiss derives the newest flagged inbound after the three cut-
     messageId: "m2",
     text: "STOP please",
     at: at("02").toISOString(),
+    exact: false,
   });
   assert.equal(await readOptOutNearMiss(input, { query }), null);
   // Not opted out: an exact word can only be there from history_import, and is flagged too.
@@ -426,6 +427,7 @@ test("readOptOutNearMiss derives the newest flagged inbound after the three cut-
     messageId: "m3",
     text: "退訂",
     at: at("03").toISOString(),
+    exact: true,
   });
   const { sql, params } = calls[0];
   assert.deepEqual(params, [OO_CONV, OO_CONTACT]);
@@ -501,17 +503,40 @@ test("dismissOptOutNearMiss: approval gate, validation and wrong-recipient guard
     assert.equal(ordinary.calls.length, 1, "no write for a message that is not flagged");
   }
   // A history-imported exact word on a contact that is not opted out is flagged, so it can be
-  // dismissed (one audit row, no contact write).
+  // dismissed, but only with a reason (at least 5 characters): no write without one.
+  for (const reason of [undefined, "", "   ", "短短"]) {
+    const noReason = fakeQuery([
+      [{ actor_ok: true, message_ok: true, text: "退訂", opted_out: false }],
+    ]);
+    await rejectsWith(
+      dismissOptOutNearMiss(dismissInput({ reason }), OO_MANAGER, { query: noReason.query }),
+      400,
+      "NEAR_MISS_REASON_REQUIRED",
+    );
+    assert.equal(noReason.calls.length, 1, "no write without a reason");
+  }
   const imported = fakeQuery([
     [{ actor_ok: true, message_ok: true, text: "退訂", opted_out: false }],
     [{ actor_ok: true, message_ok: true, dismissed: true }],
   ]);
   assert.deepEqual(
-    await dismissOptOutNearMiss(dismissInput(), OO_MANAGER, { query: imported.query }),
+    await dismissOptOutNearMiss(dismissInput({ reason: "客戶其後已重新同意" }), OO_MANAGER, {
+      query: imported.query,
+    }),
     { ok: true, dismissed: true },
   );
   assert.equal(imported.calls.length, 2);
+  assert.equal(imported.calls[1].params[4], "客戶其後已重新同意");
   assert.doesNotMatch(imported.calls[1].sql, /UPDATE\s+crm_contacts/i);
+  // A near-miss still needs no reason.
+  const near = fakeQuery([
+    [{ actor_ok: true, message_ok: true, text: "STOP please", opted_out: false }],
+    [{ actor_ok: true, message_ok: true, dismissed: true }],
+  ]);
+  assert.deepEqual(await dismissOptOutNearMiss(dismissInput(), OO_MANAGER, { query: near.query }), {
+    ok: true,
+    dismissed: true,
+  });
 });
 
 test("dismissOptOutNearMiss writes one idempotent audit row and never touches crm_contacts", async () => {

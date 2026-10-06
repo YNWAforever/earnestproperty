@@ -1313,6 +1313,7 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 300000 }, async (t) =
           const first = await readOptOutNearMiss(input);
           assert.equal(first.messageId, await messageUuid("synthetic-near-1a"));
           assert.equal(first.text, "我要退訂");
+          assert.equal(first.exact, false);
           assert.equal(first.at, new Date(LIVE * 1000).toISOString());
           assert.equal(row.opted_out_whatsapp, false);
           assertNoEvidence(row);
@@ -1642,11 +1643,27 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 300000 }, async (t) =
             ),
             (error) => error instanceof Response && error.status === 403,
           );
+          // An exact word is a plain stop request: dismissing it needs a reason (no write without).
+          assert.equal(flagged.exact, true);
+          for (const reason of [undefined, "  ", "短"])
+            await rejectsWith(
+              dismissOptOutNearMiss({ ...input, messageId: flagged.messageId, reason }, manager),
+              400,
+              "NEAR_MISS_REASON_REQUIRED",
+            );
+          assert.equal((await audits(row.id, DISMISSED)).length, 0);
+          assert.equal((await readOptOutNearMiss(input)).messageId, flagged.messageId);
           const dismiss = () =>
-            dismissOptOutNearMiss({ ...input, messageId: flagged.messageId }, manager);
+            dismissOptOutNearMiss(
+              { ...input, messageId: flagged.messageId, reason: "客戶其後已重新同意推廣" },
+              manager,
+            );
           assert.deepEqual(await dismiss(), { ok: true, dismissed: true });
           assert.deepEqual(await dismiss(), { ok: true, dismissed: false });
-          assert.equal((await audits(row.id, DISMISSED)).length, 1);
+          const dismissedRows = await audits(row.id, DISMISSED);
+          assert.equal(dismissedRows.length, 1);
+          assert.equal(dismissedRows[0].metadata.reason, "客戶其後已重新同意推廣");
+          assert.equal(dismissedRows[0].actor_id, MANAGER);
           assert.equal(await readOptOutNearMiss(input), null);
           const final = await contact(member);
           assert.equal(final.opted_out_whatsapp, false);

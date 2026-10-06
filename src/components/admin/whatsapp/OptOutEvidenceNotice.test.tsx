@@ -148,6 +148,17 @@ test("near-miss: the confirm path presets the consent dialog to 客戶拒收要�
   );
 });
 
+test("an exact stop word (history import) is named plainly, not as a 'maybe'", () => {
+  const exact = { ...nearMiss, text: "退訂", exact: true };
+  const html = render(detail({ opt_out_near_miss: exact, can_clear_opt_out: true }));
+  expect(html).toContain("客戶要求退訂");
+  expect(html).toContain("客戶曾傳送退訂字眼「退訂」（由舊紀錄匯入，系統未有自動退訂），請核實。");
+  expect(html).not.toContain("可能要求退訂");
+  expect(html).not.toContain("可能想停止接收訊息");
+  expect(html).toContain("確認退訂");
+  expect(html).toContain("不是退訂");
+});
+
 test("near-miss: agents see only 請通知經理處理", () => {
   const html = render(detail({ opt_out_near_miss: nearMiss, can_clear_opt_out: false }));
   expect(html).toContain("可能要求退訂");

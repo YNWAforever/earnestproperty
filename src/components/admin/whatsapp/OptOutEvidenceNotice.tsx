@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { clearAccidentalWhatsappOptOut, dismissOptOutNearMiss } from "@/lib/neon/admin-data";
 import type { AdminConversationDetail } from "@/lib/neon/admin-data.types";
 import { optOutReplyState } from "@/lib/neon/admin-workflow";
-import { nearMissConsentPreset } from "./safety-copy";
+import { dismissReasonError, nearMissConsentPreset, optOutReviewFlagCopy } from "./safety-copy";
 import { formatSafetyTime } from "./safety-time";
 
 function statusOf(error: unknown) {
@@ -141,10 +141,13 @@ function ClearAccidentalOptOutDialog({
 function DismissNearMissButton({
   detail,
   messageId,
+  exact,
   onChanged,
 }: {
   detail: AdminConversationDetail;
   messageId: string;
+  /** An exact stop word: the reason is required (the server enforces it too). */
+  exact: boolean;
   onChanged: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -154,6 +157,11 @@ function DismissNearMissButton({
 
   async function submit() {
     if (!detail.contact_id) return;
+    const missingReason = dismissReasonError(reason, exact);
+    if (missingReason) {
+      setError(missingReason);
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -169,8 +177,12 @@ function DismissNearMissButton({
       setOpen(false);
       setReason("");
       onChanged();
-    } catch {
-      setError("未能隱藏提示，請重新載入後再試。");
+    } catch (caught) {
+      setError(
+        statusOf(caught).includes("NEAR_MISS_REASON_REQUIRED")
+          ? "請填寫原因"
+          : "未能隱藏提示，請重新載入後再試。",
+      );
     } finally {
       setBusy(false);
     }
@@ -187,6 +199,7 @@ function DismissNearMissButton({
         description="只會隱藏這則提示，不會更改客戶的推廣同意。之後如客戶再傳類似訊息，系統會再次提示。此操作會記入審計紀錄。"
         confirmLabel="不是退訂"
         isPending={busy}
+        disabled={exact && dismissReasonError(reason, true) !== null}
         error={error}
         onOpenChange={(value) => {
           setOpen(value);
@@ -198,9 +211,13 @@ function DismissNearMissButton({
           value={reason}
           disabled={busy}
           maxLength={200}
-          aria-label="備註（選填）"
+          aria-label={exact ? "原因（必填）" : "備註（選填）"}
           onChange={(event) => setReason(event.target.value)}
-          placeholder="備註（選填），例如：客戶只是問「可唔可以停一停先」"
+          placeholder={
+            exact
+              ? "原因（必填），例如：客戶其後已重新同意接收推廣"
+              : "備註（選填），例如：客戶只是問「可唔可以停一停先」"
+          }
         />
       </AdminConfirmDialog>
     </>
@@ -247,10 +264,14 @@ export function OptOutEvidenceNotice({
 
   const nearMiss = detail.opt_out_near_miss;
   if (!nearMiss) return null;
-  const at = formatSafetyTime(nearMiss.at);
+  const copy = optOutReviewFlagCopy({
+    text: nearMiss.text,
+    at: formatSafetyTime(nearMiss.at),
+    exact: nearMiss.exact === true,
+  });
   return (
     <>
-      <Badge variant="outline">可能要求退訂</Badge>
+      <Badge variant="outline">{copy.badge}</Badge>
       {detail.can_clear_opt_out && detail.contact_id ? (
         <>
           <WhatsappConsentDialog
@@ -264,12 +285,13 @@ export function OptOutEvidenceNotice({
             key={"dismiss-" + nearMiss.messageId}
             detail={detail}
             messageId={nearMiss.messageId}
+            exact={nearMiss.exact === true}
             onChanged={onChanged}
           />
         </>
       ) : null}
       <div className="order-last basis-full space-y-1 text-sm text-muted-foreground">
-        <p>{`客戶於 ${at} 傳送「${nearMiss.text}」，可能想停止接收訊息。系統未有自動退訂，請核實。`}</p>
+        <p>{copy.line}</p>
         {detail.can_clear_opt_out ? null : <p>請通知經理處理。</p>}
       </div>
     </>
