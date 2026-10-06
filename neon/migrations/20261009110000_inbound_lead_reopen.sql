@@ -2,11 +2,17 @@
 -- 20260906100000_whatsapp_inbound_leads.sql. The trigger itself is unchanged.
 -- A contact with no lead still gets one, as before. On a new inbound message
 -- only, a contact whose leads are all closed_won or closed_lost gets a new lead
--- when the message is newer than the latest closed lead update, and a closed
--- conversation reopens when the message is at least as new as its last inbound.
--- Older messages from history import or identity moves never do either.
--- A new lead keeps the contact owner only while that staff member is active.
--- No job is queued and no history reconcile runs here. No existing row is written.
+-- when the message is newer than the latest closed lead update.
+-- On a new inbound message only, a closed conversation of that same contact
+-- reopens when the message is at least as new as the conversation last inbound.
+-- That check compares against last_inbound_at, not against the staff close. So a
+-- late or gap-fill message that is newer than the previous last inbound can
+-- reopen a conversation that staff closed after that last inbound.
+-- Identity moves through UPDATE never create a lead for a contact that has one
+-- and never reopen a conversation. Messages older than the last inbound never reopen.
+-- Any new lead, including the first lead of a contact, keeps the contact owner
+-- only while that staff member is active, otherwise it is unassigned.
+-- No job is queued and no history reconcile runs here. No existing lead is written.
 -- Rollback: neon/reverts/20261009110000_inbound_lead_reopen_revert.sql
 -- Comments avoid semicolons and quotes because apply-migrations.mjs splits
 -- the file on them.
@@ -33,7 +39,8 @@ BEGIN
   END IF;
   IF TG_OP = 'INSERT' AND NEW.conversation_id IS NOT NULL THEN
     UPDATE whatsapp_conversations w SET status = 'open', updated_at = now()
-     WHERE w.id = NEW.conversation_id AND w.status = 'closed'
+     WHERE w.id = NEW.conversation_id AND w.contact_id = NEW.contact_id
+       AND w.status = 'closed'
        AND (w.last_inbound_at IS NULL OR msg_at >= w.last_inbound_at);
   END IF;
   RETURN NEW;

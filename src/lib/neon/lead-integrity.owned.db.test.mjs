@@ -825,8 +825,11 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
           assert.equal((await conversationOf(c.conversationId)).status, "closed");
 
           // A contact with no lead still gets its first lead from history import.
-          // Its message is newer than the close above, then moves to the closed
-          // contact through the UPDATE path, which must create and reopen nothing.
+          // Its message is newer than the close above and newer than the closed
+          // conversation last inbound. An identity merge then moves that inbound
+          // row onto the closed contact AND into its own closed conversation
+          // through the UPDATE path. Only the INSERT guard keeps the trigger from
+          // creating a lead or reopening that conversation here.
           const other = await ingest(
             message("synthetic-fx09-member-reopen-3b", await nextAt(), "另一位"),
             "history_import",
@@ -835,28 +838,46 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
           const otherLeads = await leadsOf(other.contactId);
           assert.equal(otherLeads.length, 1);
           assert.equal(otherLeads[0].stage, "new");
-          const otherStatus = (await conversationOf(other.conversationId)).status;
-          await query("UPDATE whatsapp_messages SET contact_id=$1 WHERE external_message_id=$2", [
-            c.contactId,
-            "synthetic-fx09-reopen-" + messageSeq,
-          ]);
+          const closedConversation = await conversationOf(c.conversationId);
+          assert.equal(closedConversation.status, "closed");
+          const [moved] = await query(
+            `UPDATE whatsapp_messages SET contact_id=$1,conversation_id=$2
+             WHERE external_message_id=$3 AND direction='inbound' RETURNING created_at`,
+            [c.contactId, c.conversationId, "synthetic-fx09-reopen-" + messageSeq],
+          );
+          assert.ok(moved, "the merge must move one inbound row");
+          assert.ok(
+            moved.created_at >= closedConversation.last_inbound_at,
+            "the moved row is new enough that only the INSERT guard blocks the reopen",
+          );
           assert.equal((await leadsOf(c.contactId)).length, 1);
           assert.equal((await conversationOf(c.conversationId)).status, "closed");
-          assert.equal((await conversationOf(other.conversationId)).status, otherStatus);
 
-          // Test setup: a later inbound is already recorded on the conversation.
-          // A history message newer than the close but older than that inbound
-          // must not reopen it.
+          // Real path: a newer live message reopens the conversation and opens a
+          // lead, staff close both again, then history import fills in a message
+          // that is newer than the first close but older than that live message.
+          // It must not reopen the conversation or add a lead.
           const between = await nextAt();
-          await query("UPDATE whatsapp_conversations SET last_inbound_at=$2 WHERE id=$1", [
-            c.conversationId,
-            new Date(Date.parse(between) + 60000).toISOString(),
-          ]);
-          await ingest(message(member, between, "較新但未最新"), "history_import");
-          assert.equal((await conversationOf(c.conversationId)).status, "closed");
-          // That message is newer than the close, so by the rule it does open a
-          // lead. Only messages older than the close never do.
-          assert.equal((await leadsOf(c.contactId)).length, 2);
+          const later = await nextAt();
+          const live = await ingest(message(member, later, "最新訊息"), "live_webhook");
+          assert.equal(live.messageInserted, true);
+          let leads = await leadsOf(c.contactId);
+          assert.equal(leads.length, 2);
+          assert.equal((await conversationOf(c.conversationId)).status, "open");
+          await setStage(leads[1].id, "closed_lost");
+          await setConversation(c.conversationId, "closed");
+          const recent = await ingest(message(member, between, "較新但未最新"), "history_import");
+          assert.equal(recent.messageInserted, true);
+          assert.equal(recent.conversationId, c.conversationId);
+          const conversation = await conversationOf(c.conversationId);
+          assert.equal(conversation.status, "closed");
+          assert.equal(conversation.last_inbound_at.toISOString(), later);
+          // The fill-in message is older than the second close, so no lead either.
+          leads = await leadsOf(c.contactId);
+          assert.deepEqual(
+            leads.map((lead) => lead.stage),
+            ["closed_won", "closed_lost"],
+          );
         },
       );
 
