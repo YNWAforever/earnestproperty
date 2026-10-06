@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test, { mock } from "node:test";
 import {
   withOwnedPostgres,
   mockOwnedServerDb,
+  repoRoot,
 } from "../../../scripts/acceptance/owned-postgres-test.mjs";
-import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
+import { MIGRATION_VERSIONS, pendingMigrations } from "../control-plane/migration-versions.js";
+import { formatDriftReport } from "../../../scripts/neon/check-migration-drift.mjs";
 
 const PROFILE_NAME_MIGRATION = "20261009100000_contact_profile_name.sql";
 
@@ -68,7 +70,7 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
     throw new Error("FX-09 owned test: network is disabled");
   });
   try {
-    await withOwnedPostgres(async ({ query, transaction }) => {
+    await withOwnedPostgres(async ({ pool, query, transaction }) => {
       await mockOwnedServerDb(mock, query, transaction);
       const server = await import("./admin-data.server.ts");
       const { staffReassignStatements } = await import("./staff-ownership.ts");
@@ -664,6 +666,359 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
         assert.equal(res.contactId, C1);
         assert.deepEqual(await names(C1), { name: "客一", whatsapp_profile_name: "First Profile" });
         assert.equal(await contactText(C2), other);
+      });
+
+      // Task 5 / C-10: a customer whose leads are all closed gets a new lead when
+      // they message again, and a closed conversation reopens. Every message goes
+      // through real ingest. Message times follow the database clock so that a
+      // live message is always newer than the staff close before it.
+      let lastAt = 0;
+      const nextAt = async () => {
+        const [{ ms }] = await query(
+          "SELECT (extract(epoch FROM clock_timestamp())*1000)::float8 AS ms",
+        );
+        lastAt = Math.max(lastAt + 1, Math.ceil(Number(ms)) + 1);
+        return new Date(lastAt).toISOString();
+      };
+      const pastAt = (seconds) => new Date(Date.now() - seconds * 1000).toISOString();
+      let messageSeq = 0;
+      const message = (memberId, at, text) =>
+        normalizeWoztellEvent({
+          messageId: "synthetic-fx09-reopen-" + ++messageSeq,
+          timestamp: at,
+          type: "TEXT",
+          data: { text },
+          member: memberId,
+          channel: "synthetic-fx09-channel",
+          app: "synthetic-fx09-app",
+        });
+      const leadsOf = async (contactId) =>
+        query(
+          `SELECT id::text,stage::text,intent::text,source::text,assigned_agent_id::text,
+             created_at,updated_at FROM crm_leads WHERE contact_id=$1 ORDER BY created_at,id`,
+          [contactId],
+        );
+      const conversationOf = async (conversationId) =>
+        (
+          await query("SELECT status,last_inbound_at FROM whatsapp_conversations WHERE id=$1", [
+            conversationId,
+          ])
+        )[0];
+      const opsJobs = async () => (await query("SELECT count(*)::int AS n FROM ops_jobs"))[0].n;
+      const setStage = async (leadId, stage) => {
+        const saved = await server.updateAdminLead(
+          draftFrom(await read(leadId, manager), { stage }),
+          manager,
+        );
+        assert.equal(saved.ok, true);
+        return saved.version;
+      };
+      const setConversation = async (conversationId, status) => {
+        const [current] = await query(
+          "SELECT assigned_agent_id::text FROM whatsapp_conversations WHERE id=$1",
+          [conversationId],
+        );
+        const res = await server.updateAdminConversation(
+          { id: conversationId, status, assigned_agent_id: current.assigned_agent_id ?? null },
+          admin,
+        );
+        assert.equal(res.ok, true);
+        assert.equal((await conversationOf(conversationId)).status, status);
+      };
+      // Member sends once live, then a manager closes the only lead.
+      const closedCustomer = async (memberId, stage = "closed_won", closeConversation = true) => {
+        const first = await ingest(message(memberId, pastAt(3600), "第一次查詢"), "live_webhook");
+        assert.equal(first.messageInserted, true);
+        const [lead] = await leadsOf(first.contactId);
+        assert.equal(lead.stage, "new");
+        await setStage(lead.id, stage);
+        if (closeConversation) await setConversation(first.conversationId, "closed");
+        return {
+          contactId: first.contactId,
+          conversationId: first.conversationId,
+          leadId: lead.id,
+        };
+      };
+      const FORWARD = "20261009110000_inbound_lead_reopen.sql";
+      const REVERT_PATH = "neon/reverts/20261009110000_inbound_lead_reopen_revert.sql";
+      const fileText = (path) =>
+        readFileSync(new URL(path, repoRoot), "utf8").replace(/\r\n/g, "\n");
+      const applyByHand = async (sql) => {
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          await client.query(sql);
+          await client.query("COMMIT");
+        } catch (error) {
+          await client.query("ROLLBACK");
+          throw error;
+        } finally {
+          client.release();
+        }
+      };
+
+      await t.test("closed lead + new inbound → new lead and reopened conversation", async () => {
+        const member = "synthetic-fx09-member-reopen-1";
+        const c = await closedCustomer(member);
+        const closedVersion = (await read(c.leadId, manager)).version;
+        const jobs = await opsJobs();
+
+        const t2 = await nextAt();
+        const second = await ingest(message(member, t2, "又想睇樓"), "live_webhook");
+        assert.equal(second.messageInserted, true);
+        assert.equal(second.contactId, c.contactId);
+        assert.equal(second.conversationId, c.conversationId);
+
+        const leads = await leadsOf(c.contactId);
+        assert.equal(leads.length, 2);
+        const old = leads.find((lead) => lead.id === c.leadId);
+        assert.equal(old.stage, "closed_won");
+        assert.equal((await read(c.leadId, manager)).version, closedVersion);
+        const fresh = leads.find((lead) => lead.id !== c.leadId);
+        assert.equal(fresh.stage, "new");
+        assert.equal(fresh.intent, "unknown");
+        assert.equal(fresh.source, "whatsapp");
+        assert.equal(fresh.created_at.toISOString(), t2);
+        const conversation = await conversationOf(c.conversationId);
+        assert.equal(conversation.status, "open");
+        assert.equal(conversation.last_inbound_at.toISOString(), t2);
+        assert.equal(await opsJobs(), jobs, "no job is queued for the new lead");
+
+        const third = await ingest(message(member, await nextAt(), "仲有問題"), "live_webhook");
+        assert.equal(third.messageInserted, true);
+        assert.equal((await leadsOf(c.contactId)).length, 2, "an open lead blocks a third");
+        assert.equal(await opsJobs(), jobs);
+      });
+
+      await t.test("closed_lost behaves the same, and an open lead blocks a new one", async () => {
+        const member = "synthetic-fx09-member-reopen-2";
+        const c = await closedCustomer(member, "closed_lost");
+        await ingest(message(member, await nextAt(), "再問"), "live_webhook");
+        let leads = await leadsOf(c.contactId);
+        assert.deepEqual(
+          leads.map((lead) => lead.stage),
+          ["closed_lost", "new"],
+        );
+        assert.equal((await conversationOf(c.conversationId)).status, "open");
+
+        await setStage(leads[1].id, "contacted");
+        await setConversation(c.conversationId, "closed");
+        await ingest(message(member, await nextAt(), "跟進"), "live_webhook");
+        leads = await leadsOf(c.contactId);
+        assert.deepEqual(
+          leads.map((lead) => lead.stage),
+          ["closed_lost", "contacted"],
+        );
+        assert.equal((await conversationOf(c.conversationId)).status, "open");
+      });
+
+      await t.test(
+        "history import and identity merges never create a lead or reopen a conversation for old messages",
+        async () => {
+          const member = "synthetic-fx09-member-reopen-3";
+          const c = await closedCustomer(member);
+
+          const old = await ingest(message(member, pastAt(7200), "舊訊息"), "history_import");
+          assert.equal(old.messageInserted, true);
+          assert.equal(old.contactId, c.contactId);
+          assert.equal((await leadsOf(c.contactId)).length, 1);
+          assert.equal((await conversationOf(c.conversationId)).status, "closed");
+
+          // A contact with no lead still gets its first lead from history import.
+          // Its message is newer than the close above, then moves to the closed
+          // contact through the UPDATE path, which must create and reopen nothing.
+          const other = await ingest(
+            message("synthetic-fx09-member-reopen-3b", await nextAt(), "另一位"),
+            "history_import",
+          );
+          assert.notEqual(other.contactId, c.contactId);
+          const otherLeads = await leadsOf(other.contactId);
+          assert.equal(otherLeads.length, 1);
+          assert.equal(otherLeads[0].stage, "new");
+          const otherStatus = (await conversationOf(other.conversationId)).status;
+          await query("UPDATE whatsapp_messages SET contact_id=$1 WHERE external_message_id=$2", [
+            c.contactId,
+            "synthetic-fx09-reopen-" + messageSeq,
+          ]);
+          assert.equal((await leadsOf(c.contactId)).length, 1);
+          assert.equal((await conversationOf(c.conversationId)).status, "closed");
+          assert.equal((await conversationOf(other.conversationId)).status, otherStatus);
+
+          // Test setup: a later inbound is already recorded on the conversation.
+          // A history message newer than the close but older than that inbound
+          // must not reopen it.
+          const between = await nextAt();
+          await query("UPDATE whatsapp_conversations SET last_inbound_at=$2 WHERE id=$1", [
+            c.conversationId,
+            new Date(Date.parse(between) + 60000).toISOString(),
+          ]);
+          await ingest(message(member, between, "較新但未最新"), "history_import");
+          assert.equal((await conversationOf(c.conversationId)).status, "closed");
+          // That message is newer than the close, so by the rule it does open a
+          // lead. Only messages older than the close never do.
+          assert.equal((await leadsOf(c.contactId)).length, 2);
+        },
+      );
+
+      await t.test("a new lead keeps the contact owner only while active", async () => {
+        const member = "synthetic-fx09-member-reopen-4";
+        const c = await closedCustomer(member, "closed_won", false);
+        await query("UPDATE crm_contacts SET assigned_agent_id=$2 WHERE id=$1", [
+          c.contactId,
+          AGENT_B,
+        ]);
+        try {
+          await ingest(message(member, await nextAt(), "再搵你"), "live_webhook");
+          let leads = await leadsOf(c.contactId);
+          assert.equal(leads.length, 2);
+          assert.equal(leads[1].assigned_agent_id, AGENT_B);
+
+          await query("UPDATE staff_users SET active=false WHERE id=$1", [AGENT_B]);
+          await setStage(leads[1].id, "closed_lost");
+          await ingest(message(member, await nextAt(), "第三次"), "live_webhook");
+          leads = await leadsOf(c.contactId);
+          assert.equal(leads.length, 3);
+          assert.equal(leads[2].stage, "new");
+          assert.equal(leads[2].assigned_agent_id, null);
+        } finally {
+          await query("UPDATE staff_users SET active=true WHERE id=$1", [AGENT_B]);
+        }
+      });
+
+      await t.test("pending conversations are not touched", async () => {
+        const member = "synthetic-fx09-member-reopen-5";
+        const c = await closedCustomer(member, "closed_won", false);
+        await setConversation(c.conversationId, "pending");
+        await ingest(message(member, await nextAt(), "等緊"), "live_webhook");
+        assert.equal((await leadsOf(c.contactId)).length, 2);
+        assert.equal((await conversationOf(c.conversationId)).status, "pending");
+      });
+
+      await t.test(
+        "concurrent inbound messages after closure create exactly one new lead",
+        async () => {
+          const member = "synthetic-fx09-member-reopen-6";
+          const c = await closedCustomer(member);
+          const [a, b] = [await nextAt(), await nextAt()];
+          const results = await Promise.all([
+            ingest(message(member, a, "同時一"), "live_webhook"),
+            ingest(message(member, b, "同時二"), "live_webhook"),
+          ]);
+          assert.deepEqual(
+            results.map((r) => r.messageInserted),
+            [true, true],
+          );
+          const leads = await leadsOf(c.contactId);
+          assert.deepEqual(
+            leads.map((lead) => lead.stage),
+            ["closed_won", "new"],
+          );
+          assert.equal((await conversationOf(c.conversationId)).status, "open");
+        },
+      );
+
+      await t.test(
+        "migration B is idempotent, contains no job enqueue, and the revert restores the old rule",
+        async () => {
+          const forward = fileText("neon/migrations/" + FORWARD);
+          await applyByHand(forward);
+          const [{ def }] = await query(
+            "SELECT pg_get_functiondef('ensure_whatsapp_inbound_lead_fn'::regproc) AS def",
+          );
+          assert.match(def, /closed_won/);
+          assert.doesNotMatch(def, /ops_jobs/);
+          assert.doesNotMatch(forward, /ops_jobs/);
+          assert.doesNotMatch(
+            forward,
+            /INSERT INTO crm_leads\(contact_id,assigned_agent_id,stage,intent,source,note,created_at,updated_at\)\nSELECT/,
+          );
+          assert.doesNotMatch(forward, /\b(DROP|CREATE TRIGGER|LOCK TABLE)\b/);
+          assert.match(
+            forward.split("\n").find((line) => !line.startsWith("--")),
+            /^SET LOCAL lock_timeout/,
+          );
+          assert.ok(MIGRATION_VERSIONS.includes(FORWARD));
+
+          const member = "synthetic-fx09-member-reopen-7";
+          const c = await closedCustomer(member);
+          try {
+            await applyByHand(fileText(REVERT_PATH));
+            const [{ def: oldDef }] = await query(
+              "SELECT pg_get_functiondef('ensure_whatsapp_inbound_lead_fn'::regproc) AS def",
+            );
+            assert.doesNotMatch(oldDef, /closed_won/);
+            await ingest(message(member, await nextAt(), "舊規則"), "live_webhook");
+            assert.equal((await leadsOf(c.contactId)).length, 1, "the old rule adds no lead");
+            assert.equal((await conversationOf(c.conversationId)).status, "closed");
+          } finally {
+            await applyByHand(forward);
+          }
+          await ingest(message(member, await nextAt(), "新規則"), "live_webhook");
+          assert.equal((await leadsOf(c.contactId)).length, 2, "the new rule is back");
+          assert.equal((await conversationOf(c.conversationId)).status, "open");
+        },
+      );
+
+      await t.test("the revert body equals the previous function verbatim", () => {
+        const block = (sql) => {
+          const start = sql.indexOf("CREATE OR REPLACE FUNCTION ensure_whatsapp_inbound_lead_fn(");
+          assert.ok(start >= 0);
+          const end = sql.indexOf("$$;", start);
+          assert.ok(end > start);
+          return sql.slice(start, end + 3);
+        };
+        const previous = fileText("neon/migrations/20260906100000_whatsapp_inbound_leads.sql");
+        const revert = fileText(REVERT_PATH);
+        assert.equal(block(revert), block(previous));
+        const revertCode = revert.replace(/^--.*$/gm, "");
+        assert.doesNotMatch(revertCode, /\b(LOCK TABLE|DROP|CREATE TRIGGER|ops_jobs)\b/);
+        assert.equal((revertCode.match(/INSERT INTO crm_leads/g) ?? []).length, 1);
+        assert.equal((revertCode.match(/CREATE OR REPLACE FUNCTION/g) ?? []).length, 1);
+        for (const [file, sql] of [
+          [FORWARD, fileText("neon/migrations/" + FORWARD)],
+          [REVERT_PATH, revert],
+        ]) {
+          for (const line of sql.split("\n").filter((l) => l.trimStart().startsWith("--")))
+            assert.doesNotMatch(line, /[;']/, file + ": " + line);
+        }
+      });
+
+      await t.test("revert file is ignored by the migration runner and drift check", async () => {
+        // The runner applies only `.sql` files directly inside neon/migrations
+        // (non-recursive readdirSync), and the drift check reads MIGRATION_VERSIONS.
+        const runner = fileText("scripts/neon/apply-migrations.mjs");
+        assert.match(runner, /const migrationsDir = "neon\/migrations";/);
+        assert.match(runner, /readdirSync\(migrationsDir\)/);
+        assert.doesNotMatch(runner, /recursive|neon\/reverts/);
+        const drift = fileText("scripts/neon/check-migration-drift.mjs");
+        assert.match(drift, /MIGRATION_VERSIONS,\s*pendingMigrations,/);
+        assert.doesNotMatch(drift, /readdirSync|neon\/reverts/);
+
+        const revertName = REVERT_PATH.split("/").pop();
+        const runnerFiles = readdirSync(new URL("neon/migrations/", repoRoot))
+          .filter((file) => file.endsWith(".sql"))
+          .sort();
+        assert.ok(runnerFiles.includes(FORWARD));
+        assert.ok(!runnerFiles.includes(revertName));
+        assert.ok(MIGRATION_VERSIONS.includes(FORWARD));
+        assert.ok(!MIGRATION_VERSIONS.some((version) => version.includes("revert")));
+        assert.deepEqual(pendingMigrations(MIGRATION_VERSIONS), []);
+
+        const applied = (await query("SELECT version FROM app_migrations ORDER BY version")).map(
+          (row) => row.version,
+        );
+        assert.ok(applied.includes(FORWARD));
+        assert.ok(!applied.some((version) => version.includes("revert")));
+        const report = formatDriftReport(pendingMigrations(applied));
+        assert.equal(report.ok, true);
+        assert.doesNotMatch(report.message, /revert/);
+      });
+
+      await t.test("the migration and revert never mention the alert job type", () => {
+        // Built at runtime so this file never carries the literal job type.
+        const alertJobType = ["lead", "staff", "alert"].join(".");
+        for (const path of ["neon/migrations/" + FORWARD, REVERT_PATH])
+          assert.ok(!fileText(path).includes(alertJobType), path);
       });
     });
   } finally {
