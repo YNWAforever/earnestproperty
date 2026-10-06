@@ -2381,6 +2381,7 @@ export async function listAdminLeads(actor?: StaffAccess): Promise<AdminLeadRow[
 
 export async function fetchAdminLead(id: string, actor?: StaffAccess) {
   const scope = actor ? agentScope(actor) : null;
+  const { leadVersionSql } = await import("./lead-version");
   const rows = await queryRows(
     `
     SELECT
@@ -2395,6 +2396,7 @@ export async function fetchAdminLead(id: string, actor?: StaffAccess) {
       l.contact_id,
       l.assigned_agent_id,
       l.preferred_estates,
+      ${leadVersionSql("l")} AS version,
       c.name,
       c.phone,
       c.email,
@@ -2447,6 +2449,8 @@ export async function fetchAdminLead(id: string, actor?: StaffAccess) {
     listing_no: stringOrNull(lead.listing_no),
     property_title: stringOrNull(lead.property_title),
     contact_id: stringOrNull(lead.contact_id),
+    // Opaque SQL-generated token: a string, never a Date (FX-09, FX-05b lesson).
+    version: stringOrEmpty(lead.version),
     preferred_estates: Array.isArray(lead.preferred_estates)
       ? lead.preferred_estates.map(String)
       : [],
@@ -2558,9 +2562,28 @@ export async function rejectAdminAiTag(input: { tagId: string }, actor: StaffAcc
   return result;
 }
 
-export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffAccess) {
+/**
+ * Save one lead with optimistic concurrency (FX-09).
+ *
+ * One statement locks the row, compares the caller's expected_version with the
+ * current one, checks that a newly chosen assignee is active, writes only when
+ * at least one field differs, and inserts the audit row with the before and
+ * after values of the changed fields. A save that changes nothing writes
+ * nothing and returns the unchanged version, so a double click never 409s.
+ */
+export async function updateAdminLead(
+  input: AdminLeadUpdateInput,
+  actor: StaffAccess,
+): Promise<import("./admin-data.types").AdminLeadUpdateResult> {
   const budgetProblem = leadBudgetError(input.budget_min, input.budget_max);
   if (budgetProblem) throw new Response(budgetProblem, { status: 400 });
+  const { leadVersionSql, isLeadVersion, LEAD_CHANGED, LEAD_VERSION_REQUIRED, ASSIGNEE_INACTIVE } =
+    await import("./lead-version");
+  // A client without a version (a pre-deploy bundle, a fixture) must not be
+  // treated as a blind overwrite.
+  if (!isLeadVersion(input.expected_version)) {
+    throw new Response(LEAD_VERSION_REQUIRED, { status: 400 });
+  }
   const scope = agentScope(actor);
   const params: unknown[] = [
     input.stage,
@@ -2571,31 +2594,83 @@ export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffA
     input.assigned_agent_id,
     input.note,
     input.id,
+    input.expected_version,
+    actor.staffId,
   ];
   if (scope !== null) params.push(scope);
-  const rows = await queryRows(
-    `UPDATE crm_leads SET
-      stage = $1::crm_lead_stage,
-      intent = $2,
-      budget_min = $3,
-      budget_max = $4,
-      preferred_estates = $5::text[],
-      assigned_agent_id = $6,
-      note = $7,
-      updated_at = now()
-     WHERE id = $8${scope !== null ? " AND assigned_agent_id = $9" : ""}
-     RETURNING id`,
+  const fields = (alias: string) =>
+    `'stage',${alias}.stage,'intent',${alias}.intent,'budget_min',${alias}.budget_min,` +
+    `'budget_max',${alias}.budget_max,'preferred_estates',${alias}.preferred_estates,` +
+    `'assigned_agent_id',${alias}.assigned_agent_id,'note',${alias}.note`;
+  const rows = await queryRows<{
+    current_version: string;
+    assignee_ok: boolean;
+    new_version: string | null;
+    changed: import("./admin-data.types").AdminLeadField[];
+  }>(
+    `WITH old AS (
+       SELECT l.*, ${leadVersionSql("l")} AS version
+       FROM crm_leads l
+       WHERE l.id = $8::uuid${scope !== null ? " AND l.assigned_agent_id = $11::uuid" : ""}
+       FOR UPDATE
+     ), assignee AS (
+       SELECT ($6::uuid IS NULL OR $6::uuid IS NOT DISTINCT FROM o.assigned_agent_id
+         OR EXISTS (SELECT 1 FROM staff_users s WHERE s.id = $6::uuid AND s.active)) AS ok
+       FROM old o
+     ), upd AS (
+       UPDATE crm_leads l SET
+         stage = $1::crm_lead_stage,
+         intent = $2,
+         budget_min = $3,
+         budget_max = $4,
+         preferred_estates = $5::text[],
+         assigned_agent_id = $6::uuid,
+         note = $7,
+         updated_at = GREATEST(now(), o.updated_at + interval '1 microsecond')
+       FROM old o, assignee a
+       WHERE l.id = o.id AND o.version = $9 AND a.ok
+         AND (o.stage, o.intent, o.budget_min, o.budget_max, o.preferred_estates, o.assigned_agent_id, o.note)
+           IS DISTINCT FROM ($1::crm_lead_stage, $2, $3::numeric, $4::numeric, $5::text[], $6::uuid, $7)
+       RETURNING l.*, ${leadVersionSql("l")} AS version
+     ), diff AS (
+       SELECT b.k, b.v AS before, a.v AS after
+       FROM upd u, old o,
+         LATERAL jsonb_each(jsonb_build_object(${fields("o")})) b(k, v)
+         JOIN LATERAL jsonb_each(jsonb_build_object(${fields("u")})) a(k, v) ON a.k = b.k
+       WHERE a.v IS DISTINCT FROM b.v
+     ), audit AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT $10::uuid, 'lead.update', 'lead', u.id, jsonb_build_object(
+         'changed', (SELECT COALESCE(jsonb_agg(k ORDER BY k), '[]'::jsonb) FROM diff),
+         'before', (SELECT COALESCE(jsonb_object_agg(k, before), '{}'::jsonb) FROM diff),
+         'after', (SELECT COALESCE(jsonb_object_agg(k, after), '{}'::jsonb) FROM diff),
+         'expectedVersion', $9::text,
+         'version', u.version)
+       FROM upd u
+       RETURNING id
+     )
+     SELECT o.version AS current_version, a.ok AS assignee_ok,
+       (SELECT version FROM upd) AS new_version,
+       (SELECT COALESCE(jsonb_agg(k ORDER BY k), '[]'::jsonb) FROM diff) AS changed
+     FROM old o CROSS JOIN assignee a`,
     params,
   );
-  if (!rows[0]) {
+  const row = rows[0];
+  if (!row) {
     if (scope !== null) throw new Response("Forbidden", { status: 403 });
     return { ok: false, error: "Not found" };
   }
-  await writeAudit(actor.staffId, "lead.update", "lead", input.id, {
-    stage: input.stage,
-    intent: input.intent,
-  });
-  return { ok: true };
+  if (row.current_version !== input.expected_version) {
+    // Id only, no PII: gives the canary a conflict rate.
+    console.warn("LEAD_CHANGED", { leadId: input.id });
+    throw new Response(LEAD_CHANGED, { status: 409 });
+  }
+  if (!row.assignee_ok) throw new Response(ASSIGNEE_INACTIVE, { status: 400 });
+  return {
+    ok: true,
+    version: row.new_version ?? row.current_version,
+    changed: Array.isArray(row.changed) ? row.changed : [],
+  };
 }
 
 /** Re-stage or reassign many leads in one statement.

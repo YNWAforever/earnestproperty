@@ -692,7 +692,9 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
         setNoteError(null);
       }
 
-      const result = await updateAdminLead({ data: draftToInput(targetLeadId, nextDraft) });
+      const result = await updateAdminLead({
+        data: draftToInput(targetLeadId, nextDraft, detail.version),
+      });
       if (!isWorkspaceCurrent(lifetime)) return;
       assertNoMutationError(result);
 
@@ -1846,7 +1848,7 @@ function leadToDraft(lead: AdminLeadDetail): LeadDraft {
   };
 }
 
-function draftToInput(id: string, draft: LeadDraft): AdminLeadUpdateInput {
+function draftToInput(id: string, draft: LeadDraft, expectedVersion: string): AdminLeadUpdateInput {
   return {
     id,
     stage: draft.stage,
@@ -1856,6 +1858,7 @@ function draftToInput(id: string, draft: LeadDraft): AdminLeadUpdateInput {
     preferred_estates: parsePreferredEstates(draft.preferred_estates),
     assigned_agent_id: draft.assigned_agent_id,
     note: draft.note.trim() || null,
+    expected_version: expectedVersion,
   };
 }
 

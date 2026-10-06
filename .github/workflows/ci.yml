@@ -97,6 +97,7 @@ jobs:
       - run: npm run test:estate-conversion
       - run: npm run test:neon-auth
       - run: npm run test:command-center
+      - run: npm run test:lead-integrity
       - run: npm run test:staff-notifications
       - run: npm run test:whatsapp-enquiries
       - run: npm run test:no-link
@@ -143,6 +144,7 @@ jobs:
       - run: docker pull pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
       - run: npm run test:no-link:local-postgres
       - run: npm run test:admin-golden:db
+      - run: npm run test:lead-integrity:db
       - run: npm run test:ai-knowledge:db
       - run: npm run test:crm-analysis:db
       - run: npm run test:conversation-assist:db
