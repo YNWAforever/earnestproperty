@@ -224,7 +224,7 @@ Bare 停止, 取消, 唔要 and 不要 never flag on their own. They are too com
   -- DO $$ … IF NOT EXISTS pg_constraint 'crm_contacts_opted_out_source_check' THEN
   --   ADD CONSTRAINT … CHECK (opted_out_source IS NULL OR opted_out_source IN ('customer_message','staff_recorded','legacy')) … $$;
   -- Legacy stamp: freeze the opt-out at the latest known inbound, so only a LATER customer message reopens text.
-  UPDATE crm_contacts SET opted_out_at = COALESCE(last_inbound_at, updated_at, now()), opted_out_source = 'legacy'
+  UPDATE crm_contacts c SET opted_out_at = COALESCE(GREATEST(c.last_inbound_at, (SELECT max(wc.last_inbound_at) FROM whatsapp_conversations wc WHERE wc.contact_id = c.id), c.updated_at), now()), opted_out_source = 'legacy'
    WHERE opted_out_whatsapp AND opted_out_at IS NULL;
   ```
   Header comment: FX-08 / D-01 / D4; "never writes `opted_out_whatsapp`; never clears; re-runnable". **No revert file**: the columns stay (register).
@@ -658,14 +658,14 @@ The resolution applies to staff **and** service-automation intents (fact 7: both
      WHERE m.direction = 'inbound' AND m.contact_id IS NOT NULL
    ),
    opted AS (
-     SELECT c.id, c.name, right(coalesce(c.normalized_phone,''), 4) AS phone_last4,
+     SELECT c.id, right(coalesce(c.normalized_phone,''), 4) AS phone_last4,
             c.last_inbound_at, c.updated_at,
             EXISTS (SELECT 1 FROM inbound i JOIN d4 ON d4.word = i.norm WHERE i.contact_id = c.id) AS has_d4_message,
             EXISTS (SELECT 1 FROM crm_consent_events e WHERE e.contact_id = c.id AND e.opted_in = false) AS staff_recorded
      FROM crm_contacts c WHERE c.opted_out_whatsapp
    )
    -- (1) review list: opted out, no exact D4 message, not staff-recorded
-   SELECT o.id AS contact_id, o.name, o.phone_last4, o.last_inbound_at,
+   SELECT o.id AS contact_id, o.phone_last4, o.last_inbound_at,
           (SELECT string_agg(left(i.text, 80), ' | ' ORDER BY i.created_at DESC)
              FROM (SELECT text, created_at FROM inbound i2 WHERE i2.contact_id = o.id
                    ORDER BY created_at DESC LIMIT 3) i) AS last_3_inbound
