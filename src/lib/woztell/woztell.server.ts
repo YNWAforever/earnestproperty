@@ -113,6 +113,9 @@ export const OPT_OUT_NEAR_MISS_PHRASES: readonly string[] = [
   "唔好再聯絡我",
   "removeme",
   "optout",
+  "unsub",
+  "停止接受",
+  "不要再send",
 ];
 
 const OPT_OUT_MAX_LENGTH = 64;
@@ -151,6 +154,15 @@ const STOP_FILLER_LATIN = new RegExp(
 );
 const STOP_TOKEN = new RegExp(`${NOT_LATIN_OR_DIGIT_BEFORE}stop${NOT_LATIN_OR_DIGIT_AFTER}`, "u");
 const STOP_TOKEN_ALL = new RegExp(STOP_TOKEN.source, "gu");
+const STOP_OBJECT_WORDS: ReadonlySet<string> = new Set([
+  "all",
+  "it",
+  "me",
+  "sending",
+  "messaging",
+  "texting",
+  "send",
+]);
 const STOP_FILLER_CJK = /唔該|請|啦|呀|喇|吖/gu;
 const UNSUBSCRIBE_TOKEN = new RegExp(
   `${NOT_LATIN_OR_DIGIT_BEFORE}unsubscribe${NOT_LATIN_OR_DIGIT_AFTER}`,
@@ -161,7 +173,13 @@ const UNSUBSCRIBE_TOKEN = new RegExp(
 function isStopWithOnlyFiller(spaced: string) {
   const withoutFiller = spaced.replace(STOP_FILLER_LATIN, " ").replace(STOP_FILLER_CJK, " ");
   if (!STOP_TOKEN.test(withoutFiller)) return false;
-  return withoutFiller.replace(STOP_TOKEN_ALL, " ").replace(/[\p{P}\p{S}\p{Z}\s]+/gu, "") === "";
+  const residue = withoutFiller.replace(STOP_TOKEN_ALL, " ");
+  // Whatever is left may only be an object of the request ("stop sending", "stop it",
+  // "STOP ALL"). Digits or any other word ("stop by", "STOP 2") mean it is not a request.
+  return residue
+    .split(/[\p{P}\p{S}\p{Z}\s]+/u)
+    .filter(Boolean)
+    .every((word) => STOP_OBJECT_WORDS.has(word));
 }
 
 /**
@@ -172,7 +190,8 @@ export function isOptOutNearMiss(value: string | null | undefined): boolean {
   if (isOptOutText(value)) return false;
   const spaced = foldEdges(value, NEAR_MISS_MAX_LENGTH);
   if (!spaced) return false;
-  const compact = spaced.replace(/[\p{Z}\s]+/gu, "");
+  // Hyphens are dropped for the phrase checks only, so "opt-out" matches "optout".
+  const compact = spaced.replace(/[\p{Z}\s-]+/gu, "");
 
   // 1. A CJK opt-out word anywhere.
   if (CJK_OPT_OUT_WORDS.some((word) => compact.includes(word))) return true;

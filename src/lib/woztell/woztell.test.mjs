@@ -515,6 +515,47 @@ test("near-miss contains rules: what flags and what does not", async () => {
   }
 });
 
+test("near-miss round 2: Latin stop-messaging requests, opt-out spellings and Chinese variants flag", async () => {
+  const { isOptOutNearMiss, isOptOutText } = await import("./woztell.server.ts");
+
+  for (const value of [
+    "stop sending",
+    "pls stop sending",
+    "stop messaging me",
+    "stop texting me",
+    "stop send",
+    "STOP ALL",
+    "stop it",
+    "stop me",
+    "opt-out",
+    "Opt-Out please",
+    "unsub",
+    "停止接受",
+    "不要再send",
+    "唔好再send",
+  ]) {
+    assert.equal(isOptOutNearMiss(value), true, `${JSON.stringify(value)} must be a near-miss`);
+    assert.equal(isOptOutText(value), false, `${JSON.stringify(value)} must NOT be an opt-out`);
+  }
+
+  for (const value of [
+    "Can I stop by?",
+    "bus stop",
+    "stopover",
+    "nonstop",
+    "STOP 2",
+    "stop 123",
+    "S-T-O-P",
+  ]) {
+    assert.equal(
+      isOptOutNearMiss(value),
+      false,
+      `${JSON.stringify(value)} must NOT be a near-miss`,
+    );
+    assert.equal(isOptOutText(value), false, `${JSON.stringify(value)} must NOT be an opt-out`);
+  }
+});
+
 test("normalizeOptOutCandidate applies NFKC, case-fold, edge trim and inner-space removal only", async () => {
   const { normalizeOptOutCandidate } = await import("./woztell.server.ts");
 

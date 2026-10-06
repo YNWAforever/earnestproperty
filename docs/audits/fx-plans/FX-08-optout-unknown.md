@@ -197,7 +197,7 @@ Bare 停止, 取消, 唔要 and 不要 never flag on their own. They are too com
     - **Flags (`isOptOutNearMiss === true`):** `我要退訂`, `請退訂`, `唔該退訂`, `退訂，謝謝`, `我想取消訂閱`, `退订吧`, `STOP please`, `Please STOP`, `stop stop`, `唔該stop啦`, `請stop`, `unsubscribe me`, `please unsubscribe`, `唔好再send嘢俾我`, `唔好再發訊息俾我`, `不要再發給我`, `拒收`, `唔想再收你哋訊息`, `停止發送`, `remove me from the list`, `opt out`.
     - **Does not flag (false):** `Can I stop by?`, `can i stop by the office tomorrow`, `附近有冇 bus stop?`, `bus stop`, `stopover in Tsuen Wan`, `nonstop`, `唔要`, `不要太貴嘅盤`, `取消`, `我想取消今日睇樓約會`, `請停止安排星期六睇樓`, `停止`, `想睇樓`, `""`, `null`.
     - **Never both:** `isOptOutNearMiss` is false for every exact opt-out (`STOP`, `退訂`, `退订`, `取消订阅`, …), so a message is either an opt-out or a near-miss, never both.
-  - `normalizeOptOutCandidate applies NFKC, case-fold, edge trim and inner-space removal only`: `normalizeOptOutCandidate("  ＳＴＯＰ！ ")==="stop"`; `("退 訂")==="退訂"`; `("退訂，謝謝")==="退訂，謝謝"`; `("x".repeat(65))===""`.
+  - `normalizeOptOutCandidate applies NFKC, case-fold, edge trim and inner-space removal only`: `normalizeOptOutCandidate("  ＳＴＯＰ！ ")==="stop"`; `("退 訂")==="退訂"`; `("退訂，謝謝")==="退訂,謝謝"`; `("x".repeat(65))===""`.
   - Run `npm run test:woztell`. It must fail on the new expectations, for example `停止` is still `true`.
 - [ ] **Step 2:** implement until green. Do not keep any of the old lists.
 - [ ] **Step 3:** run `npm run test:woztell`, `npm run lint`, `npm run typecheck`.
