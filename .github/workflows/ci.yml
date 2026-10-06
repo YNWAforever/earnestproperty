@@ -100,6 +100,7 @@ jobs:
       - run: npm run test:command-center
       - run: npm run test:staff-notifications
       - run: npm run test:whatsapp-enquiries
+      - run: npm run test:staff-server-fn
       - run: npm run test:no-link
       - run: npm run test:woztell
       - run: npm run test:operations

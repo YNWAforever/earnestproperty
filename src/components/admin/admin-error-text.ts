@@ -27,3 +27,27 @@ export function adminErrorText(message: string) {
   }
   return message;
 }
+
+/** Existing zh-HK copy only (admin-data.ts and TransactionAttributionEditor.tsx); no new strings. */
+const STAFF_ACTION_STATUS_MESSAGES: Record<number, string> = {
+  401: "登入已失效，請重新登入後再試。",
+  403: "你沒有權限進行此操作。",
+  409: "資料版本已變更，請重新載入並核對後再儲存。",
+};
+
+/**
+ * For a failed staff ACTION or load. A status-bearing error (ServerFnResponseError, a
+ * thrown Response, or any `{ status: number }`) maps 401/403/409 to existing copy and
+ * every other status to the screen's own `fallback` -- never a raw code such as
+ * `Forbidden` or `BATCH_PREVIEW_EXPIRED`. A plain Error (local validation, network)
+ * keeps its text through adminErrorText; anything else gets `fallback`.
+ */
+export function staffActionErrorText(error: unknown, fallback: string): string {
+  const status =
+    typeof error === "object" && error !== null && "status" in error
+      ? (error as { status: unknown }).status
+      : undefined;
+  if (typeof status === "number") return STAFF_ACTION_STATUS_MESSAGES[status] ?? fallback;
+  if (error instanceof Error) return adminErrorText(error.message) || fallback;
+  return fallback;
+}
