@@ -107,6 +107,7 @@ test("Overview reads operational sources independently without polling", () => {
 
   for (const source of [
     "fetchAdminOverview",
+    "fetchAdminTodayTasks",
     "listAdminTeam",
     "fetchOperationsHealth",
     "fetchOperationsAudit",
@@ -118,11 +119,17 @@ test("Overview reads operational sources independently without polling", () => {
     "待處理邀請",
     "開放查詢",
     "系統健康",
+    "今日待辦",
     "需要跟進",
     "最近職員活動",
   ]) {
     assert.match(overview, new RegExp(label));
   }
+  assert.match(overview, /aria-label=\{tileName\}/);
+  assert.match(
+    overview,
+    /isAdmin \?[\s\S]{0,40}<OperationalCard[\s\S]{0,40}id="overview-attention"/,
+  );
   assert.match(overview, /role="alert"/);
   assert.match(overview, /重新整理/);
   assert.match(overview, /entry\.action\.startsWith\("staff\."\)/);
@@ -620,6 +627,74 @@ test("admin routes expose functional workflows, not only read-only tables", () =
   assert.match(listingEditRoute, /AdminPropertyWorkspace/);
 });
 
+test("跟進工作台 flags a remembered lead that left the board and blocks its reanalysis", () => {
+  // No browser fixture renders this route; rowForOpenPanel's offBoard decision is unit-tested in
+  // background-refresh.test.ts, and this pins the panel's wiring to it.
+  const commandCenter = read("src/routes/admin.leads_.command-center.tsx");
+  assert.match(commandCenter, /const offBoard = panel\?\.offBoard \?\? false;/);
+  assert.match(
+    commandCenter,
+    /\{offBoard \? \([\s\S]*?此查詢已不在跟進工作台，資料可能不是最新。[\s\S]*?\) : null\}/,
+  );
+  assert.match(commandCenter, /disabled=\{busy \|\| offBoard\}[\s\S]*?重新 AI 分析/);
+});
+
+test("跟進工作台 polls only for the roles its read accepts, and stops after a refusal", () => {
+  // No browser fixture renders this route; createBackgroundReadGate is unit-tested in
+  // background-refresh.test.ts, and this pins the board's poll to it.
+  const commandCenter = read("src/routes/admin.leads_.command-center.tsx");
+  assert.match(commandCenter, /createBackgroundReadGate\(BACKGROUND_READ_ROLES\.commandCenter\)/);
+  // Roles come from the shared staff session the shell already loaded: no request of its own.
+  assert.match(commandCenter, /useStaffSession\(user\?\.id \?\? null\)/);
+  assert.match(
+    commandCenter,
+    /useVisibleInterval\(\(\) => \{\s*if \(!pollGate\.allows\(staffRoles\)[^)]*\) return undefined;[\s\S]*?background: true[\s\S]*?MIN_VISIBLE_INTERVAL_MS\)/,
+  );
+  assert.match(commandCenter, /catch \(err\) \{\s*pollGate\.backgroundFailed\(err\);/);
+  assert.match(
+    commandCenter,
+    /setData\(result\);\s*setError\(null\);\s*pollGate\.foregroundSucceeded\(\);/,
+  );
+});
+
+test("WhatsApp inbox polls only for roles its list read accepts and forgets the list error on success", () => {
+  const whatsapp = read("src/routes/admin.whatsapp.tsx");
+  assert.match(whatsapp, /createBackgroundReadGate\(BACKGROUND_READ_ROLES\.inboxList\)/);
+  assert.match(
+    whatsapp,
+    /useVisibleInterval\(\(\) => \{[\s\S]*?if \(!pollGate\.allows\(staffRoles\)\) return undefined;[\s\S]*?background: true[\s\S]*?MIN_VISIBLE_INTERVAL_MS\)/,
+  );
+  assert.match(whatsapp, /catch \(err\) \{\s*pollGate\.backgroundFailed\(err\);/);
+  // F4: a user list read that succeeds also forgets the list's earlier failure, so a poll can
+  // never clear a later banner from another read whose text happens to be identical.
+  assert.match(
+    whatsapp,
+    /\} else \{\s*listErrorRef\.current = null;\s*setError\(null\);\s*pollGate\.foregroundSucceeded\(\);\s*\}/,
+  );
+});
+
+test("WhatsApp inbox re-reads the nav counts after the user's own list reads, never after a poll", () => {
+  const whatsapp = read("src/routes/admin.whatsapp.tsx");
+  const shell = read("src/components/admin/AdminShell.tsx");
+  // The same identity the shell's badges use, so the refresh lands on the counts on screen.
+  assert.match(
+    shell,
+    /const identity = adminAttentionIdentity\(user\?\.id \?\? null, staffSession\);/,
+  );
+  assert.match(whatsapp, /adminAttentionIdentity\(user\?\.id \?\? null, staffSession\)/);
+  // Keyed on handoffRefreshKey, which only user-started list reads move (a poll's stamp is
+  // skipped), and outside saveConversationUpdate, which stays untouched.
+  assert.match(
+    whatsapp,
+    /useEffect\(\(\) => \{[\s\S]{0,400}?adminAttentionStore\.refresh\(attentionIdentity\)[\s\S]{0,40}?\}, \[handoffRefreshKey, attentionIdentity\]\);/,
+  );
+  const save = whatsapp.slice(
+    whatsapp.indexOf("async function saveConversationUpdate("),
+    whatsapp.indexOf("async function sendReply("),
+  );
+  assert.doesNotMatch(save, /adminAttentionStore/);
+});
+
 test("shared admin workflow components exist", () => {
   for (const file of [
     "src/components/admin/AdminToolbar.tsx",
@@ -998,11 +1073,10 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
 
   const adminLeadsEntry = block.match(/\{\s*to:\s*"\/admin\/leads",[^}]*\}/)?.[0];
   assert.ok(adminLeadsEntry, "/admin/leads entry must exist in navGroups");
-  assert.match(
-    adminLeadsEntry,
-    /activeExact:\s*false/,
-    "/admin/leads owns child routes and should use prefix matching",
-  );
+  const leadsHighlightMessage =
+    "/admin/leads has no child routes; prefix matching lit 客戶查詢 on /admin/leads/command-center too (G-16), and exact matching without includeSearch:false unlights /admin/leads?stage=open";
+  assert.match(adminLeadsEntry, /activeExact:\s*true/, leadsHighlightMessage);
+  assert.match(adminLeadsEntry, /includeSearch:\s*false/, leadsHighlightMessage);
 
   // `activeOptions` is where each entry's activeExact/includeSearch above
   // actually takes effect, and `explicitUndefined: true` is what makes an
@@ -1022,6 +1096,29 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
     /explicitUndefined:\s*true/,
     "explicitUndefined must stay true, or an entry with no search params (like /admin) can match a URL carrying extra search state it should not",
   );
+});
+
+// The badges must not change the link names 客戶查詢 and WhatsApp 收件匣, which other
+// suites match exactly, and every count comes from the one shared, visibility-gated store.
+test("nav badges keep link names and come from the shared attention store", () => {
+  const shell = read("src/components/admin/AdminShell.tsx");
+
+  assert.match(shell, /useAdminAttention\(identity\)/);
+  assert.match(shell, /aria-describedby=/);
+  assert.match(shell, /aria-hidden="true"[\s\S]{0,80}data-attention-badge/);
+  assert.match(shell, /withAttentionTitle\(/);
+  assert.match(shell, /attention: "leads"/);
+  assert.match(shell, /attention: "inbox"/);
+  assert.doesNotMatch(shell, /setInterval|setTimeout/, "the shell must poll only via the store");
+
+  const block = shell.slice(
+    shell.indexOf("const navGroups = ["),
+    shell.indexOf("] as const;", shell.indexOf("const navGroups = [")),
+  );
+  const leadsEntry = block.match(/\{\s*to:\s*"\/admin\/leads",[^}]*\}/)?.[0] ?? "";
+  const inboxEntry = block.match(/\{\s*to:\s*"\/admin\/whatsapp",[^}]*\}/)?.[0] ?? "";
+  assert.match(leadsEntry, /attention: "leads"/, "the leads badge belongs on 客戶查詢");
+  assert.match(inboxEntry, /attention: "inbox"/, "the inbox badge belongs on WhatsApp 收件匣");
 });
 
 test("Neon Auth UI is given the absolute site origin so password-reset links return to this app", () => {

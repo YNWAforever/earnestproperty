@@ -981,6 +981,103 @@ export async function getAdminOverview(actor: StaffAccess) {
   };
 }
 
+/**
+ * Waiting work for the nav badges, in one read-only statement. $1 is the caller's staff id and
+ * $2 is agentScope(actor): conversations follow the inbox rule (an agent's own, and only what
+ * wa_can_read_conversation allows), leads follow the leads list rule (an agent's own).
+ * - unanswered: an open conversation whose latest message is inbound;
+ * - unassigned: an open lead with no assignee (always 0 for an agent);
+ * - stale new: a `new` lead with no activity of any kind for 2 hours;
+ * - leads needing attention: distinct open leads that are unassigned OR stale new, so the
+ *   客戶查詢 badge never counts one lead twice.
+ */
+export async function getAdminAttentionCounts(actor: StaffAccess) {
+  if (!actor) throw new Response("Forbidden", { status: 403 });
+  const rows = await queryRows(
+    `SELECT
+       (SELECT count(*)::int
+          FROM whatsapp_conversations w
+          JOIN LATERAL (
+            SELECT m.direction FROM whatsapp_messages m
+            WHERE m.conversation_id = w.id
+            ORDER BY m.created_at DESC, m.id DESC LIMIT 1
+          ) latest ON latest.direction = 'inbound'
+         WHERE w.status = 'open'
+           AND ($2::uuid IS NULL OR w.assigned_agent_id = $2::uuid)
+           AND wa_can_read_conversation($1::uuid, w.id)) AS unanswered_conversations,
+       count(*) FILTER (WHERE open_leads.unassigned)::int AS unassigned_leads,
+       count(*) FILTER (WHERE open_leads.stale_new)::int AS stale_new_leads,
+       count(*) FILTER (WHERE open_leads.unassigned OR open_leads.stale_new)::int AS leads_needing_attention
+     FROM (
+       SELECT l.assigned_agent_id IS NULL AS unassigned,
+         l.stage = 'new' AND COALESCE(
+           (SELECT max(a.created_at) FROM crm_activities a WHERE a.lead_id = l.id),
+           l.created_at
+         ) <= now() - interval '2 hours' AS stale_new
+       FROM crm_leads l
+       WHERE l.stage NOT IN ('closed_won', 'closed_lost')
+         AND ($2::uuid IS NULL OR l.assigned_agent_id = $2::uuid)
+     ) open_leads`,
+    [actor.staffId, agentScope(actor)],
+  );
+  const row = rows[0] ?? {};
+  return {
+    unansweredConversations: numberOrNull(row.unanswered_conversations) ?? 0,
+    unassignedLeads: numberOrNull(row.unassigned_leads) ?? 0,
+    staleNewLeads: numberOrNull(row.stale_new_leads) ?? 0,
+    leadsNeedingAttention: numberOrNull(row.leads_needing_attention) ?? 0,
+  };
+}
+
+/**
+ * 今日待辦: the unanswered conversations and stale new leads of getAdminAttentionCounts, in the
+ * same scope, longest wait first, at most 10. One read-only statement.
+ */
+export async function getAdminTodayTasks(actor: StaffAccess) {
+  if (!actor) throw new Response("Forbidden", { status: 403 });
+  const rows = await queryRows(
+    `SELECT kind, id, name, phone, waiting_since FROM (
+       SELECT 'conversation' AS kind, w.id, c.name, c.phone, latest.created_at AS waiting_since
+       FROM whatsapp_conversations w
+       JOIN LATERAL (
+         SELECT m.direction, m.created_at FROM whatsapp_messages m
+         WHERE m.conversation_id = w.id
+         ORDER BY m.created_at DESC, m.id DESC LIMIT 1
+       ) latest ON latest.direction = 'inbound'
+       LEFT JOIN crm_contacts c ON c.id = w.contact_id
+       WHERE w.status = 'open'
+         AND ($2::uuid IS NULL OR w.assigned_agent_id = $2::uuid)
+         AND wa_can_read_conversation($1::uuid, w.id)
+       UNION ALL
+       SELECT 'lead' AS kind, l.id, c.name, c.phone,
+         COALESCE(la.last_activity_at, l.created_at) AS waiting_since
+       FROM crm_leads l
+       LEFT JOIN crm_contacts c ON c.id = l.contact_id
+       LEFT JOIN LATERAL (
+         SELECT max(a.created_at) AS last_activity_at FROM crm_activities a WHERE a.lead_id = l.id
+       ) la ON true
+       WHERE l.stage = 'new'
+         AND ($2::uuid IS NULL OR l.assigned_agent_id = $2::uuid)
+         AND COALESCE(la.last_activity_at, l.created_at) <= now() - interval '2 hours'
+     ) t
+     ORDER BY waiting_since ASC, kind ASC, id ASC
+     LIMIT 10`,
+    [actor.staffId, agentScope(actor)],
+  );
+  return rows.map((row) => {
+    const kind = row.kind === "lead" ? ("lead" as const) : ("conversation" as const);
+    return {
+      kind,
+      id: String(row.id),
+      title:
+        stringOrNull(row.name)?.trim() ||
+        stringOrNull(row.phone)?.trim() ||
+        (kind === "lead" ? "未命名客戶" : "WhatsApp 客戶"),
+      waitingSince: dateOrNull(row.waiting_since) ?? "",
+    };
+  });
+}
+
 export async function listAdminListings(input: AdminListingInput = {}, actor?: StaffAccess) {
   const params: unknown[] = [];
   const where: string[] = [];
