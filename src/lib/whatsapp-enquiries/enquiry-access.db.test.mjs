@@ -38,6 +38,16 @@ async function withDb(fn) {
         "utf8",
       ),
     );
+    // FX-06: the current wa_can_read_conversation (managers org-wide).
+    await db.exec(
+      readFileSync(
+        new URL(
+          "../../../neon/migrations/20261007100000_wa_access_unassigned.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     for (const [id, branch, role, active] of [
       [ids.s1, ids.branchA, "agent", true],
       [ids.s2, ids.branchB, "agent", true],
@@ -83,6 +93,17 @@ test("direct SQL list/detail predicates reject wrong branch, viewer and inactive
       )[0].allowed,
       true,
     );
+    // FX-06: the enquiry predicates above keep their branch rule, but the whole
+    // conversation is now readable by every active manager, company-wide. The
+    // conversation is assigned to S1 (branch A), so manager B is the wrong branch.
+    const readConversation = async (id) =>
+      (await query("SELECT wa_can_read_conversation($1,$2) AS allowed", [id, ids.conversation]))[0]
+        .allowed;
+    assert.equal(await readConversation(ids.managerB), true);
+    assert.equal(await readConversation(ids.managerA), true);
+    assert.equal(await readConversation(ids.admin), true);
+    assert.equal(await readConversation(ids.viewer), false);
+    assert.equal(await readConversation(ids.inactive), false);
   });
 });
 
