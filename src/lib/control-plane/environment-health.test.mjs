@@ -22,13 +22,19 @@ const COMPLETE = {
 };
 
 function woztellWith(env) {
-  const old = { ...process.env };
+  // Restore key by key in place; replacing process.env with a plain object drops
+  // Node's env semantics (string coercion, Windows case-insensitivity).
+  const keys = [...new Set([...WOZTELL_VARS, ...Object.keys(env)])];
+  const saved = keys.map((key) => [key, Object.hasOwn(process.env, key), process.env[key]]);
   try {
     for (const name of WOZTELL_VARS) delete process.env[name];
     Object.assign(process.env, env);
     return environmentChecks().find((check) => check.key === "woztell");
   } finally {
-    process.env = old;
+    for (const [key, had, value] of saved) {
+      if (had) process.env[key] = value;
+      else delete process.env[key];
+    }
   }
 }
 
@@ -54,4 +60,15 @@ test("disabled woztell stays degraded", () => {
   assert.equal(woztellWith({}).status, "degraded");
   const { WOZTELL_ENABLED: _omit, ...rest } = COMPLETE;
   assert.equal(woztellWith(rest).status, "degraded");
+});
+
+test("env is restored in place, key by key", () => {
+  const before = process.env;
+  const marker = Object.hasOwn(process.env, "WOZTELL_APP_ID") ? process.env.WOZTELL_APP_ID : null;
+  woztellWith(COMPLETE);
+  assert.equal(process.env, before, "process.env must stay the same object");
+  assert.equal(
+    Object.hasOwn(process.env, "WOZTELL_APP_ID") ? process.env.WOZTELL_APP_ID : null,
+    marker,
+  );
 });

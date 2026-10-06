@@ -1,8 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { trackedRedirect } from "../neon/whatsapp-enquiries.server.ts";
+
+// Env is restored key by key in place: replacing process.env with a plain object
+// would drop Node's env semantics (string coercion, Windows case-insensitivity).
+const ORIGINAL_ENV = process.env;
+const TRACKED_ENV_KEYS = [
+  "EP_WA_TRACKED_LINKS_ENABLED",
+  "EP_WA_COMPANY_CHANNEL_ID",
+  "EP_WA_COMPANY_PHONE",
+  "VITE_CONTACT_WHATSAPP_PHONE",
+];
+const ORIGINAL_TRACKED = Object.fromEntries(TRACKED_ENV_KEYS.map((k) => [k, process.env[k]]));
+function snapshotEnv(keys) {
+  const saved = keys.map((key) => [key, Object.hasOwn(process.env, key), process.env[key]]);
+  return () => {
+    for (const [key, had, value] of saved) {
+      if (had) process.env[key] = value;
+      else delete process.env[key];
+    }
+  };
+}
 test("AT-15/19 normal registered redirect writes only reference and rate evidence", async () => {
-  const old = { ...process.env };
+  const restoreEnv = snapshotEnv(TRACKED_ENV_KEYS);
   Object.assign(process.env, {
     EP_WA_TRACKED_LINKS_ENABLED: "true",
     EP_WA_COMPANY_CHANNEL_ID: "fixture",
@@ -49,11 +69,11 @@ test("AT-15/19 normal registered redirect writes only reference and rate evidenc
     );
     assert.equal(calls.length, 0);
   } finally {
-    process.env = old;
+    restoreEnv();
   }
 });
 test("AT-26 unavailable offering produces honest general company fallback, no reference", async () => {
-  const old = { ...process.env };
+  const restoreEnv = snapshotEnv(TRACKED_ENV_KEYS);
   Object.assign(process.env, {
     EP_WA_TRACKED_LINKS_ENABLED: "true",
     EP_WA_COMPANY_CHANNEL_ID: "fixture",
@@ -75,7 +95,7 @@ test("AT-26 unavailable offering produces honest general company fallback, no re
     assert.equal(r.status, 302);
     assert.ok(!r.headers.get("location").includes("EPWA"));
   } finally {
-    process.env = old;
+    restoreEnv();
   }
 });
 
@@ -105,7 +125,7 @@ const DB_ERROR = "connect ECONNREFUSED postgres://owner:s3cret@db.internal/neond
 const fallbackPayloads = [];
 
 async function withTrackedEnv(t, overrides, fn) {
-  const old = { ...process.env };
+  const restoreEnv = snapshotEnv([...TRACKED_ENV_KEYS, ...Object.keys(overrides)]);
   Object.assign(process.env, {
     EP_WA_TRACKED_LINKS_ENABLED: "true",
     EP_WA_COMPANY_CHANNEL_ID: "fixture",
@@ -124,7 +144,7 @@ async function withTrackedEnv(t, overrides, fn) {
       if (call.arguments[0] === FALLBACK_LOG) fallbackPayloads.push(call.arguments[1]);
     }
     errors.mock.restore();
-    process.env = old;
+    restoreEnv();
   }
 }
 
@@ -546,4 +566,9 @@ test("a failure inside the fallback catch body still answers 302 /contact", asyn
     assert.equal(r.status, 302);
     assert.equal(r.headers.get("location"), "/contact");
   });
+});
+
+test("env is restored in place, key by key", () => {
+  assert.equal(process.env, ORIGINAL_ENV, "process.env must stay the same object");
+  for (const key of TRACKED_ENV_KEYS) assert.equal(process.env[key], ORIGINAL_TRACKED[key], key);
 });
