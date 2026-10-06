@@ -103,6 +103,7 @@ test("two tabs: the second tab's stale save shows the zh-HK conflict message and
   await expect(b.getByLabel(NOTE_FIELD, { exact: true })).toHaveValue("B 的修改");
   await expect(b.getByText("有未儲存的修改")).toBeVisible();
   expect(await updates(b)).toHaveLength(0);
+  await expect(b.getByText("跟進備註已儲存", { exact: false })).toHaveCount(0);
 
   for (const [width, height] of [
     [375, 812],
@@ -165,6 +166,7 @@ test("a pending note written before the 409 is reported as saved", async ({ brow
   await b.getByLabel(NOTE_FIELD, { exact: true }).fill("B 的修改");
   await save(b).click();
   await expect(b.getByText("跟進備註已儲存", { exact: false }).first()).toBeVisible();
+  await expect(conflict(b)).toBeVisible();
   await expect(b.getByLabel(NOTE_FIELD, { exact: true })).toHaveValue("B 的修改");
   await context.close();
 });
@@ -186,5 +188,47 @@ test("after 重新載入最新資料 the second tab saves successfully", async (
   await save(b).click();
   await expect(toastOk(b)).toBeVisible();
   expect(await updates(b)).toHaveLength(1);
+  await context.close();
+});
+
+test("switching leads while a save is in flight keeps the new lead's version", async ({
+  browser,
+}) => {
+  const context = await browser.newContext();
+  const a = await context.newPage();
+  await openTab(a);
+  await a.getByLabel("新增內部跟進紀錄", { exact: true }).fill("切換前的備註");
+  await a.evaluate(
+    () =>
+      ((window as unknown as { dailyWorkFixture: { noteMode: string } }).dailyWorkFixture.noteMode =
+        "delayed"),
+  );
+  await save(a).click();
+  await expect
+    .poll(() =>
+      a.evaluate(
+        () =>
+          (window as unknown as { dailyWorkFixture: { mutationPending: unknown[] } })
+            .dailyWorkFixture.mutationPending.length,
+      ),
+    )
+    .toBe(1);
+  // Leave lead A (discarding the guard) and open lead B while A's save is pending.
+  await a.keyboard.press("Escape");
+  await a.getByRole("button", { name: "放棄修改" }).click();
+  await a.getByText("每日工作合成查詢1", { exact: true }).click();
+  await expect(a.getByLabel(NOTE_FIELD, { exact: true })).toBeVisible();
+  await a.evaluate(() =>
+    (
+      window as unknown as { dailyWorkFixture: { mutationPending: { release: () => void }[] } }
+    ).dailyWorkFixture.mutationPending[0].release(),
+  );
+  await expect.poll(async () => (await updates(a)).length).toBe(1);
+
+  await a.getByLabel(NOTE_FIELD, { exact: true }).fill("B 的修改");
+  await save(a).click();
+  await expect.poll(async () => (await updates(a)).length).toBe(2);
+  await expect(conflict(a)).toHaveCount(0);
+  expect((await updates(a))[1].input.id).toBe("40000000-0000-4000-8000-000000000002");
   await context.close();
 });

@@ -718,8 +718,10 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
       });
       if (!isWorkspaceCurrent(lifetime)) return;
       assertNoMutationError(result);
+      // Narrows the union for `result.version`; also catches an undefined `ok`.
       if (!result.ok) throw new Error("更新失敗");
-      setDraftVersion(result.version);
+      // Guarded like `detail` below: the user may have switched to another lead.
+      if (canApplyLeadDetail(targetLeadId)) setDraftVersion(result.version);
       setDetail((current) =>
         current?.id === targetLeadId ? { ...current, version: result.version } : current,
       );
