@@ -385,28 +385,32 @@ export async function trackedRedirect(
   try {
     return await trackedRedirectOrThrow(request, code, query, progress);
   } catch (error) {
-    // Logs the stage and a fixed reason only: never the code, URL, phone or error text.
-    const reason =
-      error instanceof Error && error.message === "WA_COMPANY_CHANNEL_REQUIRED"
-        ? "company_channel_missing"
-        : error instanceof Error && error.message === "WA_COMPANY_PHONE_REQUIRED"
-          ? "company_phone_invalid"
-          : "unexpected";
-    const name =
-      error instanceof Error && /^[A-Za-z]{1,40}$/.test(error.name) ? error.name : "Error";
-    console.error(
-      "WA_TRACKED_REDIRECT_FALLBACK",
-      JSON.stringify({ reason, stage: progress.stage, errorName: name }),
-    );
-    return new Response(null, {
-      status: 302,
-      headers: {
-        ...noStoreHeaders,
-        Location: companyFallbackLocation(),
-        "X-WA-Tracking": "untracked",
-      },
-    });
+    try {
+      return trackedRedirectFallback(error, progress.stage);
+    } catch {
+      // Last resort so "never throws" holds unconditionally (e.g. the log sink throws).
+      return new Response(null, { status: 302, headers: { Location: "/contact" } });
+    }
   }
+}
+function trackedRedirectFallback(error: unknown, stage: TrackedRedirectStage): Response {
+  // Logs the stage and a fixed reason only: never the code, URL, phone or error text.
+  const reason =
+    error instanceof Error && error.message === "WA_COMPANY_CHANNEL_REQUIRED"
+      ? "company_channel_missing"
+      : error instanceof Error && error.message === "WA_COMPANY_PHONE_REQUIRED"
+        ? "company_phone_invalid"
+        : "unexpected";
+  const name = error instanceof Error && /^[A-Za-z]{1,40}$/.test(error.name) ? error.name : "Error";
+  console.error("WA_TRACKED_REDIRECT_FALLBACK", JSON.stringify({ reason, stage, errorName: name }));
+  return new Response(null, {
+    status: 302,
+    headers: {
+      ...noStoreHeaders,
+      Location: companyFallbackLocation(),
+      "X-WA-Tracking": "untracked",
+    },
+  });
 }
 async function trackedRedirectOrThrow(
   request: Request,

@@ -528,3 +528,22 @@ test("a placeholder company phone on the link-limited branch ends at the safe co
     }
   }
 });
+
+// FX-10a task-1 M2: even if the fallback catch body itself fails (here the log
+// sink throws), trackedRedirect still never throws and answers a bare 302 to /contact.
+test("a failure inside the fallback catch body still answers 302 /contact", async (t) => {
+  await withTrackedEnv(t, {}, async ({ errors }) => {
+    errors.mock.mockImplementation(() => {
+      throw new Error("log sink down");
+    });
+    const r = await trackedRedirect(
+      new Request("https://fixture/w/abcdefghijklmnop"),
+      "abcdefghijklmnop",
+      async () => {
+        throw new Error(DB_ERROR);
+      },
+    );
+    assert.equal(r.status, 302);
+    assert.equal(r.headers.get("location"), "/contact");
+  });
+});
