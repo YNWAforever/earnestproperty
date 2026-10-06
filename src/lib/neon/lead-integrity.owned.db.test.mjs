@@ -1065,6 +1065,75 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
         assert.equal((await conversationOf(c.conversationId)).status, "pending");
       });
 
+      // WozTell timestamps are whole seconds and the staff close is a database
+      // microsecond time, so a live message right after a close can be stored as
+      // no newer than the close. When it reopens the conversation it must still
+      // open a lead.
+      const closeSecond = async (leadId, offsetSeconds) => {
+        const [{ s }] = await query(
+          "SELECT extract(epoch FROM date_trunc('second', updated_at))::bigint AS s FROM crm_leads WHERE id=$1",
+          [leadId],
+        );
+        return String(Number(s) + offsetSeconds);
+      };
+      for (const [label, offset] of [
+        ["the same second as", 0],
+        ["one second before", -1],
+      ]) {
+        await t.test(
+          `a live message stamped ${label} the close reopens the conversation and opens a lead`,
+          async () => {
+            const member = "synthetic-fx09-member-reopen-sec" + String(-offset);
+            const c = await closedCustomer(member);
+            const at = await closeSecond(c.leadId, offset);
+            const [{ closed }] = await query(
+              "SELECT updated_at AS closed FROM crm_leads WHERE id=$1",
+              [c.leadId],
+            );
+            assert.ok(Number(at) * 1000 <= closed.getTime(), "the message is not newer than the close");
+            const res = await ingest(message(member, at, "啱啱先講完"), "live_webhook");
+            assert.equal(res.messageInserted, true);
+            assert.equal(res.conversationId, c.conversationId);
+            const conversation = await conversationOf(c.conversationId);
+            assert.equal(conversation.status, "open");
+            assert.equal(conversation.last_inbound_at.getTime(), Number(at) * 1000);
+            const leads = await leadsOf(c.contactId);
+            assert.deepEqual(
+              leads.map((lead) => [lead.stage, lead.source]),
+              [
+                ["closed_won", "whatsapp"],
+                ["new", "whatsapp"],
+              ],
+            );
+          },
+        );
+      }
+
+      await t.test(
+        "a message no newer than the close that does not reopen a conversation opens no lead",
+        async () => {
+          // History import into a closed conversation, older than its last inbound.
+          const member = "synthetic-fx09-member-reopen-noreopen";
+          const c = await closedCustomer(member);
+          const old = await ingest(message(member, pastAt(7200), "更舊訊息"), "history_import");
+          assert.equal(old.messageInserted, true);
+          assert.equal((await conversationOf(c.conversationId)).status, "closed");
+          assert.equal((await leadsOf(c.contactId)).length, 1);
+
+          // A conversation staff left open: nothing to reopen, and the message
+          // is not newer than the close, so no lead either.
+          const member2 = "synthetic-fx09-member-reopen-noreopen-2";
+          const c2 = await closedCustomer(member2, "closed_won", false);
+          for (const origin of ["history_import", "live_webhook"]) {
+            const at = await closeSecond(c2.leadId, origin === "history_import" ? -1 : 0);
+            const res = await ingest(message(member2, at, "同一秒 " + origin), origin);
+            assert.equal(res.messageInserted, true);
+          }
+          assert.equal((await conversationOf(c2.conversationId)).status, "open");
+          assert.equal((await leadsOf(c2.contactId)).length, 1);
+        },
+      );
+
       await t.test(
         "concurrent inbound messages after closure create exactly one new lead",
         async () => {
