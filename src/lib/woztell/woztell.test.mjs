@@ -584,6 +584,14 @@ test("legacy opt-out reset fails closed and the inbox uses evidence-based consen
     inbox,
     /clearContactWhatsappOptOut|confirmClearOptOut|clearOptOutReason|解除拒收/,
   );
+  // FX-08: the accidental-opt-out clear is a separate, evidence-checked server fn, admin and
+  // manager only; the inbox reaches it only through the evidence notice, never by name.
+  assert.match(
+    client,
+    /clearAccidentalWhatsappOptOutServer[\s\S]{0,400}requireStaff\(\["admin", "manager"\]\)/,
+  );
+  assert.doesNotMatch(inbox, /clearAccidentalWhatsappOptOut/);
+  assert.match(inbox, /<OptOutEvidenceNotice/);
 });
 
 // WOZTELL does not put a messageId on every event -- inbound webhook payloads

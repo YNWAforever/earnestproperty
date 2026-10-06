@@ -1580,6 +1580,96 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 300000 }, async (t) =
           assertNoEvidence(after);
         },
       );
+
+      // FX-08 Task 5: the inbox detail read. Evidence is for every reader; the unknown send and
+      // the resolve/clear capability flags are managers only.
+      await t.test(
+        "fetchAdminConversation exposes evidence to all readers and unknown_outbound to managers only",
+        async () => {
+          const { fetchAdminConversation } = await import("../neon/admin-data.server.ts");
+          const agent = { staffId: AGENT, roles: ["agent"] };
+          // 1. A genuine opt-out with an old unconfirmed send.
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-detail-1a",
+              member: "synthetic-detail-1",
+              phone: "85291270001",
+              text: "退訂",
+              at: LIVE,
+            }),
+          );
+          const conv = await conversation("synthetic-detail-1");
+          await assignTo([conv.id], AGENT);
+          const old = await enqueueOutboundIntent(
+            {
+              requestId: randomUUID(),
+              conversationId: conv.id,
+              kind: "text",
+              payload: { text: "合成回覆" },
+            },
+            ADMIN,
+            null,
+          );
+          await query(
+            "UPDATE whatsapp_outbound_intents SET state='unknown',dispatch_started_at=now()-interval '20 minutes',error='WOZTELL_DELIVERY_UNKNOWN' WHERE id=$1",
+            [old.id],
+          );
+          const asManager = await fetchAdminConversation(conv.id, manager, false);
+          assert.equal(asManager.opted_out_whatsapp, true);
+          assert.equal(asManager.opted_out_text, "退訂");
+          assert.equal(asManager.opted_out_source, "customer_message");
+          assert.match(
+            asManager.opted_out_version,
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/,
+          );
+          assert.equal(asManager.opt_out_near_miss, null);
+          assert.equal(asManager.can_clear_opt_out, true);
+          assert.equal(asManager.can_resolve_unknown_outbound, true);
+          assert.equal(asManager.unknown_outbound.id, old.id);
+          assert.equal(asManager.unknown_outbound.kind, "text");
+          assert.equal(asManager.unknown_outbound.actor_type, "staff");
+          assert.equal(asManager.unknown_outbound.resolvable, true);
+          const asAgent = await fetchAdminConversation(conv.id, agent, false);
+          assert.equal(asAgent.opted_out_whatsapp, true);
+          assert.equal(asAgent.opted_out_text, "退訂");
+          assert.equal(asAgent.opted_out_source, "customer_message");
+          assert.equal(asAgent.can_clear_opt_out, false);
+          assert.equal(asAgent.can_resolve_unknown_outbound, false);
+          assert.equal(asAgent.unknown_outbound, null);
+          // 2. An unconfirmed send younger than 15 minutes is listed but not yet resolvable.
+          await query(
+            "UPDATE whatsapp_outbound_intents SET dispatch_started_at=now()-interval '2 minutes' WHERE id=$1",
+            [old.id],
+          );
+          assert.equal(
+            (await fetchAdminConversation(conv.id, manager, false)).unknown_outbound.resolvable,
+            false,
+          );
+          // 3. A near-miss is read for every reader and never opts the contact out.
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-detail-2a",
+              member: "synthetic-detail-2",
+              phone: "85291270002",
+              text: "我要退訂",
+              at: LIVE,
+            }),
+          );
+          const nearConv = await conversation("synthetic-detail-2");
+          await assignTo([nearConv.id], AGENT);
+          for (const actor of [manager, agent]) {
+            const detail = await fetchAdminConversation(nearConv.id, actor, false);
+            assert.equal(detail.opted_out_whatsapp, false);
+            assert.equal(detail.opted_out_source, null);
+            assert.equal(detail.opt_out_near_miss.text, "我要退訂");
+            assert.equal(
+              detail.opt_out_near_miss.messageId,
+              await messageUuid("synthetic-detail-2a"),
+            );
+            assert.equal(detail.unknown_outbound, null);
+          }
+        },
+      );
     });
     assert.equal(network.mock.callCount(), 0);
   } finally {

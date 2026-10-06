@@ -101,6 +101,7 @@ jobs:
       - run: npm run test:whatsapp-enquiries
       - run: npm run test:no-link
       - run: npm run test:woztell
+      - run: npm run test:whatsapp-safety:ui
       - run: npm run test:operations
 
       - run: npm run test:control-plane

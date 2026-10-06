@@ -12,19 +12,32 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+type ConsentSource = "written_confirmation" | "recorded_call" | "customer_opt_out";
+
+export type WhatsappConsentPreset = {
+  optedIn: boolean;
+  evidenceSource: ConsentSource;
+  evidenceRef: string;
+};
+
 export function WhatsappConsentDialog({
   contactId,
   onSaved,
+  preset,
+  triggerLabel = "管理 WhatsApp 推廣同意",
 }: {
   contactId: string;
   onSaved: () => void;
+  /** Prefills the form (FX-08 near-miss confirm). Omitted: the dialog behaves as before. */
+  preset?: WhatsappConsentPreset;
+  triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [optedIn, setOptedIn] = useState(false);
-  const [evidenceRef, setEvidenceRef] = useState("");
-  const [source, setSource] = useState<
-    "written_confirmation" | "recorded_call" | "customer_opt_out"
-  >("written_confirmation");
+  const [optedIn, setOptedIn] = useState(preset?.optedIn ?? false);
+  const [evidenceRef, setEvidenceRef] = useState(preset?.evidenceRef ?? "");
+  const [source, setSource] = useState<ConsentSource>(
+    preset?.evidenceSource ?? "written_confirmation",
+  );
   const [busy, setBusy] = useState(false);
   async function save() {
     setBusy(true);
@@ -32,7 +45,13 @@ export function WhatsappConsentDialog({
       await setWhatsappMarketingConsent({
         data: { contactId, optedIn, evidenceSource: source, evidenceRef },
       });
-      toast.success(optedIn ? "已記錄 WhatsApp 推廣同意及憑證" : "已記錄 WhatsApp 拒收及憑證");
+      toast.success(
+        preset
+          ? "已記錄客戶退訂，範本及推廣會停止。"
+          : optedIn
+            ? "已記錄 WhatsApp 推廣同意及憑證"
+            : "已記錄 WhatsApp 拒收及憑證",
+      );
       setOpen(false);
       onSaved();
     } catch {
@@ -50,7 +69,7 @@ export function WhatsappConsentDialog({
     >
       <DialogTrigger asChild>
         <Button type="button" variant="outline">
-          管理 WhatsApp 推廣同意
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent>
