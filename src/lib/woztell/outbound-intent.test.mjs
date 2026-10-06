@@ -283,6 +283,83 @@ test("explicit provider refusal is failed; ambiguous HTTP failure is unknown", a
     assert.equal(h.state(), state);
   }
 });
+// FX-08 / D-02: a definite refusal or a config error is `failed` (no lock), never `unknown`.
+// Provider-down fallback: every case calls the fake send exactly once, and a second delivery of
+// the same intent makes no call at all. Nothing here talks to WozTell.
+async function deliverTwice(result) {
+  const h = harness(() => {
+    if (result instanceof Error) throw result;
+    return result;
+  });
+  await deliverOutboundIntent(id, h.deps);
+  await deliverOutboundIntent(id, h.deps);
+  assert.equal(h.sends(), 1);
+  assert.equal(h.persisted.length, 1);
+  return { state: h.state(), error: h.persisted[0].error };
+}
+test("401 non-JSON → failed, next send allowed", async () => {
+  assert.deepEqual(
+    await deliverTwice({ ok: false, error: "WOZTELL_INVALID_RESPONSE", status: 401 }),
+    { state: "failed", error: "WOZTELL_PROVIDER_REJECTED" },
+  );
+});
+test("definite rejections and config errors are failed", async () => {
+  for (const status of [400, 403, 404, 422, 429]) {
+    // No body at all, an empty JSON body, and a JSON 4xx without ok:0 (refused:false).
+    for (const result of [
+      { ok: false, error: "WOZTELL_INVALID_RESPONSE", status },
+      { ok: false, error: `WOZTELL_HTTP_${status}`, status, body: {}, refused: false },
+    ])
+      assert.deepEqual(
+        await deliverTwice(result),
+        { state: "failed", error: "WOZTELL_PROVIDER_REJECTED" },
+        JSON.stringify(result),
+      );
+    // An explicit ok:0 is a refusal first (rule 4 precedes rule 5): still failed.
+    assert.deepEqual(
+      await deliverTwice({ ok: false, error: "refused", status, body: { ok: 0 }, refused: true }),
+      { state: "failed", error: "WOZTELL_REFUSED" },
+      String(status),
+    );
+  }
+  for (const error of [
+    "WOZTELL_ENABLED is not true",
+    "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID",
+  ])
+    assert.deepEqual(await deliverTwice({ ok: false, error, stage: "preflight" }), {
+      state: "failed",
+      error: "WOZTELL_CONFIGURATION_UNAVAILABLE",
+    });
+});
+test("any acceptance signal keeps unknown: 401 with ok:1, 429 with a messageId, 2xx execution_accepted", async () => {
+  for (const result of [
+    { ok: false, error: "WOZTELL_HTTP_401", status: 401, body: { ok: 1 }, refused: false },
+    { ok: false, error: "WOZTELL_HTTP_429", status: 429, body: { messageId: "maybe-sent" } },
+    { ok: true, status: 200, body: { ok: 1, sendResult: { result: [{}] } } },
+    // A config-stage shape that nonetheless carries acceptance evidence is never `failed`.
+    { ok: false, stage: "preflight", status: 403, body: { ok: 1 } },
+  ])
+    assert.deepEqual(
+      await deliverTwice(result),
+      { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" },
+      JSON.stringify(result),
+    );
+});
+test("5xx without ok:0, a timeout throw and an ambiguous 2xx stay unknown", async () => {
+  for (const result of [
+    { ok: false, error: "WOZTELL_HTTP_503", status: 503, body: {}, refused: false },
+    { ok: false, error: "WOZTELL_INVALID_RESPONSE", status: 500 },
+    { ok: false, error: "WOZTELL_AMBIGUOUS_RESPONSE", status: 200, body: {}, refused: false },
+    { ok: false, error: "WOZTELL_AMBIGUOUS_RESPONSE" },
+    Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" }),
+    new TypeError("fetch failed"),
+  ])
+    assert.deepEqual(
+      await deliverTwice(result),
+      { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" },
+      String(result?.error ?? result),
+    );
+});
 test("nested provider identity is persisted for callback correlation", async () => {
   const h = harness(() => ({
     ok: true,

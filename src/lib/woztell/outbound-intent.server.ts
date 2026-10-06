@@ -1,6 +1,10 @@
 import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 import { createHash, randomUUID } from "node:crypto";
-import { parseWoztellProviderResult, type ParsedWoztellProviderResult } from "./provider-result.ts";
+import {
+  classifyOutboundSendResult,
+  parseWoztellProviderResult,
+  type ParsedWoztellProviderResult,
+} from "./provider-result.ts";
 
 export type OutboundState =
   | "queued"
@@ -8,7 +12,9 @@ export type OutboundState =
   | "accepted"
   | "unknown"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "resolved_sent"
+  | "resolved_not_sent";
 export type OutboundIntentInput = {
   requestId: string;
   conversationId: string;
@@ -192,6 +198,7 @@ type ProviderResult = {
   refused?: boolean;
   status?: number;
   error?: string;
+  stage?: "preflight";
   providerResult?: ParsedWoztellProviderResult;
 };
 export function providerMessageIdentity(body: unknown): string | null {
@@ -219,24 +226,10 @@ export async function deliverOutboundIntent(
     const result = await send(reservation);
     const parsed = result.providerResult ?? parseWoztellProviderResult(result.body);
     externalMessageId = parsed.primaryMessageId;
-    const possibleAccepted = result.ok || parsed.possibleAccepted;
-    const definitivelyRefused = result.refused === true || parsed.outcome === "definitive_refusal";
-    await finish(id, {
-      state:
-        result.ok && parsed.outcome === "identifiable_acceptance"
-          ? "accepted"
-          : definitivelyRefused && !possibleAccepted
-            ? "failed"
-            : "unknown",
-      externalMessageId,
-      error:
-        result.ok && parsed.outcome === "identifiable_acceptance"
-          ? null
-          : definitivelyRefused && !possibleAccepted
-            ? "WOZTELL_REFUSED"
-            : "WOZTELL_DELIVERY_UNKNOWN",
-      providerResult: parsed,
-    });
+    // FX-08 / D-02: definite refusals and config errors are `failed` (no lock); any acceptance
+    // signal, a 5xx or an ambiguous answer stays `unknown`.
+    const { state, error } = classifyOutboundSendResult(result, parsed);
+    await finish(id, { state, externalMessageId, error, providerResult: parsed });
   } catch {
     // Never throw a retryable send after the irreversible boundary. If this write also fails,
     // the retained dispatching row is converted to unknown on recovery, never to queued.

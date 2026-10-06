@@ -391,11 +391,17 @@ export async function sendWoztellResponse(input: {
   response: Record<string, unknown>[];
 }) {
   const config = woztellConfig();
+  // FX-08: `stage` marks a failure before any provider call, so the send is `failed`, not
+  // `unknown`. Campaign delivery ignores it and still keys on the missing `status`.
   if (!config.enabled) {
-    return { ok: false, error: "WOZTELL_ENABLED is not true" };
+    return { ok: false, error: "WOZTELL_ENABLED is not true", stage: "preflight" as const };
   }
   if (!config.accessToken || !config.channelId) {
-    return { ok: false, error: "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID" };
+    return {
+      ok: false,
+      error: "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID",
+      stage: "preflight" as const,
+    };
   }
   if (input.channelId !== undefined && input.channelId !== config.channelId) {
     return { ok: false, refused: true, error: "WOZTELL_CHANNEL_SCOPE_MISMATCH" };

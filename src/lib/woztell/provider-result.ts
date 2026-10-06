@@ -111,3 +111,37 @@ export function parseWoztellProviderResult(
     evidence: body,
   };
 }
+
+/**
+ * FX-08 / D-02: HTTP statuses that mean the provider refused the request outright. With no
+ * acceptance signal in the body, these are `failed` (safe to resend), not `unknown`.
+ */
+export const DEFINITE_REJECTION_STATUSES: readonly number[] = [400, 401, 403, 404, 422, 429];
+
+/**
+ * The outcome of one staff or service-automation send. First match wins:
+ * 1. ok with an identifiable acceptance       -> accepted
+ * 2. any acceptance signal at all              -> unknown (the customer may have the message)
+ * 3. a preflight (configuration) failure       -> failed, WOZTELL_CONFIGURATION_UNAVAILABLE
+ * 4. an explicit refusal (flag or ok:0 body)   -> failed, WOZTELL_REFUSED
+ * 5. a definite-rejection HTTP status          -> failed, WOZTELL_PROVIDER_REJECTED
+ * 6. anything else (5xx, timeouts, ambiguity)  -> unknown
+ * A thrown send (timeout or network error) never reaches this function: the caller keeps it
+ * `unknown`.
+ */
+export function classifyOutboundSendResult(
+  result: { ok: boolean; status?: number; refused?: boolean; stage?: "preflight" },
+  parsed: ParsedWoztellProviderResult,
+): { state: "accepted" | "failed" | "unknown"; error: string | null } {
+  if (result.ok && parsed.outcome === "identifiable_acceptance")
+    return { state: "accepted", error: null };
+  if (result.ok || parsed.possibleAccepted)
+    return { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" };
+  if (result.stage === "preflight")
+    return { state: "failed", error: "WOZTELL_CONFIGURATION_UNAVAILABLE" };
+  if (result.refused === true || parsed.outcome === "definitive_refusal")
+    return { state: "failed", error: "WOZTELL_REFUSED" };
+  if (result.status !== undefined && DEFINITE_REJECTION_STATUSES.includes(result.status))
+    return { state: "failed", error: "WOZTELL_PROVIDER_REJECTED" };
+  return { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" };
+}

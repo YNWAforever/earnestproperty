@@ -20,7 +20,7 @@ test(
     });
     try {
       await withOwnedPostgres(async ({ query, migrationCount }) => {
-        assert.equal(migrationCount, 86);
+        assert.equal(migrationCount, 87);
         const {
           previewWhatsappLinkBatch: preview,
           commitWhatsappLinkChunk: commit,

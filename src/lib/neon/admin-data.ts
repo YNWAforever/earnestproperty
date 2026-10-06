@@ -1504,6 +1504,32 @@ export async function dismissOptOutNearMiss(options: {
     dismissOptOutNearMissServer(await withStaffAuthHeaders(options)),
   );
 }
+
+// FX-08 / D-02: a manager resolves a real `unknown` send (核對未確認傳送). Audited; releases the
+// conversation lock; never sends, queues or resends anything.
+type ResolveAdminUnknownOutboundInput = {
+  intentId: string;
+  conversationId: string;
+  outcome: "resolved_sent" | "resolved_not_sent";
+  reason: string;
+};
+const resolveAdminUnknownOutboundServer = createServerFn({ method: "POST" })
+  .inputValidator((data: ResolveAdminUnknownOutboundInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    return (await import("../woztell/outbound-resolution.server")).resolveUnknownOutbound(
+      data,
+      staff,
+    );
+  });
+
+export async function resolveAdminUnknownOutbound(options: {
+  data: ResolveAdminUnknownOutboundInput;
+}) {
+  return callStaffServerFn(async () =>
+    resolveAdminUnknownOutboundServer(await withStaffAuthHeaders(options)),
+  );
+}
 export async function fetchAdminOutboundReservation(options: { data: { conversationId: string } }) {
   const request = await withStaffAuthHeaders({});
   const params = new URLSearchParams({ ...options.data, reconciliation: "true" });
