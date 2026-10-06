@@ -2718,24 +2718,41 @@ export async function bulkUpdateAdminLeads(
   ];
   if (scope !== null) params.push(scope);
 
-  const rows = await queryRows<{ id: string }>(
-    `UPDATE crm_leads SET
-       stage = CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
-       assigned_agent_id = CASE WHEN $4::boolean THEN $5 ELSE assigned_agent_id END,
-       updated_at = now()
-     WHERE id = ANY($1::uuid[])${scope !== null ? " AND assigned_agent_id = $6" : ""}
-     RETURNING id::text AS id`,
+  const { ASSIGNEE_INACTIVE } = await import("./lead-version");
+  // The version only moves when a row really changes, so re-staging to the
+  // value a lead already has cannot 409 a colleague who has it open. Unchanged
+  // rows are still counted as updated: they are in the requested state.
+  const rows = await queryRows<{ assignee_ok: boolean; ids: string[] }>(
+    `WITH assignee AS (
+       SELECT (NOT $4::boolean OR $5::uuid IS NULL
+               OR EXISTS(SELECT 1 FROM staff_users s WHERE s.id=$5::uuid AND s.active)) AS ok
+     ), updated AS (
+       UPDATE crm_leads SET
+         stage = CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
+         assigned_agent_id = CASE WHEN $4::boolean THEN $5::uuid ELSE assigned_agent_id END,
+         updated_at = CASE WHEN (stage, assigned_agent_id) IS DISTINCT FROM (
+             CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
+             CASE WHEN $4::boolean THEN $5::uuid ELSE assigned_agent_id END)
+           THEN GREATEST(now(), updated_at + interval '1 microsecond')
+           ELSE updated_at END
+       WHERE id = ANY($1::uuid[])${scope !== null ? " AND assigned_agent_id = $6" : ""} AND (SELECT ok FROM assignee)
+       RETURNING id::text AS id
+     )
+     SELECT (SELECT ok FROM assignee) AS assignee_ok, COALESCE(array_agg(id), '{}') AS ids FROM updated`,
     params,
   );
+  // A new assignment to inactive staff is refused before anything is audited.
+  if (rows[0]?.assignee_ok === false) throw new Response(ASSIGNEE_INACTIVE, { status: 400 });
+  const updatedIds = rows[0]?.ids ?? [];
 
   await writeAudit(actor.staffId, "lead.bulk_update", "lead", undefined, {
     requested: ids.length,
-    updated: rows.length,
+    updated: updatedIds.length,
     ...(setStage ? { stage: input.stage } : {}),
     ...(setAgent ? { assigned_agent_id: input.assigned_agent_id ?? null } : {}),
   });
 
-  return { ok: true as const, updated: rows.length, requested: ids.length };
+  return { ok: true as const, updated: updatedIds.length, requested: ids.length };
 }
 
 export async function createAdminLeadActivity(input: AdminLeadActivityInput, actor: StaffAccess) {

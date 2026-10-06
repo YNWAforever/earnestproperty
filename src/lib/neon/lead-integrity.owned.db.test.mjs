@@ -18,6 +18,8 @@ const AGENT_C = id(5);
 const VIEWER = id(6);
 const CONTACT = id(10);
 const L1 = id(20);
+const L3 = id(23);
+const L4 = id(24);
 const MEMBER = "synthetic-fx09-member-1";
 
 const actor = (staffId, role) => ({
@@ -416,6 +418,99 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
           assert.equal(await auditCount(L1), beforeAudits);
         },
       );
+
+      const bulkAudits = async () =>
+        (
+          await query("SELECT count(*)::int AS n FROM audit_logs WHERE action='lead.bulk_update'")
+        )[0].n;
+      const resetBulk = async () => {
+        for (const leadId of [L3, L4]) {
+          await query(
+            `INSERT INTO crm_leads(id,contact_id,assigned_agent_id,stage,intent,updated_at)
+             VALUES($1,$2,$3,'contacted','buyer','2026-10-06 02:03:04.234567+00')
+             ON CONFLICT (id) DO UPDATE SET stage='contacted',assigned_agent_id=$3,
+               updated_at='2026-10-06 02:03:04.234567+00'`,
+            [leadId, CONTACT, AGENT_A],
+          );
+        }
+      };
+
+      await t.test("bulk assign to inactive staff → 400", async () => {
+        await resetBulk();
+        const v3 = (await read(L3)).version;
+        const v4 = (await read(L4)).version;
+        const audits = await bulkAudits();
+        await rejectsWith(
+          server.bulkUpdateAdminLeads(
+            { ids: [L3, L4], assignAgent: true, assigned_agent_id: AGENT_C },
+            manager,
+          ),
+          400,
+          "ASSIGNEE_INACTIVE",
+        );
+        for (const [leadId, v] of [
+          [L3, v3],
+          [L4, v4],
+        ]) {
+          const lead = await read(leadId);
+          assert.equal(lead.version, v);
+          assert.equal(lead.assigned_agent_id, AGENT_A);
+        }
+        assert.equal(await bulkAudits(), audits);
+      });
+
+      await t.test(
+        "bulk re-stage and bulk unassign still work when the owner is inactive",
+        async () => {
+          await resetBulk();
+          await query("UPDATE staff_users SET active=false WHERE id=$1", [AGENT_A]);
+          try {
+            let v = (await read(L3)).version;
+            const step = async (input) => {
+              const res = await server.bulkUpdateAdminLeads({ ids: [L3, L4], ...input }, manager);
+              assert.deepEqual(res, { ok: true, updated: 2, requested: 2 });
+              const next = (await read(L3)).version;
+              assert.notEqual(next, v, "a real change must bump the version");
+              v = next;
+            };
+            await step({ stage: "viewing" });
+            await step({ assignAgent: true, assigned_agent_id: null });
+            await step({ assignAgent: true, assigned_agent_id: AGENT_B });
+          } finally {
+            await query("UPDATE staff_users SET active=true WHERE id=$1", [AGENT_A]);
+          }
+        },
+      );
+
+      await t.test("bulk update bumps the version so an open editor gets 409", async () => {
+        await resetBulk();
+        const open = await read(L3);
+        await server.bulkUpdateAdminLeads({ ids: [L3], stage: "viewing" }, manager);
+        await rejectsWith(
+          server.updateAdminLead(draftFrom(open, { note: "x" }), admin),
+          409,
+          "LEAD_CHANGED",
+        );
+      });
+
+      await t.test("bulk re-stage to the same value does not bump the version", async () => {
+        await resetBulk();
+        const v3 = (await read(L3)).version;
+        const v4 = (await read(L4)).version;
+        const res = await server.bulkUpdateAdminLeads(
+          { ids: [L3, L4], stage: "contacted", assignAgent: true, assigned_agent_id: AGENT_A },
+          manager,
+        );
+        assert.equal(res.ok, true);
+        assert.equal((await read(L3)).version, v3);
+        assert.equal((await read(L4)).version, v4);
+        // One lead changes, the other does not: only the changed one bumps.
+        await query("UPDATE crm_leads SET stage='viewing' WHERE id=$1", [L4]);
+        const v4b = (await read(L4)).version;
+        await server.bulkUpdateAdminLeads({ ids: [L3, L4], stage: "viewing" }, manager);
+        assert.notEqual((await read(L3)).version, v3);
+        assert.equal((await read(L4)).version, v4b);
+      });
 
       await t.test("agent scope is unchanged", async () => {
         await resetL1();

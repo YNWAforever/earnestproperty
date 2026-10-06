@@ -57,6 +57,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { useDirtyCloseGuard, useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
+import { assignableAgents, bulkAssignableAgents } from "@/lib/admin/lead-assignment";
 import { leadBudgetError } from "@/lib/admin/lead-budget";
 import {
   analyzeAdminLeadAiProfile,
@@ -127,6 +128,7 @@ const bulkErrorLabels: Record<string, string> = {
   NO_LEADS_SELECTED: "請先選擇至少一筆客戶查詢。",
   TOO_MANY_LEADS_SELECTED: "一次最多只可更新 200 筆客戶查詢，請分批處理。",
   NO_CHANGES_REQUESTED: "請選擇要套用的階段或負責代理。",
+  ASSIGNEE_INACTIVE: "該同事已停用，不能指派客戶查詢給他／她。",
 };
 
 // Filters used to live in local useState, so reload, browser Back from a lead,
@@ -581,7 +583,8 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
           : `已更新 ${updated}／${requested} 筆客戶查詢，其餘沒有權限修改`,
       );
     } catch (err) {
-      if (isWorkspaceCurrent(lifetime)) toast.error(errorText(err));
+      if (isWorkspaceCurrent(lifetime))
+        toast.error(bulkErrorLabels[errorText(err)] ?? errorText(err));
     } finally {
       if (isWorkspaceCurrent(lifetime)) setBulkPending(false);
     }
@@ -1059,7 +1062,7 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">取消指派</SelectItem>
-              {agents.map((agent) => (
+              {bulkAssignableAgents(agents).map((agent) => (
                 <SelectItem key={agent.id} value={agent.id}>
                   {agent.name ?? agent.email ?? agent.id}
                 </SelectItem>
@@ -1219,7 +1222,11 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
               key={user?.id}
               draftKey={user?.id}
               onBusyChange={setForwardBusy}
-              agents={agents.map((agent) => ({ id: agent.id, name: agent.name, active: true }))}
+              agents={agents.map((agent) => ({
+                id: agent.id,
+                name: agent.name,
+                active: agent.active,
+              }))}
               onCancel={() => setForwardOpen(false)}
               onSaved={(leadId) => {
                 if (!isWorkspaceCurrent()) return;
@@ -1467,12 +1474,14 @@ function LeadDetailEditor({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">未指定代理</SelectItem>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agentLabel(agent)}
-                    {agent.active ? "" : "（停用）"}
-                  </SelectItem>
-                ))}
+                {assignableAgents(agents, lead.assigned_agent_id).map(
+                  ({ agent, inactiveCurrent }) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agentLabel(agent)}
+                      {inactiveCurrent ? "（已停用，請改派）" : ""}
+                    </SelectItem>
+                  ),
+                )}
               </SelectContent>
             </Select>
           </Field>

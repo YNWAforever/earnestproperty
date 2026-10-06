@@ -111,7 +111,7 @@
     "test:property-maintenance:owned:db": "node --experimental-test-module-mocks --test src/lib/neon/admin-property-maintenance-owned.db.test.mjs",
     "test:property-maintenance:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-property-maintenance.spec.ts",
     "test:operations:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-operations-recovery.spec.ts e2e/admin-workspace-scope.spec.ts",
-    "test:lead-integrity": "node --test src/lib/neon/lead-version.contract.test.mjs && bun test --no-env-file src/lib/neon/lead-version.test.ts",
+    "test:lead-integrity": "node --test src/lib/neon/lead-version.contract.test.mjs && bun test --no-env-file src/lib/neon/lead-version.test.ts src/lib/admin/lead-assignment.test.ts",
     "test:lead-integrity:db": "node --experimental-test-module-mocks --test --test-concurrency=1 src/lib/neon/lead-integrity.owned.db.test.mjs",
     "test:staff-setup:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-staff-setup.spec.ts",
     "test:whatsapp-mobile:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-whatsapp-mobile.spec.ts",
