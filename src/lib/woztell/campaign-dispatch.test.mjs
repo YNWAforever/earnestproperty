@@ -349,10 +349,19 @@ function runCampaign(rows, sendResponse, extra = {}) {
 }
 
 test("an unreadable provider body is unknown at any status, never retry-safe", () => {
-  for (const status of [200, 400, 401, 403, 404, 422, 429, 500, 502, 503]) {
+  for (const status of [200, 400, 404, 422, 429, 500, 502, 503]) {
     assert.deepEqual(
       classifyCampaignSendResult({ ok: false, status, bodyUnreadable: true }),
       UNKNOWN,
+      String(status),
+    );
+  }
+  // Fix round 1 ruling: an unreadable 401/403 is still unknown for that one
+  // recipient, but it halts the run at once as an auth stop.
+  for (const status of [401, 403]) {
+    assert.deepEqual(
+      classifyCampaignSendResult({ ok: false, status, bodyUnreadable: true }),
+      { ...UNKNOWN, halt: { reason: "WOZTELL_AUTH_REJECTED", providerStatus: status } },
       String(status),
     );
   }
@@ -486,3 +495,27 @@ test("a pause that could not apply keeps the original stop code", async () => {
   });
   await assert.rejects(auth.run, (error) => error.code === "WOZTELL_AUTH_REJECTED");
 });
+
+for (const status of [401, 403]) {
+  test(`an unreadable ${status} records one unknown, re-queues the rest, then pauses as an auth stop`, async () => {
+    const rows = ["a", "b", "c", "d"].map(recipient);
+    const { run, updates, pauses, sends, events } = runCampaign(rows, async (_input, call) =>
+      call === 1
+        ? { ok: true, status: 200 }
+        : { ok: false, status, error: "WOZTELL_INVALID_RESPONSE", bodyUnreadable: true },
+    );
+    await assert.rejects(
+      run,
+      (error) => error.code === CAMPAIGN_PAUSED_ERROR && error.reason === "WOZTELL_AUTH_REJECTED",
+    );
+    assert.deepEqual(sends, ["a", "b"]);
+    assert.deepEqual(updates, [
+      ["a", "sent", null],
+      ["b", "failed", CAMPAIGN_DELIVERY_UNKNOWN],
+      ["c", "queued", "JOB_DELIVERY_INTERRUPTED"],
+      ["d", "queued", "JOB_DELIVERY_INTERRUPTED"],
+    ]);
+    assert.deepEqual(pauses, [["campaign", "WOZTELL_AUTH_REJECTED", status, JOB]]);
+    assert.equal(events.at(-1)[0], "pause");
+  });
+}

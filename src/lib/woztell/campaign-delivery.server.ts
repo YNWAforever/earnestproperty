@@ -277,6 +277,11 @@ export async function pauseCampaignDelivery(
         ), paused AS (
           UPDATE whatsapp_campaigns c SET status='review', updated_at=now()
           WHERE c.id=$1::uuid AND c.status IN ('queued','sending') AND EXISTS (SELECT 1 FROM owner)
+            -- Pause only when something is left to send. Otherwise the run ends
+            -- with the stop code and the normal status refresh finishes it.
+            AND EXISTS (SELECT 1 FROM whatsapp_campaign_recipients w
+              WHERE w.campaign_id=c.id AND (w.status='queued'
+                OR (w.status='sending' AND w.dispatch_started_at IS NULL AND w.claim_job_id=$2::uuid)))
           RETURNING c.id
         ), remaining AS (
           UPDATE whatsapp_campaign_recipients r SET status='queued', error='${CAMPAIGN_PAUSED_ERROR}'
@@ -304,6 +309,7 @@ type RecipientDelivery =
   | {
       result: "sent" | "blocked" | "failed";
       streak: "sent" | "failed" | "unknown" | "thrown" | null;
+      halt?: { reason: "WOZTELL_AUTH_REJECTED"; providerStatus: number };
     }
   | {
       result: "stop";
@@ -363,9 +369,13 @@ async function deliverCampaignRecipient(
       await dependencies.updateRecipient(recipient.id, "sent", null);
       return { result: "sent", streak: "sent" };
     case "failed":
+      await dependencies.updateRecipient(recipient.id, "failed", outcome.code);
+      return { result: "failed", streak: "failed" };
     case "unknown":
       await dependencies.updateRecipient(recipient.id, "failed", outcome.code);
-      return { result: "failed", streak: outcome.kind };
+      return outcome.halt
+        ? { result: "failed", streak: "unknown", halt: outcome.halt }
+        : { result: "failed", streak: "unknown" };
     case "stop":
       // Provably not sent (no HTTP exchange, or an auth/channel refusal), so the
       // reservation is released and the recipient goes back to the queue.
@@ -484,6 +494,12 @@ export async function deliverWoztellCampaign(
         }
         summary[outcome.result] += 1;
         summary.checked += 1;
+        if (outcome.halt) {
+          // An unreadable 401/403: this recipient stays unknown (never re-sent),
+          // and the auth refusal stops the run before anyone else is tried.
+          await requeueRest();
+          throw await stopRun(outcome.halt.reason, outcome.halt.providerStatus);
+        }
         if (outcome.streak) unknownStreak = nextUnknownStreak(unknownStreak, outcome.streak);
         if (unknownStreak >= CAMPAIGN_UNKNOWN_STREAK_LIMIT) {
           // Provider-outage breaker: stop spending recipients on answers that can

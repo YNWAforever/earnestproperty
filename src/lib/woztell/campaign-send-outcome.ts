@@ -15,7 +15,13 @@ export type CampaignStopReason =
 export type CampaignSendOutcome =
   | { kind: "sent" }
   | { kind: "failed"; code: "WOZTELL_PROVIDER_REJECTED" } // retry-safe
-  | { kind: "unknown"; code: "WOZTELL_DELIVERY_UNKNOWN" } // terminal
+  | {
+      kind: "unknown";
+      code: "WOZTELL_DELIVERY_UNKNOWN"; // terminal
+      // Set only for an unreadable 401/403: the recipient stays unknown, but the
+      // refusal is systemic, so the run stops at once as an auth stop.
+      halt?: { reason: "WOZTELL_AUTH_REJECTED"; providerStatus: number };
+    }
   | {
       kind: "stop";
       reason: Exclude<CampaignStopReason, "WOZTELL_PROVIDER_UNSTABLE">;
@@ -64,7 +70,19 @@ export function classifyCampaignSendResult(result: {
   //     gateway HTML page, empty or truncated JSON). Nothing in it proves the
   //     message was refused, so it is never retry-safe -- whatever the status,
   //     4xx and 429 included (FX-10b controller ruling I1).
-  if (result.bodyUnreadable === true) return UNKNOWN;
+  //     An unreadable 401/403 is still unknown for this recipient, but it is
+  //     a systemic refusal: halt the run now instead of spending two more
+  //     recipients on the breaker (FX-10b fix round 1 ruling).
+  if (result.bodyUnreadable === true) {
+    if (result.status === 401 || result.status === 403) {
+      return {
+        kind: "unknown",
+        code: "WOZTELL_DELIVERY_UNKNOWN",
+        halt: { reason: "WOZTELL_AUTH_REJECTED", providerStatus: result.status },
+      };
+    }
+    return UNKNOWN;
+  }
   // 3. Any sign the provider may have accepted the message (Fact 15).
   if (result.providerResult?.possibleAccepted === true) return UNKNOWN;
   // 4. Credentials rejected: every later recipient would fail the same way.

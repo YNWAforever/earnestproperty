@@ -610,6 +610,96 @@ test(
         },
       );
 
+      await t.test(
+        "a breaker trip on the last recipient finishes the campaign instead of pausing it",
+        async () => {
+          providerCalls.length = 0;
+          const seeded = await seedCampaign(3);
+          const job = await leaseCampaignJob(seeded.campaign);
+          provider = () => new Error("WOZTELL_PROVIDER_TIMEOUT");
+          const outcome = await deliver(seeded.campaign, job);
+          assert.equal(outcome.error?.code, "WOZTELL_PROVIDER_UNSTABLE");
+          assert.equal(providerCalls.length, 3);
+          const rows = await recipientsOf(seeded.campaign);
+          assert.equal(
+            count(rows, (r) => r.status === "failed" && r.error === "WOZTELL_DELIVERY_UNKNOWN"),
+            3,
+          );
+          assert.equal(
+            count(rows, (r) => r.status === "sending" || r.status === "queued"),
+            0,
+          );
+          // No stuck 待審核: the campaign finishes through the normal refresh.
+          assert.equal(await campaignStatus(seeded.campaign), "failed");
+          assert.equal((await pausedAudits(seeded.campaign)).length, 0);
+          const [jobRow] = await query("SELECT status,last_error_code FROM ops_jobs WHERE id=$1", [
+            job.id,
+          ]);
+          assert.equal(jobRow.status, "failed");
+          assert.equal(jobRow.last_error_code, "WOZTELL_PROVIDER_UNSTABLE");
+          assert.equal(
+            (await query(CRON_ELIGIBILITY_SQL)).filter((r) => r.campaign_id === seeded.campaign)
+              .length,
+            0,
+          );
+        },
+      );
+
+      for (const status of [401, 403]) {
+        await t.test(
+          `an HTML ${status} records exactly one unknown and pauses with the remainder queued`,
+          async () => {
+            providerCalls.length = 0;
+            const seeded = await seedCampaign(4);
+            const job = await leaseCampaignJob(seeded.campaign);
+            provider = () =>
+              providerCalls.length === 0
+                ? accepted()
+                : { status, raw: `<html><body>${status} Forbidden</body></html>` };
+            const outcome = await deliver(seeded.campaign, job);
+            assert.equal(outcome.error?.code, "WOZTELL_CAMPAIGN_PAUSED");
+            assert.equal(providerCalls.length, 2);
+            const rows = await recipientsOf(seeded.campaign);
+            assert.equal(
+              count(rows, (r) => r.status === "sent"),
+              1,
+            );
+            const unknown = rows.filter((r) => r.status === "failed");
+            assert.equal(unknown.length, 1);
+            assert.equal(unknown[0].error, "WOZTELL_DELIVERY_UNKNOWN");
+            assert.ok(unknown[0].dispatch_started_at);
+            const queued = rows.filter((r) => r.status === "queued");
+            assert.equal(queued.length, 2);
+            for (const row of queued) {
+              assert.equal(row.error, "WOZTELL_CAMPAIGN_PAUSED");
+              assert.equal(row.dispatch_started_at, null);
+            }
+            assert.equal(
+              count(rows, (r) => r.status === "sending"),
+              0,
+            );
+            assert.equal(await campaignStatus(seeded.campaign), "review");
+            const audits = await pausedAudits(seeded.campaign);
+            assert.equal(audits.length, 1);
+            assert.equal(audits[0].metadata.reason, "WOZTELL_AUTH_REJECTED");
+            assert.equal(audits[0].metadata.providerStatus, status);
+            assert.equal(Number(audits[0].metadata.remaining), 2);
+            const retryable = await query(
+              `SELECT r.id FROM whatsapp_campaign_recipients r
+               WHERE r.campaign_id=$1 AND ${retryableFailedRecipientSql("r")}`,
+              [seeded.campaign],
+            );
+            assert.equal(retryable.length, 0);
+            const [jobRow] = await query(
+              "SELECT status,last_error_code FROM ops_jobs WHERE id=$1",
+              [job.id],
+            );
+            assert.equal(jobRow.status, "failed");
+            assert.equal(jobRow.last_error_code, "WOZTELL_CAMPAIGN_PAUSED");
+          },
+        );
+      }
+
       await t.test("a stale worker cannot pause a campaign it no longer owns", async () => {
         const seeded = await seedCampaign(2);
         const job = await leaseCampaignJob(seeded.campaign);
