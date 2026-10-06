@@ -266,10 +266,17 @@ async function beginOutboundDispatch(
     },
     { statement: `SELECT id FROM ops_jobs WHERE id=$1::uuid FOR UPDATE`, params: [job.jobId] },
     {
+      // FX-08 D4: an opt-out blocks templates for as long as it lasts. Text reopens only after a
+      // customer message on THIS conversation strictly later than the opt-out (the opt-out
+      // message's own inbound time equals it), within the usual 24 h; a NULL time fails closed.
       statement: `WITH eligibility AS (
       SELECT i.id,wc.channel_id,wc.woztell_member_id,t.element_name,t.language_code,t.components,i.kind,i.payload,
-      (c.opted_out_whatsapp=false AND NULLIF(wc.woztell_member_id,'') IS NOT NULL
-       AND (i.kind='text' AND wc.last_inbound_at >= now()-interval '24 hours' OR i.kind='template' AND t.status LIKE 'active%')
+      (NULLIF(wc.woztell_member_id,'') IS NOT NULL
+       AND (
+         (i.kind='text' AND wc.last_inbound_at >= now()-interval '24 hours'
+            AND (c.opted_out_whatsapp=false
+                 OR (c.opted_out_at IS NOT NULL AND wc.last_inbound_at > c.opted_out_at)))
+         OR (i.kind='template' AND c.opted_out_whatsapp=false AND t.status LIKE 'active%'))
        AND wa_can_read_conversation(i.actor_staff_id,wc.id)
        AND (i.enquiry_id IS NULL OR NOT EXISTS(
          SELECT 1 FROM inquiries q WHERE q.id=i.enquiry_id

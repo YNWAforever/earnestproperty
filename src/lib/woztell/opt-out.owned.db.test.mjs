@@ -1,9 +1,13 @@
-// FX-08 Task 2 / D-01 / D4: opt-out evidence on owned full-schema Postgres.
+// FX-08 Tasks 2-3 / D-01 / D4: opt-out evidence, what it blocks, the accidental-opt-out
+// clear and the near-miss flag, on owned full-schema Postgres.
 // Synthetic data only. No provider call: fetch throws, wake is disabled and the
 // enquiry workflow is off, so ingest only writes the transcript and the contact.
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import vm from "node:vm";
 import test, { mock } from "node:test";
+import ts from "typescript";
 import {
   mockOwnedServerDb,
   repoRoot,
@@ -16,7 +20,7 @@ const id = (n) => `78000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const CHANNEL = "synthetic-optout-channel";
 const BASE = 1788000000; // 2026-08-29, unix seconds, in the past
 
-test("FX-08 opt-out evidence (owned Postgres)", { timeout: 180000 }, async (t) => {
+test("FX-08 opt-out evidence (owned Postgres)", { timeout: 300000 }, async (t) => {
   const network = mock.method(globalThis, "fetch", () => {
     throw Error("Provider/network request forbidden in owned opt-out acceptance");
   });
@@ -601,6 +605,751 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 180000 }, async (t) =
         assert.equal(row.opted_out_text.length, 500);
         assert.equal(row.opted_out_text, long.slice(0, 500));
       });
+      // ---------------------------------------------------------------------
+      // FX-08 Task 3: what an opt-out blocks, the accidental-opt-out clear,
+      // and the near-miss flag. Live times are inside the 24 h window.
+      // ---------------------------------------------------------------------
+      const LIVE = Math.floor(Date.now() / 1000) - 3600;
+      const CHANNEL_B = "synthetic-optout-channel-b";
+      const ADMIN = id(60),
+        MANAGER = id(61),
+        AGENT = id(62),
+        VIEWER = id(63),
+        INACTIVE_MANAGER = id(64),
+        BRANCH = id(65),
+        TEMPLATE = id(70);
+      await query(
+        "INSERT INTO branches(id,slug,name) VALUES($1,'synthetic-optout-branch','合成分行')",
+        [BRANCH],
+      );
+      for (const [staffId, role, active, branch] of [
+        [ADMIN, "admin", true, null],
+        [MANAGER, "manager", true, BRANCH],
+        [AGENT, "agent", true, BRANCH],
+        [VIEWER, "viewer", true, BRANCH],
+        [INACTIVE_MANAGER, "manager", false, BRANCH],
+      ]) {
+        await query(
+          "INSERT INTO staff_users(id,auth_user_id,name_zh,active,branch_id) VALUES($1,$2,'合成職員',$3,$4)",
+          [staffId, `synthetic-optout-${role}-${staffId.slice(-2)}`, active, branch],
+        );
+        await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,$2)", [staffId, role]);
+      }
+      await query(
+        "INSERT INTO whatsapp_templates(id,element_name,status) VALUES($1,'synthetic_optout_template','active')",
+        [TEMPLATE],
+      );
+      const liveEvent = ({ messageId, member, phone, text, at, channel = CHANNEL }) =>
+        normalizeWoztellEvent({
+          memberId: member,
+          channelId: channel,
+          appId: "synthetic-app",
+          messageEvent: {
+            messageId,
+            from: phone,
+            to: "85230000000",
+            type: "TEXT",
+            timestamp: at,
+            data: { text },
+          },
+        });
+      const conversation = async (member, channel = CHANNEL) =>
+        (
+          await query(
+            "SELECT id,last_inbound_at FROM whatsapp_conversations WHERE woztell_member_id=$1 AND channel_id=$2",
+            [member, channel],
+          )
+        )[0];
+      const { enqueueOutboundIntent, deliverOutboundIntent } =
+        await import("./outbound-intent.server.ts");
+      let sends = 0;
+      // Real enqueue, a real ops_jobs lease and the real begin/finish; only `send` is fake.
+      const dispatch = async (conversationId, kind) => {
+        const requestId = randomUUID();
+        await enqueueOutboundIntent(
+          kind === "text"
+            ? { requestId, conversationId, kind, payload: { text: "合成回覆" } }
+            : { requestId, conversationId, kind, payload: { templateId: TEMPLATE } },
+          ADMIN,
+          null,
+        );
+        const [job] = await query(
+          "UPDATE ops_jobs SET status='running',lease_owner='synthetic-worker',lease_expires_at=now()+interval '5 minutes' WHERE idempotency_key=$1 RETURNING id",
+          ["woztell.reply:" + requestId],
+        );
+        let duringSend = null;
+        await deliverOutboundIntent(requestId, {
+          checkpoint: async () => {},
+          job: { jobId: job.id, workerId: "synthetic-worker" },
+          send: async (reservation) => {
+            sends++;
+            assert.equal(reservation.response[0].type, kind === "text" ? "TEXT" : "TEMPLATE");
+            duringSend = (
+              await query("SELECT state FROM whatsapp_outbound_intents WHERE id=$1", [requestId])
+            )[0].state;
+            return { ok: true, body: { messageId: "synthetic-out-" + requestId } };
+          },
+        });
+        const [row] = await query("SELECT state FROM whatsapp_outbound_intents WHERE id=$1", [
+          requestId,
+        ]);
+        return { state: row.state, duringSend };
+      };
+      const stampLegacy = (member) =>
+        query(
+          "UPDATE crm_contacts SET opted_out_whatsapp=true,opted_out_at=last_inbound_at,opted_out_source='legacy' WHERE whatsapp_member_id=$1",
+          [member],
+        );
+      const audits = async (contactId, action) =>
+        query(
+          "SELECT actor_id,metadata FROM audit_logs WHERE subject_type='contact' AND subject_id=$1 AND action=$2 ORDER BY created_at",
+          [contactId, action],
+        );
+      // A provider-confirmed assignment (a bare write only opens an assignment request).
+      const assignTo = (conversationIds, staffId) =>
+        transaction([
+          { statement: "SELECT set_config('app.wa_confirm_assignment','true',true)", params: [] },
+          {
+            statement:
+              "UPDATE whatsapp_conversations SET assigned_agent_id=$2,confirmed_staff_id=$2 WHERE id = ANY($1::uuid[])",
+            params: [conversationIds, staffId],
+          },
+        ]);
+      // assert.rejects needs a synchronous validator, so the Response body is read here.
+      const rejectsWith = async (promise, status, body) => {
+        let error;
+        try {
+          await promise;
+        } catch (caught) {
+          error = caught;
+        }
+        assert.ok(error instanceof Response, `expected a ${status} Response, got ${error}`);
+        assert.equal(error.status, status);
+        if (body) assert.equal(await error.text(), body);
+      };
+      const fullContact = async (member) =>
+        (await query("SELECT * FROM crm_contacts WHERE whatsapp_member_id=$1", [member]))[0];
+
+      await t.test(
+        "opted-out contact: template cancelled, text allowed after newer inbound",
+        async () => {
+          const member = "synthetic-reopen-1";
+          const phone = "85291240001";
+          await ingest(
+            liveEvent({ messageId: "synthetic-reopen-1a", member, phone, text: "退訂", at: LIVE }),
+          );
+          assert.equal((await contact(member)).opted_out_whatsapp, true);
+          const conv = await conversation(member);
+          const before = sends;
+          assert.equal((await dispatch(conv.id, "text")).state, "cancelled");
+          assert.equal(sends, before);
+          assert.equal((await dispatch(conv.id, "template")).state, "cancelled");
+          assert.equal(sends, before);
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-reopen-1b",
+              member,
+              phone,
+              text: "你好",
+              at: LIVE + 1,
+            }),
+          );
+          assert.equal(
+            (await contact(member)).opted_out_whatsapp,
+            true,
+            "a reply never clears the flag",
+          );
+          const reopened = await dispatch(conv.id, "text");
+          assert.equal(reopened.duringSend, "dispatching");
+          assert.equal(reopened.state, "accepted");
+          assert.equal(sends, before + 1);
+          assert.equal((await dispatch(conv.id, "template")).state, "cancelled");
+          assert.equal(sends, before + 1);
+        },
+      );
+
+      await t.test(
+        "the opt-out message itself never reopens text; only a strictly later inbound does, and only on that conversation",
+        async () => {
+          const member = "synthetic-reopen-2";
+          const phone = "85291240002";
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-reopen-2a",
+              member,
+              phone,
+              text: "你好",
+              at: LIVE - 10,
+              channel: CHANNEL_B,
+            }),
+          );
+          await ingest(
+            liveEvent({ messageId: "synthetic-reopen-2b", member, phone, text: "STOP", at: LIVE }),
+          );
+          const optedOut = await contact(member);
+          assert.equal(optedOut.opted_out_whatsapp, true);
+          const c1 = await conversation(member, CHANNEL);
+          const c2 = await conversation(member, CHANNEL_B);
+          assert.notEqual(c1.id, c2.id);
+          // The STOP's own inbound time equals opted_out_at: not strictly later.
+          assert.equal(c1.last_inbound_at.getTime(), optedOut.opted_out_at.getTime());
+          const before = sends;
+          assert.equal((await dispatch(c1.id, "text")).state, "cancelled");
+          assert.equal((await dispatch(c2.id, "text")).state, "cancelled");
+          // Another contact's message changes nothing for this one.
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-reopen-2c",
+              member: "synthetic-reopen-2-other",
+              phone: "85291240092",
+              text: "你好",
+              at: LIVE + 2,
+            }),
+          );
+          assert.equal((await dispatch(c1.id, "text")).state, "cancelled");
+          // A newer message on C2 reopens C2 only.
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-reopen-2d",
+              member,
+              phone,
+              text: "想問下",
+              at: LIVE + 3,
+              channel: CHANNEL_B,
+            }),
+          );
+          assert.equal((await dispatch(c2.id, "text")).state, "accepted");
+          assert.equal((await dispatch(c1.id, "text")).state, "cancelled");
+          assert.equal(sends, before + 1);
+        },
+      );
+
+      await t.test(
+        "legacy opt-out (stamped at migration) stays blocked until the next customer message",
+        async () => {
+          const member = "synthetic-reopen-3";
+          const phone = "85291240003";
+          await ingest(
+            liveEvent({ messageId: "synthetic-reopen-3a", member, phone, text: "唔要", at: LIVE }),
+          );
+          await stampLegacy(member);
+          const conv = await conversation(member);
+          const before = sends;
+          assert.equal((await dispatch(conv.id, "text")).state, "cancelled");
+          assert.equal(sends, before);
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-reopen-3b",
+              member,
+              phone,
+              text: "仲有冇盤",
+              at: LIVE + 1,
+            }),
+          );
+          assert.equal((await dispatch(conv.id, "text")).state, "accepted");
+          assert.equal(sends, before + 1);
+        },
+      );
+
+      await t.test(
+        "campaigns, surveys and service acks stay blocked while opted out, even after a reopen",
+        async () => {
+          const member = "synthetic-reopen-1"; // reopened in the first Task 3 test
+          const row = await fullContact(member);
+          const conv = await conversation(member);
+          assert.equal(row.opted_out_whatsapp, true);
+          assert.ok(conv.last_inbound_at > row.opted_out_at, "the conversation is reopened");
+          const before = sends;
+          // Campaign claim eligibility: run the contact gate from campaign-delivery itself.
+          const campaignSource = readFileSync(
+            new URL("./campaign-delivery.server.ts", import.meta.url),
+            "utf8",
+          );
+          const gate =
+            /contact\.opt_in_whatsapp = true\s+AND contact\.opted_out_whatsapp = false/.exec(
+              campaignSource,
+            );
+          assert.ok(gate, "campaign claim still gates on opted_out_whatsapp");
+          await query("UPDATE crm_contacts SET opt_in_whatsapp=true WHERE id=$1", [row.id]);
+          const [{ allowed }] = await query(
+            `SELECT (${gate[0]}) AS allowed FROM crm_contacts contact WHERE contact.id=$1`,
+            [row.id],
+          );
+          assert.equal(allowed, false);
+          await query("UPDATE crm_contacts SET opt_in_whatsapp=$2 WHERE id=$1", [
+            row.id,
+            row.opt_in_whatsapp,
+          ]);
+          const { isBlastRecipientAllowed } = await import("./woztell.server.ts");
+          assert.equal(
+            isBlastRecipientAllowed({ optedIn: true, optedOut: row.opted_out_whatsapp }),
+            false,
+          );
+          // Service automation (survey, acks): evaluate the module's own blockedReason.
+          const serviceSource = readFileSync(
+            new URL("../whatsapp-enquiries/service-workflow.server.ts", import.meta.url),
+            "utf8",
+          );
+          const file = ts.createSourceFile("s.ts", serviceSource, ts.ScriptTarget.Latest, true);
+          let fn;
+          const visit = (node) => {
+            if (ts.isFunctionDeclaration(node) && node.name?.text === "blockedReason")
+              fn = node.getText(file);
+            ts.forEachChild(node, visit);
+          };
+          visit(file);
+          assert.ok(fn, "blockedReason found");
+          const context = {
+            policyFromRow: () => ({ rules: { freshnessSeconds: 600 } }),
+            unresolvedServicePolicy: () => [],
+          };
+          vm.runInNewContext(
+            ts.transpile(`${fn}; globalThis.blockedReason = blockedReason;`, {
+              target: ts.ScriptTarget.ES2022,
+            }),
+            context,
+          );
+          const now = new Date();
+          const serviceRow = {
+            activation_id: "synthetic-generation",
+            ended_at: null,
+            channel_id: CHANNEL,
+            woztell_member_id: member,
+            policy_id: "p",
+            policy_status: "approved",
+            effects_eligible: true,
+            timing: "fresh",
+            identity_quality: "provider_id",
+            occurred_at: now.toISOString(),
+            received_at: now.toISOString(),
+            opted_out_whatsapp: row.opted_out_whatsapp,
+            last_inbound_at: conv.last_inbound_at.toISOString(),
+            inquiry_status: "open",
+            purpose: "survey",
+          };
+          const runtime = {
+            enabled: true,
+            generationId: "synthetic-generation",
+            channelId: CHANNEL,
+          };
+          assert.equal(context.blockedReason(serviceRow, runtime, now), "whatsapp_opt_out");
+          // Control: the same row without the opt-out passes the opt-out gate.
+          assert.notEqual(
+            context.blockedReason({ ...serviceRow, opted_out_whatsapp: false }, runtime, now),
+            "whatsapp_opt_out",
+          );
+          assert.equal(sends, before);
+        },
+      );
+
+      const { clearAccidentalOptOut } = await import("../neon/whatsapp-opt-out.server.ts");
+      const manager = { staffId: MANAGER, roles: ["manager"] };
+      const reason = "客戶只是回覆唔要睇呢個盤，不是退訂";
+
+      await t.test(
+        "clearAccidentalOptOut refuses when the contact's history contains a D4 message",
+        async () => {
+          const { setWhatsappMarketingConsent } =
+            await import("../neon/whatsapp-consent.server.ts");
+          // (a) Opted out by a live 退訂.
+          const live = "synthetic-clear-1";
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-clear-1a",
+              member: live,
+              phone: "85291250001",
+              text: "退訂",
+              at: LIVE,
+            }),
+          );
+          // (b) Legacy row whose history holds "STOP." (imported, so not opted out by ingest).
+          const legacy = "synthetic-clear-2";
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-clear-2a",
+              member: legacy,
+              phone: "85291250002",
+              text: "STOP.",
+              at: LIVE - 20,
+            }),
+            "history_import",
+          );
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-clear-2b",
+              member: legacy,
+              phone: "85291250002",
+              text: "唔要",
+              at: LIVE,
+            }),
+          );
+          await stampLegacy(legacy);
+          // (c) Staff-recorded 拒收推廣 (opted_out_at = now(), microsecond precision).
+          const staff = "synthetic-clear-3";
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-clear-3a",
+              member: staff,
+              phone: "85291250003",
+              text: "你好",
+              at: LIVE,
+            }),
+          );
+          await setWhatsappMarketingConsent(
+            {
+              contactId: (await contact(staff)).id,
+              optedIn: false,
+              evidenceSource: "customer_opt_out",
+              evidenceRef: "synthetic-call-1",
+            },
+            manager,
+          );
+          for (const member of [live, legacy, staff]) {
+            const before = await fullContact(member);
+            assert.equal(before.opted_out_whatsapp, true, member);
+            await rejectsWith(
+              clearAccidentalOptOut(
+                {
+                  contactId: before.id,
+                  reason,
+                  expectedOptedOutAt: before.opted_out_at.toISOString(),
+                },
+                manager,
+              ),
+              409,
+              "OPT_OUT_GENUINE_USE_CONSENT",
+            );
+            assert.deepEqual(await fullContact(member), before, member);
+            assert.equal((await audits(before.id, "contact.whatsapp_opt_out_cleared")).length, 0);
+          }
+        },
+      );
+
+      await t.test(
+        "clearAccidentalOptOut clears a legacy false positive, keeps the evidence and writes one audit row",
+        async () => {
+          const member = "synthetic-clear-4";
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-clear-4a",
+              member,
+              phone: "85291250004",
+              text: "唔要",
+              at: LIVE,
+            }),
+          );
+          await stampLegacy(member);
+          const before = await fullContact(member);
+          assert.equal(before.opted_out_source, "legacy");
+          const result = await clearAccidentalOptOut(
+            {
+              contactId: before.id,
+              reason: `  ${reason}  `,
+              expectedOptedOutAt: before.opted_out_at.toISOString(),
+            },
+            manager,
+          );
+          assert.deepEqual(result, { ok: true, contactId: before.id, cleared: true });
+          const after = await fullContact(member);
+          assert.equal(after.opted_out_whatsapp, false);
+          for (const column of [
+            "opted_out_at",
+            "opted_out_message_id",
+            "opted_out_text",
+            "opted_out_source",
+            "opt_in_whatsapp",
+          ])
+            assert.deepEqual(after[column], before[column], column);
+          assert.notEqual(after.opted_out_cleared_at, null);
+          assert.equal(after.opted_out_cleared_by, MANAGER);
+          const rows = await audits(before.id, "contact.whatsapp_opt_out_cleared");
+          assert.equal(rows.length, 1);
+          assert.equal(rows[0].actor_id, MANAGER);
+          assert.equal(rows[0].metadata.reason, reason);
+          assert.equal(rows[0].metadata.optedOutSource, "legacy");
+          assert.equal(
+            new Date(rows[0].metadata.optedOutAt).getTime(),
+            before.opted_out_at.getTime(),
+          );
+          assert.equal(rows[0].metadata.optedOutMessageId, null);
+          assert.equal(rows[0].metadata.optedOutText, null);
+        },
+      );
+
+      await t.test("clear is idempotent", async () => {
+        const before = await fullContact("synthetic-clear-4");
+        const again = await clearAccidentalOptOut(
+          { contactId: before.id, reason, expectedOptedOutAt: before.opted_out_at.toISOString() },
+          manager,
+        );
+        assert.deepEqual(again, { ok: true, contactId: before.id, cleared: false });
+        assert.deepEqual(await fullContact("synthetic-clear-4"), before);
+        assert.equal((await audits(before.id, "contact.whatsapp_opt_out_cleared")).length, 1);
+      });
+
+      await t.test("a stale clear (expectedOptedOutAt mismatch) changes nothing", async () => {
+        const member = "synthetic-clear-5";
+        const phone = "85291250005";
+        await ingest(
+          liveEvent({ messageId: "synthetic-clear-5a", member, phone, text: "唔要", at: LIVE }),
+        );
+        await stampLegacy(member);
+        const seen = (await fullContact(member)).opted_out_at.toISOString();
+        // A new opt-out lands after the manager loaded the detail.
+        await ingest(
+          liveEvent({ messageId: "synthetic-clear-5b", member, phone, text: "退訂", at: LIVE + 5 }),
+        );
+        const before = await fullContact(member);
+        assert.notEqual(before.opted_out_at.toISOString(), seen);
+        await rejectsWith(
+          clearAccidentalOptOut(
+            { contactId: before.id, reason, expectedOptedOutAt: seen },
+            manager,
+          ),
+          409,
+          "OPT_OUT_CHANGED",
+        );
+        assert.deepEqual(await fullContact(member), before);
+        assert.equal((await audits(before.id, "contact.whatsapp_opt_out_cleared")).length, 0);
+      });
+
+      await t.test(
+        "approval gate: agents, viewers and inactive managers cannot clear",
+        async () => {
+          const member = "synthetic-clear-6";
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-clear-6a",
+              member,
+              phone: "85291250006",
+              text: "唔要",
+              at: LIVE,
+            }),
+          );
+          await stampLegacy(member);
+          const before = await fullContact(member);
+          for (const actor of [
+            { staffId: AGENT, roles: ["agent"] },
+            { staffId: VIEWER, roles: ["viewer"] },
+            { staffId: INACTIVE_MANAGER, roles: ["manager"] },
+          ])
+            await assert.rejects(
+              clearAccidentalOptOut(
+                {
+                  contactId: before.id,
+                  reason,
+                  expectedOptedOutAt: before.opted_out_at.toISOString(),
+                },
+                actor,
+              ),
+              (error) => error instanceof Response && error.status === 403,
+            );
+          assert.deepEqual(await fullContact(member), before);
+          assert.equal((await audits(before.id, "contact.whatsapp_opt_out_cleared")).length, 0);
+        },
+      );
+
+      const { readOptOutNearMiss, dismissOptOutNearMiss } =
+        await import("../neon/whatsapp-opt-out-near-miss.server.ts");
+      const messageUuid = async (external) =>
+        (
+          await query("SELECT id FROM whatsapp_messages WHERE external_message_id=$1", [external])
+        )[0].id;
+      const DISMISSED = "contact.whatsapp_opt_out_near_miss_dismissed";
+
+      await t.test(
+        "a near-miss never changes opted_out_whatsapp, and a dismissal hides only messages up to the dismissed one",
+        async () => {
+          const member = "synthetic-near-1";
+          const phone = "85291260001";
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-near-1a",
+              member,
+              phone,
+              text: "我要退訂",
+              at: LIVE,
+            }),
+          );
+          const conv = await conversation(member);
+          await assignTo([conv.id], MANAGER);
+          const row = await contact(member);
+          const input = { conversationId: conv.id, contactId: row.id };
+          const first = await readOptOutNearMiss(input);
+          assert.equal(first.messageId, await messageUuid("synthetic-near-1a"));
+          assert.equal(first.text, "我要退訂");
+          assert.equal(first.at, new Date(LIVE * 1000).toISOString());
+          assert.equal(row.opted_out_whatsapp, false);
+          assertNoEvidence(row);
+          assert.deepEqual(
+            await dismissOptOutNearMiss(
+              { ...input, messageId: first.messageId, reason: "客戶只是問價" },
+              manager,
+            ),
+            { ok: true, dismissed: true },
+          );
+          const rows = await audits(row.id, DISMISSED);
+          assert.equal(rows.length, 1);
+          assert.equal(rows[0].metadata.messageId, first.messageId);
+          assert.equal(rows[0].metadata.conversationId, conv.id);
+          assert.equal(rows[0].metadata.text, "我要退訂");
+          assert.equal(rows[0].metadata.reason, "客戶只是問價");
+          assert.equal(new Date(rows[0].metadata.messageAt).toISOString(), first.at);
+          assert.equal(await readOptOutNearMiss(input), null);
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-near-1b",
+              member,
+              phone,
+              text: "STOP please",
+              at: LIVE + 2,
+            }),
+          );
+          const second = await readOptOutNearMiss(input);
+          assert.equal(second.messageId, await messageUuid("synthetic-near-1b"));
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-near-1c",
+              member,
+              phone,
+              text: "Can I stop by?",
+              at: LIVE + 3,
+            }),
+          );
+          assert.deepEqual(await readOptOutNearMiss(input), second);
+          const after = await contact(member);
+          assert.equal(after.opted_out_whatsapp, false);
+          assertNoEvidence(after);
+        },
+      );
+
+      await t.test(
+        "near-miss confirm through the consent dialog opts out with that message as evidence",
+        async () => {
+          const { setWhatsappMarketingConsent } =
+            await import("../neon/whatsapp-consent.server.ts");
+          const member = "synthetic-near-2";
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-near-2a",
+              member,
+              phone: "85291260002",
+              text: "我要退訂",
+              at: LIVE,
+            }),
+          );
+          const conv = await conversation(member);
+          const row = await contact(member);
+          const input = { conversationId: conv.id, contactId: row.id };
+          const flagged = await readOptOutNearMiss(input);
+          assert.ok(flagged);
+          await setWhatsappMarketingConsent(
+            {
+              contactId: row.id,
+              optedIn: false,
+              evidenceSource: "customer_opt_out",
+              evidenceRef: `near-miss:${flagged.messageId}`,
+            },
+            manager,
+          );
+          const after = await contact(member);
+          assert.equal(after.opted_out_whatsapp, true);
+          assert.equal(after.opted_out_text, "我要退訂");
+          assert.equal(after.opted_out_source, "staff_recorded");
+          const consent = await audits(row.id, "contact.marketing_consent");
+          assert.equal(consent.length, 1);
+          assert.equal(consent[0].metadata.trigger, "near_miss");
+          assert.equal(await readOptOutNearMiss(input), null);
+          const before = sends;
+          assert.equal((await dispatch(conv.id, "template")).state, "cancelled");
+          assert.equal(sends, before);
+        },
+      );
+
+      await t.test(
+        "near-miss dismiss: idempotent, wrong-recipient and approval gates",
+        async () => {
+          const member = "synthetic-near-3";
+          const phone = "85291260003";
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-near-3a",
+              member,
+              phone,
+              text: "唔好再send嘢俾我",
+              at: LIVE,
+            }),
+          );
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-near-3b",
+              member,
+              phone,
+              text: "STOP please",
+              at: LIVE + 1,
+              channel: CHANNEL_B,
+            }),
+          );
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-near-3c",
+              member: "synthetic-near-3-other",
+              phone: "85291260093",
+              text: "我要退訂",
+              at: LIVE,
+            }),
+          );
+          const conv = await conversation(member);
+          const otherChannel = await conversation(member, CHANNEL_B);
+          await assignTo([conv.id, otherChannel.id], MANAGER);
+          const row = await contact(member);
+          const input = { conversationId: conv.id, contactId: row.id };
+          const flagged = await readOptOutNearMiss(input);
+          assert.equal(flagged.messageId, await messageUuid("synthetic-near-3a"));
+          // Wrong recipient: another contact's message, and this contact's message on another conversation.
+          for (const messageId of [
+            await messageUuid("synthetic-near-3c"),
+            await messageUuid("synthetic-near-3b"),
+          ])
+            await assert.rejects(
+              dismissOptOutNearMiss({ ...input, messageId }, manager),
+              (error) => error instanceof Response && error.status === 404,
+            );
+          assert.equal((await audits(row.id, DISMISSED)).length, 0);
+          // Approval gates.
+          for (const actor of [
+            { staffId: AGENT, roles: ["agent"] },
+            { staffId: VIEWER, roles: ["viewer"] },
+            { staffId: INACTIVE_MANAGER, roles: ["manager"] },
+          ])
+            await assert.rejects(
+              dismissOptOutNearMiss({ ...input, messageId: flagged.messageId }, actor),
+              (error) => error instanceof Response && error.status === 403,
+            );
+          assert.equal((await audits(row.id, DISMISSED)).length, 0);
+          // Idempotent.
+          const dismiss = () =>
+            dismissOptOutNearMiss({ ...input, messageId: flagged.messageId }, manager);
+          assert.deepEqual(await dismiss(), { ok: true, dismissed: true });
+          assert.deepEqual(await dismiss(), { ok: true, dismissed: false });
+          assert.equal((await audits(row.id, DISMISSED)).length, 1);
+          assert.equal(await readOptOutNearMiss(input), null);
+          // The other conversation's near-miss is still flagged there.
+          assert.equal(
+            (await readOptOutNearMiss({ conversationId: otherChannel.id, contactId: row.id }))
+              .messageId,
+            await messageUuid("synthetic-near-3b"),
+          );
+          const source = readFileSync(
+            new URL("../neon/whatsapp-opt-out-near-miss.server.ts", import.meta.url),
+            "utf8",
+          );
+          assert.doesNotMatch(source, /UPDATE\s+crm_contacts/i);
+          const after = await contact(member);
+          assert.equal(after.opted_out_whatsapp, false);
+          assertNoEvidence(after);
+        },
+      );
     });
     assert.equal(network.mock.callCount(), 0);
   } finally {

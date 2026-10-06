@@ -420,3 +420,33 @@ test("outbound reconciliation evidence rejects synthetic identities and unsuppor
     null,
   );
 });
+
+// FX-08 D4: structural pin on the one dispatch predicate. Behaviour is proven on owned
+// Postgres in opt-out.owned.db.test.mjs; this catches a silent widening in review.
+test("eligibility SQL keeps template behind opted_out_whatsapp=false and gates text on last_inbound_at > opted_out_at", () => {
+  const source = readFileSync("src/lib/woztell/outbound-intent.server.ts", "utf8").replace(
+    /\s+/g,
+    " ",
+  );
+  const start = source.indexOf("WITH eligibility AS (");
+  const end = source.indexOf(") AS allowed", start);
+  assert.ok(start > 0 && end > start, "eligibility CTE found");
+  const allowed = source.slice(start, end);
+  const text =
+    /\(i\.kind='text' AND wc\.last_inbound_at >= now\(\)-interval '24 hours' AND \(c\.opted_out_whatsapp=false OR \(c\.opted_out_at IS NOT NULL AND wc\.last_inbound_at > c\.opted_out_at\)\)\)/;
+  const template =
+    /\(i\.kind='template' AND c\.opted_out_whatsapp=false AND t\.status LIKE 'active%'\)/;
+  assert.match(allowed, text);
+  assert.match(allowed, template);
+  // The reopen is strictly later, never >=, and never reads the contact-level inbound time.
+  assert.doesNotMatch(allowed, /last_inbound_at\s*>=\s*c\.opted_out_at/);
+  assert.doesNotMatch(allowed, /(?<!w)c\.last_inbound_at/);
+  // Exactly one opted_out_at comparison and exactly two flag reads (text + template).
+  assert.equal(allowed.match(/opted_out_at/g).length, 2);
+  assert.equal(allowed.match(/c\.opted_out_whatsapp=false/g).length, 2);
+  // No other kind can slip through: the two branches are the whole kind gate.
+  assert.match(
+    allowed,
+    /NULLIF\(wc\.woztell_member_id,''\) IS NOT NULL AND \( \(i\.kind='text'[\s\S]*\) OR \(i\.kind='template'[^)]*\)\)/,
+  );
+});

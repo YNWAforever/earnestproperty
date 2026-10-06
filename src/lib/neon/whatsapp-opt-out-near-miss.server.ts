@@ -1,0 +1,103 @@
+import "@tanstack/react-start/server-only";
+import { z } from "zod";
+import { isOptOutNearMiss } from "../woztell/woztell.server.ts";
+import type { StaffAccess } from "./auth.server";
+import { queryRows } from "./db.server.ts";
+
+// FX-08 owner decision 7: a near-miss opt-out request (「我要退訂」, "STOP please") is a flag
+// for staff review only. It is derived at read time and NEVER writes crm_contacts. A dismissal
+// is persisted as an audit_logs row whose messageAt (the dismissed message's own created_at,
+// not the click time) is a read-time cut-off, so a later request still shows. No migration.
+
+export type OptOutNearMiss = { messageId: string; text: string; at: string } | null;
+
+const uuid = z.string().uuid();
+
+function iso(value: unknown) {
+  return (value instanceof Date ? value : new Date(String(value))).toISOString();
+}
+
+/** Read-time derivation. Never writes. */
+export async function readOptOutNearMiss(
+  input: { conversationId: string; contactId: string },
+  ports: { query?: typeof queryRows } = {},
+): Promise<OptOutNearMiss> {
+  const conversationId = uuid.parse(input.conversationId);
+  const contactId = uuid.parse(input.contactId);
+  const query = ports.query ?? queryRows;
+  // Cut-offs: the latest consent decision, the latest dismissal, and the opt-out itself while
+  // opted out (so the flag never duplicates the 已退訂推廣 badge). The 30-day floor and
+  // LIMIT 50 bound the cost.
+  const rows = await query<{ id: string; text: string | null; created_at: Date | string }>(
+    `WITH cut AS (SELECT GREATEST(
+       (SELECT max(created_at) FROM crm_consent_events WHERE contact_id = $2::uuid),
+       (SELECT max((metadata->>'messageAt')::timestamptz) FROM audit_logs
+         WHERE action = 'contact.whatsapp_opt_out_near_miss_dismissed' AND subject_type = 'contact' AND subject_id = $2::uuid),
+       (SELECT CASE WHEN opted_out_whatsapp THEN opted_out_at END FROM crm_contacts WHERE id = $2::uuid),
+       now() - interval '30 days') AS t)
+     SELECT id, text, created_at FROM whatsapp_messages, cut
+     WHERE conversation_id = $1::uuid AND contact_id = $2::uuid AND direction = 'inbound' AND created_at > cut.t
+     ORDER BY created_at DESC LIMIT 50`,
+    [conversationId, contactId],
+  );
+  const flagged = rows.find((row) => isOptOutNearMiss(row.text));
+  return flagged
+    ? { messageId: String(flagged.id), text: String(flagged.text), at: iso(flagged.created_at) }
+    : null;
+}
+
+const dismissSchema = z
+  .object({
+    conversationId: z.string().uuid(),
+    contactId: z.string().uuid(),
+    messageId: z.string().uuid(),
+    reason: z.string().trim().max(200).optional(),
+  })
+  .strict();
+
+export async function dismissOptOutNearMiss(
+  value: unknown,
+  actor: Pick<StaffAccess, "staffId" | "roles">,
+  ports: { query?: typeof queryRows } = {},
+): Promise<{ ok: true; dismissed: boolean }> {
+  if (!actor.roles.some((role) => role === "admin" || role === "manager")) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+  const parsed = dismissSchema.safeParse(value);
+  if (!parsed.success) throw new Response("VALIDATION_ERROR", { status: 400 });
+  const input = parsed.data;
+  const query = ports.query ?? queryRows;
+  // One statement. The message must be this contact's inbound message on this conversation
+  // (wrong-recipient guard), and the actor an active admin/manager who can read it. The audit
+  // row is written once per message (idempotent). crm_contacts is never written.
+  const [row] = await query<{ actor_ok: boolean; message_ok: boolean; dismissed: boolean }>(
+    `WITH actor AS (
+      SELECT s.id FROM staff_users s
+      WHERE s.id = $4::uuid AND s.active = true
+        AND EXISTS (SELECT 1 FROM staff_roles r WHERE r.staff_user_id = s.id AND r.role IN ('admin', 'manager'))
+    ), msg AS (
+      SELECT m.id, m.created_at, m.text FROM whatsapp_messages m
+      JOIN whatsapp_conversations wc ON wc.id = m.conversation_id
+      JOIN actor a ON true
+      WHERE m.id = $3::uuid AND m.conversation_id = $1::uuid AND m.contact_id = $2::uuid
+        AND wc.contact_id = $2::uuid AND m.direction = 'inbound'
+        AND wa_can_read_conversation(a.id, wc.id)
+    ), inserted AS (
+      INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+      SELECT $4::uuid, 'contact.whatsapp_opt_out_near_miss_dismissed', 'contact', $2::uuid,
+        jsonb_build_object('conversationId', $1::text, 'messageId', m.id::text,
+          'messageAt', m.created_at, 'text', left(m.text, 200), 'reason', $5::text)
+      FROM msg m
+      WHERE NOT EXISTS (
+        SELECT 1 FROM audit_logs l
+        WHERE l.action = 'contact.whatsapp_opt_out_near_miss_dismissed' AND l.subject_type = 'contact'
+          AND l.subject_id = $2::uuid AND l.metadata->>'messageId' = m.id::text)
+      RETURNING id
+    ) SELECT EXISTS (SELECT 1 FROM actor) AS actor_ok, EXISTS (SELECT 1 FROM msg) AS message_ok,
+      EXISTS (SELECT 1 FROM inserted) AS dismissed`,
+    [input.conversationId, input.contactId, input.messageId, actor.staffId, input.reason || null],
+  );
+  if (!row?.actor_ok) throw new Response("Forbidden", { status: 403 });
+  if (!row.message_ok) throw new Response("NEAR_MISS_MESSAGE_NOT_FOUND", { status: 404 });
+  return { ok: true, dismissed: row.dismissed === true };
+}
