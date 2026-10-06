@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { z } from "zod";
-import { isOptOutNearMiss } from "../woztell/woztell.server.ts";
+import { isOptOutNearMiss, isOptOutText } from "../woztell/woztell.server.ts";
 import type { StaffAccess } from "./auth.server";
 import { queryRows } from "./db.server.ts";
 
@@ -10,6 +10,16 @@ import { queryRows } from "./db.server.ts";
 // not the click time) is a read-time cut-off, so a later request still shows. No migration.
 
 export type OptOutNearMiss = { messageId: string; text: string; at: string } | null;
+
+/**
+ * What the review flag shows. On a contact that is NOT opted out an exact D4 word is flagged
+ * too: it can only be there without setting the flag when it arrived through history_import
+ * (D4 never opts out from history), and a customer stop request must never be invisible.
+ * Display-only, like the near-miss itself: nothing here writes crm_contacts.
+ */
+export function isOptOutReviewFlag(text: string | null | undefined, optedOut: boolean) {
+  return isOptOutNearMiss(text) || (!optedOut && isOptOutText(text));
+}
 
 const uuid = z.string().uuid();
 
@@ -28,19 +38,26 @@ export async function readOptOutNearMiss(
   // Cut-offs: the latest consent decision, the latest dismissal, and the opt-out itself while
   // opted out (so the flag never duplicates the 已退訂推廣 badge). The 30-day floor and
   // LIMIT 50 bound the cost.
-  const rows = await query<{ id: string; text: string | null; created_at: Date | string }>(
+  const rows = await query<{
+    id: string;
+    text: string | null;
+    created_at: Date | string;
+    opted_out: boolean | null;
+  }>(
     `WITH cut AS (SELECT GREATEST(
        (SELECT max(created_at) FROM crm_consent_events WHERE contact_id = $2::uuid),
        (SELECT max((metadata->>'messageAt')::timestamptz) FROM audit_logs
          WHERE action = 'contact.whatsapp_opt_out_near_miss_dismissed' AND subject_type = 'contact' AND subject_id = $2::uuid),
        (SELECT CASE WHEN opted_out_whatsapp THEN opted_out_at END FROM crm_contacts WHERE id = $2::uuid),
        now() - interval '30 days') AS t)
-     SELECT id, text, created_at FROM whatsapp_messages, cut
+     SELECT id, text, created_at,
+       (SELECT opted_out_whatsapp FROM crm_contacts WHERE id = $2::uuid) AS opted_out
+     FROM whatsapp_messages, cut
      WHERE conversation_id = $1::uuid AND contact_id = $2::uuid AND direction = 'inbound' AND created_at > cut.t
      ORDER BY created_at DESC LIMIT 50`,
     [conversationId, contactId],
   );
-  const flagged = rows.find((row) => isOptOutNearMiss(row.text));
+  const flagged = rows.find((row) => isOptOutReviewFlag(row.text, row.opted_out === true));
   return flagged
     ? { messageId: String(flagged.id), text: String(flagged.text), at: iso(flagged.created_at) }
     : null;
@@ -84,15 +101,22 @@ export async function dismissOptOutNearMiss(
   const params = [input.conversationId, input.contactId, input.messageId, actor.staffId];
   // 1. Read: the actor is an active admin/manager, and the message is this contact's inbound
   //    message on this conversation (wrong-recipient guard) that the actor can read.
-  const [found] = await query<{ actor_ok: boolean; message_ok: boolean; text: string | null }>(
+  const [found] = await query<{
+    actor_ok: boolean;
+    message_ok: boolean;
+    text: string | null;
+    opted_out: boolean | null;
+  }>(
     `${DISMISS_GUARD} SELECT EXISTS (SELECT 1 FROM actor) AS actor_ok,
-      EXISTS (SELECT 1 FROM msg) AS message_ok, (SELECT text FROM msg) AS text`,
+      EXISTS (SELECT 1 FROM msg) AS message_ok, (SELECT text FROM msg) AS text,
+      (SELECT opted_out_whatsapp FROM crm_contacts WHERE id = $2::uuid) AS opted_out`,
     params,
   );
   if (!found?.actor_ok) throw new Response("Forbidden", { status: 403 });
-  // Only a real near-miss can be dismissed. An ordinary message (or an exact opt-out, which
-  // is never a near-miss) is refused, so a dismissal cannot silently move the cut-off.
-  if (!found.message_ok || !isOptOutNearMiss(found.text)) {
+  // Only a message the flag would show can be dismissed (a near-miss, or an exact word on a
+  // contact that is not opted out). An ordinary message is refused, so a dismissal cannot
+  // silently move the cut-off.
+  if (!found.message_ok || !isOptOutReviewFlag(found.text, found.opted_out === true)) {
     throw new Response("NEAR_MISS_MESSAGE_NOT_FOUND", { status: 404 });
   }
   // 2. Write, re-checking the same guard: one audit row per message (idempotent). The

@@ -116,6 +116,9 @@ export const OPT_OUT_NEAR_MISS_PHRASES: readonly string[] = [
   "unsub",
   "停止接受",
   "不要再send",
+  "stoppromotions",
+  "停止推廣",
+  "停止推广",
 ];
 
 const OPT_OUT_MAX_LENGTH = 64;
@@ -162,6 +165,10 @@ const STOP_OBJECT_WORDS: ReadonlySet<string> = new Set([
   "messaging",
   "texting",
   "send",
+  "messages",
+  "promotions",
+  "marketing",
+  "msgs",
 ]);
 const STOP_FILLER_CJK = /唔該|請|啦|呀|喇|吖/gu;
 const UNSUBSCRIBE_TOKEN = new RegExp(

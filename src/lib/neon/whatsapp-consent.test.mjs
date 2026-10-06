@@ -402,22 +402,31 @@ test("clearAccidentalOptOut is idempotent and a lost race is OPT_OUT_CHANGED", a
 test("readOptOutNearMiss derives the newest flagged inbound after the three cut-offs and never writes", async () => {
   const { readOptOutNearMiss } = await import("./whatsapp-opt-out-near-miss.server.ts");
   const at = (s) => new Date(`2026-10-06T10:00:${s}.000Z`);
+  const rowsFor = (optedOut) => [
+    { id: "m4", text: "Can I stop by?", created_at: at("04"), opted_out: optedOut },
+    { id: "m3", text: "退訂", created_at: at("03"), opted_out: optedOut },
+    { id: "m2", text: "STOP please", created_at: at("02"), opted_out: optedOut },
+    { id: "m1", text: "我要退訂", created_at: at("01"), opted_out: optedOut },
+  ];
   const { calls, query } = fakeQuery([
-    [
-      { id: "m4", text: "Can I stop by?", created_at: at("04") },
-      { id: "m3", text: "退訂", created_at: at("03") },
-      { id: "m2", text: "STOP please", created_at: at("02") },
-      { id: "m1", text: "我要退訂", created_at: at("01") },
-    ],
-    [{ id: "m5", text: "你好", created_at: at("05") }],
+    rowsFor(true),
+    [{ id: "m5", text: "你好", created_at: at("05"), opted_out: false }],
+    rowsFor(false),
   ]);
   const input = { conversationId: OO_CONV, contactId: OO_CONTACT };
+  // Opted out: an exact word is already the 已退訂推廣 badge, so only near-misses flag.
   assert.deepEqual(await readOptOutNearMiss(input, { query }), {
     messageId: "m2",
     text: "STOP please",
     at: at("02").toISOString(),
   });
   assert.equal(await readOptOutNearMiss(input, { query }), null);
+  // Not opted out: an exact word can only be there from history_import, and is flagged too.
+  assert.deepEqual(await readOptOutNearMiss(input, { query }), {
+    messageId: "m3",
+    text: "退訂",
+    at: at("03").toISOString(),
+  });
   const { sql, params } = calls[0];
   assert.deepEqual(params, [OO_CONV, OO_CONTACT]);
   assert.match(sql, /^\s*WITH cut AS/);
@@ -432,6 +441,7 @@ test("readOptOutNearMiss derives the newest flagged inbound after the three cut-
   );
   assert.match(sql, /created_at > cut\.t/);
   assert.match(sql, /LIMIT 50/);
+  assert.match(sql, /SELECT opted_out_whatsapp FROM crm_contacts WHERE id = \$2::uuid/);
   assert.doesNotMatch(sql, /\b(UPDATE|INSERT|DELETE)\b/);
   await assert.rejects(
     readOptOutNearMiss({ conversationId: "x", contactId: OO_CONTACT }, { query }),
@@ -474,17 +484,34 @@ test("dismissOptOutNearMiss: approval gate, validation and wrong-recipient guard
     dismissOptOutNearMiss(dismissInput(), OO_MANAGER, { query: foreign.query }),
     404,
   );
-  // Only a real near-miss can be dismissed: an ordinary message or an exact opt-out is refused
-  // before any write.
-  for (const text of ["你好", "Can I stop by?", "退訂", null]) {
-    const ordinary = fakeQuery([[{ actor_ok: true, message_ok: true, text }]]);
+  // Only a message the flag would show can be dismissed: an ordinary message, or an exact
+  // opt-out on a contact that IS opted out, is refused before any write.
+  for (const [text, optedOut] of [
+    ["你好", false],
+    ["Can I stop by?", false],
+    ["退訂", true],
+    [null, false],
+  ]) {
+    const ordinary = fakeQuery([[{ actor_ok: true, message_ok: true, text, opted_out: optedOut }]]);
     await rejectsWith(
       dismissOptOutNearMiss(dismissInput(), OO_MANAGER, { query: ordinary.query }),
       404,
       "NEAR_MISS_MESSAGE_NOT_FOUND",
     );
-    assert.equal(ordinary.calls.length, 1, "no write for a message that is not a near-miss");
+    assert.equal(ordinary.calls.length, 1, "no write for a message that is not flagged");
   }
+  // A history-imported exact word on a contact that is not opted out is flagged, so it can be
+  // dismissed (one audit row, no contact write).
+  const imported = fakeQuery([
+    [{ actor_ok: true, message_ok: true, text: "退訂", opted_out: false }],
+    [{ actor_ok: true, message_ok: true, dismissed: true }],
+  ]);
+  assert.deepEqual(
+    await dismissOptOutNearMiss(dismissInput(), OO_MANAGER, { query: imported.query }),
+    { ok: true, dismissed: true },
+  );
+  assert.equal(imported.calls.length, 2);
+  assert.doesNotMatch(imported.calls[1].sql, /UPDATE\s+crm_contacts/i);
 });
 
 test("dismissOptOutNearMiss writes one idempotent audit row and never touches crm_contacts", async () => {

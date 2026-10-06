@@ -1541,26 +1541,37 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 300000 }, async (t) =
             404,
             "NEAR_MISS_MESSAGE_NOT_FOUND",
           );
-          // Pinned today: a manager with no branch cannot read the conversation under the current
-          // wa_can_read_conversation, so dismiss is a 404. Re-check after #226 replaces it.
+          // A manager with no branch: whatever wa_can_read_conversation answers decides. Today
+          // (branch-scoped managers) it is false and dismiss is a 404 with no audit; once #226
+          // makes manager reads org-wide it is true and the dismissal is recorded under them.
           await query(
             "INSERT INTO staff_users(id,auth_user_id,name_zh,active) VALUES($1,'synthetic-optout-branchless','合成無分行經理',true)",
             [id(66)],
           );
           await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [id(66)]);
-          await rejectsWith(
+          const [{ readable: branchlessReads }] = await query(
+            "SELECT wa_can_read_conversation($1,$2) AS readable",
+            [id(66), conv.id],
+          );
+          const branchlessDismiss = () =>
             dismissOptOutNearMiss(
               { ...input, messageId: flagged.messageId },
               { staffId: id(66), roles: ["manager"] },
-            ),
-            404,
-            "NEAR_MISS_MESSAGE_NOT_FOUND",
-          );
-          assert.equal((await audits(row.id, DISMISSED)).length, 0);
-          // Idempotent.
+            );
+          if (!branchlessReads) {
+            await rejectsWith(branchlessDismiss(), 404, "NEAR_MISS_MESSAGE_NOT_FOUND");
+            assert.equal((await audits(row.id, DISMISSED)).length, 0);
+          } else {
+            assert.deepEqual(await branchlessDismiss(), { ok: true, dismissed: true });
+            const recorded = await audits(row.id, DISMISSED);
+            assert.equal(recorded.length, 1);
+            assert.equal(recorded[0].actor_id, id(66));
+            assert.equal(recorded[0].metadata.messageId, flagged.messageId);
+          }
+          // Idempotent: one audit row per message, whoever dismissed it first.
           const dismiss = () =>
             dismissOptOutNearMiss({ ...input, messageId: flagged.messageId }, manager);
-          assert.deepEqual(await dismiss(), { ok: true, dismissed: true });
+          assert.deepEqual(await dismiss(), { ok: true, dismissed: !branchlessReads });
           assert.deepEqual(await dismiss(), { ok: true, dismissed: false });
           assert.equal((await audits(row.id, DISMISSED)).length, 1);
           assert.equal(await readOptOutNearMiss(input), null);
@@ -1578,6 +1589,98 @@ test("FX-08 opt-out evidence (owned Postgres)", { timeout: 300000 }, async (t) =
           const after = await contact(member);
           assert.equal(after.opted_out_whatsapp, false);
           assertNoEvidence(after);
+        },
+      );
+
+      await t.test(
+        "a history-imported exact 退訂 is flagged for review on a not-opted-out contact, never opts out",
+        async () => {
+          const member = "synthetic-near-5";
+          const phone = "85291260005";
+          await ingest(
+            liveEvent({ messageId: "synthetic-near-5a", member, phone, text: "你好", at: LIVE }),
+          );
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-near-5b",
+              member,
+              phone,
+              text: "退訂",
+              at: LIVE + 1,
+            }),
+            "history_import",
+          );
+          const conv = await conversation(member);
+          await assignTo([conv.id], MANAGER);
+          const row = await contact(member);
+          assert.equal(row.opted_out_whatsapp, false);
+          assertNoEvidence(row);
+          const input = { conversationId: conv.id, contactId: row.id };
+          const snapshot = await fullContact(member);
+          const flagged = await readOptOutNearMiss(input);
+          assert.equal(flagged.messageId, await messageUuid("synthetic-near-5b"));
+          assert.equal(flagged.text, "退訂");
+          // The read never writes: the flag and the evidence stay untouched (D4: never from history).
+          assert.deepEqual(await fullContact(member), snapshot);
+          const after = await contact(member);
+          assert.equal(after.opted_out_whatsapp, false);
+          assertNoEvidence(after);
+          // The detail exposes it through the same near-miss field.
+          const { fetchAdminConversation } = await import("../neon/admin-data.server.ts");
+          assert.equal(
+            (await fetchAdminConversation(conv.id, manager, false)).opt_out_near_miss.messageId,
+            flagged.messageId,
+          );
+          // Approval gate, then a manager can dismiss it like any near-miss (idempotent).
+          await assert.rejects(
+            dismissOptOutNearMiss(
+              { ...input, messageId: flagged.messageId },
+              {
+                staffId: AGENT,
+                roles: ["agent"],
+              },
+            ),
+            (error) => error instanceof Response && error.status === 403,
+          );
+          const dismiss = () =>
+            dismissOptOutNearMiss({ ...input, messageId: flagged.messageId }, manager);
+          assert.deepEqual(await dismiss(), { ok: true, dismissed: true });
+          assert.deepEqual(await dismiss(), { ok: true, dismissed: false });
+          assert.equal((await audits(row.id, DISMISSED)).length, 1);
+          assert.equal(await readOptOutNearMiss(input), null);
+          const final = await contact(member);
+          assert.equal(final.opted_out_whatsapp, false);
+          assertNoEvidence(final);
+
+          // Already opted out: a later exact word is not flagged again (the badge already shows).
+          const optedOut = "synthetic-near-6";
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-near-6a",
+              member: optedOut,
+              phone: "85291260006",
+              text: "退訂",
+              at: LIVE,
+            }),
+          );
+          await ingest(
+            liveEvent({
+              messageId: "synthetic-near-6b",
+              member: optedOut,
+              phone: "85291260006",
+              text: "STOP",
+              at: LIVE + 1,
+            }),
+            "history_import",
+          );
+          const optedConv = await conversation(optedOut);
+          const optedRow = await contact(optedOut);
+          assert.equal(optedRow.opted_out_whatsapp, true);
+          assert.equal(optedRow.opted_out_message_id, "synthetic-near-6a");
+          assert.equal(
+            await readOptOutNearMiss({ conversationId: optedConv.id, contactId: optedRow.id }),
+            null,
+          );
         },
       );
 
