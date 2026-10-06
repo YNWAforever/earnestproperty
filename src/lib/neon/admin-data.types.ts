@@ -222,17 +222,33 @@ export type AdminCampaignRetryPreview = {
   status: string;
   /** Exactly what requeueFailedCampaignRecipients would move now. */
   retryable: number;
+  /** Rows already queued (e.g. paused) that a re-approval would also send. */
+  alreadyQueued: number;
   /** Retry-safe failure, but consent or identity now fails. */
   excludedOptedOut: number;
   /** Retry-safe failure, but not the primary row for its phone. */
   excludedDuplicatePhone: number;
+  /** Retry-safe failure, but the contact changed after the attempt (reason CONTACT_CHANGED_SINCE_ATTEMPT). */
+  excludedContactChanged: number;
+  /** The non-zero exclusions, by reason code, for the UI to render. */
+  exclusions: {
+    reason: "OPTED_OUT" | "DUPLICATE_PHONE" | "CONTACT_CHANGED_SINCE_ATTEMPT";
+    count: number;
+  }[];
   unknownTotal: number;
   /** At most 100, oldest dispatch first. No phone or member id. */
   unknown: { recipientId: string; name: string | null; dispatchedAt: string | null }[];
 };
 
 export type AdminCampaignRequeueResult =
-  | { ok: true; requeued: number; excludedUnknown: number; excludedOther: number }
+  | {
+      ok: true;
+      requeued: number;
+      excludedUnknown: number;
+      /** Every other failed row left behind, including excludedContactChanged. */
+      excludedOther: number;
+      excludedContactChanged: number;
+    }
   | {
       ok: false;
       error:

@@ -3456,19 +3456,39 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
     .map((row) => stringOrEmpty(row.id))
     .filter(Boolean);
   const uniqueEligibleContactIds = Array.from(new Set(eligibleContactIds));
-  // A campaign that may already have reached anyone resumes with its original
-  // recipients only: new audience matches are never added to it (FX-10b).
+  // A campaign that may already have reached anyone (FX-10b) is frozen to the
+  // rows it already has: nothing is inserted and no row is revived. Only rows
+  // that are already queued (requeued refusals, paused rows) go forward, so a
+  // re-send can never reach more people than the retry preview showed.
   const hasHistory = campaign.has_history === true;
 
-  if (uniqueEligibleContactIds.length > 0) {
+  if (hasHistory) {
+    if (uniqueEligibleContactIds.length > 0) {
+      // Clear a stale pause or interruption marker on rows that still qualify.
+      await queryRows(
+        `
+        UPDATE whatsapp_campaign_recipients r
+        SET error = NULL
+        WHERE r.campaign_id = $1::uuid
+          AND r.status = 'queued'
+          AND r.dispatch_started_at IS NULL
+          AND r.error IS NOT NULL
+          AND r.contact_id = ANY($2::uuid[])
+        `,
+        [campaignId, uniqueEligibleContactIds],
+      );
+    }
+  } else if (uniqueEligibleContactIds.length > 0) {
     await queryRows(
       `
       INSERT INTO whatsapp_campaign_recipients (campaign_id, contact_id, status)
       SELECT $1::uuid, contact_id, 'queued'
       FROM unnest($2::uuid[]) AS contact_ids(contact_id)
-      WHERE NOT $3::boolean OR EXISTS (
-        SELECT 1 FROM whatsapp_campaign_recipients x
-        WHERE x.campaign_id = $1::uuid AND x.contact_id = contact_ids.contact_id
+      -- Re-checked in this statement's own snapshot: if the first send started
+      -- after has_history was read, nothing is added.
+      WHERE NOT EXISTS (
+        SELECT 1 FROM whatsapp_campaigns hc
+        WHERE hc.id = $1::uuid AND ${campaignHasDeliveryHistorySql("hc")}
       )
       -- 'sent'/'sending' are obviously not re-queueable, nor is any row whose
       -- dispatch was reserved. 'failed' is kept too: a retry-safe refusal goes
@@ -3495,7 +3515,7 @@ export async function materializeCampaignRecipients(campaignId: string, actor: S
           ELSE NULL
         END
       `,
-      [campaignId, uniqueEligibleContactIds, hasHistory],
+      [campaignId, uniqueEligibleContactIds],
     );
   }
   await queryRows(
@@ -3696,6 +3716,18 @@ function campaignRetryConsentSql(contactAlias: string) {
     AND ${marketingIdentitySafeSql(contactAlias)})`;
 }
 
+// FX-10b controller ruling I2: a re-send goes only to the number the refused
+// attempt used. The recipient row stores no phone or member snapshot, so the
+// conservative test is time-based: the contact must not have been updated
+// since that attempt was claimed (r.queued_at, set by the claim). A row with no
+// claim time is treated as changed. Any contact update (consent toggle,
+// inbound message, live-agent phone correction) therefore excludes the row.
+export const CAMPAIGN_RETRY_CONTACT_CHANGED = "CONTACT_CHANGED_SINCE_ATTEMPT";
+function campaignRetryContactUnchangedSql(recipientAlias: string, contactAlias: string) {
+  return `(${recipientAlias}.queued_at IS NOT NULL
+    AND ${contactAlias}.updated_at <= ${recipientAlias}.queued_at)`;
+}
+
 // True while a recipient is on the wire or a delivery job still holds a live
 // lease on the campaign. A late result from either must land before a retry.
 const CAMPAIGN_RETRY_BUSY_SQL = `(EXISTS (
@@ -3722,8 +3754,11 @@ export async function fetchCampaignRetryPreview(
     campaignId,
     status: "",
     retryable: 0,
+    alreadyQueued: 0,
     excludedOptedOut: 0,
     excludedDuplicatePhone: 0,
+    excludedContactChanged: 0,
+    exclusions: [],
     unknownTotal: 0,
     unknown: [],
   };
@@ -3734,6 +3769,7 @@ export async function fetchCampaignRetryPreview(
       WITH candidate AS (
         SELECT
           ${campaignRetryConsentSql("contact")} AS consent_ok,
+          ${campaignRetryContactUnchangedSql("r", "contact")} AS unchanged,
           ${campaignRecipientPrimarySql("r", "contact")} AS primary_row
         FROM whatsapp_campaign_recipients r
         JOIN crm_contacts contact ON contact.id = r.contact_id
@@ -3742,11 +3778,18 @@ export async function fetchCampaignRetryPreview(
       SELECT
         c.status,
         CASE WHEN c.status IN ('failed', 'completed', 'review') AND NOT ${CAMPAIGN_RETRY_BUSY_SQL}
-          THEN (SELECT count(*) FROM candidate WHERE consent_ok AND primary_row)
+          THEN (SELECT count(*) FROM candidate WHERE consent_ok AND unchanged AND primary_row)
           ELSE 0 END::int AS retryable,
         (SELECT count(*) FROM candidate WHERE NOT consent_ok)::int AS excluded_opted_out,
-        (SELECT count(*) FROM candidate WHERE consent_ok AND NOT primary_row)::int
+        (SELECT count(*) FROM candidate WHERE consent_ok AND NOT unchanged)::int
+          AS excluded_contact_changed,
+        (SELECT count(*) FROM candidate WHERE consent_ok AND unchanged AND NOT primary_row)::int
           AS excluded_duplicate_phone,
+        (SELECT count(*) FROM whatsapp_campaign_recipients q
+          JOIN crm_contacts qc ON qc.id = q.contact_id
+          WHERE q.campaign_id = $1::uuid AND q.status = 'queued' AND q.dispatch_started_at IS NULL
+            AND ${campaignRetryConsentSql("qc")}
+            AND ${campaignRecipientPrimarySql("q", "qc")})::int AS already_queued,
         (SELECT count(*) FROM whatsapp_campaign_recipients u
           WHERE u.campaign_id = $1::uuid AND u.error = 'WOZTELL_DELIVERY_UNKNOWN')::int
           AS unknown_total
@@ -3758,7 +3801,8 @@ export async function fetchCampaignRetryPreview(
     queryRows(
       `
       SELECT r.id,
-        CASE WHEN regexp_replace(contact.name, '[[:space:]().+-]', '', 'g') ~ '[0-9]{6,}'
+        CASE WHEN regexp_replace(translate(contact.name, '０１２３４５６７８９', '0123456789'),
+            '[^0-9]', '', 'g') ~ '[0-9]{6,}'
           THEN NULL ELSE contact.name END AS name,
         r.dispatch_started_at
       FROM whatsapp_campaign_recipients r
@@ -3776,8 +3820,19 @@ export async function fetchCampaignRetryPreview(
     campaignId,
     status: stringOrEmpty(summary.status),
     retryable: Number(summary.retryable ?? 0),
+    alreadyQueued: Number(summary.already_queued ?? 0),
     excludedOptedOut: Number(summary.excluded_opted_out ?? 0),
     excludedDuplicatePhone: Number(summary.excluded_duplicate_phone ?? 0),
+    excludedContactChanged: Number(summary.excluded_contact_changed ?? 0),
+    exclusions: (
+      [
+        ["OPTED_OUT", summary.excluded_opted_out],
+        ["DUPLICATE_PHONE", summary.excluded_duplicate_phone],
+        [CAMPAIGN_RETRY_CONTACT_CHANGED, summary.excluded_contact_changed],
+      ] as const
+    )
+      .map(([reason, value]) => ({ reason, count: Number(value ?? 0) }))
+      .filter((exclusion) => exclusion.count > 0),
     unknownTotal: Number(summary.unknown_total ?? 0),
     unknown: unknownRows.map((row) => ({
       recipientId: stringOrEmpty(row.id),
@@ -3795,7 +3850,8 @@ export async function fetchCampaignRetryPreview(
  *
  * Only rows matching retryableFailedRecipientSql (failed, never dispatched,
  * a retry-safe code) whose contact still passes consent, identity and the
- * one-row-per-phone rule move. Never: new audience members, 結果未明
+ * one-row-per-phone rule, and has not changed since the refused attempt
+ * (campaignRetryContactUnchangedSql), move. Never: new audience members, 結果未明
  * (WOZTELL_DELIVERY_UNKNOWN), sent/sending rows, or a row with a dispatch
  * reservation. The campaign row lock serialises concurrent calls, and the
  * write re-reads in a fresh snapshot, so a repeat finds NOTHING_TO_RETRY.
@@ -3827,6 +3883,7 @@ export async function requeueFailedCampaignRecipients(
         WHERE c.status IN ('failed', 'completed', 'review') AND NOT busy.busy
           AND ${retryableFailedRecipientSql("r")}
           AND ${campaignRetryConsentSql("contact")}
+          AND ${campaignRetryContactUnchangedSql("r", "contact")}
           AND ${campaignRecipientPrimarySql("r", "contact")}
         FOR UPDATE OF r
       ), requeued AS (
@@ -3847,8 +3904,14 @@ export async function requeueFailedCampaignRecipients(
           count(*) FILTER (WHERE x.error = 'WOZTELL_DELIVERY_UNKNOWN')::int AS unknown,
           count(*) FILTER (
             WHERE x.status = 'failed' AND x.error IS DISTINCT FROM 'WOZTELL_DELIVERY_UNKNOWN'
-          )::int AS other
+          )::int AS other,
+          count(*) FILTER (
+            WHERE ${retryableFailedRecipientSql("x")}
+              AND ${campaignRetryConsentSql("xc")}
+              AND NOT ${campaignRetryContactUnchangedSql("x", "xc")}
+          )::int AS contact_changed
         FROM whatsapp_campaign_recipients x
+        JOIN crm_contacts xc ON xc.id = x.contact_id
         WHERE x.campaign_id = $1::uuid AND x.id NOT IN (SELECT id FROM requeued)
       ), audited AS (
         INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
@@ -3857,13 +3920,14 @@ export async function requeueFailedCampaignRecipients(
             'requeued', (SELECT count(*) FROM requeued),
             'previousStatus', f.previous_status,
             'excludedUnknown', e.unknown,
-            'excludedOther', e.other
+            'excludedOther', e.other,
+            'excludedContactChanged', e.contact_changed
           )
         FROM flipped f CROSS JOIN excluded e
         RETURNING id
       )
       SELECT c.status, busy.busy, (SELECT count(*) FROM requeued)::int AS requeued,
-        e.unknown, e.other
+        e.unknown, e.other, e.contact_changed
       FROM c, busy, excluded e
       `,
       params: [campaignId, actor.staffId],
@@ -3882,6 +3946,7 @@ export async function requeueFailedCampaignRecipients(
     requeued,
     excludedUnknown: Number(row.unknown ?? 0),
     excludedOther: Number(row.other ?? 0),
+    excludedContactChanged: Number(row.contact_changed ?? 0),
   };
 }
 

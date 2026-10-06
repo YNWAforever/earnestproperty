@@ -848,7 +848,8 @@ test(
         await query(
           `UPDATE whatsapp_campaign_recipients SET status=$2, error=$3,
              dispatch_started_at=CASE WHEN $4::boolean THEN now() - interval '1 hour' END,
-             sent_at=CASE WHEN $2='sent' THEN now() END
+             sent_at=CASE WHEN $2='sent' THEN now() END,
+             queued_at=COALESCE(queued_at, now())
            WHERE id=$1`,
           [person.recipient, status, error, dispatched],
         );
@@ -937,6 +938,7 @@ test(
           requeued: 2,
           excludedUnknown: 1,
           excludedOther: 2,
+          excludedContactChanged: 0,
         });
         // 3.
         for (const label of ["B", "F"]) {
@@ -964,6 +966,7 @@ test(
           previousStatus: "completed",
           excludedUnknown: 1,
           excludedOther: 2,
+          excludedContactChanged: 0,
         });
         assertNoContactData(audits[0].metadata);
         assert.deepEqual(await jobsOf(campaign), jobsBefore);
@@ -1001,7 +1004,13 @@ test(
         const racing = await Promise.all([requeue(campaign), requeue(campaign)]);
         assert.deepEqual(
           racing.find((result) => result.ok),
-          { ok: true, requeued: 1, excludedUnknown: 2, excludedOther: 0 },
+          {
+            ok: true,
+            requeued: 1,
+            excludedUnknown: 2,
+            excludedOther: 0,
+            excludedContactChanged: 0,
+          },
         );
         assert.deepEqual(
           racing.find((result) => !result.ok),
@@ -1096,6 +1105,7 @@ test(
           requeued: 1,
           excludedUnknown: 2,
           excludedOther: 0,
+          excludedContactChanged: 0,
         });
         assert.deepEqual(
           [await recipientRow(people.U1.recipient), await recipientRow(people.N.recipient)],
@@ -1132,6 +1142,7 @@ test(
             requeued: 1,
             excludedUnknown: 0,
             excludedOther: 0,
+            excludedContactChanged: 0,
           });
           assert.deepEqual(await jobsOf(campaign), jobsBefore);
           assert.deepEqual(await reviewedAt(), reviewedBefore);
@@ -1437,6 +1448,7 @@ test(
           requeued: 1,
           excludedUnknown: 0,
           excludedOther: 0,
+          excludedContactChanged: 0,
         });
         assert.equal((await queueAdminCampaign(d.campaign, actor)).ok, true);
         providerCalls.length = 0;
@@ -1446,6 +1458,136 @@ test(
           providerCalls.map((call) => call.memberId),
           [d.people.J1.member],
         );
+      });
+
+      await t.test("a re-send through the UI path never grows past the preview", async () => {
+        // Review I1: blocked rows that never reached WhatsApp must stay blocked
+        // when 「發送…」 re-materialises a campaign with history.
+        const source = "owned-fx10b-grow";
+        const [scoped] = await query(
+          "INSERT INTO whatsapp_audiences(name,filters,created_by) VALUES('Owned FX-10b grow audience',$1::jsonb,$2) RETURNING id",
+          [JSON.stringify({ source }), staff.id],
+        );
+        const { campaign, people } = await seedRetryCampaign(["W1", "W2", "W3", "W4"], {
+          audienceId: scoped.id,
+          source,
+          queue: false,
+          status: "completed",
+        });
+        await setRecipient(people.W1, "sent", null, true);
+        await setRecipient(people.W2, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+        await setRecipient(people.W3, "blocked", "WOZTELL_DISPATCH_INELIGIBLE", false);
+        await setRecipient(people.W4, "blocked", "No longer eligible for audience", false);
+
+        const shown = await preview(campaign);
+        assert.equal(shown.retryable, 1);
+        assert.equal((await requeue(campaign)).ok, true);
+        const result = await adminData.sendAdminCampaignQueue(campaign, actor);
+        assert.equal(result.ok, true);
+        const rows = await recipientsOf(campaign);
+        assert.equal(
+          count(rows, (row) => row.status === "queued"),
+          shown.retryable,
+        );
+        for (const label of ["W3", "W4"]) {
+          assert.equal((await recipientRow(people[label].recipient)).status, "blocked", label);
+        }
+        providerCalls.length = 0;
+        provider = accepted;
+        await deliver(campaign, await leaseCampaignJob(campaign));
+        assert.deepEqual(
+          providerCalls.map((call) => call.memberId),
+          [people.W2.member],
+        );
+      });
+
+      await t.test("a re-send never goes to a number changed since the attempt", async () => {
+        // Controller ruling I2: a contact whose phone or member id may have
+        // changed after the refused attempt is not re-queued.
+        const { campaign, people } = await seedRetryCampaign(["K1", "K2"], {
+          queue: false,
+          status: "completed",
+        });
+        await setRecipient(people.K1, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+        await setRecipient(people.K2, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+        const changedPhone = "85264449990";
+        retryPhones.push(changedPhone);
+        await query(
+          "UPDATE crm_contacts SET phone=$2, normalized_phone=$2, updated_at=clock_timestamp() WHERE id=$1",
+          [people.K1.contact, changedPhone],
+        );
+        const shown = await preview(campaign);
+        assert.equal(shown.retryable, 1);
+        assert.equal(shown.excludedContactChanged, 1);
+        assert.equal(shown.excludedOptedOut, 0);
+        assert.deepEqual(shown.exclusions, [{ reason: "CONTACT_CHANGED_SINCE_ATTEMPT", count: 1 }]);
+        assertNoContactData(shown);
+        assert.deepEqual(await requeue(campaign), {
+          ok: true,
+          requeued: 1,
+          excludedUnknown: 0,
+          excludedOther: 1,
+          excludedContactChanged: 1,
+        });
+        // K2's phone did not change, so it is re-queued; K1 stays failed.
+        assert.equal((await recipientRow(people.K2.recipient)).status, "queued");
+        assert.equal((await recipientRow(people.K1.recipient)).status, "failed");
+        const [audit] = await requeueAudits(campaign);
+        assert.equal(audit.metadata.excludedContactChanged, 1);
+        assertNoContactData(audit.metadata);
+
+        // The real phone-rewrite path: a live-agent visitor corrects the phone
+        // on the contact the handoff created (updated_owned).
+        const live = await import("../ai/live-agent.server.ts");
+        const { session, accessToken } = await live.createLiveAgentSession({
+          sourcePath: "/listings",
+        });
+        const handoff = (phone) =>
+          live.requestLiveAgentHandoff({
+            sessionId: session.id,
+            accessToken,
+            name: "Synthetic visitor",
+            phone,
+            intent: "buyer",
+            opt_in_whatsapp: true,
+          });
+        await handoff("9444 0001");
+        retryPhones.push("85294440001", "85294440002");
+        const [visitor] = await query(
+          "SELECT id FROM crm_contacts WHERE normalized_phone='85294440001'",
+        );
+        assert.ok(visitor, "the handoff created the visitor contact");
+        const [liveCampaign] = await query(
+          "INSERT INTO whatsapp_campaigns(name,template_id,audience_id,status,created_by) VALUES('Owned FX-10b live-agent campaign',$1,$2,'review',$3) RETURNING id",
+          [template.id, audience.id, staff.id],
+        );
+        const [visitorRow] = await query(
+          "INSERT INTO whatsapp_campaign_recipients(campaign_id,contact_id) VALUES($1,$2) RETURNING id",
+          [liveCampaign.id, visitor.id],
+        );
+        assert.equal((await queueAdminCampaign(liveCampaign.id, actor)).ok, true);
+        providerCalls.length = 0;
+        provider = () => refused;
+        await deliver(liveCampaign.id, await leaseCampaignJob(liveCampaign.id));
+        assert.equal(providerCalls.length, 1);
+        assert.equal((await recipientRow(visitorRow.id)).error, "WOZTELL_PROVIDER_REJECTED");
+        // Unchanged so far: the preview would retry it.
+        assert.equal((await preview(liveCampaign.id)).retryable, 1);
+        await handoff("9444 0002");
+        assert.equal(
+          (await query("SELECT normalized_phone FROM crm_contacts WHERE id=$1", [visitor.id]))[0]
+            .normalized_phone,
+          "85294440002",
+        );
+        const afterEdit = await preview(liveCampaign.id);
+        assert.equal(afterEdit.retryable, 0);
+        assert.equal(afterEdit.excludedContactChanged, 1);
+        assertNoContactData(afterEdit);
+        assert.deepEqual(await requeue(liveCampaign.id), {
+          ok: false,
+          error: "NOTHING_TO_RETRY",
+        });
+        assert.equal((await recipientRow(visitorRow.id)).status, "failed");
       });
 
       await t.test("no recipient gets two accepted sends: every provider call in this file", () => {
