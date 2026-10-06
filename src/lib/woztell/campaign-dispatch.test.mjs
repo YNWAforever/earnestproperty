@@ -306,3 +306,183 @@ test("a 429 stays a per-recipient retryable failure and the run continues", asyn
   assert.equal(summary.failed, 1);
   assert.deepEqual(updates, [["1", "failed", "WOZTELL_PROVIDER_REJECTED"]]);
 });
+
+// ---------------------------------------------------------------------------
+// FX-10b Task 2: a systemic stop (auth, configuration, provider outage) pauses
+// the campaign back to review and keeps every unsent recipient queued.
+// ---------------------------------------------------------------------------
+const JOB = { jobId: "job-1", workerId: "worker-1", attempt: 1 };
+
+function runCampaign(rows, sendResponse, extra = {}) {
+  let claimed = false;
+  const updates = [];
+  const pauses = [];
+  const sends = [];
+  const events = [];
+  const run = deliverWoztellCampaign("campaign", {
+    job: JOB,
+    isEnabled: () => true,
+    claimRecipients: async () => {
+      if (claimed) return [];
+      claimed = true;
+      return rows;
+    },
+    beginDispatch: async (_campaign, id) => rows.find((r) => r.id === id),
+    updateRecipient: async (...args) => {
+      updates.push(args);
+      events.push(["update", ...args]);
+    },
+    hasPendingRecipients: async () => false,
+    refreshStatus: async () => {},
+    pauseCampaign: async (...args) => {
+      pauses.push(args);
+      events.push(["pause", ...args]);
+      return { paused: true, remaining: 0 };
+    },
+    sendResponse: async (input) => {
+      sends.push(input.memberId);
+      return sendResponse(input, sends.length);
+    },
+    ...extra,
+  });
+  return { run, updates, pauses, sends, events };
+}
+
+test("an unreadable provider body is unknown at any status, never retry-safe", () => {
+  for (const status of [200, 400, 401, 403, 404, 422, 429, 500, 502, 503]) {
+    assert.deepEqual(
+      classifyCampaignSendResult({ ok: false, status, bodyUnreadable: true }),
+      UNKNOWN,
+      String(status),
+    );
+  }
+  // A parsed definite refusal keeps its retry-safe classification.
+  assert.deepEqual(classifyCampaignSendResult({ ok: false, status: 400 }), FAILED);
+  assert.deepEqual(
+    classifyCampaignSendResult({ ok: false, status: 400, bodyUnreadable: false }),
+    FAILED,
+  );
+});
+
+test("a 401 mid-run re-queues the rest, then pauses the campaign and stops", async () => {
+  const rows = ["a", "b", "c", "d", "e"].map(recipient);
+  const { run, updates, pauses, sends, events } = runCampaign(rows, async (_input, call) =>
+    call <= 2 ? { ok: true, status: 200 } : { ok: false, status: 401, refused: false },
+  );
+  await assert.rejects(
+    run,
+    (error) => error.code === CAMPAIGN_PAUSED_ERROR && error.reason === "WOZTELL_AUTH_REJECTED",
+  );
+  assert.deepEqual(sends, ["a", "b", "c"]);
+  assert.deepEqual(updates, [
+    ["a", "sent", null],
+    ["b", "sent", null],
+    ["c", "queued", "WOZTELL_AUTH_REJECTED"],
+    ["d", "queued", "JOB_DELIVERY_INTERRUPTED"],
+    ["e", "queued", "JOB_DELIVERY_INTERRUPTED"],
+  ]);
+  assert.deepEqual(pauses, [["campaign", "WOZTELL_AUTH_REJECTED", 401, JOB]]);
+  // The remainder is back in the queue before the campaign is paused.
+  assert.equal(events.at(-1)[0], "pause");
+});
+
+test("an ok:0 not-authorized refusal pauses exactly like a 401", async () => {
+  const rows = ["a", "b"].map(recipient);
+  const { run, pauses, sends } = runCampaign(rows, async () => ({
+    ok: false,
+    status: 500,
+    refused: true,
+    error: "User is not authorized.",
+  }));
+  await assert.rejects(run, (error) => error.code === CAMPAIGN_PAUSED_ERROR);
+  assert.deepEqual(sends, ["a"]);
+  assert.deepEqual(pauses, [["campaign", "WOZTELL_AUTH_REJECTED", 500, JOB]]);
+});
+
+test("three unconfirmed results in a row trip the breaker and pause the campaign", async () => {
+  const rows = ["a", "b", "c", "d", "e", "f"].map(recipient);
+  const { run, updates, pauses, sends } = runCampaign(rows, async () => {
+    throw Object.assign(new Error("timeout"), { code: "WOZTELL_PROVIDER_TIMEOUT" });
+  });
+  await assert.rejects(
+    run,
+    (error) => error.code === CAMPAIGN_PAUSED_ERROR && error.reason === "WOZTELL_PROVIDER_UNSTABLE",
+  );
+  assert.deepEqual(sends, ["a", "b", "c"]);
+  assert.deepEqual(updates, [
+    ["a", "failed", CAMPAIGN_DELIVERY_UNKNOWN],
+    ["b", "failed", CAMPAIGN_DELIVERY_UNKNOWN],
+    ["c", "failed", CAMPAIGN_DELIVERY_UNKNOWN],
+    ["d", "queued", "JOB_DELIVERY_INTERRUPTED"],
+    ["e", "queued", "JOB_DELIVERY_INTERRUPTED"],
+    ["f", "queued", "JOB_DELIVERY_INTERRUPTED"],
+  ]);
+  assert.deepEqual(pauses, [["campaign", "WOZTELL_PROVIDER_UNSTABLE", null, JOB]]);
+});
+
+test("a confirmed or refused send in between resets the breaker; a 429 never stops the run", async () => {
+  const answers = [
+    { ok: false, status: 503 },
+    null, // thrown
+    { ok: true, status: 200 },
+    { ok: false, status: 503 },
+    { ok: false, status: 429, refused: false },
+    { ok: false, status: 503 },
+    { ok: false, status: 503 },
+  ];
+  const rows = answers.map((_, i) => recipient(String(i)));
+  const { run, pauses, sends } = runCampaign(rows, async (_input, call) => {
+    const answer = answers[call - 1];
+    if (!answer) throw new TypeError("fetch failed");
+    return answer;
+  });
+  const summary = await run;
+  assert.equal(sends.length, 7);
+  assert.deepEqual(pauses, []);
+  assert.equal(summary.sent, 1);
+});
+
+test("three unreadable provider bodies (400, 429, 500) count as unknown and trip the breaker", async () => {
+  const rows = ["a", "b", "c", "d"].map(recipient);
+  const statuses = [400, 429, 500];
+  const { run, updates, pauses } = runCampaign(rows, async (_input, call) => ({
+    ok: false,
+    status: statuses[call - 1],
+    error: "WOZTELL_INVALID_RESPONSE",
+    bodyUnreadable: true,
+  }));
+  await assert.rejects(run, (error) => error.code === CAMPAIGN_PAUSED_ERROR);
+  assert.deepEqual(updates.slice(0, 3), [
+    ["a", "failed", CAMPAIGN_DELIVERY_UNKNOWN],
+    ["b", "failed", CAMPAIGN_DELIVERY_UNKNOWN],
+    ["c", "failed", CAMPAIGN_DELIVERY_UNKNOWN],
+  ]);
+  assert.deepEqual(pauses, [["campaign", "WOZTELL_PROVIDER_UNSTABLE", null, JOB]]);
+});
+
+test("disabled delivery pauses before any send when a job owns the campaign", async () => {
+  const { run, pauses, sends } = runCampaign([recipient("a")], async () => ({ ok: true }), {
+    isEnabled: () => false,
+  });
+  await assert.rejects(
+    run,
+    (error) =>
+      error.code === CAMPAIGN_PAUSED_ERROR && error.reason === "WOZTELL_CONFIGURATION_UNAVAILABLE",
+  );
+  assert.deepEqual(sends, []);
+  assert.deepEqual(pauses, [["campaign", "WOZTELL_CONFIGURATION_UNAVAILABLE", null, JOB]]);
+});
+
+test("a pause that could not apply keeps the original stop code", async () => {
+  const notPaused = async () => ({ paused: false, remaining: 0 });
+  const disabled = runCampaign([recipient("a")], async () => ({ ok: true }), {
+    isEnabled: () => false,
+    pauseCampaign: notPaused,
+  });
+  // Still retryable in the handler for the rare case the campaign was already cancelled.
+  await assert.rejects(disabled.run, (error) => error.code === "WOZTELL_CONFIGURATION_UNAVAILABLE");
+  const auth = runCampaign([recipient("a")], async () => ({ ok: false, status: 403 }), {
+    pauseCampaign: notPaused,
+  });
+  await assert.rejects(auth.run, (error) => error.code === "WOZTELL_AUTH_REJECTED");
+});

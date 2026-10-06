@@ -13,6 +13,7 @@ import {
   verifyWoztellSignature,
 } from "./woztell.server.ts";
 import { deliverWoztellCampaign } from "./campaign-delivery.server.ts";
+import { classifyCampaignSendResult } from "./campaign-send-outcome.ts";
 
 const root = process.cwd();
 
@@ -765,4 +766,59 @@ test("a DB-selected conversation channel cannot be sent through a different conf
     process.env.WOZTELL_BOT_ACCESS_TOKEN = previous.token;
     process.env.WOZTELL_CHANNEL_ID = previous.channel;
   }
+});
+
+// FX-10b Task 2 (controller ruling I1): a provider answer whose body could not
+// be read or parsed proves nothing about whether WOZTELL sent the message --
+// a gateway HTML page or a truncated JSON body can sit in front of an accepted
+// send. It is flagged so campaign delivery files it as unknown, never as a
+// retry-safe refusal, whatever the HTTP status.
+async function captureRawSend(status, text) {
+  const originalFetch = globalThis.fetch;
+  const previous = {
+    enabled: process.env.WOZTELL_ENABLED,
+    token: process.env.WOZTELL_BOT_ACCESS_TOKEN,
+    channel: process.env.WOZTELL_CHANNEL_ID,
+  };
+  globalThis.fetch = async () => new Response(text, { status });
+  process.env.WOZTELL_ENABLED = "true";
+  process.env.WOZTELL_BOT_ACCESS_TOKEN = "test-token";
+  process.env.WOZTELL_CHANNEL_ID = "test-channel";
+  try {
+    return await sendWoztellResponse({ memberId: "m1", response: [{ type: "TEXT", text: "hi" }] });
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.WOZTELL_ENABLED = previous.enabled;
+    process.env.WOZTELL_BOT_ACCESS_TOKEN = previous.token;
+    process.env.WOZTELL_CHANNEL_ID = previous.channel;
+  }
+}
+
+for (const status of [400, 429, 500]) {
+  for (const [label, text] of [
+    ["a gateway HTML page", "<html><body>502 Bad Gateway</body></html>"],
+    ["truncated JSON", '{"ok":0,"err":"User is'],
+    ["an empty body", ""],
+  ]) {
+    test(`a ${status} with ${label} is flagged unreadable and classified unknown`, async () => {
+      const result = await captureRawSend(status, text);
+      assert.equal(result.ok, false);
+      assert.equal(result.status, status);
+      assert.equal(result.bodyUnreadable, true);
+      assert.notEqual(result.refused, true);
+      assert.deepEqual(classifyCampaignSendResult(result), {
+        kind: "unknown",
+        code: "WOZTELL_DELIVERY_UNKNOWN",
+      });
+    });
+  }
+}
+
+test("a parsed ok:0 refusal at 400 is not flagged unreadable and stays retry-safe", async () => {
+  const result = await captureSend(400, { ok: 0, err: "Parameter(s) is missing" });
+  assert.notEqual(result.bodyUnreadable, true);
+  assert.deepEqual(classifyCampaignSendResult(result), {
+    kind: "failed",
+    code: "WOZTELL_PROVIDER_REJECTED",
+  });
 });

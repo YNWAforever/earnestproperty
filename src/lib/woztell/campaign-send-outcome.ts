@@ -51,6 +51,7 @@ export function classifyCampaignSendResult(result: {
   refused?: boolean;
   error?: string;
   providerResult?: { possibleAccepted?: boolean };
+  bodyUnreadable?: boolean;
 }): CampaignSendOutcome {
   // 1. WOZTELL confirmed the send.
   if (result.ok) return { kind: "sent" };
@@ -59,6 +60,11 @@ export function classifyCampaignSendResult(result: {
   if (result.status === undefined) {
     return { kind: "stop", reason: "WOZTELL_CONFIGURATION_UNAVAILABLE", providerStatus: null };
   }
+  // 2b. The provider answered, but its body could not be read or parsed (a
+  //     gateway HTML page, empty or truncated JSON). Nothing in it proves the
+  //     message was refused, so it is never retry-safe -- whatever the status,
+  //     4xx and 429 included (FX-10b controller ruling I1).
+  if (result.bodyUnreadable === true) return UNKNOWN;
   // 3. Any sign the provider may have accepted the message (Fact 15).
   if (result.providerResult?.possibleAccepted === true) return UNKNOWN;
   // 4. Credentials rejected: every later recipient would fail the same way.

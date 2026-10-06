@@ -1,7 +1,13 @@
 import "@tanstack/react-start/server-only";
 import { campaignRecipientPrimarySql, marketingIdentitySafeSql } from "../neon/phone-identity.ts";
 
-import { classifyCampaignSendResult } from "./campaign-send-outcome.ts";
+import { CAMPAIGN_PAUSED_ERROR } from "../neon/campaign-retry.ts";
+import {
+  CAMPAIGN_UNKNOWN_STREAK_LIMIT,
+  classifyCampaignSendResult,
+  nextUnknownStreak,
+  type CampaignStopReason,
+} from "./campaign-send-outcome.ts";
 import { isBlastRecipientAllowed, sendWoztellResponse, woztellEnabled } from "./woztell.server.ts";
 
 type CampaignRecipient = {
@@ -31,6 +37,7 @@ type CampaignDeliveryDependencies = {
   updateRecipient?: typeof updateCampaignRecipient;
   refreshStatus?: typeof refreshCampaignDeliveryStatus;
   sendResponse?: typeof sendWoztellResponse;
+  pauseCampaign?: typeof pauseCampaignDelivery;
 };
 
 function deliveryError(code: string, message: string) {
@@ -85,8 +92,11 @@ export async function beginCampaignDispatch(
         SET dispatch_started_at = CASE WHEN e.allowed THEN clock_timestamp() ELSE NULL END,
             dispatch_job_id = CASE WHEN e.allowed THEN $3::uuid END, dispatch_worker_id = CASE WHEN e.allowed THEN $4 END,
             dispatch_attempt = CASE WHEN e.allowed THEN e.attempt_count END,
-            status = CASE WHEN e.allowed THEN 'sending' WHEN e.campaign_status = 'cancelled' THEN 'cancelled' ELSE 'blocked' END,
-            error = CASE WHEN e.allowed THEN NULL ELSE 'WOZTELL_DISPATCH_INELIGIBLE' END
+            status = CASE WHEN e.allowed THEN 'sending' WHEN e.campaign_status = 'cancelled' THEN 'cancelled'
+              WHEN e.campaign_status = 'review' THEN 'queued' ELSE 'blocked' END,
+            error = CASE WHEN e.allowed THEN NULL
+              WHEN e.campaign_status = 'review' THEN '${CAMPAIGN_PAUSED_ERROR}'
+              ELSE 'WOZTELL_DISPATCH_INELIGIBLE' END
         FROM eligible e WHERE r.id = e.id AND r.status = 'sending' AND r.dispatch_started_at IS NULL
         RETURNING r.id, r.dispatch_started_at
       ), audited AS (
@@ -179,12 +189,14 @@ async function updateCampaignRecipient(
     `UPDATE whatsapp_campaign_recipients
      SET status = $1,
          sent_at = CASE WHEN $1 = 'sent' THEN now() ELSE sent_at END,
-         dispatch_started_at = CASE WHEN $2 IN ('WOZTELL_PROVIDER_REJECTED', 'WOZTELL_CONFIGURATION_UNAVAILABLE')
+         dispatch_started_at = CASE
+           WHEN $2 IN ('WOZTELL_PROVIDER_REJECTED', 'WOZTELL_CONFIGURATION_UNAVAILABLE', 'WOZTELL_AUTH_REJECTED')
            THEN NULL ELSE dispatch_started_at END,
          error = $2
      WHERE id = $3::uuid AND status = 'sending'
        AND claim_job_id = $4::uuid AND claim_worker_id = $5 AND claim_attempt = $6
-       AND ($1 <> 'queued' OR dispatch_started_at IS NULL OR $2 = 'WOZTELL_CONFIGURATION_UNAVAILABLE')`,
+       AND ($1 <> 'queued' OR dispatch_started_at IS NULL
+         OR $2 IN ('WOZTELL_CONFIGURATION_UNAVAILABLE', 'WOZTELL_AUTH_REJECTED'))`,
     [
       status,
       errorCode,
@@ -236,10 +248,73 @@ async function refreshCampaignDeliveryStatus(campaignId: string) {
   );
 }
 
+/**
+ * Pauses a campaign back to review (待審核) after a systemic stop, keeping every
+ * unsent recipient queued and marked WOZTELL_CAMPAIGN_PAUSED. Only the live
+ * owner of the delivery job may pause: a stale worker gets {paused:false}.
+ *
+ * Rows already reserved for dispatch (`sending` with dispatch_started_at set)
+ * are left alone, so an in-flight result is still recorded exactly once. The
+ * audit carries no phone, member id or provider text.
+ */
+export async function pauseCampaignDelivery(
+  campaignId: string,
+  reason: CampaignStopReason,
+  providerStatus: number | null,
+  job: { jobId: string; workerId: string; attempt: number },
+): Promise<{ paused: boolean; remaining: number }> {
+  const { transactionRows } = await import("../neon/db.server.ts");
+  const results = await transactionRows([
+    {
+      statement: "SELECT id FROM whatsapp_campaigns WHERE id=$1::uuid FOR UPDATE",
+      params: [campaignId],
+    },
+    { statement: "SELECT id FROM ops_jobs WHERE id=$1::uuid FOR UPDATE", params: [job.jobId] },
+    {
+      statement: `WITH owner AS (
+          SELECT 1 FROM ops_jobs j WHERE j.id=$2::uuid AND j.status='running'
+            AND j.lease_owner=$3 AND j.attempt_count=$4 AND j.lease_expires_at>clock_timestamp()
+        ), paused AS (
+          UPDATE whatsapp_campaigns c SET status='review', updated_at=now()
+          WHERE c.id=$1::uuid AND c.status IN ('queued','sending') AND EXISTS (SELECT 1 FROM owner)
+          RETURNING c.id
+        ), remaining AS (
+          UPDATE whatsapp_campaign_recipients r SET status='queued', error='${CAMPAIGN_PAUSED_ERROR}'
+          WHERE r.campaign_id IN (SELECT id FROM paused)
+            AND (r.status='queued'
+              OR (r.status='sending' AND r.dispatch_started_at IS NULL AND r.claim_job_id=$2::uuid))
+          RETURNING r.id
+        ), audited AS (
+          INSERT INTO audit_logs(action,subject_type,subject_id,metadata)
+          SELECT 'campaign.paused','campaign',p.id, jsonb_build_object('reason',$5::text,
+            'providerStatus',$6::int,'jobId',$2::text,'attempt',$4::int,
+            'remaining',(SELECT count(*) FROM remaining))
+          FROM paused p RETURNING id
+        )
+        SELECT (SELECT count(*) FROM paused)::int AS paused,
+          (SELECT count(*) FROM remaining)::int AS remaining`,
+      params: [campaignId, job.jobId, job.workerId, job.attempt, reason, providerStatus],
+    },
+  ]);
+  const row = results[2]?.[0] as { paused?: number; remaining?: number } | undefined;
+  return { paused: Number(row?.paused ?? 0) > 0, remaining: Number(row?.remaining ?? 0) };
+}
+
+type RecipientDelivery =
+  | {
+      result: "sent" | "blocked" | "failed";
+      streak: "sent" | "failed" | "unknown" | "thrown" | null;
+    }
+  | {
+      result: "stop";
+      reason: Exclude<CampaignStopReason, "WOZTELL_PROVIDER_UNSTABLE">;
+      providerStatus: number | null;
+    };
+
 async function deliverCampaignRecipient(
   recipient: CampaignRecipient,
   dependencies: Required<Omit<CampaignDeliveryDependencies, "job">>,
-) {
+): Promise<RecipientDelivery> {
   if (
     !isBlastRecipientAllowed({
       optedIn: recipient.opt_in_whatsapp === true,
@@ -247,13 +322,13 @@ async function deliverCampaignRecipient(
     })
   ) {
     await dependencies.updateRecipient(recipient.id, "blocked", "WOZTELL_RECIPIENT_NOT_OPTED_IN");
-    return "blocked" as const;
+    return { result: "blocked", streak: null };
   }
 
   const memberId = recipient.whatsapp_member_id ?? recipient.normalized_phone;
   if (!memberId) {
     await dependencies.updateRecipient(recipient.id, "failed", "WOZTELL_RECIPIENT_MISSING");
-    return "failed" as const;
+    return { result: "failed", streak: null };
   }
 
   let result: Awaited<ReturnType<typeof sendWoztellResponse>>;
@@ -275,7 +350,7 @@ async function deliverCampaignRecipient(
     // A thrown send (timeout, network error after the request left) may have
     // been accepted, so it is never classified as retry-safe.
     await dependencies.updateRecipient(recipient.id, "failed", "WOZTELL_DELIVERY_UNKNOWN");
-    return "failed" as const;
+    return { result: "failed", streak: "thrown" };
   }
 
   // WOZTELL_DELIVERY_UNKNOWN is TERMINAL: materializeCampaignRecipients refuses
@@ -286,20 +361,24 @@ async function deliverCampaignRecipient(
   switch (outcome.kind) {
     case "sent":
       await dependencies.updateRecipient(recipient.id, "sent", null);
-      return "sent" as const;
+      return { result: "sent", streak: "sent" };
     case "failed":
     case "unknown":
       await dependencies.updateRecipient(recipient.id, "failed", outcome.code);
-      return "failed" as const;
+      return { result: "failed", streak: outcome.kind };
     case "stop":
+      // Provably not sent (no HTTP exchange, or an auth/channel refusal), so the
+      // reservation is released and the recipient goes back to the queue.
       await dependencies.updateRecipient(recipient.id, "queued", outcome.reason);
-      if (outcome.reason === "WOZTELL_CONFIGURATION_UNAVAILABLE") {
-        throw deliveryError(outcome.reason, "WozTell configuration is unavailable.");
-      }
-      // Interim (FX-10b Task 1): Task 2 replaces this throw with a campaign pause.
-      throw deliveryError(outcome.reason, "WozTell rejected the credentials or channel.");
+      return { result: "stop", reason: outcome.reason, providerStatus: outcome.providerStatus };
   }
 }
+
+const STOP_MESSAGES: Record<CampaignStopReason, string> = {
+  WOZTELL_CONFIGURATION_UNAVAILABLE: "WozTell configuration is unavailable.",
+  WOZTELL_AUTH_REJECTED: "WozTell rejected the credentials or channel.",
+  WOZTELL_PROVIDER_UNSTABLE: "WozTell returned too many unconfirmed results in a row.",
+};
 
 export async function deliverWoztellCampaign(
   campaignId: string,
@@ -319,9 +398,24 @@ export async function deliverWoztellCampaign(
       ((id, status, code) => updateCampaignRecipient(id, status, code, overrides.job)),
     refreshStatus: overrides.refreshStatus ?? refreshCampaignDeliveryStatus,
     sendResponse: overrides.sendResponse ?? sendWoztellResponse,
+    pauseCampaign: overrides.pauseCampaign ?? pauseCampaignDelivery,
+  };
+  // Pauses the campaign to review and returns the error the job must fail
+  // with. Without a job lease, or when the pause could not apply (the lease was
+  // lost, or the campaign was cancelled meanwhile), the original stop code is
+  // kept so the handler treats it exactly as before.
+  const stopRun = async (reason: CampaignStopReason, providerStatus: number | null) => {
+    const { paused } = overrides.job
+      ? await dependencies.pauseCampaign(campaignId, reason, providerStatus, overrides.job)
+      : { paused: false };
+    if (!paused) return deliveryError(reason, STOP_MESSAGES[reason]);
+    return Object.assign(
+      deliveryError(CAMPAIGN_PAUSED_ERROR, "WozTell campaign paused for review."),
+      { reason, providerStatus },
+    );
   };
   if (!dependencies.isEnabled()) {
-    throw deliveryError("WOZTELL_CONFIGURATION_UNAVAILABLE", "WozTell delivery is disabled.");
+    throw await stopRun("WOZTELL_CONFIGURATION_UNAVAILABLE", null);
   }
   const summary: WoztellCampaignDeliverySummary = {
     sent: 0,
@@ -330,6 +424,7 @@ export async function deliverWoztellCampaign(
     checked: 0,
   };
   let exhausted = true;
+  let unknownStreak = 0;
 
   try {
     for (let batch = 0; batch < 100; batch += 1) {
@@ -360,7 +455,15 @@ export async function deliverWoztellCampaign(
           );
           throw error;
         }
-        let outcome: Awaited<ReturnType<typeof deliverCampaignRecipient>>;
+        const requeueRest = () =>
+          Promise.all(
+            recipients
+              .slice(index + 1)
+              .map((pending) =>
+                dependencies.updateRecipient(pending.id, "queued", "JOB_DELIVERY_INTERRUPTED"),
+              ),
+          );
+        let outcome: RecipientDelivery;
         try {
           const current = await dependencies.beginDispatch(campaignId, recipient.id);
           if (!current) {
@@ -370,17 +473,24 @@ export async function deliverWoztellCampaign(
           }
           outcome = await deliverCampaignRecipient(current, dependencies);
         } catch (error) {
-          await Promise.all(
-            recipients
-              .slice(index + 1)
-              .map((pending) =>
-                dependencies.updateRecipient(pending.id, "queued", "JOB_DELIVERY_INTERRUPTED"),
-              ),
-          );
+          await requeueRest();
           throw error;
         }
-        summary[outcome] += 1;
+        if (outcome.result === "stop") {
+          // Auth or configuration refused: every later send would fail the same
+          // way. Hand the rest back to the queue first, then pause.
+          await requeueRest();
+          throw await stopRun(outcome.reason, outcome.providerStatus);
+        }
+        summary[outcome.result] += 1;
         summary.checked += 1;
+        if (outcome.streak) unknownStreak = nextUnknownStreak(unknownStreak, outcome.streak);
+        if (unknownStreak >= CAMPAIGN_UNKNOWN_STREAK_LIMIT) {
+          // Provider-outage breaker: stop spending recipients on answers that can
+          // never be retried. The rest go back to the queue first, then pause.
+          await requeueRest();
+          throw await stopRun("WOZTELL_PROVIDER_UNSTABLE", null);
+        }
       }
     }
     if (exhausted) {
