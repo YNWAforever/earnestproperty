@@ -2,7 +2,8 @@ import { test, expect } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { AdminConversationDetail } from "@/lib/neon/admin-data.types";
-import { OptOutEvidenceNotice, nearMissConsentPreset } from "./OptOutEvidenceNotice";
+import { OptOutEvidenceNotice } from "./OptOutEvidenceNotice";
+import { nearMissConsentPreset } from "./safety-copy";
 
 const MIN = 60 * 1000;
 const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
@@ -43,6 +44,34 @@ test("shows the quoted message and time for a customer opt-out, with no clear bu
   expect(html).toContain("客戶於");
   expect(html).toContain("傳送「退訂」，系統已停止範本、推廣及問卷。");
   expect(html).not.toContain("清除誤判");
+});
+
+test("a customer opt-out with no saved text never shows an empty quote", () => {
+  for (const text of [null, undefined, "", "   "]) {
+    const html = render(
+      detail({
+        opted_out_whatsapp: true,
+        opted_out_at: iso(-60 * MIN),
+        opted_out_text: text as string | null,
+        opted_out_source: "customer_message",
+      }),
+    );
+    expect(html).toContain("已退訂推廣");
+    expect(html).not.toContain("「」");
+    expect(html).not.toContain("「   」");
+    expect(html).toContain("未有保存原文");
+    expect(html).toContain("系統已停止範本、推廣及問卷。");
+  }
+  const noTime = render(
+    detail({
+      opted_out_whatsapp: true,
+      opted_out_at: null,
+      opted_out_text: null,
+      opted_out_source: "customer_message",
+    }),
+  );
+  expect(noTime).not.toContain("「」");
+  expect(noTime).toContain("未有保存原文");
 });
 
 test("shows 清除誤判 only to managers on legacy rows", () => {

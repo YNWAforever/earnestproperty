@@ -79,7 +79,7 @@
     "test:cms:db": "node scripts/test-cms-db.mjs",
     "test:woztell:db": "node --test src/lib/woztell/outbound-intent.db.test.mjs",
     "test:woztell:owned:db": "node --experimental-test-module-mocks --test --test-concurrency=1 src/lib/woztell/opt-out.owned.db.test.mjs src/lib/woztell/outbound-intent.owned.db.test.mjs",
-    "test:whatsapp-safety:ui": "bun test --no-env-file src/components/admin/whatsapp/OptOutEvidenceNotice.test.tsx src/components/admin/whatsapp/ResolveUnknownOutboundDialog.test.tsx",
+    "test:whatsapp-safety:ui": "bun test --no-env-file src/components/admin/whatsapp/OptOutEvidenceNotice.test.tsx src/components/admin/whatsapp/ResolveUnknownOutboundDialog.test.tsx src/components/admin/whatsapp/safety-copy.test.ts",
     "test:crm:db": "node --test src/lib/neon/website-inquiry.db.test.mjs src/lib/neon/whatsapp-leads.db.test.mjs",
     "test:admin:paging:db": "node scripts/test-admin-pagination-db.mjs",
     "test:public-performance:db": "node --test src/lib/neon/public-performance.db.test.mjs src/lib/neon/property-identity.db.test.mjs src/lib/neon/estate-links.db.test.mjs",

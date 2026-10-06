@@ -29,6 +29,10 @@ import { AdminStatusSelect } from "@/components/admin/AdminStatusSelect";
 import { AdminToolbar } from "@/components/admin/AdminToolbar";
 import { OptOutEvidenceNotice } from "@/components/admin/whatsapp/OptOutEvidenceNotice";
 import { ResolveUnknownOutboundDialog } from "@/components/admin/whatsapp/ResolveUnknownOutboundDialog";
+import {
+  MANAGER_RESOLVED_READBACK_NOTICE,
+  outboundReadbackOutcome,
+} from "@/components/admin/whatsapp/safety-copy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -924,11 +928,11 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
         if (result.intent?.id !== saved.requestId || result.intent.kind !== kind)
           throw new Error("傳送要求資料未能核對，請聯絡支援。");
-        const state = result.intent.state;
-        if (!["queued", "accepted", "failed", "cancelled"].includes(state))
+        const outcome = outboundReadbackOutcome(result.intent.state);
+        if (outcome === "pending")
           throw new Error("傳送結果仍未確認，請稍後核對或聯絡支援。沒有重送要求。");
         clearOutboundRequestId(actorId, targetId, kind);
-        if (kind === "text" && ["queued", "accepted"].includes(state)) {
+        if (kind === "text" && outcome === "sent_or_queued") {
           setReplyDrafts((current) =>
             current[targetId]?.trim() === saved.original[0]
               ? { ...current, [targetId]: "" }
@@ -936,9 +940,11 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
           );
         }
         toast.success(
-          ["queued", "accepted"].includes(state)
+          outcome === "sent_or_queued"
             ? outboundResultNotice(result, "傳送要求")
-            : "已核對傳送要求未完成；沒有重送。如需再傳，請重新確認內容。",
+            : outcome === "manager_resolved"
+              ? MANAGER_RESOLVED_READBACK_NOTICE
+              : "已核對傳送要求未完成；沒有重送。如需再傳，請重新確認內容。",
         );
       }
       if (blocked)

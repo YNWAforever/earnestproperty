@@ -7,6 +7,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { resolveAdminUnknownOutbound } from "@/lib/neon/admin-data";
 import type { AdminConversationDetail } from "@/lib/neon/admin-data.types";
+import { resolveUnknownSuccessNotice } from "./safety-copy";
 import { formatSafetyTime } from "./safety-time";
 
 type Outcome = "resolved_sent" | "resolved_not_sent";
@@ -142,7 +143,7 @@ export function ResolveUnknownOutboundDialog({
     setBusy(true);
     setError(null);
     try {
-      await resolveAdminUnknownOutbound({
+      const result = await resolveAdminUnknownOutbound({
         data: {
           intentId: intent.id,
           conversationId: detail.id,
@@ -150,7 +151,7 @@ export function ResolveUnknownOutboundDialog({
           reason: reason.trim(),
         },
       });
-      toast.success("已記錄核對結果，對話已解鎖。系統沒有重新傳送；如需再發，請自行輸入新訊息。");
+      toast.success(resolveUnknownSuccessNotice(result.lockReleased));
       setOpen(false);
       setOutcome(null);
       setReason("");

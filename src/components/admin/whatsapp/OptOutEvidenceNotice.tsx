@@ -2,10 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
-import {
-  WhatsappConsentDialog,
-  type WhatsappConsentPreset,
-} from "@/components/admin/WhatsappConsentDialog";
+import { WhatsappConsentDialog } from "@/components/admin/WhatsappConsentDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,16 +17,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { clearAccidentalWhatsappOptOut, dismissOptOutNearMiss } from "@/lib/neon/admin-data";
 import type { AdminConversationDetail } from "@/lib/neon/admin-data.types";
 import { optOutReplyState } from "@/lib/neon/admin-workflow";
+import { nearMissConsentPreset } from "./safety-copy";
 import { formatSafetyTime } from "./safety-time";
-
-/** The consent dialog preset for a near-miss confirmation: one click on 確認並儲存 saves. */
-export function nearMissConsentPreset(messageId: string): WhatsappConsentPreset {
-  return {
-    optedIn: false,
-    evidenceSource: "customer_opt_out",
-    evidenceRef: "near-miss:" + messageId,
-  };
-}
 
 function statusOf(error: unknown) {
   return error instanceof Error ? error.message : "";
@@ -48,7 +37,11 @@ function clearErrorText(error: unknown) {
 function evidenceLine(detail: AdminConversationDetail) {
   const at = formatSafetyTime(detail.opted_out_at);
   if (detail.opted_out_source === "customer_message") {
-    return `客戶於 ${at ?? "較早前"} 傳送「${detail.opted_out_text ?? ""}」，系統已停止範本、推廣及問卷。`;
+    const text = detail.opted_out_text;
+    // No saved text (should not happen for a customer message): legacy-style wording, never 「」.
+    if (!text?.trim())
+      return `客戶於 ${at ?? "較早前"} 要求退訂（未有保存原文），系統已停止範本、推廣及問卷。`;
+    return `客戶於 ${at ?? "較早前"} 傳送「${text}」，系統已停止範本、推廣及問卷。`;
   }
   if (detail.opted_out_source === "staff_recorded") {
     return `同事於 ${at ?? "較早前"} 記錄客戶拒收推廣。`;
