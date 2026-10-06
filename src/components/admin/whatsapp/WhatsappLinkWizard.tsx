@@ -43,7 +43,6 @@ export function WhatsappLinkWizard({
   agents,
   actorScope,
   onCreated,
-  enableBatchImport = true,
   seedScope,
   onSeedConsumed,
   isWorkspaceCurrent,
@@ -52,7 +51,6 @@ export function WhatsappLinkWizard({
   agents: Staff[];
   actorScope: string;
   onCreated: () => void;
-  enableBatchImport?: boolean;
   seedScope?: string;
   onSeedConsumed?: () => void;
   isWorkspaceCurrent?: () => boolean;
@@ -619,23 +617,21 @@ export function WhatsappLinkWizard({
               公司一般查詢
             </label>
           </fieldset>
-          {enableBatchImport ? (
-            <WhatsappBatchImport
-              disabled={busy || !canReplace}
-              onImported={(result) => {
-                setImportedRows(result.rows);
-                setSelected(result.offers);
-                setMode("sales");
-                setRouting("reception");
-                setVerified(false);
-                setProgress(null);
-                sessionStorage.removeItem(linkBatchProgressKey(actorScope));
-                setIncomingPending(false);
-                onSeedConsumed?.();
-                setStep(2);
-              }}
-            />
-          ) : null}
+          <WhatsappBatchImport
+            disabled={busy || !canReplace}
+            onImported={(result) => {
+              setImportedRows(result.rows);
+              setSelected(result.offers);
+              setMode("sales");
+              setRouting("reception");
+              setVerified(false);
+              setProgress(null);
+              sessionStorage.removeItem(linkBatchProgressKey(actorScope));
+              setIncomingPending(false);
+              onSeedConsumed?.();
+              setStep(2);
+            }}
+          />
           {mode === "sales" ? (
             <>
               <form

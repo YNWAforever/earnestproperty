@@ -92,23 +92,22 @@ const id = (n: number) => `80000000-0000-4000-8000-${String(n).padStart(12, "0")
 const metric = (page: Page, label: string) =>
   page.getByRole("heading", { name: label, exact: true }).locator("..").locator("..");
 const records = (page: Page) => page.getByRole("region", { name: "對應記錄", exact: true });
-async function open(page: Page, enabled = true, ready = true, extra = "") {
+async function open(page: Page, ready = true, extra = "") {
   await page.route("**/*", (route) =>
     new URL(route.request().url()).origin === origin &&
     ["GET", "HEAD"].includes(route.request().method())
       ? route.continue()
       : route.abort(),
   );
-  await page.addInitScript((enabled) => {
+  await page.addInitScript(() => {
     sessionStorage.setItem("no-link-fixture-actor", "manager");
     sessionStorage.setItem("performance-readback-actor", "actor-a");
-    sessionStorage.setItem("analytics-fixture-enabled", String(enabled));
-  }, enabled);
+  });
   await page.goto(
     origin + "/admin/analytics?start=2026-09-30&end=2026-09-30&cohortWindowDays=90" + extra,
   );
   await expect(page.getByRole("heading", { name: "營運及轉換統計", exact: true })).toBeVisible();
-  if (enabled && ready) await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("4");
+  if (ready) await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("4");
 }
 async function drill(page: Page, label = "有效查詢") {
   await metric(page, label).getByRole("button", { name: "可查看記錄", exact: true }).click();
@@ -1286,7 +1285,7 @@ for (const width of [1440, 1280, 768, 390])
     });
     test("late old-actor report cannot restore old company metrics", async ({ page }) => {
       await page.addInitScript(() => sessionStorage.setItem("performance-delayed-initial", "true"));
-      await open(page, true, false);
+      await open(page, false);
       await expect
         .poll(() => page.evaluate(() => window.performanceReadbackFixture.pending.length))
         .toBe(1);
@@ -1351,7 +1350,7 @@ for (const width of [1440, 1280, 768, 390])
       await expect(metric(page, "有效查詢").locator("p").first()).toHaveText("4");
     });
     test("invalid URL filters block report reads until explicit reset", async ({ page }) => {
-      await open(page, true, false, "&branchId=invalid-scope");
+      await open(page, false, "&branchId=invalid-scope");
       await expect(
         page.getByRole("alert").filter({ hasText: "網址中的績效篩選無效" }),
       ).toBeVisible();
@@ -1518,24 +1517,5 @@ for (const width of [1440, 1280, 768, 390])
       expect(csv.replace(/^\uFEFF/, "").split(/\r?\n/)).toHaveLength(2);
       expect(csv).toContain(id(2));
       expect(csv).not.toContain(id(1));
-    });
-    test("disabled flag explains unavailable report and makes no performance reads", async ({
-      page,
-    }) => {
-      await open(page, false);
-      await expect(
-        page.getByRole("heading", { name: "銷售及代理績效暫未啟用", exact: true }),
-      ).toBeVisible();
-      expect(
-        await page.evaluate(
-          () =>
-            window.performanceReadbackFixture.calls.filter((c) =>
-              ["report", "options", "records"].includes(c.name),
-            ).length,
-        ),
-      ).toBe(0);
-      await expect(
-        page.getByRole("heading", { name: "期間建立的查詢及跟進", exact: true }),
-      ).toBeVisible();
     });
   });
