@@ -699,6 +699,42 @@ for (const width of [1440, 1280, 768, 390]) {
       "resolveImport",
     ]);
   });
+  test(`denied offer search shows the zh-HK permission message and no false results ${width}`, async ({
+    page,
+  }) => {
+    await setup(page, width);
+    await page.evaluate(() => {
+      window.ownedLinkBulk.searchDenied = true;
+    });
+    await page.getByLabel("搜尋公開樓編或物業").fill("A0000");
+    await page
+      .getByLabel("建立 WhatsApp 連結")
+      .getByRole("button", { name: "搜尋", exact: true })
+      .click();
+    await expect(page.getByRole("alert")).toContainText("你沒有權限進行此操作。");
+    await expect(page.getByText("合成中文樓盤 1", { exact: false })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "建立 WhatsApp 連結" })).toBeVisible();
+    await page.screenshot({
+      path: `.audit/remediation-20261003/fx10a-denied-search-${width}.png`,
+      fullPage: true,
+    });
+    if (width === 390) {
+      await page.setViewportSize({ width: 375, height: 900 });
+      await page.screenshot({
+        path: ".audit/remediation-20261003/fx10a-denied-search-375.png",
+        fullPage: true,
+      });
+    }
+    await page.evaluate(() => {
+      window.ownedLinkBulk.searchDenied = false;
+    });
+    await page
+      .getByLabel("建立 WhatsApp 連結")
+      .getByRole("button", { name: "搜尋", exact: true })
+      .click();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(page.getByText("合成中文樓盤 1", { exact: false }).first()).toBeVisible();
+  });
   test(`atomic rejected fifty-row chunk exports failures without invented successful links ${width}`, async ({
     page,
   }) => {
