@@ -1,8 +1,7 @@
-import { dispatchWorkspaceRequest } from "../admin/workspace-request";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 const contextServer = createServerFn({ method: "GET" })
   .inputValidator(z.object({ conversationId: z.string().uuid() }))
   .handler(async ({ data }) => {
@@ -48,7 +47,7 @@ const contextServer = createServerFn({ method: "GET" })
     }
   });
 export async function getWhatsappAssignment(data: { conversationId: string }) {
-  return contextServer(await withStaffAuthHeaders({ data }));
+  return callStaffServerFn(contextServer, { data });
 }
 const settingsServer = createServerFn({ method: "GET" }).handler(async () => {
   const { requireStaffAccess } = await import("./auth.server");
@@ -56,7 +55,7 @@ const settingsServer = createServerFn({ method: "GET" }).handler(async () => {
   return (await import("../whatsapp-enquiries/assignment.server")).listStaffChannels(actor);
 });
 export async function getWhatsappStaffChannels() {
-  return settingsServer(await withStaffAuthHeaders({}));
+  return callStaffServerFn(settingsServer, {});
 }
 const saveServer = createServerFn({ method: "POST" })
   .inputValidator(
@@ -77,7 +76,7 @@ const saveServer = createServerFn({ method: "POST" })
     return (await import("../whatsapp-enquiries/assignment.server")).saveStaffChannel(data, actor);
   });
 export async function saveWhatsappStaffChannel(data: Parameters<typeof saveServer>[0]["data"]) {
-  return saveServer(await withStaffAuthHeaders({ data }));
+  return callStaffServerFn(saveServer, { data });
 }
 const queueServer = createServerFn({ method: "GET" }).handler(async () => {
   const { requireStaffAccess } = await import("./auth.server");
@@ -87,7 +86,7 @@ const queueServer = createServerFn({ method: "GET" }).handler(async () => {
   return api.readEnquiryQueue(actor);
 });
 export async function getWhatsappEnquiryQueue() {
-  return queueServer(await withStaffAuthHeaders({}));
+  return callStaffServerFn(queueServer, {});
 }
 const reviewedSaveServer = createServerFn({ method: "POST" })
   .inputValidator(
@@ -109,11 +108,7 @@ export async function saveReviewedWhatsappStaffChannel(
   data: Parameters<typeof reviewedSaveServer>[0]["data"],
   isWorkspaceCurrent?: () => boolean,
 ) {
-  return dispatchWorkspaceRequest(
-    () => withStaffAuthHeaders({ data }),
-    (prepared) => reviewedSaveServer(prepared),
-    isWorkspaceCurrent,
-  );
+  return callStaffServerFn(reviewedSaveServer, { data }, isWorkspaceCurrent);
 }
 const retireChannelServer = createServerFn({ method: "POST" })
   .inputValidator(
@@ -134,9 +129,5 @@ export async function retireWhatsappStaffChannel(
   data: Parameters<typeof retireChannelServer>[0]["data"],
   isWorkspaceCurrent?: () => boolean,
 ) {
-  return dispatchWorkspaceRequest(
-    () => withStaffAuthHeaders({ data }),
-    (prepared) => retireChannelServer(prepared),
-    isWorkspaceCurrent,
-  );
+  return callStaffServerFn(retireChannelServer, { data }, isWorkspaceCurrent);
 }

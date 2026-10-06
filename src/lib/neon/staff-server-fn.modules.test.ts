@@ -91,6 +91,66 @@ const table: [string, Call, unknown[]][] = [
   ],
 ];
 
+const staffModules = {
+  "staff-endpoints": await load("./staff-endpoints"),
+  "staff-notifications": await load("./staff-notifications"),
+  "staff-reference-admin": await load("./staff-reference-admin"),
+  "whatsapp-assignment": await load("./whatsapp-assignment"),
+  "whatsapp-readiness": await load("./whatsapp-readiness"),
+  "whatsapp-service-health": await load("./whatsapp-service-health"),
+  "whatsapp-service-policy": await load("./whatsapp-service-policy"),
+  "whatsapp-test-notification": await load("./whatsapp-test-notification"),
+  "inbox-directory": await load("./inbox-directory"),
+  "forwarded-enquiries": await load("./forwarded-enquiries"),
+  "enquiry-resolution": await load("./enquiry-resolution"),
+};
+const staffCalls: [keyof typeof staffModules, string, unknown[]][] = [
+  ["staff-endpoints", "fetchStaffEndpoints", []],
+  ["staff-endpoints", "updateStaffEndpoint", [{ staffId: uuid }]],
+  ["staff-endpoints", "fetchStaffNotificationHealth", []],
+  ["staff-endpoints", "fetchStaffAttention", []],
+  ["staff-endpoints", "turnOffStaffEndpoint", [{ id: uuid, expectedVersion: 1 }]],
+  ["staff-endpoints", "fetchStaffEventReview", []],
+  ["staff-notifications", "fetchMyStaffNotifications", [{}]],
+  ["staff-notifications", "confirmStaffNotification", [{ notificationId: uuid }]],
+  ["staff-notifications", "askStaffNotificationHelp", [{ notificationId: uuid, reason: "r" }]],
+  ["staff-reference-admin", "fetchStaffReferences", []],
+  ["staff-reference-admin", "createStaffReference", [{ staffId: uuid }]],
+  ["staff-reference-admin", "disableStaffReference", [{ id: uuid }]],
+  ["whatsapp-assignment", "getWhatsappAssignment", [{ conversationId: uuid }]],
+  ["whatsapp-assignment", "getWhatsappStaffChannels", []],
+  ["whatsapp-assignment", "saveWhatsappStaffChannel", [{ staffId: uuid }]],
+  ["whatsapp-assignment", "getWhatsappEnquiryQueue", []],
+  ["whatsapp-assignment", "saveReviewedWhatsappStaffChannel", [{ staffId: uuid }]],
+  ["whatsapp-assignment", "retireWhatsappStaffChannel", [{ mappingId: uuid }]],
+  ["whatsapp-readiness", "getWhatsappStaffReadiness", [{}]],
+  ["whatsapp-readiness", "getWhatsappRuntimeStatus", []],
+  ["whatsapp-service-health", "fetchWhatsappServiceHealth", []],
+  ["whatsapp-service-policy", "getWhatsappServicePolicies", []],
+  ["whatsapp-service-policy", "saveWhatsappServicePolicy", [{ rules: {} }]],
+  ["whatsapp-service-policy", "approveWhatsappServicePolicy", [{ id: uuid, version: 1 }]],
+  ["whatsapp-test-notification", "previewStaffTestNotification", [{ staffId: uuid }]],
+  ["whatsapp-test-notification", "enqueueStaffTestNotification", [{ staffId: uuid }]],
+  ["whatsapp-test-notification", "getStaffTestNotification", [uuid]],
+  ["whatsapp-test-notification", "confirmStaffTestReceipt", [{ attemptId: uuid }]],
+  ["whatsapp-test-notification", "findStaffTestNotificationByRequest", [uuid]],
+  ["inbox-directory", "getInboxCandidates", [{ query: "" }]],
+  ["inbox-directory", "getInboxFolders", []],
+  ["inbox-directory", "verifyInboxCandidate", [{ staffId: uuid }]],
+  ["inbox-directory", "saveNamedInboxFolder", [{ folderKey: "f" }]],
+  ["forwarded-enquiries", "saveForwardedEnquiry", [{ requestId: uuid }]],
+  ["forwarded-enquiries", "fetchForwardedEnquiry", [uuid]],
+  ["forwarded-enquiries", "fetchRelatedLeadConversations", [uuid]],
+  ["forwarded-enquiries", "saveLeadContact", [{ leadId: uuid }]],
+  ["enquiry-resolution", "correctWhatsappEnquiry", [{ inquiryId: uuid }]],
+  ["enquiry-resolution", "fetchWhatsappEnquiryDetail", [uuid]],
+];
+const staffTable: [string, Call, unknown[]][] = staffCalls.map(([mod, name, args]) => [
+  `${mod} ${name}`,
+  staffModules[mod][name],
+  args,
+]);
+
 let seen: StubOptions[] = [];
 beforeEach(() => {
   seen = [];
@@ -169,4 +229,46 @@ test("a denied chunk commit is not recorded as completed and the batch does not 
     expect(last?.completed).toEqual([]);
     expect(last?.uncertain).toBe(true);
   }
+});
+
+test("every staff, notification and enquiry wrapper rejects a resolved 401, 403 and 409 Response", async () => {
+  expect(staffTable).toHaveLength(39);
+  for (const [name, call, args] of staffTable) {
+    expect({ name, type: typeof call }).toEqual({ name, type: "function" });
+    for (const status of [401, 403, 409]) {
+      seen = [];
+      fixture.__fx10aStub = async (options) => {
+        seen.push(options);
+        return new Response("X", { status });
+      };
+      let error: unknown;
+      try {
+        await call(...args);
+      } catch (cause) {
+        error = cause;
+      }
+      expect({ name, status, rejected: error instanceof ServerFnResponseError }).toEqual({
+        name,
+        status,
+        rejected: true,
+      });
+      expect((error as ServerFnResponseError).status).toBe(status);
+      expect(seen).toHaveLength(1);
+      expect(seen[0].headers?.get("authorization")).toBe("Bearer fx10a");
+    }
+  }
+});
+
+test("every staff, notification and enquiry wrapper passes a genuine result through", async () => {
+  for (const [name, call, args] of staffTable) {
+    fixture.__fx10aStub = async () => ({ ok: true });
+    expect({ name, result: await call(...args) }).toEqual({ name, result: { ok: true } });
+  }
+});
+
+test('getWhatsappAssignment still returns the handler\'s own { kind: "error" } result', async () => {
+  const handled = { kind: "error", code: "forbidden", statusCode: 403, requestId: "r" };
+  fixture.__fx10aStub = async () => handled;
+  const call = staffModules["whatsapp-assignment"].getWhatsappAssignment;
+  expect(await call({ conversationId: uuid })).toEqual(handled);
 });

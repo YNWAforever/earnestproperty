@@ -25,8 +25,9 @@ const LEGACY_UNWRAPPED = [
 ];
 // Raw fetch to /api/admin/control-plane with its own status mapping.
 const FETCH_CLIENTS = ["src/lib/admin/operations/operations-client.ts"];
-// Task 3 empties this list; the contract then asserts it is empty.
-const PENDING_TASK_3 = [
+// Emptied by Task 3; a test below keeps it empty.
+const PENDING_TASK_3 = [];
+const MIGRATED = [
   "src/lib/neon/staff-endpoints.ts",
   "src/lib/neon/staff-notifications.ts",
   "src/lib/neon/staff-reference-admin.ts",
@@ -38,8 +39,6 @@ const PENDING_TASK_3 = [
   "src/lib/neon/inbox-directory.ts",
   "src/lib/neon/forwarded-enquiries.ts",
   "src/lib/neon/enquiry-resolution.ts",
-];
-const MIGRATED = [
   "src/lib/neon/whatsapp-link-management.ts",
   "src/lib/neon/whatsapp-link-selection.ts",
   "src/lib/neon/whatsapp-link-import.ts",
@@ -200,3 +199,5 @@ test("the pending list only names files that still need migrating", () => {
   const done = PENDING_TASK_3.filter((path) => !mentionsAuthHeaders(code(path)));
   assert.deepEqual(done, [], `remove migrated files from PENDING_TASK_3: ${done.join(", ")}`);
 });
+
+test("no module is still pending migration", () => assert.deepEqual(PENDING_TASK_3, []));
