@@ -12,14 +12,26 @@ import { queryRows } from "./db.server.ts";
 export type ClearAccidentalOptOutInput = {
   contactId: string;
   reason: string;
+  /** The opt-out version (optOutVersionSql) from the detail the manager saw; stale guard. */
   expectedOptedOutAt: string | null;
 };
+
+/**
+ * The opt-out version: opted_out_at as an exact microsecond UTC string (FX-05b pattern). A JS
+ * Date keeps only milliseconds, so the version is always produced and compared in SQL. Every
+ * reader that hands a version to the clear (Task 5 detail) must emit this same expression.
+ */
+export function optOutVersionSql(alias: string) {
+  if (!/^[a-z_][a-z0-9_]*$/.test(alias)) throw new Error("INVALID_SQL_ALIAS");
+  return `to_char(${alias}.opted_out_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+}
+const VERSION = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
 const schema = z
   .object({
     contactId: z.string().uuid(),
     reason: z.string().trim().min(5).max(500),
-    expectedOptedOutAt: z.string().datetime({ offset: true }).nullable(),
+    expectedOptedOutAt: z.string().regex(VERSION).nullable(),
   })
   .strict();
 
@@ -28,6 +40,7 @@ type ReadRow = {
   id: string | null;
   opted_out_whatsapp: boolean | null;
   opted_out_at: Date | string | null;
+  opted_out_version: string | null;
   opted_out_message_id: string | null;
   opted_out_text: string | null;
   opted_out_source: string | null;
@@ -38,22 +51,47 @@ type ReadRow = {
 const MANAGER_SQL = `EXISTS (SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id = s.id
         WHERE s.id = $2::uuid AND s.active = true AND r.role IN ('admin', 'manager'))`;
 
-function millis(value: Date | string | null) {
-  if (value === null) return null;
-  const time = (value instanceof Date ? value : new Date(value)).getTime();
-  return Number.isNaN(time) ? null : time;
-}
+export type OptOutEvidence = {
+  optedOut: boolean;
+  optedOutAt: string | null;
+  optedOutVersion: string | null;
+  optedOutMessageId: string | null;
+  optedOutText: string | null;
+  optedOutSource: string | null;
+  optedOutClearedAt: string | null;
+  optedOutClearedBy: string | null;
+} | null;
 
-/**
- * The detail the manager saw serialises opted_out_at at millisecond precision, while
- * Postgres keeps microseconds (a staff-recorded or updated_at-stamped time). Compare at
- * millisecond precision so an unchanged opt-out is never reported as changed.
- */
-function sameOptOut(stored: Date | string | null, expected: string | null) {
-  const a = millis(stored);
-  const b = millis(expected);
-  if (a === null || b === null) return a === b;
-  return Math.abs(a - b) < 1;
+const iso = (value: unknown) =>
+  value === null || value === undefined
+    ? null
+    : (value instanceof Date ? value : new Date(String(value))).toISOString();
+
+/** Read-only: a contact's opt-out evidence and its version, for the manager's detail. */
+export async function readOptOutEvidence(
+  contactId: string,
+  ports: { query?: typeof queryRows } = {},
+): Promise<OptOutEvidence> {
+  const id = z.string().uuid().parse(contactId);
+  const query = ports.query ?? queryRows;
+  const [row] = await query<Record<string, unknown>>(
+    `SELECT c.opted_out_whatsapp, c.opted_out_at, ${optOutVersionSql("c")} AS opted_out_version,
+      c.opted_out_message_id, c.opted_out_text, c.opted_out_source, c.opted_out_cleared_at,
+      c.opted_out_cleared_by
+     FROM crm_contacts c WHERE c.id = $1::uuid`,
+    [id],
+  );
+  if (!row) return null;
+  return {
+    optedOut: row.opted_out_whatsapp === true,
+    optedOutAt: iso(row.opted_out_at),
+    optedOutVersion: (row.opted_out_version as string | null) ?? null,
+    optedOutMessageId: (row.opted_out_message_id as string | null) ?? null,
+    optedOutText: (row.opted_out_text as string | null) ?? null,
+    optedOutSource: (row.opted_out_source as string | null) ?? null,
+    optedOutClearedAt: iso(row.opted_out_cleared_at),
+    optedOutClearedBy: (row.opted_out_cleared_by as string | null) ?? null,
+  };
 }
 
 export async function clearAccidentalOptOut(
@@ -73,7 +111,8 @@ export async function clearAccidentalOptOut(
   //    time is unknown), plus whether the caller is still an active admin or manager.
   const [row] = await query<ReadRow>(
     `SELECT ${MANAGER_SQL} AS actor_ok,
-      c.id, c.opted_out_whatsapp, c.opted_out_at, c.opted_out_message_id, c.opted_out_text,
+      c.id, c.opted_out_whatsapp, c.opted_out_at, ${optOutVersionSql("c")} AS opted_out_version,
+      c.opted_out_message_id, c.opted_out_text,
       c.opted_out_source, c.opted_out_cleared_at,
       ARRAY(SELECT m.text FROM whatsapp_messages m
         WHERE m.contact_id = c.id AND m.direction = 'inbound'
@@ -86,12 +125,12 @@ export async function clearAccidentalOptOut(
   if (!row.id) throw new Response("CONTACT_NOT_FOUND", { status: 404 });
   if (!row.opted_out_whatsapp) {
     // Idempotent replay: this exact opt-out was already cleared.
-    if (row.opted_out_cleared_at && sameOptOut(row.opted_out_at, input.expectedOptedOutAt)) {
+    if (row.opted_out_cleared_at && row.opted_out_version === input.expectedOptedOutAt) {
       return { ok: true, contactId: row.id, cleared: false };
     }
     throw new Response("CONTACT_NOT_OPTED_OUT", { status: 404 });
   }
-  if (!sameOptOut(row.opted_out_at, input.expectedOptedOutAt)) {
+  if ((row.opted_out_version ?? null) !== input.expectedOptedOutAt) {
     throw new Response("OPT_OUT_CHANGED", { status: 409 });
   }
   const genuine =
@@ -100,15 +139,14 @@ export async function clearAccidentalOptOut(
     (row.inbound_texts ?? []).some((text) => isOptOutText(text));
   if (genuine) throw new Response("OPT_OUT_GENUINE_USE_CONSENT", { status: 409 });
 
-  // 2. One guarded write: still opted out, still the same opt-out (opted_out_at IS NOT
-  //    DISTINCT FROM the expected time, at millisecond precision), caller still a manager.
+  // 2. One guarded write: still opted out, still the same opt-out version (exact to the
+  //    microsecond), caller still a manager.
   const written = await query<{ id: string }>(
     `WITH changed AS (
       UPDATE crm_contacts c SET opted_out_whatsapp = false, opted_out_cleared_at = now(),
         opted_out_cleared_by = $2::uuid, updated_at = now()
       WHERE c.id = $1::uuid AND c.opted_out_whatsapp
-        AND ((c.opted_out_at IS NULL AND $3::timestamptz IS NULL)
-          OR abs(extract(epoch FROM c.opted_out_at - $3::timestamptz)) < 0.001)
+        AND ${optOutVersionSql("c")} IS NOT DISTINCT FROM $3::text
         AND ${MANAGER_SQL}
       RETURNING c.id, c.opted_out_at, c.opted_out_message_id, c.opted_out_text, c.opted_out_source
     ), audit AS (

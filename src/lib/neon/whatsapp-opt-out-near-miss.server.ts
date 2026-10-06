@@ -55,6 +55,20 @@ const dismissSchema = z
   })
   .strict();
 
+// Shared by the dismiss read and write: $1 conversation, $2 contact, $3 message, $4 actor.
+const DISMISS_GUARD = `WITH actor AS (
+      SELECT s.id FROM staff_users s
+      WHERE s.id = $4::uuid AND s.active = true
+        AND EXISTS (SELECT 1 FROM staff_roles r WHERE r.staff_user_id = s.id AND r.role IN ('admin', 'manager'))
+    ), msg AS (
+      SELECT m.id, m.created_at, m.text FROM whatsapp_messages m
+      JOIN whatsapp_conversations wc ON wc.id = m.conversation_id
+      JOIN actor a ON true
+      WHERE m.id = $3::uuid AND m.conversation_id = $1::uuid AND m.contact_id = $2::uuid
+        AND wc.contact_id = $2::uuid AND m.direction = 'inbound'
+        AND wa_can_read_conversation(a.id, wc.id)
+    )`;
+
 export async function dismissOptOutNearMiss(
   value: unknown,
   actor: Pick<StaffAccess, "staffId" | "roles">,
@@ -67,22 +81,24 @@ export async function dismissOptOutNearMiss(
   if (!parsed.success) throw new Response("VALIDATION_ERROR", { status: 400 });
   const input = parsed.data;
   const query = ports.query ?? queryRows;
-  // One statement. The message must be this contact's inbound message on this conversation
-  // (wrong-recipient guard), and the actor an active admin/manager who can read it. The audit
-  // row is written once per message (idempotent). crm_contacts is never written.
+  const params = [input.conversationId, input.contactId, input.messageId, actor.staffId];
+  // 1. Read: the actor is an active admin/manager, and the message is this contact's inbound
+  //    message on this conversation (wrong-recipient guard) that the actor can read.
+  const [found] = await query<{ actor_ok: boolean; message_ok: boolean; text: string | null }>(
+    `${DISMISS_GUARD} SELECT EXISTS (SELECT 1 FROM actor) AS actor_ok,
+      EXISTS (SELECT 1 FROM msg) AS message_ok, (SELECT text FROM msg) AS text`,
+    params,
+  );
+  if (!found?.actor_ok) throw new Response("Forbidden", { status: 403 });
+  // Only a real near-miss can be dismissed. An ordinary message (or an exact opt-out, which
+  // is never a near-miss) is refused, so a dismissal cannot silently move the cut-off.
+  if (!found.message_ok || !isOptOutNearMiss(found.text)) {
+    throw new Response("NEAR_MISS_MESSAGE_NOT_FOUND", { status: 404 });
+  }
+  // 2. Write, re-checking the same guard: one audit row per message (idempotent). The
+  //    dismissal lives only in audit_logs. crm_contacts is never written.
   const [row] = await query<{ actor_ok: boolean; message_ok: boolean; dismissed: boolean }>(
-    `WITH actor AS (
-      SELECT s.id FROM staff_users s
-      WHERE s.id = $4::uuid AND s.active = true
-        AND EXISTS (SELECT 1 FROM staff_roles r WHERE r.staff_user_id = s.id AND r.role IN ('admin', 'manager'))
-    ), msg AS (
-      SELECT m.id, m.created_at, m.text FROM whatsapp_messages m
-      JOIN whatsapp_conversations wc ON wc.id = m.conversation_id
-      JOIN actor a ON true
-      WHERE m.id = $3::uuid AND m.conversation_id = $1::uuid AND m.contact_id = $2::uuid
-        AND wc.contact_id = $2::uuid AND m.direction = 'inbound'
-        AND wa_can_read_conversation(a.id, wc.id)
-    ), inserted AS (
+    `${DISMISS_GUARD}, inserted AS (
       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
       SELECT $4::uuid, 'contact.whatsapp_opt_out_near_miss_dismissed', 'contact', $2::uuid,
         jsonb_build_object('conversationId', $1::text, 'messageId', m.id::text,
@@ -95,7 +111,7 @@ export async function dismissOptOutNearMiss(
       RETURNING id
     ) SELECT EXISTS (SELECT 1 FROM actor) AS actor_ok, EXISTS (SELECT 1 FROM msg) AS message_ok,
       EXISTS (SELECT 1 FROM inserted) AS dismissed`,
-    [input.conversationId, input.contactId, input.messageId, actor.staffId, input.reason || null],
+    [...params, input.reason || null],
   );
   if (!row?.actor_ok) throw new Response("Forbidden", { status: 403 });
   if (!row.message_ok) throw new Response("NEAR_MISS_MESSAGE_NOT_FOUND", { status: 404 });

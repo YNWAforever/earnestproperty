@@ -149,14 +149,8 @@ test("recording 拒收推廣 stamps staff_recorded evidence; recording consent k
     query,
   );
   for (const { sql } of statements) {
-    assert.match(
-      sql,
-      /opted_out_source\s*=\s*CASE WHEN NOT \$2 AND NOT c\.opted_out_whatsapp THEN 'staff_recorded'/,
-    );
-    assert.match(
-      sql,
-      /opted_out_at\s*=\s*CASE WHEN NOT \$2 AND NOT c\.opted_out_whatsapp THEN now\(\)/,
-    );
+    assert.match(sql, /opted_out_source\s*=\s*CASE WHEN NOT \$2 THEN 'staff_recorded'/);
+    assert.match(sql, /opted_out_at\s*=\s*CASE WHEN NOT \$2 THEN now\(\)/);
     assert.doesNotMatch(sql, /opted_out_(at|text|message_id|source)\s*=\s*NULL/i);
     // Every evidence column falls back to its own existing value, so $2=true leaves it untouched.
     for (const column of [
@@ -212,6 +206,8 @@ const OO_CONV = "55555555-5555-4555-8555-555555555555";
 const OO_MSG = "66666666-6666-4666-8666-666666666666";
 const OO_MANAGER = { staffId: "77777777-7777-4777-8777-777777777777", roles: ["manager"] };
 const OO_AT = "2026-08-01T10:00:00.000Z";
+// The opt-out version: the exact microsecond UTC string the read emits (FX-05b pattern).
+const OO_VERSION = "2026-08-01T10:00:00.000000Z";
 // assert.rejects needs a synchronous validator, so the Response body is read here instead.
 async function rejectsWith(promise, status, body) {
   let error;
@@ -239,6 +235,7 @@ const legacyRead = (patch = {}) => ({
   id: OO_CONTACT,
   opted_out_whatsapp: true,
   opted_out_at: new Date(OO_AT),
+  opted_out_version: OO_VERSION,
   opted_out_message_id: null,
   opted_out_text: null,
   opted_out_source: "legacy",
@@ -249,7 +246,7 @@ const legacyRead = (patch = {}) => ({
 const clearInput = (patch = {}) => ({
   contactId: OO_CONTACT,
   reason: "客戶只是回覆唔要睇呢個盤",
-  expectedOptedOutAt: OO_AT,
+  expectedOptedOutAt: OO_VERSION,
   ...patch,
 });
 
@@ -272,6 +269,8 @@ test("clearAccidentalOptOut: invalid input is a 400 with no query", async () => 
     clearInput({ reason: "x".repeat(501) }),
     clearInput({ contactId: "not-a-uuid" }),
     clearInput({ expectedOptedOutAt: "yesterday" }),
+    // A millisecond ISO time is not a version: only the exact microsecond string is.
+    clearInput({ expectedOptedOutAt: OO_AT }),
     clearInput({ extra: true }),
     { contactId: OO_CONTACT, reason: "合理的原因說明" },
     null,
@@ -331,7 +330,11 @@ test("clearAccidentalOptOut refuses a genuine D4 opt-out (evidence, history or s
 
 test("clearAccidentalOptOut: a stale expectedOptedOutAt is 409 OPT_OUT_CHANGED with no write", async () => {
   const { clearAccidentalOptOut } = await import("./whatsapp-opt-out.server.ts");
-  for (const expectedOptedOutAt of ["2026-08-01T09:59:59.000Z", null]) {
+  for (const expectedOptedOutAt of [
+    "2026-08-01T10:00:00.000001Z",
+    "2026-08-01T09:59:59.999999Z",
+    null,
+  ]) {
     const { calls, query } = fakeQuery([[legacyRead()]]);
     await rejectsWith(
       clearAccidentalOptOut(clearInput({ expectedOptedOutAt }), OO_MANAGER, { query }),
@@ -369,7 +372,11 @@ test("clearAccidentalOptOut clears with one guarded write that keeps evidence an
   assert.doesNotMatch(set, /opted_out_(at|message_id|text|source)\s*=/);
   assert.equal(params[0], OO_CONTACT);
   assert.equal(params[1], OO_MANAGER.staffId);
-  assert.equal(params[2], OO_AT);
+  assert.equal(params[2], OO_VERSION);
+  assert.match(
+    sql,
+    /to_char\(c\.opted_out_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS\.US"Z"'\) IS NOT DISTINCT FROM \$3::text/,
+  );
   assert.equal(params[3], "客戶只是回覆唔要睇呢個盤");
 });
 
@@ -457,22 +464,35 @@ test("dismissOptOutNearMiss: approval gate, validation and wrong-recipient guard
     await rejectsWith(dismissOptOutNearMiss(input, OO_MANAGER, { query }), 400);
     assert.equal(calls.length, 0);
   }
-  const inactive = fakeQuery([[{ actor_ok: false, message_ok: false, dismissed: false }]]);
+  const inactive = fakeQuery([[{ actor_ok: false, message_ok: false, text: null }]]);
   await rejectsWith(
     dismissOptOutNearMiss(dismissInput(), OO_MANAGER, { query: inactive.query }),
     403,
   );
-  const foreign = fakeQuery([[{ actor_ok: true, message_ok: false, dismissed: false }]]);
+  const foreign = fakeQuery([[{ actor_ok: true, message_ok: false, text: null }]]);
   await rejectsWith(
     dismissOptOutNearMiss(dismissInput(), OO_MANAGER, { query: foreign.query }),
     404,
   );
+  // Only a real near-miss can be dismissed: an ordinary message or an exact opt-out is refused
+  // before any write.
+  for (const text of ["你好", "Can I stop by?", "退訂", null]) {
+    const ordinary = fakeQuery([[{ actor_ok: true, message_ok: true, text }]]);
+    await rejectsWith(
+      dismissOptOutNearMiss(dismissInput(), OO_MANAGER, { query: ordinary.query }),
+      404,
+      "NEAR_MISS_MESSAGE_NOT_FOUND",
+    );
+    assert.equal(ordinary.calls.length, 1, "no write for a message that is not a near-miss");
+  }
 });
 
 test("dismissOptOutNearMiss writes one idempotent audit row and never touches crm_contacts", async () => {
   const { dismissOptOutNearMiss } = await import("./whatsapp-opt-out-near-miss.server.ts");
   const { calls, query } = fakeQuery([
+    [{ actor_ok: true, message_ok: true, text: "STOP please" }],
     [{ actor_ok: true, message_ok: true, dismissed: true }],
+    [{ actor_ok: true, message_ok: true, text: "STOP please" }],
     [{ actor_ok: true, message_ok: true, dismissed: false }],
   ]);
   assert.deepEqual(
@@ -487,7 +507,8 @@ test("dismissOptOutNearMiss writes one idempotent audit row and never touches cr
     ok: true,
     dismissed: false,
   });
-  const { sql, params } = calls[0];
+  assert.doesNotMatch(calls[0].sql, /(UPDATE|INSERT|DELETE)/i, "the first statement only reads");
+  const { sql, params } = calls[1];
   assert.deepEqual(params, [
     OO_CONV,
     OO_CONTACT,
@@ -495,7 +516,7 @@ test("dismissOptOutNearMiss writes one idempotent audit row and never touches cr
     OO_MANAGER.staffId,
     "客戶只是問可唔可以停一停先",
   ]);
-  assert.equal(calls[1].params[4], null);
+  assert.equal(calls[3].params[4], null);
   assert.doesNotMatch(sql, /\bUPDATE\b/i);
   assert.match(sql, /INSERT INTO audit_logs/);
   assert.match(sql, /'contact\.whatsapp_opt_out_near_miss_dismissed'/);

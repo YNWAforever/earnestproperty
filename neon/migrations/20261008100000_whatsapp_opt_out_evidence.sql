@@ -35,9 +35,17 @@ BEGIN
   END IF;
 END $$;
 
--- Legacy stamp: freeze each existing opt-out at the latest known inbound, so only
--- a LATER customer message reopens text replies. The flag itself is not touched.
-UPDATE crm_contacts
-SET opted_out_at = COALESCE(last_inbound_at, updated_at, now()),
+-- Legacy stamp: freeze each existing opt-out at the latest known time for the
+-- contact (its own inbound, any of its conversations, or its last update), so only
+-- a LATER customer message reopens text replies and a legacy row can never reopen
+-- immediately. The flag itself is not touched.
+UPDATE crm_contacts c
+SET opted_out_at = COALESCE(
+      GREATEST(
+        c.last_inbound_at,
+        (SELECT max(wc.last_inbound_at) FROM whatsapp_conversations wc WHERE wc.contact_id = c.id),
+        c.updated_at
+      ),
+      now()),
     opted_out_source = 'legacy'
-WHERE opted_out_whatsapp AND opted_out_at IS NULL;
+WHERE c.opted_out_whatsapp AND c.opted_out_at IS NULL;

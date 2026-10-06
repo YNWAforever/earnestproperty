@@ -38,8 +38,11 @@ export async function setWhatsappMarketingConsent(
       input.evidenceRef,
     );
   const nearMissMessageId = !input.optedIn && nearMiss ? nearMiss[1] : null;
-  // FX-08: recording 拒收推廣 on a contact who was not opted out stamps staff_recorded
-  // evidence. Recording consent clears the flag but keeps every evidence column.
+  // FX-08: recording 拒收推廣 always starts a new staff_recorded episode at now(), even when
+  // the contact is already opted out: a confirmed stop must re-block text on a conversation
+  // that a newer customer message had reopened. A near-miss confirm names the message as
+  // evidence; otherwise an already opted-out contact keeps its earlier message evidence.
+  // Recording consent clears the flag but keeps every evidence column.
   const rows = await query(
     `WITH eligible AS (
       SELECT c.id FROM crm_contacts c
@@ -56,12 +59,12 @@ export async function setWhatsappMarketingConsent(
       SELECT ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM near_miss)) AS ok FROM eligible
     ), changed AS (
       UPDATE crm_contacts c SET opt_in_whatsapp = $2, opted_out_whatsapp = NOT $2,
-        opted_out_at = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN now() ELSE c.opted_out_at END,
-        opted_out_source = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN 'staff_recorded' ELSE c.opted_out_source END,
-        opted_out_message_id = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN (SELECT external_message_id FROM near_miss) ELSE c.opted_out_message_id END,
-        opted_out_text = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN (SELECT text FROM near_miss) ELSE c.opted_out_text END,
-        opted_out_cleared_at = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN NULL ELSE c.opted_out_cleared_at END,
-        opted_out_cleared_by = CASE WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN NULL ELSE c.opted_out_cleared_by END,
+        opted_out_at = CASE WHEN NOT $2 THEN now() ELSE c.opted_out_at END,
+        opted_out_source = CASE WHEN NOT $2 THEN 'staff_recorded' ELSE c.opted_out_source END,
+        opted_out_message_id = CASE WHEN NOT $2 AND $7::uuid IS NOT NULL THEN (SELECT external_message_id FROM near_miss) WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN NULL ELSE c.opted_out_message_id END,
+        opted_out_text = CASE WHEN NOT $2 AND $7::uuid IS NOT NULL THEN (SELECT text FROM near_miss) WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN NULL ELSE c.opted_out_text END,
+        opted_out_cleared_at = CASE WHEN NOT $2 THEN NULL ELSE c.opted_out_cleared_at END,
+        opted_out_cleared_by = CASE WHEN NOT $2 THEN NULL ELSE c.opted_out_cleared_by END,
         updated_at = now()
       FROM eligible e, guard g WHERE c.id = e.id AND g.ok RETURNING c.id, c.opt_in_whatsapp AS opted_in
     ), evidence AS (
