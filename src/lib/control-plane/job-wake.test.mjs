@@ -65,16 +65,19 @@ test("lifetime registration failure never masks a committed mutation", async () 
   await Promise.resolve();
   assert.deepEqual(errors, ["JOB_WAKE_REGISTRATION_FAILED"]);
 });
-test("job drains have no recurring Cloudflare or Vercel schedule", () => {
-  const config = readFileSync("workers/cron/wrangler.jsonc", "utf8");
+test("job drains have one 10-minute Cloudflare sweep and no Vercel schedule", () => {
+  const source = readFileSync("workers/cron/wrangler.jsonc", "utf8");
+  const config = JSON.parse(source.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"));
   const vercel = readFileSync("vercel.ts", "utf8");
   const worker = readFileSync("workers/cron/src/index.ts", "utf8");
-  assert.match(config, /"crons"\s*:\s*\[\s*\]/);
+  // Owner decision 4: every 10 min 08:00-21:50 HKT, hourly overnight (UTC cron strings).
+  assert.deepEqual(config.triggers.crons, ["*/10 0-13 * * *", "0 14-23 * * *"]);
+  assert.equal(config.vars.SITE_ORIGIN, "https://www.earnestproperty.com");
+  assert.match(worker, /async scheduled\(/);
+  assert.match(worker, /sweepLanes\(/);
+  assert.match(worker, /createLaneDrain\(/);
+  assert.match(vercel, /crons:\s*\[\s*\]/);
   assert.doesNotMatch(vercel, /path:\s*"\/api\/admin\/(control-plane\/worker|jobs\/send-queue)"/);
-  assert.match(worker, /getByName\(lane\)\.signal\(\)/);
-  assert.match(worker, /authorization.*Bearer/);
-  assert.match(worker, /"\/api\/admin\/whatsapp\/service-worker"/);
-  assert.match(worker, /"\/api\/admin\/control-plane\/worker"/);
 });
 
 test("maintenance stays event driven while property refresh has one gated daily schedule", () => {
