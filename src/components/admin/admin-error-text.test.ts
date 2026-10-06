@@ -20,9 +20,6 @@ test("other statuses fall back to the screen's own message", () => {
   expect(staffActionErrorText(new ServerFnResponseError("BATCH_ROWS_INVALID", 400), fallback)).toBe(
     fallback,
   );
-  expect(staffActionErrorText(new Response("Not found", { status: 404 }), "連結未能載入")).toBe(
-    "連結未能載入",
-  );
   expect(staffActionErrorText({ status: 500 }, "覆蓋資料未能載入")).toBe("覆蓋資料未能載入");
 });
 
@@ -44,5 +41,23 @@ test("plain link conflict codes read in zh-HK with existing copy", () => {
   );
   expect(staffActionErrorText(new Error("STAFF_REFERENCE_CONFLICT_OR_EXPIRED"), fallback)).toBe(
     "同事來源代碼已過期或衝突",
+  );
+});
+
+test("404 maps to the existing not-found copy so staff reload instead of retrying", () => {
+  expect(staffActionErrorText(new Response("Not found", { status: 404 }), "連結未能載入")).toBe(
+    "找不到資料，可能已被刪除，請重新載入頁面。",
+  );
+  expect(staffActionErrorText(new ServerFnResponseError("NOT_FOUND", 404), fallback)).toBe(
+    "找不到資料，可能已被刪除，請重新載入頁面。",
+  );
+  expect(staffActionErrorText({ status: 404 }, fallback)).toBe(
+    "找不到資料，可能已被刪除，請重新載入頁面。",
+  );
+});
+
+test("a delisted offer code reads in zh-HK with the existing batch copy", () => {
+  expect(staffActionErrorText(new Error("WA_LINK_PUBLIC_OFFER_UNAVAILABLE"), fallback)).toBe(
+    "目前租售盤已下架或版本改變",
   );
 });

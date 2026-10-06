@@ -28,25 +28,33 @@ export function adminErrorText(message: string) {
   return message;
 }
 
-/** Existing zh-HK copy only (admin-data.ts and TransactionAttributionEditor.tsx); no new strings. */
+/**
+ * Existing zh-HK copy only (admin-data.ts, TransactionAttributionEditor.tsx, and the
+ * ADMIN_ERROR_MESSAGES "Not found" entry above for 404); no new strings.
+ */
 const STAFF_ACTION_STATUS_MESSAGES: Record<number, string> = {
   401: "登入已失效，請重新登入後再試。",
   403: "你沒有權限進行此操作。",
+  404: ADMIN_ERROR_MESSAGES["Not found"],
   409: "資料版本已變更，請重新載入並核對後再儲存。",
 };
 
 /**
  * Plain-Error codes (no status) that reach the WhatsApp link screens. Existing copy only:
  * the 409 string above, and the batch reason text in whatsapp-link-batches.server.ts.
+ * Codes with no existing zh-HK copy (WA_LINK_STAFF_UNAVAILABLE,
+ * WA_LINK_OFFER_CONTEXT_REQUIRED, WA_LINK_VERSION_REQUIRED, SERVICE_COPY_UNAPPROVED,
+ * WA_POLICY_UNAPPROVED) are left for an owner copy pass.
  */
 const STAFF_ACTION_CODE_MESSAGES: Record<string, string> = {
   WA_LINK_VERSION_CONFLICT: STAFF_ACTION_STATUS_MESSAGES[409],
   STAFF_REFERENCE_CONFLICT_OR_EXPIRED: "同事來源代碼已過期或衝突",
+  WA_LINK_PUBLIC_OFFER_UNAVAILABLE: "目前租售盤已下架或版本改變",
 };
 
 /**
  * For a failed staff ACTION or load. A status-bearing error (ServerFnResponseError, a
- * thrown Response, or any `{ status: number }`) maps 401/403/409 to existing copy and
+ * thrown Response, or any `{ status: number }`) maps 401/403/404/409 to existing copy and
  * every other status to the screen's own `fallback` -- never a raw code such as
  * `Forbidden` or `BATCH_PREVIEW_EXPIRED`. A plain Error (local validation, network)
  * keeps its text through adminErrorText; anything else gets `fallback`.
