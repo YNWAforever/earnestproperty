@@ -36,6 +36,15 @@ const STAFF_ACTION_STATUS_MESSAGES: Record<number, string> = {
 };
 
 /**
+ * Plain-Error codes (no status) that reach the WhatsApp link screens. Existing copy only:
+ * the 409 string above, and the batch reason text in whatsapp-link-batches.server.ts.
+ */
+const STAFF_ACTION_CODE_MESSAGES: Record<string, string> = {
+  WA_LINK_VERSION_CONFLICT: STAFF_ACTION_STATUS_MESSAGES[409],
+  STAFF_REFERENCE_CONFLICT_OR_EXPIRED: "同事來源代碼已過期或衝突",
+};
+
+/**
  * For a failed staff ACTION or load. A status-bearing error (ServerFnResponseError, a
  * thrown Response, or any `{ status: number }`) maps 401/403/409 to existing copy and
  * every other status to the screen's own `fallback` -- never a raw code such as
@@ -48,6 +57,9 @@ export function staffActionErrorText(error: unknown, fallback: string): string {
       ? (error as { status: unknown }).status
       : undefined;
   if (typeof status === "number") return STAFF_ACTION_STATUS_MESSAGES[status] ?? fallback;
-  if (error instanceof Error) return adminErrorText(error.message) || fallback;
+  if (error instanceof Error) {
+    const coded = STAFF_ACTION_CODE_MESSAGES[error.message.trim()];
+    return coded ?? (adminErrorText(error.message) || fallback);
+  }
   return fallback;
 }

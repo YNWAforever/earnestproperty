@@ -116,3 +116,24 @@ test("never reloads the page", async () => {
   expect(httpError).toBeInstanceOf(TypeError);
   expect(reloads).toBe(0);
 });
+
+test("a thrown or rejected Response is normalised like a returned one", async () => {
+  const thrown = await rejection(
+    callStaffServerFn(
+      async () => {
+        throw new Response("Forbidden", { status: 403 });
+      },
+      { data: {} },
+    ),
+  );
+  expect(thrown).toBeInstanceOf(ServerFnResponseError);
+  expect((thrown as ServerFnResponseError).status).toBe(403);
+  expect((thrown as ServerFnResponseError).message).toBe("Forbidden");
+
+  const rejected = await rejection(
+    callStaffServerFn(() => Promise.reject(new Response("", { status: 409 })), { data: {} }),
+  );
+  expect(rejected).toBeInstanceOf(ServerFnResponseError);
+  expect((rejected as ServerFnResponseError).status).toBe(409);
+  expect((rejected as ServerFnResponseError).message).toBe("HTTP 409");
+});

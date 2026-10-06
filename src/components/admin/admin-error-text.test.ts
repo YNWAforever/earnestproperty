@@ -37,3 +37,12 @@ test("local validation errors keep their text", () => {
   expect(staffActionErrorText("Forbidden", fallback)).toBe(fallback);
   expect(staffActionErrorText(null, fallback)).toBe(fallback);
 });
+
+test("plain link conflict codes read in zh-HK with existing copy", () => {
+  expect(staffActionErrorText(new Error("WA_LINK_VERSION_CONFLICT"), fallback)).toBe(
+    "資料版本已變更，請重新載入並核對後再儲存。",
+  );
+  expect(staffActionErrorText(new Error("STAFF_REFERENCE_CONFLICT_OR_EXPIRED"), fallback)).toBe(
+    "同事來源代碼已過期或衝突",
+  );
+});

@@ -8,7 +8,8 @@ type StaffCallOptions = { data?: unknown; headers?: HeadersInit };
  * Every staff server-function call from the browser goes through here:
  *   withStaffAuthHeaders(options ?? {}) → dispatchWorkspaceRequest gate → serverFn(prepared)
  *   → unwrapServerFnResponse. A resolved Response (401/403/404/409/…) THROWS
- *   ServerFnResponseError(body, status). Never reloads the page (poll-safe).
+ *   ServerFnResponseError(body, status). A thrown or rejected Response is normalised the same
+ *   way. Never reloads the page (poll-safe).
  *
  * TanStack Start resolves -- it does not reject -- when a handler throws a Response, so
  * without the unwrap a denied save reads as success (see server-fn-response.ts).
@@ -29,7 +30,11 @@ export async function callStaffServerFn<
       () => withStaffAuthHeaders(options ?? ({} as TOptions)),
       (prepared) => serverFn(prepared),
       isWorkspaceCurrent,
-    ),
+    ).catch((error: unknown) => {
+      // A thrown Response becomes a resolved one, so the unwrap below converts it.
+      if (error instanceof Response) return error as never;
+      throw error;
+    }),
   );
   return result as Exclude<Awaited<TResult>, Response>;
 }
