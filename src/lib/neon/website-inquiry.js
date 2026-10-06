@@ -1,3 +1,5 @@
+import { leadAlertEnqueueCte } from "./lead-alert-enqueue.js";
+
 export function deriveWebsiteInquiryRouting(listing) {
   if (!listing) {
     return {
@@ -132,7 +134,8 @@ export async function persistWebsiteInquiry(query, input) {
       FROM contact
       CROSS JOIN routing
       RETURNING id
-    )
+    ),
+    ${leadAlertEnqueueCte("new_lead")}
     INSERT INTO inquiries (
 ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_version," : ""}
       source, property_id, intent, name, phone, email, message, assigned_agent_id, crm_contact_id
@@ -142,7 +145,7 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
       routing.assigned_agent_id, contact.id
     FROM contact
     CROSS JOIN routing
-    RETURNING id
+    RETURNING id, (SELECT count(*) FROM lead_alert) > 0 AS lead_alert_queued
     `,
     [
       name,
@@ -178,7 +181,10 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
         { code: "INQUIRY_REPLAY_EXPIRED" },
       );
     }
-    return { id: String(prior.id) };
+    return { id: String(prior.id), leadAlertQueued: false };
   }
-  return { id: rows[0]?.id == null ? "" : String(rows[0].id) };
+  return {
+    id: rows[0]?.id == null ? "" : String(rows[0].id),
+    leadAlertQueued: rows[0]?.lead_alert_queued === true,
+  };
 }

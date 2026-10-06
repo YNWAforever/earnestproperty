@@ -4,6 +4,7 @@ import type { StaffAccess, StaffRole } from "./auth.server.ts";
 import { staffLifecycleMemberFromRow } from "./admin-team.server.ts";
 import type {
   ChangeStaffActiveInput,
+  ChangeStaffDutyManagerInput,
   ChangeStaffRolesInput,
   InviteStaffMemberInput,
   LinkStaffIdentityInput,
@@ -45,6 +46,7 @@ type AuditInput = {
     | "staff.password_reset.requested"
     | "staff.session_revocation"
     | "staff.roles_changed"
+    | "staff.duty_manager_changed"
     | "staff.identity_linked"
     | "staff.suspended"
     | "staff.reactivated";
@@ -685,6 +687,40 @@ export function createStaffLifecycleService(dependencies: StaffLifecycleDependen
         metadata: { afterRoles: result.roles },
       });
       return { ...result, requestId };
+    },
+
+    /**
+     * Mark/unmark a duty manager. The flag and its audit row are ONE statement
+     * (data-modifying CTEs), so they commit or fail together; a stale version
+     * (or inactive member) matches no row, writes nothing and answers 409.
+     */
+    async changeStaffDutyManager(
+      input: ChangeStaffDutyManagerInput,
+      actor: StaffAccess,
+      _request: Request,
+    ) {
+      requireAdmin(actor);
+      const requestId = nextRequestId();
+      const rows = await runQuery<Record<string, unknown>>(
+        `WITH changed AS (
+           UPDATE staff_users SET is_duty_manager = $2, updated_at = now()
+            WHERE id = $1::uuid AND active
+              AND to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') = $3
+            RETURNING id, is_duty_manager
+         ),
+         audit AS (
+           INSERT INTO ops_audit_logs
+             (actor_staff_id, permission, action, resource_type, resource_id, outcome, request_id, metadata)
+           SELECT $4::uuid, 'staff.manage', 'staff.duty_manager_changed', 'staff_user',
+                  id::text, 'success', $5::uuid, jsonb_build_object('before', NOT $2::boolean, 'after', $2::boolean)
+             FROM changed
+           RETURNING id
+         )
+         SELECT id::text AS id, is_duty_manager FROM changed`,
+        [input.staffId, input.isDutyManager, input.expectedVersion, actor.staffId, requestId],
+      );
+      if (!rows.length) throw new Response("STAFF_CHANGED", { status: 409 });
+      return { isDutyManager: rows[0].is_duty_manager === true, requestId };
     },
 
     /** Bind only a verified Neon Auth account with the same staff email. */

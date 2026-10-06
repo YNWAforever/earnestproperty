@@ -10,6 +10,7 @@ import type {
   AdminTeamListInput,
   AdminTeamMemberDetail,
   ChangeStaffActiveInput,
+  ChangeStaffDutyManagerInput,
   ChangeStaffRolesInput,
   InviteStaffMemberInput,
   LinkStaffIdentityInput,
@@ -59,6 +60,13 @@ export const changeStaffActiveSchema = z
     reassignToStaffId: staffIdSchema.nullable().optional(),
   })
   .strict() as z.ZodType<ChangeStaffActiveInput>;
+export const changeStaffDutyManagerSchema = z
+  .object({
+    staffId: staffIdSchema,
+    isDutyManager: z.boolean(),
+    expectedVersion: z.string().datetime({ offset: true }),
+  })
+  .strict() as z.ZodType<ChangeStaffDutyManagerInput>;
 export const linkStaffIdentitySchema = z
   .object({ staffId: staffIdSchema })
   .strict() as z.ZodType<LinkStaffIdentityInput>;
@@ -102,6 +110,11 @@ type LifecycleService = {
     actor: StaffAccess,
     request: Request,
   ): Promise<{ ok: true; reassigned: Record<string, number> | null; requestId: string }>;
+  changeStaffDutyManager(
+    input: ChangeStaffDutyManagerInput,
+    actor: StaffAccess,
+    request: Request,
+  ): Promise<{ isDutyManager: boolean; requestId: string }>;
   linkStaffIdentity(
     input: LinkStaffIdentityInput,
     actor: StaffAccess,
@@ -184,6 +197,11 @@ export function createAdminTeamServerBoundary(
         service.changeStaffActive(input, actor, request),
       );
     },
+    changeStaffDutyManager(input: ChangeStaffDutyManagerInput, request: Request) {
+      return withRequest(request, (service, actor) =>
+        service.changeStaffDutyManager(input, actor, request),
+      );
+    },
     linkStaffIdentity(input: LinkStaffIdentityInput, request: Request) {
       return withRequest(request, (service, actor) =>
         service.linkStaffIdentity(input, actor, request),
@@ -215,6 +233,9 @@ const changeStaffRolesServer = createServerFn({ method: "POST" })
 const changeStaffActiveServer = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => changeStaffActiveSchema.parse(data))
   .handler(({ data }) => boundary.changeStaffActive(data, getRequest()));
+const changeStaffDutyManagerServer = createServerFn({ method: "POST" })
+  .inputValidator((data: unknown) => changeStaffDutyManagerSchema.parse(data))
+  .handler(({ data }) => boundary.changeStaffDutyManager(data, getRequest()));
 const linkStaffIdentityServer = createServerFn({ method: "POST" })
   .inputValidator((data: unknown) => linkStaffIdentitySchema.parse(data))
   .handler(({ data }) => boundary.linkStaffIdentity(data, getRequest()));
@@ -244,6 +265,8 @@ export const changeStaffRoles = async (options: { data: ChangeStaffRolesInput })
   unwrapServerFnResponse(changeStaffRolesServer(await withStaffHeaders(options)));
 export const changeStaffActive = async (options: { data: ChangeStaffActiveInput }) =>
   unwrapServerFnResponse(changeStaffActiveServer(await withStaffHeaders(options)));
+export const changeStaffDutyManager = async (options: { data: ChangeStaffDutyManagerInput }) =>
+  unwrapServerFnResponse(changeStaffDutyManagerServer(await withStaffHeaders(options)));
 export const linkStaffIdentity = async (options: { data: LinkStaffIdentityInput }) =>
   unwrapServerFnResponse(linkStaffIdentityServer(await withStaffHeaders(options)));
 

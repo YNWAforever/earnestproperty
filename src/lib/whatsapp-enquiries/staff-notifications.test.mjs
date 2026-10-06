@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import test, { after } from "node:test";
 import { createInboxApi } from "../woztell/inbox-api.server.ts";
 import { parseRegisteredJobPayload } from "../control-plane/job-handlers.server.ts";
@@ -92,7 +94,7 @@ test("NT-16 dedicated staff transport uses protected STAFF member and proven res
     "EP_WA_STAFF_WHATSAPP_VERIFICATION_REF",
     "EP_WA_STAFF_CORRELATION_VERIFICATION_REF",
     "EP_WA_STAFF_REPLY_CONTEXT_PATH",
-    "EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED",
+    "EP_WA_STAFF_NOTIFICATIONS_ENABLED",
     "WOZTELL_CHANNEL_ID",
     "EP_WA_STAFF_ASSOCIATION_REVIEW_REF",
   ];
@@ -118,8 +120,7 @@ test("NT-16 dedicated staff transport uses protected STAFF member and proven res
       channelId: "fixture",
       memberId: "staff-device",
       message: "Protected work link",
-      templateName: null,
-      templateLanguage: null,
+      template: null,
       beforeSend: async () => {},
     });
     assert.deepEqual(sent, {
@@ -133,8 +134,7 @@ test("NT-16 dedicated staff transport uses protected STAFF member and proven res
         channelId: "fixture",
         memberId: "staff-device",
         message: "Protected link",
-        templateName: null,
-        templateLanguage: null,
+        template: null,
         beforeSend: async () => {
           throw new Error("endpoint_changed");
         },
@@ -197,5 +197,65 @@ test("unassigned live thread may omit userId but cannot authorize a private note
       message: "test",
     }),
     /PREFLIGHT_BLOCKED/,
+  );
+});
+
+// Names are assembled so this file never matches its own scan.
+const REMOVED_SWITCHES = [
+  ["EP_WA_STAFF", "WHATSAPP_ALERTS_ENABLED"].join("_"),
+  ["EP_WA_STAFF", "ACK_ESCALATION_ENABLED"].join("_"),
+];
+function sourceFiles(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === "node_modules" ? [] : sourceFiles(path);
+    return /\.(?:[cm]?[jt]sx?|json|sql|ya?ml|sh|ps1)$/.test(entry.name) ? [path] : [];
+  });
+}
+const scanned = () => [".env.example", ...sourceFiles("src"), ...sourceFiles("scripts")];
+
+test("only EP_WA_STAFF_NOTIFICATIONS_ENABLED gates staff notifications", async () => {
+  const hits = scanned().filter((file) => {
+    const text = readFileSync(file, "utf8");
+    return REMOVED_SWITCHES.some((name) => text.includes(name));
+  });
+  assert.deepEqual(hits, []);
+  assert.match(readFileSync(".env.example", "utf8"), /^EP_WA_STAFF_NOTIFICATIONS_ENABLED=/m);
+  assert.match(readFileSync(".env.example", "utf8"), /^EP_WA_STAFF_ALERT_TEMPLATE=/m);
+  const { staffNotificationRuntime } = await import("./staff-notifications.server.ts");
+  const names = ["EP_WA_STAFF_NOTIFICATIONS_ENABLED", "EP_WA_ENQUIRY_MODE"];
+  const old = names.map((name) => process.env[name]);
+  try {
+    process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED = "true";
+    process.env.EP_WA_ENQUIRY_MODE = "active";
+    assert.deepEqual(Object.keys(staffNotificationRuntime()).sort(), [
+      "channelId",
+      "enabled",
+      "generationId",
+      "template",
+    ]);
+    assert.equal(staffNotificationRuntime().enabled, true);
+    process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED = "false";
+    assert.equal(staffNotificationRuntime().enabled, false);
+  } finally {
+    names.forEach((name, index) =>
+      old[index] === undefined ? delete process.env[name] : (process.env[name] = old[index]),
+    );
+  }
+});
+
+test("ack escalation has no reader", () => {
+  const reader = new RegExp(["ack", "escalation"].join("_?"), "i");
+  const self = join("src", "lib", "whatsapp-enquiries", "staff-notifications.test.mjs");
+  const hits = sourceFiles("src").filter(
+    (file) => file !== self && reader.test(readFileSync(file, "utf8")),
+  );
+  assert.deepEqual(hits, []);
+  // Queued legacy rows must still parse; the handler stays registered.
+  assert.equal(
+    parseRegisteredJobPayload("woztell.enquiry.staff.ack.check", 1, {
+      notificationId: "11111111-1111-4111-8111-111111111111",
+    }).payload.notificationId,
+    "11111111-1111-4111-8111-111111111111",
   );
 });

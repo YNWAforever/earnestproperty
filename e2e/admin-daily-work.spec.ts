@@ -112,7 +112,9 @@ async function open(page: Page, role = "manager") {
   }, role);
   await page.goto(origin + "/admin");
   await expect(page.getByRole("heading", { name: "總覽", exact: true })).toBeVisible();
-  await expect(card(page, "開放查詢")).toContainText(role === "manager" ? "7" : "2");
+  await expect(card(page, "開放查詢")).toContainText(
+    ["admin", "manager"].includes(role) ? "7" : "2",
+  );
   expect(errors).toEqual([]);
 }
 async function leadSearch(page: Page, empty = false) {
@@ -533,14 +535,14 @@ for (const width of [1440, 1280, 768, 390]) {
     test("same-user role downgrade clears whole-company values and restricted team history", async ({
       page,
     }) => {
-      await open(page);
+      await open(page, "admin");
       await expect(page.getByText("受限合成團隊成員", { exact: true })).toBeVisible();
       await page.evaluate(() => window.dailyWorkFixture.changeContext("actor-a", "agent"));
       await expect(card(page, "開放查詢")).toContainText("2");
       await expect(page.getByText("受限合成團隊成員", { exact: true })).toHaveCount(0);
       await expect(page.getByText("已更新團隊角色", { exact: true })).toHaveCount(0);
       await expect(page.getByText(/客戶資料範圍：我負責的查詢與對話/)).toBeVisible();
-      expect((await calls(page, "overview")).map((c) => c.role)).toEqual(["manager", "agent"]);
+      expect((await calls(page, "overview")).map((c) => c.role)).toEqual(["admin", "agent"]);
     });
     test("same-user staff relink refreshes scope even when role is unchanged", async ({ page }) => {
       await open(page, "agent");
@@ -582,7 +584,7 @@ for (const width of [1440, 1280, 768, 390]) {
       page,
     }) => {
       await page.clock.setFixedTime(new Date("2026-10-03T01:00:00Z"));
-      await open(page);
+      await open(page, "admin");
       await page.clock.setFixedTime(new Date("2026-10-03T01:05:00Z"));
       await page.evaluate(() => (window.dailyWorkFixture.teamMode = "failure"));
       await page.getByRole("button", { name: "重新整理", exact: true }).click();
@@ -631,6 +633,34 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(card(page, "開放查詢")).toContainText("2");
       await expect(page.getByText("受限合成團隊成員", { exact: true })).toHaveCount(0);
     });
+    test("overview tiles have accessible names", async ({ page }) => {
+      await open(page);
+      await expect(page.getByRole("link", { name: "開放查詢：7", exact: true })).toBeVisible();
+      await expect(page.getByRole("link", { name: "待處理對話：7", exact: true })).toBeVisible();
+    });
+    test("今日待辦 is shown to every staff role and the invite panel only to admins", async ({
+      page,
+    }) => {
+      await open(page, "admin");
+      await expect(page.locator('[aria-labelledby="overview-today"]')).toBeVisible();
+      await expect(page.locator('[aria-labelledby="overview-attention"]')).toHaveCount(1);
+      for (const role of ["manager", "agent"]) {
+        await page.evaluate((role) => window.dailyWorkFixture.changeContext("actor-a", role), role);
+        await expect(page.locator('[aria-labelledby="overview-today"]')).toBeVisible();
+        await expect(page.locator('[aria-labelledby="overview-attention"]')).toHaveCount(0);
+      }
+    });
+    test("今日待辦 links open the WhatsApp conversation and the lead", async ({ page }) => {
+      await open(page);
+      const today = page.locator('[aria-labelledby="overview-today"]');
+      await expect(today.getByRole("link", { name: /合成客戶甲/ })).toHaveAttribute(
+        "href",
+        /\/admin\/whatsapp\?conversation=10000000-0000-4000-8000-000000000001$/,
+      );
+      await today.getByRole("link", { name: /每日工作合成查詢1/ }).click();
+      await expect(page).toHaveURL(/\/admin\/leads\?lead=40000000-0000-4000-8000-000000000002$/);
+      await expect.poll(async () => (await calls(page, "lead-detail")).length).toBe(1);
+    });
     test("keyboard card opens the same filtered list and reload retains filter", async ({
       page,
     }) => {
@@ -639,6 +669,17 @@ for (const width of [1440, 1280, 768, 390]) {
       await link.focus();
       await page.keyboard.press("Enter");
       await expect(page).toHaveURL(/\/admin\/leads\?stage=open$/);
+      await expect(page.getByRole("combobox", { name: "階段", exact: true })).toHaveText(
+        "開放（未完成）",
+      );
+      if (width >= 1024) {
+        const current = page
+          .getByRole("navigation", { name: "後台選單" })
+          .filter({ visible: true })
+          .locator('[aria-current="page"]');
+        await expect(current).toHaveCount(1);
+        await expect(current).toHaveAccessibleName("客戶查詢");
+      }
       await expect(page.getByText("每日工作合成查詢0", { exact: true })).toBeVisible();
       await expect(page.getByText("每日工作合成查詢1", { exact: true })).toBeVisible();
       expect((await calls(page, "leads"))[0].input).toMatchObject({ stage: "open" });

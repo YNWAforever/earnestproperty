@@ -238,24 +238,39 @@ test("Operations health loader starts with only the injected health fetch", asyn
   assert.deepEqual(state, { health: operationsHealth(agent), error: null, stale: false });
 });
 
-test("idle admin views do not repeatedly query Neon", () => {
+test("admin views poll only through the visible 60-second interval", () => {
   const files = [
     new URL("./operations-polling.ts", import.meta.url),
     new URL("../../../routes/admin.operations.tsx", import.meta.url),
     new URL("../../../routes/admin.whatsapp.tsx", import.meta.url),
     new URL("../../../routes/admin.leads_.command-center.tsx", import.meta.url),
+    new URL("../../../components/admin/AdminShell.tsx", import.meta.url),
+    new URL("../../../components/admin/admin-attention.ts", import.meta.url),
   ];
-  for (const file of files) {
-    const source = readFileSync(file, "utf8");
-    assert.doesNotMatch(source, /setInterval\s*\(/, file.pathname + " has idle polling");
+  const sources = files.map((file) => readFileSync(file, "utf8"));
+  const [polling, operations, whatsapp, commandCenter, , attention] = sources;
+  for (const [index, file] of files.entries()) {
+    const source = sources[index];
+    assert.doesNotMatch(source, /setInterval\s*\(/, file.pathname + " has a raw timer poll");
     assert.doesNotMatch(
       source,
       /addEventListener\(["']focus/,
-      file.pathname + " refreshes without a user action",
+      file.pathname + " refreshes on focus instead of the visible interval",
     );
   }
-  const whatsapp = readFileSync(files[2], "utf8");
-  const commandCenter = readFileSync(files[3], "utf8");
+  // Operations stays manual: it refreshes on a click or after a mutation only.
+  assert.doesNotMatch(polling, /useVisibleInterval/);
+  assert.doesNotMatch(operations, /useVisibleInterval/);
+  for (const source of [whatsapp, commandCenter])
+    assert.match(
+      source,
+      /useVisibleInterval\([\s\S]*?background: true[\s\S]*?MIN_VISIBLE_INTERVAL_MS\)/,
+    );
+  assert.match(attention, /useVisibleInterval\([\s\S]*?ATTENTION_POLL_MS\)/);
+  assert.match(attention, /ATTENTION_POLL_MS = MIN_VISIBLE_INTERVAL_MS/);
+  const hook = readFileSync(new URL("../use-visible-interval.ts", import.meta.url), "utf8");
+  assert.match(hook, /MIN_VISIBLE_INTERVAL_MS = 60_000/);
+  assert.match(hook, /visibilityState/);
   assert.match(whatsapp, /onClick=\{\(\) => \{[\s\S]*?refreshConversations\(\)/);
   assert.match(commandCenter, /onClick=\{\(\) => void refresh\(\)\}/);
 });

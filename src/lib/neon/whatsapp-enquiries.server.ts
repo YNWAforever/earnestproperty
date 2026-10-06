@@ -30,6 +30,7 @@ import {
   redirectCapacityDecision,
   maybePruneRedirectBuckets,
 } from "../whatsapp-enquiries/redirect-capacity.ts";
+import { whatsappPhoneProblem } from "../../config/whatsapp-phone.js";
 const fields = `l.id,l.code,v.*,l.created_at`;
 export function companyChannel() {
   const channel = process.env.EP_WA_COMPANY_CHANNEL_ID;
@@ -39,6 +40,50 @@ export function companyChannel() {
 export function trackingEnabled() {
   return process.env.EP_WA_TRACKED_LINKS_ENABLED === "true";
 }
+const GENERAL_ENQUIRY_TEXT = "您好，我想向晉誠地產查詢。樓盤供應請向職員確認。";
+/**
+ * The one strict validity check for a company WhatsApp number taken from env:
+ * bare digits /^[1-9]\d{7,14}$/ AND whatsappPhoneProblem(value) === null (rejects the
+ * .env.example placeholder, branch landlines and repeated digits). Returns the phone
+ * or null. Never throws. Callers pass env values only, never link, request or DB data.
+ */
+export function usableCompanyPhone(value: unknown): string | null {
+  try {
+    return typeof value === "string" &&
+      /^[1-9]\d{7,14}$/.test(value) &&
+      whatsappPhoneProblem(value) === null
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+/**
+ * The only place a fallback WhatsApp target is chosen. Reads env only:
+ * EP_WA_COMPANY_PHONE if valid, else VITE_CONTACT_WHATSAPP_PHONE if valid, else "/contact".
+ * Valid = /^[1-9]\d{7,14}$/ AND whatsappPhoneProblem(value) === null. Never throws.
+ * Never derives a number from the link, the request or the database: a fallback must
+ * never open a chat with anyone but the company.
+ */
+export function companyFallbackLocation(
+  env: Record<string, string | undefined> = process.env,
+): string {
+  try {
+    for (const candidate of [env?.EP_WA_COMPANY_PHONE, env?.VITE_CONTACT_WHATSAPP_PHONE]) {
+      const phone = usableCompanyPhone(candidate);
+      if (phone) return companyWhatsappHref(phone, GENERAL_ENQUIRY_TEXT);
+    }
+  } catch {
+    // Fall through: /contact is always safe.
+  }
+  return "/contact";
+}
+const noStoreHeaders = {
+  "Cache-Control": "private, no-store, max-age=0",
+  Pragma: "no-cache",
+  "Referrer-Policy": "no-referrer",
+  "X-Robots-Tag": "noindex, nofollow",
+};
 function admin(actor: StaffAccess) {
   if (!actor.roles.some((r) => r === "admin" || r === "manager"))
     throw new Response("Forbidden", { status: 403 });
@@ -329,30 +374,63 @@ export async function listEnquiries(
     providerThreadReview: r.association_review === true || r.provider_thread_review === true,
   }));
 }
-export async function trackedRedirect(request: Request, code: string, query = queryRows) {
-  const headers = {
-    "Cache-Control": "private, no-store, max-age=0",
-    Pragma: "no-cache",
-    "Referrer-Policy": "no-referrer",
-    "X-Robots-Tag": "noindex, nofollow",
-  };
-  const fallback = () => {
-    const phone = process.env.EP_WA_COMPANY_PHONE;
-    return new Response(null, {
+type TrackedRedirectStage = "config" | "rate" | "link" | "offer" | "phone" | "alias" | "open";
+/** Never throws. Any error → 302 companyFallbackLocation() + X-WA-Tracking: untracked + one log line. */
+export async function trackedRedirect(
+  request: Request,
+  code: string,
+  query = queryRows,
+): Promise<Response> {
+  const progress: { stage: TrackedRedirectStage } = { stage: "config" };
+  try {
+    return await trackedRedirectOrThrow(request, code, query, progress);
+  } catch (error) {
+    try {
+      return trackedRedirectFallback(error, progress.stage);
+    } catch {
+      // Last resort so "never throws" holds unconditionally (e.g. the log sink throws).
+      return new Response(null, { status: 302, headers: { Location: "/contact" } });
+    }
+  }
+}
+function trackedRedirectFallback(error: unknown, stage: TrackedRedirectStage): Response {
+  // Logs the stage and a fixed reason only: never the code, URL, phone or error text.
+  const reason =
+    error instanceof Error && error.message === "WA_COMPANY_CHANNEL_REQUIRED"
+      ? "company_channel_missing"
+      : error instanceof Error && error.message === "WA_COMPANY_PHONE_REQUIRED"
+        ? "company_phone_invalid"
+        : "unexpected";
+  const name = error instanceof Error && /^[A-Za-z]{1,40}$/.test(error.name) ? error.name : "Error";
+  console.error("WA_TRACKED_REDIRECT_FALLBACK", JSON.stringify({ reason, stage, errorName: name }));
+  return new Response(null, {
+    status: 302,
+    headers: {
+      ...noStoreHeaders,
+      Location: companyFallbackLocation(),
+      "X-WA-Tracking": "untracked",
+    },
+  });
+}
+async function trackedRedirectOrThrow(
+  request: Request,
+  code: string,
+  query: typeof queryRows,
+  progress: { stage: TrackedRedirectStage },
+) {
+  const headers = noStoreHeaders;
+  const fallback = () =>
+    new Response(null, {
       status: 302,
-      headers: {
-        ...headers,
-        Location: phone
-          ? companyWhatsappHref(phone, "您好，我想向晉誠地產查詢。樓盤供應請向職員確認。")
-          : "/contact",
-      },
+      headers: { ...headers, Location: companyFallbackLocation() },
     });
-  };
   if (!shouldMintReference(request)) return new Response(null, { status: 204, headers });
   if (!trackingEnabled() || !/^[A-Za-z0-9_-]{16,64}$/.test(code)) return fallback();
+  progress.stage = "config";
   const channel = companyChannel();
   // Fixed-size global shards bound arbitrary-code traffic without one hot row.
   // Per-link buckets are created only after a registered enabled link is found.
+  progress.stage = "rate";
   const capacity = redirectCapacity();
   const rateSql =
     "INSERT INTO whatsapp_link_rate_buckets(bucket_key,window_start,request_count) VALUES($1,date_trunc('minute',now()),1) ON CONFLICT(bucket_key) DO UPDATE SET window_start=date_trunc('minute',now()),request_count=CASE WHEN whatsapp_link_rate_buckets.window_start=date_trunc('minute',now()) THEN whatsapp_link_rate_buckets.request_count+1 ELSE 1 END RETURNING request_count";
@@ -366,6 +444,7 @@ export async function trackedRedirect(request: Request, code: string, query = qu
       status: 429,
       headers: { ...headers, "Retry-After": "60", "X-WA-Tracking": "untracked" },
     });
+  progress.stage = "link";
   const [row] = await query(
     `SELECT ${fields} FROM whatsapp_tracking_links l JOIN whatsapp_tracking_link_versions v ON v.link_id=l.id AND v.version=l.current_version WHERE l.code=$1 AND v.enabled AND v.channel_id=$2`,
     [code, channel],
@@ -374,6 +453,7 @@ export async function trackedRedirect(request: Request, code: string, query = qu
   let title = "";
   let propertyResponsibleStaffIdAtIntake: string | null = null;
   if (row.property_id) {
+    progress.stage = "offer";
     const [offer] = await query(currentOfferSql, [
       row.property_id,
       row.public_listing_no,
@@ -383,6 +463,7 @@ export async function trackedRedirect(request: Request, code: string, query = qu
     title = String(offer.title_zh).slice(0, 160);
     propertyResponsibleStaffIdAtIntake = offer.agent_id ? String(offer.agent_id) : null;
   }
+  progress.stage = "rate";
   const [linkRate] = await query(rateSql, [redirectBucketKey("registered", String(row.id))]);
   if (
     redirectCapacityDecision(
@@ -391,30 +472,37 @@ export async function trackedRedirect(request: Request, code: string, query = qu
       capacity,
     ) === "link_limited"
   ) {
-    const action = resolvePublicWaAction(
-      {
-        propertyId: String(row.property_id ?? ""),
-        publicListingNo: String(row.public_listing_no ?? ""),
-        dealType: row.deal_type === "rent" ? "rent" : "sale",
-        title,
-      },
-      null,
-      process.env.EP_WA_COMPANY_PHONE,
-    );
-    const location = row.property_id
-      ? action.href
-      : (fallback().headers.get("Location") ?? "/contact");
+    // Same strict check as the fallback: an invalid company phone (placeholder,
+    // landline, spaced/+ form) never becomes a wa.me target here.
+    const limitedPhone = usableCompanyPhone(process.env.EP_WA_COMPANY_PHONE);
+    const location =
+      row.property_id && limitedPhone
+        ? resolvePublicWaAction(
+            {
+              propertyId: String(row.property_id ?? ""),
+              publicListingNo: String(row.public_listing_no ?? ""),
+              dealType: row.deal_type === "rent" ? "rent" : "sale",
+              title,
+            },
+            null,
+            limitedPhone,
+          ).href
+        : companyFallbackLocation();
     console.warn("WA_REDIRECT_LINK_LIMITED", JSON.stringify({ linkId: String(row.id) }));
     return new Response(null, {
       status: 302,
       headers: { ...headers, Location: location, "X-WA-Tracking": "untracked" },
     });
   }
-  const phone = process.env.EP_WA_COMPANY_PHONE ?? "";
-  companyWhatsappHref(phone, "");
+  progress.stage = "phone";
+  // Strict check before the open INSERT: an invalid company phone throws, so the
+  // wrapper's catch sends the customer to companyFallbackLocation() with no orphan open.
+  const phone = usableCompanyPhone(process.env.EP_WA_COMPANY_PHONE);
+  if (!phone) throw new Error("WA_COMPANY_PHONE_REQUIRED");
   const reference = mintReference(),
     snapshot = { ...linkDto(row), propertyResponsibleStaffIdAtIntake };
   let aliasContext = {};
+  progress.stage = "alias";
   if (snapshot.referenceMappingId) {
     const [ref] = await query(
       "SELECT namespace,external_reference,staff_id,mapping_version FROM staff_external_references WHERE id=$1::uuid AND valid_from<=now() AND (valid_until IS NULL OR valid_until>now()) AND verified_at<=now()",
@@ -428,6 +516,7 @@ export async function trackedRedirect(request: Request, code: string, query = qu
       referenceMappingVersion: ref.mapping_version,
     };
   }
+  progress.stage = "open";
   await query(
     `INSERT INTO whatsapp_link_opens(reference_hash,link_id,link_version,channel_id,context_snapshot) VALUES($1,$2::uuid,$3,$4,$5::jsonb)`,
     [

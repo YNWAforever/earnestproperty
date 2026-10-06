@@ -2399,20 +2399,6 @@ try {
   for (const width of [390, 768, 1280, 1440]) {
     const analyticsUrl = `${origin}/admin/analytics?start=2026-09-30&end=2026-09-30&cohortWindowDays=30`;
     await check(
-      "analytics disabled capability is explicit and obtains no performance report",
-      width,
-      async (page) => {
-        await page.addInitScript(() =>
-          sessionStorage.setItem("analytics-fixture-enabled", "false"),
-        );
-        await open(page, analyticsUrl);
-        await expect(page.getByText("銷售及代理績效暫未啟用", { exact: true })).toBeVisible();
-        await expect(page.getByRole("form", { name: "績效篩選" })).toHaveCount(0);
-        expect(await page.evaluate(() => window.analyticsFixture.reads.length)).toBe(0);
-      },
-      "manager",
-    );
-    await check(
       "analytics KPI drilldown and visible CSV match scoped Hong Kong cohort",
       width,
       async (page) => {

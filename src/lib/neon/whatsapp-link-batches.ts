@@ -1,7 +1,6 @@
-import { dispatchWorkspaceRequest } from "../admin/workspace-request";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 import { z } from "zod";
 import { batchRowSchema } from "../whatsapp-enquiries/link-batch-policy";
 
@@ -51,12 +50,7 @@ export const previewWhatsappLinkBatch = async (
     rows: z.infer<typeof batchRowSchema>[];
   },
   isWorkspaceCurrent?: () => boolean,
-) =>
-  dispatchWorkspaceRequest(
-    () => withStaffAuthHeaders({ data }),
-    (prepared) => preview(prepared),
-    isWorkspaceCurrent,
-  );
+) => callStaffServerFn(preview, { data }, isWorkspaceCurrent);
 export const commitWhatsappLinkChunk = async (
   data: {
     batchId: string;
@@ -65,18 +59,8 @@ export const commitWhatsappLinkChunk = async (
     rows: z.infer<typeof batchRowSchema>[];
   },
   isWorkspaceCurrent?: () => boolean,
-) =>
-  dispatchWorkspaceRequest(
-    () => withStaffAuthHeaders({ data }),
-    (prepared) => commit(prepared),
-    isWorkspaceCurrent,
-  );
+) => callStaffServerFn(commit, { data }, isWorkspaceCurrent);
 export const getWhatsappLinkBatchResult = async (
   batchId: string,
   isWorkspaceCurrent?: () => boolean,
-) =>
-  dispatchWorkspaceRequest(
-    () => withStaffAuthHeaders({ data: { batchId } }),
-    (prepared) => read(prepared),
-    isWorkspaceCurrent,
-  );
+) => callStaffServerFn(read, { data: { batchId } }, isWorkspaceCurrent);

@@ -32,10 +32,6 @@ await build({
         replacement: resolve(root, "synthetic-analytics.ts"),
       },
       {
-        find: /^@\/lib\/admin\/final-fix-rollout$/,
-        replacement: resolve(root, "synthetic-flags.ts"),
-      },
-      {
         find: /^@\/lib\/neon\/(admin-data|whatsapp-assignment|staff-notifications|enquiry-resolution|forwarded-enquiries)$/,
         replacement: api,
       },

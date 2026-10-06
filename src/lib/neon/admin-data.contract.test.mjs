@@ -35,6 +35,7 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     "sendAdminCampaignQueue",
     "queueAdminCampaign",
     "cancelAdminCampaign",
+    "fetchLeadLiveAgentTranscript",
   ];
 
   for (const name of exports) {
@@ -57,6 +58,15 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
 
   assert.doesNotMatch(server, /input\.agent_id\s*\|\|\s*actor\.staffId/);
   assert.match(server, /input\.agent_id\s*\?\?\s*null/);
+
+  assert.match(
+    client,
+    /fetchLeadLiveAgentTranscriptServer[\s\S]*?requireStaff\(\["admin", "manager", "agent"\]\)/,
+  );
+  assert.match(
+    server,
+    /export\s+async\s+function\s+fetchLeadLiveAgentTranscript[\s\S]*?await assertLeadInScope\(input\.leadId, actor\)/,
+  );
 });
 
 test("command center read model is guarded and set-based", () => {
@@ -71,6 +81,93 @@ test("command center read model is guarded and set-based", () => {
   assert.match(client, /export\s+async\s+function\s+fetchCommandCenter\b/);
   assert.match(client, /export\s+async\s+function\s+completeAdminLeadActivity\b/);
   assert.match(client, /fetchCommandCenterServer[\s\S]*?requireStaff\(\["admin", "manager"\]\)/);
+});
+
+test("attention reads are staff-scoped server functions next to the overview", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const client = read("src/lib/neon/admin-data.ts");
+  const types = read("src/lib/neon/admin-data.types.ts");
+
+  for (const name of ["fetchAdminAttentionCounts", "fetchAdminTodayTasks"])
+    assert.match(client, new RegExp(`export\\s+async\\s+function\\s+${name}\\b`));
+  for (const name of ["getAdminAttentionCounts", "getAdminTodayTasks"])
+    assert.match(server, new RegExp(`export\\s+async\\s+function\\s+${name}\\b`));
+  assert.match(
+    client,
+    /fetchAdminAttentionCountsServer[\s\S]*?requireStaff\(\["admin", "manager", "agent"\]\)/,
+  );
+  assert.match(
+    client,
+    /fetchAdminTodayTasksServer[\s\S]*?requireStaff\(\["admin", "manager", "agent"\]\)/,
+  );
+
+  // PR #222 appends at the end of these files; the attention reads sit next to the overview.
+  const placed = server.indexOf("export async function getAdminAttentionCounts");
+  assert.ok(placed > server.indexOf("export async function getAdminOverview"));
+  assert.ok(placed < server.indexOf("export async function listAdminListings"));
+  assert.match(server, /wa_can_read_conversation\(\$1::uuid,\s*w\.id\)/);
+
+  assert.match(types, /export\s+type\s+AdminAttentionCounts\b/);
+  assert.match(types, /export\s+type\s+AdminTodayTask\b/);
+  assert.match(types, /leadsNeedingAttention:\s*number/);
+});
+
+test("background attention reads never reload the page under the user", () => {
+  const source = read("src/lib/neon/admin-data.ts");
+  const file = ts.createSourceFile("admin-data.ts", source, ts.ScriptTarget.Latest, true);
+  const body = (name) => {
+    const declaration = file.statements.find(
+      (statement) => ts.isFunctionDeclaration(statement) && statement.name?.text === name,
+    );
+    assert.ok(declaration?.body, `admin-data.ts should declare ${name}`);
+    return { declaration, text: declaration.body.getText(file) };
+  };
+
+  // A background poll that fails must not reload the page (a half-typed reply would be lost),
+  // and its success must not clear the reload guard that foreground reads rely on.
+  const background = body("callStaffServerFnInBackground");
+  assert.doesNotMatch(background.text, /reloadOnStaleServerFunction|clearStorageFlag/);
+  assert.match(background.text, /unwrapServerFnResponse\(call\(\)\)/);
+  assert.ok(
+    !ts.getModifiers(background.declaration)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword),
+    "callStaffServerFnInBackground stays private to admin-data.ts",
+  );
+
+  const counts = body("fetchAdminAttentionCounts").text;
+  assert.match(counts, /\bcallStaffServerFnInBackground\(/);
+  assert.doesNotMatch(counts, /\bcallStaffServerFn\(/);
+});
+
+test("background inbox and command-center polls never reload the page under the user", () => {
+  const source = read("src/lib/neon/admin-data.ts");
+  const file = ts.createSourceFile("admin-data.ts", source, ts.ScriptTarget.Latest, true);
+  const functions = file.statements.filter(ts.isFunctionDeclaration);
+  const index = (name) => functions.findIndex((statement) => statement.name?.text === name);
+  const body = (name) => {
+    const declaration = functions[index(name)];
+    assert.ok(declaration?.body, `admin-data.ts should declare ${name}`);
+    assert.ok(
+      ts.getModifiers(declaration)?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword),
+      `${name} is exported`,
+    );
+    return declaration.body.getText(file);
+  };
+
+  for (const name of ["fetchAdminPageInBackground", "fetchCommandCenterInBackground"]) {
+    const text = body(name);
+    assert.match(text, /\bcallStaffServerFnInBackground\(/, name);
+    assert.doesNotMatch(text, /\bcallStaffServerFn\(/, name);
+  }
+  // The foreground reads keep their reload-on-stale behaviour.
+  for (const name of ["fetchAdminPage", "fetchCommandCenter"])
+    assert.match(body(name), /\bcallStaffServerFn\(/, name);
+
+  // PR #222 appends after fetchAdminPage at the end of the file, so the background page read
+  // sits with the other background reads next to the overview, and the command-center one
+  // directly after its foreground twin.
+  assert.ok(index("fetchAdminPageInBackground") > index("fetchAdminTodayTasks"));
+  assert.ok(index("fetchAdminPageInBackground") < index("fetchAdminListings"));
+  assert.equal(index("fetchCommandCenterInBackground"), index("fetchCommandCenter") + 1);
 });
 
 test("property mutation keeps Copilot content fields explicit and scoped", () => {

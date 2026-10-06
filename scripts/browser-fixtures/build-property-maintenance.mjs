@@ -18,7 +18,7 @@ await build({
     alias: [
       { find: /^@\/lib\/ai\/content-copilot-admin$/, replacement: api },
       {
-        find: /^@\/lib\/(admin\/final-fix-rollout|neon\/(admin-data|whatsapp-assignment|inbox-directory|whatsapp-readiness|staff-endpoints|staff-reference-admin|whatsapp-service-policy|whatsapp-test-notification))$/,
+        find: /^@\/lib\/(neon\/(admin-data|whatsapp-assignment|inbox-directory|whatsapp-readiness|staff-endpoints|staff-reference-admin|whatsapp-service-policy|whatsapp-test-notification))$/,
         replacement: resolve(root, "synthetic-staff.ts"),
       },
       {

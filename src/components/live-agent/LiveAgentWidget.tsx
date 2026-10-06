@@ -5,6 +5,12 @@ import { LoaderCircle, MessageCircle, Phone, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  formatHandoffPhoneForDisplay,
+  liveAgentPhoneErrorFromBody,
+  liveAgentPhoneErrorMessage,
+  validateHandoffPhone,
+} from "@/lib/ai/live-agent";
 
 const liveAgentEndpoints = {
   session: "/api/live-agent/session",
@@ -24,6 +30,83 @@ const initialMessages: Message[] = [
   },
 ];
 
+const handoffPhoneErrorId = "live-agent-handoff-phone-error";
+const handoffPhonePreviewId = "live-agent-handoff-phone-preview";
+
+type LiveAgentHandoffPanelProps = {
+  phone: string;
+  phoneTouched: boolean;
+  consent: boolean;
+  loading: boolean;
+  serverError: string | null;
+  onPhoneChange: (value: string) => void;
+  onPhoneBlur: () => void;
+  onConsentChange: (value: boolean) => void;
+  onSubmit: () => void;
+};
+
+// The same validator the handoff route uses, so the button is enabled only for a phone the
+// server will accept. `serverError` is client-side copy chosen by `liveAgentPhoneErrorFromBody`,
+// never raw response text.
+export function LiveAgentHandoffPanel({
+  phone,
+  phoneTouched,
+  consent,
+  loading,
+  serverError,
+  onPhoneChange,
+  onPhoneBlur,
+  onConsentChange,
+  onSubmit,
+}: LiveAgentHandoffPanelProps) {
+  const check = validateHandoffPhone(phone);
+  const error =
+    serverError ??
+    (phoneTouched && phone.trim() && !check.ok ? liveAgentPhoneErrorMessage(check.code) : null);
+  const describedBy = error ? handoffPhoneErrorId : check.ok ? handoffPhonePreviewId : undefined;
+
+  return (
+    <div className="space-y-2 border-t pt-3">
+      <Input
+        value={phone}
+        onChange={(event) => onPhoneChange(event.target.value)}
+        onBlur={onPhoneBlur}
+        placeholder="WhatsApp 電話"
+        aria-label="轉接 WhatsApp 電話"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        autoComplete="tel"
+        inputMode="tel"
+      />
+      {error ? (
+        <p id={handoffPhoneErrorId} role="alert" className="text-xs text-destructive">
+          {error}
+        </p>
+      ) : check.ok ? (
+        <p id={handoffPhonePreviewId} className="text-xs text-muted-foreground">
+          代理會用 {formatHandoffPhoneForDisplay(check.normalized)} 聯絡你
+        </p>
+      ) : null}
+      <label className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
+        <Checkbox
+          checked={consent}
+          onCheckedChange={(checked) => onConsentChange(checked === true)}
+          aria-label="同意 WhatsApp 跟進聯絡"
+        />
+        <span>我同意 Earnest Property 透過 WhatsApp 聯絡我跟進今次查詢。</span>
+      </label>
+      <Button onClick={onSubmit} type="button" variant="outline" disabled={loading || !check.ok}>
+        {loading ? (
+          <LoaderCircle className="h-4 w-4 animate-spin" />
+        ) : (
+          <Phone className="h-4 w-4" />
+        )}
+        轉介代理
+      </Button>
+    </div>
+  );
+}
+
 export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boolean } = {}) {
   const [open, setOpen] = useState(initiallyOpen);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -31,6 +114,8 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState("");
   const [handoffPhone, setHandoffPhone] = useState("");
+  const [handoffPhoneTouched, setHandoffPhoneTouched] = useState(false);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
   const [handoffConsent, setHandoffConsent] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -104,7 +189,7 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
   }
 
   async function requestHandoff() {
-    if (handoffLoading) return;
+    if (handoffLoading || !validateHandoffPhone(handoffPhone).ok) return;
 
     setHandoffLoading(true);
     try {
@@ -120,8 +205,19 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
           opt_in_whatsapp: handoffConsent,
         }),
       });
-      if (!response.ok) throw new Error("Unable to request live-agent handoff.");
+      if (!response.ok) {
+        // Only the two phone codes map to client copy; any other failure keeps the generic
+        // message below and the server's text is never shown.
+        const body: unknown = await response.json().catch(() => null);
+        const phoneError = liveAgentPhoneErrorFromBody(body);
+        if (phoneError) {
+          setHandoffError(phoneError);
+          return;
+        }
+        throw new Error("Unable to request live-agent handoff.");
+      }
 
+      setHandoffError(null);
       setMessages((current) => [
         ...current,
         {
@@ -215,36 +311,20 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
               </div>
             ) : null}
             {showHandoffPanel ? (
-              <div className="space-y-2 border-t pt-3">
-                <Input
-                  value={handoffPhone}
-                  onChange={(event) => setHandoffPhone(event.target.value)}
-                  placeholder="WhatsApp 電話"
-                  aria-label="轉接 WhatsApp 電話"
-                  autoComplete="tel"
-                />
-                <label className="flex items-start gap-2 text-xs leading-5 text-muted-foreground">
-                  <Checkbox
-                    checked={handoffConsent}
-                    onCheckedChange={(checked) => setHandoffConsent(checked === true)}
-                    aria-label="同意 WhatsApp 跟進聯絡"
-                  />
-                  <span>我同意 Earnest Property 透過 WhatsApp 聯絡我跟進今次查詢。</span>
-                </label>
-                <Button
-                  onClick={requestHandoff}
-                  type="button"
-                  variant="outline"
-                  disabled={handoffLoading}
-                >
-                  {handoffLoading ? (
-                    <LoaderCircle className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Phone className="h-4 w-4" />
-                  )}
-                  轉介代理
-                </Button>
-              </div>
+              <LiveAgentHandoffPanel
+                phone={handoffPhone}
+                phoneTouched={handoffPhoneTouched}
+                consent={handoffConsent}
+                loading={handoffLoading}
+                serverError={handoffError}
+                onPhoneChange={(value) => {
+                  setHandoffPhone(value);
+                  setHandoffError(null);
+                }}
+                onPhoneBlur={() => setHandoffPhoneTouched(true)}
+                onConsentChange={setHandoffConsent}
+                onSubmit={requestHandoff}
+              />
             ) : null}
             <div ref={scrollRef} />
           </div>

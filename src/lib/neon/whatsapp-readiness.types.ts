@@ -69,8 +69,8 @@ export type StaffReadinessInput = {
   runtime: {
     channelId: string | null;
     assignmentEnabled: boolean;
+    /** EP_WA_STAFF_NOTIFICATIONS_ENABLED (the lead-alert gate), not enquiry mode. */
     notificationsEnabled: boolean;
-    staffWhatsAppEnabled: boolean;
     inboxProviderVerified: boolean;
     staffTransportVerified: boolean;
     templateContractVerified: boolean;
