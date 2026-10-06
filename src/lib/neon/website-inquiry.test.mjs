@@ -222,29 +222,77 @@ test("public inquiry upsert can never raise consent or overwrite an existing con
   assert.equal(calls[0].params[5], true);
 });
 
-test("live-agent atomic contact upsert preserves existing identity and consent", () => {
-  const source = readFileSync(new URL("../ai/live-agent.server.ts", import.meta.url), "utf8");
-  const start = source.indexOf("inserted_contact AS (");
-  const clause = source.slice(start, source.indexOf("RETURNING id", start));
+// Each CTE clause of live-agent.server.ts that starts with `<name> AS (` (the name must not be a
+// suffix of a longer identifier), up to the start of its RETURNING. CRLF-tolerant: only \s is used.
+function liveAgentCteClauses(source, name) {
+  const pattern = new RegExp(`(?<![\\w])${name}\\s+AS\\s+\\(([\\s\\S]*?)\\bRETURNING\\b`, "g");
+  return [...source.matchAll(pattern)].map((match) => match[1]);
+}
 
-  assert.notEqual(start, -1);
-  assert.match(clause, /name\s*=\s*COALESCE\(crm_contacts\.name,\s*EXCLUDED\.name\)/);
-  assert.match(clause, /phone\s*=\s*COALESCE\(crm_contacts\.phone,\s*EXCLUDED\.phone\)/);
-  assert.match(clause, /email\s*=\s*COALESCE\(crm_contacts\.email,\s*EXCLUDED\.email\)/);
-  assert.match(clause, /opt_in_whatsapp\s*=\s*crm_contacts\.opt_in_whatsapp/);
-  assert.doesNotMatch(clause, /opt_in_whatsapp\s*=[^,]*EXCLUDED/);
+const readLiveAgentSource = () =>
+  readFileSync(new URL("../ai/live-agent.server.ts", import.meta.url), "utf8");
+
+test("live-agent contact insert never rewrites an existing contact on conflict", () => {
+  const clauses = liveAgentCteClauses(readLiveAgentSource(), "inserted_contact");
+
+  // One in the handoff, one in the phone correction.
+  assert.equal(clauses.length, 2);
+  for (const clause of clauses) {
+    assert.match(clause, /'live_agent'/);
+    // The self-assignment only makes RETURNING yield the conflicting row; it changes no column.
+    assert.match(
+      clause,
+      /ON\s+CONFLICT\s*\(\s*normalized_phone\s*\)\s+DO\s+UPDATE\s+SET\s+opt_in_whatsapp\s*=\s*crm_contacts\.opt_in_whatsapp\s*$/,
+    );
+    assert.doesNotMatch(clause, /EXCLUDED/);
+    assert.doesNotMatch(clause, /\b(name|phone|email|updated_at)\s*=/);
+  }
 });
 
-test("live-agent atomic existing contact update is existing-wins", () => {
-  const source = readFileSync(new URL("../ai/live-agent.server.ts", import.meta.url), "utf8");
-  const start = source.indexOf("updated_contact AS (");
-  const clause = source.slice(start, source.indexOf("RETURNING c.id", start));
+test("live-agent never writes a matched or pre-existing contact", () => {
+  const source = readLiveAgentSource();
 
-  assert.notEqual(start, -1);
-  assert.match(clause, /name\s*=\s*COALESCE\(c\.name,\s*\$3\)/);
-  assert.match(clause, /phone\s*=\s*COALESCE\(c\.phone,\s*\$4\)/);
-  assert.match(clause, /email\s*=\s*COALESCE\(c\.email,\s*\$6\)/);
-  assert.doesNotMatch(clause, /name\s*=\s*COALESCE\(\$3,\s*c\.name\)/);
+  assert.doesNotMatch(source, /updated_contact\s+AS\s+\(/);
+  assert.match(source, /matched_contact\s+AS\s+\(\s*SELECT\s+id\s+FROM\s+candidate_contact\s*\)/);
+  assert.equal((source.match(/UPDATE\s+crm_contacts\b/g) ?? []).length, 1);
+
+  // The one contact UPDATE is the phone correction of a contact this handoff created.
+  const updated = liveAgentCteClauses(source, "updated_owned");
+  assert.equal(updated.length, 1);
+  const [updateClause] = updated;
+  const setList = updateClause.match(/\bSET\s+([\s\S]*?)\s+FROM\b/);
+  assert.ok(setList, "updated_owned must be an UPDATE … SET … FROM");
+  assert.deepEqual(
+    setList[1]
+      .split(",")
+      .map((assignment) => assignment.split("=")[0].trim())
+      .sort(),
+    ["normalized_phone", "phone", "updated_at"],
+  );
+  assert.match(updateClause, /\bFROM\s+owned\b/);
+  assert.match(updateClause, /NOT\s+EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+existing_for_new\s*\)/);
+  assert.doesNotMatch(updateClause, /\b(name|email|opt_in_whatsapp|whatsapp_member_id)\s*=/);
+
+  const owned = source.match(/(?<![\w])owned\s+AS\s+\(([\s\S]*?)\),\s+existing_for_new\s+AS\b/);
+  assert.ok(owned, "owned must be defined before existing_for_new");
+  assert.match(owned[1], /metadata->>'contactCreated'\s*=\s*'true'/);
+  assert.match(owned[1], /metadata->>'contactId'\s*=\s*c\.id::text/);
+  assert.match(owned[1], /whatsapp_member_id\s+IS\s+NULL/);
+});
+
+// The behaviour needs two real connections (live-agent.handoff.local-db.test.mjs, opt-in); this
+// keeps the predicates from silently disappearing in CI.
+test("live-agent phone correction that changes nothing writes no contact update, note or audit", () => {
+  const source = readLiveAgentSource();
+  const changed =
+    /EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+updated_owned\s*\)\s+OR\s+r\.id\s+IS\s+DISTINCT\s+FROM\s+t\.contact_id/;
+
+  const [updateClause] = liveAgentCteClauses(source, "updated_owned");
+  assert.match(updateClause, /c\.normalized_phone\s+IS\s+DISTINCT\s+FROM\s+\$5::text/);
+  const [noteClause] = liveAgentCteClauses(source, "possible_note");
+  assert.match(noteClause, changed);
+  const [auditClause] = liveAgentCteClauses(source, "correction_audit");
+  assert.match(auditClause, changed);
 });
 
 test("website inquiry SQL resolves active listings and active staff before inserting", () => {

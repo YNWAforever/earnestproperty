@@ -35,6 +35,7 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     "sendAdminCampaignQueue",
     "queueAdminCampaign",
     "cancelAdminCampaign",
+    "fetchLeadLiveAgentTranscript",
   ];
 
   for (const name of exports) {
@@ -57,6 +58,15 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
 
   assert.doesNotMatch(server, /input\.agent_id\s*\|\|\s*actor\.staffId/);
   assert.match(server, /input\.agent_id\s*\?\?\s*null/);
+
+  assert.match(
+    client,
+    /fetchLeadLiveAgentTranscriptServer[\s\S]*?requireStaff\(\["admin", "manager", "agent"\]\)/,
+  );
+  assert.match(
+    server,
+    /export\s+async\s+function\s+fetchLeadLiveAgentTranscript[\s\S]*?await assertLeadInScope\(input\.leadId, actor\)/,
+  );
 });
 
 test("command center read model is guarded and set-based", () => {

@@ -16,6 +16,7 @@ export default defineConfig({
     "**/admin-performance-readback.spec.ts",
     "**/admin-link-bulk-owned.spec.ts",
     "**/admin-attention.spec.ts",
+    "**/public-form-feedback.spec.ts",
   ],
   fullyParallel: true,
   retries: 0,

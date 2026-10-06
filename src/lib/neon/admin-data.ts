@@ -1868,3 +1868,21 @@ export async function fetchAdminPage<R extends AdminPageResource>(
     ),
   )) as CursorPage<AdminPageRows[R]>;
 }
+
+import type { AdminLeadTranscriptMessage } from "./admin-data.types";
+
+const fetchLeadLiveAgentTranscriptServer = createServerFn({ method: "GET" })
+  .inputValidator((data: unknown) => z.object({ leadId: z.string().uuid() }).strict().parse(data))
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager", "agent"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchLeadLiveAgentTranscript(data, staff);
+  });
+
+export async function fetchLeadLiveAgentTranscript(options: {
+  data: { leadId: string };
+}): Promise<AdminLeadTranscriptMessage[]> {
+  return callStaffServerFn(async () =>
+    fetchLeadLiveAgentTranscriptServer(await withStaffAuthHeaders(options)),
+  );
+}

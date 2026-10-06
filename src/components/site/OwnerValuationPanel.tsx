@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { ClipboardCheck, MessageCircle } from "lucide-react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,6 +10,10 @@ import { whatsappIntentUrl, type WhatsAppIntentContext } from "@/config/site";
 import { createValuationLead } from "@/lib/neon/admin-data";
 import { VALUATION_CONSENT_TEXT } from "@/lib/neon/valuation-leads.js";
 import { buildContext, track } from "@/lib/analytics/events";
+import { submitPublicForm } from "@/lib/public-form-submit";
+import { FormStatus, type FormStatusState } from "@/components/site/FormStatus";
+
+const VALUATION_FORM_STATUS_ID = "valuation-form-status";
 
 const UTM_PARAM_KEYS = [
   "utm_source",
@@ -20,12 +23,12 @@ const UTM_PARAM_KEYS = [
   "utm_content",
 ] as const;
 
-// Best-effort UTM capture from the current URL -- mirrors listings.tsx's own
-// collectUtmParams for ListingAlertForm (this repo has no shared UTM utility,
-// confirmed via repo-wide grep, so each form keeps this small self-contained
-// copy rather than introducing cross-feature coupling for five lines of
-// logic). Safe to call during SSR: `window` is guarded, and this only
-// actually runs from a client event handler (the form's onSubmit) in
+// Best-effort UTM capture from the current URL -- mirrors ListingAlertForm's own
+// collectUtmParams (not analytics/events.ts's exported one, which only keeps
+// approved campaign tokens and so has different rules; each form keeps this
+// small self-contained copy rather than introducing cross-feature coupling for
+// five lines of logic). Safe to call during SSR: `window` is guarded, and this
+// only actually runs from a client event handler (the form's onSubmit) in
 // practice.
 function collectUtmParams(): Record<string, string> {
   if (typeof window === "undefined") return {};
@@ -43,11 +46,11 @@ function collectUtmParams(): Record<string, string> {
  * WhatsApp deep-link beside it -- not replacing it. Same "offer a structured
  * path without removing the WhatsApp-first option" pattern already
  * established by /listings' zero-results notify-me form (ListingAlertForm in
- * listings.tsx). The consent checkbox starts unchecked (useState(false)) and
- * is never preselected by any prop or effect -- this is a repo-wide,
- * plan-mandated invariant, not a per-form style choice.
+ * src/components/site/ListingAlertForm.tsx). The consent checkbox starts
+ * unchecked (useState(false)) and is never preselected by any prop or effect
+ * -- this is a repo-wide, plan-mandated invariant, not a per-form style choice.
  */
-function ValuationLeadForm({ estateId }: { estateId?: string }) {
+export function ValuationLeadForm({ estateId }: { estateId?: string }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [propertyAddress, setPropertyAddress] = useState("");
@@ -55,34 +58,37 @@ function ValuationLeadForm({ estateId }: { estateId?: string }) {
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [status, setStatus] = useState<FormStatusState>({ kind: "idle" });
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    // Clear any previous result first so a stale error never sits next to a
+    // fresh attempt.
+    setStatus({ kind: "idle" });
     if (!consent) {
-      toast.error("請先剔選同意先可以提交");
+      setStatus({ kind: "error", message: "請先剔選同意先可以提交" });
       return;
     }
     setSubmitting(true);
-    const result = await createValuationLead({
-      data: {
-        name,
-        phone,
-        propertyAddress,
-        notes,
-        estateId,
-        consent,
-        utm: collectUtmParams(),
-      },
-    }).catch((err) => ({
-      error: err instanceof Error ? err.message : String(err),
-    }));
+    const outcome = await submitPublicForm(() =>
+      createValuationLead({
+        data: {
+          name,
+          phone,
+          propertyAddress,
+          notes,
+          estateId,
+          consent,
+          utm: collectUtmParams(),
+        },
+      }),
+    );
     setSubmitting(false);
-    if (result && "error" in result && result.error) {
-      toast.error("提交失敗：" + result.error);
+    if (outcome.status === "error") {
+      setStatus({ kind: "error", message: outcome.message });
       return;
     }
     setSubmitted(true);
-    toast.success("已收到你嘅估價查詢，我們會盡快聯絡你。");
     track({ name: "valuation_form_submit", payload: {} }, buildContext());
   }
 
@@ -159,9 +165,15 @@ function ValuationLeadForm({ estateId }: { estateId?: string }) {
           {VALUATION_CONSENT_TEXT}
         </Label>
       </div>
-      <Button type="submit" className="w-full" disabled={submitting || !consent}>
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={submitting || !consent}
+        aria-describedby={status.kind === "idle" ? undefined : VALUATION_FORM_STATUS_ID}
+      >
         {submitting ? "提交中…" : "提交估價查詢"}
       </Button>
+      <FormStatus state={status} id={VALUATION_FORM_STATUS_ID} />
     </form>
   );
 }

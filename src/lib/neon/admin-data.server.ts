@@ -3908,3 +3908,44 @@ export async function writeAudit(
     params,
   );
 }
+
+import type { AdminLeadTranscriptMessage } from "./admin-data.types";
+
+/** The newest messages a lead's website-chat transcript returns; older ones are dropped. */
+const LEAD_TRANSCRIPT_LIMIT = 100;
+
+/**
+ * Read-only transcript of the website chat behind a lead, oldest message first.
+ *
+ * Scoped like fetchAdminLead: admins and managers read any lead, an agent only the leads
+ * assigned to them (403 otherwise). The ids break created_at ties, so rows that share a
+ * timestamp still come back in one stable order. The enum has only four directions; anything
+ * else would be shown as a system message rather than dropped.
+ */
+export async function fetchLeadLiveAgentTranscript(
+  input: { leadId: string },
+  actor: StaffAccess,
+): Promise<AdminLeadTranscriptMessage[]> {
+  await assertLeadInScope(input.leadId, actor);
+  const rows = await queryRows(
+    `SELECT t.direction, t.message_text, t.created_at
+       FROM (
+         SELECT m.id, m.direction, m.message_text, m.created_at
+           FROM live_agent_messages m
+           JOIN live_agent_sessions s ON s.id = m.session_id
+          WHERE s.lead_id = $1::uuid
+          ORDER BY m.created_at DESC, m.id DESC
+          LIMIT $2::int
+       ) t
+      ORDER BY t.created_at ASC, t.id ASC`,
+    [input.leadId, LEAD_TRANSCRIPT_LIMIT],
+  );
+  return rows.map((row) => ({
+    role:
+      row.direction === "visitor" || row.direction === "assistant" || row.direction === "staff"
+        ? row.direction
+        : "system",
+    text: stringOrEmpty(row.message_text),
+    created_at: rowDate(row.created_at),
+  }));
+}

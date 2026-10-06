@@ -588,6 +588,7 @@ export async function fetchForwardedEnquiry(leadId: string) {
     : null;
 }
 export const fetchAdminLeadAiProfile = async () => ({ profile: null, tags: [] });
+export const fetchLeadLiveAgentTranscript = async () => [];
 export async function fetchRelatedLeadConversations(leadId: string) {
   call("relatedRead", { leadId });
   if (fixture().relatedReadFailure) throw Error("Synthetic related read failure");

@@ -653,3 +653,10 @@ export type StaffAccessSummary = {
   owned: StaffOwnedCounts;
   ownedTotal: number;
 };
+
+/** One message of the public website chat, as staff read it on a live_agent lead. */
+export type AdminLeadTranscriptMessage = {
+  role: "visitor" | "assistant" | "staff" | "system";
+  text: string;
+  created_at: string;
+};

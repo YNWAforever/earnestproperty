@@ -84,7 +84,12 @@ test("AI modules expose the expected public and server-only contracts", () => {
     ],
     [
       "src/lib/ai/live-agent.ts",
-      ["canUseChunkForPublicAnswer", "buildLiveAgentLeadInput", "shouldOfferHumanHandoff"],
+      [
+        "canUseChunkForPublicAnswer",
+        "buildLiveAgentLeadInput",
+        "shouldOfferHumanHandoff",
+        "validateHandoffPhone",
+      ],
     ],
     [
       "src/lib/ai/live-agent.server.ts",
@@ -269,6 +274,11 @@ test("live-agent handoff avoids fake Woztell conversations and implicit opt-in",
   assert.doesNotMatch(server, /OR\s+EXCLUDED\.opt_in_whatsapp/i);
   assert.match(server, /opt_in_whatsapp\s*=\s*crm_contacts\.opt_in_whatsapp/);
   assert.match(server, /session\.status\s+===\s+"handoff_requested"/);
+  // Unverified web input never writes an existing WhatsApp thread, and a handoff lead starts at
+  // `new`; a phone that matches an existing thread only becomes a lead note for staff.
+  assert.doesNotMatch(server, /UPDATE\s+whatsapp_conversations/i);
+  assert.doesNotMatch(server, /'contacted'/);
+  assert.match(server, /可能與現有 WhatsApp 對話相關/);
 
   assert.match(widget, /<Checkbox/);
   assert.match(widget, /handoffConsent/);

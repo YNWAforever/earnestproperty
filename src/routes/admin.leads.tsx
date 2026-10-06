@@ -26,6 +26,7 @@ import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { ForwardedEnquiryForm } from "@/components/admin/whatsapp/ForwardedEnquiryForm";
 import { ForwardedEnquiryEvidence } from "@/components/admin/whatsapp/ForwardedEnquiryEvidence";
 import { RelatedLeadConversations } from "@/components/admin/whatsapp/RelatedLeadConversations";
+import { LeadChatTranscript } from "@/components/admin/LeadChatTranscript";
 import { LeadContactEditor } from "@/components/admin/whatsapp/LeadContactEditor";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
@@ -1620,6 +1621,8 @@ function LeadDetailEditor({
           )}
         </div>
       </section>
+
+      {lead.source === "live_agent" ? <LeadChatTranscript key={lead.id} leadId={lead.id} /> : null}
 
       <section className="rounded-lg border p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
