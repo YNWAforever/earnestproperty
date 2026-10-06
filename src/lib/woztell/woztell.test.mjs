@@ -259,8 +259,9 @@ test("campaign reconciliation makes stale sending recipients terminal without re
 test("blast and service-window guards enforce WhatsApp safety defaults", () => {
   const now = new Date("2026-06-23T12:00:00.000Z");
 
-  assert.equal(isOptOutText("停止"), true);
-  assert.equal(isOptOutText("unsubscribe please"), true);
+  assert.equal(isOptOutText("停止"), false);
+  assert.equal(isOptOutText("unsubscribe please"), false);
+  assert.equal(isOptOutText("退訂"), true);
   assert.equal(isOptOutText("想睇樓"), false);
 
   assert.equal(
@@ -371,86 +372,156 @@ test("admin reply server action never accepts a browser recipient id", () => {
   assert.doesNotMatch(adminData, /conversationId: string; recipientId: string; text: string/);
 });
 
-// The substring matcher behind isOptOutText fired on any message merely
-// CONTAINING an opt-out keyword. Written Chinese has no word delimiter, so
-// 「我想取消今日睇樓約會」 -- a customer rescheduling a viewing -- silently opted
-// them out of WhatsApp. Because the webhook writes the flag monotonically
-// (opted_out_whatsapp OR $7), that was irreversible until the admin/manager
-// reset landed: staff replies 400'd forever and the contact was dropped from
-// every campaign.
-test("real opt-out messages are detected across script, width and politeness", async () => {
-  const { isOptOutText } = await import("./woztell.server.ts");
+// D4 (owner, 2026-10-06): the old substring/stem matcher opted customers out on
+// 「唔要」, "Can I stop by?" and "bus stop". Only the whole normalised message
+// being an exact opt-out word counts now; near-misses are flagged for staff
+// review (isOptOutNearMiss) and never opt anyone out automatically.
+test("D4: only the whole message STOP/UNSUBSCRIBE/退訂/取消訂閱/停止接收 is an opt-out", async () => {
+  const { isOptOutText, isOptOutNearMiss } = await import("./woztell.server.ts");
 
-  // Unambiguous phrases anywhere in the message.
   for (const value of [
+    "STOP",
+    "stop",
+    "Stop",
+    "  STOP  ",
+    "STOP.",
+    "STOP!!!",
+    "ＳＴＯＰ",
+    "Ｓｔｏｐ",
+    "🛑 STOP",
+    "STOP 🙏",
+    "S T O P",
+    "UNSUBSCRIBE",
+    "unsubscribe",
+    "Unsubscribe.",
+    "退訂",
+    "退訂！",
+    "「退訂」",
+    "退 訂",
+    "退訂\uFE0F",
+    "\u200B退訂",
+    "退订",
     "取消訂閱",
     "取消订阅",
-    "我要退訂",
-    "退订",
-    "請停止發送",
-    "停止發送",
-    "拒收",
-    "不再接收",
-    "唔想再收",
-    "unsubscribe please",
-    "opt out",
-    "remove me",
+    "取消訂閱。",
+    "停止接收",
+    "停止接收。",
   ]) {
-    assert.equal(isOptOutText(value), true, `${value} must be treated as an opt-out`);
-  }
-
-  // Bare stems, with and without politeness prefixes and punctuation.
-  for (const value of [
-    "取消",
-    "停止",
-    "唔要",
-    "不要",
-    "取消！",
-    "  停止  ",
-    "唔該停止",
-    "我要取消",
-  ]) {
-    assert.equal(isOptOutText(value), true, `${value} must be treated as an opt-out`);
-  }
-
-  // Latin, including next to CJK -- \\P{L} never matched there because CJK
-  // characters ARE letters, so 「請stop」 and 「STOP啦」 used to slip past.
-  for (const value of [
-    "stop",
-    "STOP.",
-    "Please STOP",
-    "請stop",
-    "STOP啦",
-    "唔該stop",
-    "ＳＴＯＰ",
-  ]) {
-    assert.equal(isOptOutText(value), true, `${value} must be treated as an opt-out`);
+    assert.equal(isOptOutText(value), true, `${JSON.stringify(value)} must be an opt-out`);
+    assert.equal(isOptOutNearMiss(value), false, `${JSON.stringify(value)} is never a near-miss`);
   }
 });
 
-// The original matcher used `text.includes(term)`, so any sentence merely
-// CONTAINING a stem opted the customer out. Written Chinese has no word
-// delimiter, so 「我想取消今日睇樓約會」 -- rescheduling a viewing -- silently opted
-// them out, irreversibly (the webhook writes opted_out_whatsapp OR $7).
-test("ordinary sentences containing an opt-out stem are not opt-outs", async () => {
+test("D4: sentences, stems and old phrases are not opt-outs", async () => {
   const { isOptOutText } = await import("./woztell.server.ts");
 
   for (const value of [
-    "我想取消今日睇樓約會",
-    "唔要呢個單位，想睇第二個",
-    "不要太貴嘅盤",
-    "請停止安排星期六睇樓",
-    "我不要三房嘅",
-    "想睇樓",
+    "Can I stop by?",
+    "唔要",
+    "can i stop by the office",
+    "附近有冇 bus stop?",
+    "bus stop",
+    "please stop",
+    "STOP please",
+    "Please STOP",
+    "請stop",
+    "STOP啦",
     "stopover in Tsuen Wan",
+    "STOP STOP",
+    "STOP-STOP",
+    "不要",
+    "取消",
+    "停止",
+    "不用",
+    "唔該停止",
+    "我要取消",
+    "我想取消今日睇樓約會",
+    "我要退訂",
+    "請退訂",
+    "唔該退訂",
+    "退訂，謝謝",
+    "unsubscribe me",
+    "unsubscribe please",
+    "opt out",
+    "remove me",
+    "拒收",
+    "停止發送",
+    "不再接收",
+    "唔想再收",
+    "唔要再send",
     "",
     "   ",
+    "!!!",
+    "🛑",
+    null,
+    undefined,
+    "STOP" + " ".repeat(10) + "x".repeat(60),
   ]) {
-    assert.equal(isOptOutText(value), false, `${value} must NOT be treated as an opt-out`);
+    assert.equal(isOptOutText(value), false, `${JSON.stringify(value)} must NOT be an opt-out`);
+  }
+});
+
+test("near-miss contains rules: what flags and what does not", async () => {
+  const { isOptOutNearMiss } = await import("./woztell.server.ts");
+
+  for (const value of [
+    "我要退訂",
+    "請退訂",
+    "唔該退訂",
+    "退訂，謝謝",
+    "我想取消訂閱",
+    "退订吧",
+    "STOP please",
+    "Please STOP",
+    "stop stop",
+    "唔該stop啦",
+    "請stop",
+    "unsubscribe me",
+    "please unsubscribe",
+    "唔好再send嘢俾我",
+    "唔好再發訊息俾我",
+    "不要再發給我",
+    "拒收",
+    "唔想再收你哋訊息",
+    "停止發送",
+    "remove me from the list",
+    "opt out",
+  ]) {
+    assert.equal(isOptOutNearMiss(value), true, `${JSON.stringify(value)} must be a near-miss`);
   }
 
-  assert.equal(isOptOutText(null), false);
-  assert.equal(isOptOutText(undefined), false);
+  for (const value of [
+    "Can I stop by?",
+    "can i stop by the office tomorrow",
+    "附近有冇 bus stop?",
+    "bus stop",
+    "stopover in Tsuen Wan",
+    "nonstop",
+    "唔要",
+    "不要太貴嘅盤",
+    "取消",
+    "我想取消今日睇樓約會",
+    "請停止安排星期六睇樓",
+    "停止",
+    "想睇樓",
+    "",
+    null,
+  ]) {
+    assert.equal(
+      isOptOutNearMiss(value),
+      false,
+      `${JSON.stringify(value)} must NOT be a near-miss`,
+    );
+  }
+});
+
+test("normalizeOptOutCandidate applies NFKC, case-fold, edge trim and inner-space removal only", async () => {
+  const { normalizeOptOutCandidate } = await import("./woztell.server.ts");
+
+  assert.equal(normalizeOptOutCandidate("  ＳＴＯＰ！ "), "stop");
+  assert.equal(normalizeOptOutCandidate("退 訂"), "退訂");
+  assert.equal(normalizeOptOutCandidate("退訂，謝謝"), "退訂,謝謝");
+  assert.equal(normalizeOptOutCandidate("x".repeat(65)), "");
 });
 
 test("legacy opt-out reset fails closed and the inbox uses evidence-based consent", () => {
