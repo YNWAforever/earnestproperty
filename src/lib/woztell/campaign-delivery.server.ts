@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { campaignRecipientPrimarySql, marketingIdentitySafeSql } from "../neon/phone-identity.ts";
 
+import { classifyCampaignSendResult } from "./campaign-send-outcome.ts";
 import { isBlastRecipientAllowed, sendWoztellResponse, woztellEnabled } from "./woztell.server.ts";
 
 type CampaignRecipient = {
@@ -235,39 +236,6 @@ async function refreshCampaignDeliveryStatus(campaignId: string) {
   );
 }
 
-/**
- * WOZTELL_DELIVERY_UNKNOWN is now a TERMINAL state: materializeCampaignRecipients
- * refuses to re-queue a recipient carrying it, because the provider may already
- * have delivered the message and re-queueing would send (and bill) a second one.
- *
- * That makes it important not to over-apply. Only outcomes where delivery is
- * genuinely ambiguous belong here. Anything that proves the request was
- * rejected BEFORE dispatch means nothing was sent, so it stays retryable and
- * the recipient can be re-queued. Three things prove it: WOZTELL answering
- * ok:0 (`refused`), a 429 rate-limit, and the 4xx set below.
- *
- * The status alone cannot carry that distinction, which is why `refused`
- * exists: WOZTELL reports a refusal as HTTP 500, the same status a genuinely
- * ambiguous mid-flight failure produces.
- */
-function providerFailureCode(result: { ok: boolean; status?: number; refused?: boolean }) {
-  if (!result.status) return "WOZTELL_CONFIGURATION_UNAVAILABLE";
-  // WOZTELL said ok:0 -- it refused before handing anything to the integration
-  // server, so the recipient definitively did not get a message. That has to be
-  // decided before the status list, because WOZTELL answers a refusal with 500
-  // and would otherwise fall through to UNKNOWN, which is terminal: a single
-  // wrong token scope or unknown channel id would permanently strand every
-  // recipient in the blast, none of whom were ever contacted.
-  if (result.refused === true) return "WOZTELL_PROVIDER_REJECTED";
-  // 429: the provider refused to accept the request at all. Definitively not
-  // delivered, so this must not be misfiled as ambiguous and stranded forever.
-  if ([400, 401, 403, 404, 422, 429].includes(result.status)) return "WOZTELL_PROVIDER_REJECTED";
-  // Anything else is genuinely ambiguous -- the send may have gone through
-  // before the failure -- and stays terminal so a retry cannot bill a customer
-  // for a second message.
-  return "WOZTELL_DELIVERY_UNKNOWN";
-}
-
 async function deliverCampaignRecipient(
   recipient: CampaignRecipient,
   dependencies: Required<Omit<CampaignDeliveryDependencies, "job">>,
@@ -304,22 +272,33 @@ async function deliverCampaignRecipient(
       ],
     });
   } catch {
+    // A thrown send (timeout, network error after the request left) may have
+    // been accepted, so it is never classified as retry-safe.
     await dependencies.updateRecipient(recipient.id, "failed", "WOZTELL_DELIVERY_UNKNOWN");
     return "failed" as const;
   }
 
-  if (result.ok) {
-    await dependencies.updateRecipient(recipient.id, "sent", null);
-    return "sent" as const;
+  // WOZTELL_DELIVERY_UNKNOWN is TERMINAL: materializeCampaignRecipients refuses
+  // to re-queue it, because the provider may already have delivered (and
+  // billed) the message. classifyCampaignSendResult is the one place that
+  // decides "provably not sent" (retry-safe) versus "possibly accepted".
+  const outcome = classifyCampaignSendResult(result);
+  switch (outcome.kind) {
+    case "sent":
+      await dependencies.updateRecipient(recipient.id, "sent", null);
+      return "sent" as const;
+    case "failed":
+    case "unknown":
+      await dependencies.updateRecipient(recipient.id, "failed", outcome.code);
+      return "failed" as const;
+    case "stop":
+      await dependencies.updateRecipient(recipient.id, "queued", outcome.reason);
+      if (outcome.reason === "WOZTELL_CONFIGURATION_UNAVAILABLE") {
+        throw deliveryError(outcome.reason, "WozTell configuration is unavailable.");
+      }
+      // Interim (FX-10b Task 1): Task 2 replaces this throw with a campaign pause.
+      throw deliveryError(outcome.reason, "WozTell rejected the credentials or channel.");
   }
-
-  const code = providerFailureCode(result);
-  if (code === "WOZTELL_CONFIGURATION_UNAVAILABLE") {
-    await dependencies.updateRecipient(recipient.id, "queued", code);
-    throw deliveryError(code, "WozTell configuration is unavailable.");
-  }
-  await dependencies.updateRecipient(recipient.id, "failed", code);
-  return "failed" as const;
 }
 
 export async function deliverWoztellCampaign(

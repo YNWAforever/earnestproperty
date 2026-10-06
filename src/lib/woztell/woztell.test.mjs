@@ -689,7 +689,7 @@ test("a provider refusal stays retryable instead of stranding the recipient", as
     ok: false,
     status: 500,
     refused: true,
-    error: "WOZTELL_112: Channel ID not found",
+    error: "WOZTELL_131026: Receiver is incapable of receiving this message",
   }));
 
   assert.deepEqual(result.updates, [[campaignRecipient.id, "failed", "WOZTELL_PROVIDER_REJECTED"]]);
