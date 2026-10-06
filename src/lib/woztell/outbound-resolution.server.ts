@@ -21,6 +21,7 @@ export type ResolveUnknownOutboundInput = {
  * A lease-expired `dispatching` row becomes `unknown` while the original worker may still be
  * waiting on the provider (up to the 15 s fetch timeout). Resolving only after this many minutes
  * since dispatch keeps a resolution (and a later manual resend) clear of an in-flight send.
+ * A row with no dispatch time falls back to its last update, so it is never resolvable at once.
  */
 export const UNKNOWN_RESOLUTION_MIN_AGE_MINUTES = 15;
 
@@ -83,8 +84,7 @@ export async function resolveUnknownOutbound(
       FROM cur c, actor a
       WHERE i.id = c.id AND i.id = $1::uuid AND i.conversation_id = $2::uuid
         AND i.state = 'unknown'
-        AND (i.dispatch_started_at IS NULL
-          OR i.dispatch_started_at <= now() - make_interval(mins => $6::int))
+        AND COALESCE(i.dispatch_started_at, i.updated_at) <= now() - make_interval(mins => $6::int)
         AND a.ok AND a.can_read
       RETURNING i.*
     ), msg AS (
@@ -115,9 +115,11 @@ export async function resolveUnknownOutbound(
     ],
   );
   if (!row?.actor_ok) throw new Response("Forbidden", { status: 403 });
+  // Read access first, so a caller who cannot read the conversation learns nothing about
+  // whether an intent exists (no existence oracle).
+  if (!row.can_read) throw new Response("Forbidden", { status: 403 });
   // An intent id paired with another conversation id is simply not found.
   if (!row.intent_id) throw new Response("OUTBOUND_NOT_FOUND_OR_FORBIDDEN", { status: 404 });
-  if (!row.can_read) throw new Response("Forbidden", { status: 403 });
   const result = (changed: boolean) => ({
     ok: true as const,
     intentId: row.intent_id as string,

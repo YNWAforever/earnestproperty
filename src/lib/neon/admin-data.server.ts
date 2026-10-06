@@ -2998,8 +2998,8 @@ export async function fetchAdminConversation(
     -- FX-08: the oldest unconfirmed send, for managers only (agents never see or get a null).
     LEFT JOIN LATERAL (
       SELECT i.id, i.kind, i.actor_type, i.dispatch_started_at, i.error,
-        (i.dispatch_started_at IS NULL
-          OR i.dispatch_started_at <= now() - make_interval(mins => $3::int)) AS resolvable
+        (COALESCE(i.dispatch_started_at, i.updated_at)
+          <= now() - make_interval(mins => $3::int)) AS resolvable
       FROM whatsapp_outbound_intents i
       WHERE i.conversation_id = wc.id AND i.state = 'unknown' AND $4::boolean
       ORDER BY i.dispatch_started_at ASC NULLS FIRST, i.id

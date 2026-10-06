@@ -11,6 +11,9 @@
 -- It leaves the forward migration app_migrations row in place, so the drift check
 -- still reports up to date and neon:migrate will not re-apply the forward file.
 -- Re-apply the forward file by hand if needed.
+--
+-- Run it inside BEGIN … COMMIT. SET LOCAL holds only inside a transaction, so outside
+-- one the lock timeout below would not apply.
 SET LOCAL lock_timeout = '5s';
 DROP TRIGGER IF EXISTS wa_intent_resolution_guard ON whatsapp_outbound_intents;
 DROP FUNCTION IF EXISTS wa_guard_outbound_resolution();

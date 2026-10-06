@@ -602,6 +602,255 @@ test("FX-08 unknown outcomes (owned Postgres)", { timeout: 300000 }, async (t) =
       });
 
       await t.test(
+        "final wave Q1: a NULL dispatch_started_at falls back to updated_at for the 15-minute guard",
+        async () => {
+          const { conversationId } = await newConversation();
+          const intentId = await deliver(conversationId, timeout());
+          // A legacy or hand-recovered row with no dispatch time, just touched.
+          await query(
+            "UPDATE whatsapp_outbound_intents SET dispatch_started_at=NULL,updated_at=now() WHERE id=$1",
+            [intentId],
+          );
+          await rejectsWith(
+            resolve(intentId, conversationId),
+            409,
+            "OUTBOUND_RESOLUTION_TOO_EARLY",
+          );
+          assert.equal((await intent(intentId)).state, "unknown");
+          assert.equal((await audits(intentId)).length, 0);
+          await query(
+            "UPDATE whatsapp_outbound_intents SET updated_at=now()-interval '16 minutes' WHERE id=$1",
+            [intentId],
+          );
+          const before = sends;
+          const result = await resolve(intentId, conversationId);
+          assert.equal(result.changed, true);
+          assert.equal((await intent(intentId)).state, "resolved_not_sent");
+          assert.equal(sends, before);
+        },
+      );
+
+      await t.test(
+        "final wave Q2: a manager who cannot read the conversation gets 403 whether or not the intent exists",
+        async () => {
+          const { conversationId } = await newConversation();
+          const intentId = await deliver(conversationId, timeout());
+          await age(intentId, 20);
+          const other = { staffId: OTHER_MANAGER, roles: ["manager"] };
+          const [{ readable }] = await query("SELECT wa_can_read_conversation($1,$2) AS readable", [
+            OTHER_MANAGER,
+            conversationId,
+          ]);
+          if (!readable) {
+            // Same answer for a real intent, an unknown intent id and an unknown conversation id:
+            // no existence oracle.
+            for (const [probeIntent, probeConversation] of [
+              [intentId, conversationId],
+              [randomUUID(), conversationId],
+              [intentId, randomUUID()],
+            ])
+              await rejectsWith(
+                resolve(probeIntent, probeConversation, undefined, other),
+                403,
+                "Forbidden",
+              );
+          } else {
+            await rejectsWith(
+              resolve(randomUUID(), conversationId, undefined, other),
+              404,
+              "OUTBOUND_NOT_FOUND_OR_FORBIDDEN",
+            );
+          }
+          // A reader still gets the 404 for an intent that is not on this conversation.
+          await rejectsWith(
+            resolve(randomUUID(), conversationId),
+            404,
+            "OUTBOUND_NOT_FOUND_OR_FORBIDDEN",
+          );
+          const row = await intent(intentId);
+          assert.equal(row.state, "unknown");
+          assert.equal((await audits(intentId)).length, 0);
+        },
+      );
+
+      await t.test(
+        "final wave M2: a staff intent left dispatching after its job failed or its lease expired becomes unknown, never resent",
+        async () => {
+          const { recoverExpiredServiceLeases } = await import("../control-plane/jobs.server.ts");
+          const begun = async (conversationId) => {
+            const { id: intentId } = await enqueue(conversationId);
+            await query(
+              "UPDATE whatsapp_outbound_intents SET state='dispatching',dispatch_started_at=now()-interval '2 minutes' WHERE id=$1",
+              [intentId],
+            );
+            return intentId;
+          };
+          // (a) The job failed for good while the intent was still dispatching.
+          const failedConv = await newConversation();
+          const failedId = await begun(failedConv.conversationId);
+          await query(
+            "UPDATE ops_jobs SET status='failed',lease_owner=NULL,lease_expires_at=NULL,last_error_code='SYNTHETIC' WHERE idempotency_key=$1",
+            ["woztell.reply:" + failedId],
+          );
+          // (b) The worker died: its lease expired while the intent was dispatching.
+          const expiredConv = await newConversation();
+          const expiredId = await begun(expiredConv.conversationId);
+          await query(
+            "UPDATE ops_jobs SET status='running',lease_owner='synthetic-dead',lease_expires_at=now()-interval '1 minute' WHERE idempotency_key=$1",
+            ["woztell.reply:" + expiredId],
+          );
+          // Wrong-recipient guard: a live worker (valid lease) and a queued job are left alone.
+          const liveConv = await newConversation();
+          const liveId = await begun(liveConv.conversationId);
+          await query(
+            "UPDATE ops_jobs SET status='running',lease_owner='synthetic-live',lease_expires_at=now()+interval '5 minutes' WHERE idempotency_key=$1",
+            ["woztell.reply:" + liveId],
+          );
+          const queuedConv = await newConversation();
+          const queuedId = await begun(queuedConv.conversationId);
+
+          const before = { sends, fetches: network.mock.callCount() };
+          const jobsBefore = (await query("SELECT count(*)::int n FROM ops_jobs"))[0].n;
+          await recoverExpiredServiceLeases(query);
+          await recoverExpiredServiceLeases(query); // idempotent
+          for (const intentId of [failedId, expiredId]) {
+            const row = await intent(intentId);
+            assert.equal(row.state, "unknown");
+            assert.equal(row.error, "WOZTELL_DELIVERY_UNKNOWN");
+            assert.equal(row.message_status, "unknown");
+          }
+          assert.equal((await intent(liveId)).state, "dispatching");
+          assert.equal((await intent(queuedId)).state, "dispatching");
+          assert.equal((await query("SELECT count(*)::int n FROM ops_jobs"))[0].n, jobsBefore);
+
+          // The re-queued job of (b) runs again: the intent is no longer queued or dispatching,
+          // so nothing is sent.
+          const [job] = await query(
+            "UPDATE ops_jobs SET status='running',lease_owner='synthetic-worker',lease_expires_at=now()+interval '5 minutes' WHERE idempotency_key=$1 RETURNING id",
+            ["woztell.reply:" + expiredId],
+          );
+          await deliverOutboundIntent(expiredId, {
+            checkpoint: async () => {},
+            job: { jobId: job.id, workerId: "synthetic-worker" },
+            send: async () => {
+              sends++;
+              return { ok: true, body: { ok: 1, messageId: "synthetic-never" } };
+            },
+          });
+          assert.equal((await intent(expiredId)).state, "unknown");
+          assert.deepEqual({ sends, fetches: network.mock.callCount() }, before);
+
+          // Now resolvable, after the usual 15 minutes.
+          await rejectsWith(
+            resolve(failedId, failedConv.conversationId),
+            409,
+            "OUTBOUND_RESOLUTION_TOO_EARLY",
+          );
+          await age(failedId, 16);
+          const result = await resolve(failedId, failedConv.conversationId);
+          assert.equal(result.changed, true);
+          assert.equal(result.lockReleased, true);
+          assert.equal((await enqueue(failedConv.conversationId)).state, "queued");
+          assert.equal(sends, before.sends);
+        },
+      );
+
+      await t.test(
+        "final wave Q3: a late service finish after a manager resolved the intent does not throw",
+        async () => {
+          const { syncServiceActionAfterFinish } =
+            await import("../whatsapp-enquiries/service-workflow.server.ts");
+          const { conversationId, contactId } = await newConversation();
+          const serviceIntent = randomUUID();
+          const actionId = randomUUID();
+          const messageId = randomUUID();
+          await query(
+            `INSERT INTO whatsapp_messages(id,conversation_id,contact_id,direction,message_type,text,status,woztell_member_id,channel_id)
+             SELECT $1,$2,$3,'outbound','TEXT','合成問卷','unknown',woztell_member_id,channel_id
+             FROM whatsapp_conversations WHERE id=$2`,
+            [messageId, conversationId, contactId],
+          );
+          // Synthetic fixture only: SET LOCAL skips the FK layer for these two inserts and is
+          // reset when the transaction ends; every CHECK constraint still applies.
+          await transaction([
+            { statement: "SET LOCAL session_replication_role = replica", params: [] },
+            {
+              statement: `INSERT INTO whatsapp_service_actions(id,inquiry_id,survey_id,purpose,state,block_reason,due_at,policy_id,activation_id,outbound_intent_id)
+              VALUES($1,$2,$3,'after_hours_ack','unknown','WOZTELL_DELIVERY_UNKNOWN',now(),$4,$5,$6)`,
+              params: [
+                actionId,
+                randomUUID(),
+                randomUUID(),
+                randomUUID(),
+                randomUUID(),
+                serviceIntent,
+              ],
+            },
+            {
+              statement: `INSERT INTO whatsapp_outbound_intents(id,conversation_id,actor_type,actor_staff_id,service_action_id,kind,payload,payload_hash,message_id,state,error,dispatch_started_at)
+              VALUES($1,$2,'service',NULL,$3,'text','{"text":"合成問卷"}'::jsonb,repeat('c',64),$4,'unknown','WOZTELL_DELIVERY_UNKNOWN',now()-interval '30 minutes')`,
+              params: [serviceIntent, conversationId, actionId, messageId],
+            },
+          ]);
+          const [{ role }] = await query(
+            "SELECT current_setting('session_replication_role') AS role",
+          );
+          assert.equal(role, "origin");
+          assert.equal((await resolve(serviceIntent, conversationId)).changed, true);
+          // The original worker's provider call finally returns: finish is a no-op on a resolved
+          // intent, and the action sync must not copy resolved_* into the action CHECK.
+          await finishOutboundIntent(
+            serviceIntent,
+            { state: "accepted", externalMessageId: null, error: null },
+            transaction,
+          );
+          await syncServiceActionAfterFinish(serviceIntent, new Date(), { query, transaction });
+          const [action] = await query(
+            "SELECT state,block_reason FROM whatsapp_service_actions WHERE id=$1",
+            [actionId],
+          );
+          assert.equal(action.state, "unknown");
+          assert.equal((await intent(serviceIntent)).state, "resolved_not_sent");
+          // A normal finish still copies an allowed state into the action.
+          const failedIntent = randomUUID();
+          const failedAction = randomUUID();
+          const failedMessage = randomUUID();
+          await query(
+            `INSERT INTO whatsapp_messages(id,conversation_id,contact_id,direction,message_type,text,status,woztell_member_id,channel_id)
+             SELECT $1,$2,$3,'outbound','TEXT','合成問卷','failed',woztell_member_id,channel_id
+             FROM whatsapp_conversations WHERE id=$2`,
+            [failedMessage, conversationId, contactId],
+          );
+          await transaction([
+            { statement: "SET LOCAL session_replication_role = replica", params: [] },
+            {
+              statement: `INSERT INTO whatsapp_service_actions(id,inquiry_id,survey_id,purpose,state,due_at,policy_id,activation_id,outbound_intent_id)
+              VALUES($1,$2,$3,'after_hours_ack','dispatching',now(),$4,$5,$6)`,
+              params: [
+                failedAction,
+                randomUUID(),
+                randomUUID(),
+                randomUUID(),
+                randomUUID(),
+                failedIntent,
+              ],
+            },
+            {
+              statement: `INSERT INTO whatsapp_outbound_intents(id,conversation_id,actor_type,actor_staff_id,service_action_id,kind,payload,payload_hash,message_id,state,error,dispatch_started_at)
+              VALUES($1,$2,'service',NULL,$3,'text','{"text":"合成問卷"}'::jsonb,repeat('d',64),$4,'failed','WOZTELL_PROVIDER_REJECTED',now())`,
+              params: [failedIntent, conversationId, failedAction, failedMessage],
+            },
+          ]);
+          await syncServiceActionAfterFinish(failedIntent, new Date(), { query, transaction });
+          const [synced] = await query(
+            "SELECT state,block_reason FROM whatsapp_service_actions WHERE id=$1",
+            [failedAction],
+          );
+          assert.deepEqual(synced, { state: "failed", block_reason: "WOZTELL_PROVIDER_REJECTED" });
+        },
+      );
+
+      await t.test(
         "migration B widens the state check, adds the guard, and the revert drops only the guard",
         async () => {
           assert.ok(MIGRATION_VERSIONS.includes(MIGRATION));
@@ -671,6 +920,8 @@ test("FX-08 unknown outcomes (owned Postgres)", { timeout: 300000 }, async (t) =
           assert.match(revert, /lives outside neon\/migrations/);
           assert.match(revert, /owner approval/);
           assert.match(revert, /app_migrations row/);
+          // SET LOCAL only holds inside a transaction, so the header says how to run it by hand.
+          assert.match(revert, /^-- .*inside BEGIN … COMMIT/m);
           // apply-migrations.mjs splits statements on these characters, so comments avoid them.
           for (const [file, sql] of [
             [MIGRATION, forward],
@@ -683,7 +934,8 @@ test("FX-08 unknown outcomes (owned Postgres)", { timeout: 300000 }, async (t) =
             query("SELECT id,xmin::text AS xmin,state FROM whatsapp_outbound_intents ORDER BY id");
           const before = await rows();
           assert.ok(before.length > 10);
-          await pool.query(revert);
+          // Applied by hand as its header says: inside BEGIN and COMMIT.
+          await pool.query("BEGIN;\n" + revert + "\nCOMMIT;");
           assert.ok(!(await triggers()).includes("wa_intent_resolution_guard"));
           assert.equal(await guardFunction(), 0);
           assert.deepEqual(await checkStates(), STATES);
