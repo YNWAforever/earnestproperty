@@ -2568,8 +2568,10 @@ export async function rejectAdminAiTag(input: { tagId: string }, actor: StaffAcc
  * One statement locks the row, compares the caller's expected_version with the
  * current one, checks that a newly chosen assignee is active, writes only when
  * at least one field differs, and inserts the audit row with the before and
- * after values of the changed fields. A save that changes nothing writes
- * nothing and returns the unchanged version, so a double click never 409s.
+ * after values of the changed fields. A repeat save at the current version
+ * with no edits writes nothing and returns that version. A save at a stale
+ * version always 409s, even when it would change nothing, so a stale draft can
+ * never pick up a fresh version.
  */
 export async function updateAdminLead(
   input: AdminLeadUpdateInput,
