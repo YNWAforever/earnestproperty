@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import { randomUUID } from "node:crypto";
 import { deriveInboundIdentity, eventForReceiptProjection } from "./inbound-identity.ts";
 import { queryRows } from "../neon/db.server.ts";
+import { RECEIPT_RETRYABLE_SQL } from "./receipt-retry-policy.ts";
 import type {
   ReceiptProjectionState,
   ReceiptResult,
@@ -141,9 +142,48 @@ export async function markInboundReceipt(
   );
 }
 
+export type ReceiptProject = (
+  event: VerifiedReceiptInput["event"],
+  mode: "off" | "observe",
+) => Promise<unknown>;
+
+/** Projects one receipt that the caller has already claimed (leased and counted). */
+export async function projectClaimedReceipt(
+  row: ReceiptRow,
+  ports: { query: ReceiptQuery; project: ReceiptProject },
+): Promise<"projected" | "failed" | "blocked_schema" | "review"> {
+  const { query, project } = ports;
+  // Historical recovery never restores active effects or a former activation.
+  if (row.origin !== "live_webhook" || row.event_kind !== "customer_message") {
+    await markInboundReceipt(row.id, "failed", "REVIEW_REQUIRED", { query });
+    return "review";
+  }
+  const event =
+    typeof row.normalized_event === "string"
+      ? (JSON.parse(row.normalized_event) as VerifiedReceiptInput["event"])
+      : row.normalized_event;
+  try {
+    await project(
+      eventForReceiptProjection(event, row.id, row.event_kind, row.identity_key),
+      row.capture_mode === "off" ? "off" : "observe",
+    );
+    await markInboundReceipt(row.id, "projected", null, { query });
+    return "projected";
+  } catch (error) {
+    const missingSchema = error instanceof Error && error.message === "WA_ENQUIRY_SCHEMA_REQUIRED";
+    await markInboundReceipt(
+      row.id,
+      missingSchema ? "blocked_schema" : "failed",
+      missingSchema ? "WA_ENQUIRY_SCHEMA_REQUIRED" : "PROJECTION_FAILED",
+      { query },
+    );
+    return missingSchema ? "blocked_schema" : "failed";
+  }
+}
+
 export async function recoverPendingInboundReceipts(
   ports: ReceiptPorts & {
-    project?: (event: VerifiedReceiptInput["event"], mode: "off" | "observe") => Promise<unknown>;
+    project?: ReceiptProject;
     limit?: number;
   } = {},
 ) {
@@ -152,9 +192,7 @@ export async function recoverPendingInboundReceipts(
   const rows = (await query(
     `WITH claimed AS (
        SELECT id FROM whatsapp_inbound_receipts
-       WHERE projection_state IN ('pending','blocked_schema','failed')
-         AND (lease_until IS NULL OR lease_until < now())
-         AND attempt_count < 20 AND block_reason IS DISTINCT FROM 'REVIEW_REQUIRED'
+       WHERE ${RECEIPT_RETRYABLE_SQL("whatsapp_inbound_receipts")}
        ORDER BY received_at,id LIMIT $1 FOR UPDATE SKIP LOCKED
      )
      UPDATE whatsapp_inbound_receipts r
@@ -163,42 +201,18 @@ export async function recoverPendingInboundReceipts(
      RETURNING r.id,r.identity_key,r.normalized_event,r.event_kind,r.capture_mode,r.origin`,
     [limit],
   )) as ReceiptRow[];
-  const project =
+  const project: ReceiptProject =
     ports.project ??
-    (async (event: VerifiedReceiptInput["event"], mode: "off" | "observe") => {
+    (async (event, mode) => {
       const { ingestWoztellEvent } = await import("../woztell/woztell-ingest.server.ts");
       await ingestWoztellEvent(event, "live_webhook", undefined, { signedEvent: true, mode });
     });
   const counts = { projected: 0, blocked: 0, review: 0 };
   for (const row of rows) {
-    // Historical recovery never restores active effects or a former activation.
-    if (row.origin !== "live_webhook" || row.event_kind !== "customer_message") {
-      await markInboundReceipt(row.id, "failed", "REVIEW_REQUIRED", { query });
-      counts.review++;
-      continue;
-    }
-    const event =
-      typeof row.normalized_event === "string"
-        ? (JSON.parse(row.normalized_event) as VerifiedReceiptInput["event"])
-        : row.normalized_event;
-    try {
-      await project(
-        eventForReceiptProjection(event, row.id, row.event_kind, row.identity_key),
-        row.capture_mode === "off" ? "off" : "observe",
-      );
-      await markInboundReceipt(row.id, "projected", null, { query });
-      counts.projected++;
-    } catch (error) {
-      const missingSchema =
-        error instanceof Error && error.message === "WA_ENQUIRY_SCHEMA_REQUIRED";
-      await markInboundReceipt(
-        row.id,
-        missingSchema ? "blocked_schema" : "failed",
-        missingSchema ? "WA_ENQUIRY_SCHEMA_REQUIRED" : "PROJECTION_FAILED",
-        { query },
-      );
-      counts.blocked++;
-    }
+    const outcome = await projectClaimedReceipt(row, { query, project });
+    if (outcome === "projected") counts.projected++;
+    else if (outcome === "review") counts.review++;
+    else counts.blocked++;
   }
   return counts;
 }

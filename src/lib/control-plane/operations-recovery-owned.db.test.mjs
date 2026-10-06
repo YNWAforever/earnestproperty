@@ -76,3 +76,147 @@ test("EP-19 owned retry retains original job identity, payload, attempts and ato
     );
   });
 });
+
+function syntheticReceipt(messageId, mode = "active") {
+  return {
+    tenantKey: "woztell:synthetic-ops-app",
+    appId: "synthetic-ops-app",
+    channelId: "synthetic-ops-channel",
+    origin: "live_webhook",
+    eventKind: "customer_message",
+    bodyDigest: "b".repeat(64),
+    providerOccurredAt: "2026-10-06T01:59:59Z",
+    receivedAt: new Date("2026-10-06T02:00:00Z"),
+    capture: {
+      mode,
+      activationId: "22222222-2222-4222-8222-222222222222",
+      effectsEligible: false,
+    },
+    event: {
+      direction: "inbound",
+      externalMessageId: messageId,
+      legacyExternalMessageId: null,
+      fromPhone: "85255550101",
+      toPhone: "85255550202",
+      timestamp: "2026-10-06T01:59:59Z",
+      messageType: "TEXT",
+      text: "合成測試訊息",
+      woztellMemberId: "synthetic-ops-customer",
+      channelId: "synthetic-ops-channel",
+      appId: "synthetic-ops-app",
+      memberName: "Synthetic Customer",
+      payload: { type: "TEXT", eventType: "INBOUND", data: { text: "合成測試訊息" } },
+    },
+  };
+}
+
+test("FX-07 receipt retry backoff is shared by recovery and nextDueAt", async (t) => {
+  // EP-19 leaves its process-wide module mocks in place; release them before re-mocking the DB.
+  mock.reset();
+  await withOwnedPostgres(async ({ query, transaction }) => {
+    await mockOwnedServerDb(t.mock, query, transaction);
+    const { storeInboundReceipt, recoverPendingInboundReceipts } =
+      await import("../whatsapp-enquiries/inbound-receipts.server.ts");
+    const { getNextJobDueAt } = await import("./jobs-next-due.ts");
+    const nextDueAt = () => getNextJobDueAt({ lane: "service", capabilities: [], query });
+    const dbNow = async () => (await query("SELECT now() AS now"))[0].now.getTime();
+    const receiptRow = async (id) =>
+      (await query("SELECT * FROM whatsapp_inbound_receipts WHERE id=$1", [id]))[0];
+    const reset = () => query("DELETE FROM whatsapp_inbound_receipts");
+
+    await t.test("a receipt younger than the in-flight grace is not replayed", async () => {
+      await reset();
+      const stored = await storeInboundReceipt(syntheticReceipt("synthetic-ops-fresh"), { query });
+      assert.equal(stored.projectionState, "pending");
+      const projected = [];
+      const counts = await recoverPendingInboundReceipts({
+        query,
+        project: async (_event, mode) => projected.push(mode),
+      });
+      assert.equal(counts.projected, 0);
+      assert.equal(projected.length, 0);
+      const row = await receiptRow(stored.receiptId);
+      assert.equal(row.projection_state, "pending");
+      assert.equal(row.attempt_count, 1);
+      const due = await nextDueAt();
+      assert.ok(due, "a pending receipt must arm the service lane");
+      const expected = row.updated_at.getTime() + 2 * 60_000;
+      assert.ok(Math.abs(new Date(due).getTime() - expected) <= 1000, `${due} vs updated_at+2m`);
+    });
+
+    await t.test(
+      "a due receipt is replayed in observe mode and then clears nextDueAt",
+      async () => {
+        await reset();
+        const stored = await storeInboundReceipt(syntheticReceipt("synthetic-ops-due", "active"), {
+          query,
+        });
+        await query(
+          "UPDATE whatsapp_inbound_receipts SET updated_at=now()-interval '3 minutes' WHERE id=$1",
+          [stored.receiptId],
+        );
+        const modes = [];
+        const counts = await recoverPendingInboundReceipts({
+          query,
+          project: async (_event, mode) => modes.push(mode),
+        });
+        assert.equal(counts.projected, 1);
+        assert.deepEqual(modes, ["observe"]);
+        const row = await receiptRow(stored.receiptId);
+        assert.equal(row.capture_mode, "active");
+        assert.equal(row.projection_state, "projected");
+        assert.equal(row.effects_eligible, false);
+        assert.equal(await nextDueAt(), null);
+      },
+    );
+
+    await t.test("nextDueAt never points at a receipt recovery will not claim", async () => {
+      await reset();
+      const seed = async (messageId, assignments) => {
+        const stored = await storeInboundReceipt(syntheticReceipt(messageId), { query });
+        await query(
+          `UPDATE whatsapp_inbound_receipts
+           SET updated_at=now()-interval '3 hours', ${assignments} WHERE id=$1`,
+          [stored.receiptId],
+        );
+        return stored.receiptId;
+      };
+      await seed("synthetic-ops-cap", "attempt_count=20, projection_state='failed'");
+      await seed(
+        "synthetic-ops-review",
+        "projection_state='failed', block_reason='REVIEW_REQUIRED'",
+      );
+      await seed("synthetic-ops-projected", "projection_state='projected', projected_at=now()");
+      const leasedId = await seed("synthetic-ops-leased", "lease_until=now()+interval '5 minutes'");
+      const leased = await receiptRow(leasedId);
+      const firstDue = await nextDueAt();
+      assert.equal(firstDue, leased.lease_until.toISOString());
+      assert.ok(new Date(firstDue).getTime() > (await dbNow()));
+
+      const failing = await storeInboundReceipt(syntheticReceipt("synthetic-ops-failing"), {
+        query,
+      });
+      await query(
+        "UPDATE whatsapp_inbound_receipts SET updated_at=now()-interval '3 minutes' WHERE id=$1",
+        [failing.receiptId],
+      );
+      let projectCalls = 0;
+      for (let run = 0; run < 3; run++) {
+        await recoverPendingInboundReceipts({
+          query,
+          project: async () => {
+            projectCalls++;
+            throw new Error("SYNTHETIC_PROJECTION_FAILURE");
+          },
+        });
+      }
+      assert.equal(projectCalls, 1);
+      const failed = await receiptRow(failing.receiptId);
+      assert.equal(failed.projection_state, "failed");
+      assert.equal(failed.attempt_count, 2);
+      const due = await nextDueAt();
+      assert.equal(due, new Date(failed.updated_at.getTime() + 4 * 60_000).toISOString());
+      assert.ok(new Date(due).getTime() > (await dbNow()));
+    });
+  });
+});
