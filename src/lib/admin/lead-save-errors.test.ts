@@ -3,6 +3,8 @@ import { describe, expect, test } from "bun:test";
 import {
   LEAD_CHANGED_MESSAGE,
   LEAD_CHANGED_NOTE_SAVED_MESSAGE,
+  LEAD_FORBIDDEN_MESSAGE,
+  LEAD_NOT_FOUND_MESSAGE,
   isLeadChangedError,
   leadSaveErrorMessage,
 } from "./lead-save-errors";
@@ -22,6 +24,19 @@ describe("lead save errors", () => {
     );
     expect(leadSaveErrorMessage(new Error("x"))).toBe("x");
     expect(leadSaveErrorMessage("plain")).toBe("plain");
+  });
+
+  test("a lost permission and a deleted lead get zh-HK copy instead of raw English", () => {
+    const forbidden = "你已沒有權限修改此客戶查詢，可能已改派其他同事。請重新載入。";
+    expect(LEAD_FORBIDDEN_MESSAGE).toBe(forbidden);
+    expect(leadSaveErrorMessage(httpError("Forbidden", 403))).toBe(forbidden);
+    expect(leadSaveErrorMessage(httpError("", 403))).toBe(forbidden);
+    expect(leadSaveErrorMessage(new Error("Forbidden"))).toBe(forbidden);
+
+    const notFound = "此客戶查詢已不存在，請重新載入列表。";
+    expect(LEAD_NOT_FOUND_MESSAGE).toBe(notFound);
+    // { ok: false, error: "Not found" } reaches the toast as Error("Not found").
+    expect(leadSaveErrorMessage(new Error("Not found"))).toBe(notFound);
   });
 
   test("only a 409 with the LEAD_CHANGED body is a lead conflict", () => {
