@@ -1,3 +1,8 @@
+/** True only when OPS_WAKE_URL is a non-blank string; the former wake flag is ignored. */
+export function wakeEnabledFromEnv(env) {
+  return typeof env.OPS_WAKE_URL === "string" && env.OPS_WAKE_URL.trim() !== "";
+}
+
 /** Schedule post-commit work without blocking the request. */
 export function createJobWake({ enabled, waitUntil, run, report = () => {} }) {
   return (lane) => {

@@ -1,4 +1,6 @@
 export type JobLane = "service" | "general";
+/** True only when OPS_WAKE_URL is a non-blank string; the former wake flag is ignored. */
+export function wakeEnabledFromEnv(env: Record<string, string | undefined>): boolean;
 export function createJobWake(ports: {
   enabled: boolean;
   waitUntil: (work: Promise<unknown>) => unknown;

@@ -8,8 +8,8 @@ admin (CMS + CRM + WhatsApp blasts + AI copilot + ops control plane).
 TanStack Start (React 19, file-based TanStack Router) · Vite 7 + Nitro · Neon
 Postgres via `@neondatabase/serverless` (raw SQL, **no ORM**) · Neon Auth ·
 Tailwind v4 + shadcn/ui (new-york, slate) · Zod 3 · TypeScript 5.8 strict.
-Deployed to **Vercel**; `workers/cron/` is a Cloudflare Worker used **only** for
-cron cadence.
+Deployed to **Vercel**; `workers/cron/` is a Cloudflare Worker that holds the
+job-lane Durable Object alarms and a cron sweep (every 10 minutes 08:00-22:00 HKT, hourly overnight).
 
 Scaffolded by Lovable — `vite.config.ts` wraps `@lovable.dev/vite-tanstack-config`,
 which already registers tanstackStart/react/tailwind/tsconfig-paths. Do not re-add
@@ -50,7 +50,7 @@ src/content/      SEO copy, estate/corridor content constants
 src/config/       site.ts (contact/CTA config), site-branches, site-team
 src/components/ui shadcn primitives — vendored, keep in sync with upstream
 neon/migrations/  timestamped .sql, applied via `npm run neon:migrate`
-vercel.ts         Vercel config-as-TS: crons + redirects (not vercel.json)
+vercel.ts         Vercel config-as-TS: redirects (no crons; not vercel.json)
 ```
 
 ## Conventions
@@ -81,9 +81,9 @@ vercel.ts         Vercel config-as-TS: crons + redirects (not vercel.json)
 - Missing `VITE_CONTACT_WHATSAPP_PHONE` / `_PHONE_DISPLAY` / `_PHONE_TEL` silently
   degrades every WhatsApp CTA to `/contact`. `prebuild` fails Vercel builds on it;
   local dev only warns. See `.env.example`.
-- Vercel Hobby allows one cron run/day — the daily entries in `vercel.ts` are a
-  safety floor; event-driven job wakes use Vercel waitUntil and a 15-minute recovery sweep comes from `workers/cron/`. Both drain
-  `ops_jobs` under a lease, so running both is safe.
+- Vercel crons are unused (`crons: []`). Jobs drain through post-commit wakes (when
+  `OPS_WAKE_URL` is set) plus a cron sweep from `workers/cron/` (every 10 minutes
+  08:00-22:00 HKT, hourly overnight); both drain `ops_jobs` under a lease, so overlap is safe.
 - Public site copy is **zh-HK**. No i18n framework — strings are inline.
 
 ## Git

@@ -20,7 +20,7 @@ const safeEnv = Object.fromEntries(
     .filter((key) => process.env[key])
     .map((key) => [key, process.env[key]]),
 );
-safeEnv.OPS_EVENT_WAKE_ENABLED = "false";
+safeEnv.OPS_WAKE_URL = "";
 safeEnv.AUDIT_REPO = repo;
 
 const sha = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repo, encoding: "utf8" });

@@ -220,7 +220,7 @@ test(
         EP_WA_ROUTING_ENABLED: "true",
         EP_WA_STAFF_NOTIFICATIONS_ENABLED: "true",
         EP_WA_SERVICE_AUTOMATION_ENABLED: "false",
-        OPS_EVENT_WAKE_ENABLED: "false",
+        OPS_WAKE_URL: "",
       };
       const oldEnvironment = Object.fromEntries(
         Object.keys(environment).map((key) => [key, process.env[key]]),

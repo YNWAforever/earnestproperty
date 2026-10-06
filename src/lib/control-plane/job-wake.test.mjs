@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
-import { createJobWake, signalJobWake } from "./job-wake.js";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { createJobWake, signalJobWake, wakeEnabledFromEnv } from "./job-wake.js";
 
 test("disabled wake does not schedule or run any work", async () => {
   const pending = [],
@@ -116,4 +117,51 @@ test("stalled scheduler requests time out so the caller can fall back", async ()
     }),
     { name: "TimeoutError" },
   );
+});
+
+const FLAG = ["OPS_EVENT", "WAKE", "ENABLED"].join("_");
+
+function scan(path, hits) {
+  if (!existsSync(path)) return;
+  const stat = statSync(path);
+  if (stat.isDirectory()) {
+    for (const name of readdirSync(path)) {
+      if (name === "node_modules" || name === ".wrangler" || name === "dist") continue;
+      scan(join(path, name), hits);
+    }
+  } else if (readFileSync(path, "utf8").includes(FLAG)) {
+    hits.push(path);
+  }
+}
+
+test("wakes when OPS_WAKE_URL set without flag", () => {
+  assert.equal(wakeEnabledFromEnv({ OPS_WAKE_URL: "https://alarm.example" }), true);
+  assert.equal(wakeEnabledFromEnv({ [FLAG]: "true" }), false);
+  assert.equal(wakeEnabledFromEnv({ OPS_WAKE_URL: "  ", [FLAG]: "true" }), false);
+  assert.equal(wakeEnabledFromEnv({}), false);
+  assert.match(
+    readFileSync(new URL("./job-wake.server.ts", import.meta.url), "utf8"),
+    /enabled:\s*wakeEnabledFromEnv\(process\.env\)/,
+  );
+});
+
+test("the wake flag is gone from code, scripts and env docs", () => {
+  const hits = [];
+  for (const path of ["src", "scripts", "workers", ".env.example", "CLAUDE.md", "README.md"]) {
+    scan(path, hits);
+  }
+  assert.deepEqual(hits, []);
+});
+
+test("test harnesses blank OPS_WAKE_URL so no test can signal a real worker", () => {
+  for (const [file, pattern] of [
+    ["scripts/no-link-local-postgres.test.mjs", /OPS_WAKE_URL:\s*""/],
+    ["scripts/test-public-synthetic-browser.mjs", /OPS_WAKE_URL:\s*""/],
+    ["scripts/no-link-safe-checks.mjs", /safeEnv\.OPS_WAKE_URL\s*=\s*""/],
+  ]) {
+    assert.match(readFileSync(file, "utf8"), pattern, file);
+  }
+  const assignment = readFileSync("src/lib/whatsapp-enquiries/assignment.test.mjs", "utf8");
+  assert.match(assignment, /process\.env\.OPS_WAKE_URL\s*=\s*""/);
+  assert.match(assignment, /finally\s*\{[\s\S]*OPS_WAKE_URL/);
 });
