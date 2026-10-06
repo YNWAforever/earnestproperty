@@ -1090,7 +1090,10 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
               "SELECT updated_at AS closed FROM crm_leads WHERE id=$1",
               [c.leadId],
             );
-            assert.ok(Number(at) * 1000 <= closed.getTime(), "the message is not newer than the close");
+            assert.ok(
+              Number(at) * 1000 <= closed.getTime(),
+              "the message is not newer than the close",
+            );
             const res = await ingest(message(member, at, "啱啱先講完"), "live_webhook");
             assert.equal(res.messageInserted, true);
             assert.equal(res.conversationId, c.conversationId);
