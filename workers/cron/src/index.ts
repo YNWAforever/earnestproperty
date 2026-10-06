@@ -7,7 +7,7 @@ type Env = {
   JOB_WAKE: DurableObjectNamespace<JobWakeAlarm>;
 };
 
-/** Each lane stores just one alarm; an empty lane has no alarm or Neon call. */
+/** Each lane stores just one alarm; each idle sweep makes one drain call per lane. */
 export class JobWakeAlarm extends DurableObject<Env> {
   async signal() {
     await this.controller().signal();

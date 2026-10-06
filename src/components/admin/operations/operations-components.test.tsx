@@ -460,6 +460,17 @@ test("receipt helpers keep copy, toasts and refresh rules aligned with the spec"
   expect(canShowReceiptRetry(receiptRow({ canRetry: false }), true)).toBe(false);
   expect(receiptRetryToast("projected")).toEqual({ kind: "success", message: "已補錄這則來訊。" });
   expect(receiptRetryToast("failed").message).toBe("重試未成功，系統會稍後再自動重試。");
+  expect(receiptRetryToast("failed", { kind: "retry_scheduled", attemptCount: 3 }).message).toBe(
+    "重試未成功，系統會稍後再自動重試。",
+  );
+  expect(receiptRetryToast("failed", { kind: "retry_exhausted", attemptCount: 20 })).toEqual({
+    kind: "error",
+    message: "重試未成功。已停止自動重試，請稍後再手動重試。",
+  });
+  // The retry itself is the 20th attempt, so no automatic retry remains.
+  expect(receiptRetryToast("failed", { kind: "retry_scheduled", attemptCount: 19 }).message).toBe(
+    "重試未成功。已停止自動重試，請稍後再手動重試。",
+  );
   expect(receiptRetryErrorMessage("ref-1")).toBe("未能重試，請稍後再試。（支援參考編號：ref-1）");
   expect(receiptReasonLabel("WA_ENQUIRY_SCHEMA_REQUIRED")).toBe("資料庫結構未就緒");
   expect(receiptReasonLabel(null)).toBe("—");

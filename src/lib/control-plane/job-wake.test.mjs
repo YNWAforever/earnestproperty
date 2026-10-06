@@ -67,7 +67,7 @@ test("lifetime registration failure never masks a committed mutation", async () 
   await Promise.resolve();
   assert.deepEqual(errors, ["JOB_WAKE_REGISTRATION_FAILED"]);
 });
-test("job drains have one 10-minute Cloudflare sweep and no Vercel schedule", () => {
+test("job drains have one business-hours Cloudflare sweep and no Vercel schedule", () => {
   const source = readFileSync("workers/cron/wrangler.jsonc", "utf8");
   const config = JSON.parse(source.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"));
   const vercel = readFileSync("vercel.ts", "utf8");

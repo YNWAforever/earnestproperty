@@ -594,7 +594,7 @@ These are gated, in this order. Claude does none of them.
    - `failed` jobs never re-run automatically.
    - Receipts replay as **observe only** and cannot be cancelled from the UI (Open question 5).
 2. **Check settings** in Vercel (names only; never paste values into chat):
-   - `OPS_WAKE_URL` = the Worker origin (`https://earnestproperty-cron.<subdomain>.workers.dev`);
+   - **HARD GATE.** `OPS_WAKE_URL` = the Worker origin (`https://earnestproperty-cron.<subdomain>.workers.dev`). Before or immediately at merge, either set it or deploy the Worker right after merge: with `OPS_WAKE_URL` unset nothing drains until the Worker is deployed;
    - `CRON_SECRET` is set, and equals the Worker secret of the same name.
 3. **Merge and deploy the app.** Then delete `OPS_EVENT_WAKE_ENABLED` from Vercel; the deploy no longer reads it.
 4. **Check the www drain routes before deploying the Worker** (Review Focus 3; from the owner's machine):
@@ -604,15 +604,15 @@ These are gated, in this order. Claude does none of them.
    ```
    Expect `401` with an empty redirect URL. A `3xx` means: **do not deploy**. Keep `SITE_ORIGIN` on vercel.app and defer that change to FX-13.
 5. **Staging verification.**
-   - Claude runs `wrangler dev --test-scheduled --config workers/cron/wrangler.jsonc --var SITE_ORIGIN:http://localhost:3000` against a local app on owned Postgres. Claude then hits `/__scheduled?cron=*/10+*+*+*+*` and shows that a synthetic `ai.knowledge.repair` job (no AI call) drains and both heartbeats update.
+   - Claude runs `wrangler dev --test-scheduled --config workers/cron/wrangler.jsonc --var SITE_ORIGIN:http://localhost:3000` against a local app on owned Postgres. Claude then hits `/__scheduled?cron=*/10+0-13+*+*+*` and shows that a synthetic `ai.knowledge.repair` job (no AI call) drains and both heartbeats update.
    - The owner may repeat this on a Neon branch with a preview, with the alarm stopped: queue one synthetic job and confirm it drains within 10 min.
 6. **Deploy the Worker (owner).**
    ```
    npx wrangler deploy --config workers/cron/wrangler.jsonc
    ```
-   In the Cloudflare dashboard, confirm the Trigger shows `*/10 * * * *` and `SITE_ORIGIN` is www.
+   In the Cloudflare dashboard, confirm the Triggers show BOTH `*/10 0-13 * * *` and `0 14-23 * * *` (do not replace them with a flat `*/10`) and `SITE_ORIGIN` is www.
 7. **Canary** (within 20 min, then again at 24 h):
-   - /admin/operations shows 背景工作排程 正常, and 工作程序最後回報 < 15 min for both lanes;
+   - /admin/operations shows 背景工作排程 正常, and 工作程序最後回報 < 15 min during 08:30–22:00 HKT, < 90 min overnight;
    - the 3 `ai.knowledge.repair` jobs (and anything you kept) are `succeeded`;
    - the Worker logs have no `JOB_DRAIN_FAILED`, `JOB_DRAIN_REDIRECTED` or `JOB_SWEEP_FAILED`;
    - Vercel logs show 200s on both drain routes about every 10 min;
@@ -628,7 +628,7 @@ These are gated, in this order. Claude does none of them.
 
 Each has a recommended default.
 
-1. **Cadence.** Each tick makes 2 Vercel calls and a few Neon queries, even when idle. That keeps Neon compute awake for much of the day, which reverses the "idle makes no Neon request" design (`workers/cron/README.md:3`). **Default: 10 min, as approved.** Move to `*/15` if the 24 h canary shows unwelcome Neon usage; the heartbeat threshold would then become 45 min.
+1. **Cadence.** Each tick makes 2 Vercel calls and a few Neon queries, even when idle. That keeps Neon compute awake for much of the day, which reverses the "idle makes no Neon request" design (`workers/cron/README.md:3`). **Resolved by decision 4** (10 min 08:00–22:00 HKT, hourly overnight). Move to `*/15` if the 24 h canary shows unwelcome Neon usage; the heartbeat threshold would then become 45 min.
 2. **C-09 detection and retention.** "Active, projected, `attempt_count>1`" also catches a receipt whose inline projection succeeded but whose status write failed (rare). There is no dismiss without a migration. **Default:** list 30 days, link to the conversation, and add a dismiss with the live re-route follow-up.
 3. **Does manual 重試 bypass the 20-attempt cap and the backoff?** **Default: yes.** It still respects the lease and the eligible states, and it is audited.
 4. **Do terminal failures degrade the badge?** **Default: no.** They show in 需要跟進 and the receipt panel, so the badge does not stay 降級 forever.

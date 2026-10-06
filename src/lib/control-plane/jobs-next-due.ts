@@ -7,7 +7,7 @@ type JobLane = "service" | "general";
 type DueRow = { due_at: unknown };
 type DueQuery = (sql: string, params: unknown[]) => Promise<DueRow[]>;
 
-/** Called only while draining an active lane; it never polls Neon while idle. */
+/** Called only while draining an active lane; each idle sweep makes one drain call per lane. */
 export async function getNextJobDueAt(input: {
   lane: JobLane;
   capabilities?: string[];

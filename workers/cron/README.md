@@ -29,4 +29,4 @@ The Vercel YouTube crons are removed. Staff can still invoke incremental or full
 - `wrangler deploy --dry-run --config workers/cron/wrangler.jsonc --outdir ../../.audit/cron-dry-run` (`--outdir` is relative to `workers/cron/`; this writes to the root `.audit/`, which git and ESLint ignore)
 - Run the relevant route and service tests with a local fixture. Neither check above needs Neon.
 
-Cloudflare documents [Durable Object alarms](https://developers.cloudflare.com/durable-objects/api/alarms/) and [SQLite-backed free tier limits](https://developers.cloudflare.com/durable-objects/platform/pricing/). This avoids idle Neon calls, though Cloudflare alarm requests and storage still have their own usage limits.
+Cloudflare documents [Durable Object alarms](https://developers.cloudflare.com/durable-objects/api/alarms/) and [SQLite-backed free tier limits](https://developers.cloudflare.com/durable-objects/platform/pricing/). Each idle sweep makes one drain call per lane; Cloudflare alarm requests and storage still have their own usage limits.

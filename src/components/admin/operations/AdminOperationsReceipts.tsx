@@ -211,7 +211,7 @@ export function AdminOperationsReceipts({
       const result = await retryOperationsReceipt(current.id, isCurrent);
       if (!isCurrent()) return;
       setCandidate(null);
-      const outcome = receiptRetryToast(result.data.projectionState);
+      const outcome = receiptRetryToast(result.data.projectionState, current);
       if (outcome.kind === "success") toast.success(outcome.message);
       else toast.error(outcome.message);
       await onMutationComplete();

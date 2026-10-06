@@ -1,3 +1,4 @@
+import { RECEIPT_MAX_ATTEMPTS } from "@/lib/whatsapp-enquiries/receipt-retry-policy";
 import type {
   InboundReceiptProblem,
   InboundReceiptProblemKind,
@@ -50,10 +51,24 @@ export const canShowReceiptRetry = (
 export const receiptAttemptsLabel = (row: Pick<InboundReceiptProblem, "kind" | "attemptCount">) =>
   row.kind === "retry_exhausted" && row.attemptCount > 20 ? "20+" : String(row.attemptCount);
 
-export const receiptRetryToast = (projectionState: string) =>
-  projectionState === "projected"
-    ? { kind: "success" as const, message: "已補錄這則來訊。" }
-    : { kind: "error" as const, message: "重試未成功，系統會稍後再自動重試。" };
+/** `prior` is the row as staff saw it before retrying; that retry is itself one more attempt. */
+export const receiptRetryToast = (
+  projectionState: string,
+  prior?: Pick<InboundReceiptProblem, "kind" | "attemptCount">,
+) => {
+  if (projectionState === "projected") {
+    return { kind: "success" as const, message: "已補錄這則來訊。" };
+  }
+  const exhausted =
+    prior !== undefined &&
+    (prior.kind === "retry_exhausted" || prior.attemptCount + 1 >= RECEIPT_MAX_ATTEMPTS);
+  return {
+    kind: "error" as const,
+    message: exhausted
+      ? "重試未成功。已停止自動重試，請稍後再手動重試。"
+      : "重試未成功，系統會稍後再自動重試。",
+  };
+};
 
 export const RECEIPT_CONFLICT_MESSAGE = "此收件的狀態已改變，未有重試。已重新載入最新狀態。";
 
