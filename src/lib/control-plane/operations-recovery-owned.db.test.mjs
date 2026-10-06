@@ -431,3 +431,254 @@ test("a wrong or missing bearer writes no lane heartbeat on either drain route",
     assert.deepEqual(calls, [lane]);
   }
 });
+
+test("FX-07 receipts: observe-only retry, listing and C-09 labelling", async (t) => {
+  // EP-19 leaves its process-wide module mocks in place; release them before re-mocking the DB.
+  mock.reset();
+  await withOwnedPostgres(async ({ query, transaction }) => {
+    await mockOwnedServerDb(t.mock, query, transaction);
+    const {
+      storeInboundReceipt,
+      recoverPendingInboundReceipts,
+      retryInboundReceipt,
+      listInboundReceiptProblems,
+    } = await import("../whatsapp-enquiries/inbound-receipts.server.ts");
+    const staff = async (label, role) => {
+      const [row] = await query("INSERT INTO staff_users(auth_user_id) VALUES($1) RETURNING id", [
+        `qa-fx07-receipts-${label}`,
+      ]);
+      return { staffId: row.id, roles: [role] };
+    };
+    const admin = await staff("admin", "admin");
+    const manager = await staff("manager", "manager");
+    const agent = await staff("agent", "agent");
+    const receiptRow = async (id) =>
+      (await query("SELECT * FROM whatsapp_inbound_receipts WHERE id=$1", [id]))[0];
+    const auditRows = (id) =>
+      query("SELECT * FROM ops_audit_logs WHERE resource_id=$1 ORDER BY created_at", [id]);
+    const reset = async () => {
+      await query("DELETE FROM whatsapp_inbound_receipts");
+      await query("DELETE FROM whatsapp_conversations WHERE channel_id='synthetic-ops-channel'");
+    };
+    const seed = async (messageId, assignments = "", mode = "active") => {
+      const stored = await storeInboundReceipt(syntheticReceipt(messageId, mode), { query });
+      await query(
+        `UPDATE whatsapp_inbound_receipts SET updated_at=now()-interval '3 hours'${
+          assignments ? `, ${assignments}` : ""
+        } WHERE id=$1`,
+        [stored.receiptId],
+      );
+      return stored.receiptId;
+    };
+    const recorder = () => {
+      const calls = [];
+      return { calls, project: async (_event, mode) => calls.push(mode) };
+    };
+
+    await t.test("retry re-projects a failed receipt once; audited; agent forbidden", async () => {
+      await reset();
+      const id = await seed(
+        "synthetic-ops-retry",
+        "projection_state='failed', block_reason='PROJECTION_FAILED', attempt_count=20",
+      );
+      const forbidden = recorder();
+      const denied = await retryInboundReceipt(
+        id,
+        agent,
+        { requestId: randomUUID() },
+        { query, project: forbidden.project },
+      ).then(
+        () => null,
+        (error) => error,
+      );
+      assert.ok(denied instanceof Response);
+      assert.equal(denied.status, 403);
+      assert.equal(forbidden.calls.length, 0);
+      assert.equal((await receiptRow(id)).projection_state, "failed");
+      assert.equal((await receiptRow(id)).attempt_count, 20);
+      assert.equal((await auditRows(id)).length, 0);
+
+      const requestId = randomUUID();
+      const adminRun = recorder();
+      const result = await retryInboundReceipt(
+        id,
+        admin,
+        { requestId },
+        { query, project: adminRun.project },
+      );
+      assert.deepEqual(result, { receiptId: id, projectionState: "projected" });
+      assert.deepEqual(adminRun.calls, ["observe"]);
+      const saved = await receiptRow(id);
+      assert.equal(saved.projection_state, "projected");
+      assert.equal(saved.capture_mode, "active");
+      assert.equal(saved.effects_eligible, false);
+      assert.equal(saved.attempt_count, 21);
+      const audit = await auditRows(id);
+      assert.equal(audit.length, 1);
+      assert.equal(audit[0].action, "whatsapp.receipt.retry");
+      assert.equal(audit[0].permission, "system.jobs.retry");
+      assert.equal(audit[0].resource_type, "whatsapp_inbound_receipt");
+      assert.equal(audit[0].actor_staff_id, admin.staffId);
+      assert.equal(audit[0].request_id, requestId);
+      assert.equal(audit[0].outcome, "success");
+
+      // A manager may retry too.
+      const second = await seed(
+        "synthetic-ops-retry-manager",
+        "projection_state='blocked_schema', block_reason='WA_ENQUIRY_SCHEMA_REQUIRED'",
+      );
+      const managerRun = recorder();
+      assert.deepEqual(
+        await retryInboundReceipt(
+          second,
+          manager,
+          { requestId: randomUUID() },
+          { query, project: managerRun.project },
+        ),
+        { receiptId: second, projectionState: "projected" },
+      );
+      assert.equal((await auditRows(second))[0].actor_staff_id, manager.staffId);
+
+      // A failing projection reports failed and leaves the receipt for recovery.
+      const third = await seed("synthetic-ops-retry-fails", "projection_state='failed'");
+      assert.deepEqual(
+        await retryInboundReceipt(
+          third,
+          admin,
+          { requestId: randomUUID() },
+          {
+            query,
+            project: async () => {
+              throw new Error("SYNTHETIC_PROJECTION_FAILURE");
+            },
+          },
+        ),
+        { receiptId: third, projectionState: "failed" },
+      );
+      assert.equal((await receiptRow(third)).block_reason, "PROJECTION_FAILED");
+
+      // Not retryable: projected, REVIEW_REQUIRED, C-09 (projected), non-live and leased receipts.
+      const blockedIds = [
+        await seed("synthetic-ops-r-projected", "projection_state='projected'"),
+        await seed(
+          "synthetic-ops-r-review",
+          "projection_state='failed', block_reason='REVIEW_REQUIRED'",
+        ),
+        await seed("synthetic-ops-r-c09", "projection_state='projected', attempt_count=2"),
+        await seed(
+          "synthetic-ops-r-historical",
+          "projection_state='failed', origin='historical_import'",
+        ),
+        await seed(
+          "synthetic-ops-r-leased",
+          "projection_state='failed', lease_until=now()+interval '5 minutes'",
+        ),
+      ];
+      const untouched = recorder();
+      for (const blocked of blockedIds) {
+        assert.equal(
+          await retryInboundReceipt(
+            blocked,
+            admin,
+            { requestId: randomUUID() },
+            { query, project: untouched.project },
+          ),
+          null,
+          blocked,
+        );
+        assert.equal((await auditRows(blocked)).length, 0);
+      }
+      assert.equal(untouched.calls.length, 0);
+    });
+
+    await t.test("concurrent retry, double click and recovery project a receipt once", async () => {
+      await reset();
+      const id = await seed(
+        "synthetic-ops-concurrent",
+        "projection_state='failed', block_reason='PROJECTION_FAILED', attempt_count=2",
+      );
+      const projects = recorder();
+      const slow = async (event, mode) => {
+        await new Promise((done) => setTimeout(done, 150));
+        return projects.project(event, mode);
+      };
+      const ports = { query, project: slow };
+      const [first, second, recovered] = await Promise.all([
+        retryInboundReceipt(id, admin, { requestId: randomUUID() }, ports),
+        retryInboundReceipt(id, manager, { requestId: randomUUID() }, ports),
+        recoverPendingInboundReceipts({ query, project: slow }),
+      ]);
+      assert.equal(projects.calls.length, 1);
+      const winners = [first, second].filter(Boolean);
+      assert.ok(winners.length <= 1);
+      assert.equal(winners.length + recovered.projected, 1);
+      assert.equal((await auditRows(id)).length, winners.length);
+      assert.equal((await receiptRow(id)).projection_state, "projected");
+    });
+
+    await t.test(
+      "list shows retry, exhausted, review and 需要分派 receipts without message content",
+      async () => {
+        await reset();
+        const scheduled = await seed(
+          "synthetic-ops-l-scheduled",
+          "projection_state='failed', block_reason='PROJECTION_FAILED', attempt_count=3",
+        );
+        const exhausted = await seed(
+          "synthetic-ops-l-exhausted",
+          "projection_state='failed', block_reason='PROJECTION_FAILED', attempt_count=20",
+        );
+        const review = await seed(
+          "synthetic-ops-l-review",
+          "projection_state='failed', block_reason='REVIEW_REQUIRED'",
+        );
+        const routing = await seed(
+          "synthetic-ops-l-routing",
+          "projection_state='projected', attempt_count=2, projected_at=now()",
+        );
+        const oldRouting = await seed(
+          "synthetic-ops-l-old-routing",
+          "projection_state='projected', attempt_count=2, projected_at=now(), received_at=now()-interval '40 days'",
+        );
+        const plain = await seed("synthetic-ops-l-plain", "projection_state='projected'");
+        const [conversation] = await query(
+          `INSERT INTO whatsapp_conversations(woztell_member_id, channel_id)
+           VALUES('synthetic-ops-customer','synthetic-ops-channel') RETURNING id`,
+        );
+        const result = await listInboundReceiptProblems(admin, { query });
+        const byId = new Map(result.rows.map((row) => [row.id, row]));
+        assert.equal(byId.get(scheduled).kind, "retry_scheduled");
+        assert.equal(byId.get(scheduled).canRetry, true);
+        assert.ok(byId.get(scheduled).nextRetryAt);
+        assert.equal(byId.get(exhausted).kind, "retry_exhausted");
+        assert.equal(byId.get(exhausted).canRetry, true);
+        assert.equal(byId.get(exhausted).nextRetryAt, null);
+        assert.equal(byId.get(review).kind, "review_required");
+        assert.equal(byId.get(review).canRetry, false);
+        assert.equal(byId.get(routing).kind, "needs_routing");
+        assert.equal(byId.get(routing).canRetry, false);
+        assert.equal(byId.get(routing).captureMode, "active");
+        assert.equal(byId.has(oldRouting), false);
+        assert.equal(byId.has(plain), false);
+        assert.equal(byId.get(routing).conversationId, conversation.id);
+        assert.deepEqual(result.counts, {
+          retry_scheduled: 1,
+          retry_exhausted: 1,
+          review_required: 1,
+          needs_routing: 1,
+        });
+        const serialized = JSON.stringify(result);
+        for (const secret of [
+          "85255550101",
+          "85255550202",
+          "合成測試訊息",
+          "synthetic-ops-customer",
+        ])
+          assert.equal(serialized.includes(secret), false, secret);
+        for (const row of result.rows)
+          for (const key of ["memberId", "member_id", "text", "normalizedEvent", "phone"])
+            assert.equal(key in row, false, key);
+      },
+    );
+  });
+});

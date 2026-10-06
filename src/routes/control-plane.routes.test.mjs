@@ -133,6 +133,25 @@ test("job management routes validate IDs, permissions, and safe summaries", () =
   }
 });
 
+test("receipt routes enforce jobs.read and jobs.retry, validate ids and bodies, and audit failures", () => {
+  const listSource = readFileSync("src/routes/api.admin.control-plane.receipts.ts", "utf8");
+  const retrySource = readFileSync(
+    "src/routes/api.admin.control-plane.receipts.$id.retry.ts",
+    "utf8",
+  );
+  assert.match(listSource, /requireStaffPermission\(request, "system\.jobs\.read"\)/);
+  assert.match(retrySource, /requireStaffPermission\(request, "system\.jobs\.retry"\)/);
+  assert.match(retrySource, /z\.string\(\)\.uuid\(\)/);
+  assert.match(retrySource, /z\.object\(\{\}\)\.strict\(\)/);
+  assert.match(retrySource, /status: 409/);
+  const catchBlock = retrySource.slice(retrySource.indexOf("} catch (error)"));
+  assert.match(catchBlock, /writeAudit\(/);
+  assert.match(catchBlock, /outcome: "failure"/);
+  assert.match(retrySource, /retryInboundReceipt\(/);
+  // The list never reaches message content.
+  assert.doesNotMatch(listSource, /normalized_event|member_id|phone/);
+});
+
 test("AI knowledge rebuild route enqueues one versioned job per active window", () => {
   const source = readFileSync("src/routes/api.admin.ai.rebuild-knowledge.ts", "utf8");
   assert.match(source, /requireStaffPermission\(request, "ai\.knowledge\.rebuild"\)/);

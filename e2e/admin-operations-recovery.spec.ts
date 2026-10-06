@@ -225,3 +225,80 @@ for (const width of [1440, 1280, 768, 390]) {
     });
   });
 }
+const receipt = "60000000-0000-4000-8000-000000000001";
+const receiptButton = `重試收件 ${receipt.slice(0, 8)}`;
+for (const width of [1440, 375]) {
+  test.describe(`receipts ${width}`, () => {
+    test.use({ viewport: { width, height: 900 } });
+    test("receipt retry confirms, reads back and shows 已補錄這則來訊", async ({ page }) => {
+      await open(page);
+      const panel = page.getByRole("region", { name: "WhatsApp 來訊收件" });
+      await expect(panel).toBeVisible();
+      await expect(panel.getByText("等候重試", { exact: true })).toBeVisible();
+      // C-09 row: labelled, linked to the conversation, and has no retry button.
+      const routing = panel.getByRole("row").filter({ hasText: "需要分派" });
+      await expect(routing).toContainText("請開啟對話並手動分派");
+      await expect(routing.getByRole("link", { name: "開啟對話" })).toHaveAttribute(
+        "href",
+        /^\/admin\/whatsapp\?conversation=/,
+      );
+      await expect(routing.getByRole("button")).toHaveCount(0);
+      await page.screenshot({
+        path: `.audit/fx-07-jobs-drain/receipts-before-${width}.png`,
+        fullPage: true,
+      });
+
+      await panel.getByRole("button", { name: receiptButton, exact: true }).click();
+      const dialog = page.getByRole("alertdialog");
+      await expect(dialog).toContainText("重試這則來訊？");
+      await expect(dialog).toContainText(
+        "系統會再嘗試把這則訊息寫入收件匣（只作記錄）。不會回覆客戶，亦不會通知或分派同事。",
+      );
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+
+      await panel.getByRole("button", { name: receiptButton, exact: true }).click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "重試", exact: true })
+        .click();
+      await expect(page.getByText("已補錄這則來訊。", { exact: true })).toBeVisible();
+      // Read back from the (synthetic) server: the row is gone, the C-09 row remains.
+      await expect(panel.getByRole("button", { name: receiptButton, exact: true })).toHaveCount(0);
+      await expect(panel.getByText("需要分派", { exact: true })).toBeVisible();
+      await page.screenshot({
+        path: `.audit/fx-07-jobs-drain/receipts-after-${width}.png`,
+        fullPage: true,
+      });
+      await page.reload();
+      await expect(
+        page.getByRole("region", { name: "WhatsApp 來訊收件" }).getByRole("button", {
+          name: receiptButton,
+          exact: true,
+        }),
+      ).toHaveCount(0);
+      const audit = await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("operations-fixture-audit")!),
+      );
+      expect(audit[0].action).toBe("whatsapp.receipt.retry");
+      expect(audit[0].resource_id).toBe(receipt);
+    });
+    test("a conflicting receipt retry reloads and says the state changed", async ({ page }) => {
+      await open(page);
+      await page.evaluate(() => (window.operationsFixture.mode = "receipt-conflict"));
+      await page.getByRole("button", { name: receiptButton, exact: true }).click();
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "重試", exact: true })
+        .click();
+      await expect(
+        page.getByText("此收件的狀態已改變，未有重試。已重新載入最新狀態。", { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: receiptButton, exact: true })).toBeVisible();
+    });
+    test("restricted actors see no receipt retry button", async ({ page }) => {
+      await open(page, "viewer");
+      await expect(page.getByRole("button", { name: receiptButton, exact: true })).toHaveCount(0);
+      await expect(page.getByRole("region", { name: "WhatsApp 來訊收件" })).toHaveCount(0);
+    });
+  });
+}
