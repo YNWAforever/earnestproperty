@@ -3,7 +3,7 @@ import { createServer, type Server } from "node:http";
 import { readFile, writeFile } from "node:fs/promises";
 import { resolve, sep, extname } from "node:path";
 import { spawnSync } from "node:child_process";
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type Locator, type Page } from "@playwright/test";
 declare global {
   interface Window {
     noLinkBlastFixture: {
@@ -12,6 +12,8 @@ declare global {
       releaseQueue: null | (() => void);
       cancelMode: string;
       releaseCancel: null | (() => void);
+      retryMode: "ok" | "refused" | "previewFailure";
+      audienceEligible: number;
     };
     campaignReviewFixture: {
       changeActor: (id: string) => Promise<void>;
@@ -152,9 +154,233 @@ async function openCancel(page: Page) {
   await row(page).getByRole("button", { name: "取消 Campaign", exact: true }).click();
   return page.getByRole("alertdialog", { name: "取消整個 Campaign？" });
 }
+const fixtureCalls = (page: Page, name: string) =>
+  page.evaluate(
+    (name) =>
+      (
+        window as unknown as { noLinkFixture: { calls: { name: string; input?: unknown }[] } }
+      ).noLinkFixture.calls.filter((c) => c.name === name),
+    name,
+  );
+const savedCampaign = (page: Page) =>
+  page.evaluate(() => JSON.parse(sessionStorage.getItem("no-link-fixture-campaigns")!)[0]);
+/** Seeds the synthetic campaign row once per tab, before the route reads it. */
+async function seedCampaign(page: Page, fields: Record<string, unknown>) {
+  await page.addInitScript((fields) => {
+    if (sessionStorage.getItem("no-link-fixture-campaigns")) return;
+    sessionStorage.setItem(
+      "no-link-fixture-campaigns",
+      JSON.stringify([
+        {
+          id: "60000000-0000-4000-8000-000000000001",
+          name: "合成租務推廣",
+          template_id: "60000000-0000-4000-8000-000000000002",
+          audience_id: "60000000-0000-4000-8000-000000000003",
+          status: "review",
+          scheduled_at: null,
+          element_name: "synthetic_rental",
+          language_code: "zh_HK",
+          audience_name: "合成群組",
+          recipients: 0,
+          sent: 0,
+          failed: 0,
+          blocked: 0,
+          pending: 0,
+          unknown: 0,
+          dispatching: 0,
+          cancelled: 0,
+          retryable_failed: 0,
+          paused: 0,
+          delivery_started: false,
+          queueWrites: 0,
+          cancelWrites: 0,
+          requeueWrites: 0,
+          ...fields,
+        },
+      ]),
+    );
+  }, fields);
+}
+/** The value cell of one ConfirmRow, matched by its exact label. */
+const confirmValue = (page: Page, dialog: Locator, label: string) =>
+  dialog
+    .locator("dl > div")
+    .filter({ has: page.getByText(label, { exact: true }) })
+    .locator("dd");
+const retryButton = (page: Page) => row(page).getByRole("button", { name: /^重新發送失敗收件人/ });
+const retryDialog = (page: Page) => page.getByRole("alertdialog", { name: "重新發送失敗收件人？" });
+/** FX-10b screenshots at 1440 and 375, taken once the target is in view and
+ * every animation (dialog open, toast) has settled. */
+async function evidence(page: Page, name: string, focus: Locator) {
+  const width = page.viewportSize()!.width;
+  if (width !== 1440 && width !== 375) return;
+  await focus.scrollIntoViewIfNeeded();
+  await page.evaluate(() => Promise.all(document.getAnimations().map((a) => a.finished)));
+  await page.screenshot({ path: `.audit/remediation-20261003/fx10b-${name}-${width}.png` });
+}
+function retryTests() {
+  test("retry shows the exact count, lists unknown recipients by name only, and re-queues once", async ({
+    page,
+  }) => {
+    await seedCampaign(page, {
+      status: "failed",
+      recipients: 6,
+      sent: 3,
+      failed: 2,
+      retryable_failed: 2,
+      unknown: 1,
+      delivery_started: true,
+    });
+    await open(page);
+    await expect(retryButton(page)).toHaveText("重新發送失敗收件人（2）");
+    await retryButton(page).click();
+    const dialog = retryDialog(page);
+    await expect(confirmValue(page, dialog, "將重新排入")).toHaveText("2 人");
+    await expect(confirmValue(page, dialog, "結果未明（請先核實，勿重發）")).toHaveText("1 人");
+    await expect(dialog).toContainText("以下收件人結果未明，不會重新發送：");
+    await expect(dialog.getByRole("listitem")).toHaveCount(1);
+    await expect(dialog.getByRole("listitem")).toContainText("合成未明客戶");
+    expect(await dialog.textContent()).not.toMatch(/\d{8,}/);
+    await evidence(page, "retry-confirm", dialog);
+    const confirmButton = dialog.getByRole("button", { name: "重新排入 2 人", exact: true });
+    await expect(confirmButton).toBeEnabled();
+    // Two clicks in the same task, before React can render the pending state.
+    await confirmButton.evaluate((button: HTMLButtonElement) => {
+      button.click();
+      button.click();
+    });
+    await expect(dialog).not.toBeVisible();
+    expect(await fixtureCalls(page, "syntheticCampaignRequeue")).toHaveLength(1);
+    expect(await savedCampaign(page)).toMatchObject({ requeueWrites: 1, status: "review" });
+    await expect(row(page).getByText("待審核", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-sonner-toast]")).toContainText(
+      "請預覽收件人後按「發送…」確認發送",
+    );
+    // Re-queue sends nothing: approval still goes through 發送….
+    expect(await queueCalls(page)).toHaveLength(0);
+    await expect(retryButton(page)).toHaveCount(0);
+  });
+  test("paused campaign shows 已暫停 and needs 發送… again", async ({ page }) => {
+    await seedCampaign(page, {
+      status: "review",
+      recipients: 5,
+      sent: 2,
+      pending: 3,
+      paused: 3,
+      delivery_started: true,
+    });
+    await open(page);
+    await expect(row(page).getByText("已暫停", { exact: true })).toBeVisible();
+    await expect(row(page)).toContainText("已暫停，未發送 3");
+    await expect(row(page)).not.toContainText("待發送");
+    await expect(retryButton(page)).toHaveCount(0);
+    await evidence(page, "paused-row", row(page).getByText("已暫停", { exact: true }));
+    // The audience grew since the first send; the re-send must not promise it.
+    await page.evaluate(() => {
+      window.noLinkBlastFixture.audienceEligible = 9;
+    });
+    const dialog = await confirm(page);
+    await expect(confirmValue(page, dialog, "已發送（不會重發）")).toHaveText("2 人");
+    await expect(dialog).toContainText(
+      "此 Campaign 曾經發送。這次只會發送給尚待發送的收件人，不會加入新符合條件的客戶。",
+    );
+    await expect(
+      dialog.getByRole("button", { name: "確認發送給 3 人", exact: true }),
+    ).toBeVisible();
+    await evidence(
+      page,
+      "paused-send-confirm",
+      dialog.getByText("此 Campaign 曾經發送", { exact: false }),
+    );
+    expect(await queueCalls(page)).toHaveLength(0);
+  });
+  test("retry preview failure blocks confirmation and sends no requeue", async ({ page }) => {
+    await seedCampaign(page, {
+      status: "failed",
+      recipients: 4,
+      sent: 2,
+      failed: 2,
+      retryable_failed: 2,
+      delivery_started: true,
+    });
+    await open(page);
+    await page.evaluate(() => {
+      window.noLinkBlastFixture.retryMode = "previewFailure";
+    });
+    await retryButton(page).click();
+    const dialog = retryDialog(page);
+    await expect(dialog.getByRole("alert")).toContainText("未能讀取重新發送資料，請稍後再試。");
+    await expect(dialog.getByRole("button", { name: /^重新排入/ })).toBeDisabled();
+    expect(await fixtureCalls(page, "syntheticCampaignRetryPreview")).toHaveLength(1);
+    expect(await fixtureCalls(page, "syntheticCampaignRequeue")).toHaveLength(0);
+  });
+  test("retry on a paused campaign counts exclusions and the re-approval total", async ({
+    page,
+  }) => {
+    await seedCampaign(page, {
+      status: "review",
+      recipients: 8,
+      sent: 2,
+      pending: 2,
+      paused: 2,
+      failed: 4,
+      retryable_failed: 4,
+      delivery_started: true,
+      retry_exclusions: [
+        { reason: "OPTED_OUT", count: 1 },
+        { reason: "DUPLICATE_PHONE", count: 1 },
+        { reason: "CONTACT_CHANGED_SINCE_ATTEMPT", count: 1 },
+      ],
+    });
+    await open(page);
+    await retryButton(page).click();
+    const dialog = retryDialog(page);
+    await expect(confirmValue(page, dialog, "將重新排入")).toHaveText("1 人");
+    await expect(confirmValue(page, dialog, "已在佇列（暫停時未發送）")).toHaveText("2 人");
+    await expect(confirmValue(page, dialog, "按「發送…」確認後最多發送")).toHaveText("3 人");
+    await expect(confirmValue(page, dialog, "已拒收或身份未核實（不會重發）")).toHaveText("1 人");
+    await expect(confirmValue(page, dialog, "同一電話已有記錄（不會重發）")).toHaveText("1 人");
+    await expect(confirmValue(page, dialog, "聯絡資料在上次發送後曾更改（不會重發）")).toHaveText(
+      "1 人",
+    );
+    await expect(dialog.getByRole("listitem")).toHaveCount(0);
+    expect(await dialog.textContent()).not.toMatch(/\d{8,}/);
+    await evidence(page, "retry-exclusions", dialog);
+    await dialog.getByRole("button", { name: "重新排入 1 人", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(page.locator("[data-sonner-toast]")).toContainText("已重新排入 1 人");
+    expect(await savedCampaign(page)).toMatchObject({ pending: 3, requeueWrites: 1 });
+    expect(await queueCalls(page)).toHaveLength(0);
+  });
+  test("refused retry explains the reason inside the dialog and agents never see the action", async ({
+    page,
+  }) => {
+    await seedCampaign(page, {
+      status: "failed",
+      recipients: 4,
+      sent: 2,
+      failed: 2,
+      retryable_failed: 2,
+      delivery_started: true,
+    });
+    await open(page);
+    await page.evaluate(() => {
+      window.noLinkBlastFixture.retryMode = "refused";
+    });
+    await retryButton(page).click();
+    const dialog = retryDialog(page);
+    await dialog.getByRole("button", { name: "重新排入 2 人", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("Campaign 仍在發送中");
+    expect(await savedCampaign(page)).toMatchObject({ status: "failed", requeueWrites: 0 });
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    await page.evaluate(() => window.campaignReviewFixture.changeMembership("agent"));
+    await expect(page.getByRole("button", { name: /^重新發送失敗收件人/ })).toHaveCount(0);
+  });
+}
 for (const width of [1440, 1280, 768, 390])
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    retryTests();
     test("membership narrowing removes private campaign rows", async ({ page }) => {
       await open(page);
       await page.evaluate(() => window.campaignReviewFixture.changeMembership("agent"));
@@ -566,3 +792,8 @@ for (const width of [1440, 1280, 768, 390])
       expect(await queueCalls(page)).toHaveLength(0);
     });
   });
+// FX-10b evidence width: only the retry and paused screens, at the narrowest phone.
+test.describe("375", () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+  retryTests();
+});

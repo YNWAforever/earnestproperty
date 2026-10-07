@@ -13,6 +13,8 @@ const state = {
   releaseCancel: null as null | (() => void),
   templateStatus: "active",
   noTemplates: false,
+  retryMode: "ok" as "ok" | "refused" | "previewFailure",
+  audienceEligible: 2,
 };
 Object.assign(window, { noLinkBlastFixture: state });
 function call(name: string, input?: unknown) {
@@ -48,6 +50,10 @@ function records() {
         queueWrites: 0,
         cancelWrites: 0,
         cancelled: 0,
+        retryable_failed: 0,
+        paused: 0,
+        delivery_started: false,
+        requeueWrites: 0,
       },
     ]
   );
@@ -101,7 +107,7 @@ export async function previewAdminAudience(input: unknown) {
   if (state.previewFailure) throw Error("合成收件預覽失敗");
   return {
     total: 4,
-    eligible: 2,
+    eligible: state.audienceEligible,
     uniqueExcluded: 2,
     optedOut: 1,
     missingPhone: 1,
@@ -175,4 +181,85 @@ export async function cancelAdminCampaign({ data }: { data: { id: string } }) {
   sessionStorage.setItem(storage, JSON.stringify(rows));
   if (state.cancelMode === "timeout") throw Error("Owned cancel commit response lost");
   return { ok: true };
+}
+type RetryExclusion = {
+  reason: "OPTED_OUT" | "DUPLICATE_PHONE" | "CONTACT_CHANGED_SINCE_ATTEMPT";
+  count: number;
+};
+type RetryRow = {
+  id: string;
+  status: string;
+  pending: number;
+  paused?: number;
+  failed: number;
+  unknown?: number;
+  retryable_failed?: number;
+  requeueWrites?: number;
+  /** Fixture-only: exclusions the preview reports. `retryable_failed` is the
+   * list's unfiltered count, so the preview's `retryable` is that minus these,
+   * as on the server (the list count is an upper bound, not a promise). */
+  retry_exclusions?: RetryExclusion[];
+};
+const retryableStatuses = ["failed", "completed", "review"];
+function retryCounts(row: RetryRow) {
+  const exclusions = (row.retry_exclusions ?? []).filter((item) => item.count > 0);
+  const excluded = exclusions.reduce((sum, item) => sum + item.count, 0);
+  const retryable = retryableStatuses.includes(row.status)
+    ? Math.max(0, (row.retryable_failed ?? 0) - excluded)
+    : 0;
+  return { exclusions, retryable };
+}
+export async function fetchCampaignRetryPreview({ data }: { data: { id: string } }) {
+  call("syntheticCampaignRetryPreview", data);
+  requireManager();
+  if (state.retryMode === "previewFailure") throw Error("合成重新發送預覽失敗");
+  const row = (records() as RetryRow[]).find((item) => item.id === data.id);
+  if (!row) throw Error("Campaign not found");
+  const { exclusions, retryable } = retryCounts(row);
+  const count = (reason: RetryExclusion["reason"]) =>
+    exclusions.find((item) => item.reason === reason)?.count ?? 0;
+  const unknownTotal = row.unknown ?? 0;
+  return {
+    campaignId: row.id,
+    status: row.status,
+    retryable,
+    alreadyQueued: row.paused ?? 0,
+    excludedOptedOut: count("OPTED_OUT"),
+    excludedDuplicatePhone: count("DUPLICATE_PHONE"),
+    excludedContactChanged: count("CONTACT_CHANGED_SINCE_ATTEMPT"),
+    exclusions,
+    unknownTotal,
+    unknown: Array.from({ length: Math.min(unknownTotal, 100) }, (_, index) => ({
+      recipientId: `60000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
+      name: index === 0 ? "合成未明客戶" : null,
+      dispatchedAt: "2026-09-30T10:00:00Z",
+    })),
+  };
+}
+export async function requeueFailedCampaignRecipients({ data }: { data: { campaignId: string } }) {
+  call("syntheticCampaignRequeue", data);
+  requireManager();
+  if (state.retryMode === "refused") return { ok: false, error: "CAMPAIGN_STILL_SENDING" };
+  const rows = records() as RetryRow[],
+    row = rows.find((item) => item.id === data.campaignId);
+  if (!row) return { ok: false, error: "Campaign not found" };
+  if (!retryableStatuses.includes(row.status))
+    return { ok: false, error: "CAMPAIGN_NOT_RETRYABLE" };
+  const { exclusions, retryable } = retryCounts(row);
+  if (retryable === 0) return { ok: false, error: "NOTHING_TO_RETRY" };
+  const excludedOther = exclusions.reduce((sum, item) => sum + item.count, 0);
+  row.status = "review";
+  row.pending += retryable;
+  row.failed -= retryable;
+  row.retryable_failed = (row.retryable_failed ?? 0) - retryable;
+  row.requeueWrites = (row.requeueWrites ?? 0) + 1;
+  sessionStorage.setItem(storage, JSON.stringify(rows));
+  return {
+    ok: true,
+    requeued: retryable,
+    excludedUnknown: row.unknown ?? 0,
+    excludedOther,
+    excludedContactChanged:
+      exclusions.find((item) => item.reason === "CONTACT_CHANGED_SINCE_ATTEMPT")?.count ?? 0,
+  };
 }
