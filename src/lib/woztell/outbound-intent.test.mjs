@@ -11,6 +11,7 @@ import {
   readOutboundIntent,
   readOutboundReservation,
 } from "./outbound-intent.server.ts";
+import { sendWoztellResponse } from "./woztell.server.ts";
 const id = "11111111-1111-4111-8111-111111111111";
 const input = { requestId: id, conversationId: id, kind: "text", payload: { text: "hello" } };
 test("readonly HTTP handler authenticates before scoped outbound read and sanitizes failure", async (t) => {
@@ -297,18 +298,108 @@ async function deliverTwice(result) {
   assert.equal(h.persisted.length, 1);
   return { state: h.state(), error: h.persisted[0].error };
 }
-test("401 non-JSON → failed, next send allowed", async () => {
-  assert.deepEqual(
-    await deliverTwice({ ok: false, error: "WOZTELL_INVALID_RESPONSE", status: 401 }),
-    { state: "failed", error: "WOZTELL_PROVIDER_REJECTED" },
-  );
+// FX-10b controller ruling, backed by "never double-send": an answer whose body could not be
+// read or parsed (gateway HTML, an empty body, truncated JSON) proves nothing about whether the
+// customer got the message, so it is `unknown` (locked until a manager resolves it) at any
+// status. The send is made once and never repeated.
+test("an unreadable or unparsable provider answer is unknown at any status, never re-sent", async () => {
+  for (const status of [400, 401, 403, 404, 422, 429]) {
+    for (const result of [
+      // sendWoztellResponse's shape for HTML or truncated JSON.
+      { ok: false, error: "WOZTELL_INVALID_RESPONSE", status, bodyUnreadable: true },
+      // Its shape for an empty body.
+      {
+        ok: false,
+        error: `WOZTELL_HTTP_${status}`,
+        status,
+        body: {},
+        refused: false,
+        bodyUnreadable: true,
+      },
+      // An older shape without the flag still fails closed on the parse-failure code.
+      { ok: false, error: "WOZTELL_INVALID_RESPONSE", status },
+    ])
+      assert.deepEqual(
+        await deliverTwice(result),
+        { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" },
+        JSON.stringify(result),
+      );
+  }
+});
+// The same ruling end to end: a fake WozTell answer goes through the real sendWoztellResponse
+// and the real classifier. The fake fetch is the only network; nothing here talks to WozTell.
+async function deliverRawAnswerTwice(status, text) {
+  const originalFetch = globalThis.fetch;
+  const previous = {
+    enabled: process.env.WOZTELL_ENABLED,
+    token: process.env.WOZTELL_BOT_ACCESS_TOKEN,
+    channel: process.env.WOZTELL_CHANNEL_ID,
+  };
+  let fetches = 0;
+  globalThis.fetch = async () => {
+    fetches++;
+    return new Response(text, { status });
+  };
+  process.env.WOZTELL_ENABLED = "true";
+  process.env.WOZTELL_BOT_ACCESS_TOKEN = "test-token";
+  process.env.WOZTELL_CHANNEL_ID = "test-channel";
+  try {
+    let raw;
+    const h = harness(async () => {
+      raw = await sendWoztellResponse({
+        memberId: "m1",
+        response: [{ type: "TEXT", text: "hi" }],
+      });
+      return raw;
+    });
+    await deliverOutboundIntent(id, h.deps);
+    await deliverOutboundIntent(id, h.deps);
+    assert.equal(h.sends(), 1);
+    assert.equal(fetches, 1);
+    return { raw, state: h.state(), error: h.persisted[0].error };
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.WOZTELL_ENABLED = previous.enabled;
+    process.env.WOZTELL_BOT_ACCESS_TOKEN = previous.token;
+    process.env.WOZTELL_CHANNEL_ID = previous.channel;
+  }
+}
+for (const [status, label, text] of [
+  [400, "a gateway HTML page", "<html><body>400 Bad Request</body></html>"],
+  [429, "a gateway HTML page", "<html><body>429 Too Many Requests</body></html>"],
+  [403, "an empty body", ""],
+  [422, "truncated JSON", '{"ok":0,"err":"Parameter(s) is'],
+]) {
+  test(`a staff send answered ${status} with ${label} is unknown, not a definite refusal`, async () => {
+    const { raw, state, error } = await deliverRawAnswerTwice(status, text);
+    assert.equal(raw.ok, false);
+    assert.equal(raw.status, status);
+    assert.equal(raw.bodyUnreadable, true);
+    assert.notEqual(raw.refused, true);
+    assert.deepEqual({ state, error }, { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" });
+  });
+}
+test("a parsed ok:0 refusal at 4xx is readable and stays a definite refusal", async () => {
+  for (const status of [400, 401, 403, 404, 422, 429]) {
+    const { raw, state, error } = await deliverRawAnswerTwice(
+      status,
+      JSON.stringify({ ok: 0, err: "Parameter(s) is missing" }),
+    );
+    assert.notEqual(raw.bodyUnreadable, true, String(status));
+    assert.equal(raw.refused, true, String(status));
+    assert.deepEqual(
+      { state, error },
+      { state: "failed", error: "WOZTELL_REFUSED" },
+      String(status),
+    );
+  }
 });
 test("definite rejections and config errors are failed", async () => {
-  for (const status of [400, 403, 404, 422, 429]) {
-    // No body at all, an empty JSON body, and a JSON 4xx without ok:0 (refused:false).
+  for (const status of [400, 401, 403, 404, 422, 429]) {
+    // A parsed JSON 4xx with no acceptance evidence (refused:false).
     for (const result of [
-      { ok: false, error: "WOZTELL_INVALID_RESPONSE", status },
       { ok: false, error: `WOZTELL_HTTP_${status}`, status, body: {}, refused: false },
+      { ok: false, error: `WOZTELL_HTTP_${status}`, status, body: {}, bodyUnreadable: false },
     ])
       assert.deepEqual(
         await deliverTwice(result),

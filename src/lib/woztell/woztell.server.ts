@@ -427,12 +427,22 @@ export async function sendWoztellResponse(input: {
     },
   );
 
+  // `bodyUnreadable` marks an answer whose body could not be read or parsed --
+  // a gateway HTML page, an empty body, truncated JSON. Such an answer proves
+  // nothing about whether WOZTELL sent the message, so campaign delivery must
+  // file it as unknown and never as a retry-safe refusal, even at 4xx/429.
+  const bodyUnreadable = !rawBody.trim();
   let body: unknown = {};
-  if (rawBody.trim()) {
+  if (!bodyUnreadable) {
     try {
       body = JSON.parse(rawBody) as unknown;
     } catch {
-      return { ok: false, error: "WOZTELL_INVALID_RESPONSE", status: res.status };
+      return {
+        ok: false,
+        error: "WOZTELL_INVALID_RESPONSE",
+        status: res.status,
+        bodyUnreadable: true,
+      };
     }
   }
   const envelope = record(body);
@@ -460,6 +470,7 @@ export async function sendWoztellResponse(input: {
       status: res.status,
       refused: false,
       providerResult,
+      bodyUnreadable,
     };
   }
 
@@ -496,7 +507,15 @@ export async function sendWoztellResponse(input: {
   // ambiguous failure is terminal there, because the customer may already have
   // the message, while a refusal is safe to retry. Only an explicit ok:0
   // counts, so anything less certain stays ambiguous.
-  return { ok: false, error: providerError, status: res.status, body, refused, providerResult };
+  return {
+    ok: false,
+    error: providerError,
+    status: res.status,
+    body,
+    refused,
+    providerResult,
+    bodyUnreadable,
+  };
 }
 
 export { deliverWoztellCampaign } from "./campaign-delivery.server.ts";

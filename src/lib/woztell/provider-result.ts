@@ -123,14 +123,25 @@ export const DEFINITE_REJECTION_STATUSES: readonly number[] = [400, 401, 403, 40
  * 1. ok with an identifiable acceptance       -> accepted
  * 2. any acceptance signal at all              -> unknown (the customer may have the message)
  * 3. a preflight (configuration) failure       -> failed, WOZTELL_CONFIGURATION_UNAVAILABLE
+ * 3b. a body that could not be read or parsed -> unknown, at ANY status (4xx and 429 included):
+ *     gateway HTML, an empty body or truncated JSON proves nothing about whether the customer
+ *     got the message (FX-10b controller ruling; the owner's "never double-send" priority).
  * 4. an explicit refusal (flag or ok:0 body)   -> failed, WOZTELL_REFUSED
- * 5. a definite-rejection HTTP status          -> failed, WOZTELL_PROVIDER_REJECTED
+ * 5. a definite-rejection HTTP status with a  -> failed, WOZTELL_PROVIDER_REJECTED
+ *    parsed body and no acceptance evidence
  * 6. anything else (5xx, timeouts, ambiguity)  -> unknown
  * A thrown send (timeout or network error) never reaches this function: the caller keeps it
  * `unknown`.
  */
 export function classifyOutboundSendResult(
-  result: { ok: boolean; status?: number; refused?: boolean; stage?: "preflight" },
+  result: {
+    ok: boolean;
+    status?: number;
+    refused?: boolean;
+    stage?: "preflight";
+    error?: string;
+    bodyUnreadable?: boolean;
+  },
   parsed: ParsedWoztellProviderResult,
 ): { state: "accepted" | "failed" | "unknown"; error: string | null } {
   if (result.ok && parsed.outcome === "identifiable_acceptance")
@@ -139,6 +150,10 @@ export function classifyOutboundSendResult(
     return { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" };
   if (result.stage === "preflight")
     return { state: "failed", error: "WOZTELL_CONFIGURATION_UNAVAILABLE" };
+  // The parse-failure code alone also counts, so an older result shape without the flag still
+  // fails closed.
+  if (result.bodyUnreadable === true || result.error === "WOZTELL_INVALID_RESPONSE")
+    return { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" };
   if (result.refused === true || parsed.outcome === "definitive_refusal")
     return { state: "failed", error: "WOZTELL_REFUSED" };
   if (result.status !== undefined && DEFINITE_REJECTION_STATUSES.includes(result.status))

@@ -182,13 +182,34 @@ test("FX-08 unknown outcomes (owned Postgres)", { timeout: 300000 }, async (t) =
         });
       };
 
-      await t.test("401 non-JSON → failed, next send allowed", async () => {
+      await t.test("401 non-JSON → unknown and locked, never re-sent", async () => {
+        // FX-10b controller ruling: an unreadable body is not a definite refusal.
         const { conversationId } = await newConversation();
         const before = sends;
         const intentId = await deliver(conversationId, {
           ok: false,
           error: "WOZTELL_INVALID_RESPONSE",
           status: 401,
+          bodyUnreadable: true,
+        });
+        assert.equal(sends, before + 1);
+        const row = await intent(intentId);
+        assert.equal(row.state, "unknown");
+        assert.equal(row.error, "WOZTELL_DELIVERY_UNKNOWN");
+        await assert.rejects(enqueue(conversationId), /OUTBOUND_RECONCILIATION_REQUIRED/);
+        assert.equal(sends, before + 1);
+      });
+
+      await t.test("401 parsed refusal → failed, next send allowed", async () => {
+        const { conversationId } = await newConversation();
+        const before = sends;
+        const intentId = await deliver(conversationId, {
+          ok: false,
+          error: "WOZTELL_HTTP_401",
+          status: 401,
+          body: {},
+          refused: false,
+          bodyUnreadable: false,
         });
         assert.equal(sends, before + 1);
         const row = await intent(intentId);

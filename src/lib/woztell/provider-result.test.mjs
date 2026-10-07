@@ -212,6 +212,26 @@ test("classifyOutboundSendResult covers the full rule table", () => {
       { state: "failed", error: "WOZTELL_PROVIDER_REJECTED" },
       String(status),
     );
+  // 3b. an answer whose body could not be read or parsed proves nothing, so it is unknown at
+  //     ANY status, 4xx and 429 included (FX-10b controller ruling: never double-send).
+  for (const status of [...DEFINITE_REJECTION_STATUSES, 200, 500]) {
+    assert.deepEqual(
+      classify({ ok: false, status, bodyUnreadable: true, error: "WOZTELL_INVALID_RESPONSE" }, {}),
+      { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" },
+      `unparsable ${status}`,
+    );
+    assert.deepEqual(
+      classify({ ok: false, status, bodyUnreadable: true, refused: false }, {}),
+      { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" },
+      `empty ${status}`,
+    );
+    // An older result shape without the flag: the parse-failure code alone is enough.
+    assert.deepEqual(
+      classify({ ok: false, status, error: "WOZTELL_INVALID_RESPONSE" }, undefined),
+      { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" },
+      `flagless unparsable ${status}`,
+    );
+  }
   // 6. everything else (5xx, 408, an ambiguous 2xx, no status at all) -> unknown.
   for (const result of [
     { ok: false, status: 500 },

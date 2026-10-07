@@ -199,6 +199,8 @@ type ProviderResult = {
   status?: number;
   error?: string;
   stage?: "preflight";
+  /** The provider answered, but its body could not be read or parsed: never a refusal. */
+  bodyUnreadable?: boolean;
   providerResult?: ParsedWoztellProviderResult;
 };
 export function providerMessageIdentity(body: unknown): string | null {
@@ -227,7 +229,7 @@ export async function deliverOutboundIntent(
     const parsed = result.providerResult ?? parseWoztellProviderResult(result.body);
     externalMessageId = parsed.primaryMessageId;
     // FX-08 / D-02: definite refusals and config errors are `failed` (no lock); any acceptance
-    // signal, a 5xx or an ambiguous answer stays `unknown`.
+    // signal, a 5xx, an unreadable body or an ambiguous answer stays `unknown`.
     const { state, error } = classifyOutboundSendResult(result, parsed);
     await finish(id, { state, externalMessageId, error, providerResult: parsed });
   } catch {

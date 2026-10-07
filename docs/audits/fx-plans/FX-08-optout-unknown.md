@@ -23,7 +23,8 @@
    - A manager or above can clear an accidental opt-out. The clear is audited and keeps the evidence.
    - A read-only report lists existing contacts that were opted out by text **not** in the D4 list, for the owner to review. Nothing is auto-cleared.
 5. **Unknown outcomes:**
-   - Config errors, and HTTP 400/401/403/404/422/429 with no acceptance signal, become `failed`, not `unknown`.
+   - Config errors, and HTTP 400/401/403/404/422/429 with a parsed body and no acceptance signal, become `failed`, not `unknown`.
+   - **Update 2026-10-07 (FX-10b controller ruling):** a body that could not be read or parsed (gateway HTML, an empty body, truncated JSON) is never a definite refusal. It stays `unknown` at any status, 4xx and 429 included, so the conversation locks until a manager resolves it. `sendWoztellResponse` marks it `bodyUnreadable: true`.
    - A manager or above can resolve an `unknown` intent to `resolved_sent` or `resolved_not_sent` through an audited action. That releases the conversation lock. Resolving never sends anything, and `resolved_not_sent` only releases the lock. Any resend is a separate, explicit staff action.
 
 **Owner answers (2026-10-06, binding; these supersede the matching open questions):**
@@ -497,15 +498,15 @@ The resolution applies to staff **and** service-automation intents (fact 7: both
 
 - [ ] **Step 1: write the failing tests.**
   - `outbound-intent.test.mjs` (harness):
-    - `401 non-JSON → failed, next send allowed` (fix-plan name; unit half): `{ok:false,error:"WOZTELL_INVALID_RESPONSE",status:401}` → `failed`.
-    - `definite rejections and config errors are failed`: statuses 400, 403, 404, 422, 429 with `{ok:0}`, `{}` or no body → `failed` (`WOZTELL_PROVIDER_REJECTED`). `{ok:false, error:"WOZTELL_ENABLED is not true", stage:"preflight"}` → `failed` (`WOZTELL_CONFIGURATION_UNAVAILABLE`).
+    - ~~`401 non-JSON → failed, next send allowed`~~ superseded 2026-10-07: `an unreadable or unparsable provider answer is unknown at any status, never re-sent` (`{ok:false,error:"WOZTELL_INVALID_RESPONSE",status,bodyUnreadable:true}` and the empty-body shape → `unknown`).
+    - `definite rejections and config errors are failed`: statuses 400, 401, 403, 404, 422, 429 with a parsed `{ok:0}` or `{}` body → `failed` (`WOZTELL_PROVIDER_REJECTED`). No body or an unparsable body is `unknown` (2026-10-07). `{ok:false, error:"WOZTELL_ENABLED is not true", stage:"preflight"}` → `failed` (`WOZTELL_CONFIGURATION_UNAVAILABLE`).
     - `any acceptance signal keeps unknown: 401 with ok:1, 429 with a messageId, 2xx execution_accepted` (Review Focus 5).
     - `5xx without ok:0, a timeout throw and an ambiguous 2xx stay unknown`. Keep `:276-284` and add a 500 non-JSON case.
     - **Provider-down fallback:** each case calls `send` exactly once; a second `deliverOutboundIntent` makes 0 calls.
   - `provider-result.test.mjs`: `classifyOutboundSendResult` covers the full rule table (one assert per row). Separately, `sendWoztellResponse` with `WOZTELL_ENABLED` unset returns `stage:"preflight"` without calling `provider-fetch` (mock `boundedProviderFetch` to throw).
   - `outbound-intent.owned.db.test.mjs`. Seed an active manager (no branch) assigned to the conversation, an agent, a viewer, an inactive manager, a contact and a conversation. Mock fetch to throw. Use a fake `send`.
     - `migration B widens the state check, adds the guard, and the revert drops only the guard`. Check `pg_constraint` contains `wa_intent_state_check` with 8 states and `pg_trigger` has `wa_intent_resolution_guard`. Apply the revert text, then the trigger is gone, the check still has 8 states and `wa_intent_unknown_reservation` is still present. Re-apply the forward file: idempotent. `MIGRATION_VERSIONS.includes(...)`.
-    - `401 non-JSON → failed, next send allowed` (fix-plan name; DB half). Deliver with a fake send returning the 401 shape → state `failed`. A new `enqueueOutboundIntent` on the same conversation succeeds; no `OUTBOUND_RECONCILIATION_REQUIRED`.
+    - `401 non-JSON → unknown and locked, never re-sent` and `401 parsed refusal → failed, next send allowed` (DB half; split 2026-10-07). The parsed case: Deliver with a fake send returning the 401 shape → state `failed`. A new `enqueueOutboundIntent` on the same conversation succeeds; no `OUTBOUND_RECONCILIATION_REQUIRED`.
     - `timeout → unknown; resolveUnknownOutbound releases lock` (fix-plan name):
       1. A fake send throws → `unknown`.
       2. `enqueueOutboundIntent` → rejects `OUTBOUND_RECONCILIATION_REQUIRED`.
