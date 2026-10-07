@@ -1,4 +1,4 @@
-# FX-11b: The public chatbot answers only from published data (D1 = a), with the 20-case eval. Implementation plan
+屋苑資料及現有盤源
 
 **Owner decisions (binding):**
 1. **D1 = (a).** The public chatbot does lead capture plus fixed FAQ and listing cards. It writes no free AI text, and **the public path makes no model call at all**. Option (c), AI answers checked by a code fact-checker, may come later as its own batch.
@@ -356,22 +356,22 @@ return { message: mapMessage(row), handoffSuggested: reply.handoffSuggested,
          reply: { kind: reply.kind, text: reply.text, cards: reply.cards } };
 ```
 
-**Copy table (zh-HK, all [owner copy]):**
+**Copy table (zh-HK, all [owner copy]; written Chinese per owner decision 2026-10-07, matching the welcome line):**
 
 | Key | Text |
 |---|---|
-| `listings` | 以下係網站上現時符合條件嘅公開盤源，詳情以盤源頁面為準： |
-| `no_listings` | 網站暫時未有符合條件嘅公開盤源。可以留低 WhatsApp 電話，持牌代理會幫你搵。 |
-| `listing_unavailable` | 呢個盤號喺網站暫時查唔到，可能已經售出、租出或者暫停放盤。可以留低 WhatsApp 電話，持牌代理會幫你跟進。 |
-| `estates` | 屋苑資料（例如校網、落成年份）請睇屋苑頁面： |
-| `estates_browse` | 想睇邊個屋苑？可以撳下面屋苑，或者直接輸入屋苑名同房數，例如「碧堤半島 兩房」。 |
+| `listings` | 以下是網站上現時符合條件的公開盤源，詳情以盤源頁面為準： |
+| `no_listings` | 網站暫時未有符合條件的公開盤源。你可以留下 WhatsApp 電話，持牌代理會為你物色。 |
+| `listing_unavailable` | 網站暫時查不到這個盤號，盤源可能已售出、租出或暫停放盤。你可以留下 WhatsApp 電話，持牌代理會為你跟進。 |
+| `estates` | 屋苑資料（例如校網、落成年份）請參閱屋苑頁面： |
+| `estates_browse` | 想查看哪個屋苑？你可以點選下面的屋苑，或直接輸入屋苑名稱和房數，例如「碧堤半島 兩房」。 |
 | `faq` | 常見問題： |
-| `handoff` | 好的，請留低 WhatsApp 電話，持牌代理會盡快聯絡你。 |
-| `valuation` | 估價要由持牌代理按單位資料處理。請留低 WhatsApp 電話，我哋會盡快聯絡你。 |
-| `no_match` | 我暫時只可以幫你查網站上嘅盤源、屋苑同常見問題。可以輸入屋苑名同房數，例如「碧堤半島 兩房」，或者留低 WhatsApp 電話由持牌代理跟進。 |
-| `error` | 暫時未能查詢資料。可以留低 WhatsApp 電話，持牌代理會跟進。 |
-| `more_link` (card title) | 睇全部符合條件嘅盤源 |
-| `estate_line` (estate card line) | 屋苑資料同現有盤源 |
+| `handoff` | 好的，請留下 WhatsApp 電話，持牌代理會盡快與你聯絡。 |
+| `valuation` | 估價需由持牌代理按單位資料處理。請留下 WhatsApp 電話，我們會盡快與你聯絡。 |
+| `no_match` | 我暫時只能協助查詢網站上的盤源、屋苑和常見問題。你可以輸入屋苑名稱和房數，例如「碧堤半島 兩房」，或留下 WhatsApp 電話由持牌代理跟進。 |
+| `error` | 暫時未能查詢資料。你可以留下 WhatsApp 電話，持牌代理會為你跟進。 |
+| `more_link` (card title) | 查看全部符合條件的盤源 |
+| `estate_line` (estate card line) | 屋苑資料及現有盤源 |
 
 Existing copy that stays as is: the welcome line 「你好，我是 Earnest Property 問樓助手。…」 (`LiveAgentWidget.tsx:29`), the quick replies 買樓 / 租樓 / 放盤估價 / 問屋苑 (`:280`), 「已轉交代理，我哋會盡快聯絡你。」 (`live-agent.server.ts:47`). The old suffix 「需要我幫你轉介持牌代理 WhatsApp 跟進嗎？」 (`:154`) is removed: the panel itself now carries the offer.
 
@@ -659,7 +659,7 @@ Each has a recommended default. I will use the default unless the owner says oth
 3. **Card price format.** **Default: the site's current format** (`售 $6.80M`, `租 $38,000 / 月`, via `propertyPriceSummary`), so the chat matches the listing pages. D8 (`HK$1,268萬`) changes both together in FX-19d. The audit's 「680萬」 for case 1 therefore reads `$6.80M`, and the grader accepts either.
 4. **English questions.** **Default: zh-HK replies** (owner rule), with English estate names and words understood (case 16).
 5. **FAQ match threshold.** **Default: at least 2 shared bigrams and at least 50 % of the question's bigrams.** Below that, the visitor gets the no-match reply with the handoff panel, never a loosely related FAQ.
-6. **How many listing cards.** **Default: 3,** plus 「睇全部符合條件嘅盤源」 linking to the matching `/listings` filter.
+6. **How many listing cards.** **Default: 3,** plus 「查看全部符合條件的盤源」 linking to the matching `/listings` filter.
 7. **Fold FX-05c (staff alert on handoff) into this PR?** **Default: no.** It is a different hunk of `live-agent.server.ts` and a different owner rule (FX-05b's allowlist). Run it as its own small PR now, in parallel. Lead capture is this bot's main job after D1 = (a), so it should not wait.
 8. **Retention for chat transcripts** (E-14). **Default: move to FX-18,** with a proposed 12 months for `live_agent_messages` of sessions without a lead, and lead-linked rows kept with the lead.
 
