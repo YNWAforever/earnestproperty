@@ -51,6 +51,7 @@ describe("parseLiveAgentIntent", () => {
         "handoffRequested",
         "listingNo",
         "listingQuestion",
+        "sellIntent",
         "text",
         "valuation",
       ].sort(),
@@ -155,7 +156,7 @@ describe("review fixes", () => {
     expect(parseLiveAgentIntent("估价").valuation).toBe(true);
     expect(parseLiveAgentIntent("我是业主").valuation).toBe(true);
     expect(parseLiveAgentIntent("想卖楼").valuation).toBe(true);
-    expect(parseLiveAgentIntent("放盘").valuation).toBe(true);
+    expect(parseLiveAgentIntent("放盘估价").valuation).toBe(true);
     expect(parseLiveAgentIntent("荃湾").districtSlug).toBe("tsuen-wan");
     expect(parseLiveAgentIntent("青龙头").districtSlug).toBe("tsing-lung-tau");
     expect(parseLiveAgentIntent("开放式").bedrooms).toBe(0);
@@ -195,5 +196,64 @@ describe("residual R1: contact prefixes", () => {
     expect(parseLiveAgentIntent("A000001").listingNo).toBe("A000001");
     expect(parseLiveAgentIntent("tel912345678 EP11001").listingNo).toBe("EP11001");
     expect(parseLiveAgentIntent("wa-1234567 同 ep-1201").listingNo).toBe("EP-1201");
+  });
+});
+
+describe("final fix wave: parser minors", () => {
+  test("bedrooms / beds / bed in English", () => {
+    expect(parseLiveAgentIntent("rent 3 bedrooms bellagio").bedrooms).toBe(3);
+    expect(parseLiveAgentIntent("3 beds at bellagio").bedrooms).toBe(3);
+    expect(parseLiveAgentIntent("3bed").bedrooms).toBe(3);
+    expect(parseLiveAgentIntent("2 bedroom flat").bedrooms).toBe(2);
+    expect(parseLiveAgentIntent("3-beds").bedrooms).toBe(3);
+    expect(parseLiveAgentIntent("3 bedding").bedrooms).toBeNull();
+  });
+
+  test("budget, room and unit tokens are never listing numbers", () => {
+    for (const text of [
+      "碧堤半島兩房 budget hkd8000000",
+      "預算HK8000000",
+      "預算hk$8000000",
+      "rm1203",
+      "unit b1203",
+      "flat 12a",
+      "flat12a",
+      "flat1203",
+      "rm 1203",
+      "b1203室",
+    ]) {
+      expect({ text, no: parseLiveAgentIntent(text).listingNo }).toEqual({ text, no: null });
+    }
+    expect(parseLiveAgentIntent("碧堤半島兩房 budget hkd8000000").estateSlugs).toEqual([
+      "bellagio",
+    ]);
+  });
+
+  test("the site's listing number formats still parse", () => {
+    expect(parseLiveAgentIntent("EP001").listingNo).toBe("EP001");
+    expect(parseLiveAgentIntent("EP-1201 仲有冇").listingNo).toBe("EP-1201");
+    expect(parseLiveAgentIntent("ep11001").listingNo).toBe("EP11001");
+    expect(parseLiveAgentIntent("A000001").listingNo).toBe("A000001");
+    expect(parseLiveAgentIntent("c123456 呢個盤").listingNo).toBe("C123456");
+  });
+
+  test("放盤 without a valuation word is a sell-intent handoff, not valuation", () => {
+    for (const text of ["我想放盤", "有冇兩房放盤", "放盘"]) {
+      const intent = parseLiveAgentIntent(text);
+      expect({ text, valuation: intent.valuation, sell: intent.sellIntent }).toEqual({
+        text,
+        valuation: false,
+        sell: true,
+      });
+    }
+    for (const text of ["放盤前想估價", "放盤值幾錢", "想放盤，幫我估下", "放盘估价"]) {
+      expect({ text, valuation: parseLiveAgentIntent(text).valuation }).toEqual({
+        text,
+        valuation: true,
+      });
+    }
+    // Other valuation words are unchanged.
+    expect(parseLiveAgentIntent("我是業主").valuation).toBe(true);
+    expect(parseLiveAgentIntent("碧堤半島兩房").sellIntent).toBe(false);
   });
 });

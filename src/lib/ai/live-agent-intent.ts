@@ -11,6 +11,8 @@ export type LiveAgentIntent = {
   text: string;
   handoffRequested: boolean;
   valuation: boolean;
+  /** 放盤 with no valuation word: the visitor wants to list a flat, so an agent follows up. */
+  sellIntent: boolean;
   listingNo: string | null;
   /** Registry alias hits, in registry order; NOT yet gated by publication. */
   estateSlugs: string[];
@@ -31,12 +33,17 @@ const HANDOFF_RE = new RegExp(
   `真人|人工|代理|經紀|经纪|職員|职员|聯絡|联络|電話|电话|${L}(?:whatsapp|calls?|calling|agents?|human)${R}`,
 );
 const VALUATION_RE = new RegExp(
-  `估價|估价|估值|值幾錢|值几钱|放盤|放盘|賣樓|卖楼|業主|业主|${L}(?:valuation|sell my)${R}`,
+  `估價|估价|估值|值幾錢|值几钱|賣樓|卖楼|業主|业主|${L}(?:valuation|sell my)${R}`,
 );
-const LISTING_NO_RE = /(?<![A-Za-z0-9])([A-Za-z]{1,4})(-?\d{3,10})(?![A-Za-z0-9])/g;
-// Contact prefixes: a token glued to one of these is a phone, never a listing number,
-// whatever its digit count ("tel912345678", "ph1234567", "wa-1234567").
-const CONTACT_PREFIXES = new Set(["tel", "ph", "wa", "whatsapp"]);
+// 放盤 alone means "I want to list my flat" (a sell-intent handoff); with any 估 word
+// (估價, 估值, 估下) or 值幾錢 it is a valuation request.
+const SELL_LISTING_RE = /放盤|放盘/;
+const SELL_VALUATION_WORD_RE = /估|值幾錢|值几钱/;
+// Only the site's public listing number shapes: EP with 3-8 digits (EP001, EP-1201, EP11001) or
+// one letter with exactly 6 digits (A000001, C123456). A budget, room or unit token
+// ("hkd8000000", "rm1203", "unit b1203", "flat12a") or a contact prefix ("tel912345678",
+// "wa-1234567") never has that shape. Input is already lower-cased.
+const LISTING_NO_RE = /(?<![a-z0-9])(ep-?\d{3,8}|[a-z]\d{6})(?![a-z0-9])/;
 // A Hong Kong phone number (8 digits starting 2/3/5/6/7/8/9, optionally +852) is never a
 // listing number, whatever short letter prefix ("tel", "wa", "ph") is glued to it.
 const HK_PHONE_RE = /(?<!\d)(?:\+?852[\s-]*)?[235-9](?:[\s-]?\d){7}(?!\d)/g;
@@ -98,7 +105,7 @@ function normalise(raw: string): string {
 function parseBedrooms(text: string): number | null {
   if (new RegExp(`開放式|开放式|${L}studio${R}`).test(text)) return 0;
   const match =
-    /([一兩两二三四五]|\d)\s*(?:間房|间房|睡房|房|-?\s*(?:bed|br)(?![a-z])|\s*rooms?(?![a-z]))/.exec(
+    /([一兩两二三四五]|\d)\s*(?:間房|间房|睡房|房|-?\s*(?:bed(?:room)?s?|br)(?![a-z])|\s*rooms?(?![a-z]))/.exec(
       text,
     );
   if (!match) return null;
@@ -116,11 +123,8 @@ function parseDeal(text: string): LiveAgentDeal | null {
 }
 
 function findListingNo(text: string): string | null {
-  for (const match of text.matchAll(LISTING_NO_RE)) {
-    if (CONTACT_PREFIXES.has(match[1].toLowerCase())) continue;
-    return (match[1] + match[2]).toUpperCase();
-  }
-  return null;
+  const match = LISTING_NO_RE.exec(text);
+  return match ? match[1].toUpperCase() : null;
 }
 
 export function parseLiveAgentIntent(raw: string): LiveAgentIntent {
@@ -135,10 +139,13 @@ export function parseLiveAgentIntent(raw: string): LiveAgentIntent {
     )
     .map((entry) => entry.slug);
   const district = DISTRICTS.find(([name]) => text.includes(name));
+  const sell = SELL_LISTING_RE.test(text);
+  const valuation = VALUATION_RE.test(text) || (sell && SELL_VALUATION_WORD_RE.test(text));
   return {
     text,
     handoffRequested: HANDOFF_RE.test(text),
-    valuation: VALUATION_RE.test(text),
+    valuation,
+    sellIntent: sell && !valuation,
     listingNo,
     estateSlugs,
     districtSlug: district ? district[1] : null,

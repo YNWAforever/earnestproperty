@@ -507,6 +507,24 @@ test(
           },
         );
 
+        await t.test("放盤 alone is a sell-intent handoff; with 估價 it is valuation", async () => {
+          const sell = await buildLiveAgentReply("我想放盤");
+          assert.equal(sell.kind, "handoff");
+          assert.equal(sell.text, LIVE_AGENT_REPLY_COPY.handoff);
+          assert.deepEqual(sell.cards, []);
+          assert.equal(sell.handoffSuggested, true);
+          const valuation = await buildLiveAgentReply("想放盤，幫我估價");
+          assert.equal(valuation.text, LIVE_AGENT_REPLY_COPY.valuation);
+          assert.equal(valuation.handoffSuggested, true);
+        });
+
+        await t.test("a budget token is never read as a listing number", async () => {
+          const reply = await buildLiveAgentReply("碧堤半島兩房 budget hkd8000000");
+          assert.equal(reply.kind, "listings", JSON.stringify(reply));
+          assert.deepEqual(hrefs(reply), ["/property/EP11001", "/property/EP11005"]);
+          assert.doesNotMatch(JSON.stringify(reply), /8000000|HKD8/i);
+        });
+
         await t.test(
           "a responder error gives the fixed reply, the handoff panel and a logged code, never raw text",
           async (st) => {

@@ -188,6 +188,8 @@ function browseDraft(estates: PublishedEstate[]): Draft {
 async function decide(intent: LiveAgentIntent): Promise<Draft> {
   // 1. Valuation is always an agent's job.
   if (intent.valuation) return { kind: "handoff", text: COPY.valuation, cards: [] };
+  // 1b. 放盤 without a valuation word: a seller wants an agent (existing handoff copy).
+  if (intent.sellIntent) return { kind: "handoff", text: COPY.handoff, cards: [] };
 
   const estates = await readPublishedEstates();
   const publishedSlugs = new Set(estates.map((estate) => estate.slug));
