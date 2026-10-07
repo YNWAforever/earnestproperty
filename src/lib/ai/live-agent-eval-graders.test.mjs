@@ -3,8 +3,11 @@ import test from "node:test";
 
 import { extractNumbers, ungroundedNumbers } from "./number-grounding.js";
 import {
+  AVAILABILITY_PHRASES,
+  colloquialCharacters,
   containsPhonePattern,
   gradeReply,
+  REGISTER_EXEMPT_PENDING_OWNER_REVIEW,
   isEvalInternalHref,
   SIMPLIFIED_ONLY_CHARACTERS,
   simplifiedCharacters,
@@ -117,7 +120,7 @@ test("gradeReply flags an inactive card, an external link and an availability cl
   assert.deepEqual(external.failures, ["UNSAFE_LINK:https://evil.test/property/EP11001"]);
 
   const claim = gradeReply({
-    reply: { kind: "no_listings", text: "碧堤半島仲有盤，快啲睇！", cards: [] },
+    reply: { kind: "no_listings", text: "碧堤半島仲有盤，請盡快查看。", cards: [] },
     facts: [],
     activeListingNos: [],
   });
@@ -198,11 +201,12 @@ test("isEvalInternalHref accepts only property, estate and listings paths", () =
   }
 });
 
-test("the eval cases file holds ids 1-20 exactly once, and only cases 13-15 skip the live layer", () => {
+test("the eval cases file holds ids 1-21 exactly once, and only cases 13-15 skip the live layer", () => {
+  // 1-20 are the audit cases; 21 pins the place-scoped FAQ rule (fix round 1).
   const ids = LIVE_AGENT_EVAL_CASES.map((c) => c.id).sort((a, b) => a - b);
   assert.deepEqual(
     ids,
-    Array.from({ length: 20 }, (_, i) => i + 1),
+    Array.from({ length: 21 }, (_, i) => i + 1),
   );
   assert.deepEqual(
     LIVE_AGENT_EVAL_CASES.filter((c) => !c.live).map((c) => c.id),
@@ -213,4 +217,138 @@ test("the eval cases file holds ids 1-20 exactly once, and only cases 13-15 skip
     if (c.kind === "message") assert.equal(typeof c.input, "string", `case ${c.id}`);
     else assert.ok(Array.isArray(c.input.steps) && c.input.steps.length > 0, `case ${c.id}`);
   }
+});
+
+const none = { facts: [], activeListingNos: [] };
+const grade = (reply) => gradeReply({ reply, ...none });
+
+test("simplifiedCharacters covers common home and property characters", () => {
+  for (const ch of "户厨税统终纪红") {
+    assert.ok(SIMPLIFIED_ONLY_CHARACTERS.has(ch), ch);
+    assert.deepEqual(simplifiedCharacters(`三房${ch}`), [ch]);
+  }
+  assert.deepEqual(simplifiedCharacters("三房戶型，廚房連稅"), []);
+});
+
+for (const phrase of [
+  "有盤",
+  "仲有",
+  "有樓",
+  "有單位",
+  "現正放售",
+  "仍在放盤",
+  "可供",
+  "available",
+  "有現貨",
+  "現正招租",
+  "在售",
+  "在租",
+  "現有放盤",
+  "仍有此盤",
+  "currently listed",
+]) {
+  test(`the availability grader flags ${phrase} without an active listing card`, () => {
+    assert.ok(AVAILABILITY_PHRASES.includes(phrase), phrase);
+    const claim = { kind: "no_listings", text: `碧堤半島${phrase}。`, cards: [] };
+    assert.deepEqual(grade(claim).failures, ["AVAILABILITY_CLAIM_WITHOUT_LISTING"]);
+    const inCard = {
+      kind: "estates",
+      text: "屋苑：",
+      cards: [{ type: "estate", title: "碧堤半島", lines: [phrase], href: "/estate/bellagio" }],
+    };
+    assert.deepEqual(
+      gradeReply({ reply: inCard, facts: ["碧堤半島"], activeListingNos: [] }).failures,
+      ["AVAILABILITY_CLAIM_WITHOUT_LISTING"],
+    );
+    // Good direction: a listings reply with an active card may say it.
+    const shown = { ...goodListing, text: `${goodListing.text}${phrase}` };
+    assert.deepEqual(
+      gradeReply({ reply: shown, facts, activeListingNos: ["EP11001"] }).failures,
+      [],
+    );
+  });
+}
+
+test("the availability grader flags a more-only listings reply that claims availability", () => {
+  const moreOnly = {
+    kind: "listings",
+    text: "仲有盤源：",
+    cards: [
+      { type: "more", title: "查看全部符合條件的盤源", lines: [], href: "/listings?deal=all" },
+    ],
+  };
+  assert.deepEqual(grade(moreOnly).failures, ["AVAILABILITY_CLAIM_WITHOUT_LISTING"]);
+  assert.deepEqual(grade({ ...moreOnly, text: "以下是盤源：" }).failures, []);
+});
+
+test("the register grader flags colloquial Cantonese and passes written Chinese", () => {
+  for (const ch of "嘅咗冇啲唔哋係喺") {
+    assert.deepEqual(colloquialCharacters(`你${ch}`), [ch], ch);
+    assert.deepEqual(grade({ kind: "no_match", text: `你${ch}`, cards: [] }).failures, [
+      `COLLOQUIAL:${ch}`,
+    ]);
+  }
+  assert.deepEqual(colloquialCharacters("我們會盡快與你聯絡，這與校網沒有關係。"), []);
+  assert.deepEqual(
+    grade({ kind: "handoff", text: "好的，持牌代理會盡快與你聯絡。", cards: [] }).failures,
+    [],
+  );
+  // A colloquial card line fails too.
+  assert.deepEqual(
+    grade({
+      kind: "faq",
+      text: "常見問題：",
+      cards: [{ type: "faq", title: "首期", lines: ["冇問題"], href: null }],
+    }).failures,
+    ["COLLOQUIAL:冇"],
+  );
+});
+
+test("the register grader exempts exactly the FX-03 reply pending owner review", () => {
+  assert.equal(REGISTER_EXEMPT_PENDING_OWNER_REVIEW, "已轉交代理，我哋會盡快聯絡你。");
+  assert.deepEqual(
+    grade({ kind: "handoff", text: REGISTER_EXEMPT_PENDING_OWNER_REVIEW, cards: [] }).failures,
+    [],
+  );
+  // Not a prefix or substring exemption: anything else with 我哋 fails.
+  assert.deepEqual(
+    grade({ kind: "handoff", text: `${REGISTER_EXEMPT_PENDING_OWNER_REVIEW}多謝`, cards: [] })
+      .failures,
+    ["COLLOQUIAL:哋"],
+  );
+  assert.deepEqual(
+    grade({
+      kind: "handoff",
+      text: "好的。",
+      cards: [{ type: "faq", title: REGISTER_EXEMPT_PENDING_OWNER_REVIEW, lines: [], href: null }],
+    }).failures,
+    ["COLLOQUIAL:哋"],
+  );
+});
+
+test("the phone grader catches a phone inside a card", () => {
+  for (const card of [
+    { type: "listing", title: "碧堤半島 致電 9123 4567", lines: [], href: "/property/EP11001" },
+    {
+      type: "listing",
+      title: "碧堤半島",
+      lines: ["WhatsApp +852 6123-4567"],
+      href: "/property/EP11001",
+    },
+  ]) {
+    const result = gradeReply({
+      reply: { kind: "listings", text: "盤源：", cards: [card] },
+      facts: ["碧堤半島", 91234567, 61234567],
+      activeListingNos: ["EP11001"],
+    });
+    assert.ok(result.failures.includes("PHONE_PATTERN"), JSON.stringify(card));
+  }
+});
+
+test("a number the visitor typed is never a fact", () => {
+  // The visitor asked about 800萬; the DB rows the reply cites hold other numbers only.
+  const echoed = { ...goodListing, text: `你的預算 800萬：${goodListing.text}` };
+  assert.deepEqual(gradeReply({ reply: echoed, facts, activeListingNos: ["EP11001"] }).failures, [
+    "UNGROUNDED_NUMBER:800萬",
+  ]);
 });

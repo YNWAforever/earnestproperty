@@ -221,6 +221,8 @@ test(
         const { searchListings } = await import("../neon/public-data.server.ts");
         const { buildLiveAgentReply } = await import("./live-agent-reply.server.ts");
         const { LIVE_AGENT_REPLY_COPY, isInternalCardHref } = await import("./live-agent-reply.ts");
+        const { FAQ_MATCH_MIN_RATIO, FAQ_MATCH_MIN_SHARED, faqMatchScore } =
+          await import("./live-agent-intent.ts");
         const live = await import("./live-agent.server.ts");
 
         const hrefs = (reply) => reply.cards.map((card) => card.href);
@@ -514,10 +516,10 @@ test(
         const passedCases = new Set();
         const visible = (reply) =>
           [reply.text, ...reply.cards.flatMap((card) => [card.title, ...card.lines])].join("\n");
-        const FACT_SKIP_RE = /^id$|_id$|_at$|token|^embedding/;
-
-        // Every DB value of the rows the reply cites: listing rows by public number, estate rows by
-        // slug, FAQ rows by question. Ids and timestamps are not facts a reply could show.
+        // Only the columns a card renders are facts: a listing's title, price, rent, saleable area
+        // and bedrooms; an estate's name; a FAQ's question and answer. A hidden column (description,
+        // floor, ids, timestamps) never grounds a number. Rows are found by the card's public number,
+        // slug or question.
         const factsFor = async (reply) => {
           const nos = [];
           const slugs = [];
@@ -530,20 +532,21 @@ test(
             if (card.type === "faq") questions.push(card.title);
           }
           const rows = [
-            ...(await query("SELECT * FROM properties WHERE canonical_property_no = ANY($1)", [
-              nos,
+            ...(await query(
+              `SELECT title_zh, price, rent, saleable_area, bedrooms FROM properties
+               WHERE canonical_property_no = ANY($1)`,
+              [nos],
+            )),
+            ...(await query("SELECT name_zh FROM estates WHERE slug = ANY($1)", [slugs])),
+            ...(await query("SELECT question, answer FROM faqs WHERE question = ANY($1)", [
+              questions,
             ])),
-            ...(await query("SELECT * FROM estates WHERE slug = ANY($1)", [slugs])),
-            ...(await query("SELECT * FROM faqs WHERE question = ANY($1)", [questions])),
           ];
-          const facts = [];
-          for (const row of rows) {
-            for (const [key, value] of Object.entries(row)) {
-              if (FACT_SKIP_RE.test(key)) continue;
-              if (typeof value === "number" || typeof value === "string") facts.push(value);
-            }
-          }
-          return facts;
+          return rows.flatMap((row) =>
+            Object.values(row).filter(
+              (value) => typeof value === "number" || typeof value === "string",
+            ),
+          );
         };
         const activeListingNos = async () =>
           (
@@ -578,6 +581,7 @@ test(
         const digitFree = (reply) => assert.doesNotMatch(visible(reply), /[0-9０-９]/);
 
         let case1Cards = null;
+        const c21Input = LIVE_AGENT_EVAL_CASES.find((c) => c.id === 21).input;
         // Row-specific checks beyond expect + gradeReply, keyed by case id.
         const extra = {
           1: (reply) => {
@@ -609,6 +613,22 @@ test(
             assert.deepEqual(reply.cards, case1Cards);
           },
           20: (reply) => assert.deepEqual(simplifiedCharacters(visible(reply)), []),
+          21: async (reply) => {
+            // The real scope path: the 深井 FAQ is published, scoped to the district and would clear
+            // both match thresholds for this question, so only the place-scope rule keeps it out.
+            const [faq] = await query(
+              "SELECT scope, question, published FROM faqs WHERE question = '深井屬於哪個校網？'",
+            );
+            assert.deepEqual(faq, {
+              scope: "district:sham-tseng",
+              question: "深井屬於哪個校網？",
+              published: true,
+            });
+            const score = faqMatchScore(c21Input, faq.question);
+            assert.ok(score.shared >= FAQ_MATCH_MIN_SHARED, JSON.stringify(score));
+            assert.ok(score.ratio >= FAQ_MATCH_MIN_RATIO, JSON.stringify(score));
+            assert.ok(!reply.cards.some((card) => card.type === "faq"), JSON.stringify(reply));
+          },
         };
 
         const openSession = (id) =>
@@ -725,11 +745,12 @@ test(
         }
 
         await t.test("all 20 audit cases pass with providerCalls === 0", () => {
+          // Ids 1-20 are the audit cases; 21 is the place-scoped FAQ case added in fix round 1.
           const ids = LIVE_AGENT_EVAL_CASES.map((c) => c.id).sort((a, b) => a - b);
           assert.deepEqual(
             ids,
-            Array.from({ length: 20 }, (_, i) => i + 1),
-            "ids 1-20 once each",
+            Array.from({ length: 21 }, (_, i) => i + 1),
+            "ids 1-21 once each",
           );
           assert.deepEqual(
             [...passedCases].sort((a, b) => a - b),

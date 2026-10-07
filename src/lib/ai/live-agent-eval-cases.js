@@ -247,4 +247,19 @@ export const LIVE_AGENT_EVAL_CASES = [
     expect: { kind: "listings", cards: LISTINGS_BELLAGIO_2, handoffSuggested: false },
     live: true,
   },
+  // Fix round 1: the place-scoped FAQ rule as its own case. The 深井 school-net FAQ clears both
+  // match thresholds for this question, so only the scope rule keeps it out.
+  {
+    id: 21,
+    label: "沙田屬於哪個校網？",
+    kind: "message",
+    input: "沙田屬於哪個校網？",
+    expect: {
+      kind: "no_match",
+      cards: [],
+      mustNotInclude: ["62 校網", "深井屬於哪個校網"],
+      handoffSuggested: true,
+    },
+    live: true,
+  },
 ];

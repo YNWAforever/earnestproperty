@@ -15,7 +15,7 @@ export function containsPhonePattern(text) {
 // Simplified-only characters: each has a different Traditional form, and none is itself a
 // standard Traditional character or a variant common in zh-HK text. Left out on purpose: 里 台 后
 // 干 只 面 才 云 松 志 制 余 范 系, and 几 叶 于 冲 准 胜 适 涌 挂 舍 内 却 礼 况 决 够 柜 划 着 尔 儿 虫
-// 丰 录 圣 愿 画 筑 涂 烟 温 静 猫 猪 税 脚 脉 咏 吕 启 佣 缸 厦 册 叙 腊 庄 弥 盖 洒 (each also standard
+// 丰 录 圣 愿 画 筑 涂 烟 温 静 猫 猪 脚 脉 咏 吕 启 佣 缸 厦 册 叙 腊 庄 弥 盖 洒 (each also standard
 // or common in Traditional text) and the Cantonese 晒 (睇晒) and 吓, so the grader never flags valid zh-HK text.
 const SIMPLIFIED_ONLY = [
   "们这说么岛两钱价楼间问电话实盘区门车东买卖万亿层厅卫个来时会对发经国过还吗种样现",
@@ -38,6 +38,8 @@ const SIMPLIFIED_ONLY = [
   "溃滤滥滨滩潇灿炉烛烦烫焕牵牺狭狮狱猎献玛玺琐畅疯瘫皱盏监硕碍祸禅秃秆窃窍窝罢聪肃",
   "肠肿胀胁胆脑艰艳芦苇苍茧莱萧蔼蚀蛮衬袜袭誉趋跃践踪轩迁迈违逊遗邓酿释韩麦龄龟众屿",
   "沥涧庐缆赁贮缔谘谍颂",
+  // Home and property words: 户型 厨房 差饷/税 统一 终止 经纪 红线 卧室 绝对 编号.
+  "户厨税统终纪红卧绝编钥锁屉",
 ];
 
 export const SIMPLIFIED_ONLY_CHARACTERS = new Set(Array.from(SIMPLIFIED_ONLY.join("")));
@@ -64,7 +66,50 @@ export function isEvalInternalHref(href) {
   return LISTINGS_HREF_RE.test(href);
 }
 
-const AVAILABILITY_RE = /有盤|仲有|(?<![a-z])available(?![a-z])/i;
+// Phrases that tell the visitor a listing is on the market now. The brief's list plus the site's own
+// wording (在售/在租 on the property form and district page, 現有放盤 on estate pages, 仍有此盤 in
+// the withdrawal review).
+export const AVAILABILITY_PHRASES = [
+  "有盤",
+  "仲有",
+  "有樓",
+  "有單位",
+  "有現貨",
+  "現正放售",
+  "現正招租",
+  "仍在放盤",
+  "可供",
+  "在售",
+  "在租",
+  "現有放盤",
+  "仍有此盤",
+  "available",
+  "currently listed",
+];
+const AVAILABILITY_RE = new RegExp(
+  AVAILABILITY_PHRASES.map((phrase) =>
+    /^[a-z ]+$/.test(phrase) ? `(?<![a-z])${phrase.replace(/ /g, "\\s+")}(?![a-z])` : phrase,
+  ).join("|"),
+  "i",
+);
+
+// Written Chinese, not colloquial Cantonese. 係 is flagged unless it is part of a written word
+// (關係, 聯係, 係數).
+export const COLLOQUIAL_CHARACTERS = new Set(Array.from("嘅咗冇啲唔哋係喺嘢嚟佢噉咩嗰"));
+const WRITTEN_COMPOUND_RE = /關係|聯係|係數/g;
+
+/** Distinct colloquial Cantonese characters in text, in first-seen order. */
+export function colloquialCharacters(text) {
+  const seen = [];
+  for (const ch of String(text ?? "").replace(WRITTEN_COMPOUND_RE, "")) {
+    if (COLLOQUIAL_CHARACTERS.has(ch) && !seen.includes(ch)) seen.push(ch);
+  }
+  return seen;
+}
+
+// PENDING OWNER REVIEW: the FX-03 post-handoff reply is colloquial (我哋). The owner was told it
+// stays unless they ask, so it is the only reply text exempt from the register grader.
+export const REGISTER_EXEMPT_PENDING_OWNER_REVIEW = "已轉交代理，我哋會盡快聯絡你。";
 const PROPERTY_HREF_RE = /^\/property\/([^/?#]+)$/;
 
 /** Every visitor-visible string of a reply: the text, then each card's title and lines (never
@@ -90,6 +135,12 @@ export function gradeReply({ reply, facts, activeListingNos }) {
   if (containsPhonePattern(text)) failures.push("PHONE_PATTERN");
   const simplified = simplifiedCharacters(text);
   if (simplified.length > 0) failures.push(`SIMPLIFIED:${simplified.join("")}`);
+  const registerText = visibleText({
+    ...reply,
+    text: reply.text === REGISTER_EXEMPT_PENDING_OWNER_REVIEW ? "" : reply.text,
+  });
+  const colloquial = colloquialCharacters(registerText);
+  if (colloquial.length > 0) failures.push(`COLLOQUIAL:${colloquial.join("")}`);
 
   const active = new Set((activeListingNos ?? []).map((no) => no.toUpperCase()));
   let activeCards = 0;

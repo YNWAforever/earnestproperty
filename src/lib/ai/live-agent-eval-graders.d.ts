@@ -22,8 +22,9 @@ export declare function simplifiedCharacters(text: string): string[];
 export declare function isEvalInternalHref(href: string | null): boolean;
 
 /** failures: "UNGROUNDED_NUMBER:<raw>", "PHONE_PATTERN", "SIMPLIFIED:<chars>",
- *  "UNSAFE_LINK:<href>", "INACTIVE_LISTING_CARD:<no>", "AVAILABILITY_CLAIM_WITHOUT_LISTING"
- *  (text or card claims 有盤|仲有|available unless kind is "listings" with an active listing card). */
+ *  "COLLOQUIAL:<chars>", "UNSAFE_LINK:<href>", "INACTIVE_LISTING_CARD:<no>",
+ *  "AVAILABILITY_CLAIM_WITHOUT_LISTING"
+ *  (text or card uses an AVAILABILITY_PHRASES entry unless kind is "listings" with an active listing card). */
 export declare function gradeReply(input: {
   reply: GradedReply;
   /** Every DB value of the rows the reply may cite. */
@@ -31,3 +32,16 @@ export declare function gradeReply(input: {
   /** Public numbers currently active in the DB. */
   activeListingNos: string[];
 }): { ok: boolean; failures: string[] };
+
+/** Phrases that claim a listing is on the market now; allowed only in a listings reply with an
+ *  active listing card. */
+export declare const AVAILABILITY_PHRASES: readonly string[];
+
+/** Colloquial Cantonese characters (嘅 咗 冇 啲 唔 哋 係 喺 嘢 嚟 佢 噉 咩 嗰); 係 in 關係/聯係/係數 is
+ *  written Chinese and not flagged. gradeReply reports "COLLOQUIAL:<chars>". */
+export declare const COLLOQUIAL_CHARACTERS: ReadonlySet<string>;
+export declare function colloquialCharacters(text: string): string[];
+
+/** PENDING OWNER REVIEW: the FX-03 post-handoff reply, the only reply text the register grader
+ *  exempts (exact match). */
+export declare const REGISTER_EXEMPT_PENDING_OWNER_REVIEW: string;
