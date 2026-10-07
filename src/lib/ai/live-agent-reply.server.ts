@@ -1,6 +1,6 @@
 import "@tanstack/react-start/server-only";
 
-import { formatArea } from "@/lib/format";
+import { formatArea, sanitizeListingText } from "@/lib/format";
 import { queryRows, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
 import { searchListings } from "@/lib/neon/public-data.server";
 import type { NeonPropertyRow } from "@/lib/neon/public-data.types";
@@ -29,6 +29,9 @@ import {
 
 type PublishedEstate = { slug: string; name_zh: string; name_en: string | null };
 type PublishedFaq = { id: string; scope: string; question: string; answer: string };
+
+/** Rows read per listing search before filtering; at most MAX_LISTING_CARDS become cards. */
+const LISTING_FETCH_ROWS = 20;
 
 const HANDOFF_KINDS = new Set<LiveAgentReplyKind>([
   "handoff",
@@ -63,21 +66,27 @@ async function readPublishedFaqs(): Promise<PublishedFaq[]> {
   }));
 }
 
-/** Highest-scoring FAQ that clears both thresholds; preferred scopes first, then score, then
- *  the published sort order (the read order). */
+const PLACE_SCOPE_RE = /^(?:estate|district):/i;
+
+/** Highest-scoring eligible FAQ that clears both thresholds; the visitor's own place first, then
+ *  score, then the published sort order (the read order). A FAQ scoped to an estate or a district
+ *  is eligible only when the visitor named that same place: a wrong place's fact is worse than
+ *  no answer. Unscoped FAQs are always eligible. */
 function bestFaq(
   text: string,
   faqs: PublishedFaq[],
-  preferredScopes: string[] = [],
+  placeScopes: string[] = [],
 ): PublishedFaq | null {
+  const named = new Set(placeScopes.map((scope) => scope.toLowerCase()));
   const ranked = faqs
+    .filter((faq) => !PLACE_SCOPE_RE.test(faq.scope) || named.has(faq.scope.toLowerCase()))
     .map((faq, index) => ({ faq, index, score: faqMatchScore(text, faq.question) }))
     .filter(
       ({ score }) => score.shared >= FAQ_MATCH_MIN_SHARED && score.ratio >= FAQ_MATCH_MIN_RATIO,
     )
     .sort((a, b) => {
-      const scopeA = preferredScopes.includes(a.faq.scope) ? 0 : 1;
-      const scopeB = preferredScopes.includes(b.faq.scope) ? 0 : 1;
+      const scopeA = named.has(a.faq.scope.toLowerCase()) ? 0 : 1;
+      const scopeB = named.has(b.faq.scope.toLowerCase()) ? 0 : 1;
       return (
         scopeA - scopeB ||
         b.score.ratio - a.score.ratio ||
@@ -109,7 +118,7 @@ function listingCard(row: NeonPropertyRow): LiveAgentCard {
   else if (row.bedrooms) lines.push(`${row.bedrooms} 房`);
   return {
     type: "listing",
-    title: publicPropertyTitle(row),
+    title: sanitizeListingText(publicPropertyTitle(row)) ?? row.title_zh,
     lines,
     href: "/property/" + encodeURIComponent(publicPropertyNo(row)),
   };
@@ -150,7 +159,7 @@ async function findPublicListing(listingNo: string, publishedSlugs: Set<string>)
       keyword,
       sort: "newest",
       page: 1,
-      pageSize: 5,
+      pageSize: LISTING_FETCH_ROWS,
     });
     const match = showableRows(rows, publishedSlugs).find(
       (row) =>
@@ -196,17 +205,23 @@ async function decide(intent: LiveAgentIntent): Promise<Draft> {
         ...(estate ? { estateSlug: estate.slug } : { districtSlug: districtSlug ?? undefined }),
         sort: "newest",
         page: 1,
-        pageSize: MAX_LISTING_CARDS,
+        pageSize: LISTING_FETCH_ROWS,
       });
-      const cards = showableRows(rows, publishedSlugs).map(listingCard);
-      if (cards.length === 0) {
+      // Filter a bounded larger page, then slice: newer rows without a public number (or on an
+      // unpublished estate) must never hide a real listing behind "no listings".
+      const showable = showableRows(rows, publishedSlugs);
+      const cards = showable.slice(0, MAX_LISTING_CARDS).map(listingCard);
+      if (cards.length === 0 && total <= rows.length) {
         return {
           kind: "no_listings",
           text: COPY.no_listings,
           cards: estate ? [estateCard(estate)] : [],
         };
       }
-      if (total > cards.length) {
+      // More exists when the page held more showable rows than shown, or the search has rows
+      // beyond the fetched page (which /listings lists). If every fetched row was unshowable but
+      // more exist, the visitor gets only the "more" link, never a false "no listings".
+      if (showable.length > cards.length || total > rows.length) {
         cards.push({
           type: "more",
           title: COPY.more_link,
@@ -223,11 +238,11 @@ async function decide(intent: LiveAgentIntent): Promise<Draft> {
     }
 
     const faqs = await readPublishedFaqs();
-    const scopes = estate
-      ? [`estate:${estate.slug}`]
-      : districtSlug
-        ? [`district:${districtSlug}`]
-        : [];
+    // Only places the visitor actually named: a matched estate and/or a typed district.
+    const scopes = [
+      ...(estate ? [`estate:${estate.slug}`] : []),
+      ...(intent.districtSlug ? [`district:${intent.districtSlug}`] : []),
+    ];
     const faq = bestFaq(intent.text, faqs, scopes);
     if (faq) {
       return {
@@ -270,8 +285,8 @@ async function decide(intent: LiveAgentIntent): Promise<Draft> {
 }
 
 export async function buildLiveAgentReply(question: string): Promise<LiveAgentReply> {
-  const intent = parseLiveAgentIntent(question);
   try {
+    const intent = parseLiveAgentIntent(question);
     const draft = await decide(intent);
     return {
       ...draft,

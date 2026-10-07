@@ -288,6 +288,89 @@ test(
           },
         );
 
+        await t.test(
+          "newer rows without a public number never hide a real listing behind no_listings",
+          async () => {
+            const syncIds = [ID(801), ID(802), ID(803)];
+            for (const [index, id] of syncIds.entries()) {
+              await query(
+                `INSERT INTO properties (
+                   id, listing_no, canonical_property_no, title_zh, deal_type, district_slug,
+                   status, price, estate_id, bedrooms, created_at
+                 )
+                 SELECT $1,$2,$3,'麗都花園 同步盤','sale','sham-tseng','active',5000000,e.id,2,
+                        now() + ($4::int * interval '1 minute')
+                 FROM estates e WHERE e.slug = 'lido-garden'`,
+                [id, `FX11-80${index + 1}`, `SYNC-FX11-80${index + 1}`, index + 1],
+              );
+            }
+            try {
+              const reply = await buildLiveAgentReply("麗都花園兩房");
+              assert.equal(reply.kind, "listings", JSON.stringify(reply));
+              assert.ok(hrefs(reply).includes("/property/EP11004"), JSON.stringify(reply));
+              assert.ok(!JSON.stringify(reply).includes("SYNC"));
+            } finally {
+              await query("DELETE FROM properties WHERE id = ANY($1::uuid[])", [syncIds]);
+            }
+          },
+        );
+
+        await t.test("a FAQ about one place never answers a question about another", async () => {
+          const elsewhere = await buildLiveAgentReply("沙田屬於哪個校網？");
+          assert.notEqual(elsewhere.kind, "faq");
+          assert.doesNotMatch(JSON.stringify(elsewhere), /62 校網|深井屬於哪個校網/);
+          assert.equal(elsewhere.handoffSuggested, true);
+
+          const otherEstate = await buildLiveAgentReply("碧堤半島屬於哪個校網？");
+          assert.doesNotMatch(JSON.stringify(otherEstate), /62 校網/);
+
+          const named = await buildLiveAgentReply("深井屬於哪個校網？");
+          assert.equal(named.kind, "faq");
+          assert.equal(named.cards[0].title, "深井屬於哪個校網？");
+          assert.match(named.cards[0].lines[0], /62 校網/);
+
+          const unscoped = await buildLiveAgentReply("請問買樓首期要幾多？");
+          assert.equal(unscoped.kind, "faq");
+          assert.equal(unscoped.cards[0].title, "買樓首期要幾多？");
+        });
+
+        await t.test("more listings link to /listings with the same filters", async () => {
+          // Exactly three public rows (EP11001, EP11004, EP11005): the hidden-estate and SYNC rows
+          // are not counted, so no "more" card.
+          const exact = await buildLiveAgentReply("深井兩房");
+          assert.equal(exact.kind, "listings");
+          assert.equal(exact.cards.filter((card) => card.type === "listing").length, 3);
+          assert.ok(!exact.cards.some((card) => card.type === "more"), JSON.stringify(exact));
+
+          await query(
+            `INSERT INTO properties (
+               id, listing_no, canonical_property_no, title_zh, deal_type, district_slug,
+               status, price, estate_id, bedrooms, created_at
+             )
+             SELECT $1,'FX11-810','EP11810','麗都花園 2座','sale','sham-tseng','active',5300000,
+                    e.id,2,now() - interval '1 hour'
+             FROM estates e WHERE e.slug = 'lido-garden'`,
+            [ID(810)],
+          );
+          try {
+            const reply = await buildLiveAgentReply("深井兩房");
+            assert.equal(reply.kind, "listings");
+            const more = reply.cards.find((card) => card.type === "more");
+            assert.ok(more, JSON.stringify(reply.cards));
+            assert.equal(more.title, LIVE_AGENT_REPLY_COPY.more_link);
+            assert.equal(more.href, "/listings?deal=all&bedrooms=2&district=sham-tseng");
+            assert.ok(isInternalCardHref(more.href));
+          } finally {
+            await query("DELETE FROM properties WHERE id = $1", [ID(810)]);
+          }
+        });
+
+        await t.test("a hyphenated listing number finds the public listing", async () => {
+          const reply = await buildLiveAgentReply("ep-11001 呢個盤");
+          assert.equal(reply.kind, "listings");
+          assert.deepEqual(hrefs(reply), ["/property/EP11001"]);
+        });
+
         await t.test("a published FAQ is shown verbatim", async () => {
           const reply = await buildLiveAgentReply("買樓首期要幾多？");
           assert.equal(reply.kind, "faq");
