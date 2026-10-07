@@ -3779,7 +3779,18 @@ export async function validateAdminCampaignQueueability(id: string) {
   return { ok: true as const };
 }
 
-export async function sendAdminCampaignQueue(id: string, actor: StaffAccess) {
+/**
+ * 「發送…」: materialise, then queue. `expectedCount` is the number the
+ * confirmation showed (the send preview's `sendable`). For a campaign with
+ * delivery history the server's own count after materialise is authoritative:
+ * if it differs, nothing is queued and the result is SEND_COUNT_CHANGED with
+ * the current number (FX-10b final fix wave), as RETRY_COUNT_CHANGED does.
+ */
+export async function sendAdminCampaignQueue(
+  id: string,
+  actor: StaffAccess,
+  options: { expectedCount?: number | null } = {},
+) {
   const validation = await validateAdminCampaignQueueability(id);
   if (!validation.ok) return validation;
 
@@ -3787,23 +3798,29 @@ export async function sendAdminCampaignQueue(id: string, actor: StaffAccess) {
   if (!materialization.ok)
     return { ok: false as const, error: materialization.error, materialization };
 
-  const result = await queueAdminCampaign(id, actor);
+  const result = await queueAdminCampaign(id, actor, options);
   return { ...result, materialization };
 }
 
-export async function queueAdminCampaign(id: string, actor: StaffAccess) {
+/** A non-negative safe integer, or null (missing or malformed never matches). */
+function expectedSendCount(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+export async function queueAdminCampaign(
+  id: string,
+  actor: StaffAccess,
+  options: { expectedCount?: number | null } = {},
+) {
   const rows = await queryRows(
     `
     SELECT
       c.id,
       c.status,
       t.status AS template_status,
+      ${campaignHasDeliveryHistorySql("c")} AS has_history,
       count(r.id) FILTER (
-        WHERE NULLIF(contact.normalized_phone, '') IS NOT NULL
-          AND contact.opt_in_whatsapp = true
-          AND contact.opted_out_whatsapp = false
-          AND ${marketingIdentitySafeSql("contact")}
-          AND ${campaignRecipientPrimarySql("r", "contact")}
+        WHERE ${campaignDispatchableQueuedSql("r", "contact")}
       )::int AS eligible_recipients
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_templates t ON t.id = c.template_id
@@ -3824,6 +3841,14 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
     eligibleRecipients: Number(row.eligible_recipients ?? 0),
   });
   if (!check.ok) return { ok: false as const, error: check.reason };
+  const eligibleNow = Number(row.eligible_recipients ?? 0);
+  // With delivery history the confirmation must have shown exactly this many.
+  // A missing count never matches, so nothing is queued.
+  const hasHistory = row.has_history === true;
+  const expected = expectedSendCount(options.expectedCount);
+  if (hasHistory && expected !== eligibleNow) {
+    return { ok: false as const, error: "SEND_COUNT_CHANGED" as const, sendable: eligibleNow };
+  }
 
   // TOCTOU hardening: the eligibility predicate above can go stale between the
   // SELECT and the writes (a concurrent cancel/materialize could change the
@@ -3853,13 +3878,16 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
             FROM whatsapp_campaign_recipients r
             JOIN crm_contacts contact ON contact.id = r.contact_id
             WHERE r.campaign_id = c.id
-              AND r.status = 'queued'
-              AND NULLIF(contact.normalized_phone, '') IS NOT NULL
-              AND contact.opt_in_whatsapp = true
-              AND contact.opted_out_whatsapp = false
-              AND ${marketingIdentitySafeSql("contact")}
-              AND ${campaignRecipientPrimarySql("r", "contact")}
+              AND ${campaignDispatchableQueuedSql("r", "contact")}
           )
+          -- The confirmed count, re-checked in this statement (history only).
+          AND ($4::int IS NULL OR (
+            SELECT count(*)
+            FROM whatsapp_campaign_recipients r
+            JOIN crm_contacts contact ON contact.id = r.contact_id
+            WHERE r.campaign_id = c.id
+              AND ${campaignDispatchableQueuedSql("r", "contact")}
+          ) = $4::int)
         RETURNING c.id, c.reviewed_at
       ), recipients AS (
         UPDATE whatsapp_campaign_recipients r
@@ -3895,13 +3923,25 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
              (SELECT count(*) FROM audited) AS audit_rows
       FROM flipped CROSS JOIN enqueued
       `,
-      [actor.staffId, id, Number(row.eligible_recipients ?? 0)],
+      [actor.staffId, id, eligibleNow, hasHistory ? expected : null],
     ),
   ]);
 
   if (!Array.isArray(flipped) || !flipped[0]) {
     // Lost the race (campaign was cancelled/changed concurrently) or no longer
-    // eligible. Nothing was committed.
+    // eligible. Nothing was committed. A changed count is reported as such.
+    if (hasHistory) {
+      const [recount] = await queryRows(
+        `SELECT count(*)::int AS n FROM whatsapp_campaign_recipients r
+         JOIN crm_contacts contact ON contact.id = r.contact_id
+         WHERE r.campaign_id = $1::uuid AND ${campaignDispatchableQueuedSql("r", "contact")}`,
+        [id],
+      );
+      const now = Number(recount?.n ?? 0);
+      if (now !== expected) {
+        return { ok: false as const, error: "SEND_COUNT_CHANGED" as const, sendable: now };
+      }
+    }
     return { ok: false as const, error: "CAMPAIGN_NOT_ELIGIBLE" };
   }
 
@@ -3914,7 +3954,7 @@ export async function queueAdminCampaign(id: string, actor: StaffAccess) {
     jobId: stringOrEmpty(flipped[0].job_id),
     jobStatus: stringOrEmpty(flipped[0].job_status),
     /** The eligible queued recipients this approval sent to delivery (also audited). */
-    queuedRecipients: Number(row.eligible_recipients ?? 0),
+    queuedRecipients: eligibleNow,
   };
 }
 
