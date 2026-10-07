@@ -3,8 +3,12 @@
 // Modelled on scripts/jev/evaluate.mjs. This file never reads the environment: no AI keys, no phone
 // numbers and no other value can reach a request or the report. Live mode sends only the eval case
 // texts, never calls the handoff route (cases 13-15 are skipped), and never follows a redirect.
+// Live mode creates chat sessions and messages on the target deployment, so that preview must use a
+// Neon branch database, not production. Only a branch preview alias or localhost is accepted.
 
-import { pathToFileURL } from "node:url";
+import { readFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { LIVE_AGENT_EVAL_CASES } from "../../src/lib/ai/live-agent-eval-cases.js";
 import {
@@ -17,7 +21,7 @@ import { ungroundedNumbers } from "../../src/lib/ai/number-grounding.js";
 const MOCK_INTERPRETATION =
   "MOCK ONLY: exercises graders and reporting; the deterministic proof is test:live-agent:eval:db.";
 const LIVE_INTERPRETATION =
-  "LIVE PREVIEW: fixed-copy graders only (no phone, no Simplified, internal links, kind, no ungrounded number); card facts are not judged against the DB.";
+  "LIVE PREVIEW (session and messages are created on the target; use a Neon branch DB): fixed-copy graders only (no phone, no Simplified, internal links, kind, no ungrounded number); card facts are not judged against the DB.";
 
 /** Fixed canned copy per reply kind: no numbers, no phone, Traditional only, no cards. */
 const MOCK_REPLIES = {
@@ -31,22 +35,69 @@ const MOCK_REPLIES = {
 };
 
 const REQUEST_TIMEOUT_MS = 15000;
-const ANONYMOUS_ID = "live-agent-eval";
 const SOURCE_PATH = "/";
 
-function refuse() {
-  throw new Error("live_target_refused");
+const HASH_URL_HINT =
+  "hint: use the branch preview URL (earnestproperty-git-<branch>-<team>.vercel.app), not a deployment or alias URL";
+
+function refuse(hint = null) {
+  const error = new Error("live_target_refused");
+  if (hint) error.hint = hint;
+  throw error;
 }
 
-const PREVIEW_HOST_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.vercel\.app$/;
+// The only Vercel form that is always a preview is the branch alias
+// `<project>-git-<branch>-<team>.vercel.app` with a branch other than main/master. The project
+// slug (and the team scope when known) come from .vercel/project.json if present, else these
+// constants. The environment is never read. A null team scope accepts any team suffix.
+const PROJECT_SLUG_FALLBACK = "earnestproperty";
+const TEAM_SCOPE_FALLBACK = null;
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
+
+function readPinned() {
+  const pinned = { project: PROJECT_SLUG_FALLBACK, team: TEAM_SCOPE_FALLBACK };
+  try {
+    const file = fileURLToPath(new URL("../../.vercel/project.json", import.meta.url));
+    const data = JSON.parse(readFileSync(file, "utf8"));
+    if (typeof data?.projectName === "string" && SLUG_RE.test(data.projectName)) {
+      pinned.project = data.projectName;
+    }
+    const team = data?.teamSlug ?? data?.scope;
+    if (typeof team === "string" && SLUG_RE.test(team)) pinned.team = team;
+  } catch {
+    // No project link: the constants apply.
+  }
+  return pinned;
+}
+
+const VERCEL_SUFFIX = ".vercel.app";
+
+function isBranchPreviewHost(host) {
+  if (!host.endsWith(VERCEL_SUFFIX)) return false;
+  const label = host.slice(0, -VERCEL_SUFFIX.length);
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(label) || label.startsWith("xn--")) {
+    return false;
+  }
+  const { project, team } = readPinned();
+  const prefix = `${project}-git-`;
+  if (!label.startsWith(prefix)) return false;
+  const rest = label.slice(prefix.length); // "<branch>-<team>"
+  if (/^(?:main|master)(?:-|$)/.test(rest)) return false;
+  if (team) {
+    const suffix = `-${team}`;
+    return rest.endsWith(suffix) && rest.length > suffix.length;
+  }
+  // Unpinned team: there must be a branch part and a team part.
+  return /^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(rest);
+}
 
 /**
- * Allowlist for live mode. Throws "live_target_refused" unless baseUrl is a Vercel preview host
- * (a single ASCII label under .vercel.app, https only) or localhost / 127.0.0.1 (http or https).
- * The host is compared after URL parsing (which lowercases, applies IDN to punycode and NFKC) with
- * one trailing dot stripped and the port ignored. Credentials, other IP literals, punycode labels,
- * the production alias and the main-branch alias are refused. Returns the normalised URL (origin
- * only; path, query and hash are dropped).
+ * Allowlist for live mode. Throws "live_target_refused" unless baseUrl is a branch preview alias
+ * (`earnestproperty-git-<branch>-<team>.vercel.app`, https, branch not main/master) or
+ * http://localhost / http://127.0.0.1 on any port. The host is compared after URL parsing (which
+ * lowercases, applies IDN to punycode and NFKC) with one trailing dot stripped and the port ignored.
+ * The bare team alias, deployment-hash URLs, other projects, credentials, other IP literals and
+ * every production host are refused. Returns the normalised URL (origin only).
  */
 export function assertLiveTarget(baseUrl) {
   if (typeof baseUrl !== "string" || baseUrl.length === 0 || baseUrl.length > 2048) refuse();
@@ -66,13 +117,18 @@ export function assertLiveTarget(baseUrl) {
   if (host === "" || host.endsWith(".") || host.startsWith("[") || host.includes("%")) refuse();
 
   const local = host === "localhost" || host === "127.0.0.1";
-  if (!local) {
+  if (local) {
+    if (url.protocol !== "http:") refuse();
+  } else {
     if (url.protocol !== "https:") refuse();
-    if (!PREVIEW_HOST_RE.test(host)) refuse();
-    const label = host.slice(0, -".vercel.app".length);
-    if (label.startsWith("xn--")) refuse();
-    if (label === "earnestproperty" || label === "www") refuse();
-    if (/-git-(?:main|master)-/.test(label)) refuse();
+    if (!isBranchPreviewHost(host)) {
+      // A deployment-hash or team-alias URL of this project: tell the user what to pass instead.
+      refuse(
+        host.startsWith(`${readPinned().project}-`) && host.endsWith(VERCEL_SUFFIX)
+          ? HASH_URL_HINT
+          : null,
+      );
+    }
   }
 
   const port = url.port ? `:${url.port}` : "";
@@ -112,10 +168,10 @@ function gradeLiveReply(testCase, reply) {
   const text = visibleText(reply);
   if (containsPhonePattern(text)) failures.push("PHONE_PATTERN");
   const simplified = simplifiedCharacters(text);
-  if (simplified.length > 0) failures.push(`SIMPLIFIED:${simplified.join("")}`);
+  if (simplified.length > 0) failures.push("SIMPLIFIED");
   for (const card of reply.cards ?? []) {
     if (card.href === null || card.href === undefined) continue;
-    if (!isEvalInternalHref(card.href)) failures.push(`UNSAFE_LINK:${card.href}`);
+    if (!isEvalInternalHref(card.href)) failures.push("UNSAFE_LINK");
   }
   return failures;
 }
@@ -209,7 +265,10 @@ async function runLive(target, fetchImpl, cases) {
     const response = await request(fetchImpl, `${origin}/api/live-agent/session`, {
       method: "POST",
       headers: jsonHeaders,
-      body: JSON.stringify({ anonymousId: ANONYMOUS_ID, sourcePath: SOURCE_PATH }),
+      body: JSON.stringify({
+        anonymousId: `live-agent-eval-${randomUUID()}`,
+        sourcePath: SOURCE_PATH,
+      }),
     });
     const data = response.ok ? await response.json() : null;
     if (data && typeof data.id === "string" && typeof data.accessToken === "string") {
@@ -332,6 +391,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     // Only a known code is printed; any other error text could carry a URL or a value.
     const code = codes.includes(error?.message) ? error.message : "unexpected_error";
     process.stderr.write(`${code}\n`);
+    if (code === "live_target_refused" && typeof error.hint === "string") {
+      process.stderr.write(`${error.hint}\n`);
+    }
     process.exitCode = 1;
   });
 }

@@ -9,7 +9,7 @@ import { assertLiveTarget, parseArgs, runLiveAgentEval } from "./live-agent-eval
 
 const SCRIPT = fileURLToPath(new URL("./live-agent-eval.mjs", import.meta.url));
 const SESSION_ID = "11111111-2222-4333-8444-555555555555";
-const PREVIEW = "https://earnestproperty-git-fix-fx-11-chatbot.vercel.app";
+const PREVIEW = "https://earnestproperty-git-fix-fx-11-chatbot-earnest.vercel.app";
 
 const throwingFetch = () => {
   throw new Error("network_must_not_be_used");
@@ -120,6 +120,23 @@ const REFUSED = [
   "https://preview-vercel.app",
   // the main-branch alias tracks production
   "https://earnestproperty-git-main-earnest.vercel.app",
+  "https://earnestproperty-git-master-earnest.vercel.app",
+  "https://earnestproperty-git-main.vercel.app",
+  "https://earnestproperty-git-main-fix-earnest.vercel.app",
+  // the project/team alias can point at production
+  "https://earnestproperty-earnest.vercel.app",
+  "https://earnestproperty-team.vercel.app",
+  "https://earnestproperty-git-earnest.vercel.app",
+  // deployment-hash URLs (production deployments have them too)
+  "https://earnestproperty-9k2x3abcd-earnest.vercel.app",
+  "https://earnestproperty-abc123def.vercel.app",
+  // other projects and tenants
+  "https://preview.vercel.app",
+  "https://preview-abc123.vercel.app",
+  "https://evil.vercel.app",
+  "https://other-git-fix-earnest.vercel.app",
+  "https://xearnestproperty-git-fix-earnest.vercel.app",
+  "https://earnestproperty-git-fix-earnest.vercel.app.evil.example",
   // IDN, punycode and fullwidth forms
   "https://xn--earnestproperty-abc.vercel.app",
   "https://xn--80ak6aa92e.vercel.app",
@@ -177,20 +194,19 @@ test("live mode refuses production and custom hosts", () => {
 test("live mode accepts only previews and localhost", () => {
   assert.equal(assertLiveTarget(PREVIEW).origin, PREVIEW);
   assert.equal(
-    assertLiveTarget("https://Preview-Abc123.VERCEL.app").origin,
-    "https://preview-abc123.vercel.app",
+    assertLiveTarget("https://EarnestProperty-Git-Fix-FX-11-Chatbot-Earnest.VERCEL.app").origin,
+    PREVIEW,
   );
+  assert.equal(assertLiveTarget(`${PREVIEW}.`).origin, PREVIEW);
+  assert.equal(assertLiveTarget(`${PREVIEW}:443/x?y#z`).origin, PREVIEW);
   assert.equal(
-    assertLiveTarget("https://preview-abc123.vercel.app.").origin,
-    "https://preview-abc123.vercel.app",
+    assertLiveTarget("https://earnestproperty-git-feat-live-eval-acme-co.vercel.app").origin,
+    "https://earnestproperty-git-feat-live-eval-acme-co.vercel.app",
   );
-  assert.equal(
-    assertLiveTarget("https://preview-abc123.vercel.app:443/x?y#z").origin,
-    "https://preview-abc123.vercel.app",
-  );
+  assert.equal(assertLiveTarget("http://localhost:8080").origin, "http://localhost:8080");
   assert.equal(assertLiveTarget("http://127.0.0.1:3000").origin, "http://127.0.0.1:3000");
   assert.equal(assertLiveTarget("http://localhost:3000").origin, "http://localhost:3000");
-  assert.equal(assertLiveTarget("https://localhost").origin, "https://localhost");
+  assert.throws(() => assertLiveTarget("https://localhost"), /live_target_refused/);
   assert.equal(assertLiveTarget("http://LOCALHOST.:3000").origin, "http://localhost:3000");
 });
 
@@ -199,6 +215,7 @@ test("live mode refuses a production target before any request", async () => {
     "https://www.earnestproperty.com",
     "https://earnestproperty.vercel.app",
     "https://preview.vercel.app@www.earnestproperty.com",
+    "https://earnestproperty-earnest.vercel.app",
     null,
   ]) {
     await assert.rejects(
@@ -268,7 +285,8 @@ test("live mode fails a reply with a phone number or Simplified text", async () 
   });
   const two = second.results.find((r) => r.id === 2);
   assert.equal(two.status, "fail");
-  assert.match(two.failures[0], /^SIMPLIFIED:/);
+  assert.deepEqual(two.failures, ["SIMPLIFIED"]);
+  assert.equal(JSON.stringify(second).includes("这"), false);
 });
 
 test("live mode grades kind, numbers, links and card fetches", async () => {
@@ -298,9 +316,8 @@ test("live mode grades kind, numbers, links and card fetches", async () => {
     baseUrl: PREVIEW,
     fetchImpl: links.fetchImpl,
   });
-  assert.deepEqual(linkReport.results.find((r) => r.id === 1).failures, [
-    `UNSAFE_LINK:${offOrigin}`,
-  ]);
+  assert.deepEqual(linkReport.results.find((r) => r.id === 1).failures, ["UNSAFE_LINK"]);
+  assert.equal(JSON.stringify(linkReport).includes("earnestproperty.com"), false);
   // The off-origin href is never requested.
   assert.equal(
     links.calls.every((c) => c.url.origin === PREVIEW),
@@ -399,4 +416,37 @@ test("the script never reads the environment, an AI key, a phone number or the h
   assert.equal(/process\.env/.test(source), false);
   assert.equal(/AI_GATEWAY|API_KEY|OPENCODE|TAVILY/i.test(source), false);
   assert.equal(/\/api\/live-agent\/handoff/.test(source), false);
+});
+
+test("a hash URL is refused with a one-line hint and no env value", () => {
+  const run = spawnSync(
+    process.execPath,
+    [SCRIPT, "--live", "--base-url", "https://earnestproperty-9k2x3abcd-earnest.vercel.app"],
+    { encoding: "utf8", env: { ...process.env, SECRET_PROBE: "do-not-print-me" } },
+  );
+  assert.equal(run.status, 1);
+  const lines = run.stderr.trim().split(/\r?\n/);
+  assert.equal(lines[0], "live_target_refused");
+  assert.equal(lines.length, 2);
+  assert.match(lines[1], /branch preview URL/);
+  assert.equal(run.stderr.includes("do-not-print-me"), false);
+  const other = spawnSync(
+    process.execPath,
+    [SCRIPT, "--live", "--base-url", "https://www.example.com"],
+    {
+      encoding: "utf8",
+    },
+  );
+  assert.equal(other.stderr.trim(), "live_target_refused");
+});
+
+test("each run uses a fresh anonymousId", async () => {
+  const ids = [];
+  for (let i = 0; i < 2; i += 1) {
+    const { fetchImpl, calls } = recordingFetch();
+    await runLiveAgentEval({ mode: "live", baseUrl: PREVIEW, fetchImpl });
+    ids.push(JSON.parse(calls[0].body).anonymousId);
+  }
+  assert.notEqual(ids[0], ids[1]);
+  for (const id of ids) assert.match(id, /^live-agent-eval-[0-9a-f-]{36}$/);
 });
