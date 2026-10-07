@@ -449,7 +449,7 @@ test("later callback carries strict outbound evidence into atomic unknown-intent
   assert.match(sql, /i\.conversation_id=cv\.id/);
   assert.match(sql, /i\.payload->>'text'=\$11/);
   assert.match(sql, /UPDATE whatsapp_messages[\s\S]*status='accepted'/);
-  assert.equal(JSON.parse(statements.at(-1).params.at(-1))?.type, "TEXT");
+  assert.equal(JSON.parse(statements.at(-1).params[14])?.type, "TEXT");
   assert.equal(h.sends(), 1);
 });
 

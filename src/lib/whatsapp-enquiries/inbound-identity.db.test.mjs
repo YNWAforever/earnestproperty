@@ -172,6 +172,7 @@ test("scoped transcript IDs keep identical raw provider IDs from two channels", 
         conversation_id uuid,external_message_id text,state text,kind text,
         payload jsonb,error text,updated_at timestamptz
       );
+      ALTER TABLE crm_contacts ADD COLUMN whatsapp_profile_name text;
     `);
     const receiptId = "11111111-1111-4111-8111-111111111111";
     for (const channel of ["channel-a", "channel-b"]) {

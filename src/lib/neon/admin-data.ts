@@ -1382,7 +1382,9 @@ const updateAdminLeadServer = createServerFn({ method: "POST" })
     return adminData.updateAdminLead(data, staff);
   });
 
-export async function updateAdminLead(options: { data: AdminLeadUpdateInput }) {
+export async function updateAdminLead(options: {
+  data: AdminLeadUpdateInput;
+}): Promise<import("./admin-data.types").AdminLeadUpdateResult> {
   return callStaffServerFn(async () => updateAdminLeadServer(await withStaffAuthHeaders(options)));
 }
 

@@ -197,7 +197,7 @@ export async function ingestWoztellEvent(
           WHERE external_message_id=$14 AND text IS NOT DISTINCT FROM $11::text
             AND channel_id=$7 AND woztell_member_id=$2 AND direction::text='inbound'))) AS new_opt_out
     ), updated_contact AS (
-      UPDATE crm_contacts c SET name=COALESCE($3,c.name),phone=COALESCE(c.phone,$4),
+      UPDATE crm_contacts c SET name=COALESCE(c.name,$3),whatsapp_profile_name=CASE WHEN $16::boolean AND $9::text='inbound' AND $6::timestamptz>=COALESCE(c.last_inbound_at,'-infinity'::timestamptz) THEN COALESCE($3,c.whatsapp_profile_name) ELSE COALESCE(c.whatsapp_profile_name,$3) END,phone=COALESCE(c.phone,$4),
         normalized_phone=COALESCE(c.normalized_phone,$1),whatsapp_member_id=COALESCE(c.whatsapp_member_id,$2),
         opted_out_whatsapp=c.opted_out_whatsapp OR o.new_opt_out,
         opted_out_at=CASE WHEN o.new_opt_out AND (NOT c.opted_out_whatsapp OR c.opted_out_at IS NULL OR $6::timestamptz>c.opted_out_at) THEN $6::timestamptz ELSE c.opted_out_at END,
@@ -211,10 +211,10 @@ export async function ingestWoztellEvent(
       FROM valid v, opt_out o WHERE c.id=v.id RETURNING c.id
     ), new_contact AS (
       INSERT INTO crm_contacts(name,phone,normalized_phone,whatsapp_member_id,source,opt_in_whatsapp,opted_out_whatsapp,last_inbound_at,
-        opted_out_at,opted_out_message_id,opted_out_text,opted_out_source)
+        opted_out_at,opted_out_message_id,opted_out_text,opted_out_source,whatsapp_profile_name)
       SELECT $3,$4,$1,$2,'whatsapp',false,o.new_opt_out,$6::timestamptz,
         CASE WHEN o.new_opt_out THEN $6::timestamptz END,CASE WHEN o.new_opt_out THEN $12 END,
-        CASE WHEN o.new_opt_out THEN left($11::text,500) END,CASE WHEN o.new_opt_out THEN 'customer_message' END
+        CASE WHEN o.new_opt_out THEN left($11::text,500) END,CASE WHEN o.new_opt_out THEN 'customer_message' END,$3
       FROM opt_out o WHERE NOT EXISTS(SELECT 1 FROM matched)
       ON CONFLICT DO NOTHING RETURNING id
     ), contact AS (SELECT id FROM updated_contact UNION ALL SELECT id FROM new_contact),
@@ -273,6 +273,7 @@ export async function ingestWoztellEvent(
         JSON.stringify(event.payload),
         event.legacyExternalMessageId,
         JSON.stringify(outboundWoztellEvidence(event)),
+        origin === "live_webhook",
       ],
     },
     ...workflowStatements,

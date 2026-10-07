@@ -2,6 +2,7 @@
 export * from "../no-link/synthetic-api";
 import { fetchAdminLead as baseLead } from "../no-link/synthetic-api";
 import { fetchAdminPage as basePage } from "../no-link/synthetic-api";
+import { ServerFnResponseError } from "@/lib/neon/server-fn-response";
 const now = "2026-10-03T00:00:00.000Z";
 const state = {
   actor: sessionStorage.getItem("daily-work-actor") ?? "actor-a",
@@ -132,13 +133,28 @@ export async function fetchAdminPage({ data }: { data: { resource: string; stage
   return { rows, total: rows.length, nextCursor: null };
 }
 
+// FX-09: version and last-saved fields live in localStorage so a second tab (same
+// browser context) sees the first tab's save, like a shared database row.
+const leadVersionKey = (id: string) => `fx09-lead-version:${id}`;
+const leadUpdateKey = (id: string) => `fx09-lead-update:${id}`;
+const INITIAL_LEAD_VERSION = "2026-10-03T00:00:00.000001Z";
+const leadVersion = (id: string) =>
+  localStorage.getItem(leadVersionKey(id)) ?? INITIAL_LEAD_VERSION;
+function bumpLeadVersion(id: string) {
+  const [head, micros] = leadVersion(id).replace("Z", "").split(".");
+  const next = `${head}.${String(Number(micros) + 1).padStart(6, "0")}Z`;
+  localStorage.setItem(leadVersionKey(id), next);
+  return next;
+}
+
 export async function fetchAdminLead({ data }: { data: { id: string } }) {
   if (!data.id.startsWith("40000000-0000-4000-8000-")) return baseLead({ data });
   call("lead-detail", data);
   const ordinal = Number(data.id.slice(-12)) - 1;
   if (state.denied || ordinal < 0 || ordinal >= scopedCount())
     throw new Response("Owned forbidden", { status: 403 });
-  const update = state.leadUpdates.filter((x) => x.input.id === data.id).at(-1)?.input;
+  const stored = localStorage.getItem(leadUpdateKey(data.id));
+  const update = stored ? (JSON.parse(stored) as Record<string, unknown>) : undefined;
   return {
     id: data.id,
     name: "每日工作合成查詢" + ordinal,
@@ -156,6 +172,7 @@ export async function fetchAdminLead({ data }: { data: { id: string } }) {
     note: null,
     preferred_estates: [],
     ...update,
+    version: leadVersion(data.id),
     activities: state.acceptedNotes
       .filter((x) => x.input.lead_id === data.id)
       .map((x, n) => ({
@@ -180,6 +197,12 @@ export async function createAdminLeadActivity({ data }: { data: Record<string, u
 }
 export async function updateAdminLead({ data }: { data: Record<string, unknown> }) {
   call("lead-update", data);
+  const id = String(data.id);
+  if (data.expected_version !== leadVersion(id))
+    throw new ServerFnResponseError("LEAD_CHANGED", 409);
+  const version = bumpLeadVersion(id);
+  const { expected_version: _expected, ...fields } = data;
+  localStorage.setItem(leadUpdateKey(id), JSON.stringify(fields));
   state.leadUpdates.push({ actor: state.actor, input: { ...data } });
-  return { ok: true };
+  return { ok: true, version, changed: [] };
 }
