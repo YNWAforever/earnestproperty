@@ -14,10 +14,9 @@ const runtime = {
   channelId: "company",
   assignmentEnabled: true,
   notificationsEnabled: true,
-  staffWhatsAppEnabled: true,
   inboxProviderVerified: true,
   staffTransportVerified: true,
-  templateContractVerified: false,
+  templateContractVerified: true,
 };
 test("readiness reads every staff member with real enum roles and masks destination", async () => {
   const db = new PGlite();

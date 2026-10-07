@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 import type {
   ForwardedEnquiryInput,
   LeadContactUpdateInput,
@@ -31,7 +31,7 @@ const capture = createServerFn({ method: "POST" })
     return captureForwardedEnquiry(data, actor);
   });
 export const saveForwardedEnquiry = async (data: ForwardedEnquiryInput) =>
-  capture(await withStaffAuthHeaders({ data }));
+  callStaffServerFn(capture, { data });
 const read = createServerFn({ method: "GET" })
   .inputValidator(z.object({ leadId: z.string().uuid() }).strict())
   .handler(async ({ data }) => {
@@ -42,7 +42,7 @@ const read = createServerFn({ method: "GET" })
     return readForwardedEnquiry(data.leadId, actor);
   });
 export const fetchForwardedEnquiry = async (leadId: string) =>
-  read(await withStaffAuthHeaders({ data: { leadId } }));
+  callStaffServerFn(read, { data: { leadId } });
 const links = createServerFn({ method: "GET" })
   .inputValidator(z.object({ leadId: z.string().uuid() }).strict())
   .handler(async ({ data }) => {
@@ -53,7 +53,7 @@ const links = createServerFn({ method: "GET" })
     return readLeadConversationLinks(data.leadId, actor);
   });
 export const fetchRelatedLeadConversations = async (leadId: string) =>
-  links(await withStaffAuthHeaders({ data: { leadId } }));
+  callStaffServerFn(links, { data: { leadId } });
 const editContact = createServerFn({ method: "POST" })
   .inputValidator(
     z
@@ -75,4 +75,4 @@ const editContact = createServerFn({ method: "POST" })
     return updateLeadContact(data, actor);
   });
 export const saveLeadContact = async (data: LeadContactUpdateInput) =>
-  editContact(await withStaffAuthHeaders({ data }));
+  callStaffServerFn(editContact, { data });

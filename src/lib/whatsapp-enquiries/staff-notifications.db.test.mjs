@@ -3,6 +3,8 @@ import { randomUUID, createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test, { after } from "node:test";
 import { neon, neonConfig } from "@neondatabase/serverless";
+import pg from "pg";
+import { withOwnedPostgres } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 function splitSqlStatements(query) {
   const statements = [];
@@ -62,6 +64,97 @@ globalThis.fetch = async (input, init) => {
 after(() => {
   globalThis.fetch = nativeFetch;
 });
+async function seedNotificationFixture(query, tx, { staff, conv, contact, policy, generation }) {
+  for (const statement of [
+    `CREATE TABLE audit_logs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),actor_id uuid,action text,subject_type text,subject_id uuid,metadata jsonb)`,
+    `CREATE TABLE staff_users(id uuid PRIMARY KEY,active boolean DEFAULT true,name_zh text,name_en text,auth_user_id text,email text)`,
+    `CREATE TABLE staff_roles(staff_user_id uuid,role text)`,
+    `CREATE TABLE properties(id uuid PRIMARY KEY,agent_id uuid,deal_type text)`,
+    `CREATE TABLE crm_contacts(id uuid PRIMARY KEY,name text,opted_out_whatsapp boolean DEFAULT false,whatsapp_member_id text,normalized_phone text,whatsapp_profile_name text)`,
+    `CREATE TABLE crm_leads(id uuid PRIMARY KEY)`,
+    `CREATE TABLE crm_activities(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),lead_id uuid,contact_id uuid,staff_user_id uuid,activity_type text,body text,due_at timestamptz)`,
+    `CREATE TABLE whatsapp_conversations(id uuid PRIMARY KEY,contact_id uuid,assigned_agent_id uuid,channel_id text,woztell_member_id text,last_inbound_at timestamptz,last_message_at timestamptz,updated_at timestamptz DEFAULT now())`,
+    `CREATE TABLE whatsapp_messages(id uuid PRIMARY KEY,conversation_id uuid,contact_id uuid,direction text,message_type text,text text,channel_id text,woztell_member_id text,external_message_id text UNIQUE,sent_by uuid,status text,payload jsonb,error text)`,
+    `CREATE TABLE inquiries(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),source text DEFAULT 'website',name text NOT NULL,crm_contact_id uuid,property_id uuid,status text DEFAULT 'new',created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now())`,
+    `CREATE TABLE ops_jobs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),job_type text,payload_version integer,payload jsonb,status text,attempt_count integer DEFAULT 0,max_attempts integer,run_after timestamptz,lease_owner text,lease_expires_at timestamptz,last_error_code text,last_error_summary text,idempotency_key text UNIQUE,actor_staff_id uuid,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now())`,
+  ])
+    await query(statement);
+  for (const file of [
+    "20260905130000_outbound_intents.sql",
+    "20260912120000_whatsapp_enquiry_events.sql",
+    "20260912130000_whatsapp_enquiry_episodes.sql",
+    "20260912140000_whatsapp_assignment_evidence.sql",
+    "20260912150000_whatsapp_service_workflow.sql",
+    "20260912170000_staff_notifications.sql",
+    "20260927080000_staff_notification_receipt_times.sql",
+  ]) {
+    if (file.includes("staff_notifications"))
+      await query("INSERT INTO inquiries(source,name) VALUES('website','Synthetic legacy row')");
+    let sql = readFileSync("neon/migrations/" + file, "utf8");
+    if (file.includes("outbound_intents"))
+      sql = sql.slice(0, sql.indexOf("-- Existing duplicates"));
+    await tx(splitSqlStatements(sql).map((statement) => ({ statement })));
+  }
+
+  await query("INSERT INTO staff_users(id) VALUES($1)", [staff]);
+  await query("INSERT INTO staff_roles VALUES($1,'agent')", [staff]);
+  await query("INSERT INTO crm_contacts(id,name) VALUES($1,'Synthetic')", [contact]);
+  await query(
+    "INSERT INTO whatsapp_conversations(id,contact_id,channel_id,woztell_member_id) VALUES($1,$2,'fixture','customer')",
+    [conv, contact],
+  );
+  await query("INSERT INTO whatsapp_service_policies(id,version,rules) VALUES($1,1,'{}')", [
+    policy,
+  ]);
+  await query(
+    "INSERT INTO whatsapp_enquiry_activations(id,mode,policy_id,created_by,cutover_at) VALUES($1,'active',$2,$3,now()-interval '1 hour')",
+    [generation, policy, staff],
+  );
+  await query(
+    "INSERT INTO whatsapp_staff_channels(staff_id,channel_id,inbox_user_id,folder_id,routing_node_id,eligible,verification_ref,verified_at) VALUES($1,'fixture','agent','folder','node',true,'SYNTHETIC',now())",
+    [staff],
+  );
+  async function enquiry(eligible = true, routing = false) {
+    const message = randomUUID(),
+      event = randomUUID(),
+      inquiry = randomUUID();
+    await query(
+      "INSERT INTO whatsapp_messages(id,conversation_id,contact_id,direction,channel_id,woztell_member_id,external_message_id) VALUES($1::uuid,$2,$3,'inbound','fixture','customer',$1::text)",
+      [message, conv, contact],
+    );
+    await query(
+      "INSERT INTO whatsapp_enquiry_events(id,dedupe_key,origin,app_id,channel_id,member_id,external_message_id,message_id,kind,occurred_at,received_at,timing,identity_quality,evidence,capture_mode,effects_eligible,activation_id) VALUES($1::uuid,md5($1::text)||md5($1::text),'live_webhook','fixture-app','fixture','customer',$1::text,$2,'customer_message',now(),now(),'fresh','provider_id',$3::jsonb,'active',true,$4)",
+      [
+        event,
+        message,
+        JSON.stringify({ staffNotificationsEligible: eligible, staffRoutingEligible: routing }),
+        generation,
+      ],
+    );
+    await query(
+      "INSERT INTO inquiries(id,source,name,conversation_id,intake_message_id,requested_staff_id,effects_eligible,activation_id,association_review) VALUES($1,'whatsapp','Synthetic',$2,$3,$4,true,$5,false)",
+      [inquiry, conv, message, staff, generation],
+    );
+    await query("UPDATE whatsapp_enquiry_events SET inquiry_id=$2 WHERE id=$1", [event, inquiry]);
+    return { inquiry, event };
+  }
+  const first = await enquiry();
+  assert.equal((await query("SELECT count(*)::int n FROM staff_notification_intents"))[0].n, 0);
+  await query(
+    "INSERT INTO whatsapp_assignment_requests(conversation_id,desired_staff_id,version,reason,state,evidence) VALUES($1,$2,1,'fixture','confirmed',jsonb_build_object('authoritative',true))",
+    [conv, staff],
+  );
+  await tx([
+    { statement: "SELECT set_config('app.wa_confirm_assignment','true',true)" },
+    {
+      statement:
+        "UPDATE whatsapp_conversations SET confirmed_staff_id=$2,assigned_agent_id=$2,assignment_version=1,pending_assignment_id=(SELECT id FROM whatsapp_assignment_requests WHERE conversation_id=$1) WHERE id=$1",
+      params: [conv, staff],
+    },
+  ]);
+  return { enquiry, first };
+}
+
 test("NT-07/08/11/19/23 notification production transactions", { skip: !url }, async (t) => {
   await assertDisposableNeonTestTarget(url);
   const db = neon(url),
@@ -81,93 +174,13 @@ test("NT-07/08/11/19/23 notification production transactions", { skip: !url }, a
     generation = randomUUID();
   try {
     await db.query(`CREATE SCHEMA ${schema}`);
-    for (const statement of [
-      `CREATE TABLE audit_logs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),actor_id uuid,action text,subject_type text,subject_id uuid,metadata jsonb)`,
-      `CREATE TABLE staff_users(id uuid PRIMARY KEY,active boolean DEFAULT true,name_zh text,name_en text,auth_user_id text,email text)`,
-      `CREATE TABLE staff_roles(staff_user_id uuid,role text)`,
-      `CREATE TABLE properties(id uuid PRIMARY KEY,agent_id uuid,deal_type text)`,
-      `CREATE TABLE crm_contacts(id uuid PRIMARY KEY,name text,opted_out_whatsapp boolean DEFAULT false,whatsapp_member_id text)`,
-      `CREATE TABLE crm_leads(id uuid PRIMARY KEY)`,
-      `CREATE TABLE crm_activities(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),lead_id uuid,contact_id uuid,staff_user_id uuid,activity_type text,body text,due_at timestamptz)`,
-      `CREATE TABLE whatsapp_conversations(id uuid PRIMARY KEY,contact_id uuid,assigned_agent_id uuid,channel_id text,woztell_member_id text,last_inbound_at timestamptz,last_message_at timestamptz,updated_at timestamptz DEFAULT now())`,
-      `CREATE TABLE whatsapp_messages(id uuid PRIMARY KEY,conversation_id uuid,contact_id uuid,direction text,message_type text,text text,channel_id text,woztell_member_id text,external_message_id text UNIQUE,sent_by uuid,status text,payload jsonb,error text)`,
-      `CREATE TABLE inquiries(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),source text DEFAULT 'website',name text NOT NULL,crm_contact_id uuid,property_id uuid,status text DEFAULT 'new',created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now())`,
-      `CREATE TABLE ops_jobs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),job_type text,payload_version integer,payload jsonb,status text,attempt_count integer DEFAULT 0,max_attempts integer,run_after timestamptz,lease_owner text,lease_expires_at timestamptz,last_error_code text,last_error_summary text,idempotency_key text UNIQUE,actor_staff_id uuid,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now())`,
-    ])
-      await query(statement);
-    for (const file of [
-      "20260905130000_outbound_intents.sql",
-      "20260912120000_whatsapp_enquiry_events.sql",
-      "20260912130000_whatsapp_enquiry_episodes.sql",
-      "20260912140000_whatsapp_assignment_evidence.sql",
-      "20260912150000_whatsapp_service_workflow.sql",
-      "20260912170000_staff_notifications.sql",
-      "20260927080000_staff_notification_receipt_times.sql",
-    ]) {
-      if (file.includes("staff_notifications"))
-        await query("INSERT INTO inquiries(source,name) VALUES('website','Synthetic legacy row')");
-      let sql = readFileSync("neon/migrations/" + file, "utf8");
-      if (file.includes("outbound_intents"))
-        sql = sql.slice(0, sql.indexOf("-- Existing duplicates"));
-      await tx(splitSqlStatements(sql).map((statement) => ({ statement })));
-    }
-
-    await query("INSERT INTO staff_users(id) VALUES($1)", [staff]);
-    await query("INSERT INTO staff_roles VALUES($1,'agent')", [staff]);
-    await query("INSERT INTO crm_contacts(id,name) VALUES($1,'Synthetic')", [contact]);
-    await query(
-      "INSERT INTO whatsapp_conversations(id,contact_id,channel_id,woztell_member_id) VALUES($1,$2,'fixture','customer')",
-      [conv, contact],
-    );
-    await query("INSERT INTO whatsapp_service_policies(id,version,rules) VALUES($1,1,'{}')", [
+    const { enquiry, first } = await seedNotificationFixture(query, tx, {
+      staff,
+      conv,
+      contact,
       policy,
-    ]);
-    await query(
-      "INSERT INTO whatsapp_enquiry_activations(id,mode,policy_id,created_by,cutover_at) VALUES($1,'active',$2,$3,now()-interval '1 hour')",
-      [generation, policy, staff],
-    );
-    await query(
-      "INSERT INTO whatsapp_staff_channels(staff_id,channel_id,inbox_user_id,folder_id,routing_node_id,eligible,verification_ref,verified_at) VALUES($1,'fixture','agent','folder','node',true,'SYNTHETIC',now())",
-      [staff],
-    );
-    async function enquiry(eligible = true, routing = false) {
-      const message = randomUUID(),
-        event = randomUUID(),
-        inquiry = randomUUID();
-      await query(
-        "INSERT INTO whatsapp_messages(id,conversation_id,contact_id,direction,channel_id,woztell_member_id,external_message_id) VALUES($1::uuid,$2,$3,'inbound','fixture','customer',$1::text)",
-        [message, conv, contact],
-      );
-      await query(
-        "INSERT INTO whatsapp_enquiry_events(id,dedupe_key,origin,app_id,channel_id,member_id,external_message_id,message_id,kind,occurred_at,received_at,timing,identity_quality,evidence,capture_mode,effects_eligible,activation_id) VALUES($1::uuid,md5($1::text)||md5($1::text),'live_webhook','fixture-app','fixture','customer',$1::text,$2,'customer_message',now(),now(),'fresh','provider_id',$3::jsonb,'active',true,$4)",
-        [
-          event,
-          message,
-          JSON.stringify({ staffNotificationsEligible: eligible, staffRoutingEligible: routing }),
-          generation,
-        ],
-      );
-      await query(
-        "INSERT INTO inquiries(id,source,name,conversation_id,intake_message_id,requested_staff_id,effects_eligible,activation_id,association_review) VALUES($1,'whatsapp','Synthetic',$2,$3,$4,true,$5,false)",
-        [inquiry, conv, message, staff, generation],
-      );
-      await query("UPDATE whatsapp_enquiry_events SET inquiry_id=$2 WHERE id=$1", [event, inquiry]);
-      return { inquiry, event };
-    }
-    const first = await enquiry();
-    assert.equal((await query("SELECT count(*)::int n FROM staff_notification_intents"))[0].n, 0);
-    await query(
-      "INSERT INTO whatsapp_assignment_requests(conversation_id,desired_staff_id,version,reason,state,evidence) VALUES($1,$2,1,'fixture','confirmed',jsonb_build_object('authoritative',true))",
-      [conv, staff],
-    );
-    await tx([
-      { statement: "SELECT set_config('app.wa_confirm_assignment','true',true)" },
-      {
-        statement:
-          "UPDATE whatsapp_conversations SET confirmed_staff_id=$2,assigned_agent_id=$2,assignment_version=1,pending_assignment_id=(SELECT id FROM whatsapp_assignment_requests WHERE conversation_id=$1) WHERE id=$1",
-        params: [conv, staff],
-      },
-    ]);
+      generation,
+    });
     await t.test("NT-11 ready and intent and validated job commit together", async () => {
       assert.equal((await query("SELECT count(*)::int n FROM staff_notification_intents"))[0].n, 1);
       assert.equal(
@@ -234,8 +247,7 @@ test("NT-07/08/11/19/23 notification production transactions", { skip: !url }, a
         enabled: true,
         generationId: generation,
         channelId: "fixture",
-        staffWhatsAppEnabled: false,
-        ackEscalationEnabled: false,
+        template: null,
       };
       let calls = 0;
       const adapter = {
@@ -475,8 +487,7 @@ test("NT-07/08/11/19/23 notification production transactions", { skip: !url }, a
           enabled: true,
           generationId: generation,
           channelId: "fixture",
-          staffWhatsAppEnabled: true,
-          ackEscalationEnabled: false,
+          template: null,
         };
         let sends = 0;
         const adapter = {
@@ -910,8 +921,7 @@ test("NT-07/08/11/19/23 notification production transactions", { skip: !url }, a
           enabled: true,
           generationId: generation,
           channelId: "fixture",
-          staffWhatsAppEnabled: true,
-          ackEscalationEnabled: false,
+          template: null,
         };
         const options = { checkpoint: async () => {}, job: { jobId: job.id, workerId: "fixture" } };
         const adapter = {
@@ -1027,8 +1037,7 @@ test("NT-07/08/11/19/23 notification production transactions", { skip: !url }, a
             enabled: true,
             generationId: generation,
             channelId: "fixture",
-            staffWhatsAppEnabled: false,
-            ackEscalationEnabled: false,
+            template: null,
           },
           adapter,
         );
@@ -1114,4 +1123,343 @@ test("NT-07/08/11/19/23 notification production transactions", { skip: !url }, a
   } finally {
     await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
   }
+});
+
+// Runs on a new loopback Docker container (no URL accepted), so these guards execute
+// wherever Docker exists instead of being skipped with the disposable Neon suite above.
+test("staff WhatsApp dispatch guards on owned Postgres", { timeout: 300000 }, async (t) => {
+  await withOwnedPostgres(async ({ pool }) => {
+    const database = "wa_notify_" + randomUUID().replaceAll("-", "");
+    await pool.query(`CREATE DATABASE ${database}`);
+    const owned = new pg.Pool({
+      host: pool.options.host,
+      port: pool.options.port,
+      user: "postgres",
+      database,
+      max: 4,
+      connectionTimeoutMillis: 10000,
+    });
+    const query = async (statement, params = []) => (await owned.query(statement, params)).rows;
+    const tx = async (statements) => {
+      const client = await owned.connect();
+      try {
+        await client.query("BEGIN");
+        const rows = [];
+        for (const { statement, params = [] } of statements)
+          rows.push((await client.query(statement, params)).rows);
+        await client.query("COMMIT");
+        return rows;
+      } catch (error) {
+        await client.query("ROLLBACK");
+        throw error;
+      } finally {
+        client.release();
+      }
+    };
+    try {
+      const ids = {
+        staff: randomUUID(),
+        conv: randomUUID(),
+        contact: randomUUID(),
+        policy: randomUUID(),
+        generation: randomUUID(),
+      };
+      const { enquiry } = await seedNotificationFixture(query, tx, ids);
+      const { dispatchStaffNotification, staffNotificationWorkLink } =
+        await import("./staff-notifications.server.ts");
+      await query(
+        "INSERT INTO staff_notification_endpoints(staff_id,transport,channel_id,destination_reference,verified_at,verification_ref,enabled,permission_granted,permission_ref,quiet_hours_policy) VALUES($1,'inbox_private_note','fixture','agent',now(),'SYNTHETIC',true,true,'SYNTHETIC','{\"approved\":true,\"allowAllHours\":true}')",
+        [ids.staff],
+      );
+      const template = {
+        name: "staff_lead_alert",
+        language: "zh_HK",
+        params: ["name", "source", "link"],
+      };
+      const runtime = (configured) => ({
+        enabled: true,
+        generationId: ids.generation,
+        channelId: "fixture",
+        template: configured ? template : null,
+      });
+      const sends = [];
+      const notes = [];
+      const adapter = {
+        verificationRef: "SYNTHETIC",
+        postPrivateNote: async (scope) => {
+          await scope.beforeSend();
+          notes.push(scope);
+          return { state: "accepted", evidenceKind: "private_note_posted" };
+        },
+        sendStaffWhatsApp: async (scope) => {
+          await scope.beforeSend();
+          sends.push(scope);
+          return { state: "accepted", providerOperationId: "owned-template-op" };
+        },
+      };
+      async function leasedNotification() {
+        const x = await enquiry();
+        const [n] = await query(
+          "SELECT id,conversation_id,inquiry_id FROM staff_notification_intents WHERE inquiry_id=$1",
+          [x.inquiry],
+        );
+        assert.ok(n, "enquiry produced a notification intent");
+        const [job] = await query(
+          "SELECT id FROM ops_jobs WHERE job_type='woztell.enquiry.staff.notify' AND payload->>'notificationId'=$1",
+          [n.id],
+        );
+        await tx([
+          {
+            statement:
+              "SELECT set_config('app.wa_worker_capabilities','[\"woztell.enquiry.staff.notify@1\"]',true)",
+          },
+          {
+            statement:
+              "UPDATE ops_jobs SET status='running',lease_owner='fixture',lease_expires_at=now()+interval '5 minutes' WHERE id=$1",
+            params: [job.id],
+          },
+        ]);
+        return {
+          n,
+          options: { checkpoint: async () => {}, job: { jobId: job.id, workerId: "fixture" } },
+        };
+      }
+      const attempts = (notificationId, transport) =>
+        query(
+          "SELECT dispatch_state,safe_error FROM staff_notification_attempts WHERE notification_id=$1 AND transport=$2",
+          [notificationId, transport],
+        );
+      const dispatch = (n, options, configured) =>
+        dispatchStaffNotification(
+          n.id,
+          options,
+          { query, transaction: tx },
+          runtime(configured),
+          adapter,
+        );
+
+      await t.test(
+        "switch on but no enabled staff WhatsApp endpoint sends nothing and writes no staff_whatsapp attempt",
+        async () => {
+          const cases = [
+            ["no endpoint", null],
+            [
+              "disabled endpoint",
+              "INSERT INTO staff_notification_endpoints(staff_id,transport,channel_id,destination_reference,verified_at,verification_ref,enabled,permission_granted,permission_ref,quiet_hours_policy,last_inbound_at) VALUES($1,'staff_whatsapp','fixture','staff-device',now(),'SYNTHETIC',false,true,'SYNTHETIC','{\"approved\":true,\"allowAllHours\":true}',now())",
+            ],
+            [
+              "retired endpoint",
+              "UPDATE staff_notification_endpoints SET retired_at=now() WHERE staff_id=$1 AND transport='staff_whatsapp'",
+            ],
+          ];
+          for (const [label, setup] of cases) {
+            if (setup) await query(setup, [ids.staff]);
+            const notesBefore = notes.length;
+            const { n, options } = await leasedNotification();
+            // A configured template and an open window: only the endpoint can stop it.
+            const result = await dispatch(n, options, true);
+            assert.equal(sends.length, 0, label);
+            assert.deepEqual(await attempts(n.id, "staff_whatsapp"), [], label);
+            assert.deepEqual(
+              (await attempts(n.id, "inbox_private_note")).map((a) => a.dispatch_state),
+              ["accepted"],
+              label,
+            );
+            assert.equal(notes.length, notesBefore + 1, label);
+            assert.deepEqual(result, { accepted: 1, blocked: 0, unknown: 0 }, label);
+          }
+          assert.equal(
+            (
+              await query(
+                "SELECT count(*)::int n FROM staff_notification_attempts WHERE transport='staff_whatsapp'",
+              )
+            )[0].n,
+            0,
+          );
+        },
+      );
+
+      await t.test("enquiry notification outside 24h sends the template payload", async () => {
+        await query(
+          "UPDATE staff_notification_endpoints SET retired_at=NULL,enabled=true,last_inbound_at=now()-interval '25 hours' WHERE staff_id=$1 AND transport='staff_whatsapp'",
+          [ids.staff],
+        );
+        const unconfigured = await leasedNotification();
+        await dispatch(unconfigured.n, unconfigured.options, false);
+        assert.equal(sends.length, 0);
+        assert.deepEqual(await attempts(unconfigured.n.id, "staff_whatsapp"), [
+          { dispatch_state: "suppressed", safe_error: "template_not_configured" },
+        ]);
+
+        const { n, options } = await leasedNotification();
+        await dispatch(n, options, true);
+        assert.equal(sends.length, 1);
+        const workLink = staffNotificationWorkLink(n);
+        assert.ok(workLink?.startsWith("https://earnest.example.invalid/admin/whatsapp?"));
+        assert.equal(sends[0].memberId, "staff-device");
+        assert.deepEqual(sends[0].template, {
+          type: "TEMPLATE",
+          elementName: "staff_lead_alert",
+          languageCode: "zh_HK",
+          components: [
+            {
+              type: "body",
+              parameters: [
+                { type: "text", text: "WhatsApp 客戶" },
+                { type: "text", text: "WhatsApp 查詢" },
+                { type: "text", text: workLink },
+              ],
+            },
+          ],
+        });
+        assert.deepEqual(await attempts(n.id, "staff_whatsapp"), [
+          { dispatch_state: "accepted", safe_error: null },
+        ]);
+        // A replay of the same notification never sends again.
+        await dispatch(n, options, true);
+        assert.equal(sends.length, 1);
+      });
+
+      await t.test("a configured template is sent even inside the window, never TEXT", async () => {
+        await query(
+          "UPDATE staff_notification_endpoints SET last_inbound_at=now() WHERE staff_id=$1 AND transport='staff_whatsapp'",
+          [ids.staff],
+        );
+        const before = sends.length;
+        const { n, options } = await leasedNotification();
+        await dispatch(n, options, true);
+        assert.equal(sends.length, before + 1);
+        assert.equal(sends.at(-1).template?.type, "TEMPLATE");
+        assert.equal(sends.at(-1).template.elementName, "staff_lead_alert");
+      });
+
+      await t.test("no template and a window that closes at claim time sends nothing", async () => {
+        await query(
+          "UPDATE staff_notification_endpoints SET last_inbound_at=now() WHERE staff_id=$1 AND transport='staff_whatsapp'",
+          [ids.staff],
+        );
+        const before = sends.length;
+        const { n, options } = await leasedNotification();
+        // The JS window check sees an open window; it closes between claim and send.
+        const closing = async (statements) => {
+          const rows = await tx(statements);
+          const claim = statements.find((s) =>
+            s.statement.includes("SET dispatch_state='dispatching'"),
+          );
+          const [claimed] = claim
+            ? await query("SELECT transport FROM staff_notification_attempts WHERE id=$1", [
+                claim.params[0],
+              ])
+            : [];
+          if (claimed?.transport === "staff_whatsapp")
+            await query(
+              "UPDATE staff_notification_endpoints SET last_inbound_at=now()-interval '25 hours' WHERE staff_id=$1 AND transport='staff_whatsapp'",
+              [ids.staff],
+            );
+          return rows;
+        };
+        await dispatchStaffNotification(
+          n.id,
+          options,
+          { query, transaction: closing },
+          runtime(false),
+          adapter,
+        );
+        assert.equal(sends.length, before);
+        assert.deepEqual(await attempts(n.id, "staff_whatsapp"), [
+          { dispatch_state: "suppressed", safe_error: "dispatch_eligibility_changed" },
+        ]);
+      });
+      await t.test(
+        "template configured and a window that closes at claim time sends the template, never TEXT",
+        async () => {
+          await query(
+            "UPDATE staff_notification_endpoints SET last_inbound_at=now() WHERE staff_id=$1 AND transport='staff_whatsapp'",
+            [ids.staff],
+          );
+          const before = sends.length;
+          const { n, options } = await leasedNotification();
+          // The JS window check sees an open window; it closes between claim and send.
+          const closing = async (statements) => {
+            const rows = await tx(statements);
+            const claim = statements.find((s) =>
+              s.statement.includes("SET dispatch_state='dispatching'"),
+            );
+            const [claimed] = claim
+              ? await query("SELECT transport FROM staff_notification_attempts WHERE id=$1", [
+                  claim.params[0],
+                ])
+              : [];
+            if (claimed?.transport === "staff_whatsapp")
+              await query(
+                "UPDATE staff_notification_endpoints SET last_inbound_at=now()-interval '25 hours' WHERE staff_id=$1 AND transport='staff_whatsapp'",
+                [ids.staff],
+              );
+            return rows;
+          };
+          await dispatchStaffNotification(
+            n.id,
+            options,
+            { query, transaction: closing },
+            runtime(true),
+            adapter,
+          );
+          assert.equal(sends.length, before + 1);
+          assert.equal(sends.at(-1).template?.type, "TEMPLATE");
+          assert.deepEqual(await attempts(n.id, "staff_whatsapp"), [
+            { dispatch_state: "accepted", safe_error: null },
+          ]);
+        },
+      );
+      // F2: the enquiry path shares the lead-alert customer guard. A staff phone that
+      // is ANOTHER customer's member id or phone (typed differently) is never sent.
+      await t.test(
+        "a staff WhatsApp destination that is another customer's number is never sent",
+        async () => {
+          await query(
+            "UPDATE staff_notification_endpoints SET destination_reference='+852 9123 4567',last_inbound_at=now() WHERE staff_id=$1 AND transport='staff_whatsapp'",
+            [ids.staff],
+          );
+          const cases = [
+            [
+              "an unrelated conversation's member id",
+              "INSERT INTO whatsapp_conversations(id,channel_id,woztell_member_id) VALUES(gen_random_uuid(),'fixture','85291234567')",
+              "DELETE FROM whatsapp_conversations WHERE woztell_member_id='85291234567'",
+            ],
+            [
+              "an unrelated contact's phone",
+              "INSERT INTO crm_contacts(id,name,normalized_phone) VALUES(gen_random_uuid(),'合成客戶','91234567')",
+              "DELETE FROM crm_contacts WHERE normalized_phone='91234567'",
+            ],
+          ];
+          try {
+            for (const [label, seed, cleanup] of cases) {
+              await query(seed);
+              try {
+                const before = sends.length;
+                const { n, options } = await leasedNotification();
+                const result = await dispatch(n, options, true);
+                assert.equal(sends.length, before, label);
+                assert.deepEqual(
+                  await attempts(n.id, "staff_whatsapp"),
+                  [{ dispatch_state: "suppressed", safe_error: "dispatch_eligibility_changed" }],
+                  label,
+                );
+                assert.equal(result.blocked, 1, label);
+              } finally {
+                await query(cleanup);
+              }
+            }
+          } finally {
+            await query(
+              "UPDATE staff_notification_endpoints SET destination_reference='staff-device' WHERE staff_id=$1 AND transport='staff_whatsapp'",
+              [ids.staff],
+            );
+          }
+        },
+      );
+    } finally {
+      await owned.end();
+    }
+  });
 });

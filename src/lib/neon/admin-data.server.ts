@@ -996,6 +996,103 @@ export async function getAdminOverview(actor: StaffAccess) {
   };
 }
 
+/**
+ * Waiting work for the nav badges, in one read-only statement. $1 is the caller's staff id and
+ * $2 is agentScope(actor): conversations follow the inbox rule (an agent's own, and only what
+ * wa_can_read_conversation allows), leads follow the leads list rule (an agent's own).
+ * - unanswered: an open conversation whose latest message is inbound;
+ * - unassigned: an open lead with no assignee (always 0 for an agent);
+ * - stale new: a `new` lead with no activity of any kind for 2 hours;
+ * - leads needing attention: distinct open leads that are unassigned OR stale new, so the
+ *   客戶查詢 badge never counts one lead twice.
+ */
+export async function getAdminAttentionCounts(actor: StaffAccess) {
+  if (!actor) throw new Response("Forbidden", { status: 403 });
+  const rows = await queryRows(
+    `SELECT
+       (SELECT count(*)::int
+          FROM whatsapp_conversations w
+          JOIN LATERAL (
+            SELECT m.direction FROM whatsapp_messages m
+            WHERE m.conversation_id = w.id
+            ORDER BY m.created_at DESC, m.id DESC LIMIT 1
+          ) latest ON latest.direction = 'inbound'
+         WHERE w.status = 'open'
+           AND ($2::uuid IS NULL OR w.assigned_agent_id = $2::uuid)
+           AND wa_can_read_conversation($1::uuid, w.id)) AS unanswered_conversations,
+       count(*) FILTER (WHERE open_leads.unassigned)::int AS unassigned_leads,
+       count(*) FILTER (WHERE open_leads.stale_new)::int AS stale_new_leads,
+       count(*) FILTER (WHERE open_leads.unassigned OR open_leads.stale_new)::int AS leads_needing_attention
+     FROM (
+       SELECT l.assigned_agent_id IS NULL AS unassigned,
+         l.stage = 'new' AND COALESCE(
+           (SELECT max(a.created_at) FROM crm_activities a WHERE a.lead_id = l.id),
+           l.created_at
+         ) <= now() - interval '2 hours' AS stale_new
+       FROM crm_leads l
+       WHERE l.stage NOT IN ('closed_won', 'closed_lost')
+         AND ($2::uuid IS NULL OR l.assigned_agent_id = $2::uuid)
+     ) open_leads`,
+    [actor.staffId, agentScope(actor)],
+  );
+  const row = rows[0] ?? {};
+  return {
+    unansweredConversations: numberOrNull(row.unanswered_conversations) ?? 0,
+    unassignedLeads: numberOrNull(row.unassigned_leads) ?? 0,
+    staleNewLeads: numberOrNull(row.stale_new_leads) ?? 0,
+    leadsNeedingAttention: numberOrNull(row.leads_needing_attention) ?? 0,
+  };
+}
+
+/**
+ * 今日待辦: the unanswered conversations and stale new leads of getAdminAttentionCounts, in the
+ * same scope, longest wait first, at most 10. One read-only statement.
+ */
+export async function getAdminTodayTasks(actor: StaffAccess) {
+  if (!actor) throw new Response("Forbidden", { status: 403 });
+  const rows = await queryRows(
+    `SELECT kind, id, name, phone, waiting_since FROM (
+       SELECT 'conversation' AS kind, w.id, c.name, c.phone, latest.created_at AS waiting_since
+       FROM whatsapp_conversations w
+       JOIN LATERAL (
+         SELECT m.direction, m.created_at FROM whatsapp_messages m
+         WHERE m.conversation_id = w.id
+         ORDER BY m.created_at DESC, m.id DESC LIMIT 1
+       ) latest ON latest.direction = 'inbound'
+       LEFT JOIN crm_contacts c ON c.id = w.contact_id
+       WHERE w.status = 'open'
+         AND ($2::uuid IS NULL OR w.assigned_agent_id = $2::uuid)
+         AND wa_can_read_conversation($1::uuid, w.id)
+       UNION ALL
+       SELECT 'lead' AS kind, l.id, c.name, c.phone,
+         COALESCE(la.last_activity_at, l.created_at) AS waiting_since
+       FROM crm_leads l
+       LEFT JOIN crm_contacts c ON c.id = l.contact_id
+       LEFT JOIN LATERAL (
+         SELECT max(a.created_at) AS last_activity_at FROM crm_activities a WHERE a.lead_id = l.id
+       ) la ON true
+       WHERE l.stage = 'new'
+         AND ($2::uuid IS NULL OR l.assigned_agent_id = $2::uuid)
+         AND COALESCE(la.last_activity_at, l.created_at) <= now() - interval '2 hours'
+     ) t
+     ORDER BY waiting_since ASC, kind ASC, id ASC
+     LIMIT 10`,
+    [actor.staffId, agentScope(actor)],
+  );
+  return rows.map((row) => {
+    const kind = row.kind === "lead" ? ("lead" as const) : ("conversation" as const);
+    return {
+      kind,
+      id: String(row.id),
+      title:
+        stringOrNull(row.name)?.trim() ||
+        stringOrNull(row.phone)?.trim() ||
+        (kind === "lead" ? "未命名客戶" : "WhatsApp 客戶"),
+      waitingSince: dateOrNull(row.waiting_since) ?? "",
+    };
+  });
+}
+
 export async function listAdminListings(input: AdminListingInput = {}, actor?: StaffAccess) {
   const params: unknown[] = [];
   const where: string[] = [];
@@ -2396,6 +2493,7 @@ export async function listAdminLeads(actor?: StaffAccess): Promise<AdminLeadRow[
 
 export async function fetchAdminLead(id: string, actor?: StaffAccess) {
   const scope = actor ? agentScope(actor) : null;
+  const { leadVersionSql } = await import("./lead-version");
   const rows = await queryRows(
     `
     SELECT
@@ -2410,6 +2508,7 @@ export async function fetchAdminLead(id: string, actor?: StaffAccess) {
       l.contact_id,
       l.assigned_agent_id,
       l.preferred_estates,
+      ${leadVersionSql("l")} AS version,
       c.name,
       c.phone,
       c.email,
@@ -2462,6 +2561,8 @@ export async function fetchAdminLead(id: string, actor?: StaffAccess) {
     listing_no: stringOrNull(lead.listing_no),
     property_title: stringOrNull(lead.property_title),
     contact_id: stringOrNull(lead.contact_id),
+    // Opaque SQL-generated token: a string, never a Date (FX-09, FX-05b lesson).
+    version: stringOrEmpty(lead.version),
     preferred_estates: Array.isArray(lead.preferred_estates)
       ? lead.preferred_estates.map(String)
       : [],
@@ -2573,9 +2674,30 @@ export async function rejectAdminAiTag(input: { tagId: string }, actor: StaffAcc
   return result;
 }
 
-export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffAccess) {
+/**
+ * Save one lead with optimistic concurrency (FX-09).
+ *
+ * One statement locks the row, compares the caller's expected_version with the
+ * current one, checks that a newly chosen assignee is active, writes only when
+ * at least one field differs, and inserts the audit row with the before and
+ * after values of the changed fields. A repeat save at the current version
+ * with no edits writes nothing and returns that version. A save at a stale
+ * version always 409s, even when it would change nothing, so a stale draft can
+ * never pick up a fresh version.
+ */
+export async function updateAdminLead(
+  input: AdminLeadUpdateInput,
+  actor: StaffAccess,
+): Promise<import("./admin-data.types").AdminLeadUpdateResult> {
   const budgetProblem = leadBudgetError(input.budget_min, input.budget_max);
   if (budgetProblem) throw new Response(budgetProblem, { status: 400 });
+  const { leadVersionSql, isLeadVersion, LEAD_CHANGED, LEAD_VERSION_REQUIRED, ASSIGNEE_INACTIVE } =
+    await import("./lead-version");
+  // A client without a version (a pre-deploy bundle, a fixture) must not be
+  // treated as a blind overwrite.
+  if (!isLeadVersion(input.expected_version)) {
+    throw new Response(LEAD_VERSION_REQUIRED, { status: 400 });
+  }
   const scope = agentScope(actor);
   const params: unknown[] = [
     input.stage,
@@ -2586,31 +2708,83 @@ export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffA
     input.assigned_agent_id,
     input.note,
     input.id,
+    input.expected_version,
+    actor.staffId,
   ];
   if (scope !== null) params.push(scope);
-  const rows = await queryRows(
-    `UPDATE crm_leads SET
-      stage = $1::crm_lead_stage,
-      intent = $2,
-      budget_min = $3,
-      budget_max = $4,
-      preferred_estates = $5::text[],
-      assigned_agent_id = $6,
-      note = $7,
-      updated_at = now()
-     WHERE id = $8${scope !== null ? " AND assigned_agent_id = $9" : ""}
-     RETURNING id`,
+  const fields = (alias: string) =>
+    `'stage',${alias}.stage,'intent',${alias}.intent,'budget_min',${alias}.budget_min,` +
+    `'budget_max',${alias}.budget_max,'preferred_estates',${alias}.preferred_estates,` +
+    `'assigned_agent_id',${alias}.assigned_agent_id,'note',${alias}.note`;
+  const rows = await queryRows<{
+    current_version: string;
+    assignee_ok: boolean;
+    new_version: string | null;
+    changed: import("./admin-data.types").AdminLeadField[];
+  }>(
+    `WITH old AS (
+       SELECT l.*, ${leadVersionSql("l")} AS version
+       FROM crm_leads l
+       WHERE l.id = $8::uuid${scope !== null ? " AND l.assigned_agent_id = $11::uuid" : ""}
+       FOR UPDATE
+     ), assignee AS (
+       SELECT ($6::uuid IS NULL OR $6::uuid IS NOT DISTINCT FROM o.assigned_agent_id
+         OR EXISTS (SELECT 1 FROM staff_users s WHERE s.id = $6::uuid AND s.active)) AS ok
+       FROM old o
+     ), upd AS (
+       UPDATE crm_leads l SET
+         stage = $1::crm_lead_stage,
+         intent = $2,
+         budget_min = $3,
+         budget_max = $4,
+         preferred_estates = $5::text[],
+         assigned_agent_id = $6::uuid,
+         note = $7,
+         updated_at = GREATEST(now(), o.updated_at + interval '1 microsecond')
+       FROM old o, assignee a
+       WHERE l.id = o.id AND o.version = $9 AND a.ok
+         AND (o.stage, o.intent, o.budget_min, o.budget_max, o.preferred_estates, o.assigned_agent_id, o.note)
+           IS DISTINCT FROM ($1::crm_lead_stage, $2, $3::numeric, $4::numeric, $5::text[], $6::uuid, $7)
+       RETURNING l.*, ${leadVersionSql("l")} AS version
+     ), diff AS (
+       SELECT b.k, b.v AS before, a.v AS after
+       FROM upd u, old o,
+         LATERAL jsonb_each(jsonb_build_object(${fields("o")})) b(k, v)
+         JOIN LATERAL jsonb_each(jsonb_build_object(${fields("u")})) a(k, v) ON a.k = b.k
+       WHERE a.v IS DISTINCT FROM b.v
+     ), audit AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT $10::uuid, 'lead.update', 'lead', u.id, jsonb_build_object(
+         'changed', (SELECT COALESCE(jsonb_agg(k ORDER BY k), '[]'::jsonb) FROM diff),
+         'before', (SELECT COALESCE(jsonb_object_agg(k, before), '{}'::jsonb) FROM diff),
+         'after', (SELECT COALESCE(jsonb_object_agg(k, after), '{}'::jsonb) FROM diff),
+         'expectedVersion', $9::text,
+         'version', u.version)
+       FROM upd u
+       RETURNING id
+     )
+     SELECT o.version AS current_version, a.ok AS assignee_ok,
+       (SELECT version FROM upd) AS new_version,
+       (SELECT COALESCE(jsonb_agg(k ORDER BY k), '[]'::jsonb) FROM diff) AS changed
+     FROM old o CROSS JOIN assignee a`,
     params,
   );
-  if (!rows[0]) {
+  const row = rows[0];
+  if (!row) {
     if (scope !== null) throw new Response("Forbidden", { status: 403 });
     return { ok: false, error: "Not found" };
   }
-  await writeAudit(actor.staffId, "lead.update", "lead", input.id, {
-    stage: input.stage,
-    intent: input.intent,
-  });
-  return { ok: true };
+  if (row.current_version !== input.expected_version) {
+    // Id only, no PII: gives the canary a conflict rate.
+    console.warn("LEAD_CHANGED", { leadId: input.id });
+    throw new Response(LEAD_CHANGED, { status: 409 });
+  }
+  if (!row.assignee_ok) throw new Response(ASSIGNEE_INACTIVE, { status: 400 });
+  return {
+    ok: true,
+    version: row.new_version ?? row.current_version,
+    changed: Array.isArray(row.changed) ? row.changed : [],
+  };
 }
 
 /** Re-stage or reassign many leads in one statement.
@@ -2658,24 +2832,41 @@ export async function bulkUpdateAdminLeads(
   ];
   if (scope !== null) params.push(scope);
 
-  const rows = await queryRows<{ id: string }>(
-    `UPDATE crm_leads SET
-       stage = CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
-       assigned_agent_id = CASE WHEN $4::boolean THEN $5 ELSE assigned_agent_id END,
-       updated_at = now()
-     WHERE id = ANY($1::uuid[])${scope !== null ? " AND assigned_agent_id = $6" : ""}
-     RETURNING id::text AS id`,
+  const { ASSIGNEE_INACTIVE } = await import("./lead-version");
+  // The version only moves when a row really changes, so re-staging to the
+  // value a lead already has cannot 409 a colleague who has it open. Unchanged
+  // rows are still counted as updated: they are in the requested state.
+  const rows = await queryRows<{ assignee_ok: boolean; ids: string[] }>(
+    `WITH assignee AS (
+       SELECT (NOT $4::boolean OR $5::uuid IS NULL
+               OR EXISTS(SELECT 1 FROM staff_users s WHERE s.id=$5::uuid AND s.active)) AS ok
+     ), updated AS (
+       UPDATE crm_leads SET
+         stage = CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
+         assigned_agent_id = CASE WHEN $4::boolean THEN $5::uuid ELSE assigned_agent_id END,
+         updated_at = CASE WHEN (stage, assigned_agent_id) IS DISTINCT FROM (
+             CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
+             CASE WHEN $4::boolean THEN $5::uuid ELSE assigned_agent_id END)
+           THEN GREATEST(now(), updated_at + interval '1 microsecond')
+           ELSE updated_at END
+       WHERE id = ANY($1::uuid[])${scope !== null ? " AND assigned_agent_id = $6" : ""} AND (SELECT ok FROM assignee)
+       RETURNING id::text AS id
+     )
+     SELECT (SELECT ok FROM assignee) AS assignee_ok, COALESCE(array_agg(id), '{}') AS ids FROM updated`,
     params,
   );
+  // A new assignment to inactive staff is refused before anything is audited.
+  if (rows[0]?.assignee_ok === false) throw new Response(ASSIGNEE_INACTIVE, { status: 400 });
+  const updatedIds = rows[0]?.ids ?? [];
 
   await writeAudit(actor.staffId, "lead.bulk_update", "lead", undefined, {
     requested: ids.length,
-    updated: rows.length,
+    updated: updatedIds.length,
     ...(setStage ? { stage: input.stage } : {}),
     ...(setAgent ? { assigned_agent_id: input.assigned_agent_id ?? null } : {}),
   });
 
-  return { ok: true as const, updated: rows.length, requested: ids.length };
+  return { ok: true as const, updated: updatedIds.length, requested: ids.length };
 }
 
 export async function createAdminLeadActivity(input: AdminLeadActivityInput, actor: StaffAccess) {
@@ -4058,7 +4249,7 @@ export async function createWebsiteInquiry(input: {
   const optInWhatsapp = input.consentWhatsapp === true;
   const requestedPropertyId = input.property_id ?? null;
   const requestedListingNo = input.listingNo?.trim() || null;
-  return persistWebsiteInquiry(queryRows, {
+  const result = await persistWebsiteInquiry(queryRows, {
     submissionId: input.submissionId,
     name: input.name,
     phone: input.phone,
@@ -4069,6 +4260,16 @@ export async function createWebsiteInquiry(input: {
     propertyId: requestedPropertyId,
     consentWhatsapp: optInWhatsapp,
   });
+  // The alert job committed with the lead; wake only for a fresh insert, never a replay.
+  if (result.leadAlertQueued) {
+    try {
+      wakeAfterCommit("general");
+    } catch {
+      // The enquiry and its alert job are committed; the cron lane will pick the job up.
+      console.warn("[website-inquiry] lead_alert_wake_failed");
+    }
+  }
+  return result;
 }
 
 const INQUIRY_STATUSES = ["new", "contacted", "qualified", "closed", "spam"] as const;

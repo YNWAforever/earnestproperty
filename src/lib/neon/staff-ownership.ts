@@ -109,7 +109,13 @@ export function staffReassignStatements(fromStaffId: string, toStaffId: string) 
         SELECT count(*)::int AS reassigned,
           set_config('app.staff_property_handover', '', true) AS cleared
         FROM reassigned`
-        : `UPDATE ${table} SET ${column} = $2::uuid WHERE ${column} = $1::uuid`,
+        : table === "crm_leads"
+          ? // FX-09: a handover changes the lead, so it bumps the lead version
+            // (updated_at). Without it an editor opened before the handover
+            // still holds a matching version and its save would silently hand
+            // the lead back to the departed agent.
+            `UPDATE crm_leads SET assigned_agent_id = $2::uuid, updated_at = GREATEST(now(), updated_at + interval '1 microsecond') WHERE assigned_agent_id = $1::uuid`
+          : `UPDATE ${table} SET ${column} = $2::uuid WHERE ${column} = $1::uuid`,
     params: [fromStaffId, toStaffId] as unknown[],
   }));
 }

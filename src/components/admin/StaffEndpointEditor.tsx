@@ -86,6 +86,7 @@ export function StaffEndpointEditor({
                 unacknowledged: "未確認接手",
                 unknown: "發送結果不明",
                 failed_or_suppressed: "失敗／已阻擋",
+                lead_alerts_blocked: "新查詢通知未送出",
                 routing_exceptions: "路由待核對",
                 unattended_blockers: "未指定核對人",
                 association_review: "訊息關聯待核對",

@@ -16,6 +16,7 @@ import {
   saveWhatsappServicePolicy,
   approveWhatsappServicePolicy,
 } from "@/lib/neon/whatsapp-service-policy";
+import { staffActionErrorText } from "@/components/admin/admin-error-text";
 const choices = [
   ["durationMode", "三小時計算", ["elapsed", "opening"]],
   ["beforeOpen", "08:00 前", ["overnight", "daytime"]],
@@ -96,7 +97,7 @@ export function WhatsappServicePolicyEditor({
       setPolicies(workspaceResult);
     } catch (e) {
       if (!isCurrent()) return;
-      setError(e instanceof Error ? e.message : "操作未完成；請核對政策資料。");
+      setError(staffActionErrorText(e, "操作未完成；請核對政策資料。"));
     } finally {
       if (isCurrent()) {
         setBusy(false);

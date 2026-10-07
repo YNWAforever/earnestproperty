@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
-import { withStaffAuthHeaders } from "@/auth";
+import { callStaffServerFn } from "./staff-server-fn";
 import { linkPageInput } from "./whatsapp-link-management.types";
 
 const page = createServerFn({ method: "GET" })
@@ -13,4 +13,4 @@ const page = createServerFn({ method: "GET" })
     );
   });
 export const getWhatsappTrackingLinksPage = async (data: Parameters<typeof page>[0]["data"]) =>
-  page(await withStaffAuthHeaders({ data }));
+  callStaffServerFn(page, { data });

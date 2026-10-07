@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
@@ -26,13 +26,25 @@ import {
 import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
+import {
+  adminAttentionIdentity,
+  attentionBadge,
+  attentionBadges,
+  badgeText,
+  useAdminAttention,
+  withAttentionTitle,
+} from "@/components/admin/admin-attention";
 import { adminErrorText } from "@/components/admin/admin-error-text";
 import { staffSessionDenialCopy, useStaffSession } from "@/components/admin/staff-session";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import type { StaffAccessRole, StaffSessionDenialReason } from "@/lib/neon/admin-data.types";
+import type {
+  AdminAttentionCounts,
+  StaffAccessRole,
+  StaffSessionDenialReason,
+} from "@/lib/neon/admin-data.types";
 
 // Prefix matching is reserved for sections that own child routes. Team and
 // Operations deliberately stay exact so neither can illuminate the other.
@@ -56,7 +68,12 @@ const navGroups = [
         to: "/admin/leads",
         label: "客戶查詢",
         icon: ContactRound,
-        activeExact: false,
+        // Exact: /admin/leads has no child routes, and prefix matching also lit this entry on
+        // 跟進工作台 (/admin/leads/command-center). includeSearch: false keeps a filtered list
+        // (/admin/leads?stage=open) highlighted.
+        activeExact: true,
+        includeSearch: false,
+        attention: "leads",
         roles: STAFF,
       },
       {
@@ -64,6 +81,7 @@ const navGroups = [
         label: "WhatsApp 收件匣",
         icon: MessageCircle,
         activeExact: false,
+        attention: "inbox",
         roles: STAFF,
       },
       {
@@ -218,13 +236,20 @@ const navLinkActiveProps = {
 const navDisabledClassName =
   "flex min-h-11 cursor-not-allowed items-center gap-2 rounded-md border-l-2 border-transparent px-3 text-sm font-medium text-muted-foreground/60";
 
+const navBadgeClassName =
+  "ml-auto min-w-5 rounded-full bg-amber-500 px-1.5 text-center text-xs font-semibold leading-5 text-amber-950";
+
 function AdminNav({
   roles,
+  attention,
   onNavigate,
 }: {
   roles: readonly StaffAccessRole[] | null;
+  attention: AdminAttentionCounts | null;
   onNavigate?: () => void;
 }) {
+  // Per instance: the desktop sidebar and the mobile drawer can both be in the DOM.
+  const navId = useId();
   return (
     <nav aria-label="後台選單" className="grid gap-4">
       {navGroups.map((group) => (
@@ -252,6 +277,11 @@ function AdminNav({
                 </span>
               );
             }
+            // The badge is aria-hidden and its description sits in a hidden node, so the link's
+            // accessible name stays exactly the label; aria-describedby still exposes the count.
+            const kind = "attention" in item ? item.attention : null;
+            const badge = kind ? attentionBadge(kind, attention) : null;
+            const descriptionId = kind && badge ? `${navId}-${kind}` : undefined;
             return (
               <Link
                 key={`${item.to}-${item.label}`}
@@ -261,12 +291,28 @@ function AdminNav({
                   includeSearch: "includeSearch" in item ? item.includeSearch : true,
                   explicitUndefined: true,
                 }}
+                aria-describedby={descriptionId}
                 className={navLinkClassName}
                 activeProps={navLinkActiveProps}
                 onClick={onNavigate}
               >
                 <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
                 {item.label}
+                {kind && badge ? (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      data-attention-badge={kind}
+                      title={badge.description}
+                      className={navBadgeClassName}
+                    >
+                      {badgeText(badge.count)}
+                    </span>
+                    <span id={descriptionId} hidden>
+                      {badge.description}
+                    </span>
+                  </>
+                ) : null}
               </Link>
             );
           })}
@@ -403,6 +449,23 @@ export function AdminShell({
     );
   }, [staffSession]);
 
+  // Waiting-work counts for the nav badges and the tab title. Only admin, manager and agent
+  // read them; anyone else (or an unresolved staff lookup) gets a null identity and no request.
+  // The identity names whose counts these are, so a change of user, staff record or roles
+  // never shows the previous one's counts.
+  const identity = adminAttentionIdentity(user?.id ?? null, staffSession);
+  const attention = useAdminAttention(identity);
+  // Each admin route sets its own title; re-apply the count prefix after every navigation.
+  useEffect(() => {
+    document.title = withAttentionTitle(document.title, attentionBadges(attention).total);
+  }, [attention, requestedPath]);
+  useEffect(
+    () => () => {
+      document.title = withAttentionTitle(document.title, 0);
+    },
+    [],
+  );
+
   async function handleSignOut() {
     // Sat one item below 群發 in the sidebar with no confirmation, no pending
     // state and no failure surface, on all 15 pages: a mis-click ended the
@@ -464,7 +527,7 @@ export function AdminShell({
         <aside className="hidden rounded-lg border bg-background p-3 lg:sticky lg:top-4 lg:block lg:h-[calc(100vh-2rem)] lg:overflow-y-auto">
           <AdminIdentity email={user.email} />
           <div className="mt-4">
-            <AdminNav roles={staffRoles} />
+            <AdminNav roles={staffRoles} attention={attention} />
           </div>
           <div className="mt-4 border-t pt-3">
             <Button
@@ -503,7 +566,11 @@ export function AdminShell({
                         <AdminIdentity email={user.email} />
                       </div>
                       <div className="mt-4 flex-1 overflow-y-auto pr-1">
-                        <AdminNav roles={staffRoles} onNavigate={() => setMobileNavOpen(false)} />
+                        <AdminNav
+                          roles={staffRoles}
+                          attention={attention}
+                          onNavigate={() => setMobileNavOpen(false)}
+                        />
                       </div>
                       <div className="border-t pt-3">
                         <Button

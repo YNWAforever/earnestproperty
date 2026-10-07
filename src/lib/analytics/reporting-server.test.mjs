@@ -233,7 +233,6 @@ test("rendered aggregate view shows real zero counts and unavailable GA4 without
         loading: false,
       }),
     },
-    "@/lib/admin/final-fix-rollout": { finalFixUiFlags: { salesPerformanceReporting: false } },
     "@/components/admin/analytics/PerformanceDashboard": { PerformanceDashboard: passthrough },
     "@/components/admin/analytics/PerformanceTable": { PerformanceTable: passthrough },
     "@/components/ui/button": { Button: passthrough },

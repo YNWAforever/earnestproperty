@@ -499,6 +499,7 @@ test("updateAdminLead rejects invalid budgets before CRM SQL", async () => {
     preferred_estates: [],
     assigned_agent_id: null,
     note: null,
+    expected_version: "2026-10-06T00:00:00.000001Z",
   };
   for (const budget of [
     { budget_min: -1, budget_max: 100 },
@@ -529,11 +530,12 @@ test("updateAdminLead keeps a valid budget in its CRM update", async () => {
       preferred_estates: [],
       assigned_agent_id: null,
       note: null,
+      expected_version: "2026-10-06T00:00:00.000001Z",
     },
     ADMIN_ACTOR,
   );
   assert.deepEqual(result, { ok: false, error: "Not found" });
-  assert.match(calls[0].text, /UPDATE crm_leads SET/);
+  assert.match(calls[0].text, /UPDATE crm_leads l SET/);
   assert.equal(calls[0].params[2], 0);
   assert.equal(calls[0].params[3], 100);
 });

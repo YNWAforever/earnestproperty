@@ -63,6 +63,16 @@ async function withDb(fn) {
         "utf8",
       ),
     );
+    // FX-06: the current wa_can_read_conversation (managers org-wide).
+    await db.exec(
+      readFileSync(
+        new URL(
+          "../../../neon/migrations/20261007100000_wa_access_unassigned.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     for (const [id, branch, role, active] of [
       [ids.s1, ids.branchA, "agent", true],
       [ids.s2, ids.branchB, "agent", true],
