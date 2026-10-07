@@ -13,7 +13,7 @@ test(
       throw new Error("Provider/network request forbidden in owned quality acceptance");
     });
     await withOwnedPostgres(async ({ query, transaction, migrationCount, pool }) => {
-      assert.equal(migrationCount, 91);
+      assert.equal(migrationCount, 92);
       let beforeRead = null;
       const readQuery = async (sql, params) => {
         if (beforeRead) await beforeRead(sql, params);
