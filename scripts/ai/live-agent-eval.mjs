@@ -48,26 +48,30 @@ function refuse(hint = null) {
 
 // The only Vercel form that is always a preview is the branch alias
 // `<project>-git-<branch>-<team>.vercel.app` with a branch other than main/master. The project
-// slug (and the team scope when known) come from .vercel/project.json if present, else these
-// constants. The environment is never read. The team scope is pinned to this project's Vercel team.
+// slug may come from .vercel/project.json; the team is always this project's Vercel team, and a
+// local file can never widen or replace it. The environment is never read.
 const PROJECT_SLUG_FALLBACK = "earnestproperty";
-const TEAM_SCOPE_FALLBACK = "ynwaforevers-projects";
+const PINNED_TEAM = "ynwaforevers-projects";
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
 
-function readPinned() {
-  const pinned = { project: PROJECT_SLUG_FALLBACK, team: TEAM_SCOPE_FALLBACK };
-  try {
-    const file = fileURLToPath(new URL("../../.vercel/project.json", import.meta.url));
-    const data = JSON.parse(readFileSync(file, "utf8"));
-    if (typeof data?.projectName === "string" && SLUG_RE.test(data.projectName)) {
-      pinned.project = data.projectName;
-    }
-    const team = data?.teamSlug ?? data?.scope;
-    if (typeof team === "string" && SLUG_RE.test(team)) pinned.team = team;
-  } catch {
-    // No project link: the constants apply.
+/** The pinned project and team from a parsed .vercel/project.json (or null). Only the project
+ *  slug is taken from the file; its teamSlug/scope is ignored, so the team stays pinned. */
+export function pinnedFromProjectLink(data) {
+  const pinned = { project: PROJECT_SLUG_FALLBACK, team: PINNED_TEAM };
+  if (typeof data?.projectName === "string" && SLUG_RE.test(data.projectName)) {
+    pinned.project = data.projectName;
   }
   return pinned;
+}
+
+function readPinned() {
+  try {
+    const file = fileURLToPath(new URL("../../.vercel/project.json", import.meta.url));
+    return pinnedFromProjectLink(JSON.parse(readFileSync(file, "utf8")));
+  } catch {
+    // No project link: the constants apply.
+    return pinnedFromProjectLink(null);
+  }
 }
 
 const VERCEL_SUFFIX = ".vercel.app";
@@ -83,12 +87,8 @@ function isBranchPreviewHost(host) {
   if (!label.startsWith(prefix)) return false;
   const rest = label.slice(prefix.length); // "<branch>-<team>"
   if (/^(?:main|master)(?:-|$)/.test(rest)) return false;
-  if (team) {
-    const suffix = `-${team}`;
-    return rest.endsWith(suffix) && rest.length > suffix.length;
-  }
-  // Unpinned team: there must be a branch part and a team part.
-  return /^[a-z0-9]+(?:-[a-z0-9]+)+$/.test(rest);
+  const suffix = `-${team}`;
+  return rest.endsWith(suffix) && rest.length > suffix.length;
 }
 
 /**

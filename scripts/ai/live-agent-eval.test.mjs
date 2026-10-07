@@ -5,7 +5,12 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { LIVE_AGENT_EVAL_CASES } from "../../src/lib/ai/live-agent-eval-cases.js";
-import { assertLiveTarget, parseArgs, runLiveAgentEval } from "./live-agent-eval.mjs";
+import {
+  assertLiveTarget,
+  parseArgs,
+  pinnedFromProjectLink,
+  runLiveAgentEval,
+} from "./live-agent-eval.mjs";
 
 const SCRIPT = fileURLToPath(new URL("./live-agent-eval.mjs", import.meta.url));
 const SESSION_ID = "11111111-2222-4333-8444-555555555555";
@@ -462,4 +467,32 @@ test("each run uses a fresh anonymousId", async () => {
   }
   assert.notEqual(ids[0], ids[1]);
   for (const id of ids) assert.match(id, /^live-agent-eval-[0-9a-f-]{36}$/);
+});
+
+test("a local .vercel/project.json may set the project slug but never the team", () => {
+  const pinnedTeam = "ynwaforevers-projects";
+  assert.deepEqual(pinnedFromProjectLink(null), {
+    project: "earnestproperty",
+    team: pinnedTeam,
+  });
+  // Another team in teamSlug or scope is ignored: the team stays pinned.
+  for (const data of [
+    { projectName: "earnestproperty", teamSlug: "other-team" },
+    { projectName: "earnestproperty", scope: "other-team" },
+    { projectName: "earnestproperty", teamSlug: "", scope: "other-team" },
+    { projectName: "earnestproperty", teamSlug: 42 },
+  ]) {
+    assert.deepEqual(pinnedFromProjectLink(data), {
+      project: "earnestproperty",
+      team: pinnedTeam,
+    });
+  }
+  assert.deepEqual(pinnedFromProjectLink({ projectName: "renamed", teamSlug: pinnedTeam }), {
+    project: "renamed",
+    team: pinnedTeam,
+  });
+  assert.deepEqual(pinnedFromProjectLink({ projectName: "Bad Name!" }), {
+    project: "earnestproperty",
+    team: pinnedTeam,
+  });
 });
