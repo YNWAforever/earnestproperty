@@ -81,13 +81,9 @@ test("AI modules expose the expected public and server-only contracts", () => {
     ],
     [
       "src/lib/ai/live-agent.ts",
-      [
-        "canUseChunkForPublicAnswer",
-        "buildLiveAgentLeadInput",
-        "shouldOfferHumanHandoff",
-        "validateHandoffPhone",
-      ],
+      ["canUseChunkForPublicAnswer", "buildLiveAgentLeadInput", "validateHandoffPhone"],
     ],
+    ["src/lib/ai/live-agent-reply.ts", ["replyOffersHandoff"]],
     [
       "src/lib/ai/live-agent.server.ts",
       ["createLiveAgentSession", "answerLiveAgentMessage", "requestLiveAgentHandoff"],
@@ -110,6 +106,9 @@ test("AI modules expose the expected public and server-only contracts", () => {
       );
     }
   }
+  // FX-11b: the public handoff decision is replyOffersHandoff (live-agent-reply.ts); the old
+  // confidence-based helper is gone.
+  assert.doesNotMatch(read("src/lib/ai/live-agent.ts"), /shouldOfferHumanHandoff/);
 });
 
 test("AI knowledge rebuild checks job ownership around provider and database work", () => {
