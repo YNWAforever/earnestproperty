@@ -5,6 +5,7 @@ import {
   replyOffersHandoff,
   replyTranscriptText,
 } from "./live-agent-reply.ts";
+import { gradeReply, isEvalInternalHref, simplifiedCharacters } from "./live-agent-eval-graders.js";
 
 describe("LIVE_AGENT_REPLY_COPY", () => {
   test("fixed reply copy contains no digits", () => {
@@ -14,10 +15,20 @@ describe("LIVE_AGENT_REPLY_COPY", () => {
   });
 
   test("fixed reply copy has no Simplified-only characters", () => {
-    // Task 4 swaps this local list for the shared detector.
-    const simplified = /[们这说么岛两钱价楼间问电]/u;
     for (const value of Object.values(LIVE_AGENT_REPLY_COPY)) {
-      expect(value).not.toMatch(simplified);
+      expect(simplifiedCharacters(value)).toEqual([]);
+    }
+  });
+
+  test("fixed reply copy never claims a listing is available", () => {
+    // Estate cards and no-listings replies reuse this copy, so it must never say 有盤 or 仲有.
+    for (const [key, value] of Object.entries(LIVE_AGENT_REPLY_COPY)) {
+      const grade = gradeReply({
+        reply: { kind: "no_listings", text: value, cards: [] },
+        facts: [],
+        activeListingNos: [],
+      });
+      expect({ key, failures: grade.failures }).toEqual({ key, failures: [] });
     }
   });
 });
@@ -64,6 +75,26 @@ describe("replyTranscriptText", () => {
     expect(lines[0]).toBe("以下是盤源：");
     expect(lines[1]).toBe("• 碧堤半島 兩房（售價 A，實用面積 B） /property/EP11001");
     expect(lines[2]).toBe("• 問題（答案）");
+  });
+});
+
+describe("isInternalCardHref and the eval grader agree", () => {
+  test("every sample gets the same verdict from both", () => {
+    for (const href of [
+      null,
+      "/property/EP11001",
+      "/estate/bellagio",
+      "/listings?deal=all&bedrooms=2&district=sham-tseng",
+      "https://evil.test/x",
+      "//evil.test",
+      "/property/%2e%2e",
+      "/property/..",
+      "/estate/a%2Fb",
+      "/property/EP1?x=1",
+      "/admin/leads",
+    ]) {
+      expect(isEvalInternalHref(href)).toBe(isInternalCardHref(href));
+    }
   });
 });
 

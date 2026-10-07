@@ -56,7 +56,7 @@ export const LIVE_AGENT_REPLY_COPY: Record<
     "我暫時只能協助查詢網站上的盤源、屋苑和常見問題。你可以輸入屋苑名稱和房數，例如「碧堤半島 兩房」，或留下 WhatsApp 電話由持牌代理跟進。",
   error: "暫時未能查詢資料。你可以留下 WhatsApp 電話，持牌代理會為你跟進。",
   more_link: "查看全部符合條件的盤源",
-  estate_line: "屋苑資料及現有盤源",
+  estate_line: "屋苑資料及盤源",
 };
 
 export const MAX_LISTING_CARDS = 3;

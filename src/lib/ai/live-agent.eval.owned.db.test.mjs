@@ -5,6 +5,9 @@ import {
   mockOwnedServerDb,
   repoRoot,
 } from "../../../scripts/acceptance/owned-postgres-test.mjs";
+import { extractNumbers } from "./number-grounding.js";
+import { gradeReply, simplifiedCharacters } from "./live-agent-eval-graders.js";
+import { LIVE_AGENT_EVAL_CASES } from "./live-agent-eval-cases.js";
 
 // FX-11b: the public live agent answers from published FAQs, published estates and active
 // listings only. One owned full-schema container for the whole file (Task 4 adds the eval cases).
@@ -13,6 +16,8 @@ const ID = (n) => `79110000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 let providerCalls = 0;
 let failNextQuery = false;
+/** SQL statements run while a case records them (null when not recording). */
+let statementLog = null;
 
 const originalFetch = globalThis.fetch;
 globalThis.fetch = async () => {
@@ -195,6 +200,7 @@ test(
             failNextQuery = false;
             throw Object.assign(new Error("synthetic"), { name: "SyntheticDbError" });
           }
+          statementLog?.push(statement);
           return query(statement, params);
         };
         await mockOwnedServerDb(mock, guardedQuery, transaction);
@@ -501,6 +507,237 @@ test(
             assert.equal(row.shown_publicly, true);
           },
         );
+
+        // ---- The 20 audit eval cases (Task 4). Each case runs through the public message path,
+        // asserts its row of the case table, then gradeReply over the reply the visitor sees.
+
+        const passedCases = new Set();
+        const visible = (reply) =>
+          [reply.text, ...reply.cards.flatMap((card) => [card.title, ...card.lines])].join("\n");
+        const FACT_SKIP_RE = /^id$|_id$|_at$|token|^embedding/;
+
+        // Every DB value of the rows the reply cites: listing rows by public number, estate rows by
+        // slug, FAQ rows by question. Ids and timestamps are not facts a reply could show.
+        const factsFor = async (reply) => {
+          const nos = [];
+          const slugs = [];
+          const questions = [];
+          for (const card of reply.cards) {
+            const property = /^\/property\/([^/?#]+)$/.exec(card.href ?? "");
+            const estate = /^\/estate\/([^/?#]+)$/.exec(card.href ?? "");
+            if (property) nos.push(decodeURIComponent(property[1]));
+            if (estate) slugs.push(decodeURIComponent(estate[1]));
+            if (card.type === "faq") questions.push(card.title);
+          }
+          const rows = [
+            ...(await query("SELECT * FROM properties WHERE canonical_property_no = ANY($1)", [
+              nos,
+            ])),
+            ...(await query("SELECT * FROM estates WHERE slug = ANY($1)", [slugs])),
+            ...(await query("SELECT * FROM faqs WHERE question = ANY($1)", [questions])),
+          ];
+          const facts = [];
+          for (const row of rows) {
+            for (const [key, value] of Object.entries(row)) {
+              if (FACT_SKIP_RE.test(key)) continue;
+              if (typeof value === "number" || typeof value === "string") facts.push(value);
+            }
+          }
+          return facts;
+        };
+        const activeListingNos = async () =>
+          (
+            await query(
+              `SELECT canonical_property_no FROM properties
+               WHERE status = 'active' AND canonical_property_no IS NOT NULL`,
+            )
+          ).map((row) => row.canonical_property_no);
+
+        const assertExpect = (c, reply, handoffSuggested) => {
+          const shown = JSON.stringify(reply);
+          if (c.expect.kind) assert.equal(reply.kind, c.expect.kind, shown);
+          if (c.expect.cards) assert.deepEqual(hrefs(reply), c.expect.cards, shown);
+          for (const needle of c.expect.mustInclude ?? []) {
+            assert.ok(shown.includes(needle), `${needle} missing from ${shown}`);
+          }
+          for (const needle of c.expect.mustNotInclude ?? []) {
+            assert.ok(!shown.includes(needle), `${needle} in ${shown}`);
+          }
+          if (c.expect.handoffSuggested !== undefined) {
+            assert.equal(handoffSuggested, c.expect.handoffSuggested, shown);
+          }
+        };
+        const assertGraded = async (reply) => {
+          const grade = gradeReply({
+            reply,
+            facts: await factsFor(reply),
+            activeListingNos: await activeListingNos(),
+          });
+          assert.ok(grade.ok, `${grade.failures.join(", ")} in ${JSON.stringify(reply)}`);
+        };
+        const digitFree = (reply) => assert.doesNotMatch(visible(reply), /[0-9０-９]/);
+
+        let case1Cards = null;
+        // Row-specific checks beyond expect + gradeReply, keyed by case id.
+        const extra = {
+          1: (reply) => {
+            case1Cards = reply.cards;
+            const card = reply.cards.find((c) => c.href === "/property/EP11001");
+            assert.deepEqual(card.lines, ["售 $6.80M", "實用 512 呎", "2 房"]);
+          },
+          2: (reply, statements) => {
+            assert.ok(!statements.some((sql) => /\barticles\b/i.test(sql)), "article read");
+          },
+          3: (reply) => {
+            assert.deepEqual(reply.cards[0].lines, ["售 $5.20M", "2 房"]);
+            assert.doesNotMatch(visible(reply), /呎|psf/i);
+          },
+          4: digitFree,
+          6: digitFree,
+          7: (reply) => {
+            assert.equal(reply.cards[0].title, "買樓首期要幾多？");
+            assert.deepEqual(extractNumbers(visible(reply)), []);
+          },
+          10: (reply, statements) => {
+            assert.ok(!statements.some((sql) => /\bcrm_/i.test(sql)), "the responder read crm_*");
+            digitFree(reply);
+          },
+          11: (reply) => assert.equal(reply.text, LIVE_AGENT_REPLY_COPY.no_match),
+          12: (reply) => assert.equal(reply.text, LIVE_AGENT_REPLY_COPY.no_match),
+          18: (reply) => {
+            assert.equal(reply.text, LIVE_AGENT_REPLY_COPY.listings);
+            assert.deepEqual(reply.cards, case1Cards);
+          },
+          20: (reply) => assert.deepEqual(simplifiedCharacters(visible(reply)), []),
+        };
+
+        const openSession = (id) =>
+          live.createLiveAgentSession({ anonymousId: `synthetic-fx11-eval-${id}` });
+        const ask = async (session, text) => {
+          statementLog = [];
+          try {
+            const result = await live.answerLiveAgentMessage({
+              sessionId: session.session.id,
+              accessToken: session.accessToken,
+              message: text,
+            });
+            return { result, statements: statementLog };
+          } finally {
+            statementLog = null;
+          }
+        };
+        const handoff = (session, phone) =>
+          live.requestLiveAgentHandoff({
+            sessionId: session.session.id,
+            accessToken: session.accessToken,
+            name: "Synthetic visitor",
+            phone,
+            intent: "buyer",
+            opt_in_whatsapp: true,
+          });
+        const leadPhone = async (session) =>
+          (
+            await query(
+              `SELECT c.normalized_phone FROM live_agent_sessions s
+               JOIN crm_leads l ON l.id = s.lead_id
+               JOIN crm_contacts c ON c.id = l.contact_id
+               WHERE s.id = $1`,
+              [session.session.id],
+            )
+          )[0]?.normalized_phone ?? null;
+        const leadCount = async () =>
+          (await query("SELECT count(*)::int AS n FROM crm_leads"))[0].n;
+
+        let handoffSession = null;
+
+        for (const c of [...LIVE_AGENT_EVAL_CASES].sort((a, b) => a.id - b.id)) {
+          await t.test(`eval case ${c.id}: ${c.label}`, async () => {
+            const callsBefore = providerCalls;
+            if (c.kind === "message") {
+              const session = await openSession(c.id);
+              const { result, statements } = await ask(session, c.input);
+              const reply = result.reply;
+              assertExpect(c, reply, result.handoffSuggested);
+              await assertGraded(reply);
+              await extra[c.id]?.(reply, statements);
+            } else if (c.id === 13) {
+              handoffSession = await openSession(c.id);
+              const [message, blank] = c.input.steps;
+              const { result } = await ask(handoffSession, message.text);
+              assert.equal(result.reply.kind, message.expectKind);
+              assertExpect(c, result.reply, result.handoffSuggested);
+              await assertGraded(result.reply);
+              await assert.rejects(handoff(handoffSession, blank.phone), (error) => {
+                assert.equal(error.name, "LiveAgentPublicError");
+                assert.equal(error.status, blank.expectError.status);
+                assert.equal(error.code, blank.expectError.code);
+                assert.equal(error.message, "請輸入電話號碼，方便代理聯絡你。");
+                return true;
+              });
+              const [row] = await query(
+                "SELECT lead_id, status FROM live_agent_sessions WHERE id = $1",
+                [handoffSession.session.id],
+              );
+              assert.equal(row.lead_id, null, "no crm_leads row for the session");
+              assert.equal(row.status, "open");
+            } else if (c.id === 14) {
+              assert.ok(handoffSession, "case 13 opened the session");
+              const leadsBefore = await leadCount();
+              for (const step of c.input.steps) {
+                if (step.expectError) {
+                  await assert.rejects(handoff(handoffSession, step.phone), (error) => {
+                    assert.equal(error.status, step.expectError.status);
+                    assert.equal(error.code, step.expectError.code);
+                    return true;
+                  });
+                  assert.equal(await leadPhone(handoffSession), null);
+                } else {
+                  const ok = await handoff(handoffSession, step.phone);
+                  assert.deepEqual(ok, { ok: true, status: "handoff_requested" });
+                  assert.equal(await leadPhone(handoffSession), step.expectContactPhone);
+                }
+              }
+              assert.equal((await leadCount()) - leadsBefore, 1, "one lead");
+              assert.equal(await leadPhone(handoffSession), "85292345678");
+            } else if (c.id === 15) {
+              assert.ok(handoffSession, "case 14 handed the session off");
+              const [step] = c.input.steps;
+              const { result, statements } = await ask(handoffSession, step.text);
+              assert.equal(result.message.message_text, step.expectText);
+              assert.equal(result.handoffSuggested, c.expect.handoffSuggested);
+              assert.equal(result.reply, undefined, "the responder was not used");
+              assert.ok(!statements.some((sql) => /FROM (faqs|estates)\b/i.test(sql)));
+              const rows = await query(
+                `SELECT direction, message_text, safety_flags FROM live_agent_messages
+                 WHERE session_id = $1 ORDER BY created_at DESC, id DESC LIMIT 2`,
+                [handoffSession.session.id],
+              );
+              const visitorRow = rows.find((row) => row.direction === "visitor");
+              const replyRow = rows.find((row) => row.direction === "assistant");
+              assert.equal(visitorRow?.message_text, step.text);
+              assert.deepEqual(replyRow.safety_flags, ["handoff_requested"]);
+              assert.ok(!replyRow.safety_flags.some((flag) => flag.startsWith("reply:")));
+              await assertGraded({ kind: "handoff", text: replyRow.message_text, cards: [] });
+            }
+            assert.equal(providerCalls, callsBefore, "no model call");
+            passedCases.add(c.id);
+          });
+        }
+
+        await t.test("all 20 audit cases pass with providerCalls === 0", () => {
+          const ids = LIVE_AGENT_EVAL_CASES.map((c) => c.id).sort((a, b) => a - b);
+          assert.deepEqual(
+            ids,
+            Array.from({ length: 20 }, (_, i) => i + 1),
+            "ids 1-20 once each",
+          );
+          assert.deepEqual(
+            [...passedCases].sort((a, b) => a - b),
+            ids,
+            "every case subtest passed",
+          );
+          assert.equal(providerCalls, 0);
+        });
 
         await t.test("no provider is called on the public path", () => {
           assert.equal(providerCalls, 0);
