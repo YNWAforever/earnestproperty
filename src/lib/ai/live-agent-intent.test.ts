@@ -155,8 +155,8 @@ describe("review fixes", () => {
     expect(parseLiveAgentIntent("找经纪").handoffRequested).toBe(true);
     expect(parseLiveAgentIntent("找职员").handoffRequested).toBe(true);
     expect(parseLiveAgentIntent("估价").valuation).toBe(true);
-    expect(parseLiveAgentIntent("我是业主").valuation).toBe(true);
-    expect(parseLiveAgentIntent("想卖楼").valuation).toBe(true);
+    expect(parseLiveAgentIntent("我是业主").sellIntent).toBe(true);
+    expect(parseLiveAgentIntent("我想卖楼").sellIntent).toBe(true);
     expect(parseLiveAgentIntent("放盘估价").valuation).toBe(true);
     expect(parseLiveAgentIntent("荃湾").districtSlug).toBe("tsuen-wan");
     expect(parseLiveAgentIntent("青龙头").districtSlug).toBe("tsing-lung-tau");
@@ -253,8 +253,8 @@ describe("final fix wave: parser minors", () => {
         valuation: true,
       });
     }
-    // Other valuation words are unchanged.
-    expect(parseLiveAgentIntent("我是業主").valuation).toBe(true);
+    // 業主 is a seller cue (sell handoff), not valuation.
+    expect(parseLiveAgentIntent("我是業主").sellIntent).toBe(true);
     expect(parseLiveAgentIntent("碧堤半島兩房").sellIntent).toBe(false);
   });
 });
@@ -318,5 +318,42 @@ describe("follow-up N2: 放盤 from a buyer stays on listings", () => {
   test("沙田 and 青山公路 are districts", () => {
     expect(parseLiveAgentIntent("沙田兩房放盤").districtSlug).toBe("sha-tin");
     expect(parseLiveAgentIntent("青山公路兩房").districtSlug).toBe("castle-peak-road");
+  });
+});
+
+describe("follow-up N2 correction: 我想買 is a buyer", () => {
+  test("a buy or rent word wins over a weak seller cue", () => {
+    for (const text of [
+      "我想買碧堤半島兩房放盤",
+      "我想租兩房放盤",
+      "我有層樓，想入市碧堤半島放盤",
+    ]) {
+      const intent = parseLiveAgentIntent(text);
+      expect({ text, sell: intent.sellIntent, valuation: intent.valuation }).toEqual({
+        text,
+        sell: false,
+        valuation: false,
+      });
+    }
+  });
+
+  test("strong seller cues, 業主 and 我有層 are the sell handoff", () => {
+    for (const text of [
+      "我想放盤",
+      "我想賣樓",
+      "我有層樓想放盤",
+      "我要賣碧堤半島",
+      "幫我賣層樓",
+      "我是業主",
+      "我層樓想放",
+      "我想賣樓，順便想買細啲",
+    ]) {
+      const intent = parseLiveAgentIntent(text);
+      expect({ text, sell: intent.sellIntent, valuation: intent.valuation }).toEqual({
+        text,
+        sell: true,
+        valuation: false,
+      });
+    }
   });
 });

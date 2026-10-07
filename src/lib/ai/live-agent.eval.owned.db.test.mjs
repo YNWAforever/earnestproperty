@@ -598,7 +598,10 @@ test(
                 );
               }
             }
-            for (const text of ["我想放盤", "我有層樓想放盤", "放盤"]) {
+            const buyer = await buildLiveAgentReply("我想買碧堤半島兩房放盤");
+            assert.equal(buyer.kind, "listings", JSON.stringify(buyer));
+            assert.deepEqual(hrefs(buyer), ["/property/EP11001", "/property/EP11005"]);
+            for (const text of ["我想放盤", "我有層樓想放盤", "放盤", "我想賣樓"]) {
               const reply = await buildLiveAgentReply(text);
               assert.equal(reply.kind, "handoff", text);
               assert.equal(reply.text, LIVE_AGENT_REPLY_COPY.handoff, text);

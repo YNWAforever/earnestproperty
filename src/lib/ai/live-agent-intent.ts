@@ -34,15 +34,22 @@ const R = "(?![a-z])";
 const HANDOFF_RE = new RegExp(
   `真人|人工|代理|經紀|经纪|職員|职员|聯絡|联络|電話|电话|${L}(?:whatsapp|calls?|calling|agents?|human)${R}`,
 );
-const VALUATION_RE = new RegExp(
-  `估價|估价|估值|值幾錢|值几钱|賣樓|卖楼|業主|业主|${L}(?:valuation|sell my)${R}`,
-);
-// 放盤 with any 估 word (估價, 估值, 估下) or 值幾錢 is a valuation request. Otherwise a seller
-// cue, or 放盤 on its own, is a sell-intent handoff; without one, a buyer is asking about
-// listings (「有冇兩房放盤」, 「沙田有冇放盤」) and the message stays a listing question.
+const VALUATION_RE = new RegExp(`估價|估价|估值|值幾錢|值几钱|${L}valuation${R}`);
+// Selling (N2 ruling, corrected). A strong seller cue always means a seller. A weak seller cue
+// (我有層, 我層, 業主, 賣樓, "sell my") or 放盤 on its own means a seller unless the message
+// also has a buy or rent word (買, 租, 入市, 搵樓), which makes it a buyer. A bare 我想 is not a
+// cue: 「我想買碧堤半島兩房放盤」 is a buyer. Any 估 word or 值幾錢 with a seller cue or 放盤
+// is a valuation request. A buyer's 放盤 stays a listing question (「有冇兩房放盤」).
 const SELL_LISTING_RE = /放盤|放盘/;
 const SELL_VALUATION_WORD_RE = /估|值幾錢|值几钱/;
-const SELLER_CUE_RE = /我想|我有|我層|我层|我間|我间|業主|业主|想放|幫我放|帮我放|我要放/;
+const STRONG_SELLER_CUE_RE =
+  /我想放|我想賣|我想卖|我要放|我要賣|我要卖|幫我放|帮我放|幫我賣|帮我卖/;
+const WEAK_SELLER_CUE_RE = new RegExp(
+  `我有層|我有层|我層|我层|業主|业主|賣樓|卖楼|${L}sell my${R}`,
+);
+const BUYER_WORD_RE = new RegExp(
+  `買|买|租|入市|搵樓|搵楼|${L}(?:buy|buying|rent|renting|rental|lease)${R}`,
+);
 const SELL_ALONE_RE = /^[\s\p{P}\p{S}]*(?:放盤|放盘)[\s\p{P}\p{S}]*$/u;
 // Only the site's public listing number shapes: EP with 3-8 digits (EP001, EP-1201, EP11001) or
 // one letter with exactly 6 digits, written with an optional hyphen or single space (A056377,
@@ -154,8 +161,12 @@ export function parseLiveAgentIntent(raw: string): LiveAgentIntent {
     .map((entry) => entry.slug);
   const district = DISTRICTS.find(([name]) => text.includes(name));
   const sell = SELL_LISTING_RE.test(text);
-  const valuation = VALUATION_RE.test(text) || (sell && SELL_VALUATION_WORD_RE.test(text));
-  const sellIntent = sell && !valuation && (SELLER_CUE_RE.test(text) || SELL_ALONE_RE.test(text));
+  const strongSeller = STRONG_SELLER_CUE_RE.test(text);
+  const weakSeller = WEAK_SELLER_CUE_RE.test(text) || SELL_ALONE_RE.test(text);
+  const valuation =
+    VALUATION_RE.test(text) ||
+    ((sell || strongSeller || weakSeller) && SELL_VALUATION_WORD_RE.test(text));
+  const sellIntent = !valuation && (strongSeller || (weakSeller && !BUYER_WORD_RE.test(text)));
   const bedrooms = parseBedrooms(text);
   const deal = parseDeal(text);
   return {
