@@ -737,6 +737,21 @@ test("WozTell campaign handler maps timeout to retry and permanent rejection to 
     () => rejected.run(payload, { jobId: "job-3", attempt: 1 }),
     (error) => error?.code === "WOZTELL_CAMPAIGN_REJECTED" && !isRetryableJobError(error),
   );
+
+  // FX-10b: a paused campaign must not be retried by the job runner -- the
+  // job fails visibly with the pause code and staff resume from 待審核.
+  const paused = createWoztellCampaignDeliveryHandler({
+    deliverCampaign: async () => {
+      throw Object.assign(new Error("paused"), {
+        code: "WOZTELL_CAMPAIGN_PAUSED",
+        reason: "WOZTELL_AUTH_REJECTED",
+      });
+    },
+  });
+  await assert.rejects(
+    () => paused.run(payload, { jobId: "job-4", attempt: 1 }),
+    (error) => error?.code === "WOZTELL_CAMPAIGN_PAUSED" && !isRetryableJobError(error),
+  );
 });
 
 // enqueueJob returns the existing job on a duplicate key without re-arming it.

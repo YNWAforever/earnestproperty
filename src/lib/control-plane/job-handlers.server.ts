@@ -210,6 +210,11 @@ function isRetryableWoztellError(error: unknown) {
   if (!error || typeof error !== "object") return false;
   const code = "code" in error ? String(error.code) : "";
   const name = "name" in error ? String(error.name) : "";
+  // A paused campaign (FX-10b) is never retried by the runner: the job fails
+  // with WOZTELL_CAMPAIGN_PAUSED, visible in 系統運作, and staff resume it from
+  // 待審核. WOZTELL_CONFIGURATION_UNAVAILABLE below stays retryable only for the
+  // rare run where the pause could not apply (e.g. the campaign was cancelled).
+  if (code === "WOZTELL_CAMPAIGN_PAUSED") return false;
   return (
     name === "AbortError" ||
     code === "WOZTELL_PROVIDER_TIMEOUT" ||
