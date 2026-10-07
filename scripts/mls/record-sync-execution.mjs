@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { Client } from "@neondatabase/serverless";
 import { hashPayload } from "../../src/lib/mls/ingestion-contract.mjs";
 import { recordSyncRun } from "../../src/lib/mls/sync-run-repository.mjs";
+import { validateRunSummary } from "../../src/lib/mls/sync-run-contract.mjs";
 import { verifyDailyTarget } from "./verify-daily-target.mjs";
 const read = (path) => {
   if (!path) return null;
@@ -25,6 +26,27 @@ export function executionSummary({
   if (!/^[0-9]{1,30}$/.test(workflowRunId ?? "") || !/^[a-f0-9]{40}$/.test(gitSha ?? ""))
     throw Error("INVALID_EXECUTION_ID");
   const stages = {};
+  const clocks = (job) => {
+    const outputs = needs[job]?.outputs ?? {};
+    const startedAt = outputs.started_at || undefined;
+    const finishedAt = outputs.finished_at || undefined;
+    try {
+      if (finishedAt && !startedAt) throw Error("invalid_execution_timing");
+      validateRunSummary({ startedAt, finishedAt });
+    } catch {
+      throw Error("INVALID_EXECUTION_TIMING");
+    }
+    return {
+      ...(startedAt ? { startedAt: new Date(startedAt).toISOString() } : {}),
+      ...(finishedAt ? { finishedAt: new Date(finishedAt).toISOString() } : {}),
+    };
+  };
+  const measuredClocks = Object.fromEntries(
+    ["preflight", "collect", "ingest", "publish", "verify"].map((job) => [
+      job,
+      needs[job]?.result === "skipped" ? {} : clocks(job),
+    ]),
+  );
   const mapping = {
     collect: "collection",
     ingest: "ingestion",
@@ -42,7 +64,7 @@ export function executionSummary({
       ...(["failed", "cancelled", "unknown"].includes(status)
         ? { errorCode: "WORKFLOW_" + status.toUpperCase() }
         : {}),
-      finishedAt: new Date().toISOString(),
+      ...(result === "skipped" ? {} : measuredClocks[job]),
     };
   }
   if (payload) {
@@ -57,7 +79,7 @@ export function executionSummary({
       status: "succeeded",
       receiptId: receipt.id,
       reconciled: true,
-      finishedAt: new Date(receipt.accepted_at).toISOString(),
+      ...measuredClocks.ingest,
     };
   } else if (stages.ingestion.status === "succeeded")
     stages.ingestion = {
@@ -104,6 +126,10 @@ export function executionSummary({
     privateEvidenceRef: requestAsset ? { requestAsset } : undefined,
     stages,
     counts,
+    startedAt: Object.values(measuredClocks)
+      .filter((clock) => clock.startedAt)
+      .map((clock) => clock.startedAt)
+      .sort()[0],
     finishedAt: new Date().toISOString(),
   };
 }
@@ -157,6 +183,7 @@ if (process.argv[1]?.endsWith("record-sync-execution.mjs")) {
       mode: process.env.MODE,
       receipt,
     });
+    if (!summary.startedAt) throw Error("MISSING_EXECUTION_TIMING");
     await recordSyncRun({ client, runId, summary });
     console.log(JSON.stringify({ metadataRecorded: true, workflowRunId }));
   } catch {

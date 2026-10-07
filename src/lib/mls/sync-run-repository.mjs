@@ -271,7 +271,7 @@ export async function recordSyncRun({ client, runId, summary }) {
     )
       throw Error("RUN_IDENTITY_CHANGED");
     await q(
-      `INSERT INTO property_sync_runs(id,source,scope_id,workflow_run_id,git_sha,request_asset,request_hash,receipt_id,stages,branches,counts,finished_at,error_code,workflow_attempt) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) ON CONFLICT(id) DO UPDATE SET workflow_run_id=coalesce(EXCLUDED.workflow_run_id,property_sync_runs.workflow_run_id),git_sha=coalesce(EXCLUDED.git_sha,property_sync_runs.git_sha),request_asset=coalesce(EXCLUDED.request_asset,property_sync_runs.request_asset),request_hash=coalesce(EXCLUDED.request_hash,property_sync_runs.request_hash),dispatch_status=CASE WHEN EXCLUDED.workflow_run_id IS NOT NULL THEN 'accepted' ELSE property_sync_runs.dispatch_status END,stages=EXCLUDED.stages,branches=EXCLUDED.branches,counts=EXCLUDED.counts,receipt_id=EXCLUDED.receipt_id,finished_at=EXCLUDED.finished_at,error_code=EXCLUDED.error_code,revision=property_sync_runs.revision+1,updated_at=clock_timestamp()`,
+      `INSERT INTO property_sync_runs(id,source,scope_id,workflow_run_id,git_sha,request_asset,request_hash,receipt_id,stages,branches,counts,finished_at,error_code,workflow_attempt,started_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,coalesce($15::timestamptz,clock_timestamp())) ON CONFLICT(id) DO UPDATE SET workflow_run_id=coalesce(EXCLUDED.workflow_run_id,property_sync_runs.workflow_run_id),git_sha=coalesce(EXCLUDED.git_sha,property_sync_runs.git_sha),request_asset=coalesce(EXCLUDED.request_asset,property_sync_runs.request_asset),request_hash=coalesce(EXCLUDED.request_hash,property_sync_runs.request_hash),dispatch_status=CASE WHEN EXCLUDED.workflow_run_id IS NOT NULL THEN 'accepted' ELSE property_sync_runs.dispatch_status END,stages=EXCLUDED.stages,branches=EXCLUDED.branches,counts=EXCLUDED.counts,receipt_id=EXCLUDED.receipt_id,finished_at=EXCLUDED.finished_at,error_code=EXCLUDED.error_code,revision=property_sync_runs.revision+1,updated_at=clock_timestamp()`,
       [
         runId,
         summary.source,
@@ -287,6 +287,7 @@ export async function recordSyncRun({ client, runId, summary }) {
         summary.finishedAt ?? previous?.finished_at ?? null,
         summary.errorCode ?? null,
         summary.workflowAttempt ?? 1,
+        summary.startedAt ?? null,
       ],
     );
     await q("COMMIT");

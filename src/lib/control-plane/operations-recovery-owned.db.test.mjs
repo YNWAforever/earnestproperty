@@ -110,6 +110,68 @@ function syntheticReceipt(messageId, mode = "active") {
   };
 }
 
+test("EP-08 owned sync clocks preserve measured start and immutable replay history", async () => {
+  await withOwnedPostgres(async ({ query, pool }) => {
+    const { recordSyncRun } = await import("../mls/sync-run-repository.mjs");
+    const runId = randomUUID();
+    const startedAt = "2026-10-07T20:17:00.000Z";
+    const finishedAt = "2026-10-07T20:30:00.000Z";
+    const summary = {
+      source: "28hse_agent_540",
+      scopeId: "agent:540",
+      workflowRunId: "9001",
+      gitSha: "a".repeat(40),
+      startedAt,
+      finishedAt,
+      stages: {
+        collection: { status: "failed", errorCode: "WORKFLOW_FAILED", startedAt, finishedAt },
+      },
+    };
+    const client = await pool.connect();
+    try {
+      await recordSyncRun({ client, runId, summary });
+      const original = (await query("SELECT * FROM property_sync_runs WHERE id=$1", [runId]))[0];
+      assert.equal(original.started_at.toISOString(), startedAt);
+      assert.equal(original.finished_at.toISOString(), finishedAt);
+      const replay = {
+        ...summary,
+        startedAt: "2026-10-08T20:17:00.000Z",
+        finishedAt: "2026-10-08T20:30:00.000Z",
+        stages: {
+          collection: {
+            ...summary.stages.collection,
+            startedAt: "2026-10-08T20:17:00.000Z",
+            finishedAt: "2026-10-08T20:30:00.000Z",
+          },
+        },
+      };
+      await recordSyncRun({ client, runId, summary: replay });
+      const repeated = (await query("SELECT * FROM property_sync_runs WHERE id=$1", [runId]))[0];
+      assert.equal(repeated.started_at.toISOString(), startedAt);
+      assert.deepEqual(repeated.stages.collection, original.stages.collection);
+      for (const invalid of [
+        { ...replay, startedAt: "invalid" },
+        { ...replay, startedAt: "2026-10-09T20:17:00.000Z" },
+        {
+          ...replay,
+          stages: { collection: { ...replay.stages.collection, finishedAt: startedAt } },
+        },
+      ]) {
+        await assert.rejects(
+          recordSyncRun({ client, runId, summary: invalid }),
+          /invalid_execution_timing/,
+        );
+        assert.deepEqual(
+          (await query("SELECT * FROM property_sync_runs WHERE id=$1", [runId]))[0],
+          repeated,
+        );
+      }
+    } finally {
+      client.release();
+    }
+  });
+});
+
 test("FX-07 receipt retry backoff is shared by recovery and nextDueAt", async (t) => {
   // EP-19 leaves its process-wide module mocks in place; release them before re-mocking the DB.
   mock.reset();

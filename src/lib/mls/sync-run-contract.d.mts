@@ -34,6 +34,8 @@ export interface SyncRunSummary {
   requestHash?: string;
   gitSha?: string;
   workflowRunId?: string;
+  startedAt?: string;
+  finishedAt?: string;
   lastAcceptedFullAt?: string | null;
   enabled?: boolean;
   readFailed?: boolean;
