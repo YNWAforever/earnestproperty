@@ -372,13 +372,21 @@ export async function deliverServiceAction(
     send: transport?.send,
     finish: async (i, outcome) => {
       await finishOutboundIntent(i, outcome, p.transaction);
-      await p.query(
-        `WITH action AS (UPDATE whatsapp_service_actions a SET state=o.state,block_reason=o.error,updated_at=now() FROM whatsapp_outbound_intents o WHERE o.id=$1::uuid AND a.id=o.service_action_id RETURNING a.*)
- UPDATE whatsapp_service_surveys s SET state=CASE WHEN a.state='accepted' THEN 'sent' ELSE s.state END,sent_at=CASE WHEN a.state='accepted' THEN COALESCE(s.sent_at,$2::timestamptz) ELSE s.sent_at END,message_id=o.message_id FROM action a JOIN whatsapp_outbound_intents o ON o.id=a.outbound_intent_id WHERE s.id=a.survey_id AND a.purpose='survey' AND s.state='queued'`,
-        [i, now.toISOString()],
-      );
+      await syncServiceActionAfterFinish(i, now, p);
     },
   });
+}
+/**
+ * Copy the intent's state into its service action after the provider call. Only states the
+ * whatsapp_service_actions CHECK allows are copied: a late finish on an intent a manager has
+ * already resolved (resolved_sent / resolved_not_sent, FX-08) leaves the action as it was.
+ */
+export async function syncServiceActionAfterFinish(intentId: string, now: Date, p = ports) {
+  await p.query(
+    `WITH action AS (UPDATE whatsapp_service_actions a SET state=o.state,block_reason=o.error,updated_at=now() FROM whatsapp_outbound_intents o WHERE o.id=$1::uuid AND a.id=o.service_action_id AND o.state IN ('queued','dispatching','accepted','unknown','failed') RETURNING a.*)
+ UPDATE whatsapp_service_surveys s SET state=CASE WHEN a.state='accepted' THEN 'sent' ELSE s.state END,sent_at=CASE WHEN a.state='accepted' THEN COALESCE(s.sent_at,$2::timestamptz) ELSE s.sent_at END,message_id=o.message_id FROM action a JOIN whatsapp_outbound_intents o ON o.id=a.outbound_intent_id WHERE s.id=a.survey_id AND a.purpose='survey' AND s.state='queued'`,
+    [intentId, now.toISOString()],
+  );
 }
 export async function processServiceAnswer(
   eventId: string,

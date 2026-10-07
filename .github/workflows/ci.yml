@@ -110,6 +110,7 @@ jobs:
       - run: npm run test:staff-server-fn
       - run: npm run test:no-link
       - run: npm run test:woztell
+      - run: npm run test:whatsapp-safety:ui
       - run: npm run test:operations
 
       - run: npm run test:control-plane
@@ -157,6 +158,7 @@ jobs:
       - run: npm run test:crm-analysis:db
       - run: npm run test:conversation-assist:db
       - run: npm run test:whatsapp-setup:db
+      - run: npm run test:woztell:owned:db
       - run: npm run test:propertyhk-reconciliation:owned:db
       - run: npm run test:property-withdrawal:owned:db
       - run: npm run test:property-maintenance:owned:db

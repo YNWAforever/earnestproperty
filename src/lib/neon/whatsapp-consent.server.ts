@@ -24,6 +24,25 @@ export async function setWhatsappMarketingConsent(
   if (input.optedIn && input.evidenceSource === "customer_opt_out") {
     throw new Response("Opt-in requires affirmative evidence.", { status: 400 });
   }
+  // Owner decision 7: confirming a near-miss names the customer's own inbound message.
+  if (
+    /^near-miss:/i.test(input.evidenceRef) &&
+    !/^near-miss:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      input.evidenceRef,
+    )
+  ) {
+    throw new Response("NEAR_MISS_REFERENCE_INVALID", { status: 400 });
+  }
+  const nearMiss =
+    /^near-miss:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(
+      input.evidenceRef,
+    );
+  const nearMissMessageId = !input.optedIn && nearMiss ? nearMiss[1] : null;
+  // FX-08: recording 拒收推廣 always starts a new staff_recorded episode at now(), even when
+  // the contact is already opted out: a confirmed stop must re-block text on a conversation
+  // that a newer customer message had reopened. A near-miss confirm names the message as
+  // evidence; otherwise an already opted-out contact keeps its earlier message evidence.
+  // Recording consent clears the flag but keeps every evidence column.
   const rows = await query(
     `WITH eligible AS (
       SELECT c.id FROM crm_contacts c
@@ -31,18 +50,35 @@ export async function setWhatsappMarketingConsent(
         SELECT 1 FROM staff_users s JOIN staff_roles r ON r.staff_user_id = s.id
         WHERE s.id = $3::uuid AND s.active = true AND r.role IN ('admin', 'manager')
       ) FOR UPDATE OF c
+    ), near_miss AS (
+      SELECT m.external_message_id, left(m.text, 500) AS text FROM whatsapp_messages m
+      WHERE m.id = $7::uuid AND m.contact_id = $1::uuid AND m.direction = 'inbound'
+    ), guard AS (
+      -- Evaluated only for an eligible caller and contact, so an ineligible caller
+      -- always gets 403 and never learns whether the message exists.
+      SELECT ($7::uuid IS NULL OR EXISTS (SELECT 1 FROM near_miss)) AS ok FROM eligible
     ), changed AS (
-      UPDATE crm_contacts c SET opt_in_whatsapp = $2, opted_out_whatsapp = NOT $2, updated_at = now()
-      FROM eligible e WHERE c.id = e.id RETURNING c.id, c.opt_in_whatsapp AS opted_in
+      UPDATE crm_contacts c SET opt_in_whatsapp = $2, opted_out_whatsapp = NOT $2,
+        opted_out_at = CASE WHEN NOT $2 THEN now() ELSE c.opted_out_at END,
+        opted_out_source = CASE WHEN NOT $2 THEN 'staff_recorded' ELSE c.opted_out_source END,
+        opted_out_message_id = CASE WHEN NOT $2 AND $7::uuid IS NOT NULL THEN (SELECT external_message_id FROM near_miss) WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN NULL ELSE c.opted_out_message_id END,
+        opted_out_text = CASE WHEN NOT $2 AND $7::uuid IS NOT NULL THEN (SELECT text FROM near_miss) WHEN NOT $2 AND NOT c.opted_out_whatsapp THEN NULL ELSE c.opted_out_text END,
+        opted_out_cleared_at = CASE WHEN NOT $2 THEN NULL ELSE c.opted_out_cleared_at END,
+        opted_out_cleared_by = CASE WHEN NOT $2 THEN NULL ELSE c.opted_out_cleared_by END,
+        updated_at = now()
+      FROM eligible e, guard g WHERE c.id = e.id AND g.ok RETURNING c.id, c.opt_in_whatsapp AS opted_in
     ), evidence AS (
       INSERT INTO crm_consent_events (contact_id, opted_in, source, evidence_ref, copy_version, actor_staff_id)
       SELECT id, opted_in, $4, $5, $6, $3::uuid FROM changed RETURNING id
     ), audit AS (
       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
       SELECT $3::uuid, 'contact.marketing_consent', 'contact', id,
-        jsonb_build_object('optedIn', opted_in, 'source', $4::text, 'copyVersion', $6::text)
+        jsonb_build_object('optedIn', opted_in, 'source', $4::text, 'copyVersion', $6::text,
+          'evidenceRef', $5::text,
+          'trigger', CASE WHEN $7::uuid IS NOT NULL THEN 'near_miss' ELSE 'manual' END)
       FROM changed RETURNING id
-    ) SELECT id, opted_in FROM changed`,
+    ) SELECT (SELECT ok FROM guard) AS evidence_ok, ch.id, ch.opted_in
+      FROM (SELECT 1) one LEFT JOIN changed ch ON true`,
     [
       input.contactId,
       input.optedIn,
@@ -50,9 +86,14 @@ export async function setWhatsappMarketingConsent(
       input.evidenceSource,
       input.evidenceRef,
       "whatsapp-marketing-v1",
+      nearMissMessageId,
     ],
   );
-  if (!rows[0]) throw new Response("Forbidden", { status: 403 });
+  if (rows[0]?.evidence_ok === false) {
+    // Wrong-recipient guard: the message is unknown, outbound, or another contact's.
+    throw new Response("NEAR_MISS_MESSAGE_NOT_FOUND", { status: 400 });
+  }
+  if (!rows[0]?.id) throw new Response("Forbidden", { status: 403 });
   return { ok: true as const, optedIn: rows[0].opted_in === true };
 }
 

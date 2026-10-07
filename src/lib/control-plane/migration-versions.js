@@ -122,6 +122,8 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20261003040000_content_proposal_source_guard.sql",
   "20261006110000_duty_manager.sql",
   "20261007100000_wa_access_unassigned.sql",
+  "20261008100000_whatsapp_opt_out_evidence.sql",
+  "20261008110000_outbound_unknown_resolution.sql",
   "20261009100000_contact_profile_name.sql",
   "20261009110000_inbound_lead_reopen.sql",
 ]);

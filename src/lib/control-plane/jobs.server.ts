@@ -747,7 +747,12 @@ export function hasRegisteredJobHandler(jobType: string, payloadVersion: number)
   return getJobHandler(jobType, payloadVersion) !== null;
 }
 
-/** Keep service recovery bounded and independent from campaign/history recovery work. */
+/**
+ * Keep service recovery bounded and independent from campaign/history recovery work.
+ * FX-08: a reply intent still `dispatching` whose job lease expired, or whose job is already
+ * terminal, becomes `unknown` (staff payload v1 as well as service payload v2). It is never
+ * re-queued or resent, and a manager can then resolve it after the usual minimum age.
+ */
 export async function recoverExpiredServiceLeases(
   injectedQuery?: typeof import("../neon/db.server.ts").queryRows,
 ) {
@@ -756,6 +761,8 @@ export async function recoverExpiredServiceLeases(
  recovered AS (UPDATE ops_jobs j SET status=CASE WHEN attempt_count<max_attempts THEN 'queued' ELSE 'failed' END,lease_owner=NULL,lease_expires_at=NULL,last_error_code='LEASE_EXPIRED',updated_at=now() FROM expired e WHERE j.id=e.id RETURNING j.*),
  uncertain AS (UPDATE whatsapp_outbound_intents o SET state='unknown',error='WOZTELL_DELIVERY_UNKNOWN',updated_at=now() FROM recovered j WHERE j.job_type='woztell.reply.deliver' AND j.payload_version=2 AND j.payload->>'actionId'=o.service_action_id::text AND o.state='dispatching' RETURNING o.*),
  action AS (UPDATE whatsapp_service_actions a SET state='unknown',block_reason='WOZTELL_DELIVERY_UNKNOWN',updated_at=now() FROM uncertain o WHERE a.id=o.service_action_id RETURNING a.id),
- transcript AS (UPDATE whatsapp_messages m SET status='unknown',error='WOZTELL_DELIVERY_UNKNOWN' FROM uncertain o WHERE m.id=o.message_id RETURNING m.id)
+ transcript AS (UPDATE whatsapp_messages m SET status='unknown',error='WOZTELL_DELIVERY_UNKNOWN' FROM uncertain o WHERE m.id=o.message_id RETURNING m.id),
+ staff_uncertain AS (UPDATE whatsapp_outbound_intents o SET state='unknown',error='WOZTELL_DELIVERY_UNKNOWN',updated_at=now() FROM ops_jobs j LEFT JOIN recovered r ON r.id=j.id WHERE o.state='dispatching' AND o.actor_type='staff' AND j.idempotency_key='woztell.reply:'||o.id AND j.job_type='woztell.reply.deliver' AND j.payload_version=1 AND j.payload->>'intentId'=o.id::text AND (r.id IS NOT NULL OR j.status IN ('failed','cancelled','succeeded')) RETURNING o.*),
+ staff_transcript AS (UPDATE whatsapp_messages m SET status='unknown',error='WOZTELL_DELIVERY_UNKNOWN' FROM staff_uncertain o WHERE m.id=o.message_id RETURNING m.id)
  SELECT id FROM recovered`);
 }
