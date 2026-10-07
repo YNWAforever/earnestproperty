@@ -2,6 +2,16 @@ import { BRANCHES } from "./ingestion-contract.mjs";
 export function evaluateSnapshotGate(batch, baseline, policy = {}) {
   const m = batch.meta,
     reasons = [];
+  // Index observations retain useful quotes, but cannot establish detail,
+  // branch scope or identity authority even inside a complete-looking envelope.
+  if (
+    batch.source === "propertyhk" &&
+    (["full_snapshot", "details_verified", "id_scope_verified", "full_branch_scope_verified"].some(
+      (flag) => m[flag] === false || batch.payload[flag] === false,
+    ) ||
+      batch.payload.listings.some((record) => record?.observation_kind === "index_only"))
+  )
+    reasons.push("index_only_source_evidence");
   if (
     m.crawl_complete !== true ||
     m.pages_failed !== 0 ||

@@ -949,6 +949,14 @@ def gate(payload, baseline):
     reasons = []
     m = payload["meta"]
     count = len(ad_keys(payload))
+    if payload.get("source") == "propertyhk" and (
+        any(
+            m.get(flag) is False or payload.get(flag) is False
+            for flag in ["full_snapshot", "details_verified", "id_scope_verified", "full_branch_scope_verified"]
+        )
+        or any(r.get("observation_kind") == "index_only" for r in payload["listings"])
+    ):
+        reasons.append("index_only_source_evidence")
     if payload.get("source") == "propertyhk" and (not collection_page_proof(payload) or m.get("worker_rejected_count",0)):
         reasons.append("incomplete_branch_evidence")
     if not m.get("crawl_complete") or m.get("pages_failed", 0):
