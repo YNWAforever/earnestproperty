@@ -1,14 +1,14 @@
 import "@tanstack/react-start/server-only";
 import { waitUntil } from "@vercel/functions";
-import { createJobWake, signalJobWake, type JobLane } from "./job-wake.js";
+import { createJobWake, signalJobWake, wakeEnabledFromEnv, type JobLane } from "./job-wake.js";
 
 /** Call only after the producer commit succeeds. Never wait for provider effects in a webhook. */
 export function wakeAfterCommit(lane: JobLane) {
   createJobWake({
-    enabled: process.env.OPS_EVENT_WAKE_ENABLED === "true",
+    enabled: wakeEnabledFromEnv(process.env),
     waitUntil,
     run: async (selected) => {
-      const schedulerUrl = process.env.OPS_WAKE_URL;
+      const schedulerUrl = process.env.OPS_WAKE_URL?.trim();
       const secret = process.env.CRON_SECRET;
       if (schedulerUrl && secret) {
         try {

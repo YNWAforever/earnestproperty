@@ -92,6 +92,11 @@ test("recovery_never_upgrades_old_effects", async () => {
       { ...input("off"), event: { ...input().event, externalMessageId: "provider-message-2" } },
       { query },
     );
+    // Fresh receipts sit out the 2-minute in-flight grace; age both past it first.
+    await query(
+      "UPDATE whatsapp_inbound_receipts SET updated_at=now()-interval '10 minutes' WHERE id IN ($1,$2)",
+      [active.receiptId, off.receiptId],
+    );
     const modes = [];
     const result = await recoverPendingInboundReceipts({
       query,

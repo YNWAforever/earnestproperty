@@ -135,7 +135,7 @@ try {
     EP_WA_ROUTING_ENABLED: "false",
     EP_WA_SERVICE_AUTOMATION_ENABLED: "false",
     EP_WA_STAFF_NOTIFICATIONS_ENABLED: "false",
-    OPS_EVENT_WAKE_ENABLED: "false",
+    OPS_WAKE_URL: "",
     WOZTELL_ENABLED: "false",
     // Example-only number, inspected as href text; no WhatsApp link is opened.
     VITE_CONTACT_WHATSAPP_PHONE: "85200000000",

@@ -10,6 +10,7 @@ export type HealthData = {
     required: boolean;
     status: HealthStatus;
     details?: Record<string, boolean>;
+    facts?: Record<string, number | null>;
   }>;
   checkedAt: string;
   capabilities: OperationsCapabilities;
@@ -44,6 +45,28 @@ export type JobSummary = {
   >;
 };
 export type JobsPage = { rows: JobListItem[]; nextCursor: string | null; summary: JobSummary };
+export type InboundReceiptProblemKind =
+  | "retry_scheduled"
+  | "retry_exhausted"
+  | "review_required"
+  | "needs_routing";
+/** Never carries a member id, phone number, message text or event body. */
+export type InboundReceiptProblem = {
+  id: string;
+  kind: InboundReceiptProblemKind;
+  projectionState: "pending" | "failed" | "blocked_schema" | "projected";
+  captureMode: "off" | "observe" | "active";
+  attemptCount: number;
+  blockReason: string | null;
+  receivedAt: string;
+  nextRetryAt: string | null;
+  conversationId: string | null;
+  canRetry: boolean;
+};
+export type ReceiptsPage = {
+  rows: InboundReceiptProblem[];
+  counts: Record<InboundReceiptProblemKind, number>;
+};
 export type AuditRow = {
   id: string;
   actor_staff_id: string;

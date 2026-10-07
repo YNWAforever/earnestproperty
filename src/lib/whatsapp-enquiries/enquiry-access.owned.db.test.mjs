@@ -55,8 +55,8 @@ test(
   "managers see and act on every WhatsApp conversation; agents stay own-only",
   { timeout: 180000 },
   async (t) => {
-    const previousWake = process.env.OPS_EVENT_WAKE_ENABLED;
-    delete process.env.OPS_EVENT_WAKE_ENABLED;
+    const previousWakeUrl = process.env.OPS_WAKE_URL;
+    process.env.OPS_WAKE_URL = "";
     const network = mock.method(globalThis, "fetch", () => {
       throw Error("Provider/network request forbidden in FX-06 owned acceptance");
     });
@@ -367,8 +367,8 @@ test(
       });
     } finally {
       network.mock.restore();
-      if (previousWake === undefined) delete process.env.OPS_EVENT_WAKE_ENABLED;
-      else process.env.OPS_EVENT_WAKE_ENABLED = previousWake;
+      if (previousWakeUrl === undefined) delete process.env.OPS_WAKE_URL;
+      else process.env.OPS_WAKE_URL = previousWakeUrl;
     }
   },
 );

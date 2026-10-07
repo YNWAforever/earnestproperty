@@ -220,7 +220,7 @@ test(
         EP_WA_ROUTING_ENABLED: "true",
         EP_WA_STAFF_NOTIFICATIONS_ENABLED: "true",
         EP_WA_SERVICE_AUTOMATION_ENABLED: "false",
-        OPS_EVENT_WAKE_ENABLED: "false",
+        OPS_WAKE_URL: "",
       };
       const oldEnvironment = Object.fromEntries(
         Object.keys(environment).map((key) => [key, process.env[key]]),
@@ -1553,6 +1553,13 @@ test(
             const { recoverPendingInboundReceipts } =
               await import("../src/lib/whatsapp-enquiries/inbound-receipts.server.ts");
             const calls = effectCalls();
+            // FX-07: recovery leaves a receipt alone for its 2-minute in-flight grace and
+            // backoff, then claims it once it is due.
+            assert.equal((await recoverPendingInboundReceipts({ query })).projected, 0);
+            await query(
+              "UPDATE whatsapp_inbound_receipts SET updated_at=now()-interval '5 minutes',lease_until=NULL WHERE member_id=$1",
+              [body.member],
+            );
             assert.equal((await recoverPendingInboundReceipts({ query })).projected, 1);
             const [recovered] = await query(
               "SELECT id,capture_mode,effects_eligible FROM whatsapp_enquiry_events WHERE member_id=$1",

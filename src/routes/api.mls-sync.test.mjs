@@ -42,18 +42,26 @@ test("Vercel has no idle database schedules", () => {
   assert.doesNotMatch(vercel, /schedule:\s*"/);
 });
 
-test("Cloudflare wakes the appropriate job lane only after a signal or due alarm", () => {
+test("Cloudflare wakes the appropriate job lane after a signal, a due alarm or the job sweep", () => {
   const worker = readFileSync(new URL("../../workers/cron/src/index.ts", import.meta.url), "utf8");
+  const alarm = readFileSync(
+    new URL("../../workers/cron/src/job-alarm.js", import.meta.url),
+    "utf8",
+  );
   const config = readFileSync(
     new URL("../../workers/cron/wrangler.jsonc", import.meta.url),
     "utf8",
   );
 
-  assert.match(worker, /\/api\/admin\/control-plane\/worker/);
-  assert.match(worker, /\/api\/admin\/whatsapp\/service-worker/);
+  assert.match(alarm, /\/api\/admin\/control-plane\/worker/);
+  assert.match(alarm, /\/api\/admin\/whatsapp\/service-worker/);
   assert.match(worker, /\/wake\/general/);
   assert.match(worker, /\/wake\/service/);
-  assert.match(worker, /Bearer \$\{this\.env\.CRON_SECRET\}/);
-  assert.doesNotMatch(worker, /\/api\/admin\/jobs\/send-queue/);
-  assert.match(config, /"crons"\s*:\s*\[\s*\]/);
+  assert.match(worker, /secret: this\.env\.CRON_SECRET/);
+  assert.match(alarm, /Bearer \$\{secret\}/);
+  assert.doesNotMatch(worker + alarm, /\/api\/admin\/jobs\/send-queue/);
+  const { crons } = JSON.parse(
+    config.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"),
+  ).triggers;
+  assert.deepEqual(crons, ["*/10 0-13 * * *", "0 14-23 * * *"]);
 });

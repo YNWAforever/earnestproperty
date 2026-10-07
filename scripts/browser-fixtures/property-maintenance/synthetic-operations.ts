@@ -1,7 +1,12 @@
 // Real route/state/permission policy; synthetic control-plane results only.
 import { operationsCapabilitiesForRoles } from "../../../src/lib/control-plane/capabilities";
 import { OperationsClientError } from "../../../src/lib/admin/operations/operations-client";
-import type { JobListItem, AuditRow } from "../../../src/lib/admin/operations/operations-types";
+import type {
+  JobListItem,
+  AuditRow,
+  InboundReceiptProblem,
+  ReceiptsPage,
+} from "../../../src/lib/admin/operations/operations-types";
 export { OperationsClientError };
 const key = "operations-fixture-jobs";
 const job: JobListItem = {
@@ -119,6 +124,101 @@ export async function retryOperationsJob(id: string) {
     );
   call("retry-return", id);
   return { requestId: "synthetic-retry-ref", data: { id, status: "queued" } };
+}
+const receiptKey = "operations-fixture-receipts";
+export const syntheticReceiptIds = {
+  retry: "60000000-0000-4000-8000-000000000001",
+  routing: "60000000-0000-4000-8000-000000000002",
+};
+const syntheticReceipts: InboundReceiptProblem[] = [
+  {
+    id: syntheticReceiptIds.retry,
+    kind: "retry_scheduled",
+    projectionState: "failed",
+    captureMode: "observe",
+    attemptCount: 3,
+    blockReason: "PROJECTION_FAILED",
+    receivedAt: "2026-10-06T01:00:00Z",
+    nextRetryAt: "2026-10-06T01:30:00Z",
+    conversationId: null,
+    canRetry: true,
+  },
+  {
+    id: syntheticReceiptIds.routing,
+    kind: "needs_routing",
+    projectionState: "projected",
+    captureMode: "active",
+    attemptCount: 2,
+    blockReason: null,
+    receivedAt: "2026-10-06T00:30:00Z",
+    nextRetryAt: null,
+    conversationId: "70000000-0000-4000-8000-000000000001",
+    canRetry: false,
+  },
+];
+const receiptRows = (): InboundReceiptProblem[] =>
+  JSON.parse(localStorage.getItem(receiptKey) ?? JSON.stringify(syntheticReceipts));
+function receiptCounts(rows: InboundReceiptProblem[]): ReceiptsPage["counts"] {
+  const counts = { retry_scheduled: 0, retry_exhausted: 0, review_required: 0, needs_routing: 0 };
+  for (const row of rows) counts[row.kind]++;
+  return counts;
+}
+export async function fetchOperationsReceipts() {
+  call("receipts");
+  if (state.mode === "receipts-read-fail")
+    throw new OperationsClientError(
+      "未能載入來訊收件。",
+      503,
+      "OWNED_READ_FAILED",
+      "synthetic-receipts-read-ref",
+      false,
+    );
+  const saved = receiptRows();
+  return {
+    requestId: "synthetic-receipts",
+    data: { rows: saved, counts: receiptCounts(saved) },
+  };
+}
+export async function retryOperationsReceipt(id: string) {
+  call("receipt-retry", id);
+  if (state.mode === "denied")
+    throw new OperationsClientError(
+      "權限已撤回，未有執行重試。",
+      403,
+      "FORBIDDEN",
+      "synthetic-denied-ref",
+      false,
+    );
+  if (state.mode === "receipt-conflict")
+    throw new OperationsClientError(
+      "The receipt cannot be retried from its current state.",
+      409,
+      "CONFLICT_DUPLICATE",
+      "synthetic-conflict-ref",
+      false,
+    );
+  localStorage.setItem(receiptKey, JSON.stringify(receiptRows().filter((row) => row.id !== id)));
+  localStorage.setItem(
+    "operations-fixture-audit",
+    JSON.stringify([
+      {
+        id: "50000000-0000-4000-8000-000000000002",
+        actor_staff_id: "20000000-0000-4000-8000-000000000001",
+        permission: "system.jobs.retry",
+        action: "whatsapp.receipt.retry",
+        resource_type: "whatsapp_inbound_receipt",
+        resource_id: id,
+        outcome: "success",
+        request_id: "synthetic-receipt-retry-ref",
+        metadata: {},
+        created_at: "2026-10-06T01:00:00Z",
+      },
+    ]),
+  );
+  return {
+    requestId: "synthetic-receipt-retry-ref",
+    data: { receiptId: id, projectionState: "projected" },
+  };
 }
 export const cancelOperationsJob = async () => {
   throw Error("No cancel operation authorized by fixture");

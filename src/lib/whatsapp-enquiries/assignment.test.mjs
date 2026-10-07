@@ -180,8 +180,8 @@ test("same target stays idempotent while pending or unknown and can retry after 
         ];
       }),
   };
-  const previousWakeFlag = process.env.OPS_EVENT_WAKE_ENABLED;
-  process.env.OPS_EVENT_WAKE_ENABLED = "false";
+  const previousWakeUrl = process.env.OPS_WAKE_URL;
+  process.env.OPS_WAKE_URL = "";
   try {
     const request = () =>
       requestConversationAssignment({ conversationId, staffId, reason: "manual" }, actor, ports);
@@ -208,8 +208,8 @@ test("same target stays idempotent while pending or unknown and can retry after 
     assert.equal(retried.assignment.assignment_version, 2);
     assert.equal(requestCount, 2);
   } finally {
-    if (previousWakeFlag === undefined) delete process.env.OPS_EVENT_WAKE_ENABLED;
-    else process.env.OPS_EVENT_WAKE_ENABLED = previousWakeFlag;
+    if (previousWakeUrl === undefined) delete process.env.OPS_WAKE_URL;
+    else process.env.OPS_WAKE_URL = previousWakeUrl;
   }
 });
 

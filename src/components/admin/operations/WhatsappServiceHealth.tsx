@@ -11,6 +11,10 @@ const labels: Record<string, string> = {
   humanResponses: "已核實真人首回覆",
   surveyAnswers: "已回答問卷",
 };
+// FX-07 labels only the code it adds; the rest stay as codes until FX-17a.
+const reasonLabels: Record<string, string> = {
+  SERVICE_WORKER_STALE: "工作程序逾時未回報",
+};
 const state = (value: string) =>
   value === "ready" ? "就緒" : value === "blocked" ? "受阻" : "未核實";
 
@@ -110,7 +114,7 @@ export function WhatsappServiceHealth({
             {health.oldestDueAt ?? "沒有"} · 下次排程：{health.nextWakeAt ?? "沒有"}
           </p>
           <p className="text-sm">
-            工作程序最後回報：{health.heartbeatAt ?? "未有證據"} · 最近成功：
+            工作程序最後回報：{health.heartbeatAt ?? "未有記錄"} · 最近成功：
             {health.lastSuccessAt ?? "未有證據"}
           </p>
           <p className="text-sm">
@@ -132,7 +136,7 @@ export function WhatsappServiceHealth({
           {health.reasons.length ? (
             <ul className="text-xs text-destructive">
               {health.reasons.map((reason) => (
-                <li key={reason}>{reason}</li>
+                <li key={reason}>{reasonLabels[reason] ?? reason}</li>
               ))}
             </ul>
           ) : null}

@@ -3,6 +3,19 @@ import "@tanstack/react-start/server-only";
 import { randomUUID } from "node:crypto";
 import { deriveInboundIdentity, eventForReceiptProjection } from "./inbound-identity.ts";
 import { queryRows } from "../neon/db.server.ts";
+import {
+  RECEIPT_CLAIM_SET_SQL,
+  RECEIPT_DUE_AT_SQL,
+  RECEIPT_ELIGIBLE_SQL,
+  RECEIPT_INFLIGHT_GRACE_SQL,
+  RECEIPT_MAX_ATTEMPTS,
+  RECEIPT_RETRYABLE_SQL,
+} from "./receipt-retry-policy.ts";
+import type {
+  InboundReceiptProblem,
+  InboundReceiptProblemKind,
+} from "../admin/operations/operations-types.ts";
+import type { StaffAccess } from "../neon/auth.server.ts";
 import type {
   ReceiptProjectionState,
   ReceiptResult,
@@ -141,9 +154,53 @@ export async function markInboundReceipt(
   );
 }
 
+export type ReceiptProject = (
+  event: VerifiedReceiptInput["event"],
+  mode: "off" | "observe",
+) => Promise<unknown>;
+
+/** Projects one receipt that the caller has already claimed (leased and counted). */
+export async function projectClaimedReceipt(
+  row: ReceiptRow,
+  ports: { query: ReceiptQuery; project: ReceiptProject },
+): Promise<"projected" | "failed" | "blocked_schema" | "review"> {
+  const { query, project } = ports;
+  // Historical recovery never restores active effects or a former activation.
+  if (row.origin !== "live_webhook" || row.event_kind !== "customer_message") {
+    await markInboundReceipt(row.id, "failed", "REVIEW_REQUIRED", { query });
+    return "review";
+  }
+  const event =
+    typeof row.normalized_event === "string"
+      ? (JSON.parse(row.normalized_event) as VerifiedReceiptInput["event"])
+      : row.normalized_event;
+  try {
+    await project(
+      eventForReceiptProjection(event, row.id, row.event_kind, row.identity_key),
+      row.capture_mode === "off" ? "off" : "observe",
+    );
+    await markInboundReceipt(row.id, "projected", null, { query });
+    return "projected";
+  } catch (error) {
+    const missingSchema = error instanceof Error && error.message === "WA_ENQUIRY_SCHEMA_REQUIRED";
+    await markInboundReceipt(
+      row.id,
+      missingSchema ? "blocked_schema" : "failed",
+      missingSchema ? "WA_ENQUIRY_SCHEMA_REQUIRED" : "PROJECTION_FAILED",
+      { query },
+    );
+    return missingSchema ? "blocked_schema" : "failed";
+  }
+}
+
+const defaultReceiptProject: ReceiptProject = async (event, mode) => {
+  const { ingestWoztellEvent } = await import("../woztell/woztell-ingest.server.ts");
+  await ingestWoztellEvent(event, "live_webhook", undefined, { signedEvent: true, mode });
+};
+
 export async function recoverPendingInboundReceipts(
   ports: ReceiptPorts & {
-    project?: (event: VerifiedReceiptInput["event"], mode: "off" | "observe") => Promise<unknown>;
+    project?: ReceiptProject;
     limit?: number;
   } = {},
 ) {
@@ -152,53 +209,168 @@ export async function recoverPendingInboundReceipts(
   const rows = (await query(
     `WITH claimed AS (
        SELECT id FROM whatsapp_inbound_receipts
-       WHERE projection_state IN ('pending','blocked_schema','failed')
-         AND (lease_until IS NULL OR lease_until < now())
-         AND attempt_count < 20 AND block_reason IS DISTINCT FROM 'REVIEW_REQUIRED'
+       WHERE ${RECEIPT_RETRYABLE_SQL("whatsapp_inbound_receipts")}
        ORDER BY received_at,id LIMIT $1 FOR UPDATE SKIP LOCKED
      )
      UPDATE whatsapp_inbound_receipts r
-     SET lease_until=now()+interval '60 seconds',attempt_count=r.attempt_count+1,updated_at=now()
+     SET ${RECEIPT_CLAIM_SET_SQL}
      FROM claimed WHERE r.id=claimed.id
      RETURNING r.id,r.identity_key,r.normalized_event,r.event_kind,r.capture_mode,r.origin`,
     [limit],
   )) as ReceiptRow[];
-  const project =
-    ports.project ??
-    (async (event: VerifiedReceiptInput["event"], mode: "off" | "observe") => {
-      const { ingestWoztellEvent } = await import("../woztell/woztell-ingest.server.ts");
-      await ingestWoztellEvent(event, "live_webhook", undefined, { signedEvent: true, mode });
-    });
+  const project = ports.project ?? defaultReceiptProject;
   const counts = { projected: 0, blocked: 0, review: 0 };
   for (const row of rows) {
-    // Historical recovery never restores active effects or a former activation.
-    if (row.origin !== "live_webhook" || row.event_kind !== "customer_message") {
-      await markInboundReceipt(row.id, "failed", "REVIEW_REQUIRED", { query });
-      counts.review++;
-      continue;
-    }
-    const event =
-      typeof row.normalized_event === "string"
-        ? (JSON.parse(row.normalized_event) as VerifiedReceiptInput["event"])
-        : row.normalized_event;
-    try {
-      await project(
-        eventForReceiptProjection(event, row.id, row.event_kind, row.identity_key),
-        row.capture_mode === "off" ? "off" : "observe",
-      );
-      await markInboundReceipt(row.id, "projected", null, { query });
-      counts.projected++;
-    } catch (error) {
-      const missingSchema =
-        error instanceof Error && error.message === "WA_ENQUIRY_SCHEMA_REQUIRED";
-      await markInboundReceipt(
-        row.id,
-        missingSchema ? "blocked_schema" : "failed",
-        missingSchema ? "WA_ENQUIRY_SCHEMA_REQUIRED" : "PROJECTION_FAILED",
-        { query },
-      );
-      counts.blocked++;
-    }
+    const outcome = await projectClaimedReceipt(row, { query, project });
+    if (outcome === "projected") counts.projected++;
+    else if (outcome === "review") counts.review++;
+    else counts.blocked++;
   }
   return counts;
+}
+
+type Actor = Pick<StaffAccess, "staffId" | "roles">;
+
+export type { InboundReceiptProblem, InboundReceiptProblemKind };
+
+const PROBLEM_KINDS: InboundReceiptProblemKind[] = [
+  "retry_scheduled",
+  "retry_exhausted",
+  "review_required",
+  "needs_routing",
+];
+
+// One classification for rows and counts. C-09 ("needs_routing") is a receipt that
+// was captured while auto-assignment was active but replayed as observe, so nobody
+// was routed or notified. $1 = days a C-09 row stays listed.
+const PROBLEM_KIND_SQL = `
+  CASE
+    WHEN r.capture_mode='active' AND r.projection_state='projected' AND r.attempt_count>1
+         AND r.received_at > now() - make_interval(days => $1::int) THEN 'needs_routing'
+    WHEN r.block_reason='REVIEW_REQUIRED' THEN 'review_required'
+    WHEN r.projection_state IN ('pending','blocked_schema','failed')
+         AND r.attempt_count>=${RECEIPT_MAX_ATTEMPTS} THEN 'retry_exhausted'
+    WHEN ${RECEIPT_ELIGIBLE_SQL("r")} THEN 'retry_scheduled'
+  END`;
+
+/** Receipts that need attention. Never selects the member id, phone, text or event body. */
+export async function listInboundReceiptProblems(
+  _actor: Actor,
+  options: { limit?: number; sinceDays?: number; query?: ReceiptQuery } = {},
+): Promise<{
+  rows: InboundReceiptProblem[];
+  counts: Record<InboundReceiptProblemKind, number>;
+}> {
+  const query = options.query ?? queryRows;
+  const limit = Math.max(1, Math.min(Math.trunc(options.limit ?? 50), 100));
+  const sinceDays = Math.max(1, Math.min(Math.trunc(options.sinceDays ?? 30), 365));
+  const classified = `SELECT r.*, ${PROBLEM_KIND_SQL} AS problem_kind
+     FROM whatsapp_inbound_receipts r
+     WHERE r.projection_state IN ('pending','blocked_schema','failed')
+        OR r.block_reason='REVIEW_REQUIRED'
+        OR (r.capture_mode='active' AND r.projection_state='projected' AND r.attempt_count>1)`;
+  // One query: the per-kind totals are a window count taken before LIMIT, so no second scan.
+  const rows = await query(
+    `WITH classified AS (${classified})
+     SELECT c.id, c.problem_kind AS kind, c.projection_state, c.capture_mode, c.attempt_count,
+            c.block_reason, c.received_at,
+            CASE WHEN c.problem_kind='retry_scheduled' THEN ${RECEIPT_DUE_AT_SQL("c")} END AS next_retry_at,
+            w.id AS conversation_id,
+            (c.problem_kind IN ('retry_scheduled','retry_exhausted')
+               AND c.origin='live_webhook' AND c.event_kind='customer_message'
+               AND (c.lease_until IS NULL OR c.lease_until <= now())
+               AND ${RECEIPT_INFLIGHT_GRACE_SQL("c")}) AS can_retry,
+            ${PROBLEM_KINDS.map(
+              (kind) =>
+                `(count(*) FILTER (WHERE c.problem_kind='${kind}') OVER ())::int AS ${kind}_total`,
+            ).join(",\n            ")}
+     FROM classified c
+     LEFT JOIN whatsapp_conversations w
+       ON w.channel_id=c.channel_id AND w.woztell_member_id=c.member_id
+     WHERE c.problem_kind IS NOT NULL
+     ORDER BY c.received_at DESC, c.id
+     LIMIT $2`,
+    [sinceDays, limit],
+  );
+  const counts = Object.fromEntries(PROBLEM_KINDS.map((kind) => [kind, 0])) as Record<
+    InboundReceiptProblemKind,
+    number
+  >;
+  for (const kind of PROBLEM_KINDS) counts[kind] = Number(rows[0]?.[`${kind}_total`] ?? 0);
+  const iso = (value: unknown) =>
+    value === null || value === undefined ? null : new Date(value as string | Date).toISOString();
+  return {
+    rows: rows.map((row) => ({
+      id: String(row.id),
+      kind: row.kind as InboundReceiptProblemKind,
+      projectionState: row.projection_state as InboundReceiptProblem["projectionState"],
+      captureMode: row.capture_mode as InboundReceiptProblem["captureMode"],
+      attemptCount: Number(row.attempt_count),
+      blockReason: (row.block_reason as string | null) ?? null,
+      receivedAt: iso(row.received_at) as string,
+      nextRetryAt: iso(row.next_retry_at),
+      conversationId: row.conversation_id ? String(row.conversation_id) : null,
+      canRetry: row.can_retry === true,
+    })),
+    counts,
+  };
+}
+
+/**
+ * Manual, observe-only retry for admin|manager (403 Response otherwise). One statement
+ * takes the same 60 s lease recovery takes (it skips the backoff and the attempt cap,
+ * never the lease or the eligible states) and writes the audit row, so a retry that
+ * happens is always audited. Projection then reuses projectClaimedReceipt, which
+ * only ever runs `off` or `observe`: no reply, no notification, no assignment.
+ * Returns null when the receipt is not retryable or is already leased.
+ */
+export async function retryInboundReceipt(
+  receiptId: string,
+  actor: Actor,
+  context: { requestId: string },
+  ports: ReceiptPorts & { project?: ReceiptProject } = {},
+): Promise<{
+  receiptId: string;
+  projectionState: "projected" | "failed" | "blocked_schema";
+} | null> {
+  if (!actor.roles.some((role) => role === "admin" || role === "manager")) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+  const query = ports.query ?? queryRows;
+  const claimed = (await query(
+    `WITH target AS (
+       SELECT id FROM whatsapp_inbound_receipts
+       WHERE id=$1::uuid
+         AND projection_state IN ('pending','blocked_schema','failed')
+         AND block_reason IS DISTINCT FROM 'REVIEW_REQUIRED'
+         AND origin='live_webhook' AND event_kind='customer_message'
+         AND (lease_until IS NULL OR lease_until <= now())
+         AND ${RECEIPT_INFLIGHT_GRACE_SQL("whatsapp_inbound_receipts")}
+       FOR UPDATE SKIP LOCKED
+     ), claimed AS (
+       UPDATE whatsapp_inbound_receipts r
+       SET ${RECEIPT_CLAIM_SET_SQL}
+       FROM target WHERE r.id=target.id
+       RETURNING r.id,r.identity_key,r.normalized_event,r.event_kind,r.capture_mode,r.origin,
+                 r.projection_state AS previous_state,r.attempt_count
+     ), audit AS (
+       INSERT INTO ops_audit_logs
+         (actor_staff_id, permission, action, resource_type, resource_id, outcome, request_id, metadata)
+       SELECT $2::uuid, 'system.jobs.retry', 'whatsapp.receipt.retry', 'whatsapp_inbound_receipt',
+              id::text, 'success', $3::uuid,
+              jsonb_build_object('receiptId', id::text, 'previousState', previous_state,
+                                 'attemptCount', attempt_count)
+       FROM claimed
+       RETURNING id
+     )
+     SELECT * FROM claimed`,
+    [receiptId, actor.staffId, context.requestId],
+  )) as ReceiptRow[];
+  if (!claimed[0]) return null;
+  const outcome = await projectClaimedReceipt(claimed[0], {
+    query,
+    project: ports.project ?? defaultReceiptProject,
+  });
+  if (outcome === "review") return null;
+  return { receiptId, projectionState: outcome };
 }

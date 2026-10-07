@@ -5,16 +5,17 @@
   "compatibility_date": "2026-08-27",
 
   // The public endpoint only accepts a server-side CRON_SECRET bearer token.
-  // No Cron Triggers remain: Durable Object alarms wake only after a committed job.
+  // Cron Triggers (UTC) sweep both lanes: every 10 min 08:00-21:50 HKT, hourly 22:00-07:00 HKT.
+  // A sweep re-arms an idle or exhausted lane; committed jobs still signal the alarm directly.
   "workers_dev": true,
-  "triggers": { "crons": [] },
+  "triggers": { "crons": ["*/10 0-13 * * *", "0 14-23 * * *"] },
   "durable_objects": {
     "bindings": [{ "name": "JOB_WAKE", "class_name": "JobWakeAlarm" }],
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["JobWakeAlarm"] }],
 
   "vars": {
-    "SITE_ORIGIN": "https://earnestproperty.vercel.app",
+    "SITE_ORIGIN": "https://www.earnestproperty.com",
   },
 
   // CRON_SECRET is a secret, not a var. Keep it equal to the Vercel server secret.

@@ -66,7 +66,8 @@ async function rejectsWith(promise, status, body) {
 }
 
 test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) => {
-  delete process.env.OPS_EVENT_WAKE_ENABLED;
+  const previousWake = process.env.OPS_WAKE_URL;
+  process.env.OPS_WAKE_URL = "";
   const network = mock.method(globalThis, "fetch", () => {
     throw new Error("FX-09 owned test: network is disabled");
   });
@@ -1266,5 +1267,7 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
     });
   } finally {
     network.mock.restore();
+    if (previousWake === undefined) delete process.env.OPS_WAKE_URL;
+    else process.env.OPS_WAKE_URL = previousWake;
   }
 });

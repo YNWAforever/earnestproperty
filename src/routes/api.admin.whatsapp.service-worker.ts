@@ -2,6 +2,7 @@ import { runServiceJobs } from "../lib/control-plane/service-worker.server.ts";
 import { getNextJobDueAt } from "../lib/control-plane/jobs-next-due.ts";
 import { SERVICE_CAPABILITIES } from "../lib/control-plane/job-handlers.server.ts";
 import { queryRows } from "../lib/neon/db.server.ts";
+import { recordWorkerHeartbeat } from "../lib/control-plane/worker-heartbeat.server.ts";
 import { createFileRoute } from "@tanstack/react-router";
 
 export async function drainServiceJobs({ request }: { request: Request }) {
@@ -9,6 +10,7 @@ export async function drainServiceJobs({ request }: { request: Request }) {
   if (!expected || request.headers.get("authorization") !== `Bearer ${expected}`)
     return Response.json({ error: "UNAUTHORIZED" }, { status: 401 });
   try {
+    await recordWorkerHeartbeat("service-v2", SERVICE_CAPABILITIES);
     const counts = await runServiceJobs();
     const nextDueAt = await getNextJobDueAt({
       lane: "service",
