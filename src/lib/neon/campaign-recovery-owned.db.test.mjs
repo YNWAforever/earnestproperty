@@ -2056,6 +2056,45 @@ test(
         },
       );
 
+      await t.test(
+        "a requeue is refused up front when the template is inactive or the audience is gone",
+        async () => {
+          const [ownTemplate] = await query(
+            "INSERT INTO whatsapp_templates(element_name,status) VALUES('owned_requeue_gate','inactive') RETURNING id",
+          );
+          const gated = await seedRetryCampaign(["R1"], {
+            queue: false,
+            status: "failed",
+            templateId: ownTemplate.id,
+          });
+          await setRecipient(gated.people.R1, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+          assert.deepEqual(await requeue(gated.campaign, actor, 1), {
+            ok: false,
+            error: "TEMPLATE_NOT_ACTIVE",
+          });
+          assert.equal((await recipientRow(gated.people.R1.recipient)).status, "failed");
+          assert.equal(await campaignStatus(gated.campaign), "failed");
+          assert.equal((await requeueAudits(gated.campaign)).length, 0);
+
+          const [gone] = await query(
+            "INSERT INTO whatsapp_audiences(name,created_by) VALUES('Owned FX-10b deleted audience',$1) RETURNING id",
+            [staff.id],
+          );
+          const orphan = await seedRetryCampaign(["R2"], {
+            queue: false,
+            status: "failed",
+            audienceId: gone.id,
+          });
+          await setRecipient(orphan.people.R2, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+          await query("DELETE FROM whatsapp_audiences WHERE id=$1", [gone.id]);
+          assert.deepEqual(await requeue(orphan.campaign, actor, 1), {
+            ok: false,
+            error: "AUDIENCE_NOT_FOUND",
+          });
+          assert.equal(await campaignStatus(orphan.campaign), "failed");
+        },
+      );
+
       await t.test("finishing is refused without history or outside 待審核", async () => {
         const fresh = await seedRetryCampaign(["H1"], { queue: false, status: "review" });
         await query("UPDATE crm_contacts SET opted_out_whatsapp=true WHERE id=$1", [

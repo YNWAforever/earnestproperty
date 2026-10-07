@@ -4360,7 +4360,12 @@ export async function requeueFailedCampaignRecipients(
     {
       statement: `
       WITH c AS (
-        SELECT c.id, c.status FROM whatsapp_campaigns c WHERE c.id = $1::uuid
+        -- FX-10b I2: a requeue that 發送… could never send is refused up front.
+        SELECT c.id, c.status,
+          EXISTS (SELECT 1 FROM whatsapp_templates t
+            WHERE t.id = c.template_id AND t.status LIKE 'active%') AS template_ok,
+          EXISTS (SELECT 1 FROM whatsapp_audiences a WHERE a.id = c.audience_id) AS audience_ok
+        FROM whatsapp_campaigns c WHERE c.id = $1::uuid
       ), busy AS (
         SELECT ${CAMPAIGN_RETRY_BUSY_SQL} AS busy
       ), pick AS (
@@ -4369,6 +4374,7 @@ export async function requeueFailedCampaignRecipients(
         JOIN c ON c.id = r.campaign_id
         JOIN crm_contacts contact ON contact.id = r.contact_id, busy
         WHERE ${campaignRetryStatusSql("c")} AND NOT busy.busy
+          AND c.template_ok AND c.audience_ok
           AND ${campaignRetryEligibleSql("r", "contact")}
         FOR UPDATE OF r
       ), picked AS (
@@ -4414,7 +4420,8 @@ export async function requeueFailedCampaignRecipients(
         FROM flipped f CROSS JOIN excluded e
         RETURNING id
       )
-      SELECT c.status, busy.busy, (SELECT count(*) FROM requeued)::int AS requeued,
+      SELECT c.status, c.template_ok, c.audience_ok, busy.busy,
+        (SELECT count(*) FROM requeued)::int AS requeued,
         picked.n AS picked, e.unknown, e.other, e.contact_changed
       FROM c, busy, picked, excluded e
       `,
@@ -4427,6 +4434,8 @@ export async function requeueFailedCampaignRecipients(
   if (!(CAMPAIGN_RETRY_STATUSES as readonly string[]).includes(stringOrEmpty(row.status))) {
     return { ok: false, error: "CAMPAIGN_NOT_RETRYABLE" };
   }
+  if (row.template_ok !== true) return { ok: false, error: "TEMPLATE_NOT_ACTIVE" };
+  if (row.audience_ok !== true) return { ok: false, error: "AUDIENCE_NOT_FOUND" };
   const picked = Number(row.picked ?? 0);
   if (picked === 0) return { ok: false, error: "NOTHING_TO_RETRY" };
   if (picked !== expectedCount) {

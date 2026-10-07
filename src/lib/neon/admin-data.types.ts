@@ -261,7 +261,10 @@ export type AdminCampaignRequeueResult =
         | "Campaign not found"
         | "CAMPAIGN_STILL_SENDING"
         | "CAMPAIGN_NOT_RETRYABLE"
-        | "NOTHING_TO_RETRY";
+        | "NOTHING_TO_RETRY"
+        /** The re-sent rows could never be sent: refused before anything moves. */
+        | "TEMPLATE_NOT_ACTIVE"
+        | "AUDIENCE_NOT_FOUND";
     }
   | {
       /** The confirmed count no longer matches; nothing moved (a 409 in effect). */
