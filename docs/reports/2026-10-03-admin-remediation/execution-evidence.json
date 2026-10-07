@@ -7678,5 +7678,518 @@
       "source": "Revert 970f56a5c9220f35229f2f03064816546b2498c6 through a reviewed PR; no schema or production data rollback is needed for this slice.",
       "heldEvidence": "Retain immutable private acquisition and held review artifacts; no re-fetch or production replay was performed."
     }
+  },
+  "fx07Readback20261007": {
+    "recordedAt": "2026-10-07T14:39:33.986082+00:00",
+    "baseMainSha": "f000068afbe7d575236bd07da6c5d7871bedc336",
+    "integrationHeadSha": "ec05cbe2e91eddcfb6959b19036b94d8a3c1a925",
+    "verificationCodeSha": "2717f18eef07217d4e0bc846579215a7a1749d5c",
+    "pullRequest": "https://github.com/YNWAforever/earnestproperty/pull/227",
+    "red": {
+      "receiptCounts": {
+        "passed": 17,
+        "failed": 2,
+        "rootFailures": 1,
+        "parentFailure": 1,
+        "reason": "Three categories outside default LIMIT 50 reported zero instead of one"
+      },
+      "wakeGuard": {
+        "passed": 30,
+        "failed": 1,
+        "remoteCiRun": 37634407848,
+        "reason": "Three inherited owned fixtures still referenced the removed wake flag"
+      }
+    },
+    "verification": {
+      "test:operations:owned:db": {
+        "passed": 19,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-counts-green.log",
+        "sha256": "ae409e17edc613c72ff35d5719389344c0ddc3c37944e73147daefe4f278eb3f"
+      },
+      "test:operations:node": {
+        "passed": 28,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-operations-green.log",
+        "sha256": "c1b0d1fe4bfb4feb4162801763e4f1774f7e8da65eb63d07c01d063388871fd7"
+      },
+      "test:operations:bun": {
+        "passed": 18,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-operations-green.log",
+        "sha256": "c1b0d1fe4bfb4feb4162801763e4f1774f7e8da65eb63d07c01d063388871fd7"
+      },
+      "test:job-wake": {
+        "passed": 31,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-isolation-0-green.log",
+        "sha256": "1d7de11ca5bf0ec3a6183bf3abd983a1fcda9202891a4b8089cb13bb926db574"
+      },
+      "test:lead-integrity:db": {
+        "passed": 33,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-isolation-1-green.log",
+        "sha256": "765a65613cf814c85abf4a4425db45a99f2627cf560d70ab7ed80600fbd127b5"
+      },
+      "test:woztell:owned:db": {
+        "passed": 50,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-isolation-2-green.log",
+        "sha256": "a68eea01f374eaa6f0f1d64fd307deeff0b30da6e3fabab17e797a00c984ff8b"
+      },
+      "typecheck": {
+        "exitCode": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+      },
+      "build": {
+        "exitCode": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-build.log",
+        "sha256": "bff53e4cdf2b74ae48aa63f1091a8fe56e1015b7b9606167a8988af0182c2ad2"
+      },
+      "lint": {
+        "exitCode": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-final-lint.log",
+        "sha256": "cc4f4090e6913374f0aa5e4e16d2e3a94691b8130185b0fa17de8f11f19ada43",
+        "existingWarnings": 3
+      }
+    },
+    "preflight": {
+      "queuedJobs": [
+        {
+          "observed_at": "2026-10-07T13:52:26.887Z",
+          "job_type": "ai.knowledge.rebuild",
+          "status": "failed",
+          "jobs": 1,
+          "oldest_created_at": "2026-07-31T19:38:17.706Z",
+          "newest_created_at": "2026-07-31T19:38:17.706Z",
+          "due_now": 1,
+          "active_leases": 0,
+          "effect": "provider_budget_review"
+        },
+        {
+          "observed_at": "2026-10-07T13:52:26.887Z",
+          "job_type": "ai.knowledge.repair",
+          "status": "queued",
+          "jobs": 8,
+          "oldest_created_at": "2026-10-04T23:27:46.468Z",
+          "newest_created_at": "2026-10-07T00:19:48.448Z",
+          "due_now": 8,
+          "active_leases": 0,
+          "effect": "provider_budget_review"
+        }
+      ],
+      "actualEffectsVerified": {
+        "ai.knowledge.repair": "rebuildAiKnowledgeIndex allowEmbeddings:false; DB-only repair",
+        "ai.knowledge.rebuild": "existing failed job; no automatic retry"
+      },
+      "queuedOutboundJobs": 0,
+      "blockedOrRetryInboundReceipts": 0,
+      "productionMetadataNamesPresent": [
+        "OPS_WAKE_URL",
+        "OPS_EVENT_WAKE_ENABLED",
+        "CRON_SECRET"
+      ],
+      "metadataMethod": "Vercel connector403; mapped names-only CLI succeeded with verified project link and explicit team; no values pulled",
+      "projectId": "prj_hNaDYmYGeJhBY00vxsC2A0E5Fon5",
+      "teamId": "team_qvzlsFmfCsLkgItSypqHjw3z",
+      "secretEqualityVerified": false,
+      "workerDeploymentPerformed": false,
+      "currentPrHead": "ec05cbe2e91eddcfb6959b19036b94d8a3c1a925",
+      "reviewAndChecks": "Historical preflight at integration head; final source publication gated separately"
+    },
+    "migrationDryRun": {
+      "newMigrations": 0,
+      "productionMigrationsApplied": 0,
+      "pendingProductionVersionsOutsidePriorApproval": [
+        "20261006110000",
+        "20261007100000",
+        "20261008100000",
+        "20261008110000",
+        "20261009100000",
+        "20261009110000"
+      ]
+    },
+    "configDryRun": {
+      "exitCode": 0,
+      "wranglerVersion": "4.141.0",
+      "binding": "JOB_WAKE:JobWakeAlarm",
+      "siteOrigin": "https://www.earnestproperty.com",
+      "proposedCronUtc": [
+        "*/10 0-13 * * *",
+        "0 14-23 * * *"
+      ],
+      "deployed": false,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-worker-dry-run.log",
+      "sha256": "cec28866c1915078883bbf31432528fc9603e674d3eb3dee1b02bc8273851e9a"
+    },
+    "agentInitiatedSideEffects": {
+      "productionMigrations": 0,
+      "productionConfigurationChanges": 0,
+      "manualWorkerDispatch": 0,
+      "trueSends": 0,
+      "modelCalls": 0,
+      "providerCalls": 0,
+      "budget": 0
+    },
+    "capabilityStatus": {
+      "receiptTotalsAndOwnedRecovery": "READY",
+      "sourceMerge": "PENDING_EXACT_HEAD_CI_AND_FINAL_REVIEW_AT_RECORDING",
+      "productionWorkerAndConfigAcceptance": "NOT_READY",
+      "realRoleProviderModelAndRestore": "NO_NEW_EXECUTION; prior layered evidence and blockers retained"
+    },
+    "rollback": "Reviewed source revert; do not restore production receipts, outbound intents or inventory. Worker trigger rollout has not been performed.",
+    "privateRedLogs": {
+      "fx07-counts-red.log": {
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-counts-red.log",
+        "sha256": "80dbc28317bb2daaf4f6782f6d09ae3997503c70255abb624ddbc88ba8ec19a9"
+      },
+      "fx07-job-wake.log": {
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-job-wake.log",
+        "sha256": "37ad6a7855d56346220a4de41c9cba8141b25794b6b5a0db6443d183f8870d5d"
+      },
+      "fx07-integration-ci-failure.log": {
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-integration-ci-failure.log",
+        "sha256": "b11df002e40857e865a4cfb692d30e8ca26b431f2d06fbdb6dc0eb7827c31e22"
+      }
+    }
+  },
+  "native28hseThreeRuns20261007": {
+    "configuration": {
+      "cron": "17 20 * * *",
+      "hkt": "04:17",
+      "collectTimeoutMinutes": 120,
+      "ingestTimeoutMinutes": 20,
+      "publishTimeoutMinutes": 45,
+      "verifyTimeoutMinutes": 10,
+      "enabled": true,
+      "expectedBranch": "main",
+      "approvedParser": "python-v2.2"
+    },
+    "runs": [
+      {
+        "source": "28hse_agent_540",
+        "scope_id": "agent:540",
+        "workflow_run_id": "37243007099",
+        "workflow_attempt": 1,
+        "git_sha": "4965d484137a46d1d9c278bbc63f0d159cf534e9",
+        "operation": "collect",
+        "dispatch_status": "not_requested",
+        "receipt_id": "c5adeb99-d6e5-4909-bf7b-acbfa5a3c234",
+        "counts": {
+          "held": 77,
+          "published": 2,
+          "canonicalCreated": 2,
+          "canonicalUpdated": 0,
+          "advertisementsObserved": 270
+        },
+        "started_at": "2026-10-04T23:44:11.385Z",
+        "finished_at": "2026-10-04T23:44:10.522Z",
+        "stage_keys": [
+          "ingestion",
+          "collection",
+          "publication",
+          "verification"
+        ],
+        "event": "schedule",
+        "stages": {
+          "ingestion": {
+            "stage": "ingestion",
+            "status": "succeeded",
+            "receiptId": "c5adeb99-d6e5-4909-bf7b-acbfa5a3c234",
+            "finishedAt": "2026-10-04T23:27:46.468Z",
+            "reconciled": true
+          },
+          "collection": {
+            "stage": "collection",
+            "status": "succeeded",
+            "pagesRead": 21,
+            "finishedAt": "2026-10-04T23:44:10.513Z",
+            "pagesFailed": 0
+          },
+          "publication": {
+            "stage": "publication",
+            "status": "succeeded",
+            "finishedAt": "2026-10-04T23:44:10.513Z"
+          },
+          "verification": {
+            "stage": "verification",
+            "status": "succeeded",
+            "finishedAt": "2026-10-04T23:44:10.513Z"
+          }
+        },
+        "fullReceiptAccepted": true,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/native-37243007099.log",
+        "logSha256": "0f987d9bbdc0f5cc3301f01143f7adc9109cbb9c80fab3568021505ddf2d305a"
+      },
+      {
+        "source": "28hse_agent_540",
+        "scope_id": "agent:540",
+        "workflow_run_id": "37398559047",
+        "workflow_attempt": 1,
+        "git_sha": "4965d484137a46d1d9c278bbc63f0d159cf534e9",
+        "operation": "collect",
+        "dispatch_status": "not_requested",
+        "receipt_id": "ad7df384-fc34-4aac-9ac5-0f98b696750b",
+        "counts": {
+          "held": 76,
+          "published": 0,
+          "canonicalCreated": 1,
+          "canonicalUpdated": 1,
+          "advertisementsObserved": 264
+        },
+        "started_at": "2026-10-06T01:48:17.183Z",
+        "finished_at": "2026-10-06T01:48:16.116Z",
+        "stage_keys": [
+          "ingestion",
+          "collection",
+          "publication",
+          "verification"
+        ],
+        "event": "schedule",
+        "stages": {
+          "ingestion": {
+            "stage": "ingestion",
+            "status": "succeeded",
+            "receiptId": "ad7df384-fc34-4aac-9ac5-0f98b696750b",
+            "finishedAt": "2026-10-06T01:33:15.626Z",
+            "reconciled": true
+          },
+          "collection": {
+            "stage": "collection",
+            "status": "succeeded",
+            "pagesRead": 20,
+            "finishedAt": "2026-10-06T01:48:16.105Z",
+            "pagesFailed": 0
+          },
+          "publication": {
+            "stage": "publication",
+            "status": "succeeded",
+            "finishedAt": "2026-10-06T01:48:16.106Z"
+          },
+          "verification": {
+            "stage": "verification",
+            "status": "succeeded",
+            "finishedAt": "2026-10-06T01:48:16.106Z"
+          }
+        },
+        "fullReceiptAccepted": true,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/native-37398559047.log",
+        "logSha256": "8ee23b89ce302a4a2cd8cfd0c932188b09ff2abef43a85788c9a02f0ebab74fe"
+      },
+      {
+        "source": "28hse_agent_540",
+        "scope_id": "agent:540",
+        "workflow_run_id": "37548837306",
+        "workflow_attempt": 1,
+        "git_sha": "73d41c8c6bddf6890f5c8775522af97765a25e99",
+        "operation": "collect",
+        "dispatch_status": "not_requested",
+        "receipt_id": "609b131b-edb1-41ce-bc47-b5d4e5353a5f",
+        "counts": {
+          "held": 79,
+          "published": 3,
+          "canonicalCreated": 5,
+          "canonicalUpdated": 1,
+          "advertisementsObserved": 268
+        },
+        "started_at": "2026-10-07T00:21:21.497Z",
+        "finished_at": "2026-10-07T00:21:20.573Z",
+        "stage_keys": [
+          "ingestion",
+          "collection",
+          "publication",
+          "verification"
+        ],
+        "event": "schedule",
+        "stages": {
+          "ingestion": {
+            "stage": "ingestion",
+            "status": "succeeded",
+            "receiptId": "609b131b-edb1-41ce-bc47-b5d4e5353a5f",
+            "finishedAt": "2026-10-07T00:05:33.333Z",
+            "reconciled": true
+          },
+          "collection": {
+            "stage": "collection",
+            "status": "succeeded",
+            "pagesRead": 21,
+            "finishedAt": "2026-10-07T00:21:20.566Z",
+            "pagesFailed": 0
+          },
+          "publication": {
+            "stage": "publication",
+            "status": "succeeded",
+            "finishedAt": "2026-10-07T00:21:20.566Z"
+          },
+          "verification": {
+            "stage": "verification",
+            "status": "succeeded",
+            "finishedAt": "2026-10-07T00:21:20.566Z"
+          }
+        },
+        "fullReceiptAccepted": true,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/native-37548837306.log",
+        "logSha256": "b19fd1478b652f3a16e9790110c93fd9951f30c71c6adb8820e2148caee18c28"
+      }
+    ],
+    "acceptance": "Three genuine schedule pipelines correlate to full receipts and succeeded four-stage operation readbacks. This does not promote complete role/viewport/provider/restore or punctuality acceptance.",
+    "chronologyFinding": "All three completed operation-registry rows have started_at later than finished_at by less than two seconds; timestamps reflect summary insertion rather than the actual collection start. GitHub job metadata supplies the actual stage timing; no historical rows were rewritten.",
+    "newManualRuns": 0,
+    "newDispatches": 0,
+    "recordedAt": "2026-10-07T14:39:33.986082+00:00",
+    "inspectionMainSha": "f000068afbe7d575236bd07da6c5d7871bedc336",
+    "actualJobMetadata": [
+      {
+        "conclusion": "success",
+        "createdAt": "2026-10-04T23:14:00Z",
+        "databaseId": 37243007099,
+        "event": "schedule",
+        "headSha": "4965d484137a46d1d9c278bbc63f0d159cf534e9",
+        "jobs": [
+          {
+            "name": "preflight",
+            "conclusion": "success",
+            "startedAt": "2026-10-04T23:14:02Z",
+            "completedAt": "2026-10-04T23:14:37Z"
+          },
+          {
+            "name": "collect",
+            "conclusion": "success",
+            "startedAt": "2026-10-04T23:14:39Z",
+            "completedAt": "2026-10-04T23:27:11Z"
+          },
+          {
+            "name": "ingest",
+            "conclusion": "success",
+            "startedAt": "2026-10-04T23:27:13Z",
+            "completedAt": "2026-10-04T23:40:51Z"
+          },
+          {
+            "name": "publish",
+            "conclusion": "success",
+            "startedAt": "2026-10-04T23:40:54Z",
+            "completedAt": "2026-10-04T23:42:58Z"
+          },
+          {
+            "name": "verify",
+            "conclusion": "success",
+            "startedAt": "2026-10-04T23:43:00Z",
+            "completedAt": "2026-10-04T23:43:33Z"
+          },
+          {
+            "name": "record",
+            "conclusion": "success",
+            "startedAt": "2026-10-04T23:43:36Z",
+            "completedAt": "2026-10-04T23:44:14Z"
+          }
+        ],
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "createdAt": "2026-10-06T01:19:18Z",
+        "databaseId": 37398559047,
+        "event": "schedule",
+        "headSha": "4965d484137a46d1d9c278bbc63f0d159cf534e9",
+        "jobs": [
+          {
+            "name": "preflight",
+            "conclusion": "success",
+            "startedAt": "2026-10-06T01:19:22Z",
+            "completedAt": "2026-10-06T01:20:04Z"
+          },
+          {
+            "name": "collect",
+            "conclusion": "success",
+            "startedAt": "2026-10-06T01:20:06Z",
+            "completedAt": "2026-10-06T01:32:35Z"
+          },
+          {
+            "name": "ingest",
+            "conclusion": "success",
+            "startedAt": "2026-10-06T01:32:37Z",
+            "completedAt": "2026-10-06T01:45:30Z"
+          },
+          {
+            "name": "publish",
+            "conclusion": "success",
+            "startedAt": "2026-10-06T01:45:32Z",
+            "completedAt": "2026-10-06T01:47:11Z"
+          },
+          {
+            "name": "verify",
+            "conclusion": "success",
+            "startedAt": "2026-10-06T01:47:13Z",
+            "completedAt": "2026-10-06T01:47:42Z"
+          },
+          {
+            "name": "record",
+            "conclusion": "success",
+            "startedAt": "2026-10-06T01:47:45Z",
+            "completedAt": "2026-10-06T01:48:19Z"
+          }
+        ],
+        "status": "completed"
+      },
+      {
+        "conclusion": "success",
+        "createdAt": "2026-10-06T23:51:28Z",
+        "databaseId": 37548837306,
+        "event": "schedule",
+        "headSha": "73d41c8c6bddf6890f5c8775522af97765a25e99",
+        "jobs": [
+          {
+            "name": "preflight",
+            "conclusion": "success",
+            "startedAt": "2026-10-06T23:51:30Z",
+            "completedAt": "2026-10-06T23:52:07Z"
+          },
+          {
+            "name": "collect",
+            "conclusion": "success",
+            "startedAt": "2026-10-06T23:52:11Z",
+            "completedAt": "2026-10-07T00:04:56Z"
+          },
+          {
+            "name": "ingest",
+            "conclusion": "success",
+            "startedAt": "2026-10-07T00:04:58Z",
+            "completedAt": "2026-10-07T00:17:13Z"
+          },
+          {
+            "name": "publish",
+            "conclusion": "success",
+            "startedAt": "2026-10-07T00:17:16Z",
+            "completedAt": "2026-10-07T00:20:09Z"
+          },
+          {
+            "name": "verify",
+            "conclusion": "success",
+            "startedAt": "2026-10-07T00:20:11Z",
+            "completedAt": "2026-10-07T00:20:50Z"
+          },
+          {
+            "name": "record",
+            "conclusion": "success",
+            "startedAt": "2026-10-07T00:20:52Z",
+            "completedAt": "2026-10-07T00:21:24Z"
+          }
+        ],
+        "status": "completed"
+      }
+    ],
+    "capabilityStatus": {
+      "threeNativePipelines": "READY_EVIDENCE_3_OF_3",
+      "punctual0417Execution": "NOT_ACCEPTED; observed starts are later than configured time; cause not inferred",
+      "registryChronology": "NOT_READY; recorded start occurs after finish",
+      "fullEp08OrGoldenAcceptance": "PARTIAL; not promoted by schedule count alone"
+    }
   }
 }
