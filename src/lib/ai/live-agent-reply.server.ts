@@ -18,6 +18,7 @@ import {
   LIVE_AGENT_REPLY_COPY as COPY,
   MAX_ESTATE_CARDS,
   MAX_LISTING_CARDS,
+  replyOffersHandoff,
   type LiveAgentCard,
   type LiveAgentReply,
   type LiveAgentReplyKind,
@@ -32,14 +33,6 @@ type PublishedFaq = { id: string; scope: string; question: string; answer: strin
 
 /** Rows read per listing search before filtering; at most MAX_LISTING_CARDS become cards. */
 const LISTING_FETCH_ROWS = 20;
-
-const HANDOFF_KINDS = new Set<LiveAgentReplyKind>([
-  "handoff",
-  "no_listings",
-  "listing_unavailable",
-  "no_match",
-  "error",
-]);
 
 async function readPublishedEstates(): Promise<PublishedEstate[]> {
   const rows = await queryRows<Record<string, unknown>>(
@@ -290,7 +283,7 @@ export async function buildLiveAgentReply(question: string): Promise<LiveAgentRe
     const draft = await decide(intent);
     return {
       ...draft,
-      handoffSuggested: intent.handoffRequested || HANDOFF_KINDS.has(draft.kind),
+      handoffSuggested: replyOffersHandoff(draft, intent.handoffRequested),
     };
   } catch (error) {
     // A code only: never the visitor's text, the SQL or the error message.

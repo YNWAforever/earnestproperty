@@ -60,6 +60,25 @@ export const LIVE_AGENT_REPLY_COPY: Record<
 };
 
 export const MAX_LISTING_CARDS = 3;
+
+const HANDOFF_KINDS = new Set<LiveAgentReplyKind>([
+  "handoff",
+  "no_listings",
+  "listing_unavailable",
+  "no_match",
+  "error",
+]);
+
+/** Offer the WhatsApp handoff when the visitor asked for it, when the reply could not answer, or
+ *  when a listings reply shows no real listing card (only the "more" link): a visitor who sees no
+ *  concrete listing must always be able to leave a number. */
+export function replyOffersHandoff(
+  reply: Pick<LiveAgentReply, "kind" | "cards">,
+  handoffRequested: boolean,
+): boolean {
+  if (handoffRequested || HANDOFF_KINDS.has(reply.kind)) return true;
+  return reply.kind === "listings" && !reply.cards.some((card) => card.type === "listing");
+}
 export const MAX_ESTATE_CARDS = 6;
 
 const PATH_HREF_RE = /^\/(property|estate)\/([A-Za-z0-9%._-]+)$/;

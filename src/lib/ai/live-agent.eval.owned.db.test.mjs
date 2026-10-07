@@ -315,6 +315,40 @@ test(
           },
         );
 
+        await t.test(
+          "a listings reply that only has the more link offers the handoff",
+          async () => {
+            // A full fetched page of newer rows without a public number: no listing card can be
+            // shown, but /listings has more, so the visitor gets only the "more" link and must
+            // still be able to leave a WhatsApp number.
+            const syncIds = Array.from({ length: 20 }, (_, index) => ID(820 + index));
+            for (const [index, id] of syncIds.entries()) {
+              await query(
+                `INSERT INTO properties (
+                   id, listing_no, canonical_property_no, title_zh, deal_type, district_slug,
+                   status, price, estate_id, bedrooms, created_at
+                 )
+                 SELECT $1,$2,$3,'麗都花園 同步盤','sale','sham-tseng','active',5000000,e.id,2,
+                        now() + ($4::int * interval '1 minute')
+                 FROM estates e WHERE e.slug = 'lido-garden'`,
+                [id, `FX11-8${20 + index}`, `SYNC-FX11-8${20 + index}`, index + 1],
+              );
+            }
+            try {
+              const reply = await buildLiveAgentReply("麗都花園兩房");
+              assert.equal(reply.kind, "listings", JSON.stringify(reply));
+              assert.deepEqual(
+                reply.cards.map((card) => card.type),
+                ["more"],
+                JSON.stringify(reply),
+              );
+              assert.equal(reply.handoffSuggested, true, JSON.stringify(reply));
+            } finally {
+              await query("DELETE FROM properties WHERE id = ANY($1::uuid[])", [syncIds]);
+            }
+          },
+        );
+
         await t.test("a FAQ about one place never answers a question about another", async () => {
           const elsewhere = await buildLiveAgentReply("沙田屬於哪個校網？");
           assert.notEqual(elsewhere.kind, "faq");

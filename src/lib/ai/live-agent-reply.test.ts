@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   LIVE_AGENT_REPLY_COPY,
   isInternalCardHref,
+  replyOffersHandoff,
   replyTranscriptText,
 } from "./live-agent-reply.ts";
 
@@ -79,5 +80,44 @@ describe("isInternalCardHref hardening", () => {
     ]) {
       expect(isInternalCardHref(bad)).toBe(false);
     }
+  });
+});
+
+describe("replyOffersHandoff", () => {
+  const listing = {
+    type: "listing" as const,
+    title: "盤",
+    lines: ["售 $1M"],
+    href: "/property/EP11001",
+  };
+  const more = {
+    type: "more" as const,
+    title: LIVE_AGENT_REPLY_COPY.more_link,
+    lines: [],
+    href: "/listings?deal=all&estate=lido-garden",
+  };
+
+  test("no-answer kinds always offer the handoff", () => {
+    for (const kind of [
+      "handoff",
+      "no_listings",
+      "listing_unavailable",
+      "no_match",
+      "error",
+    ] as const) {
+      expect(replyOffersHandoff({ kind, cards: [] }, false)).toBe(true);
+    }
+  });
+
+  test("a listings reply with only the more link offers the handoff", () => {
+    expect(replyOffersHandoff({ kind: "listings", cards: [more] }, false)).toBe(true);
+    expect(replyOffersHandoff({ kind: "listings", cards: [] }, false)).toBe(true);
+  });
+
+  test("a listings reply with a real listing card does not, unless the visitor asked", () => {
+    expect(replyOffersHandoff({ kind: "listings", cards: [listing, more] }, false)).toBe(false);
+    expect(replyOffersHandoff({ kind: "listings", cards: [listing] }, true)).toBe(true);
+    expect(replyOffersHandoff({ kind: "faq", cards: [] }, false)).toBe(false);
+    expect(replyOffersHandoff({ kind: "estates", cards: [] }, false)).toBe(false);
   });
 });

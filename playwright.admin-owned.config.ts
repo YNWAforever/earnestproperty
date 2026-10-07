@@ -15,6 +15,7 @@ export default defineConfig({
     "admin-link-bulk-owned.spec.ts",
     "admin-attention.spec.ts",
     "public-form-feedback.spec.ts",
+    "live-agent-cards.spec.ts",
   ],
   workers: 1,
   fullyParallel: false,

@@ -88,6 +88,7 @@ jobs:
       - run: npm run test:admin-performance:ui
       - run: npm run test:admin-link-bulk:ui
       - run: npm run test:public-forms:ui
+      - run: npm run test:live-agent:ui
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"

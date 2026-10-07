@@ -11,6 +11,11 @@ import {
   liveAgentPhoneErrorMessage,
   validateHandoffPhone,
 } from "@/lib/ai/live-agent";
+import {
+  isInternalCardHref,
+  MAX_LISTING_CARDS,
+  type LiveAgentCard,
+} from "@/lib/ai/live-agent-reply";
 
 const liveAgentEndpoints = {
   session: "/api/live-agent/session",
@@ -21,7 +26,7 @@ const liveAgentEndpoints = {
 
 const anonymousStorageKey = "earnest-live-agent-anonymous-id";
 
-type Message = { role: "assistant" | "visitor"; text: string };
+type Message = { role: "assistant" | "visitor"; text: string; cards?: LiveAgentCard[] };
 
 const initialMessages: Message[] = [
   {
@@ -107,6 +112,102 @@ export function LiveAgentHandoffPanel({
   );
 }
 
+const CARD_TYPES = new Set<LiveAgentCard["type"]>(["listing", "estate", "faq", "more"]);
+
+function readCard(value: unknown): LiveAgentCard | null {
+  if (!value || typeof value !== "object") return null;
+  const card = value as Record<string, unknown>;
+  if (typeof card.type !== "string" || !CARD_TYPES.has(card.type as LiveAgentCard["type"])) {
+    return null;
+  }
+  if (typeof card.title !== "string" || !card.title.trim()) return null;
+  if (!Array.isArray(card.lines) || !card.lines.every((line) => typeof line === "string")) {
+    return null;
+  }
+  return {
+    type: card.type as LiveAgentCard["type"],
+    title: card.title,
+    lines: card.lines as string[],
+    href: typeof card.href === "string" ? card.href : null,
+  };
+}
+
+/** The message route's body as the widget shows it: the reply's fixed copy (else the stored
+ *  transcript text, else a fixed fallback) and only well-formed cards, at most
+ *  MAX_LISTING_CARDS of them listings. */
+export function readLiveAgentMessageResponse(data: unknown): {
+  text: string;
+  cards: LiveAgentCard[];
+} {
+  const body = (data && typeof data === "object" ? data : {}) as {
+    message?: { message_text?: unknown };
+    reply?: { text?: unknown; cards?: unknown };
+  };
+  const replyText = body.reply?.text;
+  const messageText = body.message?.message_text;
+  const text =
+    typeof replyText === "string" && replyText.trim()
+      ? replyText
+      : typeof messageText === "string" && messageText.trim()
+        ? messageText
+        : "暫時未能回答，請稍後再試。";
+
+  const cards: LiveAgentCard[] = [];
+  let listings = 0;
+  const rawCards = body.reply?.cards;
+  for (const value of Array.isArray(rawCards) ? rawCards : []) {
+    const card = readCard(value);
+    if (!card) continue;
+    if (card.type === "listing") {
+      if (listings >= MAX_LISTING_CARDS) continue;
+      listings += 1;
+    }
+    cards.push(card);
+  }
+  return { text, cards };
+}
+
+/** The server decides when to offer the handoff; once offered it stays for the session. */
+export function nextHandoffOffered(
+  current: boolean,
+  response: { handoffSuggested?: unknown },
+): boolean {
+  return current || response.handoffSuggested === true;
+}
+
+// Card links are plain <a> to internal pages only (property, estate, listings search): the
+// widget also renders with no router, and a full page load to a property page is fine. Any
+// other href renders the title as text.
+export function LiveAgentReplyCards({ cards }: { cards: LiveAgentCard[] }) {
+  if (cards.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-2">
+      {cards.map((card, index) => (
+        <li
+          className="rounded-md border bg-background p-2 text-xs break-words"
+          key={`${card.type}-${index}`}
+        >
+          {isInternalCardHref(card.href) ? (
+            <a
+              href={card.href ?? undefined}
+              className="rounded-sm font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+            >
+              {card.title}
+            </a>
+          ) : (
+            <p className="font-medium">{card.title}</p>
+          )}
+          {card.lines.map((line, lineIndex) => (
+            <p className="text-muted-foreground" key={lineIndex}>
+              {line}
+            </p>
+          ))}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boolean } = {}) {
   const [open, setOpen] = useState(initiallyOpen);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -119,12 +220,11 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
   const [handoffConsent, setHandoffConsent] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [handoffOffered, setHandoffOffered] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const showHandoffPanel = messages.some(
-    (message) => message.role === "assistant" && /WhatsApp|代理/.test(message.text),
-  );
+  const showHandoffPanel = handoffOffered;
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ block: "end" });
@@ -171,18 +271,22 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
       });
 
       if (!response.ok) throw new Error("Unable to answer live-agent message.");
-      const data = (await response.json()) as { message?: { message_text?: unknown } };
-      const reply =
-        typeof data.message?.message_text === "string" && data.message.message_text.trim()
-          ? data.message.message_text
-          : "暫時未能回答，請稍後再試。";
+      const data = (await response.json()) as { handoffSuggested?: unknown } | null;
+      const reply = readLiveAgentMessageResponse(data);
 
-      setMessages((current) => [...current, { role: "assistant", text: reply }]);
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", text: reply.text, cards: reply.cards },
+      ]);
+      setHandoffOffered((current) => nextHandoffOffered(current, data ?? {}));
     } catch {
       setMessages((current) => [
         ...current,
         { role: "assistant", text: "暫時未能連線，請稍後再試。" },
       ]);
+      // Never lose an enquiry: a failed send (5xx, network error) still lets the visitor leave a
+      // WhatsApp number.
+      setHandoffOffered(true);
     } finally {
       setLoading(false);
     }
@@ -300,7 +404,14 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
                 }
                 key={`${message.role}-${index}`}
               >
-                {message.text}
+                {message.cards?.length ? (
+                  <>
+                    <p>{message.text}</p>
+                    <LiveAgentReplyCards cards={message.cards} />
+                  </>
+                ) : (
+                  message.text
+                )}
               </div>
             ))}
 
