@@ -413,6 +413,28 @@ test(
           assert.deepEqual(hrefs(reply), ["/property/EP11001"]);
         });
 
+        await t.test("a listing-number lookup runs no count query", async () => {
+          for (const [text, expected] of [
+            ["EP11001", ["/property/EP11001"]],
+            ["ep-11001 呢個盤", ["/property/EP11001"]],
+            ["EP12345", []],
+          ]) {
+            statementLog = [];
+            let reply;
+            try {
+              reply = await buildLiveAgentReply(text);
+            } finally {
+              const statements = statementLog;
+              statementLog = null;
+              assert.ok(
+                !statements.some((sql) => /count\(\*\)/i.test(sql)),
+                `${text}: a count query ran`,
+              );
+            }
+            assert.deepEqual(hrefs(reply), expected, text);
+          }
+        });
+
         await t.test("a published FAQ is shown verbatim", async () => {
           const reply = await buildLiveAgentReply("買樓首期要幾多？");
           assert.equal(reply.kind, "faq");

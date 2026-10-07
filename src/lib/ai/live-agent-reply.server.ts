@@ -2,7 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { formatArea, sanitizeListingText } from "@/lib/format";
 import { queryRows, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
-import { searchListings } from "@/lib/neon/public-data.server";
+import { searchListingRows, searchListings } from "@/lib/neon/public-data.server";
 import type { NeonPropertyRow } from "@/lib/neon/public-data.types";
 import { propertyPriceSummary, publicPropertyNo, publicPropertyTitle } from "@/lib/property-public";
 
@@ -153,7 +153,8 @@ async function findPublicListing(listingNo: string, publishedSlugs: Set<string>)
   const keywords = [listingNo];
   if (listingNo.includes("-")) keywords.push(listingNo.replace(/-/g, ""));
   for (const keyword of keywords) {
-    const { rows } = await searchListings({
+    // Rows only: a number lookup never uses the total, so no count query runs.
+    const rows = await searchListingRows({
       deal: "all",
       keyword,
       sort: "newest",
