@@ -69,14 +69,17 @@ const HANDOFF_KINDS = new Set<LiveAgentReplyKind>([
   "error",
 ]);
 
-/** Offer the WhatsApp handoff when the visitor asked for it, when the reply could not answer, or
- *  when a listings reply shows no real listing card (only the "more" link): a visitor who sees no
- *  concrete listing must always be able to leave a number. */
+/** Offer the WhatsApp handoff when the visitor asked for it, when the reply could not answer,
+ *  whenever the reply has no card at all, for a browse reply (the generic estate list shown
+ *  because no estate matched), and when a listings reply shows no real listing card (only the
+ *  "more" link): a visitor who got no concrete answer must always be able to leave a number. */
 export function replyOffersHandoff(
-  reply: Pick<LiveAgentReply, "kind" | "cards">,
+  reply: Pick<LiveAgentReply, "kind" | "cards"> & { browse?: boolean },
   handoffRequested: boolean,
 ): boolean {
   if (handoffRequested || HANDOFF_KINDS.has(reply.kind)) return true;
+  if (reply.cards.length === 0) return true;
+  if (reply.kind === "estates" && reply.browse === true) return true;
   return reply.kind === "listings" && !reply.cards.some((card) => card.type === "listing");
 }
 export const MAX_ESTATE_CARDS = 6;

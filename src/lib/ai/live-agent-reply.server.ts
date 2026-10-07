@@ -28,7 +28,12 @@ import {
 // data sources are published estates, published FAQs and the public listing search, all read
 // on every message with no cache, so an unpublish or a withdrawal takes effect at once.
 
-type PublishedEstate = { slug: string; name_zh: string; name_en: string | null };
+type PublishedEstate = {
+  slug: string;
+  name_zh: string;
+  name_en: string | null;
+  district_slug: string | null;
+};
 type PublishedFaq = { id: string; scope: string; question: string; answer: string };
 
 /** Rows read per listing search before filtering; at most MAX_LISTING_CARDS become cards. */
@@ -36,13 +41,14 @@ const LISTING_FETCH_ROWS = 20;
 
 async function readPublishedEstates(): Promise<PublishedEstate[]> {
   const rows = await queryRows<Record<string, unknown>>(
-    `SELECT slug, name_zh, name_en FROM estates WHERE published = true
+    `SELECT slug, name_zh, name_en, district_slug FROM estates WHERE published = true
      ORDER BY name_zh ASC LIMIT 500`,
   );
   return rows.map((row) => ({
     slug: stringOrEmpty(row.slug),
     name_zh: stringOrEmpty(row.name_zh),
     name_en: stringOrNull(row.name_en),
+    district_slug: stringOrNull(row.district_slug),
   }));
 }
 
@@ -164,7 +170,20 @@ async function findPublicListing(listingNo: string, publishedSlugs: Set<string>)
   return null;
 }
 
-type Draft = { kind: LiveAgentReplyKind; text: string; cards: LiveAgentCard[] };
+/** browse: the generic estate list shown because no estate matched (offers the handoff). */
+type Draft = { kind: LiveAgentReplyKind; text: string; cards: LiveAgentCard[]; browse?: boolean };
+
+/** A browse list of estate cards, or the no-match reply when there is none to show: the browse
+ *  copy invites the visitor to tap an estate below, so it is never sent with an empty list. */
+function browseDraft(estates: PublishedEstate[]): Draft {
+  if (estates.length === 0) return { kind: "no_match", text: COPY.no_match, cards: [] };
+  return {
+    kind: "estates",
+    text: COPY.estates_browse,
+    cards: estates.slice(0, MAX_ESTATE_CARDS).map(estateCard),
+    browse: true,
+  };
+}
 
 async function decide(intent: LiveAgentIntent): Promise<Draft> {
   // 1. Valuation is always an agent's job.
@@ -251,12 +270,9 @@ async function decide(intent: LiveAgentIntent): Promise<Draft> {
         cards: matchedEstates.slice(0, MAX_ESTATE_CARDS).map(estateCard),
       };
     }
-    // A district alone with no FAQ falls back to the published estate list.
-    return {
-      kind: "estates",
-      text: COPY.estates_browse,
-      cards: estates.slice(0, MAX_ESTATE_CARDS).map(estateCard),
-    };
+    // A district alone with no FAQ lists that district's published estates only (the estates
+    // table's district_slug); an estate without one is never guessed into a district.
+    return browseDraft(estates.filter((row) => row.district_slug === districtSlug));
   }
 
   // 4. A published FAQ.
@@ -265,11 +281,7 @@ async function decide(intent: LiveAgentIntent): Promise<Draft> {
 
   // 5. Browsing without an estate.
   if (intent.estateBrowse || intent.deal !== null || intent.bedrooms !== null) {
-    return {
-      kind: "estates",
-      text: COPY.estates_browse,
-      cards: estates.slice(0, MAX_ESTATE_CARDS).map(estateCard),
-    };
+    return browseDraft(estates);
   }
 
   // 6. and 7.
@@ -280,10 +292,10 @@ async function decide(intent: LiveAgentIntent): Promise<Draft> {
 export async function buildLiveAgentReply(question: string): Promise<LiveAgentReply> {
   try {
     const intent = parseLiveAgentIntent(question);
-    const draft = await decide(intent);
+    const { browse, ...draft } = await decide(intent);
     return {
       ...draft,
-      handoffSuggested: replyOffersHandoff(draft, intent.handoffRequested),
+      handoffSuggested: replyOffersHandoff({ ...draft, browse }, intent.handoffRequested),
     };
   } catch (error) {
     // A code only: never the visitor's text, the SQL or the error message.

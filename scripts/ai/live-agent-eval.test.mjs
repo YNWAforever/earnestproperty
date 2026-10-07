@@ -39,8 +39,8 @@ test("defaults to mock and never touches the network", async () => {
   const report = await runLiveAgentEval({ fetchImpl: throwingFetch });
   assert.equal(report.mode, "mock");
   assert.match(report.interpretation, /^MOCK ONLY: exercises graders and reporting;/);
-  assert.equal(report.summary.graded, 18);
-  assert.equal(report.summary.passed, 18);
+  assert.equal(report.summary.graded, 20);
+  assert.equal(report.summary.passed, 20);
   assert.equal(report.summary.skipped, 3);
   assert.equal(report.summary.failed, 0);
   assert.deepEqual(
@@ -251,7 +251,7 @@ test("live mode never posts a handoff", async () => {
     assert.equal(call.redirect, "manual");
   }
   assert.equal(calls.filter((c) => c.url.pathname === "/api/live-agent/session").length, 1);
-  assert.equal(calls.filter((c) => c.url.pathname === "/api/live-agent/message").length, 18);
+  assert.equal(calls.filter((c) => c.url.pathname === "/api/live-agent/message").length, 20);
   assert.deepEqual(
     report.results.filter((r) => r.status === "skipped").map((r) => r.id),
     [13, 14, 15],
@@ -374,7 +374,7 @@ test("live mode does not follow a redirect to another host", async () => {
   const report = await runLiveAgentEval({ mode: "live", baseUrl: PREVIEW, fetchImpl });
   assert.equal(seen.length, 1); // the session call; nothing else is attempted after the redirect
   assert.equal(seen[0].url, `${PREVIEW}/api/live-agent/session`);
-  assert.equal(report.summary.unavailable, 18);
+  assert.equal(report.summary.unavailable, 20);
   assert.equal(report.summary.passed, 0);
   assert.equal(report.results.find((r) => r.id === 1).reason, "redirect_refused");
 });
@@ -415,7 +415,7 @@ test("live mode reports unavailable cases on a network error without echoing it"
       throw new Error("secret-token-should-not-print");
     },
   });
-  assert.equal(report.summary.unavailable, 18);
+  assert.equal(report.summary.unavailable, 20);
   assert.equal(JSON.stringify(report).includes("secret-token-should-not-print"), false);
 });
 

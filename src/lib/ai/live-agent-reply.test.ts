@@ -148,7 +148,34 @@ describe("replyOffersHandoff", () => {
   test("a listings reply with a real listing card does not, unless the visitor asked", () => {
     expect(replyOffersHandoff({ kind: "listings", cards: [listing, more] }, false)).toBe(false);
     expect(replyOffersHandoff({ kind: "listings", cards: [listing] }, true)).toBe(true);
-    expect(replyOffersHandoff({ kind: "faq", cards: [] }, false)).toBe(false);
-    expect(replyOffersHandoff({ kind: "estates", cards: [] }, false)).toBe(false);
+  });
+
+  const estate = {
+    type: "estate" as const,
+    title: "碧堤半島",
+    lines: [LIVE_AGENT_REPLY_COPY.estate_line],
+    href: "/estate/bellagio",
+  };
+  const faq = { type: "faq" as const, title: "問題", lines: ["答案"], href: null };
+
+  test("a reply with zero cards always offers the handoff, whatever its kind", () => {
+    for (const kind of ["listings", "estates", "faq"] as const) {
+      expect(replyOffersHandoff({ kind, cards: [] }, false)).toBe(true);
+    }
+  });
+
+  test("a browse reply (no estate matched) offers the handoff even with estate cards", () => {
+    expect(replyOffersHandoff({ kind: "estates", cards: [estate], browse: true }, false)).toBe(
+      true,
+    );
+  });
+
+  test("a matched-estate or FAQ reply with cards does not, unless the visitor asked", () => {
+    expect(replyOffersHandoff({ kind: "estates", cards: [estate] }, false)).toBe(false);
+    expect(replyOffersHandoff({ kind: "estates", cards: [estate], browse: false }, false)).toBe(
+      false,
+    );
+    expect(replyOffersHandoff({ kind: "faq", cards: [faq] }, false)).toBe(false);
+    expect(replyOffersHandoff({ kind: "estates", cards: [estate] }, true)).toBe(true);
   });
 });

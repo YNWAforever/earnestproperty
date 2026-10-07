@@ -459,6 +459,48 @@ test(
           assert.deepEqual(hrefs(active), ["/property/EP11001"]);
         });
 
+        await t.test("the 買樓 and 租樓 quick replies browse estates and offer the handoff", async () => {
+          for (const text of ["買樓", "租樓", "我想租樓"]) {
+            const reply = await buildLiveAgentReply(text);
+            assert.equal(reply.kind, "estates", `${text}: ${JSON.stringify(reply)}`);
+            assert.equal(reply.text, LIVE_AGENT_REPLY_COPY.estates_browse, text);
+            assert.ok(reply.cards.length > 0, text);
+            assert.ok(reply.cards.every((card) => card.type === "estate"), text);
+            assert.equal(reply.handoffSuggested, true, `${text}: ${JSON.stringify(reply)}`);
+          }
+        });
+
+        await t.test("a named district shows only that district's published estates", async () => {
+          const shamTseng = (
+            await query(
+              "SELECT slug FROM estates WHERE published = true AND district_slug = 'sham-tseng'",
+            )
+          ).map((row) => `/estate/${row.slug}`);
+          assert.ok(shamTseng.length > 0, "the seed has published 深井 estates");
+          const reply = await buildLiveAgentReply("深井有咩屋苑");
+          assert.equal(reply.kind, "estates", JSON.stringify(reply));
+          assert.ok(reply.cards.length > 0, JSON.stringify(reply));
+          for (const href of hrefs(reply)) {
+            assert.ok(shamTseng.includes(href), `${href} is not a 深井 estate`);
+          }
+          assert.equal(reply.handoffSuggested, true, JSON.stringify(reply));
+        });
+
+        await t.test(
+          "a district with no published estates shows no estate cards and offers the handoff",
+          async () => {
+            const [{ n }] = await query(
+              "SELECT count(*)::int AS n FROM estates WHERE published = true AND district_slug = 'tsuen-wan'",
+            );
+            assert.equal(n, 0);
+            const reply = await buildLiveAgentReply("荃灣有咩屋苑");
+            assert.deepEqual(reply.cards, [], JSON.stringify(reply));
+            assert.equal(reply.kind, "no_match", JSON.stringify(reply));
+            assert.equal(reply.text, LIVE_AGENT_REPLY_COPY.no_match);
+            assert.equal(reply.handoffSuggested, true);
+          },
+        );
+
         await t.test(
           "a responder error gives the fixed reply, the handoff panel and a logged code, never raw text",
           async (st) => {
@@ -745,12 +787,13 @@ test(
         }
 
         await t.test("all 20 audit cases pass with providerCalls === 0", () => {
-          // Ids 1-20 are the audit cases; 21 is the place-scoped FAQ case added in fix round 1.
+          // Ids 1-20 are the audit cases; 21 is the place-scoped FAQ case added in fix round 1;
+          // 22-23 are the browse-handoff cases added in the final fix wave.
           const ids = LIVE_AGENT_EVAL_CASES.map((c) => c.id).sort((a, b) => a - b);
           assert.deepEqual(
             ids,
-            Array.from({ length: 21 }, (_, i) => i + 1),
-            "ids 1-21 once each",
+            Array.from({ length: 23 }, (_, i) => i + 1),
+            "ids 1-23 once each",
           );
           assert.deepEqual(
             [...passedCases].sort((a, b) => a - b),

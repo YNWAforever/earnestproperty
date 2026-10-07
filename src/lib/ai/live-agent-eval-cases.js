@@ -262,4 +262,22 @@ export const LIVE_AGENT_EVAL_CASES = [
     },
     live: true,
   },
+  // Final fix wave: the 買樓 quick reply and a district with no published estate must never end
+  // without the WhatsApp handoff.
+  {
+    id: 22,
+    label: "買樓",
+    kind: "message",
+    input: "買樓",
+    expect: { kind: "estates", handoffSuggested: true },
+    live: true,
+  },
+  {
+    id: 23,
+    label: "荃灣有咩屋苑",
+    kind: "message",
+    input: "荃灣有咩屋苑",
+    expect: { kind: "no_match", cards: [], handoffSuggested: true },
+    live: true,
+  },
 ];

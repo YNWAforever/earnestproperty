@@ -201,12 +201,13 @@ test("isEvalInternalHref accepts only property, estate and listings paths", () =
   }
 });
 
-test("the eval cases file holds ids 1-21 exactly once, and only cases 13-15 skip the live layer", () => {
-  // 1-20 are the audit cases; 21 pins the place-scoped FAQ rule (fix round 1).
+test("the eval cases file holds ids 1-23 exactly once, and only cases 13-15 skip the live layer", () => {
+  // 1-20 are the audit cases; 21 pins the place-scoped FAQ rule (fix round 1); 22-23 pin the
+  // browse handoff (final fix wave).
   const ids = LIVE_AGENT_EVAL_CASES.map((c) => c.id).sort((a, b) => a - b);
   assert.deepEqual(
     ids,
-    Array.from({ length: 21 }, (_, i) => i + 1),
+    Array.from({ length: 23 }, (_, i) => i + 1),
   );
   assert.deepEqual(
     LIVE_AGENT_EVAL_CASES.filter((c) => !c.live).map((c) => c.id),
