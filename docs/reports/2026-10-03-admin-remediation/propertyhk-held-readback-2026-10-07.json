@@ -143,28 +143,28 @@
       "passed": 76,
       "failed": 0,
       "skipped": 0,
-      "privateLog": ".superpowers/sdd/supplied-plan/final-property-sync.log",
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/final-property-sync.log",
       "sha256": "7e9d53e180bb101f35c7388174176cd6c4730f6a4d895221e5d357361cae83d5"
     },
     "test:property-sync:python": {
       "passed": 143,
       "failed": 0,
       "skipped": 0,
-      "privateLog": ".superpowers/sdd/supplied-plan/green-property-python.log",
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/green-property-python.log",
       "sha256": "569c975d0503c53c6fa7ad04836e73a68c2598524bdbcf007b0ca50a88bba490"
     },
     "test:property-sync:daily": {
       "passed": 38,
       "failed": 0,
       "skipped": 0,
-      "privateLog": ".superpowers/sdd/supplied-plan/daily.log",
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/daily.log",
       "sha256": "913cb178884e927a252310c7c491b3495578667c31228d21d1a97193647aa5cb"
     },
     "test:propertyhk-reconciliation:owned:db": {
       "passed": 4,
       "failed": 0,
       "skipped": 0,
-      "privateLog": ".superpowers/sdd/supplied-plan/final-owned-propertyhk.log",
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/final-owned-propertyhk.log",
       "sha256": "0baada46a9bfdd27e7a2753d8892bafbedab371ca9b389c0ed6de022404b6c8b"
     },
     "typecheck": {
