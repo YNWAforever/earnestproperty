@@ -459,16 +459,22 @@ test(
           assert.deepEqual(hrefs(active), ["/property/EP11001"]);
         });
 
-        await t.test("the 買樓 and 租樓 quick replies browse estates and offer the handoff", async () => {
-          for (const text of ["買樓", "租樓", "我想租樓"]) {
-            const reply = await buildLiveAgentReply(text);
-            assert.equal(reply.kind, "estates", `${text}: ${JSON.stringify(reply)}`);
-            assert.equal(reply.text, LIVE_AGENT_REPLY_COPY.estates_browse, text);
-            assert.ok(reply.cards.length > 0, text);
-            assert.ok(reply.cards.every((card) => card.type === "estate"), text);
-            assert.equal(reply.handoffSuggested, true, `${text}: ${JSON.stringify(reply)}`);
-          }
-        });
+        await t.test(
+          "the 買樓 and 租樓 quick replies browse estates and offer the handoff",
+          async () => {
+            for (const text of ["買樓", "租樓", "我想租樓"]) {
+              const reply = await buildLiveAgentReply(text);
+              assert.equal(reply.kind, "estates", `${text}: ${JSON.stringify(reply)}`);
+              assert.equal(reply.text, LIVE_AGENT_REPLY_COPY.estates_browse, text);
+              assert.ok(reply.cards.length > 0, text);
+              assert.ok(
+                reply.cards.every((card) => card.type === "estate"),
+                text,
+              );
+              assert.equal(reply.handoffSuggested, true, `${text}: ${JSON.stringify(reply)}`);
+            }
+          },
+        );
 
         await t.test("a named district shows only that district's published estates", async () => {
           const shamTseng = (
