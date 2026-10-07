@@ -341,6 +341,8 @@ export type AdminListingFiltersInput = {
 
 export type AdminLeadDetail = AdminLeadRow & {
   contact_id: string | null;
+  /** Opaque lead version (src/lib/neon/lead-version.ts). Never parse it as a date. */
+  version: string;
   preferred_estates: string[];
   activities: AdminLeadActivityRow[];
 };
@@ -364,7 +366,22 @@ export type AdminLeadUpdateInput = {
   preferred_estates: string[];
   assigned_agent_id: string | null;
   note: string | null;
+  /** The version this draft was read at. A stale one is refused with 409 LEAD_CHANGED. */
+  expected_version: string;
 };
+
+export type AdminLeadField =
+  | "stage"
+  | "intent"
+  | "budget_min"
+  | "budget_max"
+  | "preferred_estates"
+  | "assigned_agent_id"
+  | "note";
+
+export type AdminLeadUpdateResult =
+  | { ok: true; version: string; changed: AdminLeadField[] }
+  | { ok: false; error: "Not found" };
 
 export type AdminLeadActivityInput = {
   lead_id: string;

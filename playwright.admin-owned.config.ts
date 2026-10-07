@@ -9,6 +9,7 @@ export default defineConfig({
     "admin-whatsapp-mobile.spec.ts",
     "admin-property-sync-recovery.spec.ts",
     "admin-daily-work.spec.ts",
+    "admin-lead-conflict.spec.ts",
     "admin-campaign-review.spec.ts",
     "admin-performance-readback.spec.ts",
     "admin-link-bulk-owned.spec.ts",
