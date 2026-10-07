@@ -1,4 +1,4 @@
-屋苑資料及現有盤源
+# FX-11b: The public chatbot answers only from published data (D1 = a), with the 20-case eval. Implementation plan
 
 **Owner decisions (binding):**
 1. **D1 = (a).** The public chatbot does lead capture plus fixed FAQ and listing cards. It writes no free AI text, and **the public path makes no model call at all**. Option (c), AI answers checked by a code fact-checker, may come later as its own batch.
@@ -371,7 +371,7 @@ return { message: mapMessage(row), handoffSuggested: reply.handoffSuggested,
 | `no_match` | 我暫時只能協助查詢網站上的盤源、屋苑和常見問題。你可以輸入屋苑名稱和房數，例如「碧堤半島 兩房」，或留下 WhatsApp 電話由持牌代理跟進。 |
 | `error` | 暫時未能查詢資料。你可以留下 WhatsApp 電話，持牌代理會為你跟進。 |
 | `more_link` (card title) | 查看全部符合條件的盤源 |
-| `estate_line` (estate card line) | 屋苑資料及現有盤源 |
+| `estate_line` (estate card line) | 屋苑資料及盤源 |
 
 Existing copy that stays as is: the welcome line 「你好，我是 Earnest Property 問樓助手。…」 (`LiveAgentWidget.tsx:29`), the quick replies 買樓 / 租樓 / 放盤估價 / 問屋苑 (`:280`), 「已轉交代理，我哋會盡快聯絡你。」 (`live-agent.server.ts:47`). The old suffix 「需要我幫你轉介持牌代理 WhatsApp 跟進嗎？」 (`:154`) is removed: the panel itself now carries the offer.
 
