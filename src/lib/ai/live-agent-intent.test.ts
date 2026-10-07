@@ -112,3 +112,61 @@ describe("faqMatchScore", () => {
     expect(low.ratio).toBeLessThan(0.5);
   });
 });
+
+describe("review fixes", () => {
+  test("a phone number is never a listing number", () => {
+    for (const phone of [
+      "tel91234567",
+      "WA-91234567",
+      "whatsapp 91234567",
+      "ph:91234567",
+      "tel 9123 4567",
+      "wa-9123-4567",
+      "tel+852 91234567",
+      "wa85291234567",
+      "852-6123 4567",
+    ]) {
+      expect(parseLiveAgentIntent(phone).listingNo).toBeNull();
+    }
+    expect(parseLiveAgentIntent("EP11001 同 tel91234567").listingNo).toBe("EP11001");
+  });
+
+  test("English keywords need word boundaries", () => {
+    expect(parseLiveAgentIntent("please show 3 bed at Bellagio").deal).toBeNull();
+    for (const w of ["different", "current", "present", "agency"]) {
+      expect(parseLiveAgentIntent(`${w} Bellagio 3 bed`).deal).toBeNull();
+    }
+    for (const w of ["specifically Bellagio 3 bed", "recall Bellagio", "my agency"]) {
+      expect(parseLiveAgentIntent(w).handoffRequested).toBe(false);
+    }
+    expect(parseLiveAgentIntent("please buy").deal).toBe("sale");
+    expect(parseLiveAgentIntent("to rent").deal).toBe("rent");
+    expect(parseLiveAgentIntent("call me").handoffRequested).toBe(true);
+    expect(parseLiveAgentIntent("an agent please").handoffRequested).toBe(true);
+    expect(parseLiveAgentIntent("embedded").listingQuestion).toBe(false);
+  });
+
+  test("Simplified Chinese keywords, districts and estates", () => {
+    expect(parseLiveAgentIntent("我想买碧堤半岛两房").deal).toBe("sale");
+    expect(parseLiveAgentIntent("有冇盘").listingQuestion).toBe(true);
+    expect(parseLiveAgentIntent("请联络我").handoffRequested).toBe(true);
+    expect(parseLiveAgentIntent("找经纪").handoffRequested).toBe(true);
+    expect(parseLiveAgentIntent("找职员").handoffRequested).toBe(true);
+    expect(parseLiveAgentIntent("估价").valuation).toBe(true);
+    expect(parseLiveAgentIntent("我是业主").valuation).toBe(true);
+    expect(parseLiveAgentIntent("想卖楼").valuation).toBe(true);
+    expect(parseLiveAgentIntent("放盘").valuation).toBe(true);
+    expect(parseLiveAgentIntent("荃湾").districtSlug).toBe("tsuen-wan");
+    expect(parseLiveAgentIntent("青龙头").districtSlug).toBe("tsing-lung-tau");
+    expect(parseLiveAgentIntent("开放式").bedrooms).toBe(0);
+    expect(parseLiveAgentIntent("问屋苑").estateBrowse).toBe(true);
+    expect(parseLiveAgentIntent("豪景花园几钱").estateSlugs).toEqual(["hong-kong-garden"]);
+  });
+
+  test("more bedroom forms", () => {
+    expect(parseLiveAgentIntent("2br").bedrooms).toBe(2);
+    expect(parseLiveAgentIntent("3 rooms").bedrooms).toBe(3);
+    expect(parseLiveAgentIntent("三間房").bedrooms).toBe(3);
+    expect(parseLiveAgentIntent("三睡房").bedrooms).toBe(3);
+  });
+});

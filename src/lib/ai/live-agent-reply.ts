@@ -69,7 +69,7 @@ const LISTINGS_HREF_RE = /^\/listings\?[A-Za-z0-9=&%._-]*$/;
 export function isInternalCardHref(href: string | null): boolean {
   if (!href) return false;
   const path = PATH_HREF_RE.exec(href);
-  if (path) return !/^\.+$/.test(path[2]);
+  if (path) return !/^\.+$/.test(path[2]) && !/%(?:2e|2f|5c)/i.test(path[2]);
   return LISTINGS_HREF_RE.test(href);
 }
 

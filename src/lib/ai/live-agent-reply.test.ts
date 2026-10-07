@@ -65,3 +65,19 @@ describe("replyTranscriptText", () => {
     expect(lines[2]).toBe("• 問題（答案）");
   });
 });
+
+describe("isInternalCardHref hardening", () => {
+  test("rejects odd and encoded traversal forms", () => {
+    for (const bad of [
+      "/" + String.fromCharCode(92) + "evil",
+      " /property/EP1",
+      "/property/EP1\n",
+      "/property/EP1#x",
+      "/property/%2e%2e",
+      "/estate/a%2Fb",
+      "/estate/a%5Cb",
+    ]) {
+      expect(isInternalCardHref(bad)).toBe(false);
+    }
+  });
+});

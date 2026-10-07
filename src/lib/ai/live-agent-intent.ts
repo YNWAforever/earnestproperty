@@ -23,21 +23,60 @@ export type LiveAgentIntent = {
 
 const MAX_INPUT_CHARS = 2000;
 
-const HANDOFF_RE = /真人|人工|代理|經紀|職員|聯絡|電話|电话|whatsapp|call|agent|human/;
-const VALUATION_RE = /估價|估值|值幾錢|放盤|賣樓|業主|valuation|sell my/;
+// Latin keywords are matched on word boundaries ("please" must not read as "lease");
+// Chinese keywords are unanchored. Simplified forms sit beside each Traditional keyword.
+const L = "(?<![a-z])";
+const R = "(?![a-z])";
+const HANDOFF_RE = new RegExp(
+  `真人|人工|代理|經紀|经纪|職員|职员|聯絡|联络|電話|电话|${L}(?:whatsapp|calls?|calling|agents?|human)${R}`,
+);
+const VALUATION_RE = new RegExp(
+  `估價|估价|估值|值幾錢|值几钱|放盤|放盘|賣樓|卖楼|業主|业主|${L}(?:valuation|sell my)${R}`,
+);
 const LISTING_NO_RE = /(?<![A-Za-z0-9])([A-Za-z]{1,4}-?\d{3,10})(?![A-Za-z0-9])/;
-const LISTING_QUESTION_RE =
-  /盤|房|租|買|售|幾錢|多少钱|價|价|呎|實用|面積|available|price|how much|bed|flat/;
-const ESTATE_BROWSE_RE = /屋苑|問屋苑|estate/;
-const RENT_RE = /租|rent|lease/;
-const SALE_RE = /買|售|buy|for sale/;
+// A Hong Kong phone number (8 digits starting 2/3/5/6/7/8/9, optionally +852) is never a
+// listing number, whatever short letter prefix ("tel", "wa", "ph") is glued to it.
+const HK_PHONE_RE = /(?<!\d)(?:\+?852[\s-]*)?[235-9](?:[\s-]?\d){7}(?!\d)/g;
+const LISTING_QUESTION_RE = new RegExp(
+  `盤|盘|房|租|買|买|售|幾錢|几钱|多少錢|多少钱|價|价|呎|實用|实用|面積|面积|${L}(?:available|price|how much|beds?|bedrooms?|flats?)${R}`,
+);
+const ESTATE_BROWSE_RE = new RegExp(`屋苑|問屋苑|问屋苑|${L}estates?${R}`);
+const RENT_RE = new RegExp(`租|${L}(?:rent|rents|rental|rentals|renting|lease|leasing)${R}`);
+const SALE_RE = new RegExp(`買|买|售|${L}(?:buy|buying|for sale)${R}`);
 
 const DISTRICTS: Array<[string, string]> = [
   ["深井", "sham-tseng"],
   ["青龍頭", "tsing-lung-tau"],
+  ["青龙头", "tsing-lung-tau"],
   ["汀九", "ting-kau"],
   ["荃灣", "tsuen-wan"],
+  ["荃湾", "tsuen-wan"],
 ];
+
+// Traditional -> Simplified for the characters that occur in registry estate aliases.
+const T2S: Record<string, string> = {
+  島: "岛",
+  麗: "丽",
+  韻: "韵",
+  軒: "轩",
+  華: "华",
+  臺: "台",
+  縉: "缙",
+  龍: "龙",
+  騰: "腾",
+  閣: "阁",
+  滿: "满",
+  黃: "黄",
+  愛: "爱",
+  灣: "湾",
+  濤: "涛",
+  嵐: "岚",
+  漣: "涟",
+  雲: "云",
+};
+function toSimplified(value: string): string {
+  return Array.from(value, (ch) => T2S[ch] ?? ch).join("");
+}
 
 const CN_DIGITS: Record<string, number> = {
   一: 1,
@@ -54,8 +93,11 @@ function normalise(raw: string): string {
 }
 
 function parseBedrooms(text: string): number | null {
-  if (/開放式|studio/.test(text)) return 0;
-  const match = /([一兩两二三四五]|\d)\s*(?:房|-?\s*bed)/.exec(text);
+  if (new RegExp(`開放式|开放式|${L}studio${R}`).test(text)) return 0;
+  const match =
+    /([一兩两二三四五]|\d)\s*(?:間房|间房|睡房|房|-?\s*(?:bed|br)(?![a-z])|\s*rooms?(?![a-z]))/.exec(
+      text,
+    );
   if (!match) return null;
   const token = match[1];
   const count = token in CN_DIGITS ? CN_DIGITS[token] : Number(token);
@@ -72,12 +114,13 @@ function parseDeal(text: string): LiveAgentDeal | null {
 
 export function parseLiveAgentIntent(raw: string): LiveAgentIntent {
   const text = normalise(raw);
-  const listingMatch = LISTING_NO_RE.exec(text);
+  const listingMatch = LISTING_NO_RE.exec(text.replace(HK_PHONE_RE, " "));
   const estateSlugs = estateRegistry
     .filter((entry) =>
-      entry.aliases.some(
-        (alias) => alias.length >= 2 && text.includes(alias.normalize("NFKC").toLowerCase()),
-      ),
+      entry.aliases.some((alias) => {
+        const folded = alias.normalize("NFKC").toLowerCase();
+        return alias.length >= 2 && (text.includes(folded) || text.includes(toSimplified(folded)));
+      }),
     )
     .map((entry) => entry.slug);
   const district = DISTRICTS.find(([name]) => text.includes(name));
@@ -108,7 +151,11 @@ export function matchPublishedEstates(
       if (aliasSlugs.includes(estate.slug)) return true;
       return [estate.name_zh, estate.name_en].some((name) => {
         const needle = name?.normalize("NFKC").trim().toLowerCase();
-        return !!needle && needle.length >= 2 && haystack.includes(needle);
+        return (
+          !!needle &&
+          needle.length >= 2 &&
+          (haystack.includes(needle) || haystack.includes(toSimplified(needle)))
+        );
       });
     })
     .map((estate) => estate.slug);
