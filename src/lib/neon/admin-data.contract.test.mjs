@@ -251,7 +251,7 @@ test("campaign save rejects delivery statuses before any database write", async 
   // FX-10b: once a recipient may have been reached, template and audience are frozen.
   assert.match(
     queries[1].sql,
-    /AND \(NOT EXISTS \(SELECT 1 FROM whatsapp_campaign_recipients history[\s\S]*OR \(template_id IS NOT DISTINCT FROM \$2 AND audience_id IS NOT DISTINCT FROM \$3\)\)/,
+    /AND \(NOT \(EXISTS \(SELECT 1 FROM whatsapp_campaign_recipients history[\s\S]*audit_logs requeued[\s\S]*OR \(template_id IS NOT DISTINCT FROM \$2 AND audience_id IS NOT DISTINCT FROM \$3\)\)/,
     "a campaign with delivery history keeps its template and audience",
   );
 });

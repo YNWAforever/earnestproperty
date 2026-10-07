@@ -92,8 +92,10 @@ import {
 import { campaignRecipientPrimarySql, marketingIdentitySafeSql } from "./phone-identity.ts";
 import {
   CAMPAIGN_FINISHED_NOT_SENDABLE,
+  CAMPAIGN_REQUEUE_AUDIT_ACTION,
   CAMPAIGN_RETRY_CONTACT_CHANGED,
   CAMPAIGN_RETRY_STATUSES,
+  campaignContactIdentityDigestSql,
   campaignDispatchableQueuedSql,
   campaignHasDeliveryHistorySql,
   campaignRetryBusySql,
@@ -4383,9 +4385,17 @@ export async function requeueFailedCampaignRecipients(
         UPDATE whatsapp_campaign_recipients r
         SET status = 'queued', error = NULL, queued_at = NULL,
             claim_job_id = NULL, claim_worker_id = NULL, claim_attempt = NULL,
-            dispatch_job_id = NULL, dispatch_worker_id = NULL, dispatch_attempt = NULL
-        FROM pick, picked
-        WHERE r.id = pick.id AND ${retryableFailedRecipientSql("r")}
+            dispatch_job_id = NULL, dispatch_worker_id = NULL, dispatch_attempt = NULL,
+            -- Re-review N1: a row refused before the attempted_identity
+            -- migration gets the digest now. pick already requires the contact
+            -- unchanged since the claim, so this is the identity attempted.
+            attempted_identity = COALESCE(
+              r.attempted_identity,
+              ${campaignContactIdentityDigestSql("requeued_contact")}
+            )
+        FROM pick, picked, crm_contacts requeued_contact
+        WHERE r.id = pick.id AND requeued_contact.id = r.contact_id
+          AND ${retryableFailedRecipientSql("r")}
           AND picked.n = $3::int
         RETURNING r.id
       ), flipped AS (
@@ -4409,7 +4419,7 @@ export async function requeueFailedCampaignRecipients(
         WHERE x.campaign_id = $1::uuid AND x.id NOT IN (SELECT id FROM requeued)
       ), audited AS (
         INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
-        SELECT $2::uuid, 'campaign.requeue_failed', 'campaign', f.id,
+        SELECT $2::uuid, '${CAMPAIGN_REQUEUE_AUDIT_ACTION}', 'campaign', f.id,
           jsonb_build_object(
             'requeued', (SELECT count(*) FROM requeued),
             'previousStatus', f.previous_status,

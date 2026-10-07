@@ -18,6 +18,8 @@ export const CAMPAIGN_PAUSED_ERROR = "WOZTELL_CAMPAIGN_PAUSED";
 /** A waiting row closed by finishCampaignWithoutSending: never dispatched by this campaign. */
 export const CAMPAIGN_FINISHED_NOT_SENDABLE = "CAMPAIGN_FINISHED_NOT_SENDABLE";
 export const CAMPAIGN_DELIVERY_UNKNOWN = "WOZTELL_DELIVERY_UNKNOWN";
+/** The audit action of requeueFailedCampaignRecipients. Also a history marker. */
+export const CAMPAIGN_REQUEUE_AUDIT_ACTION = "campaign.requeue_failed";
 
 const SQL_ALIAS = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -44,15 +46,23 @@ export function retryableFailedRecipientSql(recipientAlias: string): string {
  * survives a requeue. Without it a campaign whose only attempted rows were
  * refused and then requeued looked new, and 「發送…」 re-materialised the whole
  * audience onto it.
+ *
+ * Re-review N1: rows refused before the attempted_identity migration have no
+ * digest. The requeue stamps one, and as belt and braces any campaign with an
+ * audited requeue counts as history whatever its rows say. The subquery is
+ * uncorrelated, so Postgres runs it once per statement (a hashed subplan).
  */
 export function campaignHasDeliveryHistorySql(campaignAlias: string): string {
   const c = sqlAlias(campaignAlias);
-  return `EXISTS (SELECT 1 FROM whatsapp_campaign_recipients history
+  return `(EXISTS (SELECT 1 FROM whatsapp_campaign_recipients history
     WHERE history.campaign_id = ${c}.id
       AND (history.dispatch_started_at IS NOT NULL
         OR history.attempted_identity IS NOT NULL
         OR history.status IN ('sent', 'sending', 'failed')
-        OR history.error = '${CAMPAIGN_DELIVERY_UNKNOWN}'))`;
+        OR history.error = '${CAMPAIGN_DELIVERY_UNKNOWN}'))
+    OR ${c}.id IN (SELECT requeued.subject_id FROM audit_logs requeued
+      WHERE requeued.action = '${CAMPAIGN_REQUEUE_AUDIT_ACTION}'
+        AND requeued.subject_type = 'campaign'))`;
 }
 
 /** Campaign statuses from which failed recipients may be re-queued. */

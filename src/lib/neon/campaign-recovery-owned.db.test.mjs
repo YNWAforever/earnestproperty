@@ -2057,6 +2057,105 @@ test(
       );
 
       await t.test(
+        "requeued legacy rows keep campaign history so a re-send never widens the audience",
+        async () => {
+          // Re-review N1: today's production shape. Every row was refused
+          // before the migration, so none has a digest, and the refusal cleared
+          // dispatch_started_at. Written directly to simulate that data.
+          const source = "owned-fx10b-legacy";
+          const [scoped] = await query(
+            "INSERT INTO whatsapp_audiences(name,filters,created_by) VALUES('Owned FX-10b legacy audience',$1::jsonb,$2) RETURNING id",
+            [JSON.stringify({ source }), staff.id],
+          );
+          const [otherAudience] = await query(
+            "INSERT INTO whatsapp_audiences(name,created_by) VALUES('Owned FX-10b legacy other',$1) RETURNING id",
+            [staff.id],
+          );
+          const { campaign, people } = await seedRetryCampaign(["Y1", "Y2"], {
+            audienceId: scoped.id,
+            source,
+            queue: false,
+            status: "failed",
+          });
+          await setRecipient(people.Y1, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+          await setRecipient(people.Y2, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+          await query(
+            "UPDATE whatsapp_campaign_recipients SET attempted_identity=NULL WHERE campaign_id=$1",
+            [campaign],
+          );
+          // Three more contacts now match the audience but were never part of it.
+          const newcomers = [];
+          for (const label of ["YN1", "YN2", "YN3"])
+            newcomers.push(await addContact(label, { source }));
+
+          assert.equal((await requeue(campaign, actor, 2)).requeued, 2);
+          // Fix 1: the requeue stamps the identity the attempt was checked against.
+          for (const label of ["Y1", "Y2"]) {
+            assert.match(
+              String(await attemptedIdentity(people[label].recipient)),
+              /^[0-9a-f]{64}$/,
+              label,
+            );
+          }
+          const shown = await sendPreview(campaign);
+          assert.equal(shown.deliveryStarted, true);
+          assert.equal(shown.sendable, 2);
+          assert.equal((await listedRow(campaign)).delivery_started, true);
+
+          // Fix 2: even with no digest left, an audited requeue is history.
+          await query(
+            "UPDATE whatsapp_campaign_recipients SET attempted_identity=NULL WHERE campaign_id=$1",
+            [campaign],
+          );
+          assert.equal((await sendPreview(campaign)).deliveryStarted, true);
+          assert.equal((await listedRow(campaign)).delivery_started, true);
+
+          // The freeze still applies: the audience cannot be swapped first.
+          assert.deepEqual(
+            await adminData.saveAdminCampaign(
+              {
+                id: campaign,
+                name: "Owned FX-10b retry campaign",
+                template_id: template.id,
+                audience_id: otherAudience.id,
+                status: "review",
+                scheduled_at: null,
+              },
+              actor,
+            ),
+            { id: "", error: "CAMPAIGN_HAS_DELIVERY_HISTORY" },
+          );
+          // SEND_COUNT_CHANGED still applies: the audience size is refused.
+          assert.equal(
+            (await adminData.sendAdminCampaignQueue(campaign, actor, { expectedCount: 5 })).error,
+            "SEND_COUNT_CHANGED",
+          );
+          const approved = await approve(campaign, 2);
+          assert.equal(approved.ok, true);
+          assert.equal(approved.queuedRecipients, 2);
+          for (const person of newcomers) {
+            assert.equal(
+              (
+                await query(
+                  "SELECT id FROM whatsapp_campaign_recipients WHERE campaign_id=$1 AND contact_id=$2",
+                  [campaign, person.contact],
+                )
+              ).length,
+              0,
+            );
+          }
+          assert.equal((await recipientsOf(campaign)).length, 2);
+          providerCalls.length = 0;
+          provider = accepted;
+          await deliver(campaign, await leaseCampaignJob(campaign));
+          assert.deepEqual(
+            providerCalls.map((call) => call.memberId).sort(),
+            [people.Y1.member, people.Y2.member].sort(),
+          );
+        },
+      );
+
+      await t.test(
         "a requeue is refused up front when the template is inactive or the audience is gone",
         async () => {
           const [ownTemplate] = await query(
