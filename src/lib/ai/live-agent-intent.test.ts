@@ -44,6 +44,7 @@ describe("parseLiveAgentIntent", () => {
     expect(Object.keys(intent).sort()).toEqual(
       [
         "bedrooms",
+        "buyerListingAsk",
         "deal",
         "districtSlug",
         "estateBrowse",
@@ -238,7 +239,7 @@ describe("final fix wave: parser minors", () => {
   });
 
   test("放盤 without a valuation word is a sell-intent handoff, not valuation", () => {
-    for (const text of ["我想放盤", "有冇兩房放盤", "放盘"]) {
+    for (const text of ["我想放盤", "放盘"]) {
       const intent = parseLiveAgentIntent(text);
       expect({ text, valuation: intent.valuation, sell: intent.sellIntent }).toEqual({
         text,
@@ -255,5 +256,67 @@ describe("final fix wave: parser minors", () => {
     // Other valuation words are unchanged.
     expect(parseLiveAgentIntent("我是業主").valuation).toBe(true);
     expect(parseLiveAgentIntent("碧堤半島兩房").sellIntent).toBe(false);
+  });
+});
+
+describe("follow-up N1: production listing numbers", () => {
+  test("one letter and 6 digits, with an optional hyphen or single space", () => {
+    for (const [text, expected] of [
+      ["A056377", "A056377"],
+      ["T027001 仲有冇", "T027001"],
+      ["C-018613", "C-018613"],
+      ["b-072966 呢個盤", "B-072966"],
+      ["盤號：C-021283", "C-021283"],
+      ["盤號 C 018613", "C-018613"],
+      ["c018613", "C018613"],
+      ["EP-1201", "EP-1201"],
+    ] as const) {
+      expect({ text, no: parseLiveAgentIntent(text).listingNo }).toEqual({ text, no: expected });
+    }
+  });
+
+  test("budget, unit and phone tokens stay rejected", () => {
+    for (const text of [
+      "hkd8000000",
+      "rm1203",
+      "unit b1203",
+      "tel91234567",
+      "tel 9123 4567",
+      "91234567",
+      "c 91234567",
+      "c-91234567",
+    ]) {
+      expect({ text, no: parseLiveAgentIntent(text).listingNo }).toEqual({ text, no: null });
+    }
+  });
+});
+
+describe("follow-up N2: 放盤 from a buyer stays on listings", () => {
+  test("a seller cue, or 放盤 alone, is the sell handoff", () => {
+    for (const text of ["我想放盤", "我有層樓想放盤", "放盤", "放盘！", "幫我放盤", "我要放盤"]) {
+      expect({ text, sell: parseLiveAgentIntent(text).sellIntent }).toEqual({ text, sell: true });
+    }
+  });
+
+  test("with a place, bedrooms or deal and no seller cue, it is a listing question", () => {
+    for (const text of [
+      "有冇兩房放盤",
+      "沙田兩房放盤",
+      "沙田有冇放盤",
+      "碧堤半島兩房放盤",
+      "租放盤",
+    ]) {
+      const intent = parseLiveAgentIntent(text);
+      expect({ text, sell: intent.sellIntent, listing: intent.listingQuestion }).toEqual({
+        text,
+        sell: false,
+        listing: true,
+      });
+    }
+  });
+
+  test("沙田 and 青山公路 are districts", () => {
+    expect(parseLiveAgentIntent("沙田兩房放盤").districtSlug).toBe("sha-tin");
+    expect(parseLiveAgentIntent("青山公路兩房").districtSlug).toBe("castle-peak-road");
   });
 });

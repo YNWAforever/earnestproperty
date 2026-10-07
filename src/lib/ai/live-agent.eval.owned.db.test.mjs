@@ -540,6 +540,73 @@ test(
           assert.equal(valuation.handoffSuggested, true);
         });
 
+        await t.test(
+          "production-shaped listing numbers match with or without the hyphen",
+          async () => {
+            const ids = [ID(870), ID(871)];
+            await query(
+              `INSERT INTO properties (
+                 id, listing_no, canonical_property_no, title_zh, deal_type, district_slug,
+                 status, price, estate_id, bedrooms, created_at
+               )
+               SELECT v.id, v.listing_no, v.no, v.title, 'sale', 'sham-tseng', 'active', 6000000,
+                      e.id, 3, now() - interval '2 hours'
+               FROM (VALUES ($1::uuid,'FX11-870','C-018613','碧堤半島 9座'),
+                            ($2::uuid,'FX11-871','A056377','碧堤半島 10座')) AS v(id, listing_no, no, title)
+               CROSS JOIN estates e WHERE e.slug = 'bellagio'`,
+              ids,
+            );
+            try {
+              for (const [text, href] of [
+                ["C-018613", "/property/C-018613"],
+                ["c018613 仲有冇", "/property/C-018613"],
+                ["盤號：C 018613", "/property/C-018613"],
+                ["A056377", "/property/A056377"],
+                ["a-056377", "/property/A056377"],
+              ]) {
+                const reply = await buildLiveAgentReply(text);
+                assert.equal(reply.kind, "listings", `${text}: ${JSON.stringify(reply)}`);
+                assert.deepEqual(hrefs(reply), [href], text);
+              }
+            } finally {
+              await query("DELETE FROM properties WHERE id = ANY($1::uuid[])", [ids]);
+            }
+          },
+        );
+
+        await t.test(
+          "a buyer's 放盤 question stays on listings; a seller's is the handoff",
+          async () => {
+            for (const [text, kind, expected] of [
+              ["有冇兩房放盤", "listings", ["/property/EP11001", "/property/EP11004"]],
+              ["碧堤半島兩房放盤", "listings", ["/property/EP11001", "/property/EP11005"]],
+              ["租放盤", "listings", ["/property/EP11002"]],
+              ["沙田兩房放盤", "no_listings", []],
+              ["沙田有冇放盤", "no_listings", []],
+            ]) {
+              const reply = await buildLiveAgentReply(text);
+              assert.equal(reply.kind, kind, `${text}: ${JSON.stringify(reply)}`);
+              const shown = hrefs(reply);
+              for (const href of expected) assert.ok(shown.includes(href), `${text}: ${shown}`);
+              if (kind === "no_listings") {
+                assert.deepEqual(reply.cards, [], text);
+                assert.equal(reply.handoffSuggested, true, text);
+              } else {
+                assert.ok(
+                  reply.cards.some((card) => card.type === "listing"),
+                  `${text}: ${JSON.stringify(reply)}`,
+                );
+              }
+            }
+            for (const text of ["我想放盤", "我有層樓想放盤", "放盤"]) {
+              const reply = await buildLiveAgentReply(text);
+              assert.equal(reply.kind, "handoff", text);
+              assert.equal(reply.text, LIVE_AGENT_REPLY_COPY.handoff, text);
+              assert.equal(reply.handoffSuggested, true, text);
+            }
+          },
+        );
+
         await t.test("a budget token is never read as a listing number", async () => {
           const reply = await buildLiveAgentReply("碧堤半島兩房 budget hkd8000000");
           assert.equal(reply.kind, "listings", JSON.stringify(reply));

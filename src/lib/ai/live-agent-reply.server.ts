@@ -150,8 +150,11 @@ const sameNo = (a: string, b: string) =>
   a.replace(/-/g, "").toUpperCase() === b.replace(/-/g, "").toUpperCase();
 
 async function findPublicListing(listingNo: string, publishedSlugs: Set<string>) {
-  const keywords = [listingNo];
-  if (listingNo.includes("-")) keywords.push(listingNo.replace(/-/g, ""));
+  // The keyword search is a substring match, so a number stored as "C-018613" is not found by
+  // "C018613" and vice versa: try the typed form, then the other one.
+  const bare = listingNo.replace(/-/g, "");
+  const hyphenated = bare.replace(/^([A-Z]+)(\d+)$/, "$1-$2");
+  const keywords = [listingNo, listingNo.includes("-") ? bare : hyphenated];
   for (const keyword of keywords) {
     // Rows only: a number lookup never uses the total, so no count query runs.
     const rows = await searchListingRows({
@@ -186,6 +189,52 @@ function browseDraft(estates: PublishedEstate[]): Draft {
   };
 }
 
+/** Listing cards for a search scoped to an estate, a district or (both null) the whole site. */
+async function listingsDraft(
+  intent: LiveAgentIntent,
+  estate: PublishedEstate | null,
+  districtSlug: string | null,
+  publishedSlugs: Set<string>,
+): Promise<Draft> {
+  const deal = intent.deal ?? "all";
+  const { rows, total } = await searchListings({
+    deal,
+    bedrooms: intent.bedrooms ?? undefined,
+    ...(estate ? { estateSlug: estate.slug } : districtSlug ? { districtSlug } : {}),
+    sort: "newest",
+    page: 1,
+    pageSize: LISTING_FETCH_ROWS,
+  });
+  // Filter a bounded larger page, then slice: newer rows without a public number (or on an
+  // unpublished estate) must never hide a real listing behind "no listings".
+  const showable = showableRows(rows, publishedSlugs);
+  const cards = showable.slice(0, MAX_LISTING_CARDS).map(listingCard);
+  if (cards.length === 0 && total <= rows.length) {
+    return {
+      kind: "no_listings",
+      text: COPY.no_listings,
+      cards: estate ? [estateCard(estate)] : [],
+    };
+  }
+  // More exists when the page held more showable rows than shown, or the search has rows
+  // beyond the fetched page (which /listings lists). If every fetched row was unshowable but
+  // more exist, the visitor gets only the "more" link, never a false "no listings".
+  if (showable.length > cards.length || total > rows.length) {
+    cards.push({
+      type: "more",
+      title: COPY.more_link,
+      lines: [],
+      href: listingsHref({
+        deal,
+        bedrooms: intent.bedrooms,
+        estateSlug: estate?.slug ?? null,
+        districtSlug,
+      }),
+    });
+  }
+  return { kind: "listings", text: COPY.listings, cards };
+}
+
 async function decide(intent: LiveAgentIntent): Promise<Draft> {
   // 1. Valuation is always an agent's job.
   if (intent.valuation) return { kind: "handoff", text: COPY.valuation, cards: [] };
@@ -213,43 +262,7 @@ async function decide(intent: LiveAgentIntent): Promise<Draft> {
 
   if (estate || districtSlug) {
     if (intent.listingQuestion || intent.bedrooms !== null || intent.deal !== null) {
-      const deal = intent.deal ?? "all";
-      const { rows, total } = await searchListings({
-        deal,
-        bedrooms: intent.bedrooms ?? undefined,
-        ...(estate ? { estateSlug: estate.slug } : { districtSlug: districtSlug ?? undefined }),
-        sort: "newest",
-        page: 1,
-        pageSize: LISTING_FETCH_ROWS,
-      });
-      // Filter a bounded larger page, then slice: newer rows without a public number (or on an
-      // unpublished estate) must never hide a real listing behind "no listings".
-      const showable = showableRows(rows, publishedSlugs);
-      const cards = showable.slice(0, MAX_LISTING_CARDS).map(listingCard);
-      if (cards.length === 0 && total <= rows.length) {
-        return {
-          kind: "no_listings",
-          text: COPY.no_listings,
-          cards: estate ? [estateCard(estate)] : [],
-        };
-      }
-      // More exists when the page held more showable rows than shown, or the search has rows
-      // beyond the fetched page (which /listings lists). If every fetched row was unshowable but
-      // more exist, the visitor gets only the "more" link, never a false "no listings".
-      if (showable.length > cards.length || total > rows.length) {
-        cards.push({
-          type: "more",
-          title: COPY.more_link,
-          lines: [],
-          href: listingsHref({
-            deal,
-            bedrooms: intent.bedrooms,
-            estateSlug: estate?.slug ?? null,
-            districtSlug,
-          }),
-        });
-      }
-      return { kind: "listings", text: COPY.listings, cards };
+      return listingsDraft(intent, estate, districtSlug, publishedSlugs);
     }
 
     const faqs = await readPublishedFaqs();
@@ -277,6 +290,9 @@ async function decide(intent: LiveAgentIntent): Promise<Draft> {
     // table's district_slug); an estate without one is never guessed into a district.
     return browseDraft(estates.filter((row) => row.district_slug === districtSlug));
   }
+
+  // 3b. A buyer's 放盤 question with bedrooms or a deal but no place: the site-wide search.
+  if (intent.buyerListingAsk) return listingsDraft(intent, null, null, publishedSlugs);
 
   // 4. A published FAQ.
   const faq = bestFaq(intent.text, await readPublishedFaqs());

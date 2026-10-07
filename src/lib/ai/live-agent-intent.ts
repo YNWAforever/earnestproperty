@@ -11,8 +11,10 @@ export type LiveAgentIntent = {
   text: string;
   handoffRequested: boolean;
   valuation: boolean;
-  /** 放盤 with no valuation word: the visitor wants to list a flat, so an agent follows up. */
+  /** 放盤 with a seller cue (or alone) and no valuation word: an agent follows up. */
   sellIntent: boolean;
+  /** 放盤 asked by a buyer (no seller cue) with bedrooms or a deal: search listings site-wide. */
+  buyerListingAsk: boolean;
   listingNo: string | null;
   /** Registry alias hits, in registry order; NOT yet gated by publication. */
   estateSlugs: string[];
@@ -35,15 +37,19 @@ const HANDOFF_RE = new RegExp(
 const VALUATION_RE = new RegExp(
   `估價|估价|估值|值幾錢|值几钱|賣樓|卖楼|業主|业主|${L}(?:valuation|sell my)${R}`,
 );
-// 放盤 alone means "I want to list my flat" (a sell-intent handoff); with any 估 word
-// (估價, 估值, 估下) or 值幾錢 it is a valuation request.
+// 放盤 with any 估 word (估價, 估值, 估下) or 值幾錢 is a valuation request. Otherwise a seller
+// cue, or 放盤 on its own, is a sell-intent handoff; without one, a buyer is asking about
+// listings (「有冇兩房放盤」, 「沙田有冇放盤」) and the message stays a listing question.
 const SELL_LISTING_RE = /放盤|放盘/;
 const SELL_VALUATION_WORD_RE = /估|值幾錢|值几钱/;
+const SELLER_CUE_RE = /我想|我有|我層|我层|我間|我间|業主|业主|想放|幫我放|帮我放|我要放/;
+const SELL_ALONE_RE = /^[\s\p{P}\p{S}]*(?:放盤|放盘)[\s\p{P}\p{S}]*$/u;
 // Only the site's public listing number shapes: EP with 3-8 digits (EP001, EP-1201, EP11001) or
-// one letter with exactly 6 digits (A000001, C123456). A budget, room or unit token
-// ("hkd8000000", "rm1203", "unit b1203", "flat12a") or a contact prefix ("tel912345678",
-// "wa-1234567") never has that shape. Input is already lower-cased.
-const LISTING_NO_RE = /(?<![a-z0-9])(ep-?\d{3,8}|[a-z]\d{6})(?![a-z0-9])/;
+// one letter with exactly 6 digits, written with an optional hyphen or single space (A056377,
+// C-018613, "C 018613"). A budget, room or unit token ("hkd8000000", "rm1203", "unit b1203",
+// "flat12a") or a contact prefix ("tel912345678", "wa-1234567") never has that shape. Input is
+// already lower-cased; HK phone numbers are stripped before this runs.
+const LISTING_NO_RE = /(?<![a-z0-9])(?:(ep)(-?)(\d{3,8})|([a-z])([- ]?)(\d{6}))(?![a-z0-9])/;
 // A Hong Kong phone number (8 digits starting 2/3/5/6/7/8/9, optionally +852) is never a
 // listing number, whatever short letter prefix ("tel", "wa", "ph") is glued to it.
 const HK_PHONE_RE = /(?<!\d)(?:\+?852[\s-]*)?[235-9](?:[\s-]?\d){7}(?!\d)/g;
@@ -61,6 +67,11 @@ const DISTRICTS: Array<[string, string]> = [
   ["汀九", "ting-kau"],
   ["荃灣", "tsuen-wan"],
   ["荃湾", "tsuen-wan"],
+  // 青山公路 is the districts table's castle-peak-road row.
+  ["青山公路", "castle-peak-road"],
+  // 沙田 is outside the site's area (no estate or listing carries it): naming it searches an
+  // empty district, so the visitor gets no-listings plus the handoff, never another place's cards.
+  ["沙田", "sha-tin"],
 ];
 
 // Traditional -> Simplified for the characters that occur in registry estate aliases.
@@ -124,7 +135,10 @@ function parseDeal(text: string): LiveAgentDeal | null {
 
 function findListingNo(text: string): string | null {
   const match = LISTING_NO_RE.exec(text);
-  return match ? match[1].toUpperCase() : null;
+  if (!match) return null;
+  // Normalised to the stored form: upper case, and a typed space becomes the hyphen.
+  const [, ep, epSep, epDigits, letter, sep, digits] = match;
+  return ep ? `EP${epSep}${epDigits}` : `${letter.toUpperCase()}${sep ? "-" : ""}${digits}`;
 }
 
 export function parseLiveAgentIntent(raw: string): LiveAgentIntent {
@@ -141,16 +155,20 @@ export function parseLiveAgentIntent(raw: string): LiveAgentIntent {
   const district = DISTRICTS.find(([name]) => text.includes(name));
   const sell = SELL_LISTING_RE.test(text);
   const valuation = VALUATION_RE.test(text) || (sell && SELL_VALUATION_WORD_RE.test(text));
+  const sellIntent = sell && !valuation && (SELLER_CUE_RE.test(text) || SELL_ALONE_RE.test(text));
+  const bedrooms = parseBedrooms(text);
+  const deal = parseDeal(text);
   return {
     text,
     handoffRequested: HANDOFF_RE.test(text),
     valuation,
-    sellIntent: sell && !valuation,
+    sellIntent,
+    buyerListingAsk: sell && !valuation && !sellIntent && (bedrooms !== null || deal !== null),
     listingNo,
     estateSlugs,
     districtSlug: district ? district[1] : null,
-    bedrooms: parseBedrooms(text),
-    deal: parseDeal(text),
+    bedrooms,
+    deal,
     listingQuestion: LISTING_QUESTION_RE.test(text),
     estateBrowse: ESTATE_BROWSE_RE.test(text),
   };
