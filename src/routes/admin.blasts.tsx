@@ -9,13 +9,25 @@ import {
   useState,
 } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Eye, Plus, RefreshCw, Save, Send, Users, XCircle } from "lucide-react";
+import {
+  CircleCheck,
+  Eye,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Send,
+  Users,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { AdminToolbar } from "@/components/admin/AdminToolbar";
+import { serverErrorStatus } from "@/components/admin/team/admin-team-route-utils";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -54,7 +66,11 @@ import {
   cancelAdminCampaign,
   fetchAdminBlastOptions,
   fetchAdminCampaigns,
+  fetchCampaignRetryPreview,
+  fetchCampaignSendPreview,
+  finishCampaignWithoutSending,
   previewAdminAudience,
+  requeueFailedCampaignRecipients,
   sendAdminCampaignQueue,
   deleteAdminAudience,
   saveAdminAudience,
@@ -64,8 +80,12 @@ import type {
   AdminAudienceInput,
   AdminAudiencePreview,
   AdminBlastOptions,
+  AdminCampaignFinishResult,
   AdminCampaignInput,
+  AdminCampaignRequeueResult,
+  AdminCampaignRetryPreview,
   AdminCampaignRow,
+  AdminCampaignSendPreview,
 } from "@/lib/neon/admin-data.types";
 
 type PreviewInput = { audience_id?: string; filters?: AdminAudienceInput["filters"] };
@@ -87,6 +107,10 @@ type PendingSend = {
   eligible: number;
   template: AdminBlastOptions["templates"][number] | null;
   checkedAt: number;
+  /** FX-10b: some recipient may already have been reached, so this send only
+   * reaches the rows still waiting, never new audience matches. */
+  deliveryStarted: boolean;
+  sent: number;
 };
 
 // `draft` is deliberately excluded, mirroring canPrepareAdminCampaignQueue --
@@ -95,6 +119,8 @@ type PendingSend = {
 // draft the server would reject it with a raw INVALID_CAMPAIGN_STATUS.
 const queueableStatuses = new Set(["review", "scheduled"]);
 const cancellableStatuses = new Set(["draft", "review", "scheduled", "queued", "sending"]);
+// Mirrors requeueFailedCampaignRecipients' status rule; the server re-checks it.
+const retryableStatuses = new Set(["failed", "completed", "review"]);
 
 // An audience preview older than this is treated as unusable for sending. The
 // server re-materialises recipients at queue time, so a stale count on screen
@@ -110,6 +136,54 @@ const campaignStatusLabels: Record<string, string> = {
   completed: "已完成",
   failed: "失敗",
   cancelled: "已取消",
+};
+
+/** Server refusal codes on this screen, as staff copy. Existing page strings
+ * are reused where one already says the same thing. */
+const campaignErrorLabels: Record<string, string> = {
+  NOTHING_TO_RETRY: "沒有可重新發送的失敗收件人，請重新整理。",
+  // A stale 發送中 row with no live job also keeps a campaign busy (FX-10b
+  // Task 3 review M2), so staff are told where to look if it never clears.
+  CAMPAIGN_STILL_SENDING:
+    "Campaign 仍在發送中，請待發送完成或暫停後再試。如長時間仍顯示此訊息，請到「系統營運」核對發送工作。",
+  CAMPAIGN_NOT_RETRYABLE: "此 Campaign 目前的狀態不可重新發送。",
+  CAMPAIGN_HAS_DELIVERY_HISTORY:
+    "此 Campaign 已開始發送，不可更改範本或收件群組；如需不同內容，請建立新 Campaign。",
+  "Campaign not found": "找不到此 campaign，請重新整理後再試",
+  "Not found": "找不到此 campaign，請重新整理後再試",
+  RETRY_COUNT_CHANGED: "可重新發送的人數已改變，未有重新排入任何人。請核對最新數字後再確認。",
+  TEMPLATE_NOT_ACTIVE: "範本未核准或無法讀取，請先核實",
+  NO_ELIGIBLE_RECIPIENTS: "收件人預覽已過期或沒有合資格收件人，請重新預覽",
+  INVALID_CAMPAIGN_STATUS: "目前 Campaign 狀態不能加入發送佇列",
+  CAMPAIGN_NOT_ELIGIBLE: "目前 Campaign 狀態不能加入發送佇列",
+  AUDIENCE_NOT_FOUND: "此 campaign 未設定收件群組",
+  CAMPAIGN_CANCEL_NOT_ELIGIBLE: "此 Campaign 目前的狀態不可取消，請重新整理。",
+  // FX-10b final fix wave: the 發送… approval count and the finish action.
+  SEND_COUNT_CHANGED: "尚待發送人數已改變，未有加入發送佇列。請核對最新數字後再確認。",
+  CAMPAIGN_NOT_FINISHABLE: "此 Campaign 目前的狀態不可結束，請重新整理。",
+  CAMPAIGN_HAS_SENDABLE: "仍有尚待發送的收件人，請按「發送…」發送，或重新整理。",
+  FINISH_STATE_CHANGED: "Campaign 資料剛有變更，未有結束。請核對最新數字後再試。",
+};
+const RETRY_PREVIEW_ERROR = "未能讀取重新發送資料，請稍後再試。";
+const SEND_PREVIEW_ERROR = "未能讀取尚待發送人數，請稍後再試。";
+/** A lost or unreadable re-queue response: the outcome is unknown, never success. */
+const RETRY_OUTCOME_UNKNOWN =
+  "重新排入結果未明：未能確認伺服器是否已處理。請先按「重新讀取最新數字」核對，才決定是否再試；重新排入本身不會發送訊息。";
+const LIST_MAY_BE_STALE = "Campaign 列表未能更新，畫面上的數字可能已過時，請按「重新整理」。";
+const READBACK_BLOCKS_RETRY = "請先核對上一個加入佇列或取消操作的結果，才可重新排入。";
+/** A lost or unreadable finish response. Finishing sends nothing and a repeat is harmless. */
+const FINISH_OUTCOME_UNKNOWN =
+  "結束結果未明：未能確認伺服器是否已處理。已重新讀取列表，請核對 Campaign 狀態；結束操作不會發出任何訊息。";
+
+/** Retry exclusion reasons from fetchCampaignRetryPreview. Counts only: the
+ * preview carries no phone or member id, and none is ever shown. */
+const retryExclusionLabels: Record<
+  AdminCampaignRetryPreview["exclusions"][number]["reason"],
+  string
+> = {
+  OPTED_OUT: "已拒收或身份未核實（不會重發）",
+  DUPLICATE_PHONE: "同一電話已有記錄（不會重發）",
+  CONTACT_CHANGED_SINCE_ATTEMPT: "聯絡資料在上次發送後曾更改（不會重發）",
 };
 
 const intentOptions = [
@@ -176,6 +250,18 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
   const [rowPreviews, setRowPreviews] = useState<Record<string, StampedPreview>>({});
   const [pendingSend, setPendingSend] = useState<PendingSend | null>(null);
   const [pendingCancel, setPendingCancel] = useState<AdminCampaignRow | null>(null);
+  const [pendingRetry, setPendingRetry] = useState<AdminCampaignRow | null>(null);
+  const [retryPreview, setRetryPreview] = useState<AdminCampaignRetryPreview | null>(null);
+  const [retryPreviewError, setRetryPreviewError] = useState<string | null>(null);
+  const [retryOutcomeUnknown, setRetryOutcomeUnknown] = useState(false);
+  const retryingRef = useRef(false);
+  const retryPreviewRequestRef = useRef(0);
+  // FX-10b I2: finishing a 待審核 campaign that has nothing left to send.
+  const [pendingFinish, setPendingFinish] = useState<AdminCampaignRow | null>(null);
+  const [finishPreview, setFinishPreview] = useState<AdminCampaignSendPreview | null>(null);
+  const [finishPreviewError, setFinishPreviewError] = useState<string | null>(null);
+  const finishingRef = useRef(false);
+  const finishPreviewRequestRef = useRef(0);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [savedAudienceDraft, setSavedAudienceDraft] = useState<AdminAudienceInput | null>(null);
   const [pendingAudienceDelete, setPendingAudienceDelete] = useState<
@@ -446,7 +532,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       toast.success(isUpdate ? "Campaign 已儲存" : "Campaign 已新增");
     } catch (err) {
       if (!isWorkspaceCurrent()) return;
-      toast.error(errorText(err));
+      toast.error(staffErrorText(err, campaignErrorText(errorText(err))));
     } finally {
       if (isWorkspaceCurrent()) {
         setSaving(false);
@@ -562,6 +648,14 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
    * interstitial that used to be missing entirely, so a mis-click on Queue sent
    * thousands of irreversible WhatsApp messages. */
   function requestSendCampaign(campaign: AdminCampaignRow, eligible: number, checkedAt: number) {
+    void openSendConfirmation(campaign, eligible, checkedAt);
+  }
+
+  async function openSendConfirmation(
+    campaign: AdminCampaignRow,
+    eligible: number,
+    checkedAt: number,
+  ) {
     if (
       !queueJournalReady ||
       !cancelJournalReady ||
@@ -579,6 +673,43 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       toast.error("範本未核准或無法讀取，請先核實");
       return;
     }
+    // With delivery history the server adds nobody new, so the audience count
+    // would promise people who will never be messaged. The server states the
+    // exact number 發送… would dispatch now (waiting rows that still pass
+    // delivery's consent, identity and one-row-per-phone checks).
+    let reachable = eligible;
+    let deliveryStarted = false;
+    let stampedAt = checkedAt;
+    if (campaign.delivery_started === true) {
+      setMutatingAction(`send-preview:${campaign.id}`);
+      try {
+        const exact = (await fetchCampaignSendPreview(
+          { data: { id: campaign.id } },
+          isWorkspaceCurrent,
+        )) as AdminCampaignSendPreview;
+        if (!isWorkspaceCurrent()) return;
+        if (!exact || exact.campaignId !== campaign.id) throw Error("Send preview mismatch");
+        deliveryStarted = exact.deliveryStarted;
+        if (exact.sendable !== null) {
+          reachable = exact.sendable;
+          stampedAt = Date.now();
+        }
+        // Nothing left to send: offer the finish action, not a dead-end toast.
+        if (exact.finishable) {
+          openFinish(campaign, exact);
+          return;
+        }
+      } catch (err) {
+        if (isWorkspaceCurrent()) toast.error(staffErrorText(err, SEND_PREVIEW_ERROR));
+        return;
+      } finally {
+        if (isWorkspaceCurrent()) setMutatingAction(null);
+      }
+    }
+    if (reachable <= 0) {
+      toast.error("收件人預覽已過期或沒有合資格收件人，請重新預覽");
+      return;
+    }
     setProviderReviewed(false);
     setConfirmError(null);
     setPendingSend({
@@ -588,9 +719,11 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
         ? `${template.element_name}（${template.language_code}）`
         : (campaign.element_name ?? "未設定範本"),
       audienceLabel: campaign.audience_name ?? "未設定收件群組",
-      eligible,
+      eligible: reachable,
       template,
-      checkedAt,
+      checkedAt: stampedAt,
+      deliveryStarted,
+      sent: campaign.sent ?? 0,
     });
   }
 
@@ -620,12 +753,39 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
     try {
       const result = (await sendAdminCampaignQueue(
         {
-          data: { id: pendingSend.campaignId },
+          data: {
+            id: pendingSend.campaignId,
+            // With delivery history the server queues only this exact count.
+            expectedCount: pendingSend.deliveryStarted ? pendingSend.eligible : null,
+          },
         },
         isWorkspaceCurrent,
       )) as MutationResult & {
         materialization?: Partial<AdminAudiencePreview>;
+        queuedRecipients?: number;
+        sendable?: number;
       };
+      if (!isWorkspaceCurrent()) return;
+      if (result?.ok === false && result.error === "SEND_COUNT_CHANGED") {
+        // Nothing was queued (a definite refusal, not an unknown outcome):
+        // show the server's number before any new confirmation.
+        sessionStorage.removeItem(queueJournalKey);
+        const sendable = typeof result.sendable === "number" ? result.sendable : 0;
+        await refreshAdminData({ clearRowPreviews: false });
+        if (!isWorkspaceCurrent()) return;
+        if (sendable <= 0) {
+          setPendingSend(null);
+          toast.error(campaignErrorText("SEND_COUNT_CHANGED"));
+          return;
+        }
+        setPendingSend((current) =>
+          current && current.campaignId === pendingSend.campaignId
+            ? { ...current, eligible: sendable, checkedAt: Date.now() }
+            : current,
+        );
+        setConfirmError(campaignErrorText("SEND_COUNT_CHANGED"));
+        return;
+      }
       assertNoServerError(result);
       if (!isWorkspaceCurrent()) return;
 
@@ -634,8 +794,12 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       sessionStorage.removeItem(queueJournalKey);
       setCampaignDraft(null);
       setPendingSend(null);
+      // The server's own count of what it queued; materialization.eligible is
+      // the audience summary, not the send. No number is shown without it.
       toast.success(
-        `已加入發送佇列：${result.materialization?.eligible ?? pendingSend.eligible} 位合資格收件人。送達結果須另行核對。`,
+        typeof result.queuedRecipients === "number"
+          ? `已加入發送佇列：${result.queuedRecipients} 位合資格收件人。送達結果須另行核對。`
+          : "已加入發送佇列。送達結果須另行核對。",
       );
     } catch (err) {
       // Kept inside the dialog rather than behind it: the operator needs the
@@ -645,7 +809,9 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       setQueueNeedsReadback(pendingSend.campaignId);
       setRowPreviews({});
       setPreviewCheckedAt(0);
-      setConfirmError(`加入佇列結果未能確認，請先讀回 Campaign 狀態。${errorText(err)}`);
+      setConfirmError(
+        `加入佇列結果未能確認，請先讀回 Campaign 狀態。${knownCampaignErrorText(err)}`,
+      );
     } finally {
       sendingRef.current = false;
       setMutatingAction(null);
@@ -768,11 +934,226 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       if (!isWorkspaceCurrent()) return;
       setConfirmError(
         cancelReadbackRef.current
-          ? `取消結果未能確認，請先查回原 Campaign 狀態。${errorText(err)}`
-          : errorText(err),
+          ? `取消結果未能確認，請先查回原 Campaign 狀態。${knownCampaignErrorText(err)}`
+          : campaignErrorText(errorText(err)),
       );
     } finally {
       cancellingRef.current = false;
+      if (isWorkspaceCurrent()) setMutatingAction(null);
+    }
+  }
+
+  /** Reads the retry preview for one campaign. Re-read on every open: the
+   * counts move as deliveries finish, and the confirmation must state exactly
+   * what the re-queue would move now, never a remembered number. */
+  async function loadRetryPreview(campaign: AdminCampaignRow) {
+    const requestId = retryPreviewRequestRef.current + 1;
+    retryPreviewRequestRef.current = requestId;
+    setRetryPreview(null);
+    setRetryPreviewError(null);
+    try {
+      const data = (await fetchCampaignRetryPreview(
+        { data: { id: campaign.id } },
+        isWorkspaceCurrent,
+      )) as AdminCampaignRetryPreview;
+      if (!isWorkspaceCurrent() || requestId !== retryPreviewRequestRef.current) return false;
+      if (!data || data.campaignId !== campaign.id) throw Error("Retry preview mismatch");
+      setRetryPreview(data);
+      return true;
+    } catch (err) {
+      if (!isWorkspaceCurrent() || requestId !== retryPreviewRequestRef.current) return false;
+      setRetryPreviewError(staffErrorText(err, RETRY_PREVIEW_ERROR));
+      return false;
+    }
+  }
+
+  function openRetry(campaign: AdminCampaignRow) {
+    if (!isWorkspaceCurrent() || retryingRef.current) return;
+    setConfirmError(null);
+    setRetryOutcomeUnknown(false);
+    setPendingRetry(campaign);
+    void loadRetryPreview(campaign);
+  }
+
+  function closeRetry() {
+    retryPreviewRequestRef.current += 1;
+    setPendingRetry(null);
+    setRetryPreview(null);
+    setRetryPreviewError(null);
+    setRetryOutcomeUnknown(false);
+    setConfirmError(null);
+  }
+
+  /** After an unknown outcome: read the list and the preview again, and only
+   * then allow another confirmation. */
+  async function reloadRetryState() {
+    if (!pendingRetry || retryingRef.current) return;
+    const campaign = pendingRetry;
+    retryingRef.current = true;
+    setMutatingAction(`retry-read:${campaign.id}`);
+    try {
+      const fresh = await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
+      const previewRead = await loadRetryPreview(campaign);
+      if (!isWorkspaceCurrent()) return;
+      if (fresh && previewRead) {
+        setRetryOutcomeUnknown(false);
+        setConfirmError(null);
+      }
+    } finally {
+      retryingRef.current = false;
+      if (isWorkspaceCurrent()) setMutatingAction(null);
+    }
+  }
+
+  // Unlike queue and cancel there is deliberately no session journal here:
+  // re-queue sends nothing (it only returns definitely-refused rows to the
+  // queue and the campaign to 待審核, behind the 發送… approval), is idempotent
+  // on the server, and refuses a count other than the one confirmed. A lost
+  // response is resolved by re-reading the list and the preview, which the
+  // dialog requires before another confirmation.
+  async function handleConfirmRetry() {
+    if (!pendingRetry || !retryPreview || retryPreview.retryable <= 0) return;
+    if (retryingRef.current || retryOutcomeUnknown) return;
+    retryingRef.current = true;
+    const campaign = pendingRetry;
+    const expectedCount = retryPreview.retryable;
+    setMutatingAction(`retry:${campaign.id}`);
+    setConfirmError(null);
+    let result: AdminCampaignRequeueResult;
+    try {
+      result = (await requeueFailedCampaignRecipients(
+        { data: { campaignId: campaign.id, expectedCount } },
+        isWorkspaceCurrent,
+      )) as AdminCampaignRequeueResult;
+    } catch (err) {
+      retryingRef.current = false;
+      if (!isWorkspaceCurrent()) return;
+      setMutatingAction(null);
+      const status = serverErrorStatus(err);
+      if (status === 401 || status === 403) {
+        // A definite refusal: nothing was re-queued.
+        setConfirmError(staffErrorText(err, RETRY_OUTCOME_UNKNOWN));
+        return;
+      }
+      // The request may or may not have been processed. Never read as success;
+      // confirmation stays closed until the latest numbers are read back.
+      setRetryOutcomeUnknown(true);
+      setConfirmError(RETRY_OUTCOME_UNKNOWN);
+      return;
+    }
+    try {
+      if (!isWorkspaceCurrent()) return;
+      if (!result.ok) {
+        // Re-read both so the dialog never keeps offering a stale count. For
+        // RETRY_COUNT_CHANGED the new number is shown before any confirmation.
+        setConfirmError(campaignErrorText(result.error));
+        await refreshAdminData({ clearRowPreviews: true });
+        if (isWorkspaceCurrent()) await loadRetryPreview(campaign);
+        return;
+      }
+      const fresh = await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
+      closeRetry();
+      const done = `已重新排入 ${result.requeued} 人。請預覽收件人後按「發送…」確認發送。`;
+      // The re-queue succeeded either way; say so, but never imply the list
+      // on screen is current when it could not be read back.
+      if (fresh) toast.success(done);
+      else toast.success(done, { description: LIST_MAY_BE_STALE });
+    } finally {
+      retryingRef.current = false;
+      if (isWorkspaceCurrent()) setMutatingAction(null);
+    }
+  }
+
+  async function loadFinishPreview(campaign: AdminCampaignRow) {
+    const requestId = finishPreviewRequestRef.current + 1;
+    finishPreviewRequestRef.current = requestId;
+    setFinishPreview(null);
+    setFinishPreviewError(null);
+    try {
+      const data = (await fetchCampaignSendPreview(
+        { data: { id: campaign.id } },
+        isWorkspaceCurrent,
+      )) as AdminCampaignSendPreview;
+      if (!isWorkspaceCurrent() || requestId !== finishPreviewRequestRef.current) return;
+      if (!data || data.campaignId !== campaign.id) throw Error("Send preview mismatch");
+      setFinishPreview(data);
+      if (!data.finishable) setFinishPreviewError(campaignErrorText("CAMPAIGN_HAS_SENDABLE"));
+    } catch (err) {
+      if (!isWorkspaceCurrent() || requestId !== finishPreviewRequestRef.current) return;
+      setFinishPreviewError(staffErrorText(err, SEND_PREVIEW_ERROR));
+    }
+  }
+
+  /** Offered only when the server says nothing is left to send; the dialog
+   * re-reads that before it allows a confirmation. */
+  function openFinish(campaign: AdminCampaignRow, known?: AdminCampaignSendPreview) {
+    if (!isWorkspaceCurrent() || finishingRef.current) return;
+    setConfirmError(null);
+    setPendingFinish(campaign);
+    if (known && known.campaignId === campaign.id && known.finishable) {
+      finishPreviewRequestRef.current += 1;
+      setFinishPreview(known);
+      setFinishPreviewError(null);
+      return;
+    }
+    void loadFinishPreview(campaign);
+  }
+
+  function closeFinish() {
+    finishPreviewRequestRef.current += 1;
+    setPendingFinish(null);
+    setFinishPreview(null);
+    setFinishPreviewError(null);
+    setConfirmError(null);
+  }
+
+  // Finishing sends nothing, enqueues nothing and is idempotent on the server,
+  // so a lost response is resolved by re-reading the list, with no journal.
+  async function handleConfirmFinish() {
+    if (!pendingFinish || !finishPreview?.finishable || finishingRef.current) return;
+    finishingRef.current = true;
+    const campaign = pendingFinish;
+    setMutatingAction(`finish:${campaign.id}`);
+    setConfirmError(null);
+    let result: AdminCampaignFinishResult;
+    try {
+      result = (await finishCampaignWithoutSending(
+        { data: { campaignId: campaign.id } },
+        isWorkspaceCurrent,
+      )) as AdminCampaignFinishResult;
+    } catch (err) {
+      finishingRef.current = false;
+      if (!isWorkspaceCurrent()) return;
+      setMutatingAction(null);
+      const status = serverErrorStatus(err);
+      setConfirmError(
+        status === 401 || status === 403
+          ? staffErrorText(err, FINISH_OUTCOME_UNKNOWN)
+          : FINISH_OUTCOME_UNKNOWN,
+      );
+      await refreshAdminData({ clearRowPreviews: true });
+      return;
+    }
+    try {
+      if (!isWorkspaceCurrent()) return;
+      if (!result.ok) {
+        setConfirmError(campaignErrorText(result.error));
+        await refreshAdminData({ clearRowPreviews: true });
+        if (isWorkspaceCurrent()) await loadFinishPreview(campaign);
+        return;
+      }
+      const fresh = await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
+      closeFinish();
+      const done = result.alreadyFinished
+        ? "此 Campaign 早前已結束，未有再作更改。"
+        : `已結束 Campaign，狀態為「${campaignStatusLabels[result.status] ?? result.status}」。未有發出任何訊息。`;
+      if (fresh) toast.success(done);
+      else toast.success(done, { description: LIST_MAY_BE_STALE });
+    } finally {
+      finishingRef.current = false;
       if (isWorkspaceCurrent()) setMutatingAction(null);
     }
   }
@@ -995,6 +1376,17 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                         !cancelNeedsReadback &&
                         cancellableStatuses.has(campaign.status) &&
                         !mutatingAction;
+                      // FX-10b I2: only when the server says nothing is left to send.
+                      const finishEnabled =
+                        campaign.finishable === true
+                          ? !mutatingAction && !queueNeedsReadback && !cancelNeedsReadback
+                          : null;
+                      // null: no retry action for this row at all.
+                      const retryEnabled =
+                        (campaign.retryable_failed ?? 0) > 0 &&
+                        retryableStatuses.has(campaign.status)
+                          ? !mutatingAction && !queueNeedsReadback && !cancelNeedsReadback
+                          : null;
 
                       return (
                         <TableRow key={campaign.id}>
@@ -1034,7 +1426,10 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                             {formatDate(campaign.scheduled_at)}
                           </TableCell>
                           <TableCell>
-                            <CampaignStatusBadge status={campaign.status} />
+                            <CampaignStatusBadge
+                              status={campaign.status}
+                              paused={campaign.paused}
+                            />
                           </TableCell>
                           <TableCell>
                             <div className="flex min-w-80 flex-wrap justify-end gap-2">
@@ -1080,6 +1475,36 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                                 <XCircle />
                                 取消 Campaign
                               </Button>
+                              {finishEnabled !== null ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-11 lg:h-9"
+                                  onClick={() => openFinish(campaign)}
+                                  disabled={!finishEnabled}
+                                >
+                                  <CircleCheck />
+                                  結束 Campaign…
+                                </Button>
+                              ) : null}
+                              {/* Managers and admins only: this whole workspace is gated
+                                  on those roles and the server re-checks them. The list
+                                  count is not consent-aware (Task 3 review M4); the
+                                  dialog's preview gives the exact number re-queued. */}
+                              {retryEnabled !== null ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-11 lg:h-9"
+                                  onClick={() => openRetry(campaign)}
+                                  disabled={!retryEnabled}
+                                >
+                                  <RotateCcw />
+                                  重新發送失敗收件人（{campaign.retryable_failed}）
+                                </Button>
+                              ) : null}
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1336,6 +1761,77 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
             />
             <ConfirmRow label="已發送" value={`${pendingCancel.sent ?? 0} 人（無法收回）`} />
           </dl>
+        ) : null}
+      </AdminConfirmDialog>
+
+      <AdminConfirmDialog
+        open={!!pendingRetry}
+        title="重新發送失敗收件人？"
+        description="只會重新排入確定未送出的收件人。Campaign 會回到「待審核」，要再按「發送…」確認後才會發出。"
+        confirmLabel={`重新排入 ${retryPreview?.retryable ?? 0} 人`}
+        disabled={
+          !retryPreview ||
+          !!retryPreviewError ||
+          retryPreview.retryable <= 0 ||
+          retryOutcomeUnknown ||
+          !!queueNeedsReadback ||
+          !!cancelNeedsReadback
+        }
+        isPending={mutatingAction?.startsWith("retry:") ?? false}
+        error={retryPreviewError ?? confirmError}
+        onOpenChange={(open) => {
+          if (!open) closeRetry();
+        }}
+        onConfirm={() => void handleConfirmRetry()}
+      >
+        {pendingRetry ? (
+          <RetryConfirmationDetails
+            campaignName={pendingRetry.name}
+            preview={retryPreview}
+            loading={!retryPreview && !retryPreviewError}
+          />
+        ) : null}
+        {queueNeedsReadback || cancelNeedsReadback ? (
+          <p className="text-sm text-muted-foreground">{READBACK_BLOCKS_RETRY}</p>
+        ) : null}
+        {retryOutcomeUnknown ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={!!mutatingAction}
+            onClick={() => void reloadRetryState()}
+          >
+            重新讀取最新數字
+          </Button>
+        ) : null}
+      </AdminConfirmDialog>
+      <AdminConfirmDialog
+        open={!!pendingFinish}
+        title="結束 Campaign（沒有尚待發送收件人）"
+        description="此 Campaign 已開始發送，但伺服器確認目前沒有可發送的收件人。結束後，仍在等候的收件人會標示為不發送，Campaign 會按實際結果顯示為「已完成」或「失敗」，不會標示為「已取消」。此操作不會發出任何訊息。"
+        confirmLabel="結束 Campaign"
+        disabled={
+          !finishPreview?.finishable ||
+          !!finishPreviewError ||
+          !!queueNeedsReadback ||
+          !!cancelNeedsReadback
+        }
+        isPending={mutatingAction?.startsWith("finish:") ?? false}
+        error={finishPreviewError ?? confirmError}
+        onOpenChange={(open) => {
+          if (!open) closeFinish();
+        }}
+        onConfirm={() => void handleConfirmFinish()}
+      >
+        {pendingFinish ? (
+          <dl className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
+            <ConfirmRow label="Campaign" value={pendingFinish.name} />
+            <ConfirmRow label="已發送" value={`${pendingFinish.sent ?? 0} 人`} />
+            <ConfirmRow label="仍在等候（不會發送）" value={`${pendingFinish.pending ?? 0} 人`} />
+          </dl>
+        ) : null}
+        {pendingFinish && !finishPreview && !finishPreviewError ? (
+          <p className="text-sm text-muted-foreground">正在核對尚待發送人數…</p>
         ) : null}
       </AdminConfirmDialog>
     </AdminShell>
@@ -1858,7 +2354,9 @@ function CampaignDeliveryCell({ campaign }: { campaign: AdminCampaignRow }) {
   const sent = campaign.sent ?? 0;
   const failed = campaign.failed ?? 0;
   const blocked = campaign.blocked ?? 0;
-  const pending = campaign.pending ?? 0;
+  // Paused rows are queued rows too; count them once, under their own label.
+  const paused = campaign.paused ?? 0;
+  const pending = Math.max(0, (campaign.pending ?? 0) - paused);
 
   if (!campaign.recipients) {
     return <span className="text-sm text-muted-foreground">未發送</span>;
@@ -1876,6 +2374,9 @@ function CampaignDeliveryCell({ campaign }: { campaign: AdminCampaignRow }) {
       ) : null}
       {failed > 0 ? <div className="font-semibold text-destructive">失敗 {failed}</div> : null}
       {blocked > 0 ? <div className="text-muted-foreground">封鎖 {blocked}</div> : null}
+      {paused > 0 ? (
+        <div className="font-semibold text-destructive">已暫停，未發送 {paused}</div>
+      ) : null}
       {pending > 0 ? <div className="text-muted-foreground">待發送 {pending}</div> : null}
     </div>
   );
@@ -1943,8 +2444,23 @@ function SendConfirmationDetails({ send }: { send: PendingSend }) {
         <ConfirmRow label="Campaign" value={send.campaignName} />
         <ConfirmRow label="範本" value={send.templateLabel} />
         <ConfirmRow label="收件群組" value={send.audienceLabel} />
-        <ConfirmRow label="合資格收件人" value={`${send.eligible} 人`} emphasis />
+        {send.deliveryStarted ? (
+          <>
+            <ConfirmRow label="已發送（不會重發）" value={`${send.sent} 人`} />
+            <ConfirmRow label="尚待發送收件人" value={`${send.eligible} 人`} emphasis />
+          </>
+        ) : (
+          <ConfirmRow label="合資格收件人" value={`${send.eligible} 人`} emphasis />
+        )}
       </dl>
+      {send.deliveryStarted ? (
+        // role="status": informational, and kept apart from the dialog's error alert.
+        <Alert role="status">
+          <AlertDescription>
+            此 Campaign 曾經發送。這次只會發送給尚待發送的收件人，不會加入新符合條件的客戶。
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <TemplateDetails template={send.template} />
     </div>
   );
@@ -1967,7 +2483,94 @@ function ConfirmRow({
   );
 }
 
-function CampaignStatusBadge({ status }: { status: string }) {
+/** What the retry confirmation promises: the exact re-queue count from the
+ * preview, what a re-approval would then send, every exclusion as a count, and
+ * the 結果未明 recipients by name only. No phone or member id is ever shown. */
+function RetryConfirmationDetails({
+  campaignName,
+  preview,
+  loading,
+}: {
+  campaignName: string;
+  preview: AdminCampaignRetryPreview | null;
+  loading: boolean;
+}) {
+  if (loading) {
+    return (
+      <div className="space-y-2" role="status" aria-busy="true">
+        <span className="sr-only">載入中…</span>
+        <Skeleton className="h-4 w-2/3" />
+        <Skeleton className="h-4 w-1/2" />
+        <Skeleton className="h-4 w-3/5" />
+      </div>
+    );
+  }
+  if (!preview) return null;
+  const unlisted = Math.max(0, preview.unknownTotal - preview.unknown.length);
+
+  return (
+    <div className="space-y-3">
+      <dl className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
+        <ConfirmRow label="Campaign" value={campaignName} />
+        <ConfirmRow label="將重新排入" value={`${preview.retryable} 人`} emphasis />
+        {preview.alreadyQueued > 0 ? (
+          <>
+            <ConfirmRow label="已在佇列（暫停時未發送）" value={`${preview.alreadyQueued} 人`} />
+            <ConfirmRow
+              label="按「發送…」確認後最多發送"
+              value={`${preview.retryable + preview.alreadyQueued} 人`}
+              emphasis
+            />
+          </>
+        ) : null}
+        {preview.exclusions
+          .filter((item) => item.count > 0)
+          .map((item) => (
+            <ConfirmRow
+              key={item.reason}
+              label={retryExclusionLabels[item.reason] ?? item.reason}
+              value={`${item.count} 人`}
+            />
+          ))}
+        {preview.unknownTotal > 0 ? (
+          <ConfirmRow
+            label="結果未明（請先核實，勿重發）"
+            value={`${preview.unknownTotal} 人`}
+            emphasis
+          />
+        ) : null}
+      </dl>
+      {preview.retryable <= 0 ? (
+        <p className="text-sm text-muted-foreground">{campaignErrorLabels.NOTHING_TO_RETRY}</p>
+      ) : null}
+      {preview.unknownTotal > 0 ? (
+        <div className="rounded-md border border-destructive/30 p-3 text-sm">
+          <p className="font-medium">以下收件人結果未明，不會重新發送：</p>
+          <ul className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+            {preview.unknown.map((item) => (
+              <li key={item.recipientId} className="break-words">
+                {item.name ?? "（未有名稱）"}・開始傳送 {formatDate(item.dispatchedAt)}
+              </li>
+            ))}
+          </ul>
+          {unlisted > 0 ? (
+            <p className="mt-2 text-muted-foreground">另有 {unlisted} 人未列出</p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CampaignStatusBadge({ status, paused }: { status: string; paused?: number }) {
+  // A paused campaign is held in 待審核 (no new status, no migration): staff
+  // must see why it stopped and that it needs 發送… again.
+  if (status === "review" && (paused ?? 0) > 0)
+    return (
+      <Badge variant="destructive" className="whitespace-nowrap">
+        已暫停
+      </Badge>
+    );
   const variant =
     status === "failed" || status === "cancelled"
       ? "destructive"
@@ -1977,7 +2580,11 @@ function CampaignStatusBadge({ status }: { status: string }) {
           ? "secondary"
           : "outline";
 
-  return <Badge variant={variant}>{campaignStatusLabels[status] ?? status}</Badge>;
+  return (
+    <Badge variant={variant} className="whitespace-nowrap">
+      {campaignStatusLabels[status] ?? status}
+    </Badge>
+  );
 }
 
 // A wrapping <label> associates the text with the first form control inside
@@ -2081,6 +2688,26 @@ function assertNoServerError(result: unknown) {
   const payload = result as MutationResult;
   if (payload.ok === false) throw new Error(payload.error ?? "操作失敗");
   if (payload.error) throw new Error(payload.error);
+}
+
+/** Staff copy for a server code; never the raw code itself. */
+function campaignErrorText(code: string) {
+  return campaignErrorLabels[code] ?? "操作失敗，請重試。";
+}
+
+/** Staff copy for a known code inside an error, or "" so callers that add it
+ * to an "outcome unknown" sentence never append a contradicting fallback. */
+function knownCampaignErrorText(error: unknown) {
+  return campaignErrorLabels[errorText(error)] ?? "";
+}
+
+/** 401 and 403 are definite refusals with their own copy (the wording used
+ * on the CMS screen); anything else gets the caller's fallback. */
+function staffErrorText(error: unknown, fallback: string) {
+  const status = serverErrorStatus(error);
+  if (status === 401) return "登入已過期，請重新登入後再試。";
+  if (status === 403) return "你的角色沒有此操作的權限，請聯絡管理員或主管。";
+  return fallback;
 }
 
 function errorText(error: unknown) {

@@ -209,7 +209,115 @@ export type AdminCampaignRow = {
   failed: number;
   blocked: number;
   pending: number;
+  /** FX-10b: failed rows a retry may re-queue (retry-safe code, never dispatched). */
+  retryable_failed?: number;
+  /** FX-10b: rows held back by a systemic stop (queued / WOZTELL_CAMPAIGN_PAUSED). */
+  paused?: number;
+  /** FX-10b: some recipient may have reached WhatsApp; template and audience are frozen. */
+  delivery_started?: boolean;
+  /**
+   * FX-10b: 待審核 with history and, by the server's count, nothing 「發送…」
+   * could send (no dispatchable waiting row, or an inactive template or a
+   * missing audience). finishCampaignWithoutSending may close it.
+   */
+  finishable?: boolean;
 };
+
+export type AdminCampaignRetryPreview = {
+  campaignId: string;
+  status: string;
+  /** Exactly what requeueFailedCampaignRecipients would move now. */
+  retryable: number;
+  /** Rows already queued (e.g. paused) that a re-approval would also send. */
+  alreadyQueued: number;
+  /** Retry-safe failure, but consent or identity now fails. */
+  excludedOptedOut: number;
+  /** Retry-safe failure, but not the primary row for its phone. */
+  excludedDuplicatePhone: number;
+  /** Retry-safe failure, but the contact changed after the attempt (reason CONTACT_CHANGED_SINCE_ATTEMPT). */
+  excludedContactChanged: number;
+  /** The non-zero exclusions, by reason code, for the UI to render. */
+  exclusions: {
+    reason: "OPTED_OUT" | "DUPLICATE_PHONE" | "CONTACT_CHANGED_SINCE_ATTEMPT";
+    count: number;
+  }[];
+  unknownTotal: number;
+  /** At most 100, oldest dispatch first. No phone or member id. */
+  unknown: { recipientId: string; name: string | null; dispatchedAt: string | null }[];
+};
+
+export type AdminCampaignRequeueResult =
+  | {
+      ok: true;
+      requeued: number;
+      excludedUnknown: number;
+      /** Every other failed row left behind, including excludedContactChanged. */
+      excludedOther: number;
+      excludedContactChanged: number;
+    }
+  | {
+      ok: false;
+      error:
+        | "Campaign not found"
+        | "CAMPAIGN_STILL_SENDING"
+        | "CAMPAIGN_NOT_RETRYABLE"
+        | "NOTHING_TO_RETRY"
+        /** The re-sent rows could never be sent: refused before anything moves. */
+        | "TEMPLATE_NOT_ACTIVE"
+        | "AUDIENCE_NOT_FOUND";
+    }
+  | {
+      /** The confirmed count no longer matches; nothing moved (a 409 in effect). */
+      ok: false;
+      error: "RETRY_COUNT_CHANGED";
+      /** What the re-queue would move now. */
+      retryable: number;
+    };
+
+/** FX-10b: what 「發送…」 would dispatch now for one campaign. */
+export type AdminCampaignSendPreview = {
+  campaignId: string;
+  /** Some recipient may already have been reached; the send is frozen to waiting rows. */
+  deliveryStarted: boolean;
+  /**
+   * For a campaign with history: queued rows that still pass dispatch
+   * eligibility and the current audience, exactly what the queue would count.
+   * Without history it is null and the audience preview is the count.
+   */
+  sendable: number | null;
+  /**
+   * 待審核 with history, nothing in flight and nothing 「發送…」 could send now
+   * (sendable 0, an inactive template or a missing audience): the campaign can
+   * be finished without sending (finishCampaignWithoutSending).
+   */
+  finishable: boolean;
+};
+
+/** FX-10b: closing a stuck 待審核 campaign that has nothing left to send. */
+export type AdminCampaignFinishResult =
+  | {
+      ok: true;
+      /** completed, or failed when nothing was ever sent (classifyCampaignDeliveryStatus). */
+      status: "completed" | "failed";
+      /** Waiting rows blocked as CAMPAIGN_FINISHED_NOT_SENDABLE by this call. */
+      blocked: number;
+      /** A repeat of an earlier finish: nothing changed. */
+      alreadyFinished?: true;
+    }
+  | {
+      ok: false;
+      error:
+        | "Campaign not found"
+        | "CAMPAIGN_NOT_FINISHABLE"
+        | "CAMPAIGN_STILL_SENDING"
+        | "FINISH_STATE_CHANGED";
+    }
+  | {
+      /** Something can still be sent; use 「發送…」 instead. */
+      ok: false;
+      error: "CAMPAIGN_HAS_SENDABLE";
+      sendable: number;
+    };
 
 export type AdminAgentRow = {
   id: string;
