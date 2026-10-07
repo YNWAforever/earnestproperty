@@ -796,9 +796,14 @@ test(
       };
       const refused = { status: 400, body: { ok: 0, err: "Recipient refused" } };
       const unauthorized = { status: 401, body: { ok: 0, err: "Unauthorized" } };
-      const requeue = (campaignId, who = actor) =>
-        adminData.requeueFailedCampaignRecipients({ campaignId }, who);
       const preview = (campaignId) => adminData.fetchCampaignRetryPreview(campaignId, actor);
+      // Task 4 fix round 1 (I2): a requeue states the count the user confirmed.
+      // By default that is what the preview shows right now, as in the UI.
+      const requeue = async (campaignId, who = actor, expectedCount) =>
+        adminData.requeueFailedCampaignRecipients(
+          { campaignId, expectedCount: expectedCount ?? (await preview(campaignId)).retryable },
+          who,
+        );
       let retrySequence = 0;
       const retryPhones = [];
       const retryMembers = [];
@@ -1589,6 +1594,83 @@ test(
         });
         assert.equal((await recipientRow(visitorRow.id)).status, "failed");
       });
+
+      await t.test(
+        "every count on the campaign screen comes from the server and matches the send",
+        async () => {
+          // Task 4 fix round 1: the row label, the retry confirmation, the 發送…
+          // confirmation and the queue result are each one server number, and
+          // each equals what actually happens next.
+          const source = "owned-fx10b-exact";
+          const [scoped] = await query(
+            "INSERT INTO whatsapp_audiences(name,filters,created_by) VALUES('Owned FX-10b exact audience',$1::jsonb,$2) RETURNING id",
+            [JSON.stringify({ source }), staff.id],
+          );
+          const { campaign, people } = await seedRetryCampaign(["V1", "V2", "V3", "V4", "V5"], {
+            audienceId: scoped.id,
+            source,
+            queue: false,
+            status: "review",
+          });
+          await setRecipient(people.V1, "sent", null, true);
+          await setRecipient(people.V2, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+          await setRecipient(people.V3, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+          await setRecipient(people.V4, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+          await setRecipient(people.V5, "queued", "WOZTELL_CAMPAIGN_PAUSED", false);
+          await query("UPDATE crm_contacts SET opted_out_whatsapp=true WHERE id=$1", [
+            people.V4.contact,
+          ]);
+          const listed = async () =>
+            (await adminData.listAdminCampaigns()).find((row) => row.id === campaign);
+
+          // I3: the row's （N） is the consent-aware count the preview shows.
+          const shown = await preview(campaign);
+          assert.equal(shown.retryable, 2);
+          assert.equal(shown.alreadyQueued, 1);
+          assert.equal((await listed()).retryable_failed, shown.retryable);
+
+          // I2: a stale confirmed count moves nothing and says what is true now.
+          assert.deepEqual(await requeue(campaign, actor, 3), {
+            ok: false,
+            error: "RETRY_COUNT_CHANGED",
+            retryable: 2,
+          });
+          assert.equal((await recipientRow(people.V2.recipient)).status, "failed");
+          assert.equal((await requeueAudits(campaign)).length, 0);
+          assert.equal((await requeue(campaign, actor, 2)).requeued, 2);
+          assert.equal((await listed()).retryable_failed, 0);
+
+          // I1: 發送… shows exactly retryable + alreadyQueued from the preview...
+          const send = await adminData.fetchCampaignSendPreview(campaign, actor);
+          assert.deepEqual(send, {
+            campaignId: campaign,
+            deliveryStarted: true,
+            sendable: shown.retryable + shown.alreadyQueued,
+          });
+          // ...and drops when a queued contact's consent lapses.
+          await query("UPDATE crm_contacts SET opted_out_whatsapp=true WHERE id=$1", [
+            people.V3.contact,
+          ]);
+          const lapsed = await adminData.fetchCampaignSendPreview(campaign, actor);
+          assert.equal(lapsed.sendable, 2);
+
+          // The queue reports what it queued, and delivery reaches exactly those.
+          const queued = await adminData.sendAdminCampaignQueue(campaign, actor);
+          assert.equal(queued.ok, true);
+          assert.equal(queued.queuedRecipients, lapsed.sendable);
+          providerCalls.length = 0;
+          provider = accepted;
+          await deliver(campaign, await leaseCampaignJob(campaign));
+          assert.deepEqual(
+            providerCalls.map((call) => call.memberId).sort(),
+            [people.V2.member, people.V5.member].sort(),
+          );
+          await assert.rejects(
+            () => adminData.fetchCampaignSendPreview(campaign, agentActor),
+            (error) => error instanceof Response && error.status === 403,
+          );
+        },
+      );
 
       await t.test("no recipient gets two accepted sends: every provider call in this file", () => {
         assert.ok(allProviderCalls.length > 0);

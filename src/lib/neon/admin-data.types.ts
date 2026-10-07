@@ -256,7 +256,27 @@ export type AdminCampaignRequeueResult =
         | "CAMPAIGN_STILL_SENDING"
         | "CAMPAIGN_NOT_RETRYABLE"
         | "NOTHING_TO_RETRY";
+    }
+  | {
+      /** The confirmed count no longer matches; nothing moved (a 409 in effect). */
+      ok: false;
+      error: "RETRY_COUNT_CHANGED";
+      /** What the re-queue would move now. */
+      retryable: number;
     };
+
+/** FX-10b: what 「發送…」 would dispatch now for one campaign. */
+export type AdminCampaignSendPreview = {
+  campaignId: string;
+  /** Some recipient may already have been reached; the send is frozen to waiting rows. */
+  deliveryStarted: boolean;
+  /**
+   * For a campaign with history: queued rows that still pass dispatch
+   * eligibility and the current audience, exactly what the queue would count.
+   * Without history it is null and the audience preview is the count.
+   */
+  sendable: number | null;
+};
 
 export type AdminAgentRow = {
   id: string;

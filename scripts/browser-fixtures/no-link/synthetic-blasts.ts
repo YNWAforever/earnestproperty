@@ -13,7 +13,8 @@ const state = {
   releaseCancel: null as null | (() => void),
   templateStatus: "active",
   noTemplates: false,
-  retryMode: "ok" as "ok" | "refused" | "previewFailure",
+  retryMode: "ok" as "ok" | "refused" | "previewFailure" | "lost" | "forbidden",
+  retryRefusal: "CAMPAIGN_STILL_SENDING",
   audienceEligible: 2,
 };
 Object.assign(window, { noLinkBlastFixture: state });
@@ -62,7 +63,7 @@ export async function fetchAdminCampaigns() {
   call("syntheticCampaignRead");
   requireManager();
   if (state.readFailure) throw Error("合成 campaign 讀回失敗");
-  return records();
+  return retryRecords();
 }
 export async function fetchAdminBlastOptions() {
   requireManager();
@@ -130,9 +131,20 @@ export async function sendAdminCampaignQueue({ data }: { data: { id: string } })
     return { ok: false, error: "INVALID_CAMPAIGN_STATUS" };
   row.status = "queued";
   row.queueWrites++;
-  row.recipients = 2;
-  row.pending = 2;
-  sessionStorage.setItem(storage, JSON.stringify(rows));
+  let queuedRecipients = 2;
+  if (row.synthetic_recipients) {
+    // Like the server: only waiting rows that still pass dispatch eligibility
+    // go forward; the rest are held back. The result reports that count.
+    const list = row.synthetic_recipients as SyntheticRecipient[];
+    for (const r of list)
+      if (r.status === "queued" && !r.dispatched && !dispatchableQueued(r)) r.status = "blocked";
+    queuedRecipients = countOf(list, dispatchableQueued);
+    saveRecords(rows);
+  } else {
+    row.recipients = 2;
+    row.pending = 2;
+    sessionStorage.setItem(storage, JSON.stringify(rows));
+  }
   if (state.queueMode === "timeout") {
     state.queueMode = "ok";
     throw Error("合成 queue commit 後回應遺失");
@@ -141,7 +153,9 @@ export async function sendAdminCampaignQueue({ data }: { data: { id: string } })
     ok: true,
     jobId: "synthetic-job",
     jobStatus: "queued",
-    materialization: { eligible: 2 },
+    // The audience summary deliberately differs from what is queued.
+    materialization: { eligible: state.audienceEligible },
+    queuedRecipients,
   };
 }
 export async function saveAdminCampaign({ data }: { data: Record<string, unknown> }) {
@@ -182,84 +196,147 @@ export async function cancelAdminCampaign({ data }: { data: { id: string } }) {
   if (state.cancelMode === "timeout") throw Error("Owned cancel commit response lost");
   return { ok: true };
 }
-type RetryExclusion = {
-  reason: "OPTED_OUT" | "DUPLICATE_PHONE" | "CONTACT_CHANGED_SINCE_ATTEMPT";
-  count: number;
+// FX-10b retry model. A seeded row may carry `synthetic_recipients`; every
+// count the screen shows is then derived here from those recipients with the
+// same rules the server applies (campaign-retry.ts), so the tests assert the
+// UI against this independent model instead of restating numbers.
+type SyntheticRecipient = {
+  status: "sent" | "failed" | "queued" | "blocked" | "cancelled";
+  error?: string | null;
+  dispatched?: boolean;
+  /** opt-in and not opted out, identity safe. Default true. */
+  consent?: boolean;
+  /** The contact changed after the refused attempt. */
+  contactChanged?: boolean;
+  /** Not the primary row for its phone in this campaign. */
+  duplicatePhone?: boolean;
+  name?: string | null;
 };
-type RetryRow = {
+type RetryRow = Record<string, unknown> & {
   id: string;
   status: string;
   pending: number;
-  paused?: number;
-  failed: number;
-  unknown?: number;
-  retryable_failed?: number;
-  requeueWrites?: number;
-  /** Fixture-only: exclusions the preview reports. `retryable_failed` is the
-   * list's unfiltered count, so the preview's `retryable` is that minus these,
-   * as on the server (the list count is an upper bound, not a promise). */
-  retry_exclusions?: RetryExclusion[];
+  synthetic_recipients?: SyntheticRecipient[];
 };
 const retryableStatuses = ["failed", "completed", "review"];
-function retryCounts(row: RetryRow) {
-  const exclusions = (row.retry_exclusions ?? []).filter((item) => item.count > 0);
-  const excluded = exclusions.reduce((sum, item) => sum + item.count, 0);
-  const retryable = retryableStatuses.includes(row.status)
-    ? Math.max(0, (row.retryable_failed ?? 0) - excluded)
-    : 0;
-  return { exclusions, retryable };
+const retrySafeCodes = ["WOZTELL_PROVIDER_REJECTED", "WOZTELL_DELIVERY_ATTEMPTS_EXHAUSTED"];
+const consentOk = (r: SyntheticRecipient) => r.consent !== false;
+const retryableFailed = (r: SyntheticRecipient) =>
+  r.status === "failed" && !r.dispatched && retrySafeCodes.includes(r.error ?? "");
+const retryEligible = (r: SyntheticRecipient) =>
+  retryableFailed(r) && consentOk(r) && !r.contactChanged && !r.duplicatePhone;
+const dispatchableQueued = (r: SyntheticRecipient) =>
+  r.status === "queued" && !r.dispatched && consentOk(r) && !r.duplicatePhone;
+const isUnknown = (r: SyntheticRecipient) => r.error === "WOZTELL_DELIVERY_UNKNOWN";
+const countOf = (list: SyntheticRecipient[], test: (r: SyntheticRecipient) => boolean) =>
+  list.filter(test).length;
+function retryableNow(row: RetryRow) {
+  const list = row.synthetic_recipients ?? [];
+  return retryableStatuses.includes(row.status) ? countOf(list, retryEligible) : 0;
+}
+/** The list columns, derived from the recipients like listAdminCampaigns. */
+function deriveCounts(row: RetryRow) {
+  const list = row.synthetic_recipients;
+  if (!list) return row;
+  return Object.assign(row, {
+    recipients: list.length,
+    sent: countOf(list, (r) => r.status === "sent"),
+    failed: countOf(list, (r) => r.status === "failed" && !isUnknown(r)),
+    unknown: countOf(list, isUnknown),
+    blocked: countOf(list, (r) => r.status === "blocked"),
+    cancelled: countOf(list, (r) => r.status === "cancelled"),
+    pending: countOf(list, (r) => r.status === "queued" && !r.dispatched),
+    paused: countOf(list, (r) => r.status === "queued" && r.error === "WOZTELL_CAMPAIGN_PAUSED"),
+    retryable_failed: retryableNow(row),
+    delivery_started: list.some((r) => r.dispatched || ["sent", "failed"].includes(r.status)),
+  });
+}
+function retryRecords() {
+  return (records() as RetryRow[]).map(deriveCounts);
+}
+function saveRecords(rows: RetryRow[]) {
+  sessionStorage.setItem(storage, JSON.stringify(rows.map(deriveCounts)));
 }
 export async function fetchCampaignRetryPreview({ data }: { data: { id: string } }) {
   call("syntheticCampaignRetryPreview", data);
   requireManager();
   if (state.retryMode === "previewFailure") throw Error("合成重新發送預覽失敗");
-  const row = (records() as RetryRow[]).find((item) => item.id === data.id);
+  const row = retryRecords().find((item) => item.id === data.id);
   if (!row) throw Error("Campaign not found");
-  const { exclusions, retryable } = retryCounts(row);
-  const count = (reason: RetryExclusion["reason"]) =>
-    exclusions.find((item) => item.reason === reason)?.count ?? 0;
-  const unknownTotal = row.unknown ?? 0;
+  const list = row.synthetic_recipients ?? [];
+  const optedOut = countOf(list, (r) => retryableFailed(r) && !consentOk(r));
+  const changed = countOf(list, (r) => retryableFailed(r) && consentOk(r) && !!r.contactChanged);
+  const duplicate = countOf(
+    list,
+    (r) => retryableFailed(r) && consentOk(r) && !r.contactChanged && !!r.duplicatePhone,
+  );
+  const unknown = list.filter(isUnknown);
   return {
     campaignId: row.id,
     status: row.status,
-    retryable,
-    alreadyQueued: row.paused ?? 0,
-    excludedOptedOut: count("OPTED_OUT"),
-    excludedDuplicatePhone: count("DUPLICATE_PHONE"),
-    excludedContactChanged: count("CONTACT_CHANGED_SINCE_ATTEMPT"),
-    exclusions,
-    unknownTotal,
-    unknown: Array.from({ length: Math.min(unknownTotal, 100) }, (_, index) => ({
+    retryable: retryableNow(row),
+    alreadyQueued: countOf(list, dispatchableQueued),
+    excludedOptedOut: optedOut,
+    excludedDuplicatePhone: duplicate,
+    excludedContactChanged: changed,
+    exclusions: (
+      [
+        ["OPTED_OUT", optedOut],
+        ["DUPLICATE_PHONE", duplicate],
+        ["CONTACT_CHANGED_SINCE_ATTEMPT", changed],
+      ] as const
+    )
+      .map(([reason, count]) => ({ reason, count }))
+      .filter((item) => item.count > 0),
+    unknownTotal: unknown.length,
+    unknown: unknown.slice(0, 100).map((r, index) => ({
       recipientId: `60000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
-      name: index === 0 ? "合成未明客戶" : null,
+      name: r.name ?? null,
       dispatchedAt: "2026-09-30T10:00:00Z",
     })),
   };
 }
-export async function requeueFailedCampaignRecipients({ data }: { data: { campaignId: string } }) {
+export async function requeueFailedCampaignRecipients({
+  data,
+}: {
+  data: { campaignId: string; expectedCount: number };
+}) {
   call("syntheticCampaignRequeue", data);
   requireManager();
-  if (state.retryMode === "refused") return { ok: false, error: "CAMPAIGN_STILL_SENDING" };
-  const rows = records() as RetryRow[],
+  if (state.retryMode === "forbidden") throw Object.assign(Error("Forbidden"), { status: 403 });
+  if (state.retryMode === "refused") return { ok: false, error: state.retryRefusal };
+  const rows = retryRecords(),
     row = rows.find((item) => item.id === data.campaignId);
   if (!row) return { ok: false, error: "Campaign not found" };
   if (!retryableStatuses.includes(row.status))
     return { ok: false, error: "CAMPAIGN_NOT_RETRYABLE" };
-  const { exclusions, retryable } = retryCounts(row);
-  if (retryable === 0) return { ok: false, error: "NOTHING_TO_RETRY" };
-  const excludedOther = exclusions.reduce((sum, item) => sum + item.count, 0);
+  const list = row.synthetic_recipients ?? [];
+  const pick = list.filter(retryEligible);
+  if (pick.length === 0) return { ok: false, error: "NOTHING_TO_RETRY" };
+  if (pick.length !== data.expectedCount)
+    return { ok: false, error: "RETRY_COUNT_CHANGED", retryable: pick.length };
+  for (const r of pick) Object.assign(r, { status: "queued", error: null });
   row.status = "review";
-  row.pending += retryable;
-  row.failed -= retryable;
-  row.retryable_failed = (row.retryable_failed ?? 0) - retryable;
-  row.requeueWrites = (row.requeueWrites ?? 0) + 1;
-  sessionStorage.setItem(storage, JSON.stringify(rows));
+  row.requeueWrites = Number(row.requeueWrites ?? 0) + 1;
+  saveRecords(rows);
+  if (state.retryMode === "lost") throw Error("合成重新排入回應遺失");
   return {
     ok: true,
-    requeued: retryable,
-    excludedUnknown: row.unknown ?? 0,
-    excludedOther,
-    excludedContactChanged:
-      exclusions.find((item) => item.reason === "CONTACT_CHANGED_SINCE_ATTEMPT")?.count ?? 0,
+    requeued: pick.length,
+    excludedUnknown: countOf(list, isUnknown),
+    excludedOther: countOf(list, (r) => r.status === "failed" && !isUnknown(r)),
+    excludedContactChanged: countOf(list, (r) => retryableFailed(r) && !!r.contactChanged),
+  };
+}
+export async function fetchCampaignSendPreview({ data }: { data: { id: string } }) {
+  call("syntheticCampaignSendPreview", data);
+  requireManager();
+  const row = retryRecords().find((item) => item.id === data.id);
+  if (!row) throw Error("Campaign not found");
+  if (!row.delivery_started) return { campaignId: row.id, deliveryStarted: false, sendable: null };
+  return {
+    campaignId: row.id,
+    deliveryStarted: true,
+    sendable: countOf(row.synthetic_recipients ?? [], dispatchableQueued),
   };
 }

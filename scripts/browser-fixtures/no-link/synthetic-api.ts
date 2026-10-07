@@ -615,5 +615,6 @@ export {
   deleteAdminAudience,
   cancelAdminCampaign,
   fetchCampaignRetryPreview,
+  fetchCampaignSendPreview,
   requeueFailedCampaignRecipients,
 } from "./synthetic-blasts";

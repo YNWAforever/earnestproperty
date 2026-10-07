@@ -1755,6 +1755,8 @@ export async function sendAdminCampaignQueue(
       ok: boolean;
       error?: string;
       materialization?: { eligible?: number };
+      /** The eligible queued recipients the approval sent to delivery. */
+      queuedRecipients?: number;
     };
   }
   return {
@@ -1822,21 +1824,50 @@ export async function fetchCampaignRetryPreview(
 }
 
 const requeueFailedCampaignRecipientsServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { campaignId: string }) => data)
+  // expectedCount is the number the user confirmed; the server refuses with
+  // RETRY_COUNT_CHANGED if it no longer matches what would move.
+  .inputValidator((data: { campaignId: string; expectedCount: number }) =>
+    z.object({ campaignId: z.string(), expectedCount: z.number().int().nonnegative() }).parse(data),
+  )
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
-    return adminData.requeueFailedCampaignRecipients({ campaignId: data.campaignId }, staff);
+    return adminData.requeueFailedCampaignRecipients(
+      { campaignId: data.campaignId, expectedCount: data.expectedCount },
+      staff,
+    );
   });
 
 export async function requeueFailedCampaignRecipients(
-  options: { data: { campaignId: string } },
+  options: { data: { campaignId: string; expectedCount: number } },
   isWorkspaceCurrent?: () => boolean,
 ) {
   return callStaffServerFn(async () =>
     dispatchWorkspaceRequest(
       () => withStaffAuthHeaders(options),
       (prepared) => requeueFailedCampaignRecipientsServer(prepared),
+      isWorkspaceCurrent,
+    ),
+  );
+}
+
+const fetchCampaignSendPreviewServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchCampaignSendPreview(data.id, staff);
+  });
+
+/** FX-10b: the exact number 「發送…」 would dispatch for a campaign with history. */
+export async function fetchCampaignSendPreview(
+  options: { data: { id: string } },
+  isWorkspaceCurrent?: () => boolean,
+) {
+  return callStaffServerFn(async () =>
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => fetchCampaignSendPreviewServer(prepared),
       isWorkspaceCurrent,
     ),
   );
