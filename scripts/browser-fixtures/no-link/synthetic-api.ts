@@ -689,5 +689,6 @@ export {
   cancelAdminCampaign,
   fetchCampaignRetryPreview,
   fetchCampaignSendPreview,
+  finishCampaignWithoutSending,
   requeueFailedCampaignRecipients,
 } from "./synthetic-blasts";

@@ -9,7 +9,17 @@ import {
   useState,
 } from "react";
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { Eye, Plus, RefreshCw, RotateCcw, Save, Send, Users, XCircle } from "lucide-react";
+import {
+  CircleCheck,
+  Eye,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Save,
+  Send,
+  Users,
+  XCircle,
+} from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
@@ -58,6 +68,7 @@ import {
   fetchAdminCampaigns,
   fetchCampaignRetryPreview,
   fetchCampaignSendPreview,
+  finishCampaignWithoutSending,
   previewAdminAudience,
   requeueFailedCampaignRecipients,
   sendAdminCampaignQueue,
@@ -69,6 +80,7 @@ import type {
   AdminAudienceInput,
   AdminAudiencePreview,
   AdminBlastOptions,
+  AdminCampaignFinishResult,
   AdminCampaignInput,
   AdminCampaignRequeueResult,
   AdminCampaignRetryPreview,
@@ -146,6 +158,11 @@ const campaignErrorLabels: Record<string, string> = {
   CAMPAIGN_NOT_ELIGIBLE: "目前 Campaign 狀態不能加入發送佇列",
   AUDIENCE_NOT_FOUND: "此 campaign 未設定收件群組",
   CAMPAIGN_CANCEL_NOT_ELIGIBLE: "此 Campaign 目前的狀態不可取消，請重新整理。",
+  // FX-10b final fix wave: the 發送… approval count and the finish action.
+  SEND_COUNT_CHANGED: "尚待發送人數已改變，未有加入發送佇列。請核對最新數字後再確認。",
+  CAMPAIGN_NOT_FINISHABLE: "此 Campaign 目前的狀態不可結束，請重新整理。",
+  CAMPAIGN_HAS_SENDABLE: "仍有尚待發送的收件人，請按「發送…」發送，或重新整理。",
+  FINISH_STATE_CHANGED: "Campaign 資料剛有變更，未有結束。請核對最新數字後再試。",
 };
 const RETRY_PREVIEW_ERROR = "未能讀取重新發送資料，請稍後再試。";
 const SEND_PREVIEW_ERROR = "未能讀取尚待發送人數，請稍後再試。";
@@ -154,6 +171,9 @@ const RETRY_OUTCOME_UNKNOWN =
   "重新排入結果未明：未能確認伺服器是否已處理。請先按「重新讀取最新數字」核對，才決定是否再試；重新排入本身不會發送訊息。";
 const LIST_MAY_BE_STALE = "Campaign 列表未能更新，畫面上的數字可能已過時，請按「重新整理」。";
 const READBACK_BLOCKS_RETRY = "請先核對上一個加入佇列或取消操作的結果，才可重新排入。";
+/** A lost or unreadable finish response. Finishing sends nothing and a repeat is harmless. */
+const FINISH_OUTCOME_UNKNOWN =
+  "結束結果未明：未能確認伺服器是否已處理。已重新讀取列表，請核對 Campaign 狀態；結束操作不會發出任何訊息。";
 
 /** Retry exclusion reasons from fetchCampaignRetryPreview. Counts only: the
  * preview carries no phone or member id, and none is ever shown. */
@@ -236,6 +256,12 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
   const [retryOutcomeUnknown, setRetryOutcomeUnknown] = useState(false);
   const retryingRef = useRef(false);
   const retryPreviewRequestRef = useRef(0);
+  // FX-10b I2: finishing a 待審核 campaign that has nothing left to send.
+  const [pendingFinish, setPendingFinish] = useState<AdminCampaignRow | null>(null);
+  const [finishPreview, setFinishPreview] = useState<AdminCampaignSendPreview | null>(null);
+  const [finishPreviewError, setFinishPreviewError] = useState<string | null>(null);
+  const finishingRef = useRef(false);
+  const finishPreviewRequestRef = useRef(0);
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [savedAudienceDraft, setSavedAudienceDraft] = useState<AdminAudienceInput | null>(null);
   const [pendingAudienceDelete, setPendingAudienceDelete] = useState<
@@ -668,6 +694,11 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
           reachable = exact.sendable;
           stampedAt = Date.now();
         }
+        // Nothing left to send: offer the finish action, not a dead-end toast.
+        if (exact.finishable) {
+          openFinish(campaign, exact);
+          return;
+        }
       } catch (err) {
         if (isWorkspaceCurrent()) toast.error(staffErrorText(err, SEND_PREVIEW_ERROR));
         return;
@@ -722,13 +753,39 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
     try {
       const result = (await sendAdminCampaignQueue(
         {
-          data: { id: pendingSend.campaignId },
+          data: {
+            id: pendingSend.campaignId,
+            // With delivery history the server queues only this exact count.
+            expectedCount: pendingSend.deliveryStarted ? pendingSend.eligible : null,
+          },
         },
         isWorkspaceCurrent,
       )) as MutationResult & {
         materialization?: Partial<AdminAudiencePreview>;
         queuedRecipients?: number;
+        sendable?: number;
       };
+      if (!isWorkspaceCurrent()) return;
+      if (result?.ok === false && result.error === "SEND_COUNT_CHANGED") {
+        // Nothing was queued (a definite refusal, not an unknown outcome):
+        // show the server's number before any new confirmation.
+        sessionStorage.removeItem(queueJournalKey);
+        const sendable = typeof result.sendable === "number" ? result.sendable : 0;
+        await refreshAdminData({ clearRowPreviews: false });
+        if (!isWorkspaceCurrent()) return;
+        if (sendable <= 0) {
+          setPendingSend(null);
+          toast.error(campaignErrorText("SEND_COUNT_CHANGED"));
+          return;
+        }
+        setPendingSend((current) =>
+          current && current.campaignId === pendingSend.campaignId
+            ? { ...current, eligible: sendable, checkedAt: Date.now() }
+            : current,
+        );
+        setConfirmError(campaignErrorText("SEND_COUNT_CHANGED"));
+        return;
+      }
       assertNoServerError(result);
       if (!isWorkspaceCurrent()) return;
 
@@ -1009,6 +1066,98 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
     }
   }
 
+  async function loadFinishPreview(campaign: AdminCampaignRow) {
+    const requestId = finishPreviewRequestRef.current + 1;
+    finishPreviewRequestRef.current = requestId;
+    setFinishPreview(null);
+    setFinishPreviewError(null);
+    try {
+      const data = (await fetchCampaignSendPreview(
+        { data: { id: campaign.id } },
+        isWorkspaceCurrent,
+      )) as AdminCampaignSendPreview;
+      if (!isWorkspaceCurrent() || requestId !== finishPreviewRequestRef.current) return;
+      if (!data || data.campaignId !== campaign.id) throw Error("Send preview mismatch");
+      setFinishPreview(data);
+      if (!data.finishable) setFinishPreviewError(campaignErrorText("CAMPAIGN_HAS_SENDABLE"));
+    } catch (err) {
+      if (!isWorkspaceCurrent() || requestId !== finishPreviewRequestRef.current) return;
+      setFinishPreviewError(staffErrorText(err, SEND_PREVIEW_ERROR));
+    }
+  }
+
+  /** Offered only when the server says nothing is left to send; the dialog
+   * re-reads that before it allows a confirmation. */
+  function openFinish(campaign: AdminCampaignRow, known?: AdminCampaignSendPreview) {
+    if (!isWorkspaceCurrent() || finishingRef.current) return;
+    setConfirmError(null);
+    setPendingFinish(campaign);
+    if (known && known.campaignId === campaign.id && known.finishable) {
+      finishPreviewRequestRef.current += 1;
+      setFinishPreview(known);
+      setFinishPreviewError(null);
+      return;
+    }
+    void loadFinishPreview(campaign);
+  }
+
+  function closeFinish() {
+    finishPreviewRequestRef.current += 1;
+    setPendingFinish(null);
+    setFinishPreview(null);
+    setFinishPreviewError(null);
+    setConfirmError(null);
+  }
+
+  // Finishing sends nothing, enqueues nothing and is idempotent on the server,
+  // so a lost response is resolved by re-reading the list, with no journal.
+  async function handleConfirmFinish() {
+    if (!pendingFinish || !finishPreview?.finishable || finishingRef.current) return;
+    finishingRef.current = true;
+    const campaign = pendingFinish;
+    setMutatingAction(`finish:${campaign.id}`);
+    setConfirmError(null);
+    let result: AdminCampaignFinishResult;
+    try {
+      result = (await finishCampaignWithoutSending(
+        { data: { campaignId: campaign.id } },
+        isWorkspaceCurrent,
+      )) as AdminCampaignFinishResult;
+    } catch (err) {
+      finishingRef.current = false;
+      if (!isWorkspaceCurrent()) return;
+      setMutatingAction(null);
+      const status = serverErrorStatus(err);
+      setConfirmError(
+        status === 401 || status === 403
+          ? staffErrorText(err, FINISH_OUTCOME_UNKNOWN)
+          : FINISH_OUTCOME_UNKNOWN,
+      );
+      await refreshAdminData({ clearRowPreviews: true });
+      return;
+    }
+    try {
+      if (!isWorkspaceCurrent()) return;
+      if (!result.ok) {
+        setConfirmError(campaignErrorText(result.error));
+        await refreshAdminData({ clearRowPreviews: true });
+        if (isWorkspaceCurrent()) await loadFinishPreview(campaign);
+        return;
+      }
+      const fresh = await refreshAdminData({ clearRowPreviews: true });
+      if (!isWorkspaceCurrent()) return;
+      closeFinish();
+      const done = result.alreadyFinished
+        ? "此 Campaign 早前已結束，未有再作更改。"
+        : `已結束 Campaign，狀態為「${campaignStatusLabels[result.status] ?? result.status}」。未有發出任何訊息。`;
+      if (fresh) toast.success(done);
+      else toast.success(done, { description: LIST_MAY_BE_STALE });
+    } finally {
+      finishingRef.current = false;
+      if (isWorkspaceCurrent()) setMutatingAction(null);
+    }
+  }
+
   const campaignRows = rows ?? [];
   const currentDraftRow = campaignRows.find((row) => row.id === campaignDraft?.id);
   const canSubmitCampaign =
@@ -1227,6 +1376,11 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                         !cancelNeedsReadback &&
                         cancellableStatuses.has(campaign.status) &&
                         !mutatingAction;
+                      // FX-10b I2: only when the server says nothing is left to send.
+                      const finishEnabled =
+                        campaign.finishable === true
+                          ? !mutatingAction && !queueNeedsReadback && !cancelNeedsReadback
+                          : null;
                       // null: no retry action for this row at all.
                       const retryEnabled =
                         (campaign.retryable_failed ?? 0) > 0 &&
@@ -1321,6 +1475,19 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                                 <XCircle />
                                 取消 Campaign
                               </Button>
+                              {finishEnabled !== null ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-11 lg:h-9"
+                                  onClick={() => openFinish(campaign)}
+                                  disabled={!finishEnabled}
+                                >
+                                  <CircleCheck />
+                                  結束 Campaign…
+                                </Button>
+                              ) : null}
                               {/* Managers and admins only: this whole workspace is gated
                                   on those roles and the server re-checks them. The list
                                   count is not consent-aware (Task 3 review M4); the
@@ -1636,6 +1803,35 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
           >
             重新讀取最新數字
           </Button>
+        ) : null}
+      </AdminConfirmDialog>
+      <AdminConfirmDialog
+        open={!!pendingFinish}
+        title="結束 Campaign（沒有尚待發送收件人）"
+        description="此 Campaign 已開始發送，但伺服器確認目前沒有可發送的收件人。結束後，仍在等候的收件人會標示為不發送，Campaign 會按實際結果顯示為「已完成」或「失敗」，不會標示為「已取消」。此操作不會發出任何訊息。"
+        confirmLabel="結束 Campaign"
+        disabled={
+          !finishPreview?.finishable ||
+          !!finishPreviewError ||
+          !!queueNeedsReadback ||
+          !!cancelNeedsReadback
+        }
+        isPending={mutatingAction?.startsWith("finish:") ?? false}
+        error={finishPreviewError ?? confirmError}
+        onOpenChange={(open) => {
+          if (!open) closeFinish();
+        }}
+        onConfirm={() => void handleConfirmFinish()}
+      >
+        {pendingFinish ? (
+          <dl className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
+            <ConfirmRow label="Campaign" value={pendingFinish.name} />
+            <ConfirmRow label="已發送" value={`${pendingFinish.sent ?? 0} 人`} />
+            <ConfirmRow label="仍在等候（不會發送）" value={`${pendingFinish.pending ?? 0} 人`} />
+          </dl>
+        ) : null}
+        {pendingFinish && !finishPreview && !finishPreviewError ? (
+          <p className="text-sm text-muted-foreground">正在核對尚待發送人數…</p>
         ) : null}
       </AdminConfirmDialog>
     </AdminShell>

@@ -117,7 +117,11 @@ export async function previewAdminAudience(input: unknown) {
     duplicatePhone: 0,
   };
 }
-export async function sendAdminCampaignQueue({ data }: { data: { id: string } }) {
+export async function sendAdminCampaignQueue({
+  data,
+}: {
+  data: { id: string; expectedCount?: number | null };
+}) {
   call("syntheticCampaignQueue", data);
   requireManager();
   if (state.queueMode === "delay")
@@ -129,6 +133,13 @@ export async function sendAdminCampaignQueue({ data }: { data: { id: string } })
     row = rows.find((item: { id: string }) => item.id === data.id);
   if (!row || !["review", "scheduled"].includes(row.status))
     return { ok: false, error: "INVALID_CAMPAIGN_STATUS" };
+  if (row.synthetic_recipients && deriveCounts(row as RetryRow).delivery_started) {
+    // Like the server: with history the confirmed count must match what the
+    // queue would send after materialise, or nothing is queued.
+    const sendable = countOf(row.synthetic_recipients as SyntheticRecipient[], sendableNow);
+    if (data.expectedCount !== sendable)
+      return { ok: false, error: "SEND_COUNT_CHANGED", sendable };
+  }
   row.status = "queued";
   row.queueWrites++;
   let queuedRecipients = 2;
@@ -137,7 +148,7 @@ export async function sendAdminCampaignQueue({ data }: { data: { id: string } })
     // go forward; the rest are held back. The result reports that count.
     const list = row.synthetic_recipients as SyntheticRecipient[];
     for (const r of list)
-      if (r.status === "queued" && !r.dispatched && !dispatchableQueued(r)) r.status = "blocked";
+      if (r.status === "queued" && !r.dispatched && !sendableNow(r)) r.status = "blocked";
     queuedRecipients = countOf(list, dispatchableQueued);
     saveRecords(rows);
   } else {
@@ -210,6 +221,10 @@ type SyntheticRecipient = {
   contactChanged?: boolean;
   /** Not the primary row for its phone in this campaign. */
   duplicatePhone?: boolean;
+  /** No longer in the campaign's audience (materialise would block it). */
+  outOfAudience?: boolean;
+  /** Dispatched once before (the server's attempted_identity). */
+  attempted?: boolean;
   name?: string | null;
 };
 type RetryRow = Record<string, unknown> & {
@@ -227,6 +242,8 @@ const retryEligible = (r: SyntheticRecipient) =>
   retryableFailed(r) && consentOk(r) && !r.contactChanged && !r.duplicatePhone;
 const dispatchableQueued = (r: SyntheticRecipient) =>
   r.status === "queued" && !r.dispatched && consentOk(r) && !r.duplicatePhone;
+/** What 發送… would send: dispatchable and still in the audience. */
+const sendableNow = (r: SyntheticRecipient) => dispatchableQueued(r) && !r.outOfAudience;
 const isUnknown = (r: SyntheticRecipient) => r.error === "WOZTELL_DELIVERY_UNKNOWN";
 const countOf = (list: SyntheticRecipient[], test: (r: SyntheticRecipient) => boolean) =>
   list.filter(test).length;
@@ -248,9 +265,16 @@ function deriveCounts(row: RetryRow) {
     pending: countOf(list, (r) => r.status === "queued" && !r.dispatched),
     paused: countOf(list, (r) => r.status === "queued" && r.error === "WOZTELL_CAMPAIGN_PAUSED"),
     retryable_failed: retryableNow(row),
-    delivery_started: list.some((r) => r.dispatched || ["sent", "failed"].includes(r.status)),
+    delivery_started: hasHistory(list),
+    // Like listAdminCampaigns: counted without the audience.
+    finishable:
+      row.status === "review" &&
+      hasHistory(list) &&
+      (state.templateStatus !== "active" || countOf(list, dispatchableQueued) === 0),
   });
 }
+const hasHistory = (list: SyntheticRecipient[]) =>
+  list.some((r) => r.dispatched || r.attempted || ["sent", "failed"].includes(r.status));
 function retryRecords() {
   return (records() as RetryRow[]).map(deriveCounts);
 }
@@ -315,7 +339,7 @@ export async function requeueFailedCampaignRecipients({
   if (pick.length === 0) return { ok: false, error: "NOTHING_TO_RETRY" };
   if (pick.length !== data.expectedCount)
     return { ok: false, error: "RETRY_COUNT_CHANGED", retryable: pick.length };
-  for (const r of pick) Object.assign(r, { status: "queued", error: null });
+  for (const r of pick) Object.assign(r, { status: "queued", error: null, attempted: true });
   row.status = "review";
   row.requeueWrites = Number(row.requeueWrites ?? 0) + 1;
   saveRecords(rows);
@@ -333,10 +357,40 @@ export async function fetchCampaignSendPreview({ data }: { data: { id: string } 
   requireManager();
   const row = retryRecords().find((item) => item.id === data.id);
   if (!row) throw Error("Campaign not found");
-  if (!row.delivery_started) return { campaignId: row.id, deliveryStarted: false, sendable: null };
+  if (!row.delivery_started)
+    return { campaignId: row.id, deliveryStarted: false, sendable: null, finishable: false };
+  const sendable = countOf(row.synthetic_recipients ?? [], sendableNow);
   return {
     campaignId: row.id,
     deliveryStarted: true,
-    sendable: countOf(row.synthetic_recipients ?? [], dispatchableQueued),
+    sendable,
+    finishable: row.status === "review" && (state.templateStatus !== "active" || sendable === 0),
   };
+}
+// FX-10b I2: finishCampaignWithoutSending, with the server's guards.
+export async function finishCampaignWithoutSending({ data }: { data: { campaignId: string } }) {
+  call("syntheticCampaignFinish", data);
+  requireManager();
+  const rows = retryRecords(),
+    row = rows.find((item) => item.id === data.campaignId);
+  if (!row) return { ok: false, error: "Campaign not found" };
+  const list = row.synthetic_recipients ?? [];
+  if (["completed", "failed"].includes(row.status) && Number(row.finishWrites ?? 0) > 0)
+    return { ok: true, status: row.status, blocked: 0, alreadyFinished: true };
+  if (row.status !== "review" || !row.delivery_started)
+    return { ok: false, error: "CAMPAIGN_NOT_FINISHABLE" };
+  const sendable = countOf(list, sendableNow);
+  if (state.templateStatus === "active" && sendable > 0)
+    return { ok: false, error: "CAMPAIGN_HAS_SENDABLE", sendable };
+  let blocked = 0;
+  for (const r of list)
+    if (r.status === "queued" && !r.dispatched) {
+      Object.assign(r, { status: "blocked", error: "CAMPAIGN_FINISHED_NOT_SENDABLE" });
+      blocked += 1;
+    }
+  const notSent = countOf(list, (r) => r.status === "failed" || r.status === "blocked");
+  row.status = notSent >= list.length ? "failed" : "completed";
+  row.finishWrites = Number(row.finishWrites ?? 0) + 1;
+  saveRecords(rows);
+  return { ok: true, status: row.status, blocked };
 }

@@ -247,7 +247,98 @@ const patchRecipient = (page: Page, index: number, patch: Record<string, unknown
 const toast = (page: Page) => page.locator("[data-sonner-toast]");
 /** Exactly one toast with this text (others, such as the preview's, may stack). */
 const toastWith = (page: Page, text: string) => toast(page).filter({ hasText: text });
+const finishButton = (page: Page) =>
+  row(page).getByRole("button", { name: "結束 Campaign…", exact: true });
+const finishDialog = (page: Page) =>
+  page.getByRole("alertdialog", { name: "結束 Campaign（沒有尚待發送收件人）" });
+/** A refused row that a requeue put back in the queue. */
+const requeuedFor = (extra: Record<string, unknown> = {}) => ({
+  status: "queued",
+  attempted: true,
+  ...extra,
+});
 function retryTests() {
+  test("結束 Campaign… appears only when the server says nothing is left to send", async ({
+    page,
+  }) => {
+    await seedCampaign(page, {
+      status: "review",
+      synthetic_recipients: [sentTo(), requeuedFor(), refusedBy()],
+    });
+    await open(page);
+    // Still one sendable recipient: no finish, 發送… is the way forward.
+    await expect(finishButton(page)).toHaveCount(0);
+    // The waiting contact opts out; the server now counts nothing sendable.
+    await patchRecipient(page, 1, { consent: false });
+    await page.reload();
+    await expect(finishButton(page)).toBeVisible();
+    await finishButton(page).click();
+    const dialog = finishDialog(page);
+    await expect(dialog).toContainText("不會標示為「已取消」");
+    await expect(confirmValue(page, dialog, "已發送")).toHaveText("1 人");
+    await expect(confirmValue(page, dialog, "仍在等候（不會發送）")).toHaveText("1 人");
+    await evidence(page, "finish-confirm", dialog);
+    await dialog.getByRole("button", { name: "結束 Campaign", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(
+      toastWith(page, "已結束 Campaign，狀態為「已完成」。未有發出任何訊息。"),
+    ).toHaveCount(1);
+    expect(await savedCampaign(page)).toMatchObject({ status: "completed", finishWrites: 1 });
+    expect((await fixtureCalls(page, "syntheticCampaignFinish")).map((c) => c.input)).toEqual([
+      { campaignId: "60000000-0000-4000-8000-000000000001" },
+    ]);
+    expect(await queueCalls(page)).toHaveLength(0);
+    await expect(row(page).getByText("已完成", { exact: true })).toBeVisible();
+    await expect(finishButton(page)).toHaveCount(0);
+  });
+  test("發送… with nothing left to send offers to finish instead of a dead end", async ({
+    page,
+  }) => {
+    // The only waiting row has left the audience: the list cannot tell, the
+    // server's send preview can.
+    await seedCampaign(page, {
+      status: "review",
+      synthetic_recipients: [sentTo(), requeuedFor({ outOfAudience: true })],
+    });
+    await open(page);
+    await expect(finishButton(page)).toHaveCount(0);
+    await row(page).getByRole("button", { name: "預覽收件人", exact: true }).click();
+    await row(page).getByRole("button", { name: "發送…", exact: true }).click();
+    const dialog = finishDialog(page);
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole("alertdialog", { name: "確認發送 WhatsApp 群發？" })).toHaveCount(
+      0,
+    );
+    await dialog.getByRole("button", { name: "結束 Campaign", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    expect(await savedCampaign(page)).toMatchObject({ status: "completed" });
+    expect(await queueCalls(page)).toHaveLength(0);
+  });
+  test("a changed send count queues nothing and shows the server's number first", async ({
+    page,
+  }) => {
+    await seedCampaign(page, {
+      status: "review",
+      synthetic_recipients: [sentTo(), requeuedFor(), requeuedFor()],
+    });
+    await open(page);
+    const dialog = await confirm(page);
+    await expect(confirmValue(page, dialog, "尚待發送收件人")).toHaveText("2 人");
+    // Another change lands while the confirmation is open.
+    await patchRecipient(page, 2, { consent: false });
+    await dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }).click();
+    await expect(dialog.getByRole("alert")).toContainText("尚待發送人數已改變，未有加入發送佇列");
+    await expect(confirmValue(page, dialog, "尚待發送收件人")).toHaveText("1 人");
+    expect(await savedCampaign(page)).toMatchObject({ status: "review", queueWrites: 0 });
+    await expect(recovery(page)).toHaveCount(0);
+    await evidence(page, "send-count-changed", dialog);
+    await dialog.getByRole("button", { name: "確認發送給 1 人", exact: true }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(toastWith(page, "已加入發送佇列：1 位合資格收件人")).toHaveCount(1);
+    expect(
+      (await queueCalls(page)).map((c) => (c.input as { expectedCount: number }).expectedCount),
+    ).toEqual([2, 1]);
+  });
   test("retry shows the exact count, lists unknown recipients by name only, and re-queues once", async ({
     page,
   }) => {
