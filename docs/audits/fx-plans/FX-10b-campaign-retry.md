@@ -117,6 +117,7 @@ These are the likeliest failure modes that no fix-plan test covers. Each has a n
 | Rows stuck `sending` after a non-retryable job failure (Fact 17) | FX-07 follow-up | A terminal-job reconciliation for `woztell.campaign.deliver` (any `failed` job, not only `LEASE_EXPIRED`) that applies the Fact 2 rules. FX-10b only guarantees that its own pause leaves nothing in `sending`. |
 | Store the provider `messageId` on `sent` campaign rows | FX-18 | Write `external_message_id` from `providerResult.primaryMessageId`, for support lookups. |
 | Use FX-08's `stage:"preflight"` instead of `status === undefined` | after #228 merges | A one-line change in `classifyCampaignSendResult` plus its test. |
+| A failed pause or `requeueRest` transaction leaves the campaign in `sending` (final review M5, tracking only) | FX-07 follow-up | If the pause transaction or `requeueRest` throws, undispatched `sending` rows stay with a non-retryable failed job, the campaign stays `sending`, and a requeue answers `CAMPAIGN_STILL_SENDING` until a new claim runs. Cover it in the same terminal-job reconciliation as the row above. No FX-10b code change. |
 
 ---
 
@@ -535,7 +536,9 @@ export async function requeueFailedCampaignRecipients(
 
 ## Owner actions before production
 
-**Order:** owner approves this plan → staging (Vercel preview) sandbox check → merge → canary. **No migration, so there is no Neon branch or production SQL step.** Nothing is sent to any real customer number at any point.
+**Order:** owner approves this plan → staging (Vercel preview) sandbox check → merge → canary. Nothing is sent to any real customer number at any point.
+
+**Migration (final fix wave, owner decision 2026-10-07).** `neon/migrations/20261010100000_campaign_attempted_identity.sql` adds one nullable column, `whatsapp_campaign_recipients.attempted_identity`. It is additive and re-runnable, and it writes no row. It has no revert file, because the column can simply stay. Apply it to the Neon preview branch before the staging check and to production before the deploy, through the normal `npm run neon:migrate`. Rows attempted before the migration have no digest, so the send-time identity check only covers attempts made after it. The requeue-time `updated_at` check still covers the older rows.
 
 1. **Read-only production snapshot, before deploy.** It changes nothing. It shows how many campaigns this unblocks and whether anything is stuck today (Facts 7 and 17):
    ```sql
