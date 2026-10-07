@@ -280,7 +280,10 @@ export async function listInboundReceiptProblems(
                AND c.origin='live_webhook' AND c.event_kind='customer_message'
                AND (c.lease_until IS NULL OR c.lease_until <= now())
                AND ${RECEIPT_INFLIGHT_GRACE_SQL("c")}) AS can_retry,
-            (count(*) OVER (PARTITION BY c.problem_kind))::int AS kind_total
+            ${PROBLEM_KINDS.map(
+              (kind) =>
+                `(count(*) FILTER (WHERE c.problem_kind='${kind}') OVER ())::int AS ${kind}_total`,
+            ).join(",\n            ")}
      FROM classified c
      LEFT JOIN whatsapp_conversations w
        ON w.channel_id=c.channel_id AND w.woztell_member_id=c.member_id
@@ -293,7 +296,7 @@ export async function listInboundReceiptProblems(
     InboundReceiptProblemKind,
     number
   >;
-  for (const row of rows) counts[row.kind as InboundReceiptProblemKind] = Number(row.kind_total);
+  for (const kind of PROBLEM_KINDS) counts[kind] = Number(rows[0]?.[`${kind}_total`] ?? 0);
   const iso = (value: unknown) =>
     value === null || value === undefined ? null : new Date(value as string | Date).toISOString();
   return {

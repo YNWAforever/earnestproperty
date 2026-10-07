@@ -667,6 +667,44 @@ test("FX-07 receipts: observe-only retry, listing and C-09 labelling", async (t)
       },
     );
 
+    await t.test("receipt counts include kinds outside the limited page", async () => {
+      await reset();
+      for (let index = 0; index < 51; index++) {
+        await seed(
+          `synthetic-ops-count-scheduled-${index}`,
+          "projection_state='failed', block_reason='PROJECTION_FAILED', attempt_count=3, received_at=now()-interval '1 day'",
+        );
+      }
+      await seed(
+        "synthetic-ops-count-exhausted",
+        "projection_state='failed', block_reason='PROJECTION_FAILED', attempt_count=20, received_at=now()-interval '2 days'",
+      );
+      await seed(
+        "synthetic-ops-count-review",
+        "projection_state='failed', block_reason='REVIEW_REQUIRED', received_at=now()-interval '3 days'",
+      );
+      await seed(
+        "synthetic-ops-count-routing",
+        "projection_state='projected', attempt_count=2, projected_at=now(), received_at=now()-interval '4 days'",
+      );
+      const expected = {
+        retry_scheduled: 51,
+        retry_exhausted: 1,
+        review_required: 1,
+        needs_routing: 1,
+      };
+      for (const options of [{}, { limit: 1 }, { limit: 100 }]) {
+        const result = await listInboundReceiptProblems(admin, { query, ...options });
+        assert.equal(result.rows.length, options.limit === 100 ? 54 : (options.limit ?? 50));
+        assert.deepEqual(result.counts, expected);
+      }
+      await reset();
+      assert.deepEqual(await listInboundReceiptProblems(admin, { query }), {
+        rows: [],
+        counts: { retry_scheduled: 0, retry_exhausted: 0, review_required: 0, needs_routing: 0 },
+      });
+    });
+
     await t.test(
       "list shows retry, exhausted, review and 需要分派 receipts without message content",
       async () => {

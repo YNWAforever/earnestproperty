@@ -36,8 +36,8 @@ test("FX-08 unknown outcomes (owned Postgres)", { timeout: 300000 }, async (t) =
   const network = mock.method(globalThis, "fetch", () => {
     throw Error("Provider/network request forbidden in owned unknown-outcome acceptance");
   });
-  const previousWake = process.env.OPS_EVENT_WAKE_ENABLED;
-  delete process.env.OPS_EVENT_WAKE_ENABLED;
+  const previousWake = process.env.OPS_WAKE_URL;
+  process.env.OPS_WAKE_URL = "";
   try {
     await withOwnedPostgres(async ({ pool, query, transaction }) => {
       await mockOwnedServerDb(mock, query, transaction);
@@ -1017,7 +1017,7 @@ test("FX-08 unknown outcomes (owned Postgres)", { timeout: 300000 }, async (t) =
     assert.equal(network.mock.callCount(), 0);
   } finally {
     network.mock.restore();
-    if (previousWake === undefined) delete process.env.OPS_EVENT_WAKE_ENABLED;
-    else process.env.OPS_EVENT_WAKE_ENABLED = previousWake;
+    if (previousWake === undefined) delete process.env.OPS_WAKE_URL;
+    else process.env.OPS_WAKE_URL = previousWake;
   }
 });
