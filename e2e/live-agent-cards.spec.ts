@@ -235,6 +235,36 @@ for (const width of WIDTHS) {
     expect(await page.locator("body").innerText()).not.toContain("raw");
   });
 
+  test(`a 200 reply with no usable text opens the handoff panel at ${width}px`, async ({
+    page,
+  }) => {
+    await open(page, width, (route) => json(route, {}));
+    await ask(page, "碧堤半島 兩房");
+
+    await expect(page.getByText("暫時未能回答，請稍後再試。", { exact: true })).toBeVisible();
+    await expect(phoneInput(page)).toBeVisible();
+  });
+
+  test(`a listings reply with no safe listing card opens the handoff panel at ${width}px`, async ({
+    page,
+  }) => {
+    await open(page, width, (route) =>
+      json(route, {
+        ...LISTINGS_REPLY,
+        reply: {
+          ...LISTINGS_REPLY.reply,
+          cards: [{ ...LISTING_CARDS[0], href: "https://evil.test/x" }],
+        },
+      }),
+    );
+    await ask(page, "碧堤半島 兩房");
+
+    await expect(page.getByText(COPY.listings, { exact: true })).toBeVisible();
+    await expect(page.getByRole("dialog").getByRole("link")).toHaveCount(0);
+    await expect(phoneInput(page)).toBeVisible();
+    expect(await page.content()).not.toContain("evil.test");
+  });
+
   for (const failure of ["500", "network"] as const) {
     test(`a failed send (${failure}) keeps the message and opens the handoff panel at ${width}px`, async ({
       page,
@@ -249,6 +279,13 @@ for (const width of WIDTHS) {
       await expect(page.getByText(COPY.offline, { exact: true })).toBeVisible();
       await expect(phoneInput(page)).toBeVisible();
       expect(await page.locator("body").innerText()).not.toContain("Unable to answer");
+      // Keyboard order with the panel open: back from the message box reaches the consent box
+      // (the 轉介代理 button is disabled until the phone is valid), then the phone field.
+      await page.getByRole("textbox", { name: "即時客服訊息" }).focus();
+      await page.keyboard.press("Shift+Tab");
+      await expect(page.getByRole("checkbox", { name: "同意 WhatsApp 跟進聯絡" })).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(phoneInput(page)).toBeFocused();
       if (failure === "500") {
         await page.screenshot({ path: resolve(SHOTS, `fx11b-${width}-send-failed.png`) });
       }

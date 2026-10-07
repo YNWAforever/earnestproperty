@@ -11,11 +11,9 @@ import {
   liveAgentPhoneErrorMessage,
   validateHandoffPhone,
 } from "@/lib/ai/live-agent";
-import {
-  isInternalCardHref,
-  MAX_LISTING_CARDS,
-  type LiveAgentCard,
-} from "@/lib/ai/live-agent-reply";
+import { isInternalCardHref, type LiveAgentCard } from "@/lib/ai/live-agent-reply";
+
+import { nextHandoffOffered, readLiveAgentMessageResponse } from "./live-agent-widget-state";
 
 const liveAgentEndpoints = {
   session: "/api/live-agent/session",
@@ -112,69 +110,6 @@ export function LiveAgentHandoffPanel({
   );
 }
 
-const CARD_TYPES = new Set<LiveAgentCard["type"]>(["listing", "estate", "faq", "more"]);
-
-function readCard(value: unknown): LiveAgentCard | null {
-  if (!value || typeof value !== "object") return null;
-  const card = value as Record<string, unknown>;
-  if (typeof card.type !== "string" || !CARD_TYPES.has(card.type as LiveAgentCard["type"])) {
-    return null;
-  }
-  if (typeof card.title !== "string" || !card.title.trim()) return null;
-  if (!Array.isArray(card.lines) || !card.lines.every((line) => typeof line === "string")) {
-    return null;
-  }
-  return {
-    type: card.type as LiveAgentCard["type"],
-    title: card.title,
-    lines: card.lines as string[],
-    href: typeof card.href === "string" ? card.href : null,
-  };
-}
-
-/** The message route's body as the widget shows it: the reply's fixed copy (else the stored
- *  transcript text, else a fixed fallback) and only well-formed cards, at most
- *  MAX_LISTING_CARDS of them listings. */
-export function readLiveAgentMessageResponse(data: unknown): {
-  text: string;
-  cards: LiveAgentCard[];
-} {
-  const body = (data && typeof data === "object" ? data : {}) as {
-    message?: { message_text?: unknown };
-    reply?: { text?: unknown; cards?: unknown };
-  };
-  const replyText = body.reply?.text;
-  const messageText = body.message?.message_text;
-  const text =
-    typeof replyText === "string" && replyText.trim()
-      ? replyText
-      : typeof messageText === "string" && messageText.trim()
-        ? messageText
-        : "暫時未能回答，請稍後再試。";
-
-  const cards: LiveAgentCard[] = [];
-  let listings = 0;
-  const rawCards = body.reply?.cards;
-  for (const value of Array.isArray(rawCards) ? rawCards : []) {
-    const card = readCard(value);
-    if (!card) continue;
-    if (card.type === "listing") {
-      if (listings >= MAX_LISTING_CARDS) continue;
-      listings += 1;
-    }
-    cards.push(card);
-  }
-  return { text, cards };
-}
-
-/** The server decides when to offer the handoff; once offered it stays for the session. */
-export function nextHandoffOffered(
-  current: boolean,
-  response: { handoffSuggested?: unknown },
-): boolean {
-  return current || response.handoffSuggested === true;
-}
-
 // Card links are plain <a> to internal pages only (property, estate, listings search): the
 // widget also renders with no router, and a full page load to a property page is fine. Any
 // other href renders the title as text.
@@ -190,7 +125,7 @@ export function LiveAgentReplyCards({ cards }: { cards: LiveAgentCard[] }) {
           {isInternalCardHref(card.href) ? (
             <a
               href={card.href ?? undefined}
-              className="rounded-sm font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+              className="inline-block rounded-sm py-1 font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
             >
               {card.title}
             </a>
@@ -278,7 +213,9 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
         ...current,
         { role: "assistant", text: reply.text, cards: reply.cards },
       ]);
-      setHandoffOffered((current) => nextHandoffOffered(current, data ?? {}));
+      // The server decides, but a reply with nothing usable (no text, or a listings reply with
+      // no safe listing card) always offers the handoff so the enquiry is never lost.
+      setHandoffOffered((current) => nextHandoffOffered(current, data ?? {}) || !reply.usable);
     } catch {
       setMessages((current) => [
         ...current,

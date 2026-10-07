@@ -11,12 +11,8 @@ import {
 
 import { LIVE_AGENT_REPLY_COPY, type LiveAgentCard } from "@/lib/ai/live-agent-reply";
 
-import {
-  LiveAgentHandoffPanel,
-  LiveAgentReplyCards,
-  nextHandoffOffered,
-  readLiveAgentMessageResponse,
-} from "./LiveAgentWidget";
+import { LiveAgentHandoffPanel, LiveAgentReplyCards } from "./LiveAgentWidget";
+import { nextHandoffOffered, readLiveAgentMessageResponse } from "./live-agent-widget-state";
 
 type PanelProps = Parameters<typeof LiveAgentHandoffPanel>[0];
 
@@ -281,4 +277,50 @@ test("the message response keeps well-formed cards and the reply text only", () 
   expect(readLiveAgentMessageResponse({ message: { message_text: "舊回覆" } }).text).toBe("舊回覆");
   expect(readLiveAgentMessageResponse({}).text).toBe("暫時未能回答，請稍後再試。");
   expect(readLiveAgentMessageResponse({}).cards).toEqual([]);
+});
+
+test("a reply with nothing usable is flagged so the widget offers the handoff", () => {
+  const fallback = "暫時未能回答，請稍後再試。";
+  for (const body of [null, undefined, {}, "oops", { message: {} }, { reply: { text: "  " } }]) {
+    const parsed = readLiveAgentMessageResponse(body);
+    expect(parsed.text).toBe(fallback);
+    expect(parsed.usable).toBe(false);
+  }
+
+  // A listings reply whose cards were all rejected, or whose only listing has an unsafe href.
+  for (const cards of [
+    [],
+    [{ type: "listing", title: 7, lines: [], href: "/property/EP11001" }],
+    [{ type: "listing", title: "盤", lines: ["售 $1M"], href: "https://evil.test/x" }],
+    [
+      {
+        type: "more",
+        title: LIVE_AGENT_REPLY_COPY.more_link,
+        lines: [],
+        href: "/listings?deal=all",
+      },
+    ],
+  ]) {
+    const parsed = readLiveAgentMessageResponse({
+      reply: { kind: "listings", text: LIVE_AGENT_REPLY_COPY.listings, cards },
+    });
+    expect(parsed.text).toBe(LIVE_AGENT_REPLY_COPY.listings);
+    expect({ cards, usable: parsed.usable }).toEqual({ cards, usable: false });
+  }
+
+  // Usable replies.
+  expect(
+    readLiveAgentMessageResponse({
+      reply: {
+        kind: "listings",
+        text: LIVE_AGENT_REPLY_COPY.listings,
+        cards: [{ type: "listing", title: "盤", lines: [], href: "/property/EP11001" }],
+      },
+    }).usable,
+  ).toBe(true);
+  expect(
+    readLiveAgentMessageResponse({ reply: { kind: "faq", text: LIVE_AGENT_REPLY_COPY.faq } })
+      .usable,
+  ).toBe(true);
+  expect(readLiveAgentMessageResponse({ message: { message_text: "舊回覆" } }).usable).toBe(true);
 });
