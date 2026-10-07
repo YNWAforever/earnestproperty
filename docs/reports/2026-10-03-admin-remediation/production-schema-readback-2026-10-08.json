@@ -1,0 +1,483 @@
+{
+  "recordedAt": "2026-10-07T17:07:41.996657+00:00",
+  "gitSha": "a1fb816b6325bdc1a505c25f3569df9ee0629db6",
+  "taskIds": [
+    "EP-00",
+    "EP-07",
+    "EP-12",
+    "EP-14",
+    "EP-15",
+    "EP-16",
+    "EP-19",
+    "EP-20",
+    "EP-21"
+  ],
+  "caseIds": [
+    "TEST-02",
+    "TEST-14",
+    "TEST-16",
+    "TEST-17",
+    "TEST-42",
+    "TEST-54",
+    "TEST-58",
+    "NEW-00",
+    "NEW-07",
+    "NEW-12",
+    "NEW-14",
+    "NEW-15",
+    "NEW-16",
+    "NEW-19",
+    "NEW-20",
+    "NEW-21"
+  ],
+  "status": "PRODUCTION_SCHEMA_VERIFIED_ONLY",
+  "environment": "Neon production dawn-meadow-79190048/br-polished-sea-aom4i1ct/neondb PostgreSQL18.6; owned rehearsal br-weathered-river-aofx2exw",
+  "actor": {
+    "database_actor": "neondb_owner",
+    "database_name": "neondb",
+    "postgres_version": "18.6 (6569466)"
+  },
+  "authorization": {
+    "humanReply": "批准這七份 production migrations，按文件目標與限制執行",
+    "approvedPacketSha256": "17d80ab31486d487098f8d855d6d2243e9decdf801a5ffdb645b0f6f6b08238e",
+    "projectId": "dawn-meadow-79190048",
+    "branchId": "br-polished-sea-aom4i1ct",
+    "database": "neondb",
+    "sourceSha": "a1fb816b6325bdc1a505c25f3569df9ee0629db6",
+    "maxLegacyBackfill": 1,
+    "workerDeployments": 0,
+    "dispatches": 0,
+    "sends": 0,
+    "modelCalls": 0,
+    "providerBudget": 0
+  },
+  "backup": {
+    "id": "br-ancient-block-aox3y3w1",
+    "name": "codex-pending7-backup-20261008",
+    "parent_id": "br-polished-sea-aom4i1ct",
+    "parent_lsn": "0/2607A070",
+    "parent_timestamp": "2026-10-07T16:44:32Z",
+    "created_at": "2026-10-07T16:44:41Z",
+    "expires_at": "2026-10-14T16:44:29Z",
+    "state": "ready"
+  },
+  "dryRun": {
+    "ownedBranchId": "br-weathered-river-aofx2exw",
+    "sevenCanonicalFilesAppliedAndRerun": true,
+    "tables": 126,
+    "nonemptyTables": 80,
+    "originalRowsPreserved": true,
+    "canonicalNewFieldsIdempotent": true,
+    "lockedExecutionWrapperVerified": true,
+    "workerConfigChanged": false
+  },
+  "redReadback": {
+    "registryTotal": 85,
+    "sevenAbsent": true,
+    "oldRegistryDigest": "ea275c9548a549c9e906313e92417009",
+    "tableColumns": 1425,
+    "legacyOptoutCandidates": 1
+  },
+  "execution": [
+    {
+      "filename": "20261006110000_duty_manager.sql",
+      "sha256": "77193fefd7736168a8467e13f8be5385a59815d978c16fe4e210b05234014bc5",
+      "committedReportAt": "2026-10-07T16:53:34.08702+00:00",
+      "independentReadbackAt": "2026-10-07T16:53:40.905893+00:00",
+      "registryTotal": 86,
+      "originalTablesChecked": 126,
+      "originalRowsPreserved": true,
+      "rowsChecked": 21354,
+      "legacyOptoutStamped": null
+    },
+    {
+      "filename": "20261007100000_wa_access_unassigned.sql",
+      "sha256": "352b4f19b9fde22d18fa651dcbd03cbca12648b7ab4b790cc84ff884f5eaf50d",
+      "committedReportAt": "2026-10-07T16:54:20.418167+00:00",
+      "independentReadbackAt": "2026-10-07T16:54:27.039542+00:00",
+      "registryTotal": 87,
+      "originalTablesChecked": 126,
+      "originalRowsPreserved": true,
+      "rowsChecked": 21354,
+      "legacyOptoutStamped": null
+    },
+    {
+      "filename": "20261008100000_whatsapp_opt_out_evidence.sql",
+      "sha256": "b41c406ecbbcc9cc76b44354aee3aefa6d13225a82be2c518e5aaaaff7acd473",
+      "committedReportAt": "2026-10-07T16:55:21.542695+00:00",
+      "independentReadbackAt": "2026-10-07T16:55:28.067868+00:00",
+      "registryTotal": 88,
+      "originalTablesChecked": 126,
+      "originalRowsPreserved": true,
+      "rowsChecked": 21354,
+      "legacyOptoutStamped": 1
+    },
+    {
+      "filename": "20261008110000_outbound_unknown_resolution.sql",
+      "sha256": "53aae23527cae32191539b90bba122b7e81bc275460aacff95a752a0b3eb181b",
+      "committedReportAt": "2026-10-07T16:56:21.570947+00:00",
+      "independentReadbackAt": "2026-10-07T16:56:30.071111+00:00",
+      "registryTotal": 89,
+      "originalTablesChecked": 126,
+      "originalRowsPreserved": true,
+      "rowsChecked": 21354,
+      "legacyOptoutStamped": null
+    },
+    {
+      "filename": "20261009100000_contact_profile_name.sql",
+      "sha256": "5d3afd4056462bdecf947893ce1876d3fc19dfbfc935d3bb33aa1a337a4e718a",
+      "committedReportAt": "2026-10-07T16:57:20.415211+00:00",
+      "independentReadbackAt": "2026-10-07T16:57:27.273236+00:00",
+      "registryTotal": 90,
+      "originalTablesChecked": 126,
+      "originalRowsPreserved": true,
+      "rowsChecked": 21354,
+      "legacyOptoutStamped": null
+    },
+    {
+      "filename": "20261009110000_inbound_lead_reopen.sql",
+      "sha256": "dea20fb80b7c77d1fa95dcf313b9898e135e406c4b93b80ef5b6e48e205ea120",
+      "committedReportAt": "2026-10-07T16:58:35.383956+00:00",
+      "independentReadbackAt": "2026-10-07T16:58:44.133365+00:00",
+      "registryTotal": 91,
+      "originalTablesChecked": 126,
+      "originalRowsPreserved": true,
+      "rowsChecked": 21354,
+      "legacyOptoutStamped": null
+    },
+    {
+      "filename": "20261010100000_campaign_attempted_identity.sql",
+      "sha256": "6c6bf5424e6f5c739711652e9c456b6fee503449dded943ecb75b50f6309f2fd",
+      "committedReportAt": "2026-10-07T16:59:43.215747+00:00",
+      "independentReadbackAt": "2026-10-07T16:59:52.114153+00:00",
+      "registryTotal": 92,
+      "originalTablesChecked": 126,
+      "originalRowsPreserved": true,
+      "rowsChecked": 21354,
+      "legacyOptoutStamped": null
+    }
+  ],
+  "finalReadback": {
+    "registryTotal": 92,
+    "repositoryMigrationCount": 92,
+    "pending": [],
+    "old85RegistryDigest": "ea275c9548a549c9e906313e92417009",
+    "catalog": {
+      "public_tables": 126,
+      "table_columns": 1438,
+      "functions": 237,
+      "triggers": 64,
+      "indexes": 340,
+      "checks": 235
+    },
+    "newColumns": [
+      {
+        "type": "timestamptz",
+        "table": "crm_contacts",
+        "column": "opted_out_at",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "timestamptz",
+        "table": "crm_contacts",
+        "column": "opted_out_cleared_at",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "uuid",
+        "table": "crm_contacts",
+        "column": "opted_out_cleared_by",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "crm_contacts",
+        "column": "opted_out_message_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "crm_contacts",
+        "column": "opted_out_source",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "crm_contacts",
+        "column": "opted_out_text",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "crm_contacts",
+        "column": "whatsapp_profile_name",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "uuid",
+        "table": "staff_notification_attempts",
+        "column": "lead_id",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "bool",
+        "table": "staff_users",
+        "column": "is_duty_manager",
+        "default": "false",
+        "nullable": "NO"
+      },
+      {
+        "type": "text",
+        "table": "whatsapp_campaign_recipients",
+        "column": "attempted_identity",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "text",
+        "table": "whatsapp_outbound_intents",
+        "column": "resolution_reason",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "timestamptz",
+        "table": "whatsapp_outbound_intents",
+        "column": "resolved_at",
+        "default": null,
+        "nullable": "YES"
+      },
+      {
+        "type": "uuid",
+        "table": "whatsapp_outbound_intents",
+        "column": "resolved_by",
+        "default": null,
+        "nullable": "YES"
+      }
+    ],
+    "legacyOptoutsStamped": 1,
+    "legacyOptoutsUnstamped": 0,
+    "staffSubjectViolations": 0,
+    "campaignIdentityBackfill": 0,
+    "dutyManagerTrueCount": 0,
+    "notificationIdNullable": "YES",
+    "resolutionTrigger": {
+      "name": "wa_intent_resolution_guard",
+      "enabled": "O",
+      "definition": "CREATE TRIGGER wa_intent_resolution_guard BEFORE INSERT OR UPDATE OF state ON public.whatsapp_outbound_intents FOR EACH ROW EXECUTE FUNCTION wa_guard_outbound_resolution()"
+    },
+    "functionFingerprints": [
+      {
+        "proname": "ensure_whatsapp_inbound_lead_fn",
+        "definition_md5": "90881c49bd75c516b18f7f033ba8f436",
+        "identity_arguments": ""
+      },
+      {
+        "proname": "wa_can_read_conversation",
+        "definition_md5": "6630c27fe0452d1ab8a1bd408c3cf7b3",
+        "identity_arguments": "p_actor uuid, p_conversation uuid"
+      },
+      {
+        "proname": "wa_can_read_enquiry",
+        "definition_md5": "e40a15899274e54dca1956cb8d78201e",
+        "identity_arguments": "p_actor uuid, p_inquiry uuid"
+      },
+      {
+        "proname": "wa_guard_outbound_resolution",
+        "definition_md5": "115954fc77694aa48d713349c8655f7a",
+        "identity_arguments": ""
+      }
+    ],
+    "allDetailedConstraintsValidated": true,
+    "staffLeadIndex": {
+      "name": "staff_attempts_lead",
+      "definition": "CREATE INDEX staff_attempts_lead ON public.staff_notification_attempts USING btree (lead_id) WHERE (lead_id IS NOT NULL)"
+    },
+    "driftMethod": "Existing pure helpers evaluated against fresh explicit-target MCP SELECT; no CLI DB connection",
+    "driftCliDatabaseCommandRun": false,
+    "ownedCanonicalFunctionComparison": {
+      "matched": 4,
+      "proof": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/owned-canonical-function-fingerprints.json",
+      "sha256": "ab51d073b6901d0a6fe378c12241df4d7c6d2fbf6646173d8ac445b6117281ed"
+    }
+  },
+  "preservationMethod": "Each file uses its own repeatable-read transaction, projects all 126 tables onto that transaction's original columns, and compares before/after row counts and sorted-row digests. Only the seven authorized app_migrations additions are excluded. A mismatch aborts that file. This is migration preservation, not a claim that concurrent production writes were frozen for the entire operation.",
+  "scope": {
+    "tablesAdded": 0,
+    "columnsAdded": 13,
+    "indexAdded": 1,
+    "triggerAdded": 1,
+    "functionAdded": 1,
+    "functionsReplaced": 3,
+    "checksAddedNet": 2,
+    "nullableForeignKeysAdded": 3,
+    "legacyBackfillMaximum": 1,
+    "actualLegacyBackfill": 1,
+    "managerReadScope": "company-wide including unassigned/cross-branch; correct/reply functions unchanged",
+    "futureInbound": "A new delayed/gap-fill INSERT can reopen despite later staff closure when msg_at >= last_inbound_at. Reopened can permit a new lead even when msg_at <= latest closed-lead updated_at. Existing message rows are not replayed."
+  },
+  "effects": {
+    "productionMigrationsApplied": 7,
+    "migrationRegistryRowsAdded": 7,
+    "legacyNewEvidenceRowsBackfilled": 1,
+    "optoutFlagChanges": 0,
+    "recipients": 0,
+    "trueSends": 0,
+    "modelCalls": 0,
+    "providerBudget": 0,
+    "workerDeployments": 0,
+    "workerDispatches": 0,
+    "manualScheduleRuns": 0,
+    "newPropertyHkRequests": 0
+  },
+  "capabilityStatus": {
+    "productionSchema": "READY; exact seven applied and independently verified",
+    "workerRollout": "NOT_READY; existing Worker/config not changed, separate approval required",
+    "newSourceThreeNativeSchedules": "NOT_READY; no additional native schedule evidence collected in this operation",
+    "propertyHkFullSource": "BLOCKED; prior detail403 and missing verified detail/media/full EPS/EPT/EPW/dt; frozen index observations remain held",
+    "completeGoldenRolesViewportsProvider": "NOT_READY/BLOCKED; this is schema evidence only, no staff/provider canary or restore drill"
+  },
+  "rollback": "Fresh backup br-ancient-block-aox3y3w1 retained until2026-10-14T16:44:29Z; old br-empty-heart-ao0l70q3 retained. Preserve additive columns/evidence and accepted history. Disable affected feature first; review scoped wa_access_unassigned/outbound_unknown_resolution/inbound_lead_reopen reverts or captured old definitions. A restore needs separate approval and an owned restore drill; do not replace current production with an old snapshot or clear opt-out/campaign/receipt/intent history.",
+  "privateEvidence": [
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/approved-operation-plan.json",
+      "sha256": "39b8b12f264121c56150ba2d0625983c2b6d1e2bdff2cbbb117506b725951953"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/final-production-detail-readback.json",
+      "sha256": "a849a2047eb9cd023ba798789aef3cbde6461a11f5151d93f4c54a4e82f11c61"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/final-production-independent-readback.json",
+      "sha256": "8f2ab0b6a677a97570bc1e31599a5e90a9af8c6c74ebadd15bd645d1e8a854db"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/20261006110000_duty_manager.sql.execution.json",
+      "sha256": "6228aab6da7a0bc588ed5f59169cdf6a968a66ef947619b541cb7870e801ba63"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/20261007100000_wa_access_unassigned.sql.execution.json",
+      "sha256": "b30b7572230c95bea519976e5193255b7b0ef087342f9f19fe7df8e0eead9349"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/20261008100000_whatsapp_opt_out_evidence.sql.execution.json",
+      "sha256": "cb2c3752c8341b669f1eab7cd51c2e9bd3b50d119c8870de9971adad3d7d1f2d"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/20261008110000_outbound_unknown_resolution.sql.execution.json",
+      "sha256": "ce96826d09b3ac58130be7d95176c1d0daf40b808d436a8bb506574d5bd3f36d"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/20261009100000_contact_profile_name.sql.execution.json",
+      "sha256": "b0cb9cb46f3df73d268d345ac5e3b559a09dbbc53b024455ad53b90d24447805"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/20261009110000_inbound_lead_reopen.sql.execution.json",
+      "sha256": "72ba9253d71e9be94a8f78684b3fbc355f9b6affe1509782f1b16e160d7b580a"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/20261010100000_campaign_attempted_identity.sql.execution.json",
+      "sha256": "35c6c4f9d29cc356d655376d845769afb5fff6aca2457bb9b2af88fadb25dc71"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/pending7-production-approval-target-2026-10-08.md",
+      "sha256": "17d80ab31486d487098f8d855d6d2243e9decdf801a5ffdb645b0f6f6b08238e"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/pending7-approval-review-2026-10-08.json",
+      "sha256": "7de2dbf971e360971bae0b30d47c60293806a582294c97edf39bd3f157c56676"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/pending7-neon-rehearsal-2026-10-08.json",
+      "sha256": "5690b6ca58bccb9b0b5da23d9d23c2f6f3980e6de427e15e5696514d25376f35"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/pending7-canonical-source-2026-10-08.json",
+      "sha256": "2b407faa833881d4b3688815aeb1ef2414abe78f630906a2d1c4821b2d1f382f"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/pending7-canonical-fingerprints-2026-10-08.json",
+      "sha256": "2a7efbb19fe4f4aa6d768ee3dadc46b96d52920fc1a941e1a5320ac8f8b467a5"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/pending7-register-fingerprint-2026-10-08.json",
+      "sha256": "78ea9375bb7566d3c01fb61f8bc31baeb1d2cd429ac7ab7c0c0563a2650bd0e1"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/pending7-optout-execution-gate-2026-10-08.sql",
+      "sha256": "b542e990ae555414d3d3a38d65a90cb27a143ab2e36679b5863163fbe3ae0c55"
+    },
+    {
+      "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/approved-pending7-20261008/owned-canonical-function-fingerprints.json",
+      "sha256": "ab51d073b6901d0a6fe378c12241df4d7c6d2fbf6646173d8ac445b6117281ed"
+    }
+  ],
+  "historicalPreservation": {
+    "csv": [
+      {
+        "file": "EarnestProperty_Remediation_Traceability_2026-10-03.csv",
+        "rows": 22,
+        "oldColumns": 84,
+        "newColumns": 89,
+        "oldCellsUnchanged": true,
+        "beforeSha256": "fb4c3a61b31fa58da5217e54ee7f679c159b3033b109265ec6ed948c8360fa54",
+        "afterSha256": "1f66786e6c3349669b28b87d5241a0535bd9631ce173aa59f85267a500015740",
+        "annotatedIds": [
+          "EP-00",
+          "EP-07",
+          "EP-12",
+          "EP-14",
+          "EP-15",
+          "EP-16",
+          "EP-19",
+          "EP-20",
+          "EP-21"
+        ]
+      },
+      {
+        "file": "EarnestProperty_UAT_Matrix_2026-10-03.csv",
+        "rows": 82,
+        "oldColumns": 75,
+        "newColumns": 80,
+        "oldCellsUnchanged": true,
+        "beforeSha256": "04a0f1560422797bd2c6bbf8fddb35fe685670ad708ddd3dc7872566d316d51b",
+        "afterSha256": "fa1dc418d274999a2d0f65ff610c5291b0d4205f0f3f9ae5edb7462d54058e73",
+        "annotatedIds": [
+          "TEST-02",
+          "TEST-14",
+          "TEST-16",
+          "TEST-17",
+          "TEST-42",
+          "TEST-54",
+          "TEST-58",
+          "NEW-00",
+          "NEW-07",
+          "NEW-12",
+          "NEW-14",
+          "NEW-15",
+          "NEW-16",
+          "NEW-19",
+          "NEW-20",
+          "NEW-21"
+        ]
+      }
+    ],
+    "olderEvidenceRoots": 46,
+    "oldEvidenceValuesUnchanged": true,
+    "addedEvidenceRoot": "production_schema_pending7_2026_10_08",
+    "baselineCounts": {
+      "PASS": 29,
+      "FAIL": 9,
+      "BLOCKED": 22,
+      "plannedNew": 22
+    }
+  }
+}
