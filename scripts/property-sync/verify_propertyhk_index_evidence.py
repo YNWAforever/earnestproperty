@@ -5,7 +5,14 @@ import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from scraping.worker import WorkerError, checked_url, inspect_property_agent_index
-from scraping.propertyhk_index import LICENSES, approved_entries
+from scraping.propertyhk_index import FILTERS, LICENSES, approved_entries
+
+def pagination_query(url):
+    query = parse_qs(urlsplit(url).query, keep_blank_values=True)
+    query.setdefault("p", ["1"])
+    for key in FILTERS:
+        query.setdefault(key, [""])
+    return query
 
 def verify_evidence(manifest, entries, root):
     root = Path(root).resolve()
@@ -46,6 +53,7 @@ def verify_evidence(manifest, entries, root):
         page = inspect_property_agent_index(raw.decode("utf-8"), url, expected_license=LICENSES[branch])
         if page["page"] in pages[name]:
             raise WorkerError("duplicate_index_page")
+        page["evidence_url"] = url
         pages[name][page["page"]] = page
     result = {"entries": {}, "blocked_responses": blocked, "full_snapshot": False,
               "eligible_for_absence": False, "details_verified": False,
@@ -57,6 +65,11 @@ def verify_evidence(manifest, entries, root):
                 or any(p["listed_pages"] != len(ordered) for p in ordered)
                 or not ordered[-1]["is_last_listed_page"]):
             raise WorkerError("incomplete_index_pages")
+        expected_url = entries[name]
+        for page in ordered:
+            if pagination_query(page["evidence_url"]) != pagination_query(expected_url):
+                raise WorkerError("index_evidence_continuation")
+            expected_url = page["next_url"]
         ids = [set(r["property_id"] for r in p["listings"] + p["unclassified_advertisements"]) for p in ordered]
         if len(set.union(*ids)) != sum(map(len, ids)):
             raise WorkerError("repeated_index_advertisement")
