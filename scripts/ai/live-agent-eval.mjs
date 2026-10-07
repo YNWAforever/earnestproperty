@@ -49,9 +49,9 @@ function refuse(hint = null) {
 // The only Vercel form that is always a preview is the branch alias
 // `<project>-git-<branch>-<team>.vercel.app` with a branch other than main/master. The project
 // slug (and the team scope when known) come from .vercel/project.json if present, else these
-// constants. The environment is never read. A null team scope accepts any team suffix.
+// constants. The environment is never read. The team scope is pinned to this project's Vercel team.
 const PROJECT_SLUG_FALLBACK = "earnestproperty";
-const TEAM_SCOPE_FALLBACK = null;
+const TEAM_SCOPE_FALLBACK = "ynwaforevers-projects";
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,40}$/;
 
 function readPinned() {

@@ -9,7 +9,7 @@ import { assertLiveTarget, parseArgs, runLiveAgentEval } from "./live-agent-eval
 
 const SCRIPT = fileURLToPath(new URL("./live-agent-eval.mjs", import.meta.url));
 const SESSION_ID = "11111111-2222-4333-8444-555555555555";
-const PREVIEW = "https://earnestproperty-git-fix-fx-11-chatbot-earnest.vercel.app";
+const PREVIEW = "https://earnestproperty-git-fix-fx-11-chatbot-ynwaforevers-projects.vercel.app";
 
 const throwingFetch = () => {
   throw new Error("network_must_not_be_used");
@@ -119,24 +119,29 @@ const REFUSED = [
   "https://preview.vercel.app%2eevil.example",
   "https://preview-vercel.app",
   // the main-branch alias tracks production
-  "https://earnestproperty-git-main-earnest.vercel.app",
-  "https://earnestproperty-git-master-earnest.vercel.app",
+  "https://earnestproperty-git-main-ynwaforevers-projects.vercel.app",
+  "https://earnestproperty-git-master-ynwaforevers-projects.vercel.app",
   "https://earnestproperty-git-main.vercel.app",
-  "https://earnestproperty-git-main-fix-earnest.vercel.app",
+  "https://earnestproperty-git-main-fix-ynwaforevers-projects.vercel.app",
   // the project/team alias can point at production
-  "https://earnestproperty-earnest.vercel.app",
+  "https://earnestproperty-ynwaforevers-projects.vercel.app",
   "https://earnestproperty-team.vercel.app",
-  "https://earnestproperty-git-earnest.vercel.app",
+  "https://earnestproperty-git-ynwaforevers-projects.vercel.app",
   // deployment-hash URLs (production deployments have them too)
-  "https://earnestproperty-9k2x3abcd-earnest.vercel.app",
+  "https://earnestproperty-9k2x3abcd-ynwaforevers-projects.vercel.app",
   "https://earnestproperty-abc123def.vercel.app",
-  // other projects and tenants
+  // other projects and tenants, including a branch alias under another team
+  "https://earnestproperty-git-fix-fx-11-chatbot-earnest.vercel.app",
+  "https://earnestproperty-git-feat-live-eval-acme-co.vercel.app",
+  "https://earnestproperty-git-fix-ynwaforevers.vercel.app",
+  "https://earnestproperty-git-fix-projects.vercel.app",
+  "https://earnestproperty-git-fix-xynwaforevers-projects.vercel.app",
   "https://preview.vercel.app",
   "https://preview-abc123.vercel.app",
   "https://evil.vercel.app",
-  "https://other-git-fix-earnest.vercel.app",
-  "https://xearnestproperty-git-fix-earnest.vercel.app",
-  "https://earnestproperty-git-fix-earnest.vercel.app.evil.example",
+  "https://other-git-fix-ynwaforevers-projects.vercel.app",
+  "https://xearnestproperty-git-fix-ynwaforevers-projects.vercel.app",
+  "https://earnestproperty-git-fix-ynwaforevers-projects.vercel.app.evil.example",
   // IDN, punycode and fullwidth forms
   "https://xn--earnestproperty-abc.vercel.app",
   "https://xn--80ak6aa92e.vercel.app",
@@ -194,14 +199,17 @@ test("live mode refuses production and custom hosts", () => {
 test("live mode accepts only previews and localhost", () => {
   assert.equal(assertLiveTarget(PREVIEW).origin, PREVIEW);
   assert.equal(
-    assertLiveTarget("https://EarnestProperty-Git-Fix-FX-11-Chatbot-Earnest.VERCEL.app").origin,
+    assertLiveTarget(
+      "https://EarnestProperty-Git-Fix-FX-11-Chatbot-Ynwaforevers-Projects.VERCEL.app",
+    ).origin,
     PREVIEW,
   );
   assert.equal(assertLiveTarget(`${PREVIEW}.`).origin, PREVIEW);
   assert.equal(assertLiveTarget(`${PREVIEW}:443/x?y#z`).origin, PREVIEW);
   assert.equal(
-    assertLiveTarget("https://earnestproperty-git-feat-live-eval-acme-co.vercel.app").origin,
-    "https://earnestproperty-git-feat-live-eval-acme-co.vercel.app",
+    assertLiveTarget("https://earnestproperty-git-feat-live-eval-ynwaforevers-projects.vercel.app")
+      .origin,
+    "https://earnestproperty-git-feat-live-eval-ynwaforevers-projects.vercel.app",
   );
   assert.equal(assertLiveTarget("http://localhost:8080").origin, "http://localhost:8080");
   assert.equal(assertLiveTarget("http://127.0.0.1:3000").origin, "http://127.0.0.1:3000");
@@ -215,7 +223,7 @@ test("live mode refuses a production target before any request", async () => {
     "https://www.earnestproperty.com",
     "https://earnestproperty.vercel.app",
     "https://preview.vercel.app@www.earnestproperty.com",
-    "https://earnestproperty-earnest.vercel.app",
+    "https://earnestproperty-ynwaforevers-projects.vercel.app",
     null,
   ]) {
     await assert.rejects(
@@ -421,7 +429,12 @@ test("the script never reads the environment, an AI key, a phone number or the h
 test("a hash URL is refused with a one-line hint and no env value", () => {
   const run = spawnSync(
     process.execPath,
-    [SCRIPT, "--live", "--base-url", "https://earnestproperty-9k2x3abcd-earnest.vercel.app"],
+    [
+      SCRIPT,
+      "--live",
+      "--base-url",
+      "https://earnestproperty-9k2x3abcd-ynwaforevers-projects.vercel.app",
+    ],
     { encoding: "utf8", env: { ...process.env, SECRET_PROBE: "do-not-print-me" } },
   );
   assert.equal(run.status, 1);
