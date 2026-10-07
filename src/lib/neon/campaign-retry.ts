@@ -15,6 +15,8 @@ export const CAMPAIGN_RETRYABLE_FAILURE_CODES = [
 ] as const;
 
 export const CAMPAIGN_PAUSED_ERROR = "WOZTELL_CAMPAIGN_PAUSED";
+/** A waiting row closed by finishCampaignWithoutSending: never dispatched by this campaign. */
+export const CAMPAIGN_FINISHED_NOT_SENDABLE = "CAMPAIGN_FINISHED_NOT_SENDABLE";
 export const CAMPAIGN_DELIVERY_UNKNOWN = "WOZTELL_DELIVERY_UNKNOWN";
 
 const SQL_ALIAS = /^[A-Za-z_][A-Za-z0-9_]*$/;

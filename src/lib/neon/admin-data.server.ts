@@ -34,6 +34,7 @@ import type {
   AdminCmsVideoInput,
   AdminAudienceInput,
   AdminCampaignInput,
+  AdminCampaignFinishResult,
   AdminCampaignRequeueResult,
   AdminCampaignRetryPreview,
   AdminCampaignSendPreview,
@@ -77,6 +78,7 @@ import {
 import {
   canPrepareAdminCampaignQueue,
   canQueueAdminCampaign,
+  classifyCampaignDeliveryStatus,
   normalizeAdminPhone,
 } from "./admin-workflow";
 import {
@@ -89,6 +91,7 @@ import {
 } from "./command-center";
 import { campaignRecipientPrimarySql, marketingIdentitySafeSql } from "./phone-identity.ts";
 import {
+  CAMPAIGN_FINISHED_NOT_SENDABLE,
   CAMPAIGN_RETRY_CONTACT_CHANGED,
   CAMPAIGN_RETRY_STATUSES,
   campaignDispatchableQueuedSql,
@@ -3424,13 +3427,20 @@ export async function listAdminCampaigns(): Promise<AdminCampaignRow[]> {
         THEN count(r.id) FILTER (WHERE ${campaignRetryEligibleSql("r", "rc")})
         ELSE 0 END::int AS retryable_failed,
       count(r.id) FILTER (WHERE r.status = 'queued' AND r.error = 'WOZTELL_CAMPAIGN_PAUSED')::int AS paused,
-      ${campaignHasDeliveryHistorySql("c")} AS delivery_started
+      ${campaignHasDeliveryHistorySql("c")} AS delivery_started,
+      -- FX-10b I2: nothing 「發送…」 could send, counted without the audience
+      -- (so never true while the finish action would refuse).
+      (c.status = 'review' AND ${campaignHasDeliveryHistorySql("c")}
+        AND NOT ${campaignRetryBusySql("c.id")}
+        AND (t.id IS NULL OR t.status NOT LIKE 'active%' OR a.id IS NULL
+          OR count(r.id) FILTER (WHERE ${campaignDispatchableQueuedSql("r", "rc")}) = 0)
+      ) AS finishable
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_templates t ON t.id = c.template_id
     LEFT JOIN whatsapp_audiences a ON a.id = c.audience_id
     LEFT JOIN whatsapp_campaign_recipients r ON r.campaign_id = c.id
     LEFT JOIN crm_contacts rc ON rc.id = r.contact_id
-    GROUP BY c.id, t.element_name, t.language_code, t.status, a.name
+    GROUP BY c.id, t.id, t.element_name, t.language_code, t.status, a.id, a.name
     ORDER BY c.updated_at DESC, c.created_at DESC
     LIMIT 100
     `,
@@ -4088,34 +4098,226 @@ export async function fetchCampaignSendPreview(
   actor: StaffAccess,
 ): Promise<AdminCampaignSendPreview> {
   requireCampaignRetryRole(actor);
-  const none: AdminCampaignSendPreview = { campaignId, deliveryStarted: false, sendable: null };
+  const none: AdminCampaignSendPreview = {
+    campaignId,
+    deliveryStarted: false,
+    sendable: null,
+    finishable: false,
+  };
   if (!UUID_PATTERN.test(campaignId)) return none;
+  const state = await campaignSendState(campaignId);
+  if (!state || !state.hasHistory) return none;
+  return {
+    campaignId,
+    deliveryStarted: true,
+    sendable: state.sendable,
+    finishable: state.finishable,
+  };
+}
+
+/**
+ * What 「發送…」 could send now for one campaign, by the server's own count:
+ * queued, never-dispatched rows that pass delivery's checks and are still in
+ * the audience. `sendable` is that count, as the send preview shows it.
+ * `nothingSendable` also holds for an inactive template or a missing
+ * audience, where 「發送…」 is refused whatever the count.
+ */
+async function campaignSendState(campaignId: string) {
   const [campaign] = await queryRows(
     `
-    SELECT a.id AS resolved_audience_id, a.filters,
-      ${campaignHasDeliveryHistorySql("c")} AS has_history
+    SELECT c.status, a.id AS resolved_audience_id, a.filters, t.status AS template_status,
+      ${campaignHasDeliveryHistorySql("c")} AS has_history,
+      ${campaignRetryBusySql("c.id")} AS busy
     FROM whatsapp_campaigns c
     LEFT JOIN whatsapp_audiences a ON a.id = c.audience_id
+    LEFT JOIN whatsapp_templates t ON t.id = c.template_id
     WHERE c.id = $1::uuid
     `,
     [campaignId],
   );
-  if (!campaign || campaign.has_history !== true) return none;
-  const contactIds = campaign.resolved_audience_id
-    ? (await campaignAudienceEligibleContactIds(campaign.filters)).contactIds
+  if (!campaign) return null;
+  const hasHistory = campaign.has_history === true;
+  const contactIds =
+    hasHistory && campaign.resolved_audience_id
+      ? (await campaignAudienceEligibleContactIds(campaign.filters)).contactIds
+      : [];
+  const [row] = hasHistory
+    ? await queryRows(
+        `
+        SELECT count(*)::int AS sendable
+        FROM whatsapp_campaign_recipients r
+        JOIN crm_contacts contact ON contact.id = r.contact_id
+        WHERE r.campaign_id = $1::uuid
+          AND r.contact_id = ANY($2::uuid[])
+          AND ${campaignDispatchableQueuedSql("r", "contact")}
+        `,
+        [campaignId, contactIds],
+      )
     : [];
-  const [row] = await queryRows(
+  const sendable = Number(row?.sendable ?? 0);
+  const templateActive = stringOrEmpty(campaign.template_status).startsWith("active");
+  const nothingSendable = !templateActive || !campaign.resolved_audience_id || sendable === 0;
+  const status = stringOrEmpty(campaign.status);
+  const busy = campaign.busy === true;
+  return {
+    status,
+    hasHistory,
+    busy,
+    sendable,
+    contactIds,
+    nothingSendable,
+    finishable: status === "review" && hasHistory && !busy && nothingSendable,
+  };
+}
+
+const FINISH_AUDIT_ACTION = "campaign.finished_without_sending";
+
+/**
+ * Closes a campaign stuck in 待審核 (FX-10b final fix wave, I2): it has
+ * delivery history but nothing 「發送…」 could send (every waiting row became
+ * ineligible, or the template or audience is gone). Cancelling would relabel
+ * a campaign that really sent as 已取消, so instead the leftover waiting rows
+ * are blocked as CAMPAIGN_FINISHED_NOT_SENDABLE and the campaign gets the
+ * status classifyCampaignDeliveryStatus gives: completed, or failed if nothing
+ * was sent. Nothing is sent and no job is enqueued.
+ *
+ * Refused unless the campaign is in review, has history, is not busy, and the
+ * server counts zero sendable rows. The write runs under the campaign lock and
+ * re-checks the counts it was classified from, so a concurrent change answers
+ * FINISH_STATE_CHANGED. A repeat after a finish answers alreadyFinished. The
+ * audit carries the campaign id and counts only.
+ */
+export async function finishCampaignWithoutSending(
+  input: { campaignId: string },
+  actor: StaffAccess,
+): Promise<AdminCampaignFinishResult> {
+  requireCampaignRetryRole(actor);
+  const campaignId = String(input?.campaignId ?? "");
+  if (!UUID_PATTERN.test(campaignId)) return { ok: false, error: "Campaign not found" };
+  const state = await campaignSendState(campaignId);
+  if (!state) return { ok: false, error: "Campaign not found" };
+  const [counts] = await queryRows(
     `
-    SELECT count(*)::int AS sendable
-    FROM whatsapp_campaign_recipients r
-    JOIN crm_contacts contact ON contact.id = r.contact_id
-    WHERE r.campaign_id = $1::uuid
-      AND r.contact_id = ANY($2::uuid[])
-      AND ${campaignDispatchableQueuedSql("r", "contact")}
+    SELECT count(*)::int AS total,
+      count(*) FILTER (WHERE status = 'queued')::int AS queued,
+      count(*) FILTER (WHERE status = 'sent')::int AS sent,
+      count(*) FILTER (WHERE status = 'failed')::int AS failed,
+      count(*) FILTER (WHERE status = 'blocked')::int AS blocked,
+      EXISTS (SELECT 1 FROM audit_logs
+        WHERE action = '${FINISH_AUDIT_ACTION}' AND subject_type = 'campaign'
+          AND subject_id = $1::uuid) AS finished_before
+    FROM whatsapp_campaign_recipients WHERE campaign_id = $1::uuid
     `,
-    [campaignId, contactIds],
+    [campaignId],
   );
-  return { campaignId, deliveryStarted: true, sendable: Number(row?.sendable ?? 0) };
+  if ((state.status === "completed" || state.status === "failed") && counts?.finished_before) {
+    return { ok: true, status: state.status, blocked: 0, alreadyFinished: true };
+  }
+  if (state.status !== "review" || !state.hasHistory) {
+    return { ok: false, error: "CAMPAIGN_NOT_FINISHABLE" };
+  }
+  if (state.busy) return { ok: false, error: "CAMPAIGN_STILL_SENDING" };
+  if (!state.nothingSendable) {
+    return { ok: false, error: "CAMPAIGN_HAS_SENDABLE", sendable: state.sendable };
+  }
+  const total = Number(counts?.total ?? 0);
+  const queued = Number(counts?.queued ?? 0);
+  const failed = Number(counts?.failed ?? 0);
+  const blocked = Number(counts?.blocked ?? 0);
+  const sent = Number(counts?.sent ?? 0);
+  // After the finish nothing is queued or sending: the leftovers are blocked.
+  const nextStatus = classifyCampaignDeliveryStatus({
+    queuedRecipients: 0,
+    sendingRecipients: 0,
+    totalRecipients: total,
+    failedRecipients: failed,
+    blockedRecipients: blocked + queued,
+  });
+  if (nextStatus !== "completed" && nextStatus !== "failed") {
+    return { ok: false, error: "CAMPAIGN_NOT_FINISHABLE" };
+  }
+  const results = await transactionRows([
+    {
+      // The lock. The statement below starts a fresh snapshot after it.
+      statement: "SELECT id FROM whatsapp_campaigns WHERE id = $1::uuid FOR UPDATE",
+      params: [campaignId],
+    },
+    {
+      statement: `
+      WITH c AS (
+        SELECT c.id, c.status, c.template_id, c.audience_id
+        FROM whatsapp_campaigns c WHERE c.id = $1::uuid
+      ), counts AS (
+        SELECT count(*)::int AS total,
+          count(*) FILTER (WHERE status = 'queued')::int AS queued,
+          count(*) FILTER (WHERE status = 'sending')::int AS sending,
+          count(*) FILTER (WHERE status = 'sent')::int AS sent,
+          count(*) FILTER (WHERE status = 'failed')::int AS failed,
+          count(*) FILTER (WHERE status = 'blocked')::int AS blocked
+        FROM whatsapp_campaign_recipients WHERE campaign_id = $1::uuid
+      ), ok AS (
+        SELECT c.id FROM c, counts
+        WHERE c.status = 'review' AND ${campaignHasDeliveryHistorySql("c")}
+          AND NOT ${campaignRetryBusySql("$1::uuid")}
+          AND counts.total = $3 AND counts.queued = $4 AND counts.sending = 0
+          AND counts.failed = $5 AND counts.blocked = $6 AND counts.sent = $7
+          AND (
+            NOT EXISTS (SELECT 1 FROM whatsapp_templates t
+              WHERE t.id = c.template_id AND t.status LIKE 'active%')
+            OR NOT EXISTS (SELECT 1 FROM whatsapp_audiences a WHERE a.id = c.audience_id)
+            OR NOT EXISTS (
+              SELECT 1 FROM whatsapp_campaign_recipients q
+              JOIN crm_contacts qc ON qc.id = q.contact_id
+              WHERE q.campaign_id = c.id AND q.contact_id = ANY($8::uuid[])
+                AND ${campaignDispatchableQueuedSql("q", "qc")}
+            )
+          )
+      ), closed AS (
+        UPDATE whatsapp_campaign_recipients r
+        SET status = 'blocked', error = '${CAMPAIGN_FINISHED_NOT_SENDABLE}'
+        WHERE r.campaign_id IN (SELECT id FROM ok)
+          AND r.status = 'queued' AND r.dispatch_started_at IS NULL
+        RETURNING r.id
+      ), flipped AS (
+        UPDATE whatsapp_campaigns w
+        SET status = $9::whatsapp_campaign_status, updated_at = now()
+        FROM ok WHERE w.id = ok.id
+        RETURNING w.id
+      ), audited AS (
+        INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+        SELECT $2::uuid, '${FINISH_AUDIT_ACTION}', 'campaign', f.id,
+          jsonb_build_object(
+            'campaignId', f.id::text,
+            'status', $9::text,
+            'blocked', (SELECT count(*) FROM closed),
+            'total', $3::int,
+            'sent', $7::int,
+            'failed', $5::int,
+            'previouslyBlocked', $6::int
+          )
+        FROM flipped f
+        RETURNING id
+      )
+      SELECT (SELECT count(*) FROM flipped)::int AS flipped,
+        (SELECT count(*) FROM closed)::int AS closed,
+        (SELECT count(*) FROM audited)::int AS audited
+      `,
+      params: [
+        campaignId,
+        actor.staffId,
+        total,
+        queued,
+        failed,
+        blocked,
+        sent,
+        state.contactIds,
+        nextStatus,
+      ],
+    },
+  ]);
+  const row = (results[1] as Record<string, unknown>[] | undefined)?.[0];
+  if (!row || Number(row.flipped ?? 0) !== 1) return { ok: false, error: "FINISH_STATE_CHANGED" };
+  return { ok: true, status: nextStatus, blocked: Number(row.closed ?? 0) };
 }
 
 /**

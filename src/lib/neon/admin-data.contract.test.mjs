@@ -36,6 +36,7 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     "sendAdminCampaignQueue",
     "queueAdminCampaign",
     "cancelAdminCampaign",
+    "finishCampaignWithoutSending",
     "fetchLeadLiveAgentTranscript",
   ];
 
@@ -63,6 +64,15 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
   assert.match(
     client,
     /fetchLeadLiveAgentTranscriptServer[\s\S]*?requireStaff\(\["admin", "manager", "agent"\]\)/,
+  );
+  // FX-10b I2: managers and admins only, through the staff server-fn wrapper.
+  assert.match(
+    client,
+    /finishCampaignWithoutSendingServer = createServerFn\(\{ method: "POST" \}\)[\s\S]*?requireStaff\(\["admin", "manager"\]\)/,
+  );
+  assert.match(
+    client,
+    /export async function finishCampaignWithoutSending\([\s\S]*?callStaffServerFn\([\s\S]*?withStaffAuthHeaders\(options\)/,
   );
   assert.match(
     server,

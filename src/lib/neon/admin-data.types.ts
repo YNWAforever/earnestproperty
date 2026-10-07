@@ -215,6 +215,12 @@ export type AdminCampaignRow = {
   paused?: number;
   /** FX-10b: some recipient may have reached WhatsApp; template and audience are frozen. */
   delivery_started?: boolean;
+  /**
+   * FX-10b: 待審核 with history and, by the server's count, nothing 「發送…」
+   * could send (no dispatchable waiting row, or an inactive template or a
+   * missing audience). finishCampaignWithoutSending may close it.
+   */
+  finishable?: boolean;
 };
 
 export type AdminCampaignRetryPreview = {
@@ -276,7 +282,39 @@ export type AdminCampaignSendPreview = {
    * Without history it is null and the audience preview is the count.
    */
   sendable: number | null;
+  /**
+   * 待審核 with history, nothing in flight and nothing 「發送…」 could send now
+   * (sendable 0, an inactive template or a missing audience): the campaign can
+   * be finished without sending (finishCampaignWithoutSending).
+   */
+  finishable: boolean;
 };
+
+/** FX-10b: closing a stuck 待審核 campaign that has nothing left to send. */
+export type AdminCampaignFinishResult =
+  | {
+      ok: true;
+      /** completed, or failed when nothing was ever sent (classifyCampaignDeliveryStatus). */
+      status: "completed" | "failed";
+      /** Waiting rows blocked as CAMPAIGN_FINISHED_NOT_SENDABLE by this call. */
+      blocked: number;
+      /** A repeat of an earlier finish: nothing changed. */
+      alreadyFinished?: true;
+    }
+  | {
+      ok: false;
+      error:
+        | "Campaign not found"
+        | "CAMPAIGN_NOT_FINISHABLE"
+        | "CAMPAIGN_STILL_SENDING"
+        | "FINISH_STATE_CHANGED";
+    }
+  | {
+      /** Something can still be sent; use 「發送…」 instead. */
+      ok: false;
+      error: "CAMPAIGN_HAS_SENDABLE";
+      sendable: number;
+    };
 
 export type AdminAgentRow = {
   id: string;

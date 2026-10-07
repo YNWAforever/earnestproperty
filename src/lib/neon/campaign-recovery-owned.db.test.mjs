@@ -1664,6 +1664,7 @@ test(
             campaignId: campaign,
             deliveryStarted: true,
             sendable: shown.retryable + shown.alreadyQueued,
+            finishable: false,
           });
           // ...and drops when a queued contact's consent lapses.
           await query("UPDATE crm_contacts SET opted_out_whatsapp=true WHERE id=$1", [
@@ -1929,6 +1930,151 @@ test(
           assert.equal((await recipientRow(laterRow.id)).status, "sent");
         },
       );
+
+      // FX-10b final fix wave, I2: a campaign with history left in 待審核 with
+      // nothing sendable can be finished instead of cancelled.
+      const finish = (campaignId, who = actor) =>
+        adminData.finishCampaignWithoutSending({ campaignId }, who);
+      const finishAudits = (campaignId) =>
+        query(
+          "SELECT actor_id, metadata FROM audit_logs WHERE action='campaign.finished_without_sending' AND subject_id=$1",
+          [campaignId],
+        );
+      const listedRow = async (campaignId) =>
+        (await adminData.listAdminCampaigns()).find((row) => row.id === campaignId);
+
+      await t.test(
+        "a stuck 待審核 campaign with nothing sendable finishes as completed, once",
+        async () => {
+          const { campaign, people } = await seedRetryCampaign(["F1", "F2", "F3"], {
+            queue: false,
+            status: "completed",
+          });
+          await setRecipient(people.F1, "sent", null, true);
+          await setRecipient(people.F2, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+          await setRecipient(people.F3, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+          assert.equal((await requeue(campaign, actor, 2)).requeued, 2);
+          assert.equal(await campaignStatus(campaign), "review");
+
+          // While a row is still sendable the server refuses and changes nothing.
+          assert.equal((await listedRow(campaign)).finishable, false);
+          assert.equal((await sendPreview(campaign)).finishable, false);
+          assert.deepEqual(await finish(campaign), {
+            ok: false,
+            error: "CAMPAIGN_HAS_SENDABLE",
+            sendable: 2,
+          });
+          assert.equal((await recipientRow(people.F2.recipient)).status, "queued");
+          assert.equal((await finishAudits(campaign)).length, 0);
+
+          // Both waiting contacts opt out: 發送… has nobody left to send to.
+          await query(
+            "UPDATE crm_contacts SET opted_out_whatsapp=true WHERE id = ANY($1::uuid[])",
+            [[people.F2.contact, people.F3.contact]],
+          );
+          assert.deepEqual(await sendPreview(campaign), {
+            campaignId: campaign,
+            deliveryStarted: true,
+            sendable: 0,
+            finishable: true,
+          });
+          assert.equal((await listedRow(campaign)).finishable, true);
+          await assert.rejects(
+            () => finish(campaign, agentActor),
+            (error) => error instanceof Response && error.status === 403,
+          );
+          const jobsBefore = await jobsOf(campaign);
+          providerCalls.length = 0;
+          const done = await finish(campaign);
+          assert.deepEqual(done, { ok: true, status: "completed", blocked: 2 });
+          for (const label of ["F2", "F3"]) {
+            const row = await recipientRow(people[label].recipient);
+            assert.deepEqual(
+              [row.status, row.error, row.dispatch_started_at],
+              ["blocked", "CAMPAIGN_FINISHED_NOT_SENDABLE", null],
+              label,
+            );
+          }
+          assert.equal((await recipientRow(people.F1.recipient)).status, "sent");
+          assert.equal(await campaignStatus(campaign), "completed");
+          assert.deepEqual(await jobsOf(campaign), jobsBefore);
+          assert.equal(providerCalls.length, 0);
+          const audits = await finishAudits(campaign);
+          assert.equal(audits.length, 1);
+          assert.equal(audits[0].actor_id, staff.id);
+          assert.deepEqual(audits[0].metadata, {
+            campaignId: campaign,
+            status: "completed",
+            blocked: 2,
+            total: 3,
+            sent: 1,
+            failed: 0,
+            previouslyBlocked: 0,
+          });
+          assertNoContactData(audits[0].metadata);
+          assert.equal((await listedRow(campaign)).finishable, false);
+
+          // Idempotent: a repeat changes nothing and writes no second audit.
+          assert.deepEqual(await finish(campaign), {
+            ok: true,
+            status: "completed",
+            blocked: 0,
+            alreadyFinished: true,
+          });
+          assert.equal((await finishAudits(campaign)).length, 1);
+        },
+      );
+
+      await t.test(
+        "finishing a campaign that sent nothing marks it failed; an inactive template counts as nothing sendable",
+        async () => {
+          const [ownTemplate] = await query(
+            "INSERT INTO whatsapp_templates(element_name,status) VALUES('owned_finish_template','active') RETURNING id",
+          );
+          const { campaign, people } = await seedRetryCampaign(["G1", "G2"], {
+            queue: false,
+            status: "failed",
+            templateId: ownTemplate.id,
+          });
+          await setRecipient(people.G1, "failed", "WOZTELL_PROVIDER_REJECTED", false);
+          await setRecipient(people.G2, "failed", "WOZTELL_DELIVERY_UNKNOWN", true);
+          assert.equal((await requeue(campaign, actor, 1)).requeued, 1);
+          assert.equal((await sendPreview(campaign)).finishable, false);
+          await query("UPDATE whatsapp_templates SET status='inactive' WHERE id=$1", [
+            ownTemplate.id,
+          ]);
+          assert.equal((await sendPreview(campaign)).finishable, true);
+          assert.equal((await listedRow(campaign)).finishable, true);
+          assert.deepEqual(await finish(campaign), { ok: true, status: "failed", blocked: 1 });
+          assert.equal(
+            (await recipientRow(people.G1.recipient)).error,
+            "CAMPAIGN_FINISHED_NOT_SENDABLE",
+          );
+          // The unknown row is history and is left exactly as it was.
+          assert.equal((await recipientRow(people.G2.recipient)).error, "WOZTELL_DELIVERY_UNKNOWN");
+          assert.equal(await campaignStatus(campaign), "failed");
+        },
+      );
+
+      await t.test("finishing is refused without history or outside 待審核", async () => {
+        const fresh = await seedRetryCampaign(["H1"], { queue: false, status: "review" });
+        await query("UPDATE crm_contacts SET opted_out_whatsapp=true WHERE id=$1", [
+          fresh.people.H1.contact,
+        ]);
+        assert.deepEqual(await finish(fresh.campaign), {
+          ok: false,
+          error: "CAMPAIGN_NOT_FINISHABLE",
+        });
+        assert.equal((await listedRow(fresh.campaign)).finishable, false);
+        const done = await seedRetryCampaign(["H2"], { queue: false, status: "completed" });
+        await setRecipient(done.people.H2, "sent", null, true);
+        assert.deepEqual(await finish(done.campaign), {
+          ok: false,
+          error: "CAMPAIGN_NOT_FINISHABLE",
+        });
+        assert.deepEqual(await finish("not-a-uuid"), { ok: false, error: "Campaign not found" });
+        assert.equal((await finishAudits(done.campaign)).length, 0);
+      });
 
       await t.test(
         "the attempted-identity migration is re-runnable and writes no row",
