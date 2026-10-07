@@ -11,3 +11,5 @@ Config dry-run preserves contents:read, cron UTC `17 20 * * *` (04:17 HKT), exis
 **READY:** owned source chronology. **NOT_READY:** native execution of this change (zero observed), punctuality, Worker rollout and current production schema. **BLOCKED:** Property.hk full detail/media and comparable EPS/EPT/EPW/dt evidence. EP-08/19/21 acceptance remains partial; Golden journeys, roles/viewports, CAS, unknown outcome, worker restart and restore evidence are not promoted by these results.
 
 Both CSVs append five execution columns. All older cells and 29 PASS / 9 FAIL / 22 BLOCKED / 22 planned NEW cases remain unchanged. The three earlier native pipelines remain genuine evidence but cannot accept future chronology. Rollback: revert the focused source/workflow change; no migration is involved. Preserve existing run/receipt/history rows and private evidence.
+
+Independent production SELECT at 2026-10-07T15:34:48.572Z confirms all seven listed versions absent from app_migrations on dawn-meadow-79190048 / br-polished-sea-aom4i1ct. Private query-result hash is retained in the JSON. No schema mutation was performed.

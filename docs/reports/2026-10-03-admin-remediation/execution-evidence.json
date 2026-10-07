@@ -8302,7 +8302,16 @@
         "20261009100000",
         "20261009110000",
         "20261010100000"
-      ]
+      ],
+      "productionSelectReadback": {
+        "capturedAt": "2026-10-07T15:34:48.572Z",
+        "projectId": "dawn-meadow-79190048",
+        "branchId": "br-polished-sea-aom4i1ct",
+        "table": "app_migrations",
+        "pendingCount": 7,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-production-migrations-readonly.json",
+        "sha256": "7b58fc7bc32dbd31bd9f2e77358941e888e0191c986ff312ad382dba0005ce96"
+      }
     },
     "independentReadback": {
       "ownedFirstInsert": "measured start matches timestamptz",
