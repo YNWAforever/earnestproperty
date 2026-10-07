@@ -124,6 +124,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20261007100000_wa_access_unassigned.sql",
   "20261009100000_contact_profile_name.sql",
   "20261009110000_inbound_lead_reopen.sql",
+  "20261010100000_campaign_attempted_identity.sql",
 ]);
 
 /**

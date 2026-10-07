@@ -1,7 +1,12 @@
 import "@tanstack/react-start/server-only";
 import { campaignRecipientPrimarySql, marketingIdentitySafeSql } from "../neon/phone-identity.ts";
 
-import { CAMPAIGN_PAUSED_ERROR } from "../neon/campaign-retry.ts";
+import {
+  CAMPAIGN_PAUSED_ERROR,
+  CAMPAIGN_RETRY_CONTACT_CHANGED,
+  campaignAttemptedIdentityMatchesSql,
+  campaignContactIdentityDigestSql,
+} from "../neon/campaign-retry.ts";
 import {
   CAMPAIGN_UNKNOWN_STREAK_LIMIT,
   classifyCampaignSendResult,
@@ -44,7 +49,15 @@ function deliveryError(code: string, message: string) {
   return Object.assign(new Error(message), { code });
 }
 
-/** Locks are followed by a fresh statement snapshot before reserving dispatch. */
+/**
+ * Locks are followed by a fresh statement snapshot before reserving dispatch.
+ *
+ * FX-10b I1: a reservation stores attempted_identity, a digest of the member id
+ * and phone the send goes to. A row that was attempted before (a requeued
+ * refusal) is sent only if the contact still has that identity. Otherwise it is
+ * blocked as CONTACT_CHANGED_SINCE_ATTEMPT, under the contact row lock, and no
+ * provider call is made. A row never attempted (NULL) is checked as before.
+ */
 export async function beginCampaignDispatch(
   campaignId: string,
   recipientId: string,
@@ -72,10 +85,13 @@ export async function beginCampaignDispatch(
       statement: `WITH eligible AS (
         SELECT r.id, c.status AS campaign_status, contact.normalized_phone, contact.whatsapp_member_id,
           contact.opt_in_whatsapp, contact.opted_out_whatsapp, t.element_name, t.language_code, t.components, j.attempt_count,
+          ${campaignContactIdentityDigestSql("contact")} AS current_identity,
+          NOT ${campaignAttemptedIdentityMatchesSql("r", "contact")} AS identity_changed,
           (c.status IN ('queued', 'sending') AND contact.opt_in_whatsapp = true
             AND contact.opted_out_whatsapp = false
             AND ${marketingIdentitySafeSql("contact")}
             AND ${campaignRecipientPrimarySql("r", "contact")}
+            AND ${campaignAttemptedIdentityMatchesSql("r", "contact")}
             AND t.status LIKE 'active%'
             AND COALESCE(NULLIF(contact.whatsapp_member_id, ''), NULLIF(contact.normalized_phone, '')) IS NOT NULL
             AND j.status = 'running' AND j.lease_owner = $4 AND j.lease_expires_at > clock_timestamp()) AS allowed
@@ -92,10 +108,13 @@ export async function beginCampaignDispatch(
         SET dispatch_started_at = CASE WHEN e.allowed THEN clock_timestamp() ELSE NULL END,
             dispatch_job_id = CASE WHEN e.allowed THEN $3::uuid END, dispatch_worker_id = CASE WHEN e.allowed THEN $4 END,
             dispatch_attempt = CASE WHEN e.allowed THEN e.attempt_count END,
+            attempted_identity = CASE WHEN e.allowed THEN e.current_identity ELSE r.attempted_identity END,
             status = CASE WHEN e.allowed THEN 'sending' WHEN e.campaign_status = 'cancelled' THEN 'cancelled'
               WHEN e.campaign_status = 'review' THEN 'queued' ELSE 'blocked' END,
             error = CASE WHEN e.allowed THEN NULL
+              WHEN e.campaign_status = 'cancelled' THEN 'WOZTELL_DISPATCH_INELIGIBLE'
               WHEN e.campaign_status = 'review' THEN '${CAMPAIGN_PAUSED_ERROR}'
+              WHEN e.identity_changed THEN '${CAMPAIGN_RETRY_CONTACT_CHANGED}'
               ELSE 'WOZTELL_DISPATCH_INELIGIBLE' END
         FROM eligible e WHERE r.id = e.id AND r.status = 'sending' AND r.dispatch_started_at IS NULL
         RETURNING r.id, r.dispatch_started_at
