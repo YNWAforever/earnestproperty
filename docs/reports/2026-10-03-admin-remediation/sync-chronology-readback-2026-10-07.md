@@ -1,0 +1,13 @@
+# Sync chronology implementation readback — 2026-10-07
+
+Verified source `1407416405f9612f6e5929ae0ec7218578aad994` on integration base `96fac6144595812aaa6fa5f9dc241b1a76c955ad`. Three earlier genuine native runs had registry start after finish because summary insertion supplied a database-default start after generating the finish. Their original times remain unchanged in [the earlier native readback](28hse-native-readback-2026-10-07.md).
+
+Five workflow jobs now expose measured first/last step UTC clocks. The recorder uses the earliest measured start and retains stage clocks through unknown/blocked business outcomes. Summary-only verification remains unstarted. New CLI records without a measured start fail closed. Legacy terminal replay preserves absent clocks and original values. These are measured step boundaries, not invented scheduler/setup timestamps.
+
+Red-to-green verification covers initial timing, stale skipped outputs, executed reconciliation clocks, impossible calendar dates and legacy terminal replay. An initial legacy fixture reused a unique workflow identity; corrected before the confirmed `terminal_stage_change` red/green SQL run. Final named scripts pass 23 admin + 39 daily + 20 owned SQL results (82, zero failure/skip). Independent SQL readback checks the first insert, both legacy clock shapes, replay and unchanged rows after rejected input. Separate typecheck/build exit 0; lint exit 0 with three existing refresh warnings. Durable private logs and SHA256 hashes are in the JSON.
+
+Config dry-run preserves contents:read, cron UTC `17 20 * * *` (04:17 HKT), existing gates and 120/20/45/10 timeouts through parsed YAML assertions. New migrations zero; production applied zero. Latest main includes `20261010100000`; seven newer production versions are outside the four exact earlier approvals. No production data write, Worker rollout/dispatch, manual schedule, new Property.hk request, true send or model/provider call occurred.
+
+**READY:** owned source chronology. **NOT_READY:** native execution of this change (zero observed), punctuality, Worker rollout and current production schema. **BLOCKED:** Property.hk full detail/media and comparable EPS/EPT/EPW/dt evidence. EP-08/19/21 acceptance remains partial; Golden journeys, roles/viewports, CAS, unknown outcome, worker restart and restore evidence are not promoted by these results.
+
+Both CSVs append five execution columns. All older cells and 29 PASS / 9 FAIL / 22 BLOCKED / 22 planned NEW cases remain unchanged. The three earlier native pipelines remain genuine evidence but cannot accept future chronology. Rollback: revert the focused source/workflow change; no migration is involved. Preserve existing run/receipt/history rows and private evidence.

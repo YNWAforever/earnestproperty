@@ -8191,5 +8191,200 @@
       "registryChronology": "NOT_READY; recorded start occurs after finish",
       "fullEp08OrGoldenAcceptance": "PARTIAL; not promoted by schedule count alone"
     }
+  },
+  "syncChronology20261007": {
+    "recordedAt": "2026-10-07T15:32:29.529430+00:00",
+    "verificationCodeSha": "1407416405f9612f6e5929ae0ec7218578aad994",
+    "integrationBaseSha": "96fac6144595812aaa6fa5f9dc241b1a76c955ad",
+    "problem": "Recorder insertion previously generated started_at after its finished_at; stages used recorder time or old receipt acceptance.",
+    "behavior": [
+      "Five native jobs expose first/last measured UTC step clocks.",
+      "Earliest measured run start and stage clocks persist through unknown/blocked business outcomes.",
+      "Skipped jobs ignore stale outputs; summary-only verification remains unstarted.",
+      "First SQL insert preserves measured start; terminal replay preserves original values and absent keys.",
+      "Malformed/calendar-impossible/reversed supplied times are rejected before the write transaction; new CLI records without measured start fail closed."
+    ],
+    "red": {
+      "initialAdmin": {
+        "passed": 17,
+        "failed": 3
+      },
+      "initialDaily": {
+        "passed": 38,
+        "failed": 1
+      },
+      "initialOwned": {
+        "passed": 19,
+        "failed": 1
+      },
+      "staleSkippedOutput": {
+        "passed": 20,
+        "failed": 1
+      },
+      "reviewAdmin": {
+        "passed": 21,
+        "failed": 2
+      },
+      "legacyOwned": {
+        "passed": 19,
+        "failed": 1,
+        "reason": "terminal_stage_change"
+      },
+      "fixtureCorrection": "An initial legacy fixture reused a unique workflow identity; corrected before the confirmed SQL red/green run."
+    },
+    "verification": {
+      "test:property-sync:admin": {
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-admin-green.log",
+        "sha256": "4a082e67768f1a986239c217db2b6b32e082ad40b6a69c3c35a6344ab2fc5f0a"
+      },
+      "test:property-sync:daily": {
+        "passed": 39,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-daily-green.log",
+        "sha256": "3fa2cabc2ac27bc8bdbe72349bd5a143a1a5b3c3a1eb6adf52ea96a9aa64295e"
+      },
+      "test:operations:owned:db": {
+        "passed": 20,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-reviewed-owned-final-green.log",
+        "sha256": "572622dd1f91cf315547fce6dcfc84033c90c136c2d4865a4266bcdfc8418aef"
+      }
+    },
+    "checks": {
+      "typecheck": {
+        "exitCode": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+      },
+      "build": {
+        "exitCode": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-build.log",
+        "sha256": "999598b6fb861c367b9744a9c51e1a176b26fc1273c6a76d551a40a4395818a3"
+      },
+      "lint": {
+        "exitCode": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-lint.log",
+        "sha256": "cc4f4090e6913374f0aa5e4e16d2e3a94691b8130185b0fa17de8f11f19ada43"
+      },
+      "finalDeltaLint": {
+        "exitCode": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-final-delta-lint.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    "lintExistingWarnings": 3,
+    "configDryRun": {
+      "parsedYamlContractPassed": true,
+      "nativeJobsMeasured": 5,
+      "cronUtc": "17 20 * * *",
+      "timeoutsMinutes": {
+        "collect": 120,
+        "ingest": 20,
+        "publish": 45,
+        "verify": 10
+      },
+      "permissions": "contents:read",
+      "productionConfigChanged": false
+    },
+    "migrationDryRun": {
+      "newMigrations": 0,
+      "productionApplied": 0,
+      "currentMainPendingOutsidePriorApproval": [
+        "20261006110000",
+        "20261007100000",
+        "20261008100000",
+        "20261008110000",
+        "20261009100000",
+        "20261009110000",
+        "20261010100000"
+      ]
+    },
+    "independentReadback": {
+      "ownedFirstInsert": "measured start matches timestamptz",
+      "ownedReplay": "original run start and terminal values/absent keys preserved",
+      "invalidWrites": "full row unchanged",
+      "historicalNative": "28hse-native-readback-2026-10-07.json; three earlier native pipelines and original inverted clocks retained",
+      "newHeadNativeRuns": 0
+    },
+    "effects": {
+      "productionDataWrites": 0,
+      "productionMigrations": 0,
+      "workerDeployments": 0,
+      "workerDispatches": 0,
+      "manualScheduleRuns": 0,
+      "newPropertyHkRequests": 0,
+      "trueSends": 0,
+      "modelCalls": 0,
+      "providerBudget": 0
+    },
+    "capabilityStatus": {
+      "ownedChronology": "READY",
+      "postChangeNativeChronology": "NOT_READY; zero observed runs",
+      "0417Punctuality": "NOT_ACCEPTED; previous actual starts late, no cause inferred",
+      "workerRollout": "NOT_READY",
+      "productionSchema": "NOT_READY; seven newer versions outside exact prior approval",
+      "propertyHkFullSource": "BLOCKED; detail 403 and missing verified identity/media/full EPS/EPT/EPW/dt scope",
+      "masterPlanEp08Ep19Ep21": "PARTIAL; Golden roles/viewports/CAS/unknown outcome/restart/restore acceptance remains layered"
+    },
+    "rollback": "Revert focused chronology source/workflow commits; no migration. Preserve existing run rows, immutable receipts, terminal history and private logs.",
+    "privateLogs": [
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-admin-red.log",
+        "sha256": "fec132f3a268fd4abe96a45ae3f21c2797760e19a9586248d329673744e05130"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-daily-red.log",
+        "sha256": "86c5baea3ba91785de78ed040dd1b739e732fee482b832cb19f78c8dbbb76935"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-final-delta-lint.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-legacy-confirmed-red.log",
+        "sha256": "d8b3f221399a3e2b9320801926c1f7cbc45671cb341efa0a1cdf86dabb7ff570"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-owned-red.log",
+        "sha256": "52fb3f1ca42b84a6a30dc2bac4930f4cfb371333c49d37543c4ca649f586b10c"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-admin-green.log",
+        "sha256": "4a082e67768f1a986239c217db2b6b32e082ad40b6a69c3c35a6344ab2fc5f0a"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-admin-red.log",
+        "sha256": "6808999ae5193658139afa52863321947ff80784f321123d6636599d73b7ca05"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-build.log",
+        "sha256": "999598b6fb861c367b9744a9c51e1a176b26fc1273c6a76d551a40a4395818a3"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-daily-green.log",
+        "sha256": "3fa2cabc2ac27bc8bdbe72349bd5a143a1a5b3c3a1eb6adf52ea96a9aa64295e"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-lint.log",
+        "sha256": "cc4f4090e6913374f0aa5e4e16d2e3a94691b8130185b0fa17de8f11f19ada43"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-review-typecheck.log",
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-reviewed-owned-final-green.log",
+        "sha256": "572622dd1f91cf315547fce6dcfc84033c90c136c2d4865a4266bcdfc8418aef"
+      },
+      {
+        "path": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/chronology-skip-red.log",
+        "sha256": "69d2bc862d9b2fa109349d3a428e937075ffd38ffae9ff818cc935d1fea13122"
+      }
+    ]
   }
 }
