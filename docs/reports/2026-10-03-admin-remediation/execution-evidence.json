@@ -7262,5 +7262,421 @@
       "workerDispatches": 0,
       "nativeScheduleTriggers": 0
     }
+  },
+  "propertyhkNativeIndex20261007": {
+    "baselineMainSha": "f7ebe9c4bb8a800daa3111b5e3a8d0ee838358cf",
+    "collectorCodeSha": "ba201620ed9764569c0ea24a443c7b43ffb115b0",
+    "verificationCodeSha": "95a8cb4cfaa0c860d8f6b4cd88ce47b87f9af0f5",
+    "observedAt": "2026-10-07T12:05:22.742541+00:00",
+    "runId": "c5294512-9a4b-44c2-9671-bb28f026cc6c",
+    "source": "propertyhk",
+    "collectionMode": "public_http",
+    "entries": {
+      "EPS-NTM": {
+        "index_pages": 4,
+        "listed_pages": 4,
+        "advertisements": 61,
+        "offers": 67,
+        "unclassified_advertisements": 0,
+        "complete_index_pages": true,
+        "error": null
+      },
+      "EPS-NTW": {
+        "index_pages": 7,
+        "listed_pages": 7,
+        "advertisements": 139,
+        "offers": 154,
+        "unclassified_advertisements": 1,
+        "complete_index_pages": true,
+        "error": null
+      },
+      "EPT-NTM": {
+        "index_pages": 9,
+        "listed_pages": 9,
+        "advertisements": 168,
+        "offers": 195,
+        "unclassified_advertisements": 0,
+        "complete_index_pages": true,
+        "error": null
+      },
+      "EPW-NTM": {
+        "index_pages": 3,
+        "listed_pages": 3,
+        "advertisements": 46,
+        "offers": 49,
+        "unclassified_advertisements": 0,
+        "complete_index_pages": true,
+        "error": null
+      }
+    },
+    "totals": {
+      "indexPages": 23,
+      "scopeAdvertisements": 414,
+      "quotedOffers": 465,
+      "unclassifiedAdvertisements": 1
+    },
+    "fixedCollectionSourceCalls": 24,
+    "firstPartialCollectionSourceCalls": 21,
+    "detailProbeSourceCalls": 2,
+    "rawArtifactSha256": {
+      "observations.csv": "15751a3bfa7085f94de21d0d0c58de3aae5bfcbb34880c326f27679fc6209ef1",
+      "observations.jsonl": "834b93953c27c61abceff32de1ba37f5af17d5a7641993fc6487610cdc6b4968",
+      "unclassified-advertisements.jsonl": "993513eba89f3c620809bbe004d22c76f7b6bff63720563eb021e38180392b8e",
+      "capture-manifest.json": "3cd846c9ff64e67a965c24d627abb407a96bb6d527d66f31487f57f2fb980bf1",
+      "response-manifest.json": "50661df4f1dc3e808216c6219214d6928e4617433990a16528f968a5d04f0740"
+    },
+    "independentReadback": {
+      "independent_dom_csv_jsonl_parity": true,
+      "raw_advertisements": 414,
+      "offers": 465,
+      "unclassified": 1,
+      "index_pages": 23,
+      "all_artifact_hashes_verified": true,
+      "business_request_created": false,
+      "production_writes": 0
+    },
+    "exactFailedPageReadback": {
+      "page": "EPS-NTW/4",
+      "rawSha256": "97d7f1ab414e1348eecda188326d1fc5deda1864437dc16c797f5872f95741f2",
+      "advertisements": 20,
+      "offers": 22,
+      "unclassified": 1,
+      "fullSnapshot": false,
+      "productionWrites": 0
+    },
+    "detailAccess": {
+      "status": 403,
+      "attempts": 1,
+      "bytes": 1647,
+      "sha256": "b93c49380ce0f7c3aadbf441894ba1b1cb498858e45ebff6de28f3cd2c9540ad",
+      "robotsStatus": 200,
+      "robotsSha256": "f74e23b9f27d71281981ea1e448cc443bff5c24849e5d3f62582cf4e66066f63"
+    },
+    "authority": {
+      "full_snapshot": false,
+      "details_verified": false,
+      "id_scope_verified": false,
+      "full_branch_scope_verified": false,
+      "eligible_for_absence": false,
+      "publish_allowed": false,
+      "baseline_advanced": false,
+      "production_writes": 0,
+      "sync_status": "blocked_detail_verification"
+    },
+    "tests": {
+      "python": {
+        "script": "test:property-sync:python",
+        "pass": 142,
+        "fail": 0,
+        "skipped": 0
+      },
+      "ingestionApi": {
+        "script": "test:property-sync",
+        "pass": 75,
+        "fail": 0,
+        "skipped": 0
+      },
+      "schedulePublication": {
+        "script": "test:property-sync:daily",
+        "pass": 38,
+        "fail": 0,
+        "skipped": 0
+      }
+    },
+    "checks": {
+      "typecheckExit": 0,
+      "buildExit": 0,
+      "lintExit": 0,
+      "lintExistingWarnings": 3,
+      "review": "Independent read-only follow-up review: Important filter-chain finding resolved; ready to merge index-only source slice."
+    },
+    "configMigrationDryRun": {
+      "trackedSourceConfigChanged": false,
+      "migrationsAdded": 0,
+      "migrationsApplied": 0,
+      "productionConfigChanges": 0,
+      "productionScheduleChanges": 0,
+      "workerDispatch": 0,
+      "productionDBWrites": 0,
+      "recipients": 0,
+      "sends": 0,
+      "modelCalls": 0,
+      "modelBudget": 0,
+      "fullSourceGateRelaxed": false,
+      "exampleSourceConfigSha256": "bf37ad200c3b787839c1d72f4dfe7a6f304ca9c9c7ab3530df46d3c1af0cb1a7"
+    },
+    "capabilities": {
+      "approvedEntryIndexExport": "READY",
+      "fullBranchDistrictCoverage": "BLOCKED",
+      "realDetailMedia": "BLOCKED",
+      "canonicalIngestionPublication": "BLOCKED",
+      "productionFullSync": "NOT_READY"
+    },
+    "historicalEvidencePreserved": {
+      "originalAudit": {
+        "PASS": 29,
+        "FAIL": 9,
+        "BLOCKED": 22
+      },
+      "plannedNewCases": 22,
+      "previousExecutionCellsOverwritten": 0
+    },
+    "privateEvidenceRoot": ".audit/propertyhk-sync-20261007",
+    "layerLimits": "Read-only public source acquisition and owned local tests only. No new role/viewport/Golden/CAS/worker-restart/restore or native schedule acceptance in this slice. Previous evidence is preserved.",
+    "localLogSha256": {
+      "build.log": "d6020d1470d03ad58994ac6734d895000d8b16986b51589af4d98c87d33c1a8e",
+      "daily.log": "39ead454662bf195a7530b53b5ff1254b2d2bfa4d39a262ef9aef742816165b8",
+      "filter-red.log": "c40959bead52e8a8dd3e88f91325bf874eec9ed343dcdf6c94f609c1d2b5b60c",
+      "js-sync.log": "5b7932e9e3d0a8c890544b1c1bba26a815da71a5f8905e1ef01a8af5d3914824",
+      "lint.log": "cc4f4090e6913374f0aa5e4e16d2e3a94691b8130185b0fa17de8f11f19ada43",
+      "python-green.log": "dcf27eb49ee5f5b51cc6cb5bbd542bc949320deefc9597b2cfe620cda0b2aaff",
+      "python-red.log": "b3a7dec8f080c51e907e48f75f084faf6495a55000a6b99766144bb7e7055b76",
+      "typecheck.log": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+      "unknown-offer-red.log": "9adc040248b0ce76ade53d47d5947bbaf8a3bb183c34f517cf125c9b349f2fae",
+      "verifier-chain-red.log": "8a9ed0d2a45f81eee59f38b8fc5a02e83448c9232db4052f4fcf2ab29dcac6e9"
+    },
+    "privateDurableCopy": {
+      "relativeRoot": ".private-sync-evidence/propertyhk-20261007/c5294512-9a4b-44c2-9671-bb28f026cc6c",
+      "filesVerified": 56,
+      "allHashesMatch": true
+    }
+  },
+  "propertyhkHeldReadback20261007": {
+    "baselineSha": "99f1ce8712ce0900487467904c06ad2c4c3ef313",
+    "capturedAt": "2026-10-07T13:23:38.605441+00:00",
+    "environment": {
+      "project_id": "dawn-meadow-79190048",
+      "branch_id": "br-polished-sea-aom4i1ct",
+      "database_name": "neondb"
+    },
+    "collectionRunId": "c5294512-9a4b-44c2-9671-bb28f026cc6c",
+    "acquisition": {
+      "newSourceRequests": 0,
+      "quotedOffers": 465,
+      "unclassifiedAdvertisements": 1,
+      "scopeAdvertisements": 414,
+      "indexPages": 23
+    },
+    "authority": {
+      "propertyhkPolicies": 0,
+      "propertyhkSourceStates": 0,
+      "propertyhkLinks": 0,
+      "fullSnapshot": false,
+      "verifiedCanonicalMatches": 0,
+      "baselineAdvanced": false,
+      "withdrawalAllowed": false
+    },
+    "held": {
+      "records": 466,
+      "quotedOffers": 465,
+      "unclassifiedAdvertisements": 1,
+      "reasons": [
+        "index_only",
+        "detail_media_unverified",
+        "identity_scope_unverified",
+        "full_branch_dt_scope_unverified",
+        "source_policy_absent"
+      ],
+      "proposedCreates": 0,
+      "proposedUpdates": 0,
+      "proposedMerges": 0,
+      "proposedWithdrawals": 0,
+      "protectionChanges": 0
+    },
+    "aliasReadback": {
+      "advertisements": 181,
+      "candidateProperties": 200,
+      "unmatchedAdvertisements": 233,
+      "multiplicity": {
+        "1": 162,
+        "2": 19
+      },
+      "activeCandidateProperties": 143,
+      "inactiveCandidateProperties": 57,
+      "activeOtherSourceCandidateProperties": 39,
+      "protectedAliasCandidateProperties": 0,
+      "matchingFields": [
+        "legacy_detail_id"
+      ],
+      "canonicalTargetsAssigned": 0
+    },
+    "existingState": {
+      "policies": [
+        {
+          "owner": "no-hermes-v2",
+          "source": "28hse_agent_540",
+          "id_scope": "global",
+          "scope_id": "agent:540",
+          "full_count": 268,
+          "parser_version": "python-v2.2",
+          "policy_version": "no-hermes-v2",
+          "full_receipt_id": "609b131b-edb1-41ce-bc47-b5d4e5353a5f",
+          "publish_enabled": true,
+          "last_accepted_at": "2026-10-07T00:04:25.638516+00:00",
+          "bootstrap_approved": true
+        }
+      ],
+      "sourceStates": [
+        {
+          "offers": 448,
+          "source": "28hse_agent_540",
+          "scope_id": "agent:540",
+          "source_status": "active",
+          "canonical_properties": 261
+        },
+        {
+          "offers": 5,
+          "source": "28hse_agent_540",
+          "scope_id": "agent:540",
+          "source_status": "delisted",
+          "canonical_properties": 5
+        }
+      ],
+      "links": [
+        {
+          "offers": 430,
+          "source": "28hse_agent_540",
+          "status": "active",
+          "canonical_properties": 264
+        }
+      ],
+      "inventory": [
+        {
+          "status": "draft",
+          "properties": 28
+        },
+        {
+          "status": "active",
+          "properties": 553
+        },
+        {
+          "status": "inactive",
+          "properties": 637
+        }
+      ],
+      "manualProtection": [
+        {
+          "fields": 152,
+          "status": "active",
+          "properties": 76
+        },
+        {
+          "fields": 2,
+          "status": "inactive",
+          "properties": 1
+        }
+      ]
+    },
+    "privateEvidence": {
+      "production-readback.json": "f42966b9ba1b0572f3caadf851b38e330e74a65550c53d255faae8467dbdd214",
+      "held-observations.jsonl": "cb2b5ee58b4026260e45324998e542dda3810fa1106c205e5c2627cd1bccba9f"
+    },
+    "sideEffects": {
+      "productionWrites": 0,
+      "migrationsApplied": 0,
+      "configurationChanges": 0,
+      "dispatches": 0,
+      "manualScheduleRuns": 0,
+      "trueSends": 0,
+      "providerCalls": 0,
+      "modelCalls": 0,
+      "budget": 0
+    },
+    "verificationCodeSha": "970f56a5c9220f35229f2f03064816546b2498c6",
+    "verification": {
+      "test:property-sync": {
+        "passed": 76,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/final-property-sync.log",
+        "sha256": "7e9d53e180bb101f35c7388174176cd6c4730f6a4d895221e5d357361cae83d5"
+      },
+      "test:property-sync:python": {
+        "passed": 143,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/green-property-python.log",
+        "sha256": "569c975d0503c53c6fa7ad04836e73a68c2598524bdbcf007b0ca50a88bba490"
+      },
+      "test:property-sync:daily": {
+        "passed": 38,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/daily.log",
+        "sha256": "913cb178884e927a252310c7c491b3495578667c31228d21d1a97193647aa5cb"
+      },
+      "test:propertyhk-reconciliation:owned:db": {
+        "passed": 4,
+        "failed": 0,
+        "skipped": 0,
+        "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/final-owned-propertyhk.log",
+        "sha256": "0baada46a9bfdd27e7a2753d8892bafbedab371ca9b389c0ed6de022404b6c8b"
+      },
+      "typecheck": {
+        "exitCode": 0,
+        "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+      },
+      "build": {
+        "exitCode": 0,
+        "sha256": "35d630e71aae79e32e35226872f875af5679a50495f35e2cfaabb5a575be7868"
+      },
+      "lint": {
+        "exitCode": 0,
+        "sha256": "cc4f4090e6913374f0aa5e4e16d2e3a94691b8130185b0fa17de8f11f19ada43",
+        "existingWarnings": 3
+      }
+    },
+    "red": {
+      "node": {
+        "passed": 75,
+        "failed": 1,
+        "reason": "Missing expected rejection"
+      },
+      "python": {
+        "passed": 142,
+        "failed": 1,
+        "reason": "index-only gate allowed True"
+      }
+    },
+    "ownedSqlAssertions": {
+      "negativeVariants": 13,
+      "unchanged": [
+        "canonical row fingerprints",
+        "receipt payload hashes and response contents",
+        "full receipt baseline identity"
+      ],
+      "positiveFullSyntheticPublicationAndReplay": "4/4 existing owned outcomes pass; synthetic source/detail and real image bytes, no live provider"
+    },
+    "configurationDryRun": {
+      "propertyhkPolicyPresent": false,
+      "newPolicyApplied": false,
+      "newPolicyProposed": false,
+      "reason": "Full detail/media, identity and all authorised branch/dt acquisition proof unavailable"
+    },
+    "migrationDryRun": {
+      "newMigrations": [],
+      "productionApplied": 0,
+      "unappliedMainVersionsOutsidePriorApproval": [
+        "20261006110000_duty_manager.sql",
+        "20261007100000_wa_access_unassigned.sql",
+        "20261008100000_whatsapp_opt_out_evidence.sql",
+        "20261008110000_outbound_unknown_resolution.sql",
+        "20261009100000_contact_profile_name.sql",
+        "20261009110000_inbound_lead_reopen.sql"
+      ]
+    },
+    "readiness": {
+      "indexOnlyRefusal": "READY_LOCAL_AND_OWNED_SQL",
+      "frozenIndexCandidateReview": "READY_HELD_ONLY",
+      "fullPropertyhkAcquisition": "BLOCKED_EXTERNAL_DETAIL_ACCESS",
+      "productionPropertyhkIngestion": "NOT_READY_SOURCE_AUTHORITY_AND_POLICY_MISSING",
+      "absenceWithdrawal": "BLOCKED_FULL_COMPARABLE_SCOPE",
+      "nativeSchedules": "BLOCKED_PENDING_3_GENUINE_ACCEPTED_RUNS",
+      "goldenRolesViewportsProviderAndRestore": "NO_NEW_EXECUTION; existing layered evidence and blockers retained"
+    },
+    "rollback": {
+      "source": "Revert 970f56a5c9220f35229f2f03064816546b2498c6 through a reviewed PR; no schema or production data rollback is needed for this slice.",
+      "heldEvidence": "Retain immutable private acquisition and held review artifacts; no re-fetch or production replay was performed."
+    }
   }
 }

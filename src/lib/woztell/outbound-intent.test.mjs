@@ -11,6 +11,7 @@ import {
   readOutboundIntent,
   readOutboundReservation,
 } from "./outbound-intent.server.ts";
+import { sendWoztellResponse } from "./woztell.server.ts";
 const id = "11111111-1111-4111-8111-111111111111";
 const input = { requestId: id, conversationId: id, kind: "text", payload: { text: "hello" } };
 test("readonly HTTP handler authenticates before scoped outbound read and sanitizes failure", async (t) => {
@@ -283,6 +284,173 @@ test("explicit provider refusal is failed; ambiguous HTTP failure is unknown", a
     assert.equal(h.state(), state);
   }
 });
+// FX-08 / D-02: a definite refusal or a config error is `failed` (no lock), never `unknown`.
+// Provider-down fallback: every case calls the fake send exactly once, and a second delivery of
+// the same intent makes no call at all. Nothing here talks to WozTell.
+async function deliverTwice(result) {
+  const h = harness(() => {
+    if (result instanceof Error) throw result;
+    return result;
+  });
+  await deliverOutboundIntent(id, h.deps);
+  await deliverOutboundIntent(id, h.deps);
+  assert.equal(h.sends(), 1);
+  assert.equal(h.persisted.length, 1);
+  return { state: h.state(), error: h.persisted[0].error };
+}
+// FX-10b controller ruling, backed by "never double-send": an answer whose body could not be
+// read or parsed (gateway HTML, an empty body, truncated JSON) proves nothing about whether the
+// customer got the message, so it is `unknown` (locked until a manager resolves it) at any
+// status. The send is made once and never repeated.
+test("an unreadable or unparsable provider answer is unknown at any status, never re-sent", async () => {
+  for (const status of [400, 401, 403, 404, 422, 429]) {
+    for (const result of [
+      // sendWoztellResponse's shape for HTML or truncated JSON.
+      { ok: false, error: "WOZTELL_INVALID_RESPONSE", status, bodyUnreadable: true },
+      // Its shape for an empty body.
+      {
+        ok: false,
+        error: `WOZTELL_HTTP_${status}`,
+        status,
+        body: {},
+        refused: false,
+        bodyUnreadable: true,
+      },
+      // An older shape without the flag still fails closed on the parse-failure code.
+      { ok: false, error: "WOZTELL_INVALID_RESPONSE", status },
+    ])
+      assert.deepEqual(
+        await deliverTwice(result),
+        { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" },
+        JSON.stringify(result),
+      );
+  }
+});
+// The same ruling end to end: a fake WozTell answer goes through the real sendWoztellResponse
+// and the real classifier. The fake fetch is the only network; nothing here talks to WozTell.
+async function deliverRawAnswerTwice(status, text) {
+  const originalFetch = globalThis.fetch;
+  const previous = {
+    enabled: process.env.WOZTELL_ENABLED,
+    token: process.env.WOZTELL_BOT_ACCESS_TOKEN,
+    channel: process.env.WOZTELL_CHANNEL_ID,
+  };
+  let fetches = 0;
+  globalThis.fetch = async () => {
+    fetches++;
+    return new Response(text, { status });
+  };
+  process.env.WOZTELL_ENABLED = "true";
+  process.env.WOZTELL_BOT_ACCESS_TOKEN = "test-token";
+  process.env.WOZTELL_CHANNEL_ID = "test-channel";
+  try {
+    let raw;
+    const h = harness(async () => {
+      raw = await sendWoztellResponse({
+        memberId: "m1",
+        response: [{ type: "TEXT", text: "hi" }],
+      });
+      return raw;
+    });
+    await deliverOutboundIntent(id, h.deps);
+    await deliverOutboundIntent(id, h.deps);
+    assert.equal(h.sends(), 1);
+    assert.equal(fetches, 1);
+    return { raw, state: h.state(), error: h.persisted[0].error };
+  } finally {
+    globalThis.fetch = originalFetch;
+    process.env.WOZTELL_ENABLED = previous.enabled;
+    process.env.WOZTELL_BOT_ACCESS_TOKEN = previous.token;
+    process.env.WOZTELL_CHANNEL_ID = previous.channel;
+  }
+}
+for (const [status, label, text] of [
+  [400, "a gateway HTML page", "<html><body>400 Bad Request</body></html>"],
+  [429, "a gateway HTML page", "<html><body>429 Too Many Requests</body></html>"],
+  [403, "an empty body", ""],
+  [422, "truncated JSON", '{"ok":0,"err":"Parameter(s) is'],
+]) {
+  test(`a staff send answered ${status} with ${label} is unknown, not a definite refusal`, async () => {
+    const { raw, state, error } = await deliverRawAnswerTwice(status, text);
+    assert.equal(raw.ok, false);
+    assert.equal(raw.status, status);
+    assert.equal(raw.bodyUnreadable, true);
+    assert.notEqual(raw.refused, true);
+    assert.deepEqual({ state, error }, { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" });
+  });
+}
+test("a parsed ok:0 refusal at 4xx is readable and stays a definite refusal", async () => {
+  for (const status of [400, 401, 403, 404, 422, 429]) {
+    const { raw, state, error } = await deliverRawAnswerTwice(
+      status,
+      JSON.stringify({ ok: 0, err: "Parameter(s) is missing" }),
+    );
+    assert.notEqual(raw.bodyUnreadable, true, String(status));
+    assert.equal(raw.refused, true, String(status));
+    assert.deepEqual(
+      { state, error },
+      { state: "failed", error: "WOZTELL_REFUSED" },
+      String(status),
+    );
+  }
+});
+test("definite rejections and config errors are failed", async () => {
+  for (const status of [400, 401, 403, 404, 422, 429]) {
+    // A parsed JSON 4xx with no acceptance evidence (refused:false).
+    for (const result of [
+      { ok: false, error: `WOZTELL_HTTP_${status}`, status, body: {}, refused: false },
+      { ok: false, error: `WOZTELL_HTTP_${status}`, status, body: {}, bodyUnreadable: false },
+    ])
+      assert.deepEqual(
+        await deliverTwice(result),
+        { state: "failed", error: "WOZTELL_PROVIDER_REJECTED" },
+        JSON.stringify(result),
+      );
+    // An explicit ok:0 is a refusal first (rule 4 precedes rule 5): still failed.
+    assert.deepEqual(
+      await deliverTwice({ ok: false, error: "refused", status, body: { ok: 0 }, refused: true }),
+      { state: "failed", error: "WOZTELL_REFUSED" },
+      String(status),
+    );
+  }
+  for (const error of [
+    "WOZTELL_ENABLED is not true",
+    "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID",
+  ])
+    assert.deepEqual(await deliverTwice({ ok: false, error, stage: "preflight" }), {
+      state: "failed",
+      error: "WOZTELL_CONFIGURATION_UNAVAILABLE",
+    });
+});
+test("any acceptance signal keeps unknown: 401 with ok:1, 429 with a messageId, 2xx execution_accepted", async () => {
+  for (const result of [
+    { ok: false, error: "WOZTELL_HTTP_401", status: 401, body: { ok: 1 }, refused: false },
+    { ok: false, error: "WOZTELL_HTTP_429", status: 429, body: { messageId: "maybe-sent" } },
+    { ok: true, status: 200, body: { ok: 1, sendResult: { result: [{}] } } },
+    // A config-stage shape that nonetheless carries acceptance evidence is never `failed`.
+    { ok: false, stage: "preflight", status: 403, body: { ok: 1 } },
+  ])
+    assert.deepEqual(
+      await deliverTwice(result),
+      { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" },
+      JSON.stringify(result),
+    );
+});
+test("5xx without ok:0, a timeout throw and an ambiguous 2xx stay unknown", async () => {
+  for (const result of [
+    { ok: false, error: "WOZTELL_HTTP_503", status: 503, body: {}, refused: false },
+    { ok: false, error: "WOZTELL_INVALID_RESPONSE", status: 500 },
+    { ok: false, error: "WOZTELL_AMBIGUOUS_RESPONSE", status: 200, body: {}, refused: false },
+    { ok: false, error: "WOZTELL_AMBIGUOUS_RESPONSE" },
+    Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" }),
+    new TypeError("fetch failed"),
+  ])
+    assert.deepEqual(
+      await deliverTwice(result),
+      { state: "unknown", error: "WOZTELL_DELIVERY_UNKNOWN" },
+      String(result?.error ?? result),
+    );
+});
 test("nested provider identity is persisted for callback correlation", async () => {
   const h = harness(() => ({
     ok: true,
@@ -372,7 +540,7 @@ test("later callback carries strict outbound evidence into atomic unknown-intent
   assert.match(sql, /i\.conversation_id=cv\.id/);
   assert.match(sql, /i\.payload->>'text'=\$11/);
   assert.match(sql, /UPDATE whatsapp_messages[\s\S]*status='accepted'/);
-  assert.equal(JSON.parse(statements.at(-1).params.at(-1))?.type, "TEXT");
+  assert.equal(JSON.parse(statements.at(-1).params[14])?.type, "TEXT");
   assert.equal(h.sends(), 1);
 });
 
@@ -418,5 +586,35 @@ test("outbound reconciliation evidence rejects synthetic identities and unsuppor
       },
     }),
     null,
+  );
+});
+
+// FX-08 D4: structural pin on the one dispatch predicate. Behaviour is proven on owned
+// Postgres in opt-out.owned.db.test.mjs; this catches a silent widening in review.
+test("eligibility SQL keeps template behind opted_out_whatsapp=false and gates text on last_inbound_at > opted_out_at", () => {
+  const source = readFileSync("src/lib/woztell/outbound-intent.server.ts", "utf8").replace(
+    /\s+/g,
+    " ",
+  );
+  const start = source.indexOf("WITH eligibility AS (");
+  const end = source.indexOf(") AS allowed", start);
+  assert.ok(start > 0 && end > start, "eligibility CTE found");
+  const allowed = source.slice(start, end);
+  const text =
+    /\(i\.kind='text' AND wc\.last_inbound_at >= now\(\)-interval '24 hours' AND \(c\.opted_out_whatsapp=false OR \(c\.opted_out_at IS NOT NULL AND wc\.last_inbound_at > c\.opted_out_at\)\)\)/;
+  const template =
+    /\(i\.kind='template' AND c\.opted_out_whatsapp=false AND t\.status LIKE 'active%'\)/;
+  assert.match(allowed, text);
+  assert.match(allowed, template);
+  // The reopen is strictly later, never >=, and never reads the contact-level inbound time.
+  assert.doesNotMatch(allowed, /last_inbound_at\s*>=\s*c\.opted_out_at/);
+  assert.doesNotMatch(allowed, /(?<!w)c\.last_inbound_at/);
+  // Exactly one opted_out_at comparison and exactly two flag reads (text + template).
+  assert.equal(allowed.match(/opted_out_at/g).length, 2);
+  assert.equal(allowed.match(/c\.opted_out_whatsapp=false/g).length, 2);
+  // No other kind can slip through: the two branches are the whole kind gate.
+  assert.match(
+    allowed,
+    /NULLIF\(wc\.woztell_member_id,''\) IS NOT NULL AND \( \(i\.kind='text'[\s\S]*\) OR \(i\.kind='template'[^)]*\)\)/,
   );
 });

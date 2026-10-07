@@ -8,6 +8,7 @@ import {
   classifyCampaignDeliveryStatus,
   conversationAttention,
   normalizeAdminPhone,
+  optOutReplyState,
 } from "./admin-workflow.ts";
 
 test("normalizeAdminPhone uses one identity for local and international HK numbers", () => {
@@ -55,6 +56,78 @@ test("canReplyToConversation enforces Woztell safety gates", () => {
       now,
     }).reason,
     "OUTSIDE_24_HOUR_WINDOW",
+  );
+});
+
+// FX-08 D4: an opt-out blocks business-initiated sends. A customer message strictly
+// after the opt-out reopens normal staff text for 24 h; nothing else reopens it.
+test("opted-out contact: blocked until a strictly later inbound, then text for 24 h", () => {
+  const T = new Date("2026-06-23T10:00:00.000Z");
+  const plus = (ms) => new Date(T.getTime() + ms);
+  const DAY = 24 * 60 * 60 * 1000;
+  const cases = [
+    // [optedOutAt, lastInboundAt, now, reply reason or ok, state]
+    [T.toISOString(), T.toISOString(), plus(1000), "CONTACT_OPTED_OUT", "blocked"],
+    [T.toISOString(), plus(1).toISOString(), plus(1000), true, "reopened"],
+    [T, plus(1), plus(DAY + 2), "CONTACT_OPTED_OUT", "blocked"],
+    [null, plus(1).toISOString(), plus(1000), "CONTACT_OPTED_OUT", "blocked"],
+  ];
+  for (const [optedOutAt, lastInboundAt, now, expected, state] of cases) {
+    const reply = canReplyToConversation({
+      woztellEnabled: true,
+      optedOut: true,
+      optedOutAt,
+      lastInboundAt,
+      now,
+    });
+    if (expected === true) assert.deepEqual(reply, { ok: true });
+    else assert.deepEqual(reply, { ok: false, reason: expected });
+    assert.equal(optOutReplyState({ optedOut: true, optedOutAt, lastInboundAt, now }), state);
+  }
+  // Fail closed: no optedOutAt supplied (older callers), unparseable times, no inbound.
+  assert.equal(
+    canReplyToConversation({
+      woztellEnabled: true,
+      optedOut: true,
+      lastInboundAt: plus(1),
+      now: plus(2),
+    }).reason,
+    "CONTACT_OPTED_OUT",
+  );
+  for (const [optedOutAt, lastInboundAt] of [
+    ["not a date", plus(1)],
+    [T, "not a date"],
+    [T, null],
+  ])
+    assert.equal(
+      optOutReplyState({ optedOut: true, optedOutAt, lastInboundAt, now: plus(2) }),
+      "blocked",
+    );
+  // Not opted out: the opt-out state never applies; the normal window still does.
+  assert.equal(
+    optOutReplyState({ optedOut: false, optedOutAt: T, lastInboundAt: T, now: plus(1) }),
+    "not_opted_out",
+  );
+  assert.deepEqual(
+    canReplyToConversation({
+      woztellEnabled: true,
+      optedOut: false,
+      optedOutAt: T,
+      lastInboundAt: T,
+      now: plus(DAY + 2),
+    }),
+    { ok: false, reason: "OUTSIDE_24_HOUR_WINDOW" },
+  );
+  // WozTell disabled still wins over a reopen.
+  assert.equal(
+    canReplyToConversation({
+      woztellEnabled: false,
+      optedOut: true,
+      optedOutAt: T,
+      lastInboundAt: plus(1),
+      now: plus(2),
+    }).reason,
+    "WOZTELL_DISABLED",
   );
 });
 

@@ -1,6 +1,10 @@
 import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 import { createHash, randomUUID } from "node:crypto";
-import { parseWoztellProviderResult, type ParsedWoztellProviderResult } from "./provider-result.ts";
+import {
+  classifyOutboundSendResult,
+  parseWoztellProviderResult,
+  type ParsedWoztellProviderResult,
+} from "./provider-result.ts";
 
 export type OutboundState =
   | "queued"
@@ -8,7 +12,9 @@ export type OutboundState =
   | "accepted"
   | "unknown"
   | "failed"
-  | "cancelled";
+  | "cancelled"
+  | "resolved_sent"
+  | "resolved_not_sent";
 export type OutboundIntentInput = {
   requestId: string;
   conversationId: string;
@@ -192,6 +198,9 @@ type ProviderResult = {
   refused?: boolean;
   status?: number;
   error?: string;
+  stage?: "preflight";
+  /** The provider answered, but its body could not be read or parsed: never a refusal. */
+  bodyUnreadable?: boolean;
   providerResult?: ParsedWoztellProviderResult;
 };
 export function providerMessageIdentity(body: unknown): string | null {
@@ -219,24 +228,10 @@ export async function deliverOutboundIntent(
     const result = await send(reservation);
     const parsed = result.providerResult ?? parseWoztellProviderResult(result.body);
     externalMessageId = parsed.primaryMessageId;
-    const possibleAccepted = result.ok || parsed.possibleAccepted;
-    const definitivelyRefused = result.refused === true || parsed.outcome === "definitive_refusal";
-    await finish(id, {
-      state:
-        result.ok && parsed.outcome === "identifiable_acceptance"
-          ? "accepted"
-          : definitivelyRefused && !possibleAccepted
-            ? "failed"
-            : "unknown",
-      externalMessageId,
-      error:
-        result.ok && parsed.outcome === "identifiable_acceptance"
-          ? null
-          : definitivelyRefused && !possibleAccepted
-            ? "WOZTELL_REFUSED"
-            : "WOZTELL_DELIVERY_UNKNOWN",
-      providerResult: parsed,
-    });
+    // FX-08 / D-02: definite refusals and config errors are `failed` (no lock); any acceptance
+    // signal, a 5xx, an unreadable body or an ambiguous answer stays `unknown`.
+    const { state, error } = classifyOutboundSendResult(result, parsed);
+    await finish(id, { state, externalMessageId, error, providerResult: parsed });
   } catch {
     // Never throw a retryable send after the irreversible boundary. If this write also fails,
     // the retained dispatching row is converted to unknown on recovery, never to queued.
@@ -266,10 +261,17 @@ async function beginOutboundDispatch(
     },
     { statement: `SELECT id FROM ops_jobs WHERE id=$1::uuid FOR UPDATE`, params: [job.jobId] },
     {
+      // FX-08 D4: an opt-out blocks templates for as long as it lasts. Text reopens only after a
+      // customer message on THIS conversation strictly later than the opt-out (the opt-out
+      // message's own inbound time equals it), within the usual 24 h; a NULL time fails closed.
       statement: `WITH eligibility AS (
       SELECT i.id,wc.channel_id,wc.woztell_member_id,t.element_name,t.language_code,t.components,i.kind,i.payload,
-      (c.opted_out_whatsapp=false AND NULLIF(wc.woztell_member_id,'') IS NOT NULL
-       AND (i.kind='text' AND wc.last_inbound_at >= now()-interval '24 hours' OR i.kind='template' AND t.status LIKE 'active%')
+      (NULLIF(wc.woztell_member_id,'') IS NOT NULL
+       AND (
+         (i.kind='text' AND wc.last_inbound_at >= now()-interval '24 hours'
+            AND (c.opted_out_whatsapp=false
+                 OR (c.opted_out_at IS NOT NULL AND wc.last_inbound_at > c.opted_out_at)))
+         OR (i.kind='template' AND c.opted_out_whatsapp=false AND t.status LIKE 'active%'))
        AND wa_can_read_conversation(i.actor_staff_id,wc.id)
        AND (i.enquiry_id IS NULL OR NOT EXISTS(
          SELECT 1 FROM inquiries q WHERE q.id=i.enquiry_id

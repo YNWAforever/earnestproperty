@@ -46,4 +46,41 @@ Property.hk EPW/EPS/EPT are not live-enabled by this patch. Live verification re
 
 ### Private real Property.hk index evidence
 
+The native `agent.php` collector now uses this verified parser directly, without
+inventing production selectors or ID scope. Supply the original approved
+page-one URLs in a private JSON object keyed by the exact branch/district pair
+(for example `EPS-NTM`). Preserve the SID and dt; a different district needs its
+own approved entry. The collector follows only the published `jumpForm` through
+its last nonempty page, checks the exact company/licence and unchanged filters,
+rejects duplicate advertisements within each scope, and retains sale/rent as
+separate offers. It stops the source on 401/403/429, redirects or robots refusal.
+An advertisement with both prices rendered as `--` is preserved in
+`unclassified-advertisements.jsonl` with `reason=no_quoted_offer` and no inferred
+deal type or lifecycle. It still counts as an advertisement and participates in
+duplicate-page checks, but it does not create a sale/rent offer or stop pagination.
+
+```powershell
+scripts/property-sync/.venv/Scripts/python.exe scripts/property-sync/crawl_propertyhk.py `
+  --index-only --entries PRIVATE/approved-entry-urls.json --root PRIVATE/output --dry-run
+```
+
+This mode has no database/POST/apply path, even without `--dry-run`. Its unique
+`index-observations/<UUID>/` directory contains CSV/JSONL observations, raw
+responses, both attempt and final-response manifests, SHA-256 hashes and a frozen
+report. Raw evidence and URLs remain private; stdout reports aggregate counts
+and paths. CSV rows retain branch, district filter, advertisement ID, offer type,
+source update date and observed page/hash. Counts sum scope advertisements and
+offers; they are not canonical property counts, and overlapping districts are
+not deduplicated globally.
+
+Exit 0 and `status=index_complete` mean **only the approved indexes** were
+collected. `sync_status=blocked_detail_verification`, `full_snapshot=false`,
+`details_verified=false`, `id_scope_verified=false`,
+`full_branch_scope_verified=false`, `eligible_for_absence=false`,
+`publish_allowed=false`, `baseline_advanced=false` and `production_writes=0`
+remain explicit. Missing pages, changing totals/filters, unknown empty pages or
+`--max-pages` ceilings return exit 1 with a partial/failed report and preserve
+only validated observations. Accepted snapshots and receipts are untouched.
+This command neither enables the scheduler nor claims a full ingestion receipt.
+
 `verify_propertyhk_index_evidence.py --manifest PRIVATE/capture-manifest.json --entries PRIVATE/approved-entry-urls.json --out PRIVATE/report.json` runs offline. It verifies exact raw bytes and contiguous published index pages, then checks the observed agent.php table contract. Approved entry URLs/SIDs and original HTML stay private. The inspector does not grant full-snapshot, detail, ID-scope, branch-scope, absence or publication authority; blocked details remain a provider gate. See `docs/reports/propertyhk-access-verification.md` for real evidence and remaining acceptance.

@@ -148,7 +148,9 @@ test("scoped transcript IDs keep identical raw provider IDs from two channels", 
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text,phone text,
         normalized_phone text UNIQUE,whatsapp_member_id text UNIQUE,source text,
         opt_in_whatsapp boolean DEFAULT false,opted_out_whatsapp boolean DEFAULT false,
-        last_inbound_at timestamptz,updated_at timestamptz DEFAULT now()
+        last_inbound_at timestamptz,updated_at timestamptz DEFAULT now(),
+        opted_out_at timestamptz,opted_out_message_id text,opted_out_text text,
+        opted_out_source text,opted_out_cleared_at timestamptz,opted_out_cleared_by uuid
       );
       CREATE TABLE whatsapp_conversations (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),contact_id uuid REFERENCES crm_contacts(id),
@@ -170,6 +172,7 @@ test("scoped transcript IDs keep identical raw provider IDs from two channels", 
         conversation_id uuid,external_message_id text,state text,kind text,
         payload jsonb,error text,updated_at timestamptz
       );
+      ALTER TABLE crm_contacts ADD COLUMN whatsapp_profile_name text;
     `);
     const receiptId = "11111111-1111-4111-8111-111111111111";
     for (const channel of ["channel-a", "channel-b"]) {

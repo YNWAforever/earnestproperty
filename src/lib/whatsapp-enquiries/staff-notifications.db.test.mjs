@@ -70,7 +70,7 @@ async function seedNotificationFixture(query, tx, { staff, conv, contact, policy
     `CREATE TABLE staff_users(id uuid PRIMARY KEY,active boolean DEFAULT true,name_zh text,name_en text,auth_user_id text,email text)`,
     `CREATE TABLE staff_roles(staff_user_id uuid,role text)`,
     `CREATE TABLE properties(id uuid PRIMARY KEY,agent_id uuid,deal_type text)`,
-    `CREATE TABLE crm_contacts(id uuid PRIMARY KEY,name text,opted_out_whatsapp boolean DEFAULT false,whatsapp_member_id text,normalized_phone text)`,
+    `CREATE TABLE crm_contacts(id uuid PRIMARY KEY,name text,opted_out_whatsapp boolean DEFAULT false,whatsapp_member_id text,normalized_phone text,opted_out_at timestamptz,opted_out_message_id text,opted_out_text text,opted_out_source text,opted_out_cleared_at timestamptz,opted_out_cleared_by uuid,whatsapp_profile_name text)`,
     `CREATE TABLE crm_leads(id uuid PRIMARY KEY)`,
     `CREATE TABLE crm_activities(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),lead_id uuid,contact_id uuid,staff_user_id uuid,activity_type text,body text,due_at timestamptz)`,
     `CREATE TABLE whatsapp_conversations(id uuid PRIMARY KEY,contact_id uuid,assigned_agent_id uuid,channel_id text,woztell_member_id text,last_inbound_at timestamptz,last_message_at timestamptz,updated_at timestamptz DEFAULT now())`,

@@ -83,6 +83,7 @@ jobs:
       - run: npm run test:whatsapp-mobile:ui
       - run: npm run test:property-sync:recovery:ui
       - run: npm run test:admin-daily-work:ui
+      - run: npm run test:admin-lead-conflict:ui
       - run: npm run test:admin-campaign-review:ui
       - run: npm run test:admin-performance:ui
       - run: npm run test:admin-link-bulk:ui
@@ -103,11 +104,13 @@ jobs:
       - run: npm run test:estate-conversion
       - run: npm run test:neon-auth
       - run: npm run test:command-center
+      - run: npm run test:lead-integrity
       - run: npm run test:staff-notifications
       - run: npm run test:whatsapp-enquiries
       - run: npm run test:staff-server-fn
       - run: npm run test:no-link
       - run: npm run test:woztell
+      - run: npm run test:whatsapp-safety:ui
       - run: npm run test:operations
 
       - run: npm run test:control-plane
@@ -150,10 +153,12 @@ jobs:
       - run: docker pull pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
       - run: npm run test:no-link:local-postgres
       - run: npm run test:admin-golden:db
+      - run: npm run test:lead-integrity:db
       - run: npm run test:ai-knowledge:db
       - run: npm run test:crm-analysis:db
       - run: npm run test:conversation-assist:db
       - run: npm run test:whatsapp-setup:db
+      - run: npm run test:woztell:owned:db
       - run: npm run test:propertyhk-reconciliation:owned:db
       - run: npm run test:property-withdrawal:owned:db
       - run: npm run test:property-maintenance:owned:db

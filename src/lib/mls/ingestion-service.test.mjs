@@ -46,3 +46,46 @@ test("offline Property.hk branch-local preview counts branch identities separate
   const result = await ingestSnapshot(payload);
   assert.equal(result.summary.advertisement_count, 2);
 });
+
+test("Property.hk index evidence cannot be promoted by a complete-looking snapshot envelope", async () => {
+  const { ingestSnapshot } = await import("./ingestion-service.mjs");
+  const completeLooking = () =>
+    batch(
+      [
+        row("000123", {
+          branch_code: "EPS",
+          branch_memberships: ["EPS", "EPT", "EPW"],
+          source_url: "https://www.property.hk/fixture/EPS/000123",
+        }),
+      ],
+      "2026-09-07T01:00:00Z",
+      "propertyhk",
+    );
+  const variants = [
+    (payload) => {
+      payload.listings[0].observation_kind = "index_only";
+    },
+    ...["meta", "envelope"].flatMap((location) =>
+      ["full_snapshot", "details_verified", "id_scope_verified", "full_branch_scope_verified"].map(
+        (flag) => (payload) => {
+          (location === "meta" ? payload.meta : payload)[flag] = false;
+        },
+      ),
+    ),
+  ];
+  for (const markIndexEvidence of variants) {
+    const payload = completeLooking();
+    markIndexEvidence(payload);
+    await assert.rejects(
+      () =>
+        ingestSnapshot(payload, {
+          createClient() {
+            throw Error("database touched");
+          },
+        }),
+      (error) =>
+        error.code === "incomplete_snapshot" &&
+        error.details.reasons.includes("index_only_source_evidence"),
+    );
+  }
+});

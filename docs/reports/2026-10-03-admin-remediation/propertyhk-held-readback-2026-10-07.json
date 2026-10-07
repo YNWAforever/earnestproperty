@@ -1,0 +1,236 @@
+{
+  "baselineSha": "99f1ce8712ce0900487467904c06ad2c4c3ef313",
+  "capturedAt": "2026-10-07T13:23:38.605441+00:00",
+  "environment": {
+    "project_id": "dawn-meadow-79190048",
+    "branch_id": "br-polished-sea-aom4i1ct",
+    "database_name": "neondb"
+  },
+  "collectionRunId": "c5294512-9a4b-44c2-9671-bb28f026cc6c",
+  "acquisition": {
+    "newSourceRequests": 0,
+    "quotedOffers": 465,
+    "unclassifiedAdvertisements": 1,
+    "scopeAdvertisements": 414,
+    "indexPages": 23
+  },
+  "authority": {
+    "propertyhkPolicies": 0,
+    "propertyhkSourceStates": 0,
+    "propertyhkLinks": 0,
+    "fullSnapshot": false,
+    "verifiedCanonicalMatches": 0,
+    "baselineAdvanced": false,
+    "withdrawalAllowed": false
+  },
+  "held": {
+    "records": 466,
+    "quotedOffers": 465,
+    "unclassifiedAdvertisements": 1,
+    "reasons": [
+      "index_only",
+      "detail_media_unverified",
+      "identity_scope_unverified",
+      "full_branch_dt_scope_unverified",
+      "source_policy_absent"
+    ],
+    "proposedCreates": 0,
+    "proposedUpdates": 0,
+    "proposedMerges": 0,
+    "proposedWithdrawals": 0,
+    "protectionChanges": 0
+  },
+  "aliasReadback": {
+    "advertisements": 181,
+    "candidateProperties": 200,
+    "unmatchedAdvertisements": 233,
+    "multiplicity": {
+      "1": 162,
+      "2": 19
+    },
+    "activeCandidateProperties": 143,
+    "inactiveCandidateProperties": 57,
+    "activeOtherSourceCandidateProperties": 39,
+    "protectedAliasCandidateProperties": 0,
+    "matchingFields": ["legacy_detail_id"],
+    "canonicalTargetsAssigned": 0
+  },
+  "existingState": {
+    "policies": [
+      {
+        "owner": "no-hermes-v2",
+        "source": "28hse_agent_540",
+        "id_scope": "global",
+        "scope_id": "agent:540",
+        "full_count": 268,
+        "parser_version": "python-v2.2",
+        "policy_version": "no-hermes-v2",
+        "full_receipt_id": "609b131b-edb1-41ce-bc47-b5d4e5353a5f",
+        "publish_enabled": true,
+        "last_accepted_at": "2026-10-07T00:04:25.638516+00:00",
+        "bootstrap_approved": true
+      }
+    ],
+    "sourceStates": [
+      {
+        "offers": 448,
+        "source": "28hse_agent_540",
+        "scope_id": "agent:540",
+        "source_status": "active",
+        "canonical_properties": 261
+      },
+      {
+        "offers": 5,
+        "source": "28hse_agent_540",
+        "scope_id": "agent:540",
+        "source_status": "delisted",
+        "canonical_properties": 5
+      }
+    ],
+    "links": [
+      {
+        "offers": 430,
+        "source": "28hse_agent_540",
+        "status": "active",
+        "canonical_properties": 264
+      }
+    ],
+    "inventory": [
+      {
+        "status": "draft",
+        "properties": 28
+      },
+      {
+        "status": "active",
+        "properties": 553
+      },
+      {
+        "status": "inactive",
+        "properties": 637
+      }
+    ],
+    "manualProtection": [
+      {
+        "fields": 152,
+        "status": "active",
+        "properties": 76
+      },
+      {
+        "fields": 2,
+        "status": "inactive",
+        "properties": 1
+      }
+    ]
+  },
+  "privateEvidence": {
+    "production-readback.json": "f42966b9ba1b0572f3caadf851b38e330e74a65550c53d255faae8467dbdd214",
+    "held-observations.jsonl": "cb2b5ee58b4026260e45324998e542dda3810fa1106c205e5c2627cd1bccba9f"
+  },
+  "sideEffects": {
+    "productionWrites": 0,
+    "migrationsApplied": 0,
+    "configurationChanges": 0,
+    "dispatches": 0,
+    "manualScheduleRuns": 0,
+    "trueSends": 0,
+    "providerCalls": 0,
+    "modelCalls": 0,
+    "budget": 0
+  },
+  "verificationCodeSha": "970f56a5c9220f35229f2f03064816546b2498c6",
+  "verification": {
+    "test:property-sync": {
+      "passed": 76,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/final-property-sync.log",
+      "sha256": "7e9d53e180bb101f35c7388174176cd6c4730f6a4d895221e5d357361cae83d5"
+    },
+    "test:property-sync:python": {
+      "passed": 143,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/green-property-python.log",
+      "sha256": "569c975d0503c53c6fa7ad04836e73a68c2598524bdbcf007b0ca50a88bba490"
+    },
+    "test:property-sync:daily": {
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/daily.log",
+      "sha256": "913cb178884e927a252310c7c491b3495578667c31228d21d1a97193647aa5cb"
+    },
+    "test:propertyhk-reconciliation:owned:db": {
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/final-owned-propertyhk.log",
+      "sha256": "0baada46a9bfdd27e7a2753d8892bafbedab371ca9b389c0ed6de022404b6c8b"
+    },
+    "typecheck": {
+      "exitCode": 0,
+      "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+    },
+    "build": {
+      "exitCode": 0,
+      "sha256": "35d630e71aae79e32e35226872f875af5679a50495f35e2cfaabb5a575be7868"
+    },
+    "lint": {
+      "exitCode": 0,
+      "sha256": "cc4f4090e6913374f0aa5e4e16d2e3a94691b8130185b0fa17de8f11f19ada43",
+      "existingWarnings": 3
+    }
+  },
+  "red": {
+    "node": {
+      "passed": 75,
+      "failed": 1,
+      "reason": "Missing expected rejection"
+    },
+    "python": {
+      "passed": 142,
+      "failed": 1,
+      "reason": "index-only gate allowed True"
+    }
+  },
+  "ownedSqlAssertions": {
+    "negativeVariants": 13,
+    "unchanged": [
+      "canonical row fingerprints",
+      "receipt payload hashes and response contents",
+      "full receipt baseline identity"
+    ],
+    "positiveFullSyntheticPublicationAndReplay": "4/4 existing owned outcomes pass; synthetic source/detail and real image bytes, no live provider"
+  },
+  "configurationDryRun": {
+    "propertyhkPolicyPresent": false,
+    "newPolicyApplied": false,
+    "newPolicyProposed": false,
+    "reason": "Full detail/media, identity and all authorised branch/dt acquisition proof unavailable"
+  },
+  "migrationDryRun": {
+    "newMigrations": [],
+    "productionApplied": 0,
+    "unappliedMainVersionsOutsidePriorApproval": [
+      "20261006110000_duty_manager.sql",
+      "20261007100000_wa_access_unassigned.sql",
+      "20261008100000_whatsapp_opt_out_evidence.sql",
+      "20261008110000_outbound_unknown_resolution.sql",
+      "20261009100000_contact_profile_name.sql",
+      "20261009110000_inbound_lead_reopen.sql"
+    ]
+  },
+  "readiness": {
+    "indexOnlyRefusal": "READY_LOCAL_AND_OWNED_SQL",
+    "frozenIndexCandidateReview": "READY_HELD_ONLY",
+    "fullPropertyhkAcquisition": "BLOCKED_EXTERNAL_DETAIL_ACCESS",
+    "productionPropertyhkIngestion": "NOT_READY_SOURCE_AUTHORITY_AND_POLICY_MISSING",
+    "absenceWithdrawal": "BLOCKED_FULL_COMPARABLE_SCOPE",
+    "nativeSchedules": "BLOCKED_PENDING_3_GENUINE_ACCEPTED_RUNS",
+    "goldenRolesViewportsProviderAndRestore": "NO_NEW_EXECUTION; existing layered evidence and blockers retained"
+  },
+  "rollback": {
+    "source": "Revert 970f56a5c9220f35229f2f03064816546b2498c6 through a reviewed PR; no schema or production data rollback is needed for this slice.",
+    "heldEvidence": "Retain immutable private acquisition and held review artifacts; no re-fetch or production replay was performed."
+  }
+}

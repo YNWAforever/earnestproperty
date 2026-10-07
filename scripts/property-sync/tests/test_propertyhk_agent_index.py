@@ -90,3 +90,23 @@ def test_private_evidence_verifier_checks_bytes_and_contiguous_index_pages(tmp_p
  with pytest.raises(w.WorkerError,match='evidence_hash'):module.verify_evidence(bad,entries,tmp_path)
  bad=[{**manifest[0],'file':'../outside.raw'},manifest[1]]
  with pytest.raises(w.WorkerError,match='evidence_path'):module.verify_evidence(bad,entries,tmp_path)
+
+@pytest.mark.parametrize('drift_page',[1,2])
+def test_private_verifier_binds_every_page_to_approved_published_filter_chain(tmp_path,drift_page):
+ import importlib.util,hashlib
+ spec=importlib.util.spec_from_file_location('index_evidence_chain',Path(__file__).parents[1]/'verify_propertyhk_index_evidence.py')
+ module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+ manifest=[]
+ for page in (1,2):
+  url=URL if page==1 else URL+'&p=2'
+  html=fixture(page,2)
+  if page==drift_page:
+   url+='&prop=DRIFTED'
+   html=html.replace('</form>','<input name="prop" value="DRIFTED" type="hidden"></form>')
+  for ident in ('101','102','103'):
+   html=html.replace(ident,str(page)+ident)
+  raw=html.encode();name=hashlib.sha256(url.encode()).hexdigest()+'.raw'
+  (tmp_path/name).write_bytes(raw)
+  manifest.append({'url':url,'status':200,'file':name,'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()})
+ with pytest.raises(w.WorkerError,match='index_evidence_continuation'):
+  module.verify_evidence(manifest,{'EPS-NTM':URL},tmp_path)

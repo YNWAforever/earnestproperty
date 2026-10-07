@@ -140,6 +140,27 @@ if __name__ == "__main__":
 
 
 class FlowTests(unittest.TestCase):
+    def test_index_only_evidence_cannot_pass_complete_branch_replay_gate(self):
+        cfg, fixtures = w.synthetic_fixture("propertyhk")
+        original, _ = w.crawl("propertyhk", cfg, fixtures)
+        self.assertTrue(w.gate(original, None)["allowed"])
+        for location, flag in [
+            (location, flag)
+            for location in ["meta", "envelope"]
+            for flag in ["full_snapshot", "details_verified", "id_scope_verified", "full_branch_scope_verified"]
+        ] + [("record", "observation_kind")]:
+            with self.subTest(location=location, flag=flag):
+                payload = json.loads(json.dumps(original))
+                target = payload["meta"] if location == "meta" else payload
+                if location == "record":
+                    payload["listings"][0][flag] = "index_only"
+                else:
+                    target[flag] = False
+                result = w.gate(payload, None)
+                self.assertFalse(result["allowed"])
+                self.assertFalse(result["full"])
+                self.assertIn("index_only_source_evidence", result["reasons"])
+
     def test_synthetic_three_branches_and_loop(self):
         cfg, fixtures = w.synthetic_fixture("propertyhk")
         p, e = w.crawl("propertyhk", cfg, fixtures)

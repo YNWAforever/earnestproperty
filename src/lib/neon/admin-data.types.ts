@@ -341,6 +341,8 @@ export type AdminListingFiltersInput = {
 
 export type AdminLeadDetail = AdminLeadRow & {
   contact_id: string | null;
+  /** Opaque lead version (src/lib/neon/lead-version.ts). Never parse it as a date. */
+  version: string;
   preferred_estates: string[];
   activities: AdminLeadActivityRow[];
 };
@@ -364,7 +366,22 @@ export type AdminLeadUpdateInput = {
   preferred_estates: string[];
   assigned_agent_id: string | null;
   note: string | null;
+  /** The version this draft was read at. A stale one is refused with 409 LEAD_CHANGED. */
+  expected_version: string;
 };
+
+export type AdminLeadField =
+  | "stage"
+  | "intent"
+  | "budget_min"
+  | "budget_max"
+  | "preferred_estates"
+  | "assigned_agent_id"
+  | "note";
+
+export type AdminLeadUpdateResult =
+  | { ok: true; version: string; changed: AdminLeadField[] }
+  | { ok: false; error: "Not found" };
 
 export type AdminLeadActivityInput = {
   lead_id: string;
@@ -397,6 +414,24 @@ export type AdminConversationDetail = AdminConversationRow & {
    * the client never sees the role list, and the server fn enforces it again.
    */
   can_clear_opt_out: boolean;
+  // FX-08 evidence. Optional so older clients and the browser fixture still compile.
+  opted_out_at?: string | null;
+  /** Exact microsecond UTC version of opted_out_at; the only value the clear accepts. */
+  opted_out_version?: string | null;
+  opted_out_text?: string | null;
+  opted_out_source?: "customer_message" | "staff_recorded" | "legacy" | null;
+  /** Server-computed, same role rule as can_clear_opt_out. The server fn enforces it again. */
+  can_resolve_unknown_outbound?: boolean;
+  /** Managers and above only; agents get null. */
+  unknown_outbound?: {
+    id: string;
+    kind: "text" | "template";
+    actor_type: "staff" | "service";
+    dispatch_started_at: string | null;
+    error: string | null;
+    resolvable: boolean;
+  } | null;
+  opt_out_near_miss?: { messageId: string; text: string; at: string; exact?: boolean } | null;
 };
 
 export type AdminConversationUpdateInput = {

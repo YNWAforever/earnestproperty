@@ -97,6 +97,9 @@ import {
   VALUATION_CONSENT_VERSION,
 } from "./valuation-leads.js";
 import { woztellEnabled } from "../woztell/woztell.server";
+import { UNKNOWN_RESOLUTION_MIN_AGE_MINUTES } from "../woztell/outbound-resolution.server";
+import { readOptOutNearMiss } from "./whatsapp-opt-out-near-miss.server";
+import { optOutVersionSql } from "./whatsapp-opt-out.server";
 import { wakeAfterCommit } from "../control-plane/job-wake.server";
 
 /**
@@ -2478,6 +2481,7 @@ export async function listAdminLeads(actor?: StaffAccess): Promise<AdminLeadRow[
 
 export async function fetchAdminLead(id: string, actor?: StaffAccess) {
   const scope = actor ? agentScope(actor) : null;
+  const { leadVersionSql } = await import("./lead-version");
   const rows = await queryRows(
     `
     SELECT
@@ -2492,6 +2496,7 @@ export async function fetchAdminLead(id: string, actor?: StaffAccess) {
       l.contact_id,
       l.assigned_agent_id,
       l.preferred_estates,
+      ${leadVersionSql("l")} AS version,
       c.name,
       c.phone,
       c.email,
@@ -2544,6 +2549,8 @@ export async function fetchAdminLead(id: string, actor?: StaffAccess) {
     listing_no: stringOrNull(lead.listing_no),
     property_title: stringOrNull(lead.property_title),
     contact_id: stringOrNull(lead.contact_id),
+    // Opaque SQL-generated token: a string, never a Date (FX-09, FX-05b lesson).
+    version: stringOrEmpty(lead.version),
     preferred_estates: Array.isArray(lead.preferred_estates)
       ? lead.preferred_estates.map(String)
       : [],
@@ -2655,9 +2662,30 @@ export async function rejectAdminAiTag(input: { tagId: string }, actor: StaffAcc
   return result;
 }
 
-export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffAccess) {
+/**
+ * Save one lead with optimistic concurrency (FX-09).
+ *
+ * One statement locks the row, compares the caller's expected_version with the
+ * current one, checks that a newly chosen assignee is active, writes only when
+ * at least one field differs, and inserts the audit row with the before and
+ * after values of the changed fields. A repeat save at the current version
+ * with no edits writes nothing and returns that version. A save at a stale
+ * version always 409s, even when it would change nothing, so a stale draft can
+ * never pick up a fresh version.
+ */
+export async function updateAdminLead(
+  input: AdminLeadUpdateInput,
+  actor: StaffAccess,
+): Promise<import("./admin-data.types").AdminLeadUpdateResult> {
   const budgetProblem = leadBudgetError(input.budget_min, input.budget_max);
   if (budgetProblem) throw new Response(budgetProblem, { status: 400 });
+  const { leadVersionSql, isLeadVersion, LEAD_CHANGED, LEAD_VERSION_REQUIRED, ASSIGNEE_INACTIVE } =
+    await import("./lead-version");
+  // A client without a version (a pre-deploy bundle, a fixture) must not be
+  // treated as a blind overwrite.
+  if (!isLeadVersion(input.expected_version)) {
+    throw new Response(LEAD_VERSION_REQUIRED, { status: 400 });
+  }
   const scope = agentScope(actor);
   const params: unknown[] = [
     input.stage,
@@ -2668,31 +2696,83 @@ export async function updateAdminLead(input: AdminLeadUpdateInput, actor: StaffA
     input.assigned_agent_id,
     input.note,
     input.id,
+    input.expected_version,
+    actor.staffId,
   ];
   if (scope !== null) params.push(scope);
-  const rows = await queryRows(
-    `UPDATE crm_leads SET
-      stage = $1::crm_lead_stage,
-      intent = $2,
-      budget_min = $3,
-      budget_max = $4,
-      preferred_estates = $5::text[],
-      assigned_agent_id = $6,
-      note = $7,
-      updated_at = now()
-     WHERE id = $8${scope !== null ? " AND assigned_agent_id = $9" : ""}
-     RETURNING id`,
+  const fields = (alias: string) =>
+    `'stage',${alias}.stage,'intent',${alias}.intent,'budget_min',${alias}.budget_min,` +
+    `'budget_max',${alias}.budget_max,'preferred_estates',${alias}.preferred_estates,` +
+    `'assigned_agent_id',${alias}.assigned_agent_id,'note',${alias}.note`;
+  const rows = await queryRows<{
+    current_version: string;
+    assignee_ok: boolean;
+    new_version: string | null;
+    changed: import("./admin-data.types").AdminLeadField[];
+  }>(
+    `WITH old AS (
+       SELECT l.*, ${leadVersionSql("l")} AS version
+       FROM crm_leads l
+       WHERE l.id = $8::uuid${scope !== null ? " AND l.assigned_agent_id = $11::uuid" : ""}
+       FOR UPDATE
+     ), assignee AS (
+       SELECT ($6::uuid IS NULL OR $6::uuid IS NOT DISTINCT FROM o.assigned_agent_id
+         OR EXISTS (SELECT 1 FROM staff_users s WHERE s.id = $6::uuid AND s.active)) AS ok
+       FROM old o
+     ), upd AS (
+       UPDATE crm_leads l SET
+         stage = $1::crm_lead_stage,
+         intent = $2,
+         budget_min = $3,
+         budget_max = $4,
+         preferred_estates = $5::text[],
+         assigned_agent_id = $6::uuid,
+         note = $7,
+         updated_at = GREATEST(now(), o.updated_at + interval '1 microsecond')
+       FROM old o, assignee a
+       WHERE l.id = o.id AND o.version = $9 AND a.ok
+         AND (o.stage, o.intent, o.budget_min, o.budget_max, o.preferred_estates, o.assigned_agent_id, o.note)
+           IS DISTINCT FROM ($1::crm_lead_stage, $2, $3::numeric, $4::numeric, $5::text[], $6::uuid, $7)
+       RETURNING l.*, ${leadVersionSql("l")} AS version
+     ), diff AS (
+       SELECT b.k, b.v AS before, a.v AS after
+       FROM upd u, old o,
+         LATERAL jsonb_each(jsonb_build_object(${fields("o")})) b(k, v)
+         JOIN LATERAL jsonb_each(jsonb_build_object(${fields("u")})) a(k, v) ON a.k = b.k
+       WHERE a.v IS DISTINCT FROM b.v
+     ), audit AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT $10::uuid, 'lead.update', 'lead', u.id, jsonb_build_object(
+         'changed', (SELECT COALESCE(jsonb_agg(k ORDER BY k), '[]'::jsonb) FROM diff),
+         'before', (SELECT COALESCE(jsonb_object_agg(k, before), '{}'::jsonb) FROM diff),
+         'after', (SELECT COALESCE(jsonb_object_agg(k, after), '{}'::jsonb) FROM diff),
+         'expectedVersion', $9::text,
+         'version', u.version)
+       FROM upd u
+       RETURNING id
+     )
+     SELECT o.version AS current_version, a.ok AS assignee_ok,
+       (SELECT version FROM upd) AS new_version,
+       (SELECT COALESCE(jsonb_agg(k ORDER BY k), '[]'::jsonb) FROM diff) AS changed
+     FROM old o CROSS JOIN assignee a`,
     params,
   );
-  if (!rows[0]) {
+  const row = rows[0];
+  if (!row) {
     if (scope !== null) throw new Response("Forbidden", { status: 403 });
     return { ok: false, error: "Not found" };
   }
-  await writeAudit(actor.staffId, "lead.update", "lead", input.id, {
-    stage: input.stage,
-    intent: input.intent,
-  });
-  return { ok: true };
+  if (row.current_version !== input.expected_version) {
+    // Id only, no PII: gives the canary a conflict rate.
+    console.warn("LEAD_CHANGED", { leadId: input.id });
+    throw new Response(LEAD_CHANGED, { status: 409 });
+  }
+  if (!row.assignee_ok) throw new Response(ASSIGNEE_INACTIVE, { status: 400 });
+  return {
+    ok: true,
+    version: row.new_version ?? row.current_version,
+    changed: Array.isArray(row.changed) ? row.changed : [],
+  };
 }
 
 /** Re-stage or reassign many leads in one statement.
@@ -2740,24 +2820,41 @@ export async function bulkUpdateAdminLeads(
   ];
   if (scope !== null) params.push(scope);
 
-  const rows = await queryRows<{ id: string }>(
-    `UPDATE crm_leads SET
-       stage = CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
-       assigned_agent_id = CASE WHEN $4::boolean THEN $5 ELSE assigned_agent_id END,
-       updated_at = now()
-     WHERE id = ANY($1::uuid[])${scope !== null ? " AND assigned_agent_id = $6" : ""}
-     RETURNING id::text AS id`,
+  const { ASSIGNEE_INACTIVE } = await import("./lead-version");
+  // The version only moves when a row really changes, so re-staging to the
+  // value a lead already has cannot 409 a colleague who has it open. Unchanged
+  // rows are still counted as updated: they are in the requested state.
+  const rows = await queryRows<{ assignee_ok: boolean; ids: string[] }>(
+    `WITH assignee AS (
+       SELECT (NOT $4::boolean OR $5::uuid IS NULL
+               OR EXISTS(SELECT 1 FROM staff_users s WHERE s.id=$5::uuid AND s.active)) AS ok
+     ), updated AS (
+       UPDATE crm_leads SET
+         stage = CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
+         assigned_agent_id = CASE WHEN $4::boolean THEN $5::uuid ELSE assigned_agent_id END,
+         updated_at = CASE WHEN (stage, assigned_agent_id) IS DISTINCT FROM (
+             CASE WHEN $2::boolean THEN $3::crm_lead_stage ELSE stage END,
+             CASE WHEN $4::boolean THEN $5::uuid ELSE assigned_agent_id END)
+           THEN GREATEST(now(), updated_at + interval '1 microsecond')
+           ELSE updated_at END
+       WHERE id = ANY($1::uuid[])${scope !== null ? " AND assigned_agent_id = $6" : ""} AND (SELECT ok FROM assignee)
+       RETURNING id::text AS id
+     )
+     SELECT (SELECT ok FROM assignee) AS assignee_ok, COALESCE(array_agg(id), '{}') AS ids FROM updated`,
     params,
   );
+  // A new assignment to inactive staff is refused before anything is audited.
+  if (rows[0]?.assignee_ok === false) throw new Response(ASSIGNEE_INACTIVE, { status: 400 });
+  const updatedIds = rows[0]?.ids ?? [];
 
   await writeAudit(actor.staffId, "lead.bulk_update", "lead", undefined, {
     requested: ids.length,
-    updated: rows.length,
+    updated: updatedIds.length,
     ...(setStage ? { stage: input.stage } : {}),
     ...(setAgent ? { assigned_agent_id: input.assigned_agent_id ?? null } : {}),
   });
 
-  return { ok: true as const, updated: rows.length, requested: ids.length };
+  return { ok: true as const, updated: updatedIds.length, requested: ids.length };
 }
 
 export async function createAdminLeadActivity(input: AdminLeadActivityInput, actor: StaffAccess) {
@@ -3047,7 +3144,12 @@ export async function fetchAdminConversation(
   includeMessages = true,
 ) {
   if (!actor) throw new Response("Forbidden", { status: 403 });
-  const params: unknown[] = [id, actor.staffId];
+  const params: unknown[] = [
+    id,
+    actor.staffId,
+    UNKNOWN_RESOLUTION_MIN_AGE_MINUTES,
+    actor.roles.includes("admin") || actor.roles.includes("manager"),
+  ];
   const scopeClause = " AND wa_can_read_conversation($2::uuid,wc.id)";
   const rows = await queryRows(
     `
@@ -3062,8 +3164,19 @@ export async function fetchAdminConversation(
       c.name,
       c.phone,
       c.opted_out_whatsapp,
+      c.opted_out_at,
+      ${optOutVersionSql("c")} AS opted_out_version,
+      c.opted_out_text,
+      c.opted_out_source,
+      c.opted_out_cleared_at,
       m.text AS last_text,
-      m.direction AS last_direction
+      m.direction AS last_direction,
+      u.id AS unknown_id,
+      u.kind AS unknown_kind,
+      u.actor_type AS unknown_actor_type,
+      u.dispatch_started_at AS unknown_dispatch_started_at,
+      u.error AS unknown_error,
+      u.resolvable AS unknown_resolvable
     FROM whatsapp_conversations wc
     LEFT JOIN crm_contacts c ON c.id = wc.contact_id
     LEFT JOIN LATERAL (
@@ -3073,6 +3186,16 @@ export async function fetchAdminConversation(
       ORDER BY created_at DESC
       LIMIT 1
     ) m ON true
+    -- FX-08: the oldest unconfirmed send, for managers only (agents never see or get a null).
+    LEFT JOIN LATERAL (
+      SELECT i.id, i.kind, i.actor_type, i.dispatch_started_at, i.error,
+        (COALESCE(i.dispatch_started_at, i.updated_at)
+          <= now() - make_interval(mins => $3::int)) AS resolvable
+      FROM whatsapp_outbound_intents i
+      WHERE i.conversation_id = wc.id AND i.state = 'unknown' AND $4::boolean
+      ORDER BY i.dispatch_started_at ASC NULLS FIRST, i.id
+      LIMIT 1
+    ) u ON true
     WHERE wc.id = $1${scopeClause}
     LIMIT 1
     `,
@@ -3080,6 +3203,15 @@ export async function fetchAdminConversation(
   );
   const conversation = rows[0];
   if (!conversation) return null;
+  // Same role rule as the requireStaff(["admin","manager"]) gates on the clear, the near-miss
+  // dismissal and the unknown-send resolution; those server fns enforce it again.
+  const isManager = actor.roles.includes("admin") || actor.roles.includes("manager");
+  // The near-miss is only derived behind the conversation read above (wa_can_read_conversation).
+  const contactId = stringOrNull(conversation.contact_id);
+  const optOutNearMiss =
+    contactId && conversation.opted_out_whatsapp !== true
+      ? await readOptOutNearMiss({ conversationId: id, contactId })
+      : null;
 
   const messages = includeMessages
     ? await queryRows(
@@ -3106,6 +3238,15 @@ export async function fetchAdminConversation(
     name: stringOrNull(conversation.name),
     phone: stringOrNull(conversation.phone),
     opted_out_whatsapp: conversation.opted_out_whatsapp === true,
+    opted_out_at: dateOrNull(conversation.opted_out_at),
+    opted_out_version: stringOrNull(conversation.opted_out_version),
+    opted_out_text: stringOrNull(conversation.opted_out_text)?.slice(0, 200) ?? null,
+    opted_out_source: stringOrNull(conversation.opted_out_source) as
+      | "customer_message"
+      | "staff_recorded"
+      | "legacy"
+      | null,
+    opt_out_near_miss: optOutNearMiss,
     last_text: stringOrNull(conversation.last_text),
     last_direction: stringOrNull(conversation.last_direction),
     contact_id: stringOrNull(conversation.contact_id),
@@ -3115,9 +3256,23 @@ export async function fetchAdminConversation(
     // setWhatsappMarketingConsent -- this only decides whether the control is
     // rendered; the server fn enforces it for real. No actor means an internal
     // unscoped call with no UI behind it, so deny rather than assume.
-    can_clear_opt_out: actor
-      ? actor.roles.includes("admin") || actor.roles.includes("manager")
-      : false,
+    can_clear_opt_out: isManager,
+    can_resolve_unknown_outbound: isManager,
+    unknown_outbound:
+      isManager && conversation.unknown_id
+        ? {
+            id: stringOrEmpty(conversation.unknown_id),
+            kind: (conversation.unknown_kind === "template" ? "template" : "text") as
+              | "text"
+              | "template",
+            actor_type: (conversation.unknown_actor_type === "service" ? "service" : "staff") as
+              | "staff"
+              | "service",
+            dispatch_started_at: dateOrNull(conversation.unknown_dispatch_started_at),
+            error: stringOrNull(conversation.unknown_error),
+            resolvable: conversation.unknown_resolvable === true,
+          }
+        : null,
     messages: messages.map((message) => ({
       id: stringOrEmpty(message.id),
       direction: stringOrEmpty(message.direction) as "inbound" | "outbound",

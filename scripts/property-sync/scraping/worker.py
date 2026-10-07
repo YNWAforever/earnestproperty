@@ -599,6 +599,11 @@ def inspect_property_agent_index(html, expected_url, *, expected_license):
     # Only the published form is used to construct pagination, never a guessed SID.
     if set(fields) - {"p", "hqid", "val", "prop", "dt", "agent", "sid", "select"}:
         raise WorkerError("pagination_identity")
+    if set(query) - {"p", "hqid", "val", "prop", "dt", "agent", "sid", "select"}:
+        raise WorkerError("pagination_identity")
+    if any(fields.get(key, "") != query.get(key, [""])[0]
+           for key in ("hqid", "val", "prop", "select")):
+        raise WorkerError("pagination_identity")
     page_input = form.select('input[name="p"]')
     totals = re.findall(r"共\s*(\d+)\s*頁", text(form.get_text(" ")))
     if len(totals) != 1 or len(page_input) != 1 or page_input[0].get("placeholder") != requested_page:
@@ -613,7 +618,7 @@ def inspect_property_agent_index(html, expected_url, *, expected_license):
     columns = [text(node.get_text(" ")) for node in table.select("thead th")]
     if columns != ["全選", "相片", "地區", "物業資料", "樓層", "建築(呎)", "實用(呎)", "售價(萬)", "租金(HK$)", ""]:
         raise WorkerError("index_columns")
-    listings, ids = [], set()
+    listings, unclassified, ids = [], [], set()
     for node in table.select('input[type="checkbox"][name^="cbox["]'):
         ident = node.get("value", "")
         row = node.find_parent("tr")
@@ -656,7 +661,10 @@ def inspect_property_agent_index(html, expected_url, *, expected_license):
             if value != "--":
                 offers.append(deal)
         if not offers:
-            raise WorkerError("index_fields")
+            # An observed advertisement with two "--" prices does not identify
+            # an offer or prove withdrawal. Keep it separately; do not lose the
+            # rest of this page or silently manufacture a sale/rent offer.
+            unclassified.append({**base, "reason": "no_quoted_offer"})
         listings.extend({**base, "deal_type": deal} for deal in offers)
     if not ids:
         # No approved true-empty sample exists: never infer absence from empty DOM.
@@ -667,6 +675,7 @@ def inspect_property_agent_index(html, expected_url, *, expected_license):
         "page": page, "listed_pages": pages, "is_last_listed_page": page == pages,
         "next_url": None if page == pages else origin + form["action"] + "?" + urlencode(fields),
         "advertisement_count": len(ids), "listings": listings,
+        "unclassified_advertisements": unclassified,
         "full_snapshot": False, "details_verified": False,
         "eligible_for_absence": False, "id_scope_verified": False,
     }
@@ -940,6 +949,14 @@ def gate(payload, baseline):
     reasons = []
     m = payload["meta"]
     count = len(ad_keys(payload))
+    if payload.get("source") == "propertyhk" and (
+        any(
+            m.get(flag) is False or payload.get(flag) is False
+            for flag in ["full_snapshot", "details_verified", "id_scope_verified", "full_branch_scope_verified"]
+        )
+        or any(r.get("observation_kind") == "index_only" for r in payload["listings"])
+    ):
+        reasons.append("index_only_source_evidence")
     if payload.get("source") == "propertyhk" and (not collection_page_proof(payload) or m.get("worker_rejected_count",0)):
         reasons.append("incomplete_branch_evidence")
     if not m.get("crawl_complete") or m.get("pages_failed", 0):
@@ -1320,8 +1337,27 @@ def cli(source, crawl_only=False):
     parser.add_argument("--synthetic-fixture", action="store_true")
     parser.add_argument("--fixtures", type=Path)
     parser.add_argument("--output", type=Path)
+    if source == "propertyhk" and crawl_only:
+        parser.add_argument("--index-only", action="store_true",
+                            help="Collect native approved indexes; never submit or advance a baseline")
+        parser.add_argument("--entries", type=Path,
+                            help="Private JSON map of branch-dt to approved page-one URLs")
+        parser.add_argument("--max-pages", type=int, default=100)
     args = parser.parse_args()
     try:
+        if source == "propertyhk" and crawl_only and args.index_only:
+            from .propertyhk_index import collect_indexes
+            if not args.entries or args.synthetic_fixture or args.output:
+                raise WorkerError("index_collection_arguments")
+            result = collect_indexes(
+                json.loads(args.entries.read_text(encoding="utf-8-sig")), args.root,
+                fixtures=json.loads(args.fixtures.read_text(encoding="utf-8-sig")) if args.fixtures else None,
+                max_pages=args.max_pages,
+            )
+            print(json.dumps(result))
+            return 0 if result["success"] else 1
+        if source == "propertyhk" and crawl_only and args.entries:
+            raise WorkerError("index_collection_arguments")
         config = json.loads(args.config.read_text(encoding="utf-8-sig"))
         cfg = config["sources"][source]
         fixtures = (
