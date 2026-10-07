@@ -37,19 +37,12 @@ const transaction = async (statements) =>
   });
 
 await mockOwnedServerDb(mock, query, transaction);
-const knowledgeUrl = new URL("src/lib/ai/knowledge.server.ts", repoRoot).href;
-// Spread the real module: admin-data.server.ts imports rebuildAiKnowledgeIndex from it.
-const actualKnowledge = await import(knowledgeUrl);
-mock.module(knowledgeUrl, {
+const replyUrl = new URL("src/lib/ai/live-agent-reply.server.ts", repoRoot).href;
+mock.module(replyUrl, {
   exports: {
-    ...actualKnowledge,
-    answerFromPublicKnowledge: async () => {
+    buildLiveAgentReply: async () => {
       modelCalls += 1;
-      return {
-        answer: "合成答案",
-        confidence: 0.9,
-        citations: [{ title: "合成來源", url_path: "/faq", source_type: "faq" }],
-      };
+      return { kind: "faq", text: "合成答案", cards: [], handoffSuggested: false };
     },
   },
 });

@@ -33,7 +33,10 @@ const HANDOFF_RE = new RegExp(
 const VALUATION_RE = new RegExp(
   `估價|估价|估值|值幾錢|值几钱|放盤|放盘|賣樓|卖楼|業主|业主|${L}(?:valuation|sell my)${R}`,
 );
-const LISTING_NO_RE = /(?<![A-Za-z0-9])([A-Za-z]{1,4}-?\d{3,10})(?![A-Za-z0-9])/;
+const LISTING_NO_RE = /(?<![A-Za-z0-9])([A-Za-z]{1,4})(-?\d{3,10})(?![A-Za-z0-9])/g;
+// Contact prefixes: a token glued to one of these is a phone, never a listing number,
+// whatever its digit count ("tel912345678", "ph1234567", "wa-1234567").
+const CONTACT_PREFIXES = new Set(["tel", "ph", "wa", "whatsapp"]);
 // A Hong Kong phone number (8 digits starting 2/3/5/6/7/8/9, optionally +852) is never a
 // listing number, whatever short letter prefix ("tel", "wa", "ph") is glued to it.
 const HK_PHONE_RE = /(?<!\d)(?:\+?852[\s-]*)?[235-9](?:[\s-]?\d){7}(?!\d)/g;
@@ -112,9 +115,17 @@ function parseDeal(text: string): LiveAgentDeal | null {
   return rent ? "rent" : "sale";
 }
 
+function findListingNo(text: string): string | null {
+  for (const match of text.matchAll(LISTING_NO_RE)) {
+    if (CONTACT_PREFIXES.has(match[1].toLowerCase())) continue;
+    return (match[1] + match[2]).toUpperCase();
+  }
+  return null;
+}
+
 export function parseLiveAgentIntent(raw: string): LiveAgentIntent {
   const text = normalise(raw);
-  const listingMatch = LISTING_NO_RE.exec(text.replace(HK_PHONE_RE, " "));
+  const listingNo = findListingNo(text.replace(HK_PHONE_RE, " "));
   const estateSlugs = estateRegistry
     .filter((entry) =>
       entry.aliases.some((alias) => {
@@ -128,7 +139,7 @@ export function parseLiveAgentIntent(raw: string): LiveAgentIntent {
     text,
     handoffRequested: HANDOFF_RE.test(text),
     valuation: VALUATION_RE.test(text),
-    listingNo: listingMatch ? listingMatch[1].toUpperCase() : null,
+    listingNo,
     estateSlugs,
     districtSlug: district ? district[1] : null,
     bedrooms: parseBedrooms(text),

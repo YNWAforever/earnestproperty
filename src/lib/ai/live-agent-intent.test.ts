@@ -170,3 +170,30 @@ describe("review fixes", () => {
     expect(parseLiveAgentIntent("三睡房").bedrooms).toBe(3);
   });
 });
+
+describe("residual R1: contact prefixes", () => {
+  test("a token glued to tel/ph/wa/whatsapp is never a listing number, whatever its digit count", () => {
+    for (const text of [
+      "tel912345678",
+      "TEL912345678",
+      "ph1234567",
+      "PH-1234567",
+      "wa-1234567",
+      "wa123",
+      "tel-1234567890",
+      "whatsapp1234567",
+      "我嘅電話 tel912345678",
+    ]) {
+      expect(parseLiveAgentIntent(text).listingNo).toBeNull();
+    }
+  });
+
+  test("real listing numbers still parse, also next to a rejected prefix", () => {
+    expect(parseLiveAgentIntent("EP001").listingNo).toBe("EP001");
+    expect(parseLiveAgentIntent("EP-1201 仲有冇").listingNo).toBe("EP-1201");
+    expect(parseLiveAgentIntent("ep11001").listingNo).toBe("EP11001");
+    expect(parseLiveAgentIntent("A000001").listingNo).toBe("A000001");
+    expect(parseLiveAgentIntent("tel912345678 EP11001").listingNo).toBe("EP11001");
+    expect(parseLiveAgentIntent("wa-1234567 同 ep-1201").listingNo).toBe("EP-1201");
+  });
+});

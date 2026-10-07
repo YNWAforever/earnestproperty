@@ -65,10 +65,7 @@ test("AI modules expose the expected public and server-only contracts", () => {
       "src/lib/ai/knowledge.ts",
       ["chunkKnowledgeText", "normalizeKnowledgeSource", "filterPublicKnowledgeChunks"],
     ],
-    [
-      "src/lib/ai/knowledge.server.ts",
-      ["rebuildAiKnowledgeIndex", "searchPublicKnowledge", "answerFromPublicKnowledge"],
-    ],
+    ["src/lib/ai/knowledge.server.ts", ["rebuildAiKnowledgeIndex", "searchPublicKnowledge"]],
     [
       "src/lib/ai/crm-rules.ts",
       ["classifyAiTagSafety", "canAutoApplyAiTag", "suggestFactualTags", "scoreLeadProfile"],
@@ -209,10 +206,9 @@ test("client secret scan rejects a real source sentinel for every protected secr
   }
 });
 
-test("public AI answers are sourced only from public knowledge, not CRM or WhatsApp data", () => {
+test("public knowledge search reads only public, published, current chunks", () => {
   const source = read("src/lib/ai/knowledge.server.ts");
   const search = functionSource(source, "searchPublicKnowledge");
-  const answer = functionSource(source, "answerFromPublicKnowledge");
 
   assert.match(search, /c\.visibility = 'public'/);
   assert.match(search, /s\.public_visibility = 'public'/);
@@ -222,8 +218,6 @@ test("public AI answers are sourced only from public knowledge, not CRM or Whats
   assert.match(source, /knowledgeSearchTokens/);
   assert.match(source, /\\u3400-\\u9fff/);
   assert.doesNotMatch(search, /\b(?:crm_|whatsapp_)/i);
-  assert.match(answer, /searchPublicKnowledge\(\{ query: input\.question, limit: 6 \}\)/);
-  assert.doesNotMatch(answer, /\b(?:crm_|whatsapp_|fetchCrm|Conversation)/i);
 });
 
 test("public live-agent APIs validate sessions and expose only public session fields", () => {

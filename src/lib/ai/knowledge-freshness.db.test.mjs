@@ -12,15 +12,9 @@ test(
   async (t) => {
     await withOwnedPostgres(async ({ query, transaction }) => {
       await mockOwnedServerDb(mock, query, transaction);
-      let duringGenerate = async () => {};
-      let providerOk = true;
       mock.module(new URL("src/lib/ai/provider.server.ts", repoRoot).href, {
         exports: {
           embedAiTexts: async () => ({ ok: false }),
-          generateAiText: async () => {
-            await duringGenerate();
-            return { ok: providerOk, text: "OLD_PRICE_UNSAFE" };
-          },
         },
       });
       const knowledge = await import("./knowledge.server.ts");
@@ -56,30 +50,10 @@ test(
         assert.equal((await knowledge.searchPublicKnowledge({ query: "測試海景" })).length, 0);
       });
       await indexCurrent();
-      await t.test(
-        "unchanged source retains its revision and can produce a cited answer",
-        async () => {
-          const [current] = await knowledge.searchPublicKnowledge({ query: "測試海景" });
-          assert.match(current.source_revision ?? "", /^[a-f0-9]{32}$/);
-          const answer = await knowledge.answerFromPublicKnowledge({ question: "測試海景" });
-          assert.equal(answer.answer, "OLD_PRICE_UNSAFE");
-          assert.equal(answer.citations.length, 1);
-        },
-      );
-      await t.test(
-        "provider fallback also discards excerpt if price changes in flight",
-        async () => {
-          providerOk = false;
-          duringGenerate = async () => {
-            await query("UPDATE properties SET price=12500000 WHERE id=$1", [property.id]);
-          };
-          const answer = await knowledge.answerFromPublicKnowledge({ question: "測試海景" });
-          assert.doesNotMatch(answer.answer, /售價|OLD_PRICE_UNSAFE/);
-          assert.deepEqual(answer.citations, []);
-          providerOk = true;
-          duringGenerate = async () => {};
-        },
-      );
+      await t.test("unchanged source retains its revision", async () => {
+        const [current] = await knowledge.searchPublicKnowledge({ query: "測試海景" });
+        assert.match(current.source_revision ?? "", /^[a-f0-9]{32}$/);
+      });
       await indexCurrent();
       await t.test("manual protected description changes full revision", async () => {
         await query("UPDATE properties SET description='人手核實新資料' WHERE id=$1", [
@@ -107,16 +81,6 @@ test(
           assert.equal((await knowledge.searchPublicKnowledge({ query: "測試海景" })).length, 0);
         },
       );
-      await indexCurrent();
-      await t.test("model in flight cannot release old answer or fallback excerpt", async () => {
-        duringGenerate = async () => {
-          await query("UPDATE properties SET price=12000000 WHERE id=$1", [property.id]);
-        };
-        const answer = await knowledge.answerFromPublicKnowledge({ question: "測試海景" });
-        assert.doesNotMatch(answer.answer, /OLD_PRICE_UNSAFE|10000000/);
-        assert.deepEqual(answer.citations, []);
-        duringGenerate = async () => {};
-      });
       await indexCurrent();
       await t.test("withdrawal excludes indexed source despite stale=false", async () => {
         await query("UPDATE properties SET status='inactive' WHERE id=$1", [property.id]);
