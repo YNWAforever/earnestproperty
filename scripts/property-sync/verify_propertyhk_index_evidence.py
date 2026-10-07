@@ -5,23 +5,11 @@ import json
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 from scraping.worker import WorkerError, checked_url, inspect_property_agent_index
-
-LICENSES = {"EPS": "C-018613-A000", "EPT": "C-018613-A003", "EPW": "C-018613-A005"}
+from scraping.propertyhk_index import LICENSES, approved_entries
 
 def verify_evidence(manifest, entries, root):
     root = Path(root).resolve()
-    approved = {}
-    for name, url in entries.items():
-        checked_url(url, "https://www.property.hk", [r"/agent\.php"])
-        q = parse_qs(urlsplit(url).query, keep_blank_values=True)
-        if any(len(v) != 1 for v in q.values()) or not all(q.get(k) for k in ("agent", "dt", "sid")):
-            raise WorkerError("entry_identity")
-        branch, district, sid = (q[k][0] for k in ("agent", "dt", "sid"))
-        if branch not in LICENSES or name != branch + "-" + district or q.get("p", ["1"]) != ["1"]:
-            raise WorkerError("entry_identity")
-        approved[name] = (branch, district, sid)
-    if not approved:
-        raise WorkerError("missing_entries")
+    approved = approved_entries(entries)
     pages = {name: {} for name in approved}
     blocked, seen = [], {}
     for item in manifest:
@@ -69,12 +57,13 @@ def verify_evidence(manifest, entries, root):
                 or any(p["listed_pages"] != len(ordered) for p in ordered)
                 or not ordered[-1]["is_last_listed_page"]):
             raise WorkerError("incomplete_index_pages")
-        ids = [set(r["property_id"] for r in p["listings"]) for p in ordered]
+        ids = [set(r["property_id"] for r in p["listings"] + p["unclassified_advertisements"]) for p in ordered]
         if len(set.union(*ids)) != sum(map(len, ids)):
             raise WorkerError("repeated_index_advertisement")
         result["entries"][name] = {
             "index_pages": len(ordered), "advertisements": sum(map(len, ids)),
             "offers": sum(len(p["listings"]) for p in ordered),
+            "unclassified_advertisements": sum(len(p["unclassified_advertisements"]) for p in ordered),
             "complete_index_pages": True,
         }
     return result
