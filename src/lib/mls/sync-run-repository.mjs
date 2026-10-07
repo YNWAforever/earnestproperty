@@ -251,7 +251,10 @@ export async function recordSyncRun({ client, runId, summary }) {
         const event = { ...summary.stages[stage], stage },
           prior = stages[stage];
         if (prior && ["succeeded", "failed", "blocked", "cancelled"].includes(prior.status)) {
-          for (const key of ["startedAt", "finishedAt"]) if (key in prior) event[key] = prior[key];
+          for (const key of ["startedAt", "finishedAt"]) {
+            if (key in prior) event[key] = prior[key];
+            else delete event[key];
+          }
         }
         stages[stage] = transitionStage(prior ?? { status: "pending" }, event);
       }

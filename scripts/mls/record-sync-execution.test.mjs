@@ -186,3 +186,63 @@ test("public verification requires its explicit native output and preserves fail
   });
   assert.equal(failed.stages.verification.status, "failed");
 });
+
+test("executed stages retain measured clocks when their business proof is missing", () => {
+  const outputs = {
+    started_at: "2026-10-06T20:20:00.000Z",
+    finished_at: "2026-10-06T20:21:00.000Z",
+  };
+  for (const mode of [undefined, "shadow", "replay-shadow"]) {
+    const summary = executionSummary({
+      ...base,
+      mode,
+      needs: { ingest: { result: "success", outputs } },
+    });
+    assert.equal(summary.stages.ingestion.startedAt, outputs.started_at);
+    assert.equal(summary.stages.ingestion.finishedAt, outputs.finished_at);
+    assert.equal(summary.stages.ingestion.status, mode ? "blocked" : "unknown");
+  }
+  for (const publication of [undefined, { unknown: [{ propertyId: "synthetic" }] }]) {
+    const summary = executionSummary({
+      ...base,
+      publication,
+      needs: { publish: { result: "success", outputs }, verify: { result: "success", outputs } },
+    });
+    assert.equal(summary.stages.publication.status, "unknown");
+    assert.equal(summary.stages.publication.startedAt, outputs.started_at);
+    assert.equal(summary.stages.publication.finishedAt, outputs.finished_at);
+    assert.equal(summary.stages.verification.status, "pending");
+    assert.equal(summary.stages.verification.startedAt, undefined);
+    assert.equal(summary.stages.verification.finishedAt, undefined);
+  }
+  const verification = executionSummary({
+    ...base,
+    publication: { published: [] },
+    needs: { publish: { result: "success", outputs }, verify: { result: "success", outputs } },
+  });
+  assert.equal(verification.stages.verification.status, "unknown");
+  assert.equal(verification.stages.verification.startedAt, outputs.started_at);
+  assert.equal(verification.stages.verification.finishedAt, outputs.finished_at);
+});
+
+test("clock validation refuses impossible calendar dates while accepting leap days and offsets", () => {
+  for (const value of [
+    "2026-02-30T20:20:00Z",
+    "2026-02-29T20:20:00Z",
+    "2026-04-31T20:20:00Z",
+    "2026-10-07T24:00:00Z",
+  ]) {
+    assert.throws(() => validateRunSummary({ startedAt: value }), /invalid_execution_timing/);
+    assert.throws(
+      () => validateRunSummary({ stages: { collection: { finishedAt: value } } }),
+      /invalid_execution_timing/,
+    );
+  }
+  for (const value of [
+    "2028-02-29T20:20:00Z",
+    "2000-02-29T20:20:00.123+08:00",
+    "2026-10-07T00:00:00-08:00",
+  ]) {
+    assert.doesNotThrow(() => validateRunSummary({ startedAt: value }));
+  }
+});

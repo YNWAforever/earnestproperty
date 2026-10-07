@@ -39,6 +39,10 @@ export function validateRunSummary(summary) {
         !Number.isFinite(Date.parse(value))
       )
         throw Error("invalid_execution_timing");
+      const [year, month, day, hour] = value.slice(0, 19).split(/[T:-]/).map(Number);
+      const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+      const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      if (day > daysInMonth[month - 1] || hour > 23) throw Error("invalid_execution_timing");
       return Date.parse(value);
     });
     if (times[0] !== undefined && times[1] !== undefined && times[1] < times[0])

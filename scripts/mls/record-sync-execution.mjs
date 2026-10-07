@@ -73,7 +73,7 @@ export function executionSummary({
     stages.collection.pagesFailed = payload.meta?.pages_failed ?? 0;
   }
   if (needs.preflight?.result === "failure")
-    stages.collection = { status: "blocked", errorCode: "PREFLIGHT_FAILED" };
+    stages.collection = { ...stages.collection, status: "blocked", errorCode: "PREFLIGHT_FAILED" };
   if (receipt) {
     stages.ingestion = {
       status: "succeeded",
@@ -83,15 +83,24 @@ export function executionSummary({
     };
   } else if (stages.ingestion.status === "succeeded")
     stages.ingestion = {
+      ...stages.ingestion,
       status: ["shadow", "replay-shadow"].includes(mode) ? "blocked" : "unknown",
       errorCode: ["shadow", "replay-shadow"].includes(mode)
         ? "DRY_RUN_NO_WRITES"
         : "RECEIPT_RECONCILIATION_REQUIRED",
     };
   if (publication?.unknown?.length)
-    stages.publication = { status: "unknown", errorCode: "PUBLICATION_RECONCILIATION_REQUIRED" };
+    stages.publication = {
+      ...stages.publication,
+      status: "unknown",
+      errorCode: "PUBLICATION_RECONCILIATION_REQUIRED",
+    };
   else if (stages.publication.status === "succeeded" && !publication)
-    stages.publication = { status: "unknown", errorCode: "PUBLICATION_REPORT_REQUIRED" };
+    stages.publication = {
+      ...stages.publication,
+      status: "unknown",
+      errorCode: "PUBLICATION_REPORT_REQUIRED",
+    };
   if (stages.verification.status === "succeeded") {
     if (stages.publication.status !== "succeeded") {
       // The always-run summary job also succeeds when no public check ran.
@@ -99,6 +108,7 @@ export function executionSummary({
       stages.verification = { status: "pending", errorCode: "PUBLIC_VERIFICATION_NOT_RUN" };
     } else if (needs.verify?.outputs?.public_verified !== "true") {
       stages.verification = {
+        ...stages.verification,
         status: "unknown",
         errorCode: "PUBLIC_VERIFICATION_PROOF_REQUIRED",
       };

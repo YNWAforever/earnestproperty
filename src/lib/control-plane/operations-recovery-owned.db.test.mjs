@@ -149,6 +149,29 @@ test("EP-08 owned sync clocks preserve measured start and immutable replay histo
       const repeated = (await query("SELECT * FROM property_sync_runs WHERE id=$1", [runId]))[0];
       assert.equal(repeated.started_at.toISOString(), startedAt);
       assert.deepEqual(repeated.stages.collection, original.stages.collection);
+      // Before measured timing, terminal stages had only finishedAt or no clocks.
+      for (const [index, legacyClocks] of [{ finishedAt }, {}].entries()) {
+        const legacyId = randomUUID();
+        const legacy = {
+          ...summary,
+          workflowRunId: String(9002 + index),
+          stages: {
+            collection: { status: "failed", errorCode: "WORKFLOW_FAILED", ...legacyClocks },
+          },
+        };
+        await recordSyncRun({ client, runId: legacyId, summary: legacy });
+        const before = (await query("SELECT * FROM property_sync_runs WHERE id=$1", [legacyId]))[0];
+        await recordSyncRun({
+          client,
+          runId: legacyId,
+          summary: { ...replay, workflowRunId: legacy.workflowRunId },
+        });
+        const after = (await query("SELECT * FROM property_sync_runs WHERE id=$1", [legacyId]))[0];
+        assert.equal(after.started_at.toISOString(), before.started_at.toISOString());
+        assert.deepEqual(after.stages.collection, before.stages.collection);
+        assert.equal("startedAt" in after.stages.collection, false);
+        assert.equal("finishedAt" in after.stages.collection, "finishedAt" in legacyClocks);
+      }
       for (const invalid of [
         { ...replay, startedAt: "invalid" },
         { ...replay, startedAt: "2026-10-09T20:17:00.000Z" },
