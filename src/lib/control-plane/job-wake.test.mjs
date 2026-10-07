@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
-import { createJobWake, signalJobWake } from "./job-wake.js";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createJobWake, signalJobWake, wakeEnabledFromEnv } from "./job-wake.js";
 
 test("disabled wake does not schedule or run any work", async () => {
   const pending = [],
@@ -65,16 +67,23 @@ test("lifetime registration failure never masks a committed mutation", async () 
   await Promise.resolve();
   assert.deepEqual(errors, ["JOB_WAKE_REGISTRATION_FAILED"]);
 });
-test("job drains have no recurring Cloudflare or Vercel schedule", () => {
-  const config = readFileSync("workers/cron/wrangler.jsonc", "utf8");
+test("job drains have one business-hours Cloudflare sweep and no Vercel schedule", () => {
+  const source = readFileSync("workers/cron/wrangler.jsonc", "utf8");
+  const config = JSON.parse(source.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"));
   const vercel = readFileSync("vercel.ts", "utf8");
   const worker = readFileSync("workers/cron/src/index.ts", "utf8");
-  assert.match(config, /"crons"\s*:\s*\[\s*\]/);
-  assert.doesNotMatch(vercel, /path:\s*"\/api\/admin\/(control-plane\/worker|jobs\/send-queue)"/);
+  // Owner decision 4: every 10 min 08:00-21:50 HKT, hourly overnight (UTC cron strings).
+  assert.deepEqual(config.triggers.crons, ["*/10 0-13 * * *", "0 14-23 * * *"]);
+  assert.equal(config.vars.SITE_ORIGIN, "https://www.earnestproperty.com");
+  assert.match(worker, /async scheduled\(/);
+  assert.match(worker, /sweepLanes\(/);
+  assert.match(worker, /createLaneDrain\(/);
   assert.match(worker, /getByName\(lane\)\.signal\(\)/);
   assert.match(worker, /authorization.*Bearer/);
-  assert.match(worker, /"\/api\/admin\/whatsapp\/service-worker"/);
-  assert.match(worker, /"\/api\/admin\/control-plane\/worker"/);
+  // The cron sweeps; it must never signal(), which would reset the failure backoff every tick.
+  assert.doesNotMatch(worker.slice(worker.indexOf("async scheduled(")), /\.signal\(\)/);
+  assert.match(vercel, /crons:\s*\[\s*\]/);
+  assert.doesNotMatch(vercel, /path:\s*"\/api\/admin\/(control-plane\/worker|jobs\/send-queue)"/);
 });
 
 test("maintenance stays event driven while property refresh has one gated daily schedule", () => {
@@ -109,4 +118,76 @@ test("stalled scheduler requests time out so the caller can fall back", async ()
     }),
     { name: "TimeoutError" },
   );
+});
+
+const FLAG = ["OPS_EVENT", "WAKE", "ENABLED"].join("_");
+
+function scan(path, hits) {
+  if (!existsSync(path)) return;
+  const stat = statSync(path);
+  if (stat.isDirectory()) {
+    for (const name of readdirSync(path)) {
+      if (name === "node_modules" || name === ".wrangler" || name === "dist") continue;
+      scan(join(path, name), hits);
+    }
+  } else if (readFileSync(path, "utf8").includes(FLAG)) {
+    hits.push(path);
+  }
+}
+
+test("wakes when OPS_WAKE_URL set without flag", () => {
+  assert.equal(wakeEnabledFromEnv({ OPS_WAKE_URL: "https://alarm.example" }), true);
+  assert.equal(wakeEnabledFromEnv({ [FLAG]: "true" }), false);
+  assert.equal(wakeEnabledFromEnv({ OPS_WAKE_URL: "  ", [FLAG]: "true" }), false);
+  assert.equal(wakeEnabledFromEnv({}), false);
+  assert.match(
+    readFileSync(new URL("./job-wake.server.ts", import.meta.url), "utf8"),
+    /enabled:\s*wakeEnabledFromEnv\(process\.env\)/,
+  );
+});
+
+test("the wake flag is gone from code, scripts and env docs", () => {
+  const hits = [];
+  const root = new URL("../../../", import.meta.url);
+  for (const name of ["src", "scripts", "workers", ".env.example", "CLAUDE.md", "README.md"]) {
+    const path = fileURLToPath(new URL(name, root));
+    assert.ok(existsSync(path), `${name} must exist so the scan cannot pass vacuously`);
+    scan(path, hits);
+  }
+  assert.deepEqual(hits, []);
+});
+
+test("test harnesses blank OPS_WAKE_URL so no test can signal a real worker", () => {
+  for (const [file, pattern] of [
+    ["scripts/no-link-local-postgres.test.mjs", /OPS_WAKE_URL:\s*""/],
+    ["scripts/test-public-synthetic-browser.mjs", /OPS_WAKE_URL:\s*""/],
+    ["scripts/no-link-safe-checks.mjs", /safeEnv\.OPS_WAKE_URL\s*=\s*""/],
+  ]) {
+    assert.match(readFileSync(file, "utf8"), pattern, file);
+  }
+  const assignment = readFileSync("src/lib/whatsapp-enquiries/assignment.test.mjs", "utf8");
+  assert.match(assignment, /process\.env\.OPS_WAKE_URL\s*=\s*""/);
+  assert.match(assignment, /finally\s*\{[\s\S]*OPS_WAKE_URL/);
+});
+
+test("a test run never enables the wake, even with OPS_WAKE_URL set", () => {
+  const url = "https://alarm.example";
+  assert.equal(wakeEnabledFromEnv({ OPS_WAKE_URL: url, NODE_TEST_CONTEXT: "child" }), false);
+  assert.equal(wakeEnabledFromEnv({ OPS_WAKE_URL: url, NODE_ENV: "test" }), false);
+  assert.equal(wakeEnabledFromEnv({ OPS_WAKE_URL: url, NODE_ENV: "production" }), true);
+  // The real node --test process: the check the server uses must be false.
+  assert.ok(process.env.NODE_TEST_CONTEXT, "node --test sets NODE_TEST_CONTEXT");
+  const previous = process.env.OPS_WAKE_URL;
+  process.env.OPS_WAKE_URL = url;
+  try {
+    assert.equal(wakeEnabledFromEnv(process.env), false);
+  } finally {
+    if (previous === undefined) delete process.env.OPS_WAKE_URL;
+    else process.env.OPS_WAKE_URL = previous;
+  }
+});
+
+test("job-wake.server.ts trims OPS_WAKE_URL before use", () => {
+  const source = readFileSync(new URL("./job-wake.server.ts", import.meta.url), "utf8");
+  assert.match(source, /process\.env\.OPS_WAKE_URL\?\.trim\(\)/);
 });

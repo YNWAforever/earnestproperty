@@ -1,3 +1,13 @@
+/**
+ * True only when OPS_WAKE_URL is a non-blank string; the former wake flag is ignored.
+ * Test runs (node --test sets NODE_TEST_CONTEXT, bun test sets NODE_ENV=test) never wake,
+ * so no test can signal a real worker. Vercel production sets neither.
+ */
+export function wakeEnabledFromEnv(env) {
+  if (env.NODE_TEST_CONTEXT || env.NODE_ENV === "test") return false;
+  return typeof env.OPS_WAKE_URL === "string" && env.OPS_WAKE_URL.trim() !== "";
+}
+
 /** Schedule post-commit work without blocking the request. */
 export function createJobWake({ enabled, waitUntil, run, report = () => {} }) {
   return (lane) => {

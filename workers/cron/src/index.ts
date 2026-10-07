@@ -1,5 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
-import { createJobAlarm } from "./job-alarm.js";
+import { LANE_ENDPOINTS, createJobAlarm, createLaneDrain, sweepLanes } from "./job-alarm.js";
 
 type Env = {
   SITE_ORIGIN: string;
@@ -7,16 +7,14 @@ type Env = {
   JOB_WAKE: DurableObjectNamespace<JobWakeAlarm>;
 };
 
-type JobLane = "service" | "general";
-const ENDPOINT: Record<JobLane, string> = {
-  service: "/api/admin/whatsapp/service-worker",
-  general: "/api/admin/control-plane/worker",
-};
-
-/** Each lane stores just one alarm; an empty lane has no alarm or Neon call. */
+/** Each lane stores just one alarm; each idle sweep makes one drain call per lane. */
 export class JobWakeAlarm extends DurableObject<Env> {
   async signal() {
     await this.controller().signal();
+  }
+
+  async sweep() {
+    await this.controller().sweep();
   }
 
   async alarm() {
@@ -28,16 +26,11 @@ export class JobWakeAlarm extends DurableObject<Env> {
     if (lane !== "service" && lane !== "general") throw new Error("JOB_ALARM_LANE_INVALID");
     return createJobAlarm({
       storage: this.ctx.storage,
-      drain: async () => {
-        const response = await fetch(new URL(ENDPOINT[lane], this.env.SITE_ORIGIN), {
-          method: "POST",
-          headers: { authorization: `Bearer ${this.env.CRON_SECRET}` },
-        });
-        if (!response.ok) throw new Error(`JOB_DRAIN_HTTP_${response.status}`);
-        const result = (await response.json()) as { nextDueAt?: unknown };
-        if (!("nextDueAt" in result)) throw new Error("JOB_DRAIN_NEXT_DUE_MISSING");
-        return result.nextDueAt as string | null;
-      },
+      drain: createLaneDrain({
+        origin: this.env.SITE_ORIGIN,
+        path: LANE_ENDPOINTS[lane],
+        secret: this.env.CRON_SECRET,
+      }),
       report: (code) => console.error(`[job-alarm] ${lane}: ${code}`),
     });
   }
@@ -58,5 +51,16 @@ export default {
     }
     await env.JOB_WAKE.getByName(lane).signal();
     return Response.json({ scheduled: true }, { status: 202 });
+  },
+
+  // Both cron strings ("*/10 0-13 * * *" and "0 14-23 * * *", UTC) run the same sweep.
+  // The cron never calls signal(), so an outage keeps its failure count and backoff.
+  async scheduled(_controller, env, ctx) {
+    ctx.waitUntil(
+      sweepLanes(
+        (lane) => env.JOB_WAKE.getByName(lane),
+        (code) => console.error(`[job-alarm] ${code}`),
+      ),
+    );
   },
 } satisfies ExportedHandler<Env>;

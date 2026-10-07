@@ -81,3 +81,19 @@ test("unsigned_input_is_rejected_before_receipt", async () => {
   assert.equal(response.status, 401);
   assert.equal(writes, 0);
 });
+
+test("recovery and nextDueAt share one retry predicate", async () => {
+  const { readFileSync } = await import("node:fs");
+  for (const file of [
+    new URL("./inbound-receipts.server.ts", import.meta.url),
+    new URL("../control-plane/jobs-next-due.ts", import.meta.url),
+  ]) {
+    const source = readFileSync(file, "utf8");
+    assert.match(
+      source,
+      /from "[./]*(?:whatsapp-enquiries\/)?receipt-retry-policy\.ts"/,
+      file.pathname,
+    );
+    assert.ok(!/attempt_count\s*<\s*20/.test(source), `${file.pathname} has its own attempt cap`);
+  }
+});

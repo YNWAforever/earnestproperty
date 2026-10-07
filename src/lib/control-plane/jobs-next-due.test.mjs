@@ -32,3 +32,33 @@ test("a drained lane returns no due time and the general lane excludes service j
   assert.match(statement, /woztell\.enquiry/);
   assert.match(statement, /woztell\.reply\.deliver/);
 });
+
+test("pending receipt yields nextDueAt", async () => {
+  const { RECEIPT_DUE_AT_SQL } = await import("../whatsapp-enquiries/receipt-retry-policy.ts");
+  let statement = "";
+  const due = await getNextJobDueAt({
+    lane: "service",
+    capabilities: ["woztell.enquiry.service@1"],
+    query: async (sql) => {
+      statement = sql;
+      return [{ due_at: "2026-09-25T12:05:00.000Z" }];
+    },
+  });
+  assert.equal(due, "2026-09-25T12:05:00.000Z");
+  assert.ok(statement.includes("whatsapp_inbound_receipts"));
+  assert.ok(statement.includes(RECEIPT_DUE_AT_SQL("r")));
+  assert.match(statement, /least\(/);
+});
+
+test("the general lane never reads receipts", async () => {
+  let statement = "";
+  await getNextJobDueAt({
+    lane: "general",
+    query: async (sql) => {
+      statement = sql;
+      return [{ due_at: null }];
+    },
+  });
+  assert.ok(!statement.includes("whatsapp_inbound_receipts"));
+  assert.doesNotMatch(statement, /least\(/);
+});

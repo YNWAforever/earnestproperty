@@ -30,6 +30,24 @@ export function transitionStage(previous, event) {
   return { ...previous, ...event };
 }
 export function validateRunSummary(summary) {
+  for (const clocks of [summary, ...Object.values(summary.stages ?? {})]) {
+    const times = [clocks.startedAt, clocks.finishedAt].map((value) => {
+      if (value === undefined) return undefined;
+      if (
+        typeof value !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) ||
+        !Number.isFinite(Date.parse(value))
+      )
+        throw Error("invalid_execution_timing");
+      const [year, month, day, hour] = value.slice(0, 19).split(/[T:-]/).map(Number);
+      const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+      const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      if (day > daysInMonth[month - 1] || hour > 23) throw Error("invalid_execution_timing");
+      return Date.parse(value);
+    });
+    if (times[0] !== undefined && times[1] !== undefined && times[1] < times[0])
+      throw Error("invalid_execution_timing");
+  }
   const counts = summary.counts ?? {};
   for (const n of Object.values(counts))
     if (!Number.isSafeInteger(n) || n < 0) throw Error("invalid_actual_count");

@@ -7,6 +7,7 @@ import * as Tabs from "@radix-ui/react-tabs";
 
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { AdminOperationsAudit } from "@/components/admin/operations/AdminOperationsAudit";
+import { AdminOperationsReceipts } from "@/components/admin/operations/AdminOperationsReceipts";
 import { AdminOperationsJobs } from "@/components/admin/operations/AdminOperationsJobs";
 import { AdminOperationsMigrations } from "@/components/admin/operations/AdminOperationsMigrations";
 import { AdminOperationsOverview } from "@/components/admin/operations/AdminOperationsOverview";
@@ -285,13 +286,22 @@ function AdminOperationsWorkspace({ identity }: { identity: string }) {
                   onOpenJobs={() => handleTabChange("jobs")}
                 />
               ) : tab === "jobs" && activeTab === "jobs" && health.capabilities.jobsRead ? (
-                <AdminOperationsJobs
-                  isWorkspaceCurrent={isWorkspaceCurrent}
-                  capabilities={health.capabilities}
-                  active
-                  pulse={pulse}
-                  onMutationComplete={handleMutationComplete}
-                />
+                <div className="space-y-8">
+                  <AdminOperationsJobs
+                    isWorkspaceCurrent={isWorkspaceCurrent}
+                    capabilities={health.capabilities}
+                    active
+                    pulse={pulse}
+                    onMutationComplete={handleMutationComplete}
+                  />
+                  <AdminOperationsReceipts
+                    isWorkspaceCurrent={isWorkspaceCurrent}
+                    capabilities={health.capabilities}
+                    active
+                    pulse={pulse}
+                    onMutationComplete={handleMutationComplete}
+                  />
+                </div>
               ) : tab === "audit" && activeTab === "audit" && health.capabilities.auditRead ? (
                 <AdminOperationsAudit
                   isWorkspaceCurrent={isWorkspaceCurrent}

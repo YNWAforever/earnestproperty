@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { runClaimedJobs } from "../lib/control-plane/jobs.server.ts";
 import { getNextJobDueAt } from "../lib/control-plane/jobs-next-due.ts";
 import { queryRows } from "../lib/neon/db.server.ts";
+import { recordWorkerHeartbeat } from "../lib/control-plane/worker-heartbeat.server.ts";
 
 async function drainJobs({ request }: { request: Request }) {
   const expected = process.env.CRON_SECRET;
@@ -10,6 +11,9 @@ async function drainJobs({ request }: { request: Request }) {
   if (!expected || actual !== `Bearer ${expected}`) {
     return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
   }
+
+  // The general lane's liveness: the scheduled worker reached this route.
+  await recordWorkerHeartbeat("general-v1", []);
 
   const counts = await runClaimedJobs({
     workerId: `control-plane:${crypto.randomUUID()}`,

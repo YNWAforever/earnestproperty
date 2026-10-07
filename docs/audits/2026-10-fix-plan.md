@@ -793,6 +793,7 @@ Refine the existing tokens, spacing, type scale and interaction states (hover, f
 | FX-06 | `20261007100000_wa_access_unassigned.sql` | function replace | `_revert.sql` |
 | FX-08 | `20261008100000_whatsapp_opt_out_evidence.sql`, `20261008110000_outbound_unknown_resolution.sql` | additive; trigger replace | columns stay; `_revert.sql` |
 | FX-09 | `20261009100000_contact_profile_name.sql`, `20261009110000_inbound_lead_reopen.sql` | additive; trigger replace | column stays; `_revert.sql` |
+| FX-10b | `20261010100000_campaign_attempted_identity.sql` | additive (one nullable column) | column stays |
 | FX-11a | `20261010100000_live_agent_call_log.sql` | additive | columns and table stay |
 | FX-12 | `20261013100000_contact_identity_review.sql` + `scripts/neon/normalize-contact-phones.mjs` | additive + data rewrite | `--restore <snapshot>` |
 | FX-18c | `20261020100000_crm_indexes.sql`, `20261020110000_staff_email_ci_unique.sql` | indexes (+ one nullable column) | `DROP INDEX` |

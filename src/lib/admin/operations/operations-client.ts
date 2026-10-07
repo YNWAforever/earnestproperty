@@ -6,6 +6,7 @@ import type {
   JobsPage,
   MigrationPlan,
   MigrationState,
+  ReceiptsPage,
 } from "./operations-types.ts";
 
 type ControlPlaneRecord = Record<string, unknown>;
@@ -151,6 +152,29 @@ export function retryOperationsJob(id: string, isWorkspaceCurrent?: () => boolea
 export function cancelOperationsJob(id: string, isWorkspaceCurrent?: () => boolean) {
   return requestControlPlane<{ id: string; status: JobStatus }>(
     `/jobs/${encodeURIComponent(id)}/cancel`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+    undefined,
+    undefined,
+    isWorkspaceCurrent,
+  );
+}
+
+export function fetchOperationsReceipts(isWorkspaceCurrent?: () => boolean) {
+  return requestControlPlane<ReceiptsPage>(
+    "/receipts",
+    undefined,
+    undefined,
+    undefined,
+    isWorkspaceCurrent,
+  );
+}
+
+export function retryOperationsReceipt(id: string, isWorkspaceCurrent?: () => boolean) {
+  return requestControlPlane<{ receiptId: string; projectionState: string }>(
+    `/receipts/${encodeURIComponent(id)}/retry`,
     {
       method: "POST",
       body: JSON.stringify({}),

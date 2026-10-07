@@ -79,6 +79,29 @@ test("control-plane worker requires cron authorization and returns counts only",
   assert.doesNotMatch(source, /last_error_summary/);
 });
 
+test("only the authenticated drain routes write lane heartbeats; runServiceJobs and the local fallback do not", () => {
+  // FX-07 Review Focus 4: the heartbeat means "the scheduled worker reached us".
+  for (const path of [
+    "src/lib/control-plane/service-worker.server.ts",
+    "src/lib/control-plane/job-wake.server.ts",
+  ]) {
+    assert.doesNotMatch(readFileSync(path, "utf8"), /heartbeat/i, path);
+  }
+  for (const [path, lane] of [
+    ["src/routes/api.admin.whatsapp.service-worker.ts", "service-v2"],
+    ["src/routes/api.admin.control-plane.worker.ts", "general-v1"],
+  ]) {
+    const source = readFileSync(path, "utf8");
+    const unauthorized = source.indexOf('"UNAUTHORIZED"');
+    const unauthorizedReturn = source.indexOf("return", source.lastIndexOf("\n", unauthorized));
+    const heartbeat = source.indexOf(`recordWorkerHeartbeat("${lane}"`);
+    assert.ok(unauthorized > 0, `${path} keeps its bearer check`);
+    assert.ok(unauthorizedReturn > 0 && unauthorizedReturn < unauthorized, path);
+    assert.ok(heartbeat > unauthorized, `${path} writes ${lane} only after the bearer check`);
+    assert.equal(source.split("recordWorkerHeartbeat(").length - 1, 1, path);
+  }
+});
+
 test("job management routes validate IDs, permissions, and safe summaries", () => {
   const listSource = readFileSync("src/routes/api.admin.control-plane.jobs.ts", "utf8");
   const retrySource = readFileSync("src/routes/api.admin.control-plane.jobs.$id.retry.ts", "utf8");
@@ -108,6 +131,27 @@ test("job management routes validate IDs, permissions, and safe summaries", () =
   ]) {
     assert.doesNotMatch(listSource, sensitive);
   }
+});
+
+test("receipt routes enforce jobs.read and jobs.retry, validate ids and bodies, and audit failures", () => {
+  const listSource = readFileSync("src/routes/api.admin.control-plane.receipts.ts", "utf8");
+  const retrySource = readFileSync(
+    "src/routes/api.admin.control-plane.receipts.$id.retry.ts",
+    "utf8",
+  );
+  assert.match(listSource, /requireStaffPermission\(request, "system\.jobs\.read"\)/);
+  assert.match(retrySource, /requireStaffPermission\(request, "system\.jobs\.retry"\)/);
+  assert.match(retrySource, /z\.string\(\)\.uuid\(\)/);
+  assert.match(retrySource, /z\.object\(\{\}\)\.strict\(\)/);
+  assert.match(retrySource, /status: 409/);
+  const catchBlock = retrySource.slice(retrySource.indexOf("} catch (error)"));
+  assert.match(catchBlock, /writeAudit\(/);
+  assert.match(catchBlock, /outcome: "failure"/);
+  assert.match(retrySource, /retryInboundReceipt\(/);
+  assert.match(retrySource, /"invalid"/);
+  assert.match(retrySource, /此訊息仍在處理中，請稍後再試。/);
+  // The list never reaches message content.
+  assert.doesNotMatch(listSource, /normalized_event|member_id|phone/);
 });
 
 test("AI knowledge rebuild route enqueues one versioned job per active window", () => {

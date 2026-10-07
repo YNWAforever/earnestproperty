@@ -29,6 +29,23 @@ test("daily property workflow retains gated scheduling, privacy, branch and poli
       assert.equal(step["continue-on-error"], true);
     }
 });
+
+test("native jobs export measured clocks even after failure without new credentials", async () => {
+  const w = await workflow();
+  for (const name of ["preflight", "collect", "ingest", "publish", "verify"]) {
+    const job = w.jobs[name];
+    const start = job.steps[0];
+    const end = job.steps.at(-1);
+    assert.equal(start.id, "execution-start", name);
+    assert.equal(end.id, "execution-finish", name);
+    assert.equal(end.if, "always()", name);
+    assert.match(start.run, /date -u.*GITHUB_OUTPUT/, name);
+    assert.match(end.run, /date -u.*GITHUB_OUTPUT/, name);
+    assert.equal(job.outputs.started_at, "${{ steps.execution-start.outputs.at }}", name);
+    assert.equal(job.outputs.finished_at, "${{ steps.execution-finish.outputs.at }}", name);
+    assert.deepEqual(job.permissions, { contents: "read" }, name);
+  }
+});
 test("DB and media credentials are restricted to the intended stages and guarded apply steps", async () => {
   const w = await workflow();
   assert.ok(!w.env.DATABASE_URL_UNPOOLED);

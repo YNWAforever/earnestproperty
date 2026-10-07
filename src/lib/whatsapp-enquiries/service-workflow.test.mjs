@@ -32,9 +32,12 @@ test("AT46 ordinary numbers and unverified provider payloads are not answers", (
 
 test("Job alarm includes authenticated service lane", async () => {
   const { readFileSync } = await import("node:fs");
-  const worker = readFileSync("workers/cron/src/index.ts", "utf8"),
+  const worker = readFileSync("workers/cron/src/job-alarm.js", "utf8"),
     config = readFileSync("workers/cron/wrangler.jsonc", "utf8");
-  assert.match(config, /"crons"\s*:\s*\[\s*\]/);
+  const { crons } = JSON.parse(
+    config.replace(/^\s*\/\/.*$/gm, "").replace(/,(\s*[}\]])/g, "$1"),
+  ).triggers;
+  assert.deepEqual(crons, ["*/10 0-13 * * *", "0 14-23 * * *"]);
   assert.match(worker, /"\/api\/admin\/whatsapp\/service-worker"/);
   const { drainServiceJobs } = await import("../../routes/api.admin.whatsapp.service-worker.ts");
   const original = process.env.CRON_SECRET;

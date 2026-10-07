@@ -73,7 +73,26 @@ test("EP-09/10 owned full schema reconciles branch aliases, dual offers and inco
         const before = await query(
           "SELECT source,scope_id,full_receipt_id FROM mls_ingestion_scopes",
         );
-        for (const variant of ["branch", "detail", "page", "http403"]) {
+        const inventoryBefore = await query(
+          "SELECT id,md5(row_to_json(p)::text) AS fingerprint FROM properties p ORDER BY id",
+        );
+        const receiptsBefore = await query(
+          "SELECT id,payload_hash,response FROM mls_ingestion_receipts ORDER BY id",
+        );
+        const authorityFlags = [
+          "full_snapshot",
+          "details_verified",
+          "id_scope_verified",
+          "full_branch_scope_verified",
+        ];
+        for (const variant of [
+          "branch",
+          "detail",
+          "page",
+          "http403",
+          "index_only",
+          ...authorityFlags.flatMap((flag) => [`meta:${flag}`, `envelope:${flag}`]),
+        ]) {
           const partial = structuredClone(payload);
           partial.scraped_at = new Date(Date.parse(payload.scraped_at) + 1000).toISOString();
           if (variant === "branch") {
@@ -88,6 +107,11 @@ test("EP-09/10 owned full schema reconciles branch aliases, dual offers and inco
             partial.meta.crawl_complete = false;
             partial.meta.pages_failed = 1;
           }
+          if (variant === "index_only") partial.listings[0].observation_kind = "index_only";
+          if (variant.includes(":")) {
+            const [location, flag] = variant.split(":");
+            (location === "meta" ? partial.meta : partial)[flag] = false;
+          }
           await assert.rejects(
             ingestSnapshot(partial, ports),
             (e) => e.code === "incomplete_snapshot" || e.status === 422 || e.status === 400,
@@ -95,6 +119,16 @@ test("EP-09/10 owned full schema reconciles branch aliases, dual offers and inco
           assert.deepEqual(
             await query("SELECT source,scope_id,full_receipt_id FROM mls_ingestion_scopes"),
             before,
+          );
+          assert.deepEqual(
+            await query(
+              "SELECT id,md5(row_to_json(p)::text) AS fingerprint FROM properties p ORDER BY id",
+            ),
+            inventoryBefore,
+          );
+          assert.deepEqual(
+            await query("SELECT id,payload_hash,response FROM mls_ingestion_receipts ORDER BY id"),
+            receiptsBefore,
           );
         }
         assert.equal(

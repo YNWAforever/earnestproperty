@@ -52,7 +52,9 @@ export function AdminConfirmDialog({
         onOpenChange(nextOpen);
       }}
     >
-      <AlertDialogContent>
+      {/* Capped to the viewport so a long body (lists, template details) scrolls
+          instead of pushing the confirm button off a short phone screen. */}
+      <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>

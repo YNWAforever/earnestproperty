@@ -1,0 +1,181 @@
+{
+  "recordedAt": "2026-10-07T14:39:33.986082+00:00",
+  "baseMainSha": "f000068afbe7d575236bd07da6c5d7871bedc336",
+  "integrationHeadSha": "ec05cbe2e91eddcfb6959b19036b94d8a3c1a925",
+  "verificationCodeSha": "2717f18eef07217d4e0bc846579215a7a1749d5c",
+  "pullRequest": "https://github.com/YNWAforever/earnestproperty/pull/227",
+  "red": {
+    "receiptCounts": {
+      "passed": 17,
+      "failed": 2,
+      "rootFailures": 1,
+      "parentFailure": 1,
+      "reason": "Three categories outside default LIMIT 50 reported zero instead of one"
+    },
+    "wakeGuard": {
+      "passed": 30,
+      "failed": 1,
+      "remoteCiRun": 37634407848,
+      "reason": "Three inherited owned fixtures still referenced the removed wake flag"
+    }
+  },
+  "verification": {
+    "test:operations:owned:db": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-counts-green.log",
+      "sha256": "ae409e17edc613c72ff35d5719389344c0ddc3c37944e73147daefe4f278eb3f"
+    },
+    "test:operations:node": {
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-operations-green.log",
+      "sha256": "c1b0d1fe4bfb4feb4162801763e4f1774f7e8da65eb63d07c01d063388871fd7"
+    },
+    "test:operations:bun": {
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-operations-green.log",
+      "sha256": "c1b0d1fe4bfb4feb4162801763e4f1774f7e8da65eb63d07c01d063388871fd7"
+    },
+    "test:job-wake": {
+      "passed": 31,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-isolation-0-green.log",
+      "sha256": "1d7de11ca5bf0ec3a6183bf3abd983a1fcda9202891a4b8089cb13bb926db574"
+    },
+    "test:lead-integrity:db": {
+      "passed": 33,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-isolation-1-green.log",
+      "sha256": "765a65613cf814c85abf4a4425db45a99f2627cf560d70ab7ed80600fbd127b5"
+    },
+    "test:woztell:owned:db": {
+      "passed": 50,
+      "failed": 0,
+      "skipped": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-isolation-2-green.log",
+      "sha256": "a68eea01f374eaa6f0f1d64fd307deeff0b30da6e3fabab17e797a00c984ff8b"
+    },
+    "typecheck": {
+      "exitCode": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-typecheck.log",
+      "sha256": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+    },
+    "build": {
+      "exitCode": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-build.log",
+      "sha256": "bff53e4cdf2b74ae48aa63f1091a8fe56e1015b7b9606167a8988af0182c2ad2"
+    },
+    "lint": {
+      "exitCode": 0,
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-final-lint.log",
+      "sha256": "cc4f4090e6913374f0aa5e4e16d2e3a94691b8130185b0fa17de8f11f19ada43",
+      "existingWarnings": 3
+    }
+  },
+  "preflight": {
+    "queuedJobs": [
+      {
+        "observed_at": "2026-10-07T13:52:26.887Z",
+        "job_type": "ai.knowledge.rebuild",
+        "status": "failed",
+        "jobs": 1,
+        "oldest_created_at": "2026-07-31T19:38:17.706Z",
+        "newest_created_at": "2026-07-31T19:38:17.706Z",
+        "due_now": 1,
+        "active_leases": 0,
+        "effect": "provider_budget_review"
+      },
+      {
+        "observed_at": "2026-10-07T13:52:26.887Z",
+        "job_type": "ai.knowledge.repair",
+        "status": "queued",
+        "jobs": 8,
+        "oldest_created_at": "2026-10-04T23:27:46.468Z",
+        "newest_created_at": "2026-10-07T00:19:48.448Z",
+        "due_now": 8,
+        "active_leases": 0,
+        "effect": "provider_budget_review"
+      }
+    ],
+    "actualEffectsVerified": {
+      "ai.knowledge.repair": "rebuildAiKnowledgeIndex allowEmbeddings:false; DB-only repair",
+      "ai.knowledge.rebuild": "existing failed job; no automatic retry"
+    },
+    "queuedOutboundJobs": 0,
+    "blockedOrRetryInboundReceipts": 0,
+    "productionMetadataNamesPresent": [
+      "OPS_WAKE_URL",
+      "OPS_EVENT_WAKE_ENABLED",
+      "CRON_SECRET"
+    ],
+    "metadataMethod": "Vercel connector403; mapped names-only CLI succeeded with verified project link and explicit team; no values pulled",
+    "projectId": "prj_hNaDYmYGeJhBY00vxsC2A0E5Fon5",
+    "teamId": "team_qvzlsFmfCsLkgItSypqHjw3z",
+    "secretEqualityVerified": false,
+    "workerDeploymentPerformed": false,
+    "currentPrHead": "ec05cbe2e91eddcfb6959b19036b94d8a3c1a925",
+    "reviewAndChecks": "Historical preflight at integration head; final source publication gated separately"
+  },
+  "migrationDryRun": {
+    "newMigrations": 0,
+    "productionMigrationsApplied": 0,
+    "pendingProductionVersionsOutsidePriorApproval": [
+      "20261006110000",
+      "20261007100000",
+      "20261008100000",
+      "20261008110000",
+      "20261009100000",
+      "20261009110000"
+    ]
+  },
+  "configDryRun": {
+    "exitCode": 0,
+    "wranglerVersion": "4.141.0",
+    "binding": "JOB_WAKE:JobWakeAlarm",
+    "siteOrigin": "https://www.earnestproperty.com",
+    "proposedCronUtc": [
+      "*/10 0-13 * * *",
+      "0 14-23 * * *"
+    ],
+    "deployed": false,
+    "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-worker-dry-run.log",
+    "sha256": "cec28866c1915078883bbf31432528fc9603e674d3eb3dee1b02bc8273851e9a"
+  },
+  "agentInitiatedSideEffects": {
+    "productionMigrations": 0,
+    "productionConfigurationChanges": 0,
+    "manualWorkerDispatch": 0,
+    "trueSends": 0,
+    "modelCalls": 0,
+    "providerCalls": 0,
+    "budget": 0
+  },
+  "capabilityStatus": {
+    "receiptTotalsAndOwnedRecovery": "READY",
+    "sourceMerge": "PENDING_EXACT_HEAD_CI_AND_FINAL_REVIEW_AT_RECORDING",
+    "productionWorkerAndConfigAcceptance": "NOT_READY",
+    "realRoleProviderModelAndRestore": "NO_NEW_EXECUTION; prior layered evidence and blockers retained"
+  },
+  "rollback": "Reviewed source revert; do not restore production receipts, outbound intents or inventory. Worker trigger rollout has not been performed.",
+  "privateRedLogs": {
+    "fx07-counts-red.log": {
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-counts-red.log",
+      "sha256": "80dbc28317bb2daaf4f6782f6d09ae3997503c70255abb624ddbc88ba8ec19a9"
+    },
+    "fx07-job-wake.log": {
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-job-wake.log",
+      "sha256": "37ad6a7855d56346220a4de41c9cba8141b25794b6b5a0db6443d183f8870d5d"
+    },
+    "fx07-integration-ci-failure.log": {
+      "privateLog": ".private-sync-evidence/propertyhk-20261007/held-readback-20261007/fx07-integration-ci-failure.log",
+      "sha256": "b11df002e40857e865a4cfb692d30e8ca26b431f2d06fbdb6dc0eb7827c31e22"
+    }
+  }
+}

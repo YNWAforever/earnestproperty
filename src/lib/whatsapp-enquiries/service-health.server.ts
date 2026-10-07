@@ -121,7 +121,7 @@ export async function getServiceHealth(
     (SELECT count(*)::int FROM inquiries WHERE source='whatsapp' AND intake_message_id IS NOT NULL AND first_human_response_at IS NOT NULL AND first_human_response_staff_id IS NOT NULL AND status NOT IN ('spam','test')) AS human_responses,
     (SELECT count(*)::int FROM whatsapp_service_surveys WHERE answer IS NOT NULL) AS survey_answers`);
   const [beat] = await query(
-    "SELECT max(seen_at) AS seen_at FROM whatsapp_service_worker_heartbeats",
+    "SELECT max(seen_at) AS seen_at FROM whatsapp_service_worker_heartbeats WHERE worker_id='service-v2'",
   );
   const eligibleRows = await query(
     `SELECT s.id::text AS id FROM staff_users s WHERE s.active AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND (r.role IN ('admin','manager') OR (r.role='agent' AND s.branch_id IS NOT NULL)))`,

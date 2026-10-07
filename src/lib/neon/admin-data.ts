@@ -1852,16 +1852,19 @@ export async function materializeCampaignRecipients(options: { data: { campaign_
 }
 
 export async function sendAdminCampaignQueue(
-  options: { data: { id: string } },
+  options: { data: { id: string; expectedCount?: number | null } },
   isWorkspaceCurrent?: () => boolean,
 ) {
   const request = await withStaffAuthHeaders({
     headers: { "Content-Type": "application/json" },
   });
   assertWorkspaceCurrent(isWorkspaceCurrent);
+  // FX-10b: the count the confirmation showed. For a campaign with history the
+  // server refuses with SEND_COUNT_CHANGED if it would queue another number.
   const response = await fetch(`/api/admin/campaigns/${options.data.id}/queue`, {
     method: "POST",
     headers: request.headers,
+    body: JSON.stringify({ expectedCount: options.data.expectedCount ?? null }),
   });
   const payload = await response.json().catch(() => null);
 
@@ -1870,6 +1873,10 @@ export async function sendAdminCampaignQueue(
       ok: boolean;
       error?: string;
       materialization?: { eligible?: number };
+      /** The eligible queued recipients the approval sent to delivery. */
+      queuedRecipients?: number;
+      /** With SEND_COUNT_CHANGED: what the server would queue now. */
+      sendable?: number;
     };
   }
   return {
@@ -1908,6 +1915,105 @@ export async function cancelAdminCampaign(
     dispatchWorkspaceRequest(
       () => withStaffAuthHeaders(options),
       (prepared) => cancelAdminCampaignServer(prepared),
+      isWorkspaceCurrent,
+    ),
+  );
+}
+
+// FX-10b: re-send only the definitely refused recipients of a campaign. The
+// requeue returns the campaign to 待審核; sending still needs 「發送…」.
+const fetchCampaignRetryPreviewServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchCampaignRetryPreview(data.id, staff);
+  });
+
+export async function fetchCampaignRetryPreview(
+  options: { data: { id: string } },
+  isWorkspaceCurrent?: () => boolean,
+) {
+  return callStaffServerFn(async () =>
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => fetchCampaignRetryPreviewServer(prepared),
+      isWorkspaceCurrent,
+    ),
+  );
+}
+
+const requeueFailedCampaignRecipientsServer = createServerFn({ method: "POST" })
+  // expectedCount is the number the user confirmed; the server refuses with
+  // RETRY_COUNT_CHANGED if it no longer matches what would move.
+  .inputValidator((data: { campaignId: string; expectedCount: number }) =>
+    z.object({ campaignId: z.string(), expectedCount: z.number().int().nonnegative() }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.requeueFailedCampaignRecipients(
+      { campaignId: data.campaignId, expectedCount: data.expectedCount },
+      staff,
+    );
+  });
+
+export async function requeueFailedCampaignRecipients(
+  options: { data: { campaignId: string; expectedCount: number } },
+  isWorkspaceCurrent?: () => boolean,
+) {
+  return callStaffServerFn(async () =>
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => requeueFailedCampaignRecipientsServer(prepared),
+      isWorkspaceCurrent,
+    ),
+  );
+}
+
+// FX-10b I2: close a 待審核 campaign with history that has nothing left to
+// send, as completed/failed rather than 已取消. The server refuses unless its
+// own count of sendable recipients is zero.
+const finishCampaignWithoutSendingServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { campaignId: string }) =>
+    z.object({ campaignId: z.string() }).parse(data),
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.finishCampaignWithoutSending({ campaignId: data.campaignId }, staff);
+  });
+
+export async function finishCampaignWithoutSending(
+  options: { data: { campaignId: string } },
+  isWorkspaceCurrent?: () => boolean,
+) {
+  return callStaffServerFn(async () =>
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => finishCampaignWithoutSendingServer(prepared),
+      isWorkspaceCurrent,
+    ),
+  );
+}
+
+const fetchCampaignSendPreviewServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    const adminData = await import("./admin-data.server");
+    return adminData.fetchCampaignSendPreview(data.id, staff);
+  });
+
+/** FX-10b: the exact number 「發送…」 would dispatch for a campaign with history. */
+export async function fetchCampaignSendPreview(
+  options: { data: { id: string } },
+  isWorkspaceCurrent?: () => boolean,
+) {
+  return callStaffServerFn(async () =>
+    dispatchWorkspaceRequest(
+      () => withStaffAuthHeaders(options),
+      (prepared) => fetchCampaignSendPreviewServer(prepared),
       isWorkspaceCurrent,
     ),
   );

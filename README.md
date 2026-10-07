@@ -87,7 +87,7 @@ The test scripts combine Node's test runner and Bun. `:db` suites require an iso
 
 - `npm.cmd run neon:migrate` applies migrations to the configured database. Inspect the target and the migration plan before running it. `npm.cmd run check:migration-drift` is the read-only drift check.
 - Property-source workers have offline fixture and dry-run commands in [scripts/property-sync/README.md](scripts/property-sync/README.md). Daily ingestion and release gates are documented in [docs/deployment/property-sync-daily.md](docs/deployment/property-sync-daily.md).
-- `vercel.ts` currently declares no recurring cron jobs. The [job alarm Worker](workers/cron/README.md) wakes the leased job queue when work is due. The [MLS container guide](workers/mls-container/README.md) describes its separate, gated workflow.
+- `vercel.ts` currently declares no recurring cron jobs. The [job alarm Worker](workers/cron/README.md) wakes the leased job queue when work is due, and a Cloudflare cron sweeps both lanes (every 10 minutes 08:00-22:00 HKT, hourly overnight). The [MLS container guide](workers/mls-container/README.md) describes its separate, gated workflow.
 - Provider and production activation require their own configuration and checks. Start with the [WozTell](docs/woztell-activation.md), [content copilot](docs/ai-content-copilot-activation.md), [live agent](docs/ai-crm-live-agent-activation.md), and [MLS](docs/mls-production-activation.md) guides. Dated audit and report files record their check date; they are not live status dashboards.
 
 ## Working conventions
