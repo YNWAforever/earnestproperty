@@ -1519,6 +1519,69 @@ export async function setWhatsappMarketingConsent(options: {
     setWhatsappMarketingConsentServer(await withStaffAuthHeaders(options)),
   );
 }
+
+// FX-08: a manager clears an accidental (non-D4) opt-out. Evidence is kept and audited.
+const clearAccidentalWhatsappOptOutServer = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: { contactId: string; reason: string; expectedOptedOutAt: string | null }) => data,
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    return (await import("./whatsapp-opt-out.server")).clearAccidentalOptOut(data, staff);
+  });
+
+export async function clearAccidentalWhatsappOptOut(options: {
+  data: { contactId: string; reason: string; expectedOptedOutAt: string | null };
+}) {
+  return callStaffServerFn(async () =>
+    clearAccidentalWhatsappOptOutServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+// FX-08 owner decision 7: hide a near-miss flag (不是退訂). Audited; never changes consent.
+const dismissOptOutNearMissServer = createServerFn({ method: "POST" })
+  .inputValidator(
+    (data: { conversationId: string; contactId: string; messageId: string; reason?: string }) =>
+      data,
+  )
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    return (await import("./whatsapp-opt-out-near-miss.server")).dismissOptOutNearMiss(data, staff);
+  });
+
+export async function dismissOptOutNearMiss(options: {
+  data: { conversationId: string; contactId: string; messageId: string; reason?: string };
+}) {
+  return callStaffServerFn(async () =>
+    dismissOptOutNearMissServer(await withStaffAuthHeaders(options)),
+  );
+}
+
+// FX-08 / D-02: a manager resolves a real `unknown` send (核對未確認傳送). Audited; releases the
+// conversation lock; never sends, queues or resends anything.
+type ResolveAdminUnknownOutboundInput = {
+  intentId: string;
+  conversationId: string;
+  outcome: "resolved_sent" | "resolved_not_sent";
+  reason: string;
+};
+const resolveAdminUnknownOutboundServer = createServerFn({ method: "POST" })
+  .inputValidator((data: ResolveAdminUnknownOutboundInput) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaff(["admin", "manager"]);
+    return (await import("../woztell/outbound-resolution.server")).resolveUnknownOutbound(
+      data,
+      staff,
+    );
+  });
+
+export async function resolveAdminUnknownOutbound(options: {
+  data: ResolveAdminUnknownOutboundInput;
+}) {
+  return callStaffServerFn(async () =>
+    resolveAdminUnknownOutboundServer(await withStaffAuthHeaders(options)),
+  );
+}
 export async function fetchAdminOutboundReservation(options: { data: { conversationId: string } }) {
   const request = await withStaffAuthHeaders({});
   const params = new URLSearchParams({ ...options.data, reconciliation: "true" });

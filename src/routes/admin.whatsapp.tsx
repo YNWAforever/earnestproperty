@@ -28,6 +28,13 @@ import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { AdminStatusSelect } from "@/components/admin/AdminStatusSelect";
 import { AdminToolbar } from "@/components/admin/AdminToolbar";
+import { OptOutEvidenceNotice } from "@/components/admin/whatsapp/OptOutEvidenceNotice";
+import { ResolveUnknownOutboundDialog } from "@/components/admin/whatsapp/ResolveUnknownOutboundDialog";
+import {
+  MANAGER_RESOLVED_READBACK_NOTICE,
+  outboundReadbackOutcome,
+  shouldClearDraftAfterReadback,
+} from "@/components/admin/whatsapp/safety-copy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -118,7 +125,8 @@ const messageStatusLabels: Record<string, string> = {
 
 const replyErrorLabels: Record<string, string> = {
   WOZTELL_DISABLED: "WhatsApp 發送目前暫停，請聯絡技術支援。",
-  CONTACT_OPTED_OUT: "客戶已拒收 WhatsApp 訊息。",
+  CONTACT_OPTED_OUT:
+    "客戶已退訂推廣。客戶再次來訊後 24 小時內可用文字回覆；範本、推廣及問卷會保持停用。",
   OUTSIDE_24_HOUR_WINDOW: "超過 24 小時回覆窗口",
   CONVERSATION_NOT_FOUND: "找不到 WhatsApp 對話",
   MISSING_WOZTELL_MEMBER_ID: "此客戶尚未連接 WhatsApp 帳戶，請聯絡技術支援。",
@@ -1015,11 +1023,11 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         if (!canApplyConversationDetail(targetId) || actorIdRef.current !== actorId) return;
         if (result.intent?.id !== saved.requestId || result.intent.kind !== kind)
           throw new Error("傳送要求資料未能核對，請聯絡支援。");
-        const state = result.intent.state;
-        if (!["queued", "accepted", "failed", "cancelled"].includes(state))
+        const outcome = outboundReadbackOutcome(result.intent.state);
+        if (outcome === "pending")
           throw new Error("傳送結果仍未確認，請稍後核對或聯絡支援。沒有重送要求。");
         clearOutboundRequestId(actorId, targetId, kind);
-        if (kind === "text" && ["queued", "accepted"].includes(state)) {
+        if (kind === "text" && shouldClearDraftAfterReadback(result.intent.state)) {
           setReplyDrafts((current) =>
             current[targetId]?.trim() === saved.original[0]
               ? { ...current, [targetId]: "" }
@@ -1027,9 +1035,11 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
           );
         }
         toast.success(
-          ["queued", "accepted"].includes(state)
+          outcome === "sent_or_queued"
             ? outboundResultNotice(result, "傳送要求")
-            : "已核對傳送要求未完成；沒有重送。如需再傳，請重新確認內容。",
+            : outcome === "manager_resolved"
+              ? MANAGER_RESOLVED_READBACK_NOTICE
+              : "已核對傳送要求未完成；沒有重送。如需再傳，請重新確認內容。",
         );
       }
       if (blocked)
@@ -1344,6 +1354,8 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
               onSendTemplate={sendTemplate}
               onConsentSaved={() => {
                 if (selectedIdRef.current) void loadConversationDetail(selectedIdRef.current);
+                if (staffUserId && selectedIdRef.current)
+                  void checkOutboundReservation(selectedIdRef.current, staffUserId).catch(() => {});
               }}
               onStatusChange={(status) =>
                 detail
@@ -1409,6 +1421,8 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
           onSendTemplate={sendTemplate}
           onConsentSaved={() => {
             if (selectedIdRef.current) void loadConversationDetail(selectedIdRef.current);
+            if (staffUserId && selectedIdRef.current)
+              void checkOutboundReservation(selectedIdRef.current, staffUserId).catch(() => {});
           }}
           onStatusChange={(status) =>
             detail
@@ -1717,7 +1731,7 @@ function ConversationWorkspace({
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate text-base font-semibold">{detail.name ?? "WhatsApp 客戶"}</h2>
               <StatusBadge status={detail.status} />
-              {detail.opted_out_whatsapp ? <Badge variant="destructive">已拒收</Badge> : null}
+              <OptOutEvidenceNotice detail={detail} onChanged={onConsentSaved} />
               {detail.can_clear_opt_out && detail.contact_id ? (
                 <WhatsappConsentDialog
                   key={detail.contact_id}
@@ -1725,6 +1739,7 @@ function ConversationWorkspace({
                   onSaved={onConsentSaved}
                 />
               ) : null}
+              <ResolveUnknownOutboundDialog detail={detail} onChanged={onConsentSaved} />
             </div>
             <p className="mt-1 text-sm text-muted-foreground">{detail.phone ?? "未有電話"}</p>
           </div>
@@ -2199,7 +2214,9 @@ const PROVIDER_ERROR_LABELS: Record<string, string> = {
   OUTBOUND_CONFLICT_OR_NOT_FOUND: "本次要求未送出：對話負責人或權限已變更，請重新載入並核對。",
   WOZTELL_CONFIGURATION_UNAVAILABLE: "WhatsApp 尚未設定完成，請聯絡技術支援。",
   WOZTELL_RECIPIENT_MISSING: "此客戶沒有可用的 WhatsApp 號碼。",
-  CONTACT_OPTED_OUT: "客戶已拒收訊息。",
+  CONTACT_OPTED_OUT: "客戶已退訂推廣，訊息未送出。",
+  WOZTELL_PROVIDER_REJECTED: "WhatsApp 供應商拒絕了這次傳送，訊息未送出，可以修正後再試。",
+  WOZTELL_REFUSED: "WhatsApp 供應商拒絕傳送，訊息未送出。",
   OUTSIDE_24_HOUR_WINDOW: "已超過 24 小時回覆窗口。",
 };
 
@@ -2299,6 +2316,7 @@ function replyAvailability(
   const guard = canReplyToConversation({
     woztellEnabled,
     optedOut: detail.opted_out_whatsapp === true,
+    optedOutAt: detail.opted_out_at ?? null,
     lastInboundAt: detail.last_inbound_at,
   });
   if (!guard.ok) return { reason: formatReplyError(guard.reason), code: guard.reason };
@@ -2329,6 +2347,8 @@ function messageStatusLabel(status: string) {
   if (status === "accepted") return "供應商已接納（未確認送達）";
   if (status === "unknown") return "傳送結果未明，請核對，勿重發";
   if (status === "cancelled") return "已取消";
+  if (status === "resolved_sent") return "經理已核對：已送達";
+  if (status === "resolved_not_sent") return "經理已核對：未送出";
   return messageStatusLabels[status] ?? status;
 }
 

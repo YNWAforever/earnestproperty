@@ -522,6 +522,24 @@ export type AdminConversationDetail = AdminConversationRow & {
    * the client never sees the role list, and the server fn enforces it again.
    */
   can_clear_opt_out: boolean;
+  // FX-08 evidence. Optional so older clients and the browser fixture still compile.
+  opted_out_at?: string | null;
+  /** Exact microsecond UTC version of opted_out_at; the only value the clear accepts. */
+  opted_out_version?: string | null;
+  opted_out_text?: string | null;
+  opted_out_source?: "customer_message" | "staff_recorded" | "legacy" | null;
+  /** Server-computed, same role rule as can_clear_opt_out. The server fn enforces it again. */
+  can_resolve_unknown_outbound?: boolean;
+  /** Managers and above only; agents get null. */
+  unknown_outbound?: {
+    id: string;
+    kind: "text" | "template";
+    actor_type: "staff" | "service";
+    dispatch_started_at: string | null;
+    error: string | null;
+    resolvable: boolean;
+  } | null;
+  opt_out_near_miss?: { messageId: string; text: string; at: string; exact?: boolean } | null;
 };
 
 export type AdminConversationUpdateInput = {

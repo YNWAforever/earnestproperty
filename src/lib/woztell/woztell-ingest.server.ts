@@ -184,14 +184,38 @@ export async function ingestWoztellEvent(
       ORDER BY (whatsapp_member_id=$2) DESC NULLS LAST,
         (normalized_phone=$1) DESC NULLS LAST, id
       LIMIT 1
+    ), opt_out AS (
+      -- FX-08: $5 is true only for a live inbound D4 message. It is applied unless THIS
+      -- message was already applied as an opt-out (its id is the recorded evidence, which
+      -- a manager clear keeps), so a redelivery never re-sets a cleared opt-out, while a
+      -- history-imported copy of the same message never swallows the live opt-out.
+      -- A bare pre-digest legacy key is only ever stored by pre-FX-08 code, which always
+      -- applied the opt-out, so a match there also counts as already applied.
+      SELECT ($5::boolean
+        AND NOT EXISTS(SELECT 1 FROM crm_contacts WHERE opted_out_message_id=$12)
+        AND NOT ($14::text IS NOT NULL AND EXISTS(SELECT 1 FROM whatsapp_messages
+          WHERE external_message_id=$14 AND text IS NOT DISTINCT FROM $11::text
+            AND channel_id=$7 AND woztell_member_id=$2 AND direction::text='inbound'))) AS new_opt_out
     ), updated_contact AS (
       UPDATE crm_contacts c SET name=COALESCE(c.name,$3),whatsapp_profile_name=CASE WHEN $16::boolean AND $9::text='inbound' AND $6::timestamptz>=COALESCE(c.last_inbound_at,'-infinity'::timestamptz) THEN COALESCE($3,c.whatsapp_profile_name) ELSE COALESCE(c.whatsapp_profile_name,$3) END,phone=COALESCE(c.phone,$4),
         normalized_phone=COALESCE(c.normalized_phone,$1),whatsapp_member_id=COALESCE(c.whatsapp_member_id,$2),
-        opted_out_whatsapp=c.opted_out_whatsapp OR $5,last_inbound_at=GREATEST(c.last_inbound_at,$6::timestamptz),updated_at=now()
-      FROM valid v WHERE c.id=v.id RETURNING c.id
+        opted_out_whatsapp=c.opted_out_whatsapp OR o.new_opt_out,
+        opted_out_at=CASE WHEN o.new_opt_out AND (NOT c.opted_out_whatsapp OR c.opted_out_at IS NULL OR $6::timestamptz>c.opted_out_at) THEN $6::timestamptz ELSE c.opted_out_at END,
+        opted_out_message_id=CASE WHEN o.new_opt_out AND (NOT c.opted_out_whatsapp OR c.opted_out_at IS NULL OR $6::timestamptz>c.opted_out_at) THEN $12 ELSE c.opted_out_message_id END,
+        opted_out_text=CASE WHEN o.new_opt_out AND (NOT c.opted_out_whatsapp OR c.opted_out_at IS NULL OR $6::timestamptz>c.opted_out_at) THEN left($11::text,500) ELSE c.opted_out_text END,
+        opted_out_source=CASE WHEN o.new_opt_out AND (NOT c.opted_out_whatsapp OR c.opted_out_at IS NULL OR $6::timestamptz>c.opted_out_at) THEN 'customer_message' ELSE c.opted_out_source END,
+        -- A new opt-out starts a new episode: earlier clear markers are reset (audit keeps history).
+        opted_out_cleared_at=CASE WHEN o.new_opt_out AND NOT c.opted_out_whatsapp THEN NULL ELSE c.opted_out_cleared_at END,
+        opted_out_cleared_by=CASE WHEN o.new_opt_out AND NOT c.opted_out_whatsapp THEN NULL ELSE c.opted_out_cleared_by END,
+        last_inbound_at=GREATEST(c.last_inbound_at,$6::timestamptz),updated_at=now()
+      FROM valid v, opt_out o WHERE c.id=v.id RETURNING c.id
     ), new_contact AS (
-      INSERT INTO crm_contacts(name,phone,normalized_phone,whatsapp_member_id,source,opt_in_whatsapp,opted_out_whatsapp,last_inbound_at,whatsapp_profile_name)
-      SELECT $3,$4,$1,$2,'whatsapp',false,$5,$6::timestamptz,$3 WHERE NOT EXISTS(SELECT 1 FROM matched)
+      INSERT INTO crm_contacts(name,phone,normalized_phone,whatsapp_member_id,source,opt_in_whatsapp,opted_out_whatsapp,last_inbound_at,
+        opted_out_at,opted_out_message_id,opted_out_text,opted_out_source,whatsapp_profile_name)
+      SELECT $3,$4,$1,$2,'whatsapp',false,o.new_opt_out,$6::timestamptz,
+        CASE WHEN o.new_opt_out THEN $6::timestamptz END,CASE WHEN o.new_opt_out THEN $12 END,
+        CASE WHEN o.new_opt_out THEN left($11::text,500) END,CASE WHEN o.new_opt_out THEN 'customer_message' END,$3
+      FROM opt_out o WHERE NOT EXISTS(SELECT 1 FROM matched)
       ON CONFLICT DO NOTHING RETURNING id
     ), contact AS (SELECT id FROM updated_contact UNION ALL SELECT id FROM new_contact),
     updated_conversation AS (
@@ -237,7 +261,8 @@ export async function ingestWoztellEvent(
         memberId,
         event.memberName,
         phone,
-        event.direction === "inbound" && isOptOutText(event.text),
+        // FX-08 / D4: only a live inbound message can opt a contact out; history never does.
+        origin === "live_webhook" && event.direction === "inbound" && isOptOutText(event.text),
         event.direction === "inbound" ? event.timestamp : null,
         event.channelId,
         event.timestamp,

@@ -81,6 +81,10 @@ export const STAFF_HISTORICAL_COLUMNS = [
   // Append-only finance and quality revisions retain the actor who made the decision.
   "changed_by",
   "qualified_by",
+  // FX-08: the manager who cleared a mistaken opt-out, and the manager who
+  // recorded the outcome of an unconfirmed send. Audit facts, never reassigned.
+  "opted_out_cleared_by",
+  "resolved_by",
 ] as const;
 
 /**

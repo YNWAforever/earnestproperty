@@ -6,14 +6,53 @@ export function normalizeAdminPhone(value: unknown) {
   return !text.startsWith("+") && normalized.length === 8 ? `852${normalized}` : normalized;
 }
 
+function timeOf(value: Date | string | null | undefined) {
+  if (value === null || value === undefined) return null;
+  const time = (value instanceof Date ? value : new Date(value)).getTime();
+  return Number.isNaN(time) ? null : time;
+}
+
+/**
+ * FX-08 D4: an opt-out blocks business-initiated messages. A customer message
+ * strictly after the opt-out reopens normal staff text for 24 h ("reopened");
+ * templates stay blocked either way. Any missing or unparseable time fails closed.
+ */
+export function optOutReplyState(input: {
+  optedOut: boolean;
+  optedOutAt: Date | string | null;
+  lastInboundAt: Date | string | null;
+  now?: Date;
+}): "not_opted_out" | "blocked" | "reopened" {
+  if (!input.optedOut) return "not_opted_out";
+  const optedOutAt = timeOf(input.optedOutAt);
+  const inbound = timeOf(input.lastInboundAt);
+  if (optedOutAt === null || inbound === null || !(inbound > optedOutAt)) return "blocked";
+  const now = (input.now ?? new Date()).getTime();
+  return now - inbound > 24 * 60 * 60 * 1000 ? "blocked" : "reopened";
+}
+
 export function canReplyToConversation(input: {
   woztellEnabled: boolean;
   optedOut: boolean;
+  optedOutAt?: Date | string | null;
   lastInboundAt: Date | string | null;
   now?: Date;
-}) {
+}):
+  | { ok: true }
+  | { ok: false; reason: "WOZTELL_DISABLED" | "CONTACT_OPTED_OUT" | "OUTSIDE_24_HOUR_WINDOW" } {
   if (!input.woztellEnabled) return { ok: false as const, reason: "WOZTELL_DISABLED" };
-  if (input.optedOut) return { ok: false as const, reason: "CONTACT_OPTED_OUT" };
+  // Opted out: only a reopen allows text. An expired reopen stays CONTACT_OPTED_OUT, never
+  // OUTSIDE_24_HOUR_WINDOW, so the inbox never offers the template picker to an opted-out contact.
+  if (input.optedOut) {
+    return optOutReplyState({
+      optedOut: true,
+      optedOutAt: input.optedOutAt ?? null,
+      lastInboundAt: input.lastInboundAt,
+      now: input.now,
+    }) === "reopened"
+      ? { ok: true as const }
+      : { ok: false as const, reason: "CONTACT_OPTED_OUT" };
+  }
   const now = input.now ?? new Date();
   if (!input.lastInboundAt) return { ok: false as const, reason: "OUTSIDE_24_HOUR_WINDOW" };
   const inbound =

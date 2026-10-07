@@ -358,6 +358,9 @@ function noMutation(name: string, input?: unknown): never {
 export const updateAdminConversation = (input: unknown) => noMutation("updateConversation", input);
 export const runAdminWoztellBackfill = () => noMutation("backfill");
 export const setWhatsappMarketingConsent = () => noMutation("consent");
+export const clearAccidentalWhatsappOptOut = () => noMutation("clearAccidentalOptOut");
+export const dismissOptOutNearMiss = () => noMutation("dismissNearMiss");
+export const resolveAdminUnknownOutbound = () => noMutation("resolveUnknownOutbound");
 type SyntheticResolution = {
   version: number;
   propertyId: string | null;

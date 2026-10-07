@@ -117,6 +117,9 @@ import {
   VALUATION_CONSENT_VERSION,
 } from "./valuation-leads.js";
 import { woztellEnabled } from "../woztell/woztell.server";
+import { UNKNOWN_RESOLUTION_MIN_AGE_MINUTES } from "../woztell/outbound-resolution.server";
+import { readOptOutNearMiss } from "./whatsapp-opt-out-near-miss.server";
+import { optOutVersionSql } from "./whatsapp-opt-out.server";
 import { wakeAfterCommit } from "../control-plane/job-wake.server";
 
 /**
@@ -3161,7 +3164,12 @@ export async function fetchAdminConversation(
   includeMessages = true,
 ) {
   if (!actor) throw new Response("Forbidden", { status: 403 });
-  const params: unknown[] = [id, actor.staffId];
+  const params: unknown[] = [
+    id,
+    actor.staffId,
+    UNKNOWN_RESOLUTION_MIN_AGE_MINUTES,
+    actor.roles.includes("admin") || actor.roles.includes("manager"),
+  ];
   const scopeClause = " AND wa_can_read_conversation($2::uuid,wc.id)";
   const rows = await queryRows(
     `
@@ -3176,8 +3184,19 @@ export async function fetchAdminConversation(
       c.name,
       c.phone,
       c.opted_out_whatsapp,
+      c.opted_out_at,
+      ${optOutVersionSql("c")} AS opted_out_version,
+      c.opted_out_text,
+      c.opted_out_source,
+      c.opted_out_cleared_at,
       m.text AS last_text,
-      m.direction AS last_direction
+      m.direction AS last_direction,
+      u.id AS unknown_id,
+      u.kind AS unknown_kind,
+      u.actor_type AS unknown_actor_type,
+      u.dispatch_started_at AS unknown_dispatch_started_at,
+      u.error AS unknown_error,
+      u.resolvable AS unknown_resolvable
     FROM whatsapp_conversations wc
     LEFT JOIN crm_contacts c ON c.id = wc.contact_id
     LEFT JOIN LATERAL (
@@ -3187,6 +3206,16 @@ export async function fetchAdminConversation(
       ORDER BY created_at DESC
       LIMIT 1
     ) m ON true
+    -- FX-08: the oldest unconfirmed send, for managers only (agents never see or get a null).
+    LEFT JOIN LATERAL (
+      SELECT i.id, i.kind, i.actor_type, i.dispatch_started_at, i.error,
+        (COALESCE(i.dispatch_started_at, i.updated_at)
+          <= now() - make_interval(mins => $3::int)) AS resolvable
+      FROM whatsapp_outbound_intents i
+      WHERE i.conversation_id = wc.id AND i.state = 'unknown' AND $4::boolean
+      ORDER BY i.dispatch_started_at ASC NULLS FIRST, i.id
+      LIMIT 1
+    ) u ON true
     WHERE wc.id = $1${scopeClause}
     LIMIT 1
     `,
@@ -3194,6 +3223,15 @@ export async function fetchAdminConversation(
   );
   const conversation = rows[0];
   if (!conversation) return null;
+  // Same role rule as the requireStaff(["admin","manager"]) gates on the clear, the near-miss
+  // dismissal and the unknown-send resolution; those server fns enforce it again.
+  const isManager = actor.roles.includes("admin") || actor.roles.includes("manager");
+  // The near-miss is only derived behind the conversation read above (wa_can_read_conversation).
+  const contactId = stringOrNull(conversation.contact_id);
+  const optOutNearMiss =
+    contactId && conversation.opted_out_whatsapp !== true
+      ? await readOptOutNearMiss({ conversationId: id, contactId })
+      : null;
 
   const messages = includeMessages
     ? await queryRows(
@@ -3220,6 +3258,15 @@ export async function fetchAdminConversation(
     name: stringOrNull(conversation.name),
     phone: stringOrNull(conversation.phone),
     opted_out_whatsapp: conversation.opted_out_whatsapp === true,
+    opted_out_at: dateOrNull(conversation.opted_out_at),
+    opted_out_version: stringOrNull(conversation.opted_out_version),
+    opted_out_text: stringOrNull(conversation.opted_out_text)?.slice(0, 200) ?? null,
+    opted_out_source: stringOrNull(conversation.opted_out_source) as
+      | "customer_message"
+      | "staff_recorded"
+      | "legacy"
+      | null,
+    opt_out_near_miss: optOutNearMiss,
     last_text: stringOrNull(conversation.last_text),
     last_direction: stringOrNull(conversation.last_direction),
     contact_id: stringOrNull(conversation.contact_id),
@@ -3229,9 +3276,23 @@ export async function fetchAdminConversation(
     // setWhatsappMarketingConsent -- this only decides whether the control is
     // rendered; the server fn enforces it for real. No actor means an internal
     // unscoped call with no UI behind it, so deny rather than assume.
-    can_clear_opt_out: actor
-      ? actor.roles.includes("admin") || actor.roles.includes("manager")
-      : false,
+    can_clear_opt_out: isManager,
+    can_resolve_unknown_outbound: isManager,
+    unknown_outbound:
+      isManager && conversation.unknown_id
+        ? {
+            id: stringOrEmpty(conversation.unknown_id),
+            kind: (conversation.unknown_kind === "template" ? "template" : "text") as
+              | "text"
+              | "template",
+            actor_type: (conversation.unknown_actor_type === "service" ? "service" : "staff") as
+              | "staff"
+              | "service",
+            dispatch_started_at: dateOrNull(conversation.unknown_dispatch_started_at),
+            error: stringOrNull(conversation.unknown_error),
+            resolvable: conversation.unknown_resolvable === true,
+          }
+        : null,
     messages: messages.map((message) => ({
       id: stringOrEmpty(message.id),
       direction: stringOrEmpty(message.direction) as "inbound" | "outbound",

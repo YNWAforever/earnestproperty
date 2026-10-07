@@ -60,129 +60,154 @@ export function verifyWoztellSignature(
 }
 
 /**
- * Opt-out detection has to be wrong as rarely as possible in BOTH directions,
- * and the two failure modes cost different things:
+ * Opt-out detection (FX-08, owner decision D4, 2026-10-06).
  *
- *  - False positive: the flag is written monotonically by the webhook
- *    (`opted_out_whatsapp = opted_out_whatsapp OR $7`), so mis-reading
- *    「我想取消今日睇樓約會」 as an opt-out blocks every staff reply and every
- *    campaign for that contact until an admin clears it.
- *  - False negative: the agency keeps marketing to someone who asked it to
- *    stop. That is the PDPO problem, and it is the more expensive one.
+ * Only an exact whole-message opt-out word counts as an opt-out. Sentences,
+ * stems and old phrases (「唔要」, "Can I stop by?", "bus stop", 「我要退訂」)
+ * are NOT opt-outs: a false positive blocks every business-initiated message
+ * (staff-initiated outbound and campaigns) to that contact. An opt-out blocks
+ * business-initiated messages only, and the flag is recorded together with the
+ * evidence (the message that triggered it).
  *
- * So the terms are split by how ambiguous they are, rather than by language.
+ * Requests that clearly ask to stop but are not an exact word are "near-misses"
+ * (isOptOutNearMiss). They are display-only: staff review them, and they never
+ * set any flag. A message is never both an opt-out and a near-miss.
+ *
+ * Everything here is pure: no environment, network or database access.
  */
 
-/**
- * Phrases that cannot plausibly mean anything except "stop messaging me".
- * Matched ANYWHERE in the message, because there is no sentence in which
- * 「取消訂閱」 or 「拒收」 is incidental. Both Traditional and Simplified are listed;
- * the agency's customers write both.
- */
-const UNAMBIGUOUS_OPT_OUT_PHRASES = [
-  "取消訂閱",
-  "取消订阅",
+/** D4 (owner, 2026-10-06). Canonical, already normalised forms. Simplified forms per Open question 1. */
+export const OPT_OUT_WORDS: ReadonlySet<string> = new Set([
+  "stop",
+  "unsubscribe",
   "退訂",
   "退订",
+  "取消訂閱",
+  "取消订阅",
+  "停止接收",
+]);
+
+/**
+ * Owner decision 7. CJK / spaced-Latin phrases that mean "stop messaging me" and are
+ * matched anywhere in the normalised message (inner whitespace already removed, so
+ * "remove me" and "opt out" match as `removeme` / `optout`).
+ */
+export const OPT_OUT_NEAR_MISS_PHRASES: readonly string[] = [
+  "唔好再send",
+  "唔好再發",
+  "唔好再傳",
+  "唔好再传",
+  "唔使再send",
+  "唔要再send",
+  "唔想再收",
+  "不想再收",
+  "不要再發",
+  "不要再发",
+  "不要再傳",
+  "不再接收",
   "停止發送",
   "停止发送",
-  "停止接收",
-  "停止接受",
   "拒收",
-  "不再接收",
-  "不想再收",
-  "唔想再收",
-  "唔要再send",
-  "unsubscribe",
-  "opt out",
+  "唔好再搵我",
+  "不要再聯絡我",
+  "唔好再聯絡我",
+  "removeme",
   "optout",
-  "remove me",
+  "unsub",
+  "停止接受",
+  "不要再send",
+  "stoppromotions",
+  "停止推廣",
+  "停止推广",
 ];
 
-/**
- * Bare stems that DO appear mid-sentence for innocent reasons -- 取消 in
- * 「我想取消今日睇樓約會」, 停止 in 「請停止安排星期六睇樓」, 不要 in 「不要太貴嘅盤」.
- * These only count when they are the whole message, after politeness prefixes
- * and punctuation are stripped.
- */
-const AMBIGUOUS_OPT_OUT_STEMS = ["取消", "停止", "唔要", "不要", "不用"];
+const OPT_OUT_MAX_LENGTH = 64;
+const NEAR_MISS_MAX_LENGTH = 280;
 
-/**
- * Latin stems matched on word boundaries, so "please stop" opts out but
- * "stopover" does not.
- */
-const LATIN_OPT_OUT_STEMS = ["stop"];
+const NON_ASCII = /\P{ASCII}/u;
+const CJK_OPT_OUT_WORDS = [...OPT_OUT_WORDS].filter((word) => NON_ASCII.test(word));
 
-/**
- * Leading politeness that carries no meaning for this decision, so 「唔該停止」 and
- * 「我要取消」 reduce to the bare stem. Ordered longest-first so 唔該 is consumed
- * before 唔.
- */
-const POLITENESS_PREFIXES = [
-  "唔該晒",
-  "唔該",
-  "麻煩晒",
-  "麻煩你",
-  "麻煩",
-  "please",
-  "pls",
-  "我想要",
-  "我想",
-  "我要",
-  "我唔想",
-  "請你",
-  "请你",
-  "請",
-  "请",
-];
+/** Zero-width characters and variation selectors that IMEs and emoji keyboards append. */
+const INVISIBLE_CHARS = /[\p{Cf}\p{Variation_Selector}]/gu;
+const EDGE_NOISE = /^[\p{P}\p{S}\p{Z}\s]+|[\p{P}\p{S}\p{Z}\s]+$/gu;
+const NOT_LATIN_OR_DIGIT_BEFORE = String.raw`(?<![\p{Script=Latin}\p{N}])`;
+const NOT_LATIN_OR_DIGIT_AFTER = String.raw`(?![\p{Script=Latin}\p{N}])`;
 
-/** Strip punctuation, symbols and whitespace so 「取消！」 and "STOP." still match. */
-function stripPunctuation(text: string) {
-  return text.replace(/[\p{P}\p{S}\p{Z}\s]/gu, "");
+/** NFKC, drop invisible chars, lower-case, trim edge punctuation/symbols/space. Inner spacing kept. */
+function foldEdges(value: string | null | undefined, maxLength: number) {
+  if (value == null) return "";
+  const text = value.normalize("NFKC").replace(INVISIBLE_CHARS, "").toLowerCase();
+  if (text.length > maxLength) return "";
+  return text.replace(EDGE_NOISE, "");
 }
 
-function stripPolitenessPrefixes(text: string) {
-  let result = text;
-  // Loop so 「唔該請取消」 reduces all the way down.
-  for (let pass = 0; pass < 3; pass += 1) {
-    const before = result;
-    for (const prefix of POLITENESS_PREFIXES) {
-      if (result.startsWith(prefix)) {
-        result = result.slice(prefix.length);
-        break;
-      }
-    }
-    if (result === before) break;
-  }
-  return result;
+/** NFKC → drop zero-width/variation chars → trim [\p{P}\p{S}\p{Z}\s] at both ends → remove inner [\p{Z}\s] → toLowerCase. "" for null/undefined/over-length. */
+export function normalizeOptOutCandidate(value: string | null | undefined): string {
+  return foldEdges(value, OPT_OUT_MAX_LENGTH).replace(/[\p{Z}\s]+/gu, "");
 }
 
-export function isOptOutText(value: string | null | undefined) {
-  // NFKC folds full-width Latin (ＳＴＯＰ) onto ASCII before casefolding, so a
-  // customer typing on a Chinese IME is not silently ignored.
-  const text = (value ?? "").normalize("NFKC").trim().toLowerCase();
-  if (!text) return false;
+/** True only when the whole normalised message is in OPT_OUT_WORDS. Never word-boundary, never substring. */
+export function isOptOutText(value: string | null | undefined): boolean {
+  return OPT_OUT_WORDS.has(normalizeOptOutCandidate(value));
+}
 
-  const bare = stripPunctuation(text);
-  if (!bare) return false;
+const STOP_FILLER_LATIN = new RegExp(
+  String.raw`${NOT_LATIN_OR_DIGIT_BEFORE}(please|pls|plz|now|thanks|thanks+you|thx|ok)${NOT_LATIN_OR_DIGIT_AFTER}`,
+  "gu",
+);
+const STOP_TOKEN = new RegExp(`${NOT_LATIN_OR_DIGIT_BEFORE}stop${NOT_LATIN_OR_DIGIT_AFTER}`, "u");
+const STOP_TOKEN_ALL = new RegExp(STOP_TOKEN.source, "gu");
+const STOP_OBJECT_WORDS: ReadonlySet<string> = new Set([
+  "all",
+  "it",
+  "me",
+  "sending",
+  "messaging",
+  "texting",
+  "send",
+  "messages",
+  "promotions",
+  "marketing",
+  "msgs",
+]);
+const STOP_FILLER_CJK = /唔該|請|啦|呀|喇|吖/gu;
+const UNSUBSCRIBE_TOKEN = new RegExp(
+  `${NOT_LATIN_OR_DIGIT_BEFORE}unsubscribe${NOT_LATIN_OR_DIGIT_AFTER}`,
+  "u",
+);
 
-  // 1. Unambiguous phrases, anywhere in the message.
-  if (UNAMBIGUOUS_OPT_OUT_PHRASES.some((phrase) => bare.includes(stripPunctuation(phrase)))) {
-    return true;
-  }
+/** Rule 4: `stop` with nothing else except politeness/emphasis tokens or a repeated `stop`. */
+function isStopWithOnlyFiller(spaced: string) {
+  const withoutFiller = spaced.replace(STOP_FILLER_LATIN, " ").replace(STOP_FILLER_CJK, " ");
+  if (!STOP_TOKEN.test(withoutFiller)) return false;
+  const residue = withoutFiller.replace(STOP_TOKEN_ALL, " ");
+  // Whatever is left may only be an object of the request ("stop sending", "stop it",
+  // "STOP ALL"). Digits or any other word ("stop by", "STOP 2") mean it is not a request.
+  return residue
+    .split(/[\p{P}\p{S}\p{Z}\s]+/u)
+    .filter(Boolean)
+    .every((word) => STOP_OBJECT_WORDS.has(word));
+}
 
-  // 2. Ambiguous stems, only once the message is nothing but the stem.
-  const stem = stripPolitenessPrefixes(bare);
-  if (AMBIGUOUS_OPT_OUT_STEMS.includes(stem)) return true;
+/**
+ * Owner decision 7. Display-only: true when the message is NOT an exact opt-out but asks to stop.
+ * Never sets any flag. Bare 停止 / 取消 / 唔要 / 不要 never flag on their own.
+ */
+export function isOptOutNearMiss(value: string | null | undefined): boolean {
+  if (isOptOutText(value)) return false;
+  const spaced = foldEdges(value, NEAR_MISS_MAX_LENGTH);
+  if (!spaced) return false;
+  // Hyphens are dropped for the phrase checks only, so "opt-out" matches "optout".
+  const compact = spaced.replace(/[\p{Z}\s-]+/gu, "");
 
-  // 3. Latin stems on word boundaries. The boundary class is "not a Latin
-  //    letter and not a digit" rather than \P{L}: CJK characters ARE letters,
-  //    so \P{L} never matched next to one and 「請stop」 / 「STOP啦」 slipped past.
-  return LATIN_OPT_OUT_STEMS.some((term) =>
-    new RegExp(`(?:^|[^\\p{Script=Latin}\\p{N}])${term}(?:[^\\p{Script=Latin}\\p{N}]|$)`, "u").test(
-      text,
-    ),
-  );
+  // 1. A CJK opt-out word anywhere.
+  if (CJK_OPT_OUT_WORDS.some((word) => compact.includes(word))) return true;
+  // 2. A stop-messaging phrase anywhere.
+  if (OPT_OUT_NEAR_MISS_PHRASES.some((phrase) => compact.includes(phrase))) return true;
+  // 3. `unsubscribe` as a Latin token anywhere.
+  if (UNSUBSCRIBE_TOKEN.test(spaced)) return true;
+  // 4. `stop` plus only politeness/emphasis.
+  return isStopWithOnlyFiller(spaced);
 }
 
 export function canSendFreeFormMessage({
@@ -373,11 +398,17 @@ export async function sendWoztellResponse(input: {
   response: Record<string, unknown>[];
 }) {
   const config = woztellConfig();
+  // FX-08: `stage` marks a failure before any provider call, so the send is `failed`, not
+  // `unknown`. Campaign delivery ignores it and still keys on the missing `status`.
   if (!config.enabled) {
-    return { ok: false, error: "WOZTELL_ENABLED is not true" };
+    return { ok: false, error: "WOZTELL_ENABLED is not true", stage: "preflight" as const };
   }
   if (!config.accessToken || !config.channelId) {
-    return { ok: false, error: "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID" };
+    return {
+      ok: false,
+      error: "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID",
+      stage: "preflight" as const,
+    };
   }
   if (input.channelId !== undefined && input.channelId !== config.channelId) {
     return { ok: false, refused: true, error: "WOZTELL_CHANNEL_SCOPE_MISMATCH" };
