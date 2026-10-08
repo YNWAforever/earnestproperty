@@ -180,7 +180,7 @@ const CDN_CACHED_ROUTES = [
   "property.$listingNo.tsx",
 ];
 
-test("only the five allowlisted route files call publicPageCacheHeaders", async () => {
+test("only the six allowlisted route files call publicPageCacheHeaders", async () => {
   const { readdir } = await import("node:fs/promises");
   const files = (await readdir(new URL("./", import.meta.url))).filter((name) =>
     /\.tsx?$/.test(name),
@@ -221,4 +221,125 @@ test("no public route reads the request, cookies or headers during SSR", async (
       assert.equal(text.includes(reader), false, `${name} uses ${reader}`);
     }
   }
+});
+
+// TanStack merges every rendered match's `headers` root to leaf, and a child
+// returning undefined does not clear its parent's. So a route nested under a
+// cached route would silently inherit the CDN header unless it is reviewed
+// into the allowlist or explicitly opts out with `private, no-store`.
+const CACHED_PARENT_PREFIXES = [
+  "castle-peak-road.",
+  "listings.",
+  "property.$listingNo.",
+  "estate.$slug.",
+  "index.",
+];
+
+function nestedRouteViolation(name, text) {
+  if (!/\.tsx?$/.test(name) || /\.test\./.test(name)) return null;
+  if (CDN_CACHED_ROUTES.includes(name)) return null;
+  // The castle-peak-road layout itself carries no headers.
+  if (name === "castle-peak-road.tsx") return null;
+  const parent = CACHED_PARENT_PREFIXES.find((prefix) => name.startsWith(prefix));
+  if (!parent) return null;
+  const optsOut =
+    /["']?(Vercel-CDN-Cache-Control|Cache-Control)["']?\s*:\s*["']private, no-store/.test(text);
+  return optsOut ? null : `${name} is nested under ${parent.slice(0, -1)}`;
+}
+
+test("no route nested under a cached route can inherit the CDN header", async () => {
+  const { readdir } = await import("node:fs/promises");
+  const entries = await readdir(new URL("./", import.meta.url), { withFileTypes: true });
+  // Flat routes only: a routes subdirectory would need its own review.
+  assert.deepEqual(
+    entries.filter((entry) => entry.isDirectory()).map((entry) => entry.name),
+    [],
+  );
+  const violations = [];
+  for (const entry of entries) {
+    const text = await readFile(new URL(`./${entry.name}`, import.meta.url), "utf8");
+    const violation = nestedRouteViolation(entry.name, text);
+    if (violation) violations.push(violation);
+  }
+  assert.deepEqual(violations, []);
+
+  // The rule itself: a new child fails unless it opts out explicitly.
+  assert.match(
+    nestedRouteViolation("listings.compare.tsx", "headers: () => undefined"),
+    /listings/,
+  );
+  assert.match(nestedRouteViolation("property.$listingNo.print.tsx", ""), /property/);
+  assert.match(nestedRouteViolation("estate.$slug.reviews.tsx", ""), /estate/);
+  assert.match(nestedRouteViolation("castle-peak-road.$segment.map.tsx", ""), /castle-peak-road/);
+  assert.equal(
+    nestedRouteViolation(
+      "listings.compare.tsx",
+      'headers: () => ({ "Vercel-CDN-Cache-Control": "private, no-store" }),',
+    ),
+    null,
+  );
+  // `_` breaks nesting in flat routes, and other public pages are not children.
+  assert.equal(nestedRouteViolation("listings_.compare.tsx", ""), null);
+  assert.equal(nestedRouteViolation("estate-reviews.tsx", ""), null);
+});
+
+// The SSR closure of the cached routes: every module they (and the root
+// layout) import directly, plus the server modules their loaders reach.
+test("components and loader helpers rendered on cached routes never read the request", async () => {
+  const srcRoot = new URL("../", import.meta.url);
+  const routeFiles = [...CDN_CACHED_ROUTES, "castle-peak-road.tsx", "__root.tsx"];
+  const modules = new Set([
+    "lib/neon/db.server.ts",
+    "lib/neon/public-data.server.ts",
+    "lib/neon/whatsapp-enquiries.server.ts",
+  ]);
+  const { existsSync } = await import("node:fs");
+  for (const name of routeFiles) {
+    const text = await readFile(new URL(`./${name}`, import.meta.url), "utf8");
+    for (const [, spec] of text.matchAll(/from "@\/([^"]+)"/g)) {
+      const resolved = ["", ".ts", ".tsx", ".js"]
+        .map((ext) => `${spec}${ext}`)
+        .find(
+          (candidate) => /\.[jt]sx?$/.test(candidate) && existsSync(new URL(candidate, srcRoot)),
+        );
+      if (resolved) modules.add(resolved);
+    }
+  }
+  for (const required of [
+    "components/site/SiteHeader.tsx",
+    "components/site/SiteFooter.tsx",
+    "components/layout/FreshnessStamp.tsx",
+    "lib/queries.ts",
+    "lib/neon/public-data.ts",
+  ]) {
+    assert.ok(modules.has(required), `${required} is in the scanned set`);
+  }
+  const readers = /getRequest|getCookie|getHeader|getRequestHeader|\bcookies\b/;
+  for (const module of modules) {
+    let text = await readFile(new URL(module, srcRoot), "utf8");
+    if (module === "lib/neon/whatsapp-enquiries.ts") {
+      // Staff server functions in this module read the request only to
+      // authenticate (`requireStaffAccess(getRequest(), …)`); the public
+      // resolver the loaders call must not.
+      const start = text.indexOf("export const resolveWhatsappLinks");
+      const end = text.indexOf("export const", start + 1);
+      assert.ok(start >= 0, "resolveWhatsappLinks is defined");
+      assert.doesNotMatch(text.slice(start, end < 0 ? undefined : end), readers);
+      for (const line of text.split("\n").filter((l) => l.includes("getRequest()"))) {
+        assert.match(line, /requireStaffAccess\(getRequest\(\)/, line);
+      }
+      continue;
+    }
+    assert.doesNotMatch(text, readers, module);
+  }
+});
+
+test("the footer year cannot cause a hydration mismatch on a cached page", async () => {
+  const footer = await readFile(
+    new URL("../components/site/SiteFooter.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(footer, /new Date\(\)\.getFullYear\(\)/);
+  assert.match(footer, /timeZone: "Asia\/Hong_Kong", year: "numeric"/);
+  assert.match(footer, /key=\{mounted \? "client" : "server"\} suppressHydrationWarning/);
 });

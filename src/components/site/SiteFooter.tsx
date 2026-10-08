@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
 import { MapPin, Phone, Mail } from "lucide-react";
 import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { estatesWithPage } from "@/content/estate-registry";
@@ -10,6 +11,29 @@ function displayPhone(phone: string) {
   return /^\d{8}$/.test(phone) ? `${phone.slice(0, 4)} ${phone.slice(4)}` : phone;
 }
 import logoSquare from "@/assets/logo-earnest-full.png";
+
+// The year is read in Hong Kong time on both server and client (the server
+// runs in UTC, which used to disagree with HK browsers for the first 8 hours
+// of 1 January). A CDN-cached page can still be hydrated after the year
+// rolls over, so the server text is accepted as-is during hydration and the
+// span is remounted with the current Hong Kong year once mounted.
+function hongKongYear() {
+  return new Intl.DateTimeFormat("en", { timeZone: "Asia/Hong_Kong", year: "numeric" }).format(
+    new Date(),
+  );
+}
+
+function CopyrightYear() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  return (
+    <span key={mounted ? "client" : "server"} suppressHydrationWarning>
+      {hongKongYear()}
+    </span>
+  );
+}
 
 export function SiteFooter() {
   return (
@@ -228,7 +252,9 @@ export function SiteFooter() {
         </div>
 
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-background/15 pt-6 text-xs opacity-70 md:flex-row">
-          <p>© {new Date().getFullYear()} Earnest Property 晉誠地產. All rights reserved.</p>
+          <p>
+            © <CopyrightYear /> Earnest Property 晉誠地產. All rights reserved.
+          </p>
           <p>
             Licence {SITE_CONTACT.licenceNo} ·{" "}
             <a
