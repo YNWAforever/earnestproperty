@@ -1796,8 +1796,11 @@ function ConversationWorkspace({
       </div>
 
       {identityReview ? <IdentityReviewNotice detail={detail} /> : null}
+      {/* Sibling keys must differ. With the conditional notice slot above, a shared
+          key={detail.id} sent React's keyed reconcile path to drop one fiber: every
+          refresh leaked another 查詢跟進 block and remounted the timeline. */}
       <WhatsappEnquiryContext
-        key={detail.id}
+        key={`enquiry:${detail.id}`}
         conversationId={detail.id}
         refreshKey={
           detail.last_message_at +
@@ -1810,7 +1813,7 @@ function ConversationWorkspace({
         onSelect={onEnquirySelect}
       />
       <MessageTimeline
-        key={detail.id}
+        key={`timeline:${detail.id}`}
         messages={detail.messages}
         olderCursor={olderCursor}
         loadingOlder={loadingOlder}
@@ -1940,8 +1943,8 @@ const IDENTITY_REVIEW_LINK = "前往核對";
 /** Shown to every reader of the conversation; only managers and admins get the link. */
 function IdentityReviewNotice({ detail }: { detail: AdminConversationDetail }) {
   return (
-    <div className="border-b px-4 py-3">
-      <Alert variant="destructive">
+    <div className="shrink-0 border-b px-4 py-2">
+      <Alert variant="destructive" className="py-2 [&>svg]:top-3">
         <AlertTriangle className="h-4 w-4" aria-hidden="true" />
         <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
           <span>{IDENTITY_REVIEW_ALERT}</span>
