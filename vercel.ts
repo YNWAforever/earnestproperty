@@ -110,7 +110,7 @@ export const config: VercelConfig = {
     redirectEntry("/vr.php", "/listings", true), // 52
     redirectEntry("/qrcode_page.php", "/contact", true), // 590 -- Open question 1
     redirectEntry("/eng/special_prop_st.php", "/listings", true), // 987 incl. variants
-    redirectEntry("/seccode_enquiry/seccode.php", "/contact", true), // 209 incl. /eng
+    redirectEntry("/seccode_enquiry/seccode.php", "/contact", true), // 209 incl. /eng (the /eng path waits for the 404 export)
     redirectEntry("/unlucky_detail.php", "/blog", true), // 64, same target as /unlucky.php
     // Detail pages go through the legacy-id resolver (src/routes/property-detail.$file.ts),
     // temporary because the final page depends on properties.legacy_detail_id.
