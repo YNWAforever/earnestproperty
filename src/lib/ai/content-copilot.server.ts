@@ -13,6 +13,7 @@ import {
   type ContentCopilotTone,
 } from "./content-copilot.ts";
 import type { StaffAccess } from "../neon/auth.server.ts";
+import { ungroundedNumbers } from "./number-grounding.js";
 import type { LoadedContentContext } from "./content-copilot-context.server.ts";
 
 type GenerationResult = {
@@ -350,7 +351,28 @@ function validateGeneratedProposal(
     if (JSON.stringify(resource[patch.field] ?? null) !== JSON.stringify(patch.before))
       return { ok: false as const, value: null, error: "COPILOT_PATCH_CONFLICT" };
   }
-  return result;
+  const evidenceById = new Map(trustedEvidence.map((item) => [item.id, item]));
+  const patches = result.value.patches.map((patch) => {
+    // A number may only come from the field's old value or the evidence the patch cites; any
+    // other number is flagged, and a flagged patch cannot be applied.
+    const facts = [copilotValueText(patch.before)];
+    for (const id of patch.evidenceIds) {
+      const item = evidenceById.get(id);
+      if (item) facts.push(item.title, item.excerpt);
+    }
+    const ungrounded = ungroundedNumbers(copilotValueText(patch.after), facts);
+    if (ungrounded.length === 0) return patch;
+    const unsupportedClaims = [
+      ...new Set([...patch.unsupportedClaims, ...ungrounded.map((raw) => `數字未有來源：${raw}`)]),
+    ].slice(0, 20);
+    return { ...patch, unsupportedClaims };
+  });
+  return { ...result, value: { ...result.value, patches } };
+}
+
+function copilotValueText(value: ContentCopilotProposal["patches"][number]["after"]) {
+  if (value === null || value === undefined) return "";
+  return Array.isArray(value) ? value.join("、") : String(value);
 }
 
 function buildSystemPrompt(request: ContentCopilotRequest) {

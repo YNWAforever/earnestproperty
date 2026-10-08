@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildContentFingerprint } from "./content-copilot.ts";
+import { applySelectedContentPatches, buildContentFingerprint } from "./content-copilot.ts";
 import { createContentCopilotContextLoader } from "./content-copilot-context.server.ts";
 import { createContentCopilotService } from "./content-copilot.server.ts";
 
@@ -428,3 +428,106 @@ for (const unavailable of [false, true]) {
     assert.equal((await service.generateContentProposal(articleRequest, managerActor)).ok, true);
   });
 }
+
+const estateRequest = {
+  resourceType: "estate",
+  resourceId: "33333333-3333-4333-8333-333333333333",
+  action: "improve",
+  selectedFields: ["description"],
+  tone: "professional_property",
+  targetLanguage: "zh-HK",
+  researchMode: "internal",
+};
+
+async function generateEstatePatch({ before, after, claimType, evidence = [], evidenceIds = [] }) {
+  const resource = { id: estateRequest.resourceId, name_zh: "海景花園", description: before };
+  let completedProposal = null;
+  const service = createContentCopilotService(
+    makeServiceDeps({
+      loadContext: async () => ({
+        resource,
+        internalEvidence: evidence,
+        query: resource.name_zh,
+        sourceDbRevision: "ab".repeat(16),
+        knowledgeDependencies: [],
+      }),
+      completeProposal: async (input) => {
+        completedProposal = input.proposal;
+        return input.proposal;
+      },
+      generate: async () => ({
+        ok: true,
+        value: {
+          patches: [
+            {
+              field: "description",
+              before,
+              after,
+              reason: "Improve the description",
+              confidence: "medium",
+              evidenceIds,
+              unsupportedClaims: [],
+              claimType,
+            },
+          ],
+          warnings: [],
+        },
+        model: "go-content",
+        latencyMs: 10,
+        usageMetadata: {},
+        error: null,
+      }),
+    }),
+  );
+  const result = await service.generateContentProposal(estateRequest, managerActor);
+  assert.equal(result.ok, true);
+  return { proposal: completedProposal, resource };
+}
+
+test("a subjective patch that adds a price not in before or evidence is flagged and cannot be applied", async () => {
+  const { proposal, resource } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: "海景兩房單位，售價 $7.2M",
+    claimType: "subjective",
+  });
+
+  assert.ok(proposal.patches[0].unsupportedClaims.includes("數字未有來源：$7.2M"));
+  const fingerprint = await buildContentFingerprint(resource);
+  const applied = applySelectedContentPatches(resource, proposal.patches, ["description"], {
+    resourceType: "estate",
+    sourceFingerprint: fingerprint,
+    currentFingerprint: fingerprint,
+  });
+  assert.equal(applied.ok, true);
+  assert.equal(applied.value.description, "海景兩房單位");
+});
+
+test("a patch that keeps the same numbers in another format is not flagged", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "售價 6,800,000",
+    after: "售價 680萬",
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, []);
+});
+
+test("a factual patch whose number is in its cited evidence is not flagged", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: "海景兩房單位，實用 512 呎",
+    claimType: "factual_internal",
+    evidence: [
+      {
+        id: "internal-estate-1",
+        type: "internal",
+        title: "海景花園",
+        url: null,
+        excerpt: "兩房單位實用面積 512 呎，向海。",
+      },
+    ],
+    evidenceIds: ["internal-estate-1"],
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, []);
+});
