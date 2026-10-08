@@ -9,8 +9,12 @@
 
 // A leading label staff or customers type before the number (namecards, forms).
 const LABEL = /^(?:telephone|tel|t|phone|mobile|whatsapp|wa|電話|手提)\s*[:.]?\s*/i;
+// A trailing label after the number: "9123 4567 (WhatsApp)", "9123 4567 WA".
+const TRAILING_LABEL = /\s*(?:\(\s*(?:whatsapp|wa|mobile|手提|電話)\s*\)|(?:whatsapp|wa|手提))$/i;
+// A parenthesised trunk zero, dropped only after an explicit country prefix.
+const TRUNK_ZERO = /\(\s*0\s*\)/g;
 // Formatting only: whitespace, dots, parentheses, slashes and hyphens.
-const SEPARATORS = /[\s.()/-]/g;
+const SEPARATORS = /[\s.()/-]+/g;
 const HK_CANONICAL = /^852[2-9][0-9]{7}$/;
 const HK_LOCAL = /^[2-9][0-9]{7}$/;
 const SQL_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_.]*$/;
@@ -19,42 +23,74 @@ const SQL_PARAM = /^\$\d+$/;
 /** The advisory lock key prefix ingest already uses; the Task 6 script uses the same. */
 export const PHONE_LOCK_PREFIX = "woztell-phone:";
 
+function parseInternational(digits) {
+  // 852 is Hong Kong only, so a typed +852 / 00852 must be a valid HK number.
+  if (digits.startsWith("852")) return HK_CANONICAL.test(digits) ? digits : null;
+  // Owner decision (Open question 4): "+" typed before an 8-digit HK number is HK.
+  // This also captures the rare genuine 8-digit E.164 number (e.g. "+500 12345",
+  // Falklands); the owner accepted that trade-off.
+  if (HK_LOCAL.test(digits)) return "852" + digits;
+  return /^[1-9][0-9]{7,14}$/.test(digits) ? digits : null;
+}
+
+/**
+ * Without an explicit "+" or "00" prefix, separate digit groups are joined only in
+ * a Hong Kong shape: 8 digits as 4+4, or 852 then 8 digits (as 8 or 4+4). Anything
+ * else, such as "9123 4567 12" or "1203 9123 4567", is two things typed together
+ * and is never assembled into a number (FX-12 fix round 2).
+ */
+function parseBareGroups(groups) {
+  const lengths = groups.map((group) => group.length).join("+");
+  const joined = groups.join("");
+  if (lengths === "4+4") return HK_LOCAL.test(joined) ? "852" + joined : null;
+  if (groups[0] === "852" && (lengths === "3+8" || lengths === "3+4+4")) {
+    return HK_CANONICAL.test(joined) ? joined : null;
+  }
+  return null;
+}
+
 function parseNumber(text) {
   const compact = text.replace(SEPARATORS, "");
   // Only digits remain, with at most one "+" in front. Letters ("ext"), commas, a
   // second "+" or a "+" inside the number mean it is not one clear phone number.
   if (!/^\+?[0-9]+$/.test(compact)) return null;
-  let international = compact.startsWith("+");
-  let digits = international ? compact.slice(1) : compact;
-  if (!international && digits.startsWith("00")) {
-    international = true;
-    digits = digits.slice(2);
+  if (compact.startsWith("+") || compact.startsWith("00")) {
+    // An explicit country prefix: the number may be grouped, and a "(0)" trunk is
+    // dropped ("+44 (0)7911 123456").
+    const digits = text
+      .replace(TRUNK_ZERO, "")
+      .replace(SEPARATORS, "")
+      .replace(/^\+|^00/, "");
+    return parseInternational(digits);
   }
-  if (international) {
-    // 852 is Hong Kong only, so a typed +852 / 00852 must be a valid HK number.
-    if (digits.startsWith("852")) return HK_CANONICAL.test(digits) ? digits : null;
-    // Owner decision (Open question 4): "+" typed before an 8-digit HK number is HK.
-    // This also captures the rare genuine 8-digit E.164 number (e.g. "+500 12345",
-    // Falklands); the owner accepted that trade-off.
-    if (HK_LOCAL.test(digits)) return "852" + digits;
-    return /^[1-9][0-9]{7,14}$/.test(digits) ? digits : null;
-  }
+  const groups = text.split(SEPARATORS).filter(Boolean);
+  if (groups.length > 1) return parseBareGroups(groups);
+  const digits = groups[0] ?? "";
   if (HK_LOCAL.test(digits)) return "852" + digits;
-  // WozTell sends international numbers without "+", e.g. "8613812345678".
+  // One contiguous run of 10-15 digits keeps its behaviour: WozTell sends
+  // international numbers without "+" (e.g. "8613812345678"), and the company
+  // number is configured the same way.
   if (digits.length >= 10 && digits.length <= 15) return digits;
   return null;
 }
 
 /**
  * Canonical customer phone: digits only. Hong Kong is "852" + 8 digits; any other
- * number is its E.164 digits without "+". Tolerates formatting only: a leading label
- * (Tel, T, Phone, Mobile, WhatsApp, WA, 電話, 手提), spaces, dots, hyphens,
- * parentheses and slashes. Returns null for anything that is not clearly one phone
- * number, including two numbers in one string. A null is never turned into a guess.
+ * number is its E.164 digits without "+". Tolerates formatting only: a leading or
+ * trailing label (Tel, T, Phone, Mobile, WhatsApp, WA, 電話, 手提), spaces, dots,
+ * hyphens, parentheses and slashes. Separate digit groups form a number only in a
+ * Hong Kong shape or after an explicit "+"/"00" prefix. Returns null for anything
+ * that is not clearly one phone number, including two numbers in one string. A null
+ * is never turned into a guess.
  */
 export function normalizePhone(raw) {
   if (raw === null || raw === undefined) return null;
-  const text = String(raw).normalize("NFKC").trim().replace(LABEL, "");
+  const text = String(raw)
+    .normalize("NFKC")
+    .trim()
+    .replace(LABEL, "")
+    .replace(TRAILING_LABEL, "")
+    .trim();
   if (!text) return null;
   // "9123/4567" is one number split by a slash; "2688 2988/9123 4567" and
   // "9123 4567/68" are alternatives. If any slash-separated part is already a full
