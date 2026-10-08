@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 
-test("vercel config redirects legacy language query selectors to home", () => {
+// FX-13: the old `/?ln=sc|tc` -> `/` rule looped in production, because Vercel keeps
+// the request query on a redirect. `/?ln=` now renders the home page, whose canonical
+// is the clean `/`. scripts/vercel-config.test.mjs guards every rule against loops.
+test("vercel config has no legacy language self-redirect", () => {
   const configSource = readFileSync("vercel.ts", "utf8");
 
-  assert.match(configSource, /type:\s*"query"/);
-  assert.match(configSource, /key:\s*"ln"/);
-  assert.match(configSource, /value:\s*"\^\(sc\|tc\)\$"/);
+  assert.doesNotMatch(configSource, /key:\s*"ln"/);
   assert.doesNotMatch(configSource, /@vercel\/config/);
 });
