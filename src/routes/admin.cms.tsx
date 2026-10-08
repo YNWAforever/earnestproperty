@@ -808,7 +808,7 @@ function AdminCms() {
         } catch (err) {
           // Stop at the first failure and report how far it got: the loop is not
           // transactional, so silently continuing left staff with no idea which
-          // rows landed in the live agent's knowledge base.
+          // rows were saved.
           failure = { position: index + 1, message: errorText(err) };
           break;
         }
@@ -1631,7 +1631,7 @@ function AdminCms() {
                       AI 知識庫
                     </CardTitle>
                     <CardDescription>
-                      常見問題、屋苑、文章及放盤會用作前台 AI 的回答來源。
+                      常見問題、屋苑、文章及放盤會用作內容副駕的參考資料。
                     </CardDescription>
                   </div>
                 </div>
