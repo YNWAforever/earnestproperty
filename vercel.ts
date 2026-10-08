@@ -26,17 +26,20 @@ const detailRedirects = importedRedirects.map((redirect) =>
   redirectEntry(redirect.source, redirect.destination, redirect.permanent),
 );
 
-// SEO canonical URLs do not activate a domain cutover. Enable host redirects
-// only after the custom domain is verified to serve this deployment and assets.
 const FALLBACK_HOST = "earnestproperty.vercel.app";
-function canonicalHostRedirects(): VercelRedirect[] {
-  if (process.env.CANONICAL_HOST_REDIRECT_ENABLED !== "true") return [];
-  const resolved = resolveSiteOrigin();
+// Machine and browser-runtime paths are never host-redirected: a cross-origin
+// 308 drops Authorization, WozTell may not follow it, and the cron worker
+// refuses it (JOB_DRAIN_REDIRECTED). Vercel cannot match on method.
+export const HOST_REDIRECT_EXCLUDED_PREFIXES = ["api", "_serverFn", "w/", ".well-known"] as const;
+export const HOST_REDIRECT_SOURCE = "/((?!api(?:/|$)|_serverFn(?:/|$)|w/|\\.well-known(?:/|$)).*)";
+export function canonicalHostRedirects(env = process.env): VercelRedirect[] {
+  if (env.VERCEL_ENV !== "production") return [];
+  const resolved = resolveSiteOrigin(env);
   if (!resolved) return [];
   const origin = new URL(resolved);
-  if (origin.host === FALLBACK_HOST || origin.host.endsWith(".vercel.app")) return [];
+  if (origin.protocol !== "https:" || origin.host.endsWith(".vercel.app")) return [];
   return [
-    redirectEntry("/:path*", `${origin.origin}/:path*`, true, {
+    redirectEntry(HOST_REDIRECT_SOURCE, `${origin.origin}/$1`, true, {
       has: [{ type: "host", value: FALLBACK_HOST }],
     }),
   ];

@@ -30,29 +30,30 @@ test("resolveSiteOrigin prefers VITE_SITE_URL, then Vercel's production URL, els
   assert.equal(resolveSiteOrigin({}), null);
 });
 
-// A canonical SEO URL is not proof that DNS/the custom host serves this app.
-test("custom-domain redirect is opt-in independently of the SEO origin", async () => {
+// The host redirect is generated only by production builds whose origin is a
+// custom (non-vercel.app) https host. Previews never get it.
+test("custom-domain redirect follows the production origin, never a vercel.app origin", async () => {
   const { execFileSync } = await import("node:child_process");
-  function redirects(flag, origin = "https://www.earnestproperty.com") {
+  function redirects(VERCEL_ENV, VITE_SITE_URL = "https://www.earnestproperty.com") {
+    const env = { PATH: process.env.PATH, VERCEL_ENV, VITE_SITE_URL };
+    if (process.env.SystemRoot) env.SystemRoot = process.env.SystemRoot;
     return JSON.parse(
       execFileSync(
         process.execPath,
         [
           "--experimental-strip-types",
+          "--no-warnings",
           "--input-type=module",
           "-e",
           "import {config} from './vercel.ts'; console.log(JSON.stringify(config.redirects.filter(r=>r.has?.some(h=>h.type==='host'))));",
         ],
-        {
-          cwd: process.cwd(),
-          encoding: "utf8",
-          env: { ...process.env, VITE_SITE_URL: origin, CANONICAL_HOST_REDIRECT_ENABLED: flag },
-        },
+        { cwd: process.cwd(), encoding: "utf8", env },
       ),
     );
   }
-  assert.deepEqual(redirects(""), []);
-  assert.deepEqual(redirects("false"), []);
-  assert.equal(redirects("true")[0].destination, "https://www.earnestproperty.com/:path*");
-  assert.deepEqual(redirects("true", "https://earnestproperty.vercel.app"), []);
+  const production = redirects("production");
+  assert.equal(production.length, 1);
+  assert.equal(production[0].destination, "https://www.earnestproperty.com/$1");
+  assert.deepEqual(redirects("production", "https://earnestproperty.vercel.app"), []);
+  assert.deepEqual(redirects("preview"), []);
 });

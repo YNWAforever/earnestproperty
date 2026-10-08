@@ -32,10 +32,12 @@ A production build fails when `WOZTELL_ENABLED=true` or `EP_WA_TRACKED_LINKS_ENA
 Register this endpoint in the WozTell channel settings:
 
 ```text
-https://earnestproperty.vercel.app/api/woztell/webhook
+https://www.earnestproperty.com/api/woztell/webhook
 ```
 
-Keep this URL on `earnestproperty.vercel.app` until FX-13 ships the `/api/*` host-redirect exclusion.
+The older `https://earnestproperty.vercel.app/api/woztell/webhook` registration keeps
+working: production 308s pages on `earnestproperty.vercel.app` to www, but `/api/*` is
+never host-redirected.
 
 The handler verifies `X-Woztell-Signature` against the raw request body before
 parsing JSON. It stores contacts, conversations, and messages using the
