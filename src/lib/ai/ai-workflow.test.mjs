@@ -195,7 +195,11 @@ test("lead score ignores the model-guessed timeline", async () => {
 
   assert.equal(withTimeline, withoutTimeline);
   const source = await readFile(new URL("./crm-rules.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /timeline/);
+  // Only the function's code counts: a comment elsewhere in the file may mention the timeline.
+  const scoreFunction = source.match(/export function scoreLeadProfile\([\s\S]*?\r?\n\}\r?\n/);
+  assert.ok(scoreFunction, "scoreLeadProfile not found in crm-rules.ts");
+  const code = scoreFunction[0].replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.doesNotMatch(code, /\btimeline\b/);
 });
 
 test("parseSegmentPromptToFilters maps common Hong Kong property audience language", async () => {

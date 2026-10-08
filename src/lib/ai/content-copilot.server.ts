@@ -362,8 +362,9 @@ function validateGeneratedProposal(
     }
     const ungrounded = ungroundedNumbers(copilotValueText(patch.after), facts);
     if (ungrounded.length === 0) return patch;
+    // The number flags go first so the schema's 20-claim cap never drops them.
     const unsupportedClaims = [
-      ...new Set([...patch.unsupportedClaims, ...ungrounded.map((raw) => `數字未有來源：${raw}`)]),
+      ...new Set([...ungrounded.map((raw) => `數字未有來源：${raw}`), ...patch.unsupportedClaims]),
     ].slice(0, 20);
     return { ...patch, unsupportedClaims };
   });

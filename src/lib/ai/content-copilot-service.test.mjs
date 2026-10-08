@@ -439,8 +439,22 @@ const estateRequest = {
   researchMode: "internal",
 };
 
-async function generateEstatePatch({ before, after, claimType, evidence = [], evidenceIds = [] }) {
-  const resource = { id: estateRequest.resourceId, name_zh: "海景花園", description: before };
+const listingFeaturesRequest = {
+  ...listingRequest,
+  selectedFields: ["features"],
+};
+
+async function generateEstatePatch({
+  request = estateRequest,
+  field = "description",
+  before,
+  after,
+  claimType,
+  evidence = [],
+  evidenceIds = [],
+  unsupportedClaims = [],
+}) {
+  const resource = { id: request.resourceId, name_zh: "海景花園", [field]: before };
   let completedProposal = null;
   const service = createContentCopilotService(
     makeServiceDeps({
@@ -460,13 +474,13 @@ async function generateEstatePatch({ before, after, claimType, evidence = [], ev
         value: {
           patches: [
             {
-              field: "description",
+              field,
               before,
               after,
               reason: "Improve the description",
               confidence: "medium",
               evidenceIds,
-              unsupportedClaims: [],
+              unsupportedClaims,
               claimType,
             },
           ],
@@ -479,7 +493,7 @@ async function generateEstatePatch({ before, after, claimType, evidence = [], ev
       }),
     }),
   );
-  const result = await service.generateContentProposal(estateRequest, managerActor);
+  const result = await service.generateContentProposal(request, managerActor);
   assert.equal(result.ok, true);
   return { proposal: completedProposal, resource };
 }
@@ -530,4 +544,60 @@ test("a factual patch whose number is in its cited evidence is not flagged", asy
   });
 
   assert.deepEqual(proposal.patches[0].unsupportedClaims, []);
+});
+
+test("an array patch whose item adds an unsourced number is flagged with the raw text", async () => {
+  const { proposal } = await generateEstatePatch({
+    request: listingFeaturesRequest,
+    field: "features",
+    before: ["海景", "會所"],
+    after: ["海景", "會所", "實用 512 呎"],
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, ["數字未有來源：512"]);
+});
+
+test("a number found only in evidence the patch does not cite is still flagged", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: "海景兩房單位，實用 512 呎",
+    claimType: "subjective",
+    evidence: [
+      {
+        id: "internal-estate-1",
+        type: "internal",
+        title: "海景花園",
+        url: null,
+        excerpt: "兩房單位實用面積 512 呎，向海。",
+      },
+    ],
+    evidenceIds: [],
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, ["數字未有來源：512"]);
+});
+
+test("the same unsourced number twice in a patch produces one flag", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: "海景兩房單位，售價 $7.2M。再講一次：售價 $7.2M",
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, ["數字未有來源：$7.2M"]);
+});
+
+test("the number flag survives the 20-claim cap when the model already returned 20 claims", async () => {
+  const modelClaims = Array.from({ length: 20 }, (_, index) => `模型聲稱 ${index + 1}`);
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: "海景兩房單位，售價 $7.2M",
+    claimType: "subjective",
+    unsupportedClaims: modelClaims,
+  });
+
+  const claims = proposal.patches[0].unsupportedClaims;
+  assert.ok(claims.includes("數字未有來源：$7.2M"));
+  assert.ok(claims.length <= 20);
 });
