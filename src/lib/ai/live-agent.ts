@@ -77,6 +77,14 @@ export function validateHandoffPhone(raw: string | null | undefined): HandoffPho
   if (compact.startsWith("+852") || compact.startsWith("00852")) {
     return { ok: false, code: "LIVE_AGENT_PHONE_INVALID" };
   }
+  // FX-12 owner decision: "+" typed before an 8-digit Hong Kong number is Hong Kong, so it
+  // gets the same mobile check as a bare 8-digit number and the same canonical 852 form.
+  const plusLocal = /^\+([2-9]\d{7})$/.exec(compact);
+  if (plusLocal) {
+    return /^[4-9]/.test(plusLocal[1])
+      ? { ok: true, normalized: `852${plusLocal[1]}` }
+      : { ok: false, code: "LIVE_AGENT_PHONE_INVALID" };
+  }
 
   const international = /^\+([1-9]\d{7,14})$/.exec(compact);
   if (international) return { ok: true, normalized: international[1] };

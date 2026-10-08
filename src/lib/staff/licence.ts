@@ -6,16 +6,22 @@
  * passes through here, and anything that fails becomes null rather than a guess.
  */
 
+import { hkLocalNumber, normalizePhone } from "../phone.js";
+
 /** Hong Kong subscriber numbers are 8 digits and start 2, 3, 5, 6 or 9. */
 const HK_PHONE = /^[23569]\d{7}$/;
 
 /** EAA individual licence: one letter, six digits. The agency form is excluded below. */
 const EAA_INDIVIDUAL = /^([A-Z])-?(\d{6})$/;
 
+/**
+ * Parsed by the shared customer normaliser (FX-12), but the result stays the 8-digit
+ * local number: staff phones are display data, not customer identity.
+ */
 export function normalisePhone(input: string | null | undefined): string | null {
   if (!input) return null;
-  const digits = input.replace(/\D/g, "").replace(/^852/, "");
-  return HK_PHONE.test(digits) ? digits : null;
+  const local = hkLocalNumber(normalizePhone(input));
+  return local && HK_PHONE.test(local) ? local : null;
 }
 
 export function normaliseLicence(input: string | null | undefined): string | null {

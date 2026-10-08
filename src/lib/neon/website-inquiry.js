@@ -1,4 +1,5 @@
 import { leadAlertEnqueueCte } from "./lead-alert-enqueue.js";
+import { phoneMatchSql, phoneSpellingTiebreakSql } from "../phone.js";
 
 export function deriveWebsiteInquiryRouting(listing) {
   if (!listing) {
@@ -76,10 +77,9 @@ export async function persistWebsiteInquiry(query, input) {
           updated_at = now()
         WHERE ${sourceGuard} AND c.id = (
           SELECT id FROM crm_contacts
-          WHERE normalized_phone = $3
-            OR (length($3::text) = 11 AND left($3::text, 3) = '852'
-              AND normalized_phone = right($3::text, 8))
-          ORDER BY (normalized_phone = $3) DESC, id
+          WHERE ${phoneMatchSql("normalized_phone", "$3")}
+          ORDER BY (normalized_phone = $3) DESC,
+            ${phoneSpellingTiebreakSql("normalized_phone", "$3")}, id
           LIMIT 1
         )
         RETURNING id

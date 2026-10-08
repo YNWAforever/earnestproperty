@@ -1,6 +1,7 @@
 import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 import "@tanstack/react-start/server-only";
 import { normalizeAdminPhone } from "../neon/admin-workflow.ts";
+import { PHONE_LOCK_PREFIX, phoneMatchSql, phoneSpellingTiebreakSql } from "../phone.js";
 import { isOptOutText, outboundWoztellEvidence } from "./woztell.server.ts";
 import type { NormalizedWoztellEvent } from "./woztell.server.ts";
 
@@ -155,7 +156,7 @@ export async function ingestWoztellEvent(
       skipped: "no-identity",
     };
   const keys = [
-    normalizedPhone ? `woztell-phone:${normalizedPhone}` : null,
+    normalizedPhone ? `${PHONE_LOCK_PREFIX}${normalizedPhone}` : null,
     memberId ? `woztell-member:${memberId}` : null,
     `woztell-message:${event.externalMessageId}`,
   ]
@@ -172,17 +173,16 @@ export async function ingestWoztellEvent(
     })),
     {
       statement: `WITH matched AS (
-      SELECT * FROM crm_contacts WHERE normalized_phone=$1
-        OR (length($1::text)=11 AND left($1::text,3)='852'
-          AND normalized_phone=right($1::text,8)) OR whatsapp_member_id=$2
+      SELECT * FROM crm_contacts WHERE ${phoneMatchSql("normalized_phone", "$1")}
+        OR whatsapp_member_id=$2
     ), valid AS (
       SELECT * FROM matched
-      WHERE (normalized_phone IS NULL OR $1::text IS NULL OR normalized_phone=$1
-        OR (length($1::text)=11 AND left($1::text,3)='852'
-          AND normalized_phone=right($1::text,8)))
+      WHERE (normalized_phone IS NULL OR $1::text IS NULL
+        OR ${phoneMatchSql("normalized_phone", "$1")})
         AND (whatsapp_member_id IS NULL OR $2::text IS NULL OR whatsapp_member_id=$2)
       ORDER BY (whatsapp_member_id=$2) DESC NULLS LAST,
-        (normalized_phone=$1) DESC NULLS LAST, id
+        (normalized_phone=$1) DESC NULLS LAST,
+        ${phoneSpellingTiebreakSql("normalized_phone", "$1")}, id
       LIMIT 1
     ), opt_out AS (
       -- FX-08: $5 is true only for a live inbound D4 message. It is applied unless THIS

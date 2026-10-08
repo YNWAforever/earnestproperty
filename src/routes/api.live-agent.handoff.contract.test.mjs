@@ -22,7 +22,9 @@ function loadTypeScript(relativePath, mocks = {}) {
 
 const { leadBudgetError } = loadTypeScript("src/lib/admin/lead-budget.ts");
 const liveAgent = loadTypeScript("src/lib/ai/live-agent.ts", {
-  "../neon/admin-workflow.ts": loadTypeScript("src/lib/neon/admin-workflow.ts"),
+  "../neon/admin-workflow.ts": loadTypeScript("src/lib/neon/admin-workflow.ts", {
+    "../phone.js": loadTypeScript("src/lib/phone.js"),
+  }),
 });
 
 const PHONE_REQUIRED_COPY = "請輸入電話號碼，方便代理聯絡你。";
