@@ -3,6 +3,14 @@ import { load } from "cheerio";
 import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
+
+import { SiteFooter } from "@/components/site/SiteFooter";
 
 import { formatHkDate, freshnessLabel } from "@/lib/format";
 
@@ -262,5 +270,33 @@ describe("VerificationBadge", () => {
     const el = $("span").first();
     expect(el.text()).toBe("待核實");
     expect(el.hasClass("bg-muted")).toBe(true);
+  });
+});
+
+describe("SiteFooter", () => {
+  test("footer logo is lazy and is not preloaded", async () => {
+    const router = createRouter({
+      routeTree: createRootRoute({ component: SiteFooter }),
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+      isServer: true,
+    });
+    await router.load();
+    // A full document, so React 19 has a <head> to hoist an image preload into.
+    const html = renderToStaticMarkup(
+      createElement(
+        "html",
+        null,
+        createElement("head"),
+        createElement("body", null, createElement(RouterProvider, { router })),
+      ),
+    );
+    const $ = load(html);
+    const logo = $('footer img[alt="晉誠地產 Earnest Property Agency Ltd."]');
+    expect(logo).toHaveLength(1);
+    expect(logo.attr("loading")).toBe("lazy");
+    expect(logo.attr("decoding")).toBe("async");
+    expect(logo.attr("width")).toBe("800");
+    expect(logo.attr("height")).toBe("800");
+    expect(html).not.toContain('rel="preload"');
   });
 });

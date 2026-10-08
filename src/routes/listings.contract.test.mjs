@@ -511,3 +511,41 @@ test("listings route caches through publicPageCacheHeaders", () => {
     /errorComponent: ListingsErrorComponent,\n {2}headers: publicPageCacheHeaders,\n {2}component: ListingsPage,/,
   );
 });
+
+test("first listing card image is eager with fetchPriority high; the rest stay lazy", () => {
+  const cardBody = source.slice(
+    source.indexOf("function ListingCard("),
+    source.indexOf("// Same data as ListingCard"),
+  );
+  const rowBody = source.slice(
+    source.indexOf("function ListingCardRow("),
+    source.indexOf("function Pagination("),
+  );
+  const gridMap = source.slice(
+    source.indexOf('viewMode === "grid" ? ('),
+    source.indexOf('<ul className="space-y-3">'),
+  );
+  const listMap = source.slice(
+    source.indexOf('<ul className="space-y-3">'),
+    source.indexOf("</ul>", source.indexOf('<ul className="space-y-3">')),
+  );
+  for (const [name, map, component] of [
+    ["grid", gridMap, "ListingCard"],
+    ["list", listMap, "ListingCardRow"],
+  ]) {
+    assert.match(map, /rows\.map\(\(p: ListingRow, index: number\) =>/, `${name} map index`);
+    assert.match(
+      map,
+      new RegExp(String.raw`<${component}\s[\s\S]*?priority=\{index === 0\}`),
+      name,
+    );
+  }
+  for (const [name, body] of [
+    ["ListingCard", cardBody],
+    ["ListingCardRow", rowBody],
+  ]) {
+    assert.match(body, /priority\?: boolean/, `${name} declares priority`);
+    assert.match(body, /<AppImage[^>]*loading=\{priority \? "eager" : "lazy"\}/, name);
+    assert.match(body, /<AppImage[^>]*fetchPriority=\{priority \? "high" : undefined\}/, name);
+  }
+});

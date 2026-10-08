@@ -47,6 +47,8 @@ export function SiteFooter() {
                 alt="晉誠地產 Earnest Property Agency Ltd."
                 width={800}
                 height={800}
+                loading="lazy"
+                decoding="async"
                 className="h-32 w-32 bg-white p-1 object-contain"
               />
             </div>

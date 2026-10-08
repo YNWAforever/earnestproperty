@@ -1153,21 +1153,23 @@ function ListingsPage() {
             </div>
           ) : viewMode === "grid" ? (
             <ul className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-              {rows.map((p: ListingRow) => (
+              {rows.map((p: ListingRow, index: number) => (
                 <ListingCard
                   key={p.id}
                   p={p}
                   enquiryAction={listingEnquiryActions.find((a) => a.propertyId === p.id)}
+                  priority={index === 0}
                 />
               ))}
             </ul>
           ) : (
             <ul className="space-y-3">
-              {rows.map((p: ListingRow) => (
+              {rows.map((p: ListingRow, index: number) => (
                 <ListingCardRow
                   key={p.id}
                   p={p}
                   enquiryAction={listingEnquiryActions.find((a) => a.propertyId === p.id)}
+                  priority={index === 0}
                 />
               ))}
             </ul>
@@ -1211,7 +1213,15 @@ function handleCardShare(title: string, listingNo: string) {
   void shareUrl(title, `${SITE_URL}/property/${listingNo}`);
 }
 
-function ListingCard({ p, enquiryAction }: { p: ListingRow; enquiryAction?: PublicWaAction }) {
+function ListingCard({
+  p,
+  enquiryAction,
+  priority = false,
+}: {
+  p: ListingRow;
+  enquiryAction?: PublicWaAction;
+  priority?: boolean;
+}) {
   const { cover, safeTitle, price } = deriveListingCardData(p);
   const { favourited, toggle } = useFavourite(publicPropertyNo(p), p.listing_aliases);
   const action =
@@ -1242,6 +1252,8 @@ function ListingCard({ p, enquiryAction }: { p: ListingRow; enquiryAction?: Publ
             alt={safeTitle}
             width={400}
             height={300}
+            loading={priority ? "eager" : "lazy"}
+            fetchPriority={priority ? "high" : undefined}
             className="h-full w-full object-cover transition group-hover:scale-105"
           />
           <span className="absolute left-2 top-2 rounded bg-background/90 px-2 py-0.5 text-[11px] font-medium">
@@ -1317,7 +1329,15 @@ function ListingCard({ p, enquiryAction }: { p: ListingRow; enquiryAction?: Publ
 // Same data as ListingCard, horizontal row layout for the list view toggle
 // -- deliberately not a fully independent component: it shares
 // deriveListingCardData() rather than re-deriving price itself.
-function ListingCardRow({ p, enquiryAction }: { p: ListingRow; enquiryAction?: PublicWaAction }) {
+function ListingCardRow({
+  p,
+  enquiryAction,
+  priority = false,
+}: {
+  p: ListingRow;
+  enquiryAction?: PublicWaAction;
+  priority?: boolean;
+}) {
   const { cover, safeTitle, price } = deriveListingCardData(p);
   const { favourited, toggle } = useFavourite(publicPropertyNo(p), p.listing_aliases);
   const action =
@@ -1350,6 +1370,8 @@ function ListingCardRow({ p, enquiryAction }: { p: ListingRow; enquiryAction?: P
               alt={safeTitle}
               width={200}
               height={150}
+              loading={priority ? "eager" : "lazy"}
+              fetchPriority={priority ? "high" : undefined}
               className="h-full w-full object-cover transition group-hover:scale-105"
             />
             <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium">
