@@ -1979,6 +1979,7 @@ function formatActivityType(type: string) {
     call: "電話",
     viewing: "睇樓",
     follow_up: "跟進",
+    suspected_bot: "疑似機械人",
   };
   return labels[type] ?? type;
 }

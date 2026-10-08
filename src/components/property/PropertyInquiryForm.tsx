@@ -10,6 +10,7 @@ import { createWebsiteInquiry } from "@/lib/neon/admin-data";
 import { buildPropertyInquiryPayload } from "@/components/property/property-decision.js";
 import { submitPublicForm } from "@/lib/public-form-submit";
 import { FormStatus, type FormStatusState } from "@/components/site/FormStatus";
+import { HoneypotField } from "@/components/site/HoneypotField";
 
 const inquirySchema = z.object({
   name: z.string().trim().min(1, "請輸入姓名").max(120, "姓名過長"),
@@ -52,6 +53,7 @@ export function PropertyInquiryForm({
       email: String(fd.get("email") ?? ""),
       message: String(fd.get("message") ?? ""),
     };
+    const website = fd.get("website") ?? undefined;
     // Clear any previous result first so a stale error never sits next to a
     // fresh attempt.
     setStatus({ kind: "idle" });
@@ -63,16 +65,19 @@ export function PropertyInquiryForm({
     setSubmitting(true);
     const outcome = await submitPublicForm(() =>
       createWebsiteInquiry({
-        data: buildPropertyInquiryPayload({
-          form: {
-            name: parsed.data.name,
-            phone: parsed.data.phone,
-            email: parsed.data.email || "",
-            message: parsed.data.message || "",
-          },
-          propertyId,
-          consentWhatsapp,
-        }),
+        data: {
+          ...buildPropertyInquiryPayload({
+            form: {
+              name: parsed.data.name,
+              phone: parsed.data.phone,
+              email: parsed.data.email || "",
+              message: parsed.data.message || "",
+            },
+            propertyId,
+            consentWhatsapp,
+          }),
+          website,
+        },
       }),
     );
     setSubmitting(false);
@@ -87,11 +92,12 @@ export function PropertyInquiryForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3">
+    <form onSubmit={handleSubmit} className="relative space-y-3">
       <div>
         <Label htmlFor="name">姓名 *</Label>
         <Input id="name" name="name" required maxLength={120} placeholder="陳先生" />
       </div>
+      <HoneypotField />
       <div>
         <Label htmlFor="phone">電話 *</Label>
         <Input id="phone" name="phone" required type="tel" maxLength={30} placeholder="9123 4567" />

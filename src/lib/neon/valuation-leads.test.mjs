@@ -73,6 +73,7 @@ test("persistValuationLead writes through one atomic, parameterized INSERT", asy
     VALUATION_CONSENT_VERSION,
     consentedAt,
     JSON.stringify({ utm_source: "google" }),
+    false,
   ]);
 });
 
@@ -189,7 +190,7 @@ test("createValuationLead's public server fn requires consent === true, strips f
 
   assert.match(fnSource, /enforceRateLimit/);
   assert.match(fnSource, /clientIpFromRequest/);
-  assert.match(fnSource, /adminData\.createValuationLead\(data\)/);
+  assert.match(fnSource, /adminData\.createValuationLead\(\{ \.\.\.fields, suspectedBot \}\)/);
 });
 
 // This is the exact hostile-input scenario the plan calls out: a client
@@ -272,4 +273,47 @@ test("OwnerValuationPanel's structured form starts with consent unchecked and is
     consentGuardIndex < createCallIndex,
     "the consent check must happen before the server fn is called",
   );
+});
+
+test("a flagged submission is saved and audited in one statement", async () => {
+  const { persistValuationLead } = await import(moduleUrl);
+  const input = {
+    name: "陳先生",
+    phone: "9123 4567",
+    email: null,
+    propertyAddress: "深井某屋苑",
+    estateId: null,
+    notes: null,
+    consentText: "text",
+    consentVersion: "1",
+    consentedAt: "2026-08-30T00:00:00.000Z",
+    utm: {},
+  };
+  const run = async (overrides) => {
+    const calls = [];
+    const result = await persistValuationLead(
+      async (sql, params) => {
+        calls.push({ sql, params });
+        return [{ id: "valuation-9" }];
+      },
+      { ...input, ...overrides },
+    );
+    assert.equal(calls.length, 1, "save and audit share one statement");
+    return { result, ...calls[0] };
+  };
+  const flagged = await run({ suspectedBot: true });
+  assert.deepEqual(flagged.result, { id: "valuation-9" }, "the saved row's id is still returned");
+  assert.match(flagged.sql, /WITH inserted AS \(\s*INSERT INTO valuation_leads/);
+  assert.match(flagged.sql, /INSERT INTO audit_logs/);
+  assert.ok(flagged.sql.includes("'public_form.suspected_bot'"));
+  assert.ok(flagged.sql.includes("'valuation_lead'"));
+  assert.match(flagged.sql, /FROM inserted WHERE \$11::boolean/);
+  assert.match(flagged.sql, /SELECT id FROM inserted\s*$/);
+  assert.equal(flagged.params.length, 11);
+  assert.equal(flagged.params.at(-1), true);
+  const unflagged = await run({});
+  assert.equal(unflagged.params.at(-1), false);
+  assert.equal(unflagged.sql, flagged.sql);
+  assert.deepEqual(unflagged.params.slice(0, -1), flagged.params.slice(0, -1));
+  assert.equal((await run({ suspectedBot: "yes" })).params.at(-1), false);
 });

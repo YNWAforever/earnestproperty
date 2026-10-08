@@ -20,6 +20,7 @@ import {
   submitContactInquiry,
 } from "@/lib/contact-inquiry-form";
 import { FormStatus, type FormStatusState } from "@/components/site/FormStatus";
+import { HoneypotField } from "@/components/site/HoneypotField";
 
 const CONTACT_FORM_STATUS_ID = "contact-form-status";
 
@@ -75,6 +76,7 @@ export function ContactInquiryForm() {
         raw,
         consentWhatsapp,
         submitFn: (payload) => createWebsiteInquiry({ data: payload }),
+        website: fd.get("website") ?? undefined,
       });
 
       switch (outcome.status) {
@@ -102,11 +104,12 @@ export function ContactInquiryForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 max-w-md space-y-3">
+    <form onSubmit={handleSubmit} className="relative mt-4 max-w-md space-y-3">
       <div>
         <Label htmlFor="contact-name">姓名 *</Label>
         <Input id="contact-name" name="name" required maxLength={120} placeholder="陳先生" />
       </div>
+      <HoneypotField />
       <div>
         <Label htmlFor="contact-phone">電話 *</Label>
         <Input

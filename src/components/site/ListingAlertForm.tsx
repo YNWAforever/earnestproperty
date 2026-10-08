@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -9,6 +9,7 @@ import { LISTING_ALERT_CONSENT_TEXT } from "@/lib/neon/listing-alerts.js";
 import { buildContext, track } from "@/lib/analytics/events";
 import { submitPublicForm } from "@/lib/public-form-submit";
 import { FormStatus, type FormStatusState } from "@/components/site/FormStatus";
+import { HoneypotField } from "@/components/site/HoneypotField";
 
 const UTM_PARAM_KEYS = [
   "utm_source",
@@ -61,6 +62,7 @@ export function ListingAlertForm({
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [status, setStatus] = useState<FormStatusState>({ kind: "idle" });
+  const honeypotRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -81,6 +83,7 @@ export function ListingAlertForm({
           filters: { ...search },
           consent,
           utm: collectUtmParams(),
+          website: honeypotRef.current?.value,
         },
       }),
     );
@@ -118,7 +121,7 @@ export function ListingAlertForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="rounded-lg border bg-card p-6">
+    <form onSubmit={handleSubmit} className="relative rounded-lg border bg-card p-6">
       <h2 className="text-base font-semibold text-primary">未有符合嘅放盤？等新盤通知你</h2>
       <p className="mt-1 text-sm text-muted-foreground">
         留低聯絡方法，有符合呢個搜尋條件嘅新放盤，我們會盡快通知你。
@@ -135,6 +138,7 @@ export function ListingAlertForm({
             placeholder="陳先生"
           />
         </div>
+        <HoneypotField inputRef={honeypotRef} />
         <div>
           <Label htmlFor="alert-phone">電話 *</Label>
           <Input
