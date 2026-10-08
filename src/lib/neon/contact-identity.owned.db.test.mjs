@@ -507,6 +507,125 @@ test("FX-12 contact identity on owned Postgres", { timeout: 300000 }, async (t) 
           );
         },
       );
+
+      await t.test(
+        "activity contact comes from the lead, never from the client (B-10)",
+        async () => {
+          const K = id(800);
+          const Z = id(801);
+          const L = id(802);
+          await query(
+            `INSERT INTO crm_contacts(id,name,normalized_phone,source)
+             VALUES($1,'Synthetic FX12 K','85255550080','website'),
+                   ($2,'Synthetic FX12 Z','85255550081','website')`,
+            [K, Z],
+          );
+          await query(
+            "INSERT INTO crm_leads(id,contact_id,assigned_agent_id,stage,intent) VALUES($1,$2,$3,'new','buyer')",
+            [L, K, AGENT],
+          );
+          const agentActor = {
+            staffId: AGENT,
+            authUserId: "synthetic-fx12-" + AGENT,
+            roles: ["agent"],
+          };
+          const base = {
+            lead_id: L,
+            activity_type: "note",
+            body: "x",
+            due_at: null,
+            completed_at: null,
+          };
+          const forged = await server.createAdminLeadActivity(
+            { ...base, contact_id: Z },
+            agentActor,
+          );
+          const omitted = await server.createAdminLeadActivity(base, agentActor);
+          const rows = await query("SELECT id,contact_id FROM crm_activities WHERE lead_id=$1", [
+            L,
+          ]);
+          assert.equal(rows.length, 2);
+          assert.deepEqual(rows.map((r) => r.id).sort(), [forged.id, omitted.id].sort());
+          for (const row of rows) assert.equal(row.contact_id, K);
+        },
+      );
+
+      await t.test(
+        "a stale tab after a phone correction still files the note on the lead's current contact",
+        async () => {
+          const K = id(810);
+          const K2 = id(811);
+          const L = id(812);
+          await query(
+            `INSERT INTO crm_contacts(id,name,normalized_phone,source)
+             VALUES($1,'Synthetic FX12 old','85255550082','website'),
+                   ($2,'Synthetic FX12 corrected','85255550083','website')`,
+            [K, K2],
+          );
+          await query(
+            "INSERT INTO crm_leads(id,contact_id,assigned_agent_id,stage,intent) VALUES($1,$2,$3,'new','buyer')",
+            [L, K, AGENT],
+          );
+          await query("UPDATE crm_leads SET contact_id=$2, updated_at=now() WHERE id=$1", [L, K2]);
+          const agentActor = {
+            staffId: AGENT,
+            authUserId: "synthetic-fx12-" + AGENT,
+            roles: ["agent"],
+          };
+          const { id: activityId } = await server.createAdminLeadActivity(
+            {
+              lead_id: L,
+              contact_id: K,
+              activity_type: "note",
+              body: "stale",
+              due_at: null,
+              completed_at: null,
+            },
+            agentActor,
+          );
+          const [row] = await query("SELECT contact_id FROM crm_activities WHERE id=$1", [
+            activityId,
+          ]);
+          assert.equal(row.contact_id, K2);
+        },
+      );
+
+      await t.test("agent scope is unchanged", async () => {
+        const K = id(820);
+        const L = id(821);
+        await query(
+          "INSERT INTO crm_contacts(id,name,normalized_phone,source) VALUES($1,'Synthetic FX12 scope','85255550084','website')",
+          [K],
+        );
+        await query(
+          "INSERT INTO crm_leads(id,contact_id,assigned_agent_id,stage,intent) VALUES($1,$2,$3,'new','buyer')",
+          [L, K, MANAGER],
+        );
+        const agentActor = {
+          staffId: AGENT,
+          authUserId: "synthetic-fx12-" + AGENT,
+          roles: ["agent"],
+        };
+        await assert.rejects(
+          server.createAdminLeadActivity(
+            {
+              lead_id: L,
+              contact_id: K,
+              activity_type: "note",
+              body: "no",
+              due_at: null,
+              completed_at: null,
+            },
+            agentActor,
+          ),
+          (error) => error instanceof Response && error.status === 403,
+        );
+        const [{ n }] = await query(
+          "SELECT count(*)::int AS n FROM crm_activities WHERE lead_id=$1",
+          [L],
+        );
+        assert.equal(n, 0);
+      });
     });
   } finally {
     network.mock.restore();

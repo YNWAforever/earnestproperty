@@ -493,7 +493,8 @@ export type AdminLeadUpdateResult =
 
 export type AdminLeadActivityInput = {
   lead_id: string;
-  contact_id: string | null;
+  /** Ignored by the server since FX-12 (B-10); the lead decides. */
+  contact_id?: string | null;
   activity_type: "note" | "call" | "viewing" | "follow_up";
   body: string;
   due_at: string | null;

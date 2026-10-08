@@ -2904,15 +2904,17 @@ export async function createAdminLeadActivity(input: AdminLeadActivityInput, act
   // The rows then surfaced in the real owner's timeline and in the Command
   // Center's overdue KPI.
   await assertLeadInScope(input.lead_id, actor);
+  // The contact is the lead's own customer (FX-12, B-10), never the client's
+  // contact_id, which goes stale when a phone correction relinks the lead. An
+  // activity does not bump the lead version.
   const rows = await queryRows(
     `INSERT INTO crm_activities (
       lead_id, contact_id, staff_user_id, activity_type, body, due_at, completed_at
     )
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     SELECT l.id, l.contact_id, $2, $3, $4, $5, $6 FROM crm_leads l WHERE l.id = $1::uuid
      RETURNING id`,
     [
       input.lead_id,
-      input.contact_id,
       actor.staffId,
       input.activity_type,
       input.body,
@@ -2920,6 +2922,7 @@ export async function createAdminLeadActivity(input: AdminLeadActivityInput, act
       input.completed_at,
     ],
   );
+  if (!rows[0]) throw new Response("Not found", { status: 404 });
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, "lead.activity", "lead", input.lead_id, {
     activityId: id,
