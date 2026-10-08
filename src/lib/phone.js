@@ -7,7 +7,10 @@
  * comparison of customer phones goes through phoneMatchSql or phoneEquivalentsSql.
  */
 
-const ALLOWED = /^\+?[0-9 .()-]*$/;
+// A leading label staff or customers type before the number (namecards, forms).
+const LABEL = /^(?:telephone|tel|t|phone|mobile|whatsapp|wa|電話|手提)\s*[:.]?\s*/i;
+// Formatting only: whitespace, dots, parentheses, slashes and hyphens.
+const SEPARATORS = /[\s.()/-]/g;
 const HK_CANONICAL = /^852[2-9][0-9]{7}$/;
 const HK_LOCAL = /^[2-9][0-9]{7}$/;
 const SQL_IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_.]*$/;
@@ -16,33 +19,49 @@ const SQL_PARAM = /^\$\d+$/;
 /** The advisory lock key prefix ingest already uses; the Task 6 script uses the same. */
 export const PHONE_LOCK_PREFIX = "woztell-phone:";
 
-/**
- * Canonical customer phone: digits only. Hong Kong is "852" + 8 digits; any other
- * number is its E.164 digits without "+". Returns null for anything that is not
- * clearly a phone number. A null is never turned into a guess.
- */
-export function normalizePhone(raw) {
-  if (raw === null || raw === undefined) return null;
-  const text = String(raw).normalize("NFKC").trim();
-  if (!text || !ALLOWED.test(text)) return null;
-  let digits = text.replace(/[^0-9]/g, "");
-  let international = text.startsWith("+");
+function parseNumber(text) {
+  const compact = text.replace(SEPARATORS, "");
+  // Only digits remain, with at most one "+" in front. Letters ("ext"), commas, a
+  // second "+" or a "+" inside the number mean it is not one clear phone number.
+  if (!/^\+?[0-9]+$/.test(compact)) return null;
+  let international = compact.startsWith("+");
+  let digits = international ? compact.slice(1) : compact;
   if (!international && digits.startsWith("00")) {
     international = true;
     digits = digits.slice(2);
   }
-  if (!digits) return null;
   if (international) {
+    // 852 is Hong Kong only, so a typed +852 / 00852 must be a valid HK number.
     if (digits.startsWith("852")) return HK_CANONICAL.test(digits) ? digits : null;
     // Owner decision (Open question 4): "+" typed before an 8-digit HK number is HK.
+    // This also captures the rare genuine 8-digit E.164 number (e.g. "+500 12345",
+    // Falklands); the owner accepted that trade-off.
     if (HK_LOCAL.test(digits)) return "852" + digits;
     return /^[1-9][0-9]{7,14}$/.test(digits) ? digits : null;
   }
   if (HK_LOCAL.test(digits)) return "852" + digits;
-  if (HK_CANONICAL.test(digits)) return digits;
   // WozTell sends international numbers without "+", e.g. "8613812345678".
   if (digits.length >= 10 && digits.length <= 15) return digits;
   return null;
+}
+
+/**
+ * Canonical customer phone: digits only. Hong Kong is "852" + 8 digits; any other
+ * number is its E.164 digits without "+". Tolerates formatting only: a leading label
+ * (Tel, T, Phone, Mobile, WhatsApp, WA, 電話, 手提), spaces, dots, hyphens,
+ * parentheses and slashes. Returns null for anything that is not clearly one phone
+ * number, including two numbers in one string. A null is never turned into a guess.
+ */
+export function normalizePhone(raw) {
+  if (raw === null || raw === undefined) return null;
+  const text = String(raw).normalize("NFKC").trim().replace(LABEL, "");
+  if (!text) return null;
+  // "9123/4567" is one number split by a slash; "2688 2988/9123 4567" and
+  // "9123 4567/68" are alternatives. If any slash-separated part is already a full
+  // number on its own, the input is ambiguous.
+  const parts = text.split("/");
+  if (parts.length > 1 && parts.some((part) => parseNumber(part) !== null)) return null;
+  return parseNumber(text);
 }
 
 /** "852XXXXXXXX" -> "XXXXXXXX"; anything else -> null. */
@@ -79,6 +98,17 @@ export function phoneSpellingTiebreakSql(column, param) {
   const col = sqlOperand(column, "column");
   const p = sqlOperand(param, "param") + "::text";
   return `(${col} = ('00' || ${p}))`;
+}
+
+/**
+ * SQL integer: 0 when `expr` is stored in the canonical spelling (852 + 8 digits,
+ * or a non-852 international number of 10-15 digits), 1 for a legacy or
+ * unparseable spelling (8 digits, 00852..., NULL). Lower sorts first.
+ */
+export function phoneSpellingRankSql(expr) {
+  const e = sqlOperand(expr, "expression") + "::text";
+  return `(CASE WHEN ${e} ~ '^852[2-9][0-9]{7}$'
+    OR (${e} ~ '^[1-9][0-9]{9,14}$' AND ${e} !~ '^852') THEN 0 ELSE 1 END)`;
 }
 
 /**

@@ -23,5 +23,8 @@ export function phoneMatchSql(column: string, param: string): string;
  */
 export function phoneSpellingTiebreakSql(column: string, param: string): string;
 
+/** SQL integer: 0 for the canonical stored spelling, 1 for a legacy or unparseable one. */
+export function phoneSpellingRankSql(expr: string): string;
+
 /** SQL text[] of the stored spellings equivalent to `expr`. */
 export function phoneEquivalentsSql(expr: string): string;

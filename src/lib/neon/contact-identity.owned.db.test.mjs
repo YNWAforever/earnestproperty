@@ -320,6 +320,193 @@ test("FX-12 contact identity on owned Postgres", { timeout: 300000 }, async (t) 
         assert.equal(outcome.contactId, zeroZero);
         assert.deepEqual(await contactsWithPhoneLike("55550050"), [zeroZero]);
       });
+
+      await t.test(
+        "a website enquiry typed as (+852) joins the existing customer (fix round 1, I-2)",
+        async () => {
+          const existing = id(550);
+          await query(
+            `INSERT INTO crm_contacts(id,name,normalized_phone,source,opt_in_whatsapp)
+             VALUES($1,'陳生','85255550055','whatsapp',false)`,
+            [existing],
+          );
+          await server.createWebsiteInquiry({
+            submissionId: "7c000000-0000-4000-8000-000000000551",
+            name: "Chan",
+            phone: "(+852) 5555 0055",
+            consentWhatsapp: true,
+          });
+          assert.deepEqual(await contactsWithPhoneLike("55550055"), [existing]);
+          const phoneless = await query(
+            "SELECT count(*)::int AS n FROM crm_contacts WHERE normalized_phone IS NULL AND phone=$1",
+            ["(+852) 5555 0055"],
+          );
+          assert.equal(phoneless[0].n, 0, "no phoneless duplicate customer");
+          const row = await contactRow(existing);
+          assert.equal(row.name, "陳生");
+          assert.equal(row.opt_in_whatsapp, false);
+        },
+      );
+
+      // Campaign helpers for the fix-round-1 I-3 tests. Each test uses its own
+      // contact source so its audience sees only its own synthetic contacts.
+      let campaignSeq = 0;
+      const seedCampaign = async (source) => {
+        campaignSeq += 1;
+        const [template] = await query(
+          "INSERT INTO whatsapp_templates(element_name,status) VALUES($1,'active') RETURNING id",
+          ["fx12_owned_" + campaignSeq],
+        );
+        const [audience] = await query(
+          "INSERT INTO whatsapp_audiences(name,filters,created_by) VALUES($1,$2::jsonb,$3) RETURNING id",
+          ["FX12 audience " + campaignSeq, JSON.stringify({ source }), ADMIN],
+        );
+        const [campaign] = await query(
+          "INSERT INTO whatsapp_campaigns(name,template_id,audience_id,status,created_by) VALUES($1,$2,$3,'review',$4) RETURNING id",
+          ["FX12 campaign " + campaignSeq, template.id, audience.id, ADMIN],
+        );
+        return campaign.id;
+      };
+      const admin = { staffId: ADMIN, authUserId: "synthetic-fx12-" + ADMIN, roles: ["admin"] };
+      const queuedContacts = async (campaignId) =>
+        (
+          await query(
+            "SELECT contact_id FROM whatsapp_campaign_recipients WHERE campaign_id=$1 AND status='queued' ORDER BY contact_id",
+            [campaignId],
+          )
+        ).map((row) => row.contact_id);
+
+      await t.test(
+        "campaign dedupe keeps the WhatsApp contact over its lower-id 00852 twin (I-3)",
+        async () => {
+          const twin = id(600);
+          const member = id(601);
+          const optedOut = id(602);
+          const optedOutTwin = id(603);
+          await query(
+            `INSERT INTO crm_contacts(id,name,normalized_phone,whatsapp_member_id,source,opt_in_whatsapp,opted_out_whatsapp)
+             VALUES($1,'Synthetic FX12 twin','0085255550060',NULL,'fx12-dedupe',true,false),
+                   ($2,'Synthetic FX12 member','85255550060','synthetic-fx12-member-601','fx12-dedupe',true,false),
+                   ($3,'Synthetic FX12 opted out','85255550061','synthetic-fx12-member-602','fx12-dedupe',false,true),
+                   ($4,'Synthetic FX12 opted-out twin','0085255550061',NULL,'fx12-dedupe',true,false)`,
+            [twin, member, optedOut, optedOutTwin],
+          );
+          const campaignId = await seedCampaign("fx12-dedupe");
+          const result = await server.materializeCampaignRecipients(campaignId, admin);
+          assert.equal(result.ok, true, JSON.stringify(result));
+          // The member row wins; the opted-out number and its twin are both excluded.
+          assert.deepEqual(await queuedContacts(campaignId), [member]);
+
+          // Rows queued before the fix (both twins queued): only the member row is primary.
+          const queuedBefore = await seedCampaign("fx12-dedupe-none");
+          const [rTwin] = await query(
+            "INSERT INTO whatsapp_campaign_recipients(campaign_id,contact_id) VALUES($1,$2) RETURNING id",
+            [queuedBefore, twin],
+          );
+          const [rMember] = await query(
+            "INSERT INTO whatsapp_campaign_recipients(campaign_id,contact_id) VALUES($1,$2) RETURNING id",
+            [queuedBefore, member],
+          );
+          const primary = async (recipientId) =>
+            (
+              await query(
+                `SELECT ${campaignRecipientPrimarySql("r", "c")} AS primary
+                 FROM whatsapp_campaign_recipients r JOIN crm_contacts c ON c.id=r.contact_id
+                 WHERE r.id=$1`,
+                [recipientId],
+              )
+            )[0].primary;
+          assert.equal(await primary(rMember.id), true, "member row is primary");
+          assert.equal(await primary(rTwin.id), false, "00852 twin is not primary");
+        },
+      );
+
+      await t.test(
+        "an opted-in 852 contact is excluded when its 00852 twin never consented (Minor 10)",
+        async () => {
+          const consented = id(650);
+          const notConsented = id(651);
+          await query(
+            `INSERT INTO crm_contacts(id,name,normalized_phone,whatsapp_member_id,source,opt_in_whatsapp)
+             VALUES($1,'Synthetic FX12 consented','85255550065','synthetic-fx12-member-650','whatsapp',true),
+                   ($2,'Synthetic FX12 not consented','0085255550065',NULL,'website',false)`,
+            [consented, notConsented],
+          );
+          const [row] = await query(
+            `SELECT ${marketingIdentitySafeSql("c")} AS safe FROM crm_contacts c WHERE c.id=$1`,
+            [consented],
+          );
+          assert.equal(row.safe, false);
+        },
+      );
+
+      await t.test(
+        "delivery sends a member-less legacy contact as 852 and never sends an unparseable phone raw (I-3, D-09)",
+        async () => {
+          const { deliverWoztellCampaign } = await import("../woztell/campaign-delivery.server.ts");
+          const legacy = id(700);
+          const zeroZero = id(701);
+          const broken = id(702);
+          await query(
+            `INSERT INTO crm_contacts(id,name,normalized_phone,source,opt_in_whatsapp)
+             VALUES($1,'Synthetic FX12 legacy','55550070','website',true),
+                   ($2,'Synthetic FX12 00852','0085255550071','website',true),
+                   ($3,'Synthetic FX12 broken','12345','website',true)`,
+            [legacy, zeroZero, broken],
+          );
+          const campaignId = await seedCampaign("fx12-delivery-none");
+          for (const contactId of [legacy, zeroZero, broken]) {
+            await query(
+              "INSERT INTO whatsapp_campaign_recipients(campaign_id,contact_id) VALUES($1,$2)",
+              [campaignId, contactId],
+            );
+          }
+          // Real contact rows from the owned database; the provider is a recorder.
+          const recipientsFromDb = () =>
+            query(
+              `SELECT r.id, c.normalized_phone, c.whatsapp_member_id, c.opt_in_whatsapp,
+                 c.opted_out_whatsapp, 'fx12' AS element_name, 'zh_HK' AS language_code,
+                 '[]'::jsonb AS components
+               FROM whatsapp_campaign_recipients r JOIN crm_contacts c ON c.id=r.contact_id
+               WHERE r.campaign_id=$1 AND r.status='queued' ORDER BY c.id`,
+              [campaignId],
+            );
+          let claimed = false;
+          const sends = [];
+          await deliverWoztellCampaign(campaignId, {
+            isEnabled: () => true,
+            claimRecipients: async () => {
+              if (claimed) return [];
+              claimed = true;
+              return recipientsFromDb();
+            },
+            beginDispatch: async (_campaign, recipientId) =>
+              (await recipientsFromDb()).find((row) => row.id === recipientId) ?? null,
+            updateRecipient: async (recipientId, status, code) => {
+              await query(
+                "UPDATE whatsapp_campaign_recipients SET status=$2,error=$3 WHERE id=$1",
+                [recipientId, status, code],
+              );
+            },
+            hasPendingRecipients: async () => false,
+            refreshStatus: async () => {},
+            sendResponse: async ({ memberId }) => {
+              sends.push(memberId);
+              return { ok: true, status: 200, body: {} };
+            },
+          });
+          assert.deepEqual(sends.sort(), ["85255550070", "85255550071"]);
+          const [brokenRow] = await query(
+            `SELECT r.status, r.error FROM whatsapp_campaign_recipients r
+             WHERE r.campaign_id=$1 AND r.contact_id=$2`,
+            [campaignId, broken],
+          );
+          assert.deepEqual(
+            [brokenRow.status, brokenRow.error],
+            ["failed", "WOZTELL_RECIPIENT_PHONE_INVALID"],
+          );
+        },
+      );
     });
   } finally {
     network.mock.restore();

@@ -30,6 +30,46 @@ test("normalizePhone handles HK formats", () => {
   }
 });
 
+test("labelled and punctuated HK spellings normalise (fix round 1, I-1/I-2)", () => {
+  for (const input of [
+    "Tel: 9123 4567",
+    "T: +852 9123 4567",
+    "(+852) 9123 4567",
+    "+(852) 9123 4567",
+    "9123/4567",
+    "(852)91234567",
+    "+852-9123-4567",
+    "Tel. 9123 4567",
+    "TEL:91234567",
+    "Phone: 9123-4567",
+    "Mobile +852 9123 4567",
+    "WhatsApp: 9123 4567",
+    "WA: 9123 4567",
+    "電話：9123 4567",
+    "手提: 9123 4567",
+    "9123\t4567",
+    "-+852 9123 4567",
+  ]) {
+    assert.equal(normalizePhone(input), "85291234567", JSON.stringify(input));
+  }
+});
+
+test("ambiguous or malformed input is still null (fix round 1)", () => {
+  for (const input of [
+    "9123 4567 / 9876 5432",
+    "2688 2988/9123 4567",
+    "9123 4567/68",
+    "Tel: 9123 4567, 9876 5432",
+    "Tel: 9123456",
+    "Tel: 123456789",
+    "Fax: 9123 4567",
+    "Tel: abc",
+    "Tel:",
+  ]) {
+    assert.equal(normalizePhone(input), null, JSON.stringify(input));
+  }
+});
+
 test("a landline is accepted", () => {
   assert.equal(normalizePhone("2688 2988"), "85226882988");
 });

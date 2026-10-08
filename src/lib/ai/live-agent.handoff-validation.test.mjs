@@ -38,6 +38,9 @@ test("validateHandoffPhone normalises HK mobiles and international numbers", () 
       "85291234567",
     ],
     [["+852-6123-4567"], "85261234567"],
+    // FX-12 owner decision: "+" before an 8-digit HK mobile is Hong Kong.
+    [["+9123 4567"], "85291234567"],
+    [["+6123-4567"], "85261234567"],
     [["+447700900123", "+44 7700 900123"], "447700900123"],
     [["+8613800138000"], "8613800138000"],
   ];
@@ -69,6 +72,8 @@ test("validateHandoffPhone rejects blank as REQUIRED and malformed numbers as IN
     "(852) 9123 4567",
     "9123abcd",
     "00447700900123",
+    // FX-12: "+" before an 8-digit HK landline is a landline, not an international number.
+    "+2688 2988",
   ]) {
     assert.deepEqual(
       validateHandoffPhone(invalid),

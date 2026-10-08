@@ -40,7 +40,23 @@ const INPUTS = [
   "+852 6090 3521",
   " 6090-3521 ",
   "85260903521",
+  // Labelled and punctuated spellings (fix round 1, I-1/I-2, Minor 2).
+  "Tel: 9123 4567",
+  "T: +852 9123 4567",
+  "(+852) 9123 4567",
+  "9123/4567",
+  "(852)91234567",
+  "+852-9123-4567",
+  "電話：2688 2988",
+  "WhatsApp: 6123 4567",
+  "9123\t4567",
+  "-+14384031",
+  "+9123 4567",
+  "+2688 2988",
   // Garbage.
+  "9123 4567 / 9876 5432",
+  "Fax: 9123 4567",
+  "85212345678",
   "",
   null,
   undefined,
@@ -61,11 +77,9 @@ test("every customer-phone parser agrees with normalizePhone", () => {
     const canonical = normalizePhone(input);
     assert.equal(normalizeAdminPhone(input), canonical, "normalizeAdminPhone " + label);
     assert.equal(normalizePhoneDigits(input), canonical, "normalizePhoneDigits " + label);
-    const staff = normalisePhone(input);
-    assert.ok(
-      staff === null || staff === hkLocalNumber(canonical),
-      "normalisePhone " + label + " returned " + String(staff),
-    );
+    const local = hkLocalNumber(canonical);
+    const expectedStaff = local && /^[23569]\d{7}$/.test(local) ? local : null;
+    assert.equal(normalisePhone(input), expectedStaff, "normalisePhone " + label);
     const handoff = validateHandoffPhone(input);
     if (handoff.ok) {
       assert.equal(handoff.normalized, canonical, "validateHandoffPhone " + label);
@@ -109,7 +123,10 @@ test("no SQL copy of the phone match outside phone.js", () => {
     const compact = readFileSync(join(ROOT, path), "utf8").replace(/\s+/g, "");
     const twoFormat = compact.includes("left($") && compact.includes(",3)='852'");
     const prefix = compact.includes("'852'||") && compact.includes("normalized_phone");
-    return twoFormat || prefix;
+    // Minor 9: a copy that only takes the last eight digits of a param.
+    const lastEight =
+      /right\(\$\d+(::text)?,8\)/.test(compact) && compact.includes("normalized_phone");
+    return twoFormat || prefix || lastEight;
   });
   assert.deepEqual(
     offenders,

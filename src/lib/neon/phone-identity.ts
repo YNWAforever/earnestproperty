@@ -1,4 +1,4 @@
-import { phoneEquivalentsSql } from "../phone.js";
+import { phoneEquivalentsSql, phoneSpellingRankSql } from "../phone.js";
 
 /**
  * A legacy CRM row may store a Hong Kong number as eight digits, or as 00852 plus
@@ -23,7 +23,12 @@ export function marketingIdentitySafeSql(contactAlias: string): string {
       AND (identity_peer.opted_out_whatsapp = true OR identity_peer.opt_in_whatsapp = false)
   )`;
 }
-/** Only the lowest active recipient id may send to one phone in a campaign. */
+/**
+ * Only one active recipient may send to one phone in a campaign. FX-12 fix round 1
+ * (I-3): the primary is the contact with a WhatsApp member id, then the canonical
+ * phone spelling, then the lowest recipient id, so a member-less 00852 or 8-digit
+ * duplicate never displaces the customer's WhatsApp contact.
+ */
 export function campaignRecipientPrimarySql(recipientAlias: string, contactAlias: string): string {
   for (const alias of [recipientAlias, contactAlias]) {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) throw new Error("Invalid SQL alias");
@@ -39,7 +44,9 @@ export function campaignRecipientPrimarySql(recipientAlias: string, contactAlias
       AND (
         earlier.status = 'sent'
         OR earlier.error = 'WOZTELL_DELIVERY_UNKNOWN'
-        OR (earlier.id < ${recipientAlias}.id
+        OR ((NULLIF(earlier_contact.whatsapp_member_id, '') IS NULL,
+            ${phoneSpellingRankSql("earlier_contact.normalized_phone")}, earlier.id)
+          < (NULLIF(${member}, '') IS NULL, ${phoneSpellingRankSql(phone)}, ${recipientAlias}.id)
           AND earlier.status NOT IN ('cancelled', 'blocked'))
       )
       AND (

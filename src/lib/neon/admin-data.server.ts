@@ -811,8 +811,8 @@ type AudienceSummary = {
 // without silently dropping the ones an audience previously had no field for.
 // See createAdminAudienceFromSegment.
 const RECIPIENT_ELIGIBILITY_SQL = `
-SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.opt_in_whatsapp, c.opted_out_whatsapp,
-  ${marketingIdentitySafeSql("c")} AS identity_safe
+SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.whatsapp_member_id, c.opt_in_whatsapp,
+  c.opted_out_whatsapp, ${marketingIdentitySafeSql("c")} AS identity_safe
 FROM crm_contacts c
 LEFT JOIN crm_leads l ON l.contact_id = c.id
 LEFT JOIN properties p ON p.id = l.property_id
@@ -923,9 +923,30 @@ function isEligibleAudienceRow(row: Record<string, unknown>) {
   );
 }
 
+/**
+ * FX-12 fix round 1 (I-3): within one phone, keep the contact WhatsApp knows (it has
+ * a member id), then the canonical stored spelling, then the lowest id. Without this
+ * a member-less 00852 or 8-digit duplicate could win and the real customer would
+ * get nothing.
+ */
+function audienceKeepOrder(row: Record<string, unknown>) {
+  const member = typeof row.whatsapp_member_id === "string" && row.whatsapp_member_id !== "";
+  const stored = typeof row.normalized_phone === "string" ? row.normalized_phone : null;
+  const canonical = stored !== null && normalizeAdminPhone(stored) === stored;
+  return [member ? 0 : 1, canonical ? 0 : 1, String(row.id ?? "")] as const;
+}
+
+function compareAudienceKeepOrder(a: Record<string, unknown>, b: Record<string, unknown>) {
+  const left = audienceKeepOrder(a);
+  const right = audienceKeepOrder(b);
+  if (left[0] !== right[0]) return left[0] - right[0];
+  if (left[1] !== right[1]) return left[1] - right[1];
+  return left[2] < right[2] ? -1 : left[2] > right[2] ? 1 : 0;
+}
+
 function uniqueEligibleAudienceRows(rows: Record<string, unknown>[]) {
   const seenPhones = new Set<string>();
-  return rows.filter((row) => {
+  return [...rows].sort(compareAudienceKeepOrder).filter((row) => {
     if (!isEligibleAudienceRow(row)) return false;
     const phone = normalizeAdminPhone(row.normalized_phone);
     if (!phone || seenPhones.has(phone)) return false;
