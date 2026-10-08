@@ -5,7 +5,7 @@ import type { VariantSet } from "./remote-variants.mjs";
 
 type ImageRow = { images?: string[] | null; image_variants?: Record<string, VariantSet> };
 export async function attachRemoteVariants<T extends ImageRow>(rows: T[]): Promise<T[]> {
-  if (process.env.MLS_MEDIA_VARIANTS_ENABLED !== "true" || !rows.length) return rows;
+  if (!rows.length) return rows;
   const urls = [...new Set(rows.flatMap((row) => row.images ?? []))].slice(0, 500);
   if (!urls.length) return rows;
   try {

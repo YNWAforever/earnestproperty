@@ -2243,75 +2243,139 @@ test("malformed identity and dependency inputs fail before side effects", async 
 });
 
 test("publish pipeline writes ready variants from validated bytes without replacing original", async () => {
-  const previousFlag = process.env.MLS_MEDIA_VARIANTS_ENABLED;
-  process.env.MLS_MEDIA_VARIANTS_ENABLED = "true";
-  try {
-    const bytes = await sharp({
-      create: { width: 320, height: 200, channels: 3, background: "#abcdef" },
-    })
-      .png()
-      .toBuffer();
-    let saved = null;
-    const repository = fakeRepository({
-      registerOwnedMedia: async (input) => ({
-        outcome: "inserted",
-        asset: registrationAsset(input, { id: "00000000-0000-4000-8000-000000000001" }),
-      }),
-    });
-    repository.findOwnedMediaVariantSet = async () => saved;
-    repository.saveOwnedMediaVariantSet = async (set) => {
-      saved = set;
-      return set;
-    };
-    const blobStore = fakeBlobStore();
-    const result = await prepareListingMedia(mediaFixture({ bytes, repository, blobStore }));
-    assert.equal(result.publishable, true);
-    assert.equal(result.uploadCount, 1);
-    assert.equal(saved.status, "ready");
-    assert.deepEqual(
-      saved.variants.map((item) => item.width),
-      [160, 320],
-    );
-    assert.equal(blobStore.puts.length, 3);
-    assert.equal(
-      result.images[0],
-      blobStore.puts.length ? "https://owned.example/" + blobStore.puts[0].pathname : null,
-    );
-  } finally {
-    if (previousFlag === undefined) delete process.env.MLS_MEDIA_VARIANTS_ENABLED;
-    else process.env.MLS_MEDIA_VARIANTS_ENABLED = previousFlag;
-  }
+  const bytes = await sharp({
+    create: { width: 320, height: 200, channels: 3, background: "#abcdef" },
+  })
+    .png()
+    .toBuffer();
+  let saved = null;
+  const repository = fakeRepository({
+    registerOwnedMedia: async (input) => ({
+      outcome: "inserted",
+      asset: registrationAsset(input, { id: "00000000-0000-4000-8000-000000000001" }),
+    }),
+  });
+  repository.findOwnedMediaVariantSet = async () => saved;
+  repository.saveOwnedMediaVariantSet = async (set) => {
+    saved = set;
+    return set;
+  };
+  const blobStore = fakeBlobStore();
+  const result = await prepareListingMedia(mediaFixture({ bytes, repository, blobStore }));
+  assert.equal(result.publishable, true);
+  assert.equal(result.uploadCount, 1);
+  assert.equal(saved.status, "ready");
+  assert.deepEqual(
+    saved.variants.map((item) => item.width),
+    [160, 320],
+  );
+  assert.equal(blobStore.puts.length, 3);
+  assert.equal(
+    result.images[0],
+    blobStore.puts.length ? "https://owned.example/" + blobStore.puts[0].pathname : null,
+  );
 });
 
 test("variant lookup failure leaves the original owned image publishable", async () => {
-  const previousFlag = process.env.MLS_MEDIA_VARIANTS_ENABLED;
-  process.env.MLS_MEDIA_VARIANTS_ENABLED = "true";
-  try {
-    const bytes = await sharp({
-      create: { width: 320, height: 200, channels: 3, background: "#abcdef" },
-    })
-      .png()
-      .toBuffer();
-    const repository = fakeRepository({
-      registerOwnedMedia: async (input) => ({
-        outcome: "inserted",
-        asset: registrationAsset(input, { id: "00000000-0000-4000-8000-000000000001" }),
-      }),
+  const bytes = await sharp({
+    create: { width: 320, height: 200, channels: 3, background: "#abcdef" },
+  })
+    .png()
+    .toBuffer();
+  const repository = fakeRepository({
+    registerOwnedMedia: async (input) => ({
+      outcome: "inserted",
+      asset: registrationAsset(input, { id: "00000000-0000-4000-8000-000000000001" }),
+    }),
+  });
+  repository.findOwnedMediaVariantSet = async () => {
+    throw new Error("variant metadata unavailable");
+  };
+  repository.saveOwnedMediaVariantSet = async () => {
+    throw new Error("variant save should not run");
+  };
+  const blobStore = fakeBlobStore();
+  const result = await prepareListingMedia(mediaFixture({ bytes, repository, blobStore }));
+  assert.equal(result.publishable, true);
+  assert.equal(result.uploadCount, 1);
+  assert.equal(blobStore.puts.length, 1);
+  assert.equal(result.images[0], "https://owned.example/" + blobStore.puts[0].pathname);
+});
+
+function variantFixture({ blobStore = fakeBlobStore(), find, save } = {}) {
+  let saved = null;
+  const repository = fakeRepository({
+    registerOwnedMedia: async (input) => ({
+      outcome: "inserted",
+      asset: registrationAsset(input, { id: "00000000-0000-4000-8000-000000000001" }),
+    }),
+  });
+  repository.findOwnedMediaVariantSet = find ?? (async () => saved);
+  repository.saveOwnedMediaVariantSet =
+    save ??
+    (async (set) => {
+      saved = set;
+      return set;
     });
-    repository.findOwnedMediaVariantSet = async () => {
-      throw new Error("variant metadata unavailable");
-    };
-    repository.saveOwnedMediaVariantSet = async () => {
-      throw new Error("variant save should not run");
-    };
-    const blobStore = fakeBlobStore();
-    const result = await prepareListingMedia(mediaFixture({ bytes, repository, blobStore }));
+  return { repository, blobStore, saved: () => saved };
+}
+
+test("publish pipeline writes ready variants with no flag set", async () => {
+  const bytes = await sharp({
+    create: { width: 700, height: 400, channels: 3, background: "#123456" },
+  })
+    .jpeg()
+    .toBuffer();
+  const fixture = variantFixture();
+  const result = await prepareListingMedia(
+    mediaFixture({ bytes, repository: fixture.repository, blobStore: fixture.blobStore }),
+  );
+  assert.equal(result.publishable, true);
+  assert.equal(fixture.saved()?.status, "ready");
+  assert.deepEqual(
+    fixture.saved().variants.map((item) => item.width),
+    [160, 320, 640],
+  );
+  assert.equal(result.images[0], "https://owned.example/" + fixture.blobStore.puts[0].pathname);
+});
+
+test("variant upload or save failure never fails the import or drops the original photo", async () => {
+  const bytes = await sharp({
+    create: { width: 320, height: 200, channels: 3, background: "#abcdef" },
+  })
+    .png()
+    .toBuffer();
+  const failingVariantPut = fakeBlobStore({
+    put: (input) => {
+      if (input.pathname.startsWith("mls-variants/")) throw new Error("Blob quota exceeded");
+      return {
+        url: "https://owned.example/" + input.pathname,
+        pathname: input.pathname,
+        contentType: input.contentType,
+        size: input.body.byteLength,
+      };
+    },
+  });
+  for (const fixture of [
+    variantFixture({ blobStore: failingVariantPut }),
+    variantFixture({
+      save: async () => {
+        throw new Error('relation "media_variant_sets" does not exist');
+      },
+    }),
+    variantFixture({
+      find: async () => {
+        throw new Error('relation "media_variant_sets" does not exist');
+      },
+    }),
+  ]) {
+    const result = await prepareListingMedia(
+      mediaFixture({ bytes, repository: fixture.repository, blobStore: fixture.blobStore }),
+    );
     assert.equal(result.publishable, true);
     assert.equal(result.uploadCount, 1);
-    assert.equal(blobStore.puts.length, 1);
-    assert.equal(result.images[0], "https://owned.example/" + blobStore.puts[0].pathname);
-  } finally {
-    if (previousFlag === undefined) delete process.env.MLS_MEDIA_VARIANTS_ENABLED;
-    else process.env.MLS_MEDIA_VARIANTS_ENABLED = previousFlag;
+    assert.equal(result.images.length, 1);
+    assert.equal(result.images[0], "https://owned.example/" + fixture.blobStore.puts[0].pathname);
+    assert.doesNotMatch(result.images[0], /mls-variants/);
   }
 });

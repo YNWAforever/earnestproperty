@@ -1848,7 +1848,6 @@ export async function prepareListingMedia(rawInput) {
       }
       if (
         mode === "upload" &&
-        process.env.MLS_MEDIA_VARIANTS_ENABLED === "true" &&
         asset &&
         typeof repository.findOwnedMediaVariantSet === "function" &&
         typeof repository.saveOwnedMediaVariantSet === "function"

@@ -53,11 +53,18 @@ For each stage, confirm the version row exactly once, constraints and FKs, old a
 | Batch link import | Actor role, source-scoped staff reference, preview token and 50-row commit guards | 1/50/300/1,000 preview fixtures; 60-to-59 eligible subset; reconnect recovery without duplicate commit |
 | Website link coverage | Exact sale/rent current-offer denominator and explicit preview | Missing/conflicted rows reviewed; small backfill committed only after confirmation |
 | Sales performance | Attribution migration and source event projection complete | Scoped totals reconcile to transaction/detail rows, 60/40 credits, null commission and unknown/test/spam coverage |
-| Responsive media | `MLS_MEDIA_VARIANTS_ENABLED=false`; exact owned Blob host allowlist | Dry-run and limited checkpointed backfill, real WebP response bytes/dimensions and mobile `currentSrc`/layout checks |
+| Responsive media | Always on since FX-15; exact owned Blob host allowlist for the backfill | Dry-run and limited checkpointed backfill, real WebP response bytes/dimensions and mobile `currentSrc`/layout checks |
 
-The four build-time UI switches were removed in FX-05a (2026-10); the screens are always available and server checks remain the boundary. `MLS_MEDIA_VARIANTS_ENABLED` is a separate server setting and remains false until owned variants are verified.
+The four build-time UI switches were removed in FX-05a (2026-10); the screens are always available and server checks remain the boundary. Responsive photo variants have no switch since FX-15 (2026-10): pages attach ready variants whenever they exist and use the original URL otherwise, and the daily sync makes variants for each new owned photo. A variant failure never blocks a listing or drops its original photo.
 
-Backfill: run `scripts/media/backfill-remote-variants.mjs` in dry-run mode first. An apply run requires `MEDIA_BACKFILL_TARGET=staging`, a Blob token, exact `MLS_OWNED_BLOB_HOSTS` and a bounded `--limit`/checkpoint. Review the dry-run candidate count and ownership before applying. A rerun must reuse matching source hashes rather than regenerate files.
+Backfill existing photos (Owner action 5, production writes, owner only). On your machine, with production `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN` and `MLS_OWNED_BLOB_HOSTS=<the Blob host, e.g. sehe3hq90qgbyxqa.public.blob.vercel-storage.com>`:
+
+1. `node scripts/media/backfill-remote-variants.mjs` (dry run, the default; SELECTs only) prints `dbHost`, `remaining`, `estimatedBlobWrites` (`remaining` x 5) and `estimatedStorageMb`. It stops with the migration name if `20260927172000_media_asset_variants` is not applied.
+2. Check those numbers against your Vercel Blob plan's monthly operation and storage limits on the Usage page. Each photo adds about 0.2 to 0.4 MB across its variants.
+3. `node scripts/media/backfill-remote-variants.mjs --apply --limit=50 --confirm-db-host=<host part of DATABASE_URL>`. The host must equal the `dbHost` the dry run printed, or the script refuses before any query. Repeat until `remaining` is 0. The checkpoint `.cache/media-variant-backfill.json` resumes where it stopped, a rerun skips finished photos, and the first failure stops the batch with the asset ID, without touching the original photo or any listing row.
+4. Spot check: a property page's `img` now has a `srcset`.
+
+Undo: none needed. Pages use the original URL whenever a variant set is missing. The script never prints `DATABASE_URL` or the Blob token, only the host.
 
 ## 4. Acceptance before any live change
 
