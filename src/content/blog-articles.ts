@@ -133,7 +133,7 @@ const flagshipArticles: readonly BlogArticleMeta[] = [
     links: [
       { href: "/district/sham-tseng", label: "深井地區攻略" },
       { href: "/estate/bellagio", label: "碧堤半島放盤" },
-      { href: "/listings?deal=all&page=1", label: "搜尋深井放盤" },
+      { href: "/listings", label: "搜尋深井放盤" },
     ],
   },
   {

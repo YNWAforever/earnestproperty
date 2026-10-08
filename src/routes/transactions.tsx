@@ -1,6 +1,7 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, stripSearchParams, useNavigate } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
+import { TRANSACTIONS_SEARCH_DEFAULTS } from "@/lib/public-search-defaults";
 import { useEffect, useState } from "react";
 import { MessageCircle, ReceiptText, Share2, X } from "lucide-react";
 
@@ -73,6 +74,7 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/transactions")({
   validateSearch: zodValidator(searchSchema),
+  search: { middlewares: [stripSearchParams(TRANSACTIONS_SEARCH_DEFAULTS)] },
   loaderDeps: ({ search }) => ({
     district: search.district,
     estate: search.estate,

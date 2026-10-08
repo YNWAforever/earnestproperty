@@ -92,12 +92,12 @@ function getSegmentListingsHref(segment: CorridorSegment) {
   const districtSlug = segment.districtSlugs.find(
     (slug) => slug !== "castle-peak-road" && supportedListingDistrictSlugs.has(slug),
   );
-  if (districtSlug) return `/listings?deal=all&district=${districtSlug}&page=1`;
+  if (districtSlug) return `/listings?district=${districtSlug}`;
 
   const estateSlug = segment.estateSlugs[0];
-  if (estateSlug) return `/listings?deal=all&estate=${estateSlug}&page=1`;
+  if (estateSlug) return `/listings?estate=${estateSlug}`;
 
-  return "/listings?deal=all&district=castle-peak-road&page=1";
+  return "/listings?district=castle-peak-road";
 }
 
 function CastlePeakRoadSegmentError({ error }: { error: unknown }) {
