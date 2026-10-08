@@ -96,10 +96,11 @@ function match(redirects, { host, path, query = {} }) {
     keys.forEach((key, index) => {
       if (typeof key.name === "string") named[key.name] = result[index + 1];
     });
-    // Vercel passes the request query through when the destination has none.
-    let location = substitute(redirect.destination, result, named);
-    const search = new URLSearchParams(query).toString();
-    if (search && !location.includes("?")) location += `?${search}`;
+    // Vercel keeps the request query and appends the destination's own query
+    // after it (production: /property/c5?x=1 -> /listings?x=1&deal=rent&page=1).
+    const [destPath, destSearch = ""] = substitute(redirect.destination, result, named).split("?");
+    const search = [new URLSearchParams(query).toString(), destSearch].filter(Boolean).join("&");
+    const location = search ? `${destPath}?${search}` : destPath;
     return { status: redirect.permanent ? 308 : 307, location };
   }
   return null;
@@ -400,12 +401,37 @@ test("every redirect destination is an existing route", async () => {
   }
 });
 
+// A request that satisfies every `has` query condition of `rule`, or null when
+// no sample value fits (or the source has parameters).
+function satisfyingRequest(rule) {
+  if (/[:(*]/.test(rule.source)) return null;
+  const query = {};
+  for (const condition of rule.has ?? []) {
+    if (condition.type !== "query") return null;
+    if (condition.value === undefined) {
+      query[condition.key] = "1";
+      continue;
+    }
+    const sample = ["tc", "sc", "123", "1", "x", ""].find((value) =>
+      anchored(condition.value).test(value),
+    );
+    if (sample === undefined) return null;
+    query[condition.key] = sample;
+  }
+  return { host: WWW_HOST, path: rule.source, query };
+}
+
+function splitLocation(location) {
+  const [path, search = ""] = location.split("?");
+  return { path, query: Object.fromEntries(new URLSearchParams(search)) };
+}
+
 test("legacy redirects have no duplicate sources and no chains", () => {
   const rules = nonHostRules(loadRedirects(PROD));
   const keys = rules.map((rule) => rule.source + JSON.stringify(rule.has ?? []));
   assert.equal(new Set(keys).size, keys.length, "duplicate source + has");
   for (const rule of rules) {
-    const [path, search = ""] = rule.destination.split("?");
+    const [path] = rule.destination.split("?");
     // /property-detail/:oldId.html is an app route, not a vercel rule.
     if (path.startsWith("/property-detail/")) {
       assert.ok(!rules.some((other) => other.source.startsWith("/property-detail/")));
@@ -415,12 +441,37 @@ test("legacy redirects have no duplicate sources and no chains", () => {
       if (other === rule || other.has) continue;
       assert.notEqual(path, other.source, `${rule.source} -> ${path} chains into ${other.source}`);
     }
-    const query = Object.fromEntries(new URLSearchParams(search));
-    const next = match(
-      rules.filter((other) => other !== rule),
-      { host: WWW_HOST, path, query },
-    );
-    assert.equal(next, null, `${rule.source} -> ${rule.destination} redirects again`);
+    // Carry the request query through (Vercel merges it into the destination),
+    // and include the rule itself, so a self-redirect is caught too.
+    const request = satisfyingRequest(rule);
+    assert.ok(request, `${rule.source}: no sample request satisfies its conditions`);
+    const first = match(rules, request);
+    assert.ok(first, `${rule.source}: sample request does not match`);
+    const next = match(rules, { host: WWW_HOST, ...splitLocation(first.location) });
+    assert.equal(next, null, `${rule.source} -> ${first.location} redirects again`);
+  }
+});
+
+test("no redirect loops when the request query is preserved", () => {
+  const rules = nonHostRules(loadRedirects(PROD));
+  const conditional = rules.filter((rule) => rule.has?.some((h) => h.type === "query"));
+  assert.ok(conditional.length > 0, "expected query-conditioned rules to check");
+  for (const rule of conditional) {
+    const request = satisfyingRequest(rule);
+    assert.ok(request, `${rule.source}: no sample request satisfies its conditions`);
+    const seen = new Set();
+    let current = request;
+    let hops = 0;
+    for (;;) {
+      const key = `${current.path}?${new URLSearchParams(current.query)}`;
+      assert.ok(!seen.has(key), `${rule.source}: redirect loop at ${key}`);
+      seen.add(key);
+      const result = match(rules, current);
+      if (!result) break;
+      hops += 1;
+      assert.ok(hops <= 2, `${rule.source}: chain longer than 2 hops (at ${result.location})`);
+      current = { host: WWW_HOST, ...splitLocation(result.location) };
+    }
   }
 });
 

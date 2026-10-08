@@ -54,9 +54,6 @@ export const config: VercelConfig = {
   redirects: [
     ...canonicalHostRedirects(),
     ...detailRedirects,
-    redirectEntry("/", "/", true, {
-      has: [{ type: "query", key: "ln", value: "^(sc|tc)$" }],
-    }),
     redirectEntry("/district/ting-kau", "/castle-peak-road/ting-kau", true),
     redirectEntry("/district/ting-kau/", "/castle-peak-road/ting-kau", true),
     // Five lifestyle zones collapsed to three. Both retired URLs are already
