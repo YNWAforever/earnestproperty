@@ -117,13 +117,30 @@ async function postToGateway(
   return last;
 }
 
-/** Classify an error thrown while reading or validating a successful response. */
-function readFailureReason(error: unknown, signal: AbortSignal): AiFailureReason {
-  if (signal.aborted) return "AI_TIMEOUT";
-  return error instanceof AiResponseInvalidError || error instanceof SyntaxError
-    ? "AI_RESPONSE_INVALID"
-    : "AI_NETWORK";
+/**
+ * Classify an error thrown while reading or validating a received response. Once a
+ * response has arrived, only the budget abort is a timeout; anything else (a body that
+ * is not JSON, null, or the wrong shape) is an invalid response, never AI_NETWORK.
+ */
+function readFailureReason(signal: AbortSignal): AiFailureReason {
+  return signal.aborted ? "AI_TIMEOUT" : "AI_RESPONSE_INVALID";
 }
+
+type AiTextInput = {
+  system: string;
+  prompt: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+};
+
+type AiTextResult =
+  | { ok: true; text: string; error: null; metadata: AiProviderMetadata }
+  | {
+      ok: false;
+      text: "";
+      error: "AI_DISABLED" | "AI_GENERATION_FAILED";
+      reason: AiFailureReason;
+    };
 
 export function createAiGatewayClient(deps: AiGatewayDeps = {}) {
   const transport: GatewayTransport = {
@@ -134,32 +151,28 @@ export function createAiGatewayClient(deps: AiGatewayDeps = {}) {
   };
   const resolveConfig = () => deps.config ?? getAiServerConfig();
 
-  async function generateText(input: {
-    system: string;
-    prompt: string;
-    temperature?: number;
-    maxOutputTokens?: number;
-  }): Promise<
-    | { ok: true; text: string; error: null; metadata: AiProviderMetadata }
-    | {
-        ok: false;
-        text: "";
-        error: "AI_DISABLED" | "AI_GENERATION_FAILED";
-        reason: AiFailureReason;
-      }
-  > {
+  // Returns the HTTP status alongside the result so generateJson can log it too.
+  async function requestText(
+    input: AiTextInput,
+  ): Promise<{ result: AiTextResult; status: number | null }> {
     const config = resolveConfig();
-    if (!config.enabled || !config.textModel) {
-      return { ok: false, text: "", error: "AI_DISABLED", reason: "AI_DISABLED" };
+    if (!config.enabled || !config.textModel || !config.apiKey) {
+      return {
+        result: { ok: false, text: "", error: "AI_DISABLED", reason: "AI_DISABLED" },
+        status: null,
+      };
     }
 
     const fail = (reason: AiFailureReason, status: number | null) => {
       logProviderFailure(reason, status);
       return {
-        ok: false as const,
-        text: "" as const,
-        error: "AI_GENERATION_FAILED" as const,
-        reason,
+        result: {
+          ok: false as const,
+          text: "" as const,
+          error: "AI_GENERATION_FAILED" as const,
+          reason,
+        },
+        status,
       };
     };
 
@@ -187,6 +200,7 @@ export function createAiGatewayClient(deps: AiGatewayDeps = {}) {
         model?: unknown;
         usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
       };
+      if (!result || typeof result !== "object") throw new AiResponseInvalidError();
       const text = result.choices?.[0]?.message?.content;
       if (typeof text !== "string") throw new AiResponseInvalidError();
 
@@ -204,10 +218,14 @@ export function createAiGatewayClient(deps: AiGatewayDeps = {}) {
             }
           : null,
       };
-      return { ok: true, text, error: null, metadata };
-    } catch (error) {
-      return fail(readFailureReason(error, signal), response.status);
+      return { result: { ok: true, text, error: null, metadata }, status: response.status };
+    } catch {
+      return fail(readFailureReason(signal), response.status);
     }
+  }
+
+  async function generateText(input: AiTextInput): Promise<AiTextResult> {
+    return (await requestText(input)).result;
   }
 
   async function generateJson<T>(input: {
@@ -215,7 +233,7 @@ export function createAiGatewayClient(deps: AiGatewayDeps = {}) {
     prompt: string;
     fallback: T;
   }): Promise<AiJsonResult<T> & { reason?: AiFailureReason }> {
-    const result = await generateText({
+    const { result, status } = await requestText({
       system: input.system,
       prompt: `${input.prompt}\n\nReturn strict JSON only.`,
       temperature: 0.1,
@@ -235,7 +253,7 @@ export function createAiGatewayClient(deps: AiGatewayDeps = {}) {
       };
     } catch {
       // The parse error message can quote model output, so only the reason is logged.
-      logProviderFailure("AI_RESPONSE_INVALID", null);
+      logProviderFailure("AI_RESPONSE_INVALID", status);
       return {
         ok: false,
         value: input.fallback,
@@ -264,7 +282,7 @@ export async function generateAiJson<T>(input: {
 
 export async function embedAiTexts(values: string[]) {
   const config = getAiServerConfig();
-  if (!config.enabled || !config.embeddingModel || values.length === 0) {
+  if (!config.enabled || !config.embeddingModel || !config.apiKey || values.length === 0) {
     return { ok: false as const, embeddings: [] as number[][], error: "AI_EMBEDDINGS_DISABLED" };
   }
 
@@ -315,8 +333,8 @@ export async function embedAiTexts(values: string[]) {
     }
 
     return { ok: true as const, embeddings, error: null };
-  } catch (error) {
-    return fail(readFailureReason(error, signal), response.status);
+  } catch {
+    return fail(readFailureReason(signal), response.status);
   }
 }
 
