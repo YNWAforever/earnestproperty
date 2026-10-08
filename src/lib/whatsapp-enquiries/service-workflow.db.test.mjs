@@ -168,6 +168,8 @@ test("Phase4 isolated service transactions and capability lane", { skip: !url },
       `CREATE TABLE ops_jobs(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),job_type text,payload_version integer,payload jsonb,status text,attempt_count integer DEFAULT 0,max_attempts integer,run_after timestamptz,lease_owner text,lease_expires_at timestamptz,last_error_code text,last_error_summary text,idempotency_key text UNIQUE,actor_staff_id uuid,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now())`,
       // Health reads presence of the later notification schema; notification writes are tested separately.
       `CREATE TABLE staff_notification_endpoints(id uuid PRIMARY KEY)`,
+      // FX-12: every customer-bound send checks for an open identity review.
+      `CREATE TABLE crm_contact_identity_reviews(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),reason text NOT NULL,conversation_id uuid,status text NOT NULL DEFAULT 'open')`,
     ])
       await query(statement);
     for (const file of [

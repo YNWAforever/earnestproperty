@@ -235,6 +235,7 @@ test("FX-12 WhatsApp ingest identity review (owned Postgres)", { timeout: 300000
           assert.equal(reviews[0].evidence.kind, "member_phone_mismatch");
           assert.equal(reviews[0].evidence.messageCount, 1);
           assert.equal(reviews[0].evidence.optOutApplied, false);
+          assert.equal(reviews[0].evidence.stopReceived, false);
           assertNoIdentityInEvidence(reviews[0]);
 
           const second = event({
@@ -404,6 +405,7 @@ test("FX-12 WhatsApp ingest identity review (owned Postgres)", { timeout: 300000
         assert.equal(review.contact_a, M);
         assert.equal(review.contact_b, P);
         assert.equal(review.evidence.optOutApplied, true);
+        assert.equal(review.evidence.stopReceived, true);
         assert.equal(review.evidence.kind, "member_phone_mismatch");
 
         // A redelivery changes nothing.
@@ -434,6 +436,7 @@ test("FX-12 WhatsApp ingest identity review (owned Postgres)", { timeout: 300000
           assert.equal((await optOut(contactId)).opted_out_whatsapp, false, contactId);
         const [historyReview] = await reviewsFor(historical.conversationId);
         assert.equal(historyReview.evidence.optOutApplied, false);
+        assert.equal(historyReview.evidence.stopReceived, false);
       });
 
       await t.test(
@@ -687,6 +690,417 @@ test("FX-12 WhatsApp ingest identity review (owned Postgres)", { timeout: 300000
             ),
             { code: "OUTBOUND_CONFLICT_OR_NOT_FOUND" },
           );
+        },
+      );
+
+      await t.test(
+        "an owned conversation whose message resolves to no contact goes to review and creates no contact",
+        async () => {
+          // Path (c′): before FX-12 a new contact was committed, then ingest threw.
+          const Z = id(381);
+          await seedContact(Z, { phone: "85255550129" });
+          const [conversation] = await query(
+            `INSERT INTO whatsapp_conversations(contact_id,woztell_member_id,channel_id,last_message_at,last_inbound_at)
+             VALUES($1,'synthetic-fx12-m18',$2,now(),now()) RETURNING id`,
+            [Z, CHANNEL],
+          );
+          const hash = await rowHash(Z);
+          const contactsBefore = await count("crm_contacts");
+          const outcome = await ingest(
+            event({
+              messageId: "synthetic-fx12-cprime-1",
+              member: "synthetic-fx12-m18",
+              phone: "85255550130",
+              text: "合成無聯絡人衝突",
+            }),
+          );
+          assert.equal(outcome.identityReview, true);
+          assert.equal(outcome.conversationId, conversation.id);
+          assert.equal(await count("crm_contacts"), contactsBefore);
+          assert.equal(await rowHash(Z), hash);
+          const [review] = await reviewsFor(conversation.id);
+          assert.equal(review.evidence.kind, "conversation_owner");
+          assert.equal(review.contact_a, Z);
+          assert.equal(review.contact_b, null);
+          // A later STOP in this conversation matches no contact: nobody is opted out, but
+          // the review records it so that a later link can apply it (review minor 2).
+          const stop = await ingest(
+            event({
+              messageId: "synthetic-fx12-cprime-2",
+              member: "synthetic-fx12-m18",
+              phone: "85255550130",
+              text: "STOP",
+            }),
+          );
+          assert.equal(stop.identityReview, true);
+          const [afterStop] = await reviewsFor(conversation.id);
+          assert.equal(afterStop.evidence.messageCount, 2);
+          assert.equal(afterStop.evidence.optOutApplied, false);
+          assert.equal(afterStop.evidence.stopReceived, true);
+          assert.equal(await rowHash(Z), hash);
+        },
+      );
+
+      await t.test(
+        "the conversation owner holds the member and another contact holds the phone: STOP opts out both",
+        async () => {
+          // The realistic case (c): the owner holds the conversation's member.
+          const Z = id(391);
+          const V = id(392);
+          await seedContact(Z, { phone: "85255550131", member: "synthetic-fx12-m19" });
+          await seedContact(V, { phone: "85255550132" });
+          const [conversation] = await query(
+            `INSERT INTO whatsapp_conversations(contact_id,woztell_member_id,channel_id,last_message_at,last_inbound_at)
+             VALUES($1,'synthetic-fx12-m19',$2,now(),now()) RETURNING id`,
+            [Z, CHANNEL],
+          );
+          const stop = event({
+            messageId: "synthetic-fx12-cstop-1",
+            member: "synthetic-fx12-m19",
+            phone: "85255550132",
+            text: "STOP",
+          });
+          const outcome = await ingest(stop);
+          assert.equal(outcome.identityReview, true);
+          assert.equal(outcome.conversationId, conversation.id);
+          const [review] = await reviewsFor(conversation.id);
+          assert.equal(review.evidence.kind, "conversation_owner");
+          assert.equal(review.contact_a, Z);
+          assert.equal(review.contact_b, V);
+          assert.equal(review.evidence.optOutApplied, true);
+          const rows = await query(
+            "SELECT id,opted_out_whatsapp,opted_out_message_id,whatsapp_member_id,normalized_phone FROM crm_contacts WHERE id=ANY($1::uuid[]) ORDER BY id",
+            [[Z, V]],
+          );
+          for (const row of rows) {
+            assert.equal(row.opted_out_whatsapp, true, row.id);
+            assert.equal(row.opted_out_message_id, stop.externalMessageId);
+          }
+          // No identity field is filled from the conflicted message.
+          assert.equal(rows.find((row) => row.id === V).whatsapp_member_id, null);
+          assert.equal(rows.find((row) => row.id === Z).normalized_phone, "85255550131");
+        },
+      );
+
+      await t.test(
+        "no automated service reply is prepared or delivered in a 「身分待核對」 conversation",
+        async () => {
+          const service = await import("../whatsapp-enquiries/service-workflow.server.ts");
+          const { buildLiveEventStatements } =
+            await import("../whatsapp-enquiries/workflow.server.ts");
+          const { observeEpisode } = await import("../whatsapp-enquiries/episodes.server.ts");
+          const { SERVICE_CAPABILITIES } = await import("../control-plane/job-handlers.server.ts");
+          const ports = { query, transaction };
+          const previousEnv = {
+            automation: process.env.EP_WA_SERVICE_AUTOMATION_ENABLED,
+            activation: process.env.EP_WA_ACTIVATION_ID,
+            channel: process.env.EP_WA_COMPANY_CHANNEL_ID,
+          };
+          const restoreEnv = (key, value) => {
+            if (value === undefined) delete process.env[key];
+            else process.env[key] = value;
+          };
+          let sends = 0;
+          const adapter = {
+            verificationRef: "SYNTHETIC_ONLY",
+            render: ({ text }) => [{ type: "TEXT", text }],
+            send: async () => {
+              sends += 1;
+              return { ok: true, body: { messageId: "synthetic-fx12-service-out-" + sends } };
+            },
+          };
+          try {
+            const now = new Date();
+            const [policy] = await query(
+              `INSERT INTO whatsapp_service_policies(version,rules,status,approved_by,copy_version,effective_at)
+               VALUES(1,$1::jsonb,'approved',$2,'fixture-only',$3::timestamptz) RETURNING id`,
+              [
+                JSON.stringify({
+                  timezone: "Asia/Hong_Kong",
+                  weekdays: [0, 1, 2, 3, 4, 5, 6],
+                  holidays: [],
+                  openMinute: 0,
+                  closeMinute: 1439,
+                  durationMode: "elapsed",
+                  beforeOpen: "overnight",
+                  atOpen: "daytime",
+                  atClose: "overnight",
+                  crossClosing: "elapsed",
+                  reception: "sales",
+                  suppressSurveyAfterHuman: false,
+                  freshnessSeconds: 3600,
+                  surveyExpirySeconds: 86400,
+                  workerLagSeconds: 86400,
+                  managerStaffId: ADMIN,
+                  afterHoursCopy: "Hypothetical approved fixture after-hours copy",
+                }),
+                ADMIN,
+                new Date(now.getTime() - 60000).toISOString(),
+              ],
+            );
+            const generation = await service.activateServiceGeneration(
+              policy.id,
+              ADMIN,
+              ports,
+              new Date(now.getTime() - 1000),
+            );
+            const runtime = { enabled: true, generationId: generation, channelId: CHANNEL };
+            process.env.EP_WA_SERVICE_AUTOMATION_ENABLED = "true";
+            process.env.EP_WA_ACTIVATION_ID = generation;
+            process.env.EP_WA_COMPANY_CHANNEL_ID = CHANNEL;
+
+            // A normal customer conversation with a fresh enquiry and a scheduled survey.
+            let seq = 0;
+            const surveyFor = async (contactId, member, phone) => {
+              seq += 1;
+              await seedContact(contactId, { phone, member });
+              const [conversation] = await query(
+                `INSERT INTO whatsapp_conversations(contact_id,woztell_member_id,channel_id,last_message_at,last_inbound_at)
+                 VALUES($1,$2,$3,now(),now()) RETURNING id`,
+                [contactId, member, CHANNEL],
+              );
+              const messageId = "synthetic-fx12-service-intake-" + seq;
+              await query(
+                `INSERT INTO whatsapp_messages(conversation_id,contact_id,direction,message_type,text,channel_id,woztell_member_id,external_message_id)
+                 VALUES($1,$2,'inbound','TEXT','合成查詢',$3,$4,$5)`,
+                [conversation.id, contactId, CHANNEL, member, messageId],
+              );
+              const intake = normalizeWoztellEvent({
+                type: "TEXT",
+                messageId,
+                member,
+                channel: CHANNEL,
+                app: APP,
+                timestamp: Math.floor(now.getTime() / 1000),
+                data: { text: "合成查詢" },
+              });
+              const statements = buildLiveEventStatements(intake, now, "active");
+              await transaction(statements);
+              const eventId = statements[0].params[0];
+              await observeEpisode(eventId, query);
+              const scheduled = await service.scheduleServiceForEvent(eventId, ports, runtime, now);
+              assert.equal(scheduled.scheduled, 1);
+              const [action] = await query(
+                `SELECT a.* FROM whatsapp_service_actions a JOIN inquiries i ON i.id=a.inquiry_id
+                 WHERE i.conversation_id=$1 AND a.purpose='survey'`,
+                [conversation.id],
+              );
+              return { conversationId: conversation.id, action, due: new Date(action.due_at) };
+            };
+            const running = async (actionId) => {
+              const [job] = await query(
+                "SELECT id FROM ops_jobs WHERE job_type='woztell.reply.deliver' AND payload_version=2 AND payload->>'actionId'=$1",
+                [actionId],
+              );
+              await transaction([
+                {
+                  statement: "SELECT set_config('app.wa_worker_capabilities',$1,true)",
+                  params: [JSON.stringify(SERVICE_CAPABILITIES)],
+                },
+                {
+                  statement:
+                    "UPDATE ops_jobs SET status='running',lease_owner='synthetic-fx12-worker',lease_expires_at=now()+interval '5 minutes' WHERE id=$1::uuid",
+                  params: [job.id],
+                },
+              ]);
+              return {
+                checkpoint: async () => {},
+                job: { jobId: job.id, workerId: "synthetic-fx12-worker" },
+              };
+            };
+            const conflict = async (member, phone, messageId) => {
+              const outcome = await ingest(
+                event({ messageId, member, phone, text: "合成自動回覆衝突" + messageId.slice(-1) }),
+              );
+              assert.equal(outcome.identityReview, true);
+              return outcome;
+            };
+
+            // 1. Prepared before the conflict, delivered after it: never sent.
+            const Z = id(401);
+            await seedContact(id(402), { phone: "85255550142" });
+            const first = await surveyFor(Z, "synthetic-fx12-m20", "85255550141");
+            assert.deepEqual(
+              await service.prepareServiceAction(
+                first.action.id,
+                ports,
+                runtime,
+                first.due,
+                adapter,
+              ),
+              { prepared: 1, blocked: 0 },
+            );
+            await conflict("synthetic-fx12-m20", "85255550142", "synthetic-fx12-service-c-1");
+            const delivered = await service.deliverServiceAction(
+              first.action.id,
+              await running(first.action.id),
+              ports,
+              runtime,
+              first.due,
+              adapter,
+            );
+            assert.deepEqual(delivered, { dispatched: 0 });
+            assert.equal(sends, 0);
+            const [intent] = await query(
+              "SELECT state,error FROM whatsapp_outbound_intents WHERE service_action_id=$1",
+              [first.action.id],
+            );
+            assert.deepEqual(intent, { state: "cancelled", error: "identity_review_open" });
+            const [suppressed] = await query(
+              "SELECT state,block_reason FROM whatsapp_service_actions WHERE id=$1",
+              [first.action.id],
+            );
+            assert.deepEqual(suppressed, {
+              state: "suppressed",
+              block_reason: "identity_review_open",
+            });
+
+            // 2. Prepared after the conflict: not eligible, terminal, no intent.
+            const Z2 = id(403);
+            await seedContact(id(404), { phone: "85255550144" });
+            const second = await surveyFor(Z2, "synthetic-fx12-m21", "85255550143");
+            const review = await conflict(
+              "synthetic-fx12-m21",
+              "85255550144",
+              "synthetic-fx12-service-c-2",
+            );
+            const intentsBefore = await count("whatsapp_outbound_intents");
+            assert.deepEqual(
+              await service.prepareServiceAction(
+                second.action.id,
+                ports,
+                runtime,
+                second.due,
+                adapter,
+              ),
+              { prepared: 0, blocked: 1 },
+            );
+            assert.equal(await count("whatsapp_outbound_intents"), intentsBefore);
+            const [blocked] = await query(
+              "SELECT state,block_reason FROM whatsapp_service_actions WHERE id=$1",
+              [second.action.id],
+            );
+            assert.deepEqual(blocked, {
+              state: "suppressed",
+              block_reason: "identity_review_open",
+            });
+
+            // 2b. Races: the review opens after the action context was read. The SQL guard
+            // inside the locked statement alone must refuse, at deliver and at prepare.
+            const Z3 = id(405);
+            await seedContact(id(406), { phone: "85255550146" });
+            const third = await surveyFor(Z3, "synthetic-fx12-m22", "85255550145");
+            assert.deepEqual(
+              await service.prepareServiceAction(
+                third.action.id,
+                ports,
+                runtime,
+                third.due,
+                adapter,
+              ),
+              { prepared: 1, blocked: 0 },
+            );
+            const lease = await running(third.action.id);
+            let checkpoints = 0;
+            const raced = await service.deliverServiceAction(
+              third.action.id,
+              {
+                ...lease,
+                // The second checkpoint runs after the context read, just before dispatch.
+                checkpoint: async () => {
+                  checkpoints += 1;
+                  if (checkpoints === 2)
+                    await conflict(
+                      "synthetic-fx12-m22",
+                      "85255550146",
+                      "synthetic-fx12-service-c-3",
+                    );
+                },
+              },
+              ports,
+              runtime,
+              third.due,
+              adapter,
+            );
+            assert.equal(checkpoints, 2);
+            assert.deepEqual(raced, { dispatched: 0 });
+            assert.equal(sends, 0);
+            const [racedIntent] = await query(
+              "SELECT state,error FROM whatsapp_outbound_intents WHERE service_action_id=$1",
+              [third.action.id],
+            );
+            assert.deepEqual(racedIntent, { state: "cancelled", error: "identity_review_open" });
+
+            const Z4 = id(407);
+            await seedContact(id(408), { phone: "85255550148" });
+            const fourth = await surveyFor(Z4, "synthetic-fx12-m23", "85255550147");
+            await conflict("synthetic-fx12-m23", "85255550148", "synthetic-fx12-service-c-4");
+            // A stale context read that has not seen the review yet.
+            const staleQuery = async (statement, params) => {
+              const rows = await query(statement, params);
+              return statement.includes("AS identity_review_open,")
+                ? rows.map((row) => ({ ...row, identity_review_open: false }))
+                : rows;
+            };
+            const intentsBeforeRace = await count("whatsapp_outbound_intents");
+            assert.deepEqual(
+              await service.prepareServiceAction(
+                fourth.action.id,
+                { query: staleQuery, transaction },
+                runtime,
+                fourth.due,
+                adapter,
+              ),
+              { prepared: 0, blocked: 0 },
+            );
+            assert.equal(await count("whatsapp_outbound_intents"), intentsBeforeRace);
+            assert.equal(
+              await count(
+                "ops_jobs",
+                "job_type='woztell.reply.deliver' AND payload->>'actionId'=$1",
+                [fourth.action.id],
+              ),
+              0,
+            );
+
+            // 3. A manager resolves the review: automated replies work again.
+            await query(
+              `UPDATE crm_contact_identity_reviews SET status='linked',linked_contact_id=$2,
+                 resolved_at=now(),resolved_by=$3,updated_at=now() WHERE conversation_id=$1 AND status='open'`,
+              [review.conversationId, Z2, MANAGER],
+            );
+            // Stands in for the next scheduled action on the same conversation.
+            await query(
+              "UPDATE whatsapp_service_actions SET state='queued',block_reason=NULL WHERE id=$1",
+              [second.action.id],
+            );
+            assert.deepEqual(
+              await service.prepareServiceAction(
+                second.action.id,
+                ports,
+                runtime,
+                second.due,
+                adapter,
+              ),
+              { prepared: 1, blocked: 0 },
+            );
+            assert.deepEqual(
+              await service.deliverServiceAction(
+                second.action.id,
+                await running(second.action.id),
+                ports,
+                runtime,
+                second.due,
+                adapter,
+              ),
+              { dispatched: 1 },
+            );
+            assert.equal(sends, 1);
+          } finally {
+            restoreEnv("EP_WA_SERVICE_AUTOMATION_ENABLED", previousEnv.automation);
+            restoreEnv("EP_WA_ACTIVATION_ID", previousEnv.activation);
+            restoreEnv("EP_WA_COMPANY_CHANNEL_ID", previousEnv.channel);
+          }
         },
       );
     });

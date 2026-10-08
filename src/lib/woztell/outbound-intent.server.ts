@@ -5,6 +5,7 @@ import {
   parseWoztellProviderResult,
   type ParsedWoztellProviderResult,
 } from "./provider-result.ts";
+import { identityReviewOpenSql } from "./identity-review-sql.ts";
 
 export type OutboundState =
   | "queued"
@@ -139,8 +140,7 @@ export async function enqueueOutboundIntent(
     AND ($7::uuid IS NULL OR wc.assigned_agent_id=$7::uuid)
     AND wa_can_read_conversation($3::uuid,wc.id)
     -- FX-12 owner decision 1: no staff reply in a 「身分待核對」 conversation until it is linked.
-    AND NOT EXISTS(SELECT 1 FROM crm_contact_identity_reviews r
-      WHERE r.conversation_id=wc.id AND r.reason='whatsapp_identity_conflict' AND r.status='open')
+    AND NOT ${identityReviewOpenSql("wc.id")}
     AND ($9::uuid IS NOT NULL OR NOT EXISTS(
       SELECT 1 FROM inquiries q WHERE q.conversation_id=wc.id AND q.source='whatsapp'
         AND q.status NOT IN ('closed','resolved','spam')
@@ -276,8 +276,7 @@ async function beginOutboundDispatch(
                  OR (c.opted_out_at IS NOT NULL AND wc.last_inbound_at > c.opted_out_at)))
          OR (i.kind='template' AND c.opted_out_whatsapp=false AND t.status LIKE 'active%'))
        AND wa_can_read_conversation(i.actor_staff_id,wc.id)
-       AND NOT EXISTS(SELECT 1 FROM crm_contact_identity_reviews r
-         WHERE r.conversation_id=wc.id AND r.reason='whatsapp_identity_conflict' AND r.status='open')
+       AND NOT ${identityReviewOpenSql("wc.id")}
        AND (i.enquiry_id IS NULL OR NOT EXISTS(
          SELECT 1 FROM inquiries q WHERE q.id=i.enquiry_id
            AND q.attribution_method='explicit_customer_statement' AND q.link_open_id IS NULL

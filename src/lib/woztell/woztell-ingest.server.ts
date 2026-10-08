@@ -310,7 +310,9 @@ export async function ingestWoztellEvent(
             + CASE WHEN EXISTS(SELECT 1 FROM message) THEN 1 ELSE 0 END,
           'lastMessageAt',GREATEST((r.evidence->>'lastMessageAt')::timestamptz,$8::timestamptz),
           'optOutApplied',COALESCE((r.evidence->>'optOutApplied')::boolean,false)
-            OR EXISTS(SELECT 1 FROM review_opt_out))
+            OR EXISTS(SELECT 1 FROM review_opt_out),
+          -- A live D4 STOP arrived here, even if it matched no contact: Task 4 applies it on link.
+          'stopReceived',COALESCE((r.evidence->>'stopReceived')::boolean,false) OR $5::boolean)
       FROM conv, review rv
       WHERE rv.yes AND r.conversation_id=conv.id AND r.reason='whatsapp_identity_conflict'
         AND r.status='open' AND (EXISTS(SELECT 1 FROM message) OR EXISTS(SELECT 1 FROM review_opt_out))
@@ -332,7 +334,7 @@ export async function ingestWoztellEvent(
                                        WHEN EXISTS(SELECT 1 FROM fill_collision) THEN 'fill_collision'
                                        ELSE 'member_phone_mismatch' END,
           'messageCount',1,'lastMessageAt',$8::timestamptz,
-          'optOutApplied',EXISTS(SELECT 1 FROM review_opt_out))
+          'optOutApplied',EXISTS(SELECT 1 FROM review_opt_out),'stopReceived',$5::boolean)
       FROM review rv WHERE rv.yes AND EXISTS(SELECT 1 FROM message)
         AND NOT EXISTS(SELECT 1 FROM crm_contact_identity_reviews r JOIN conv ON r.conversation_id=conv.id
           WHERE r.reason='whatsapp_identity_conflict' AND r.status='open')

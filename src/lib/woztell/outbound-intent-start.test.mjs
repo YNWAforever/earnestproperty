@@ -11,6 +11,15 @@ const input = {
   payload: { text: "Hello" },
 };
 
+function loadPure(path) {
+  const pure = { exports: {} };
+  const output = ts.transpileModule(readFileSync(path, "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  new Function("module", "exports", output)(pure, pure.exports);
+  return pure.exports;
+}
+
 function loadIntent(row) {
   const wakes = [];
   const statements = [];
@@ -25,6 +34,8 @@ function loadIntent(row) {
     },
     "node:crypto": { createHash, randomUUID },
     "./provider-result.ts": { parseWoztellProviderResult: () => ({}) },
+    // FX-12: the real, import-free identity review predicate.
+    "./identity-review-sql.ts": loadPure("src/lib/woztell/identity-review-sql.ts"),
   };
   const mockRequire = (specifier) => {
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
