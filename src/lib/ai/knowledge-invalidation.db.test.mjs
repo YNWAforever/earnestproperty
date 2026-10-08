@@ -32,7 +32,7 @@ test(
           await knowledge.rebuildAiKnowledgeIndex();
           const chunks = await knowledge.searchPublicKnowledge({ query: "修復海景" });
           assert.equal(chunks.length, 1);
-          assert.match(chunks[0].chunk_text, /10000000/);
+          assert.match(chunks[0].chunk_text, /\$10,000,000/);
         },
       );
       await t.test("committed price mutation queues repair in the same transaction", async () => {
@@ -84,8 +84,8 @@ test(
           await knowledge.repairPublicKnowledgeIndex();
           const chunks = await knowledge.searchPublicKnowledge({ query: "修復海景" });
           assert.equal(chunks.length, 1);
-          assert.match(chunks[0].chunk_text, /11000000/);
-          assert.doesNotMatch(chunks[0].chunk_text, /10000000/);
+          assert.match(chunks[0].chunk_text, /\$11,000,000/);
+          assert.doesNotMatch(chunks[0].chunk_text, /\$10,000,000/);
           await knowledge.repairPublicKnowledgeIndex();
           assert.equal(providerCalls, before);
           assert.equal(
@@ -120,7 +120,7 @@ test(
         await knowledge.repairPublicKnowledgeIndex();
         assert.match(
           (await knowledge.searchPublicKnowledge({ query: "修復海景" }))[0].chunk_text,
-          /13000000/,
+          /\$13,000,000/,
         );
       });
       await t.test("a worker interruption preserves pending work for restart", async () => {
@@ -147,7 +147,7 @@ test(
         await knowledge.repairPublicKnowledgeIndex();
         assert.match(
           (await knowledge.searchPublicKnowledge({ query: "修復海景" }))[0].chunk_text,
-          /14000000/,
+          /\$14,000,000/,
         );
       });
       await t.test("older worker cannot overwrite a newer completed repair", async () => {
@@ -171,7 +171,7 @@ test(
           (c) => c.listing_id === property.id,
         );
         assert.ok(chunks.length, "Completed ledger must retain the newer readable publication");
-        assert.match(chunks[0].chunk_text, /16000000/);
+        assert.match(chunks[0].chunk_text, /\$16,000,000/);
       });
       await t.test("withdrawal repairs only affected sources and retains history", async () => {
         const [other] = await query(

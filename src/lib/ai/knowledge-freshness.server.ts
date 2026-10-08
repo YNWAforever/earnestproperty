@@ -28,8 +28,8 @@ export function publicKnowledgeCurrentSourcesCte() {
     LEFT JOIN estates e ON e.id=p.estate_id
   ), current_public_sources AS (
     SELECT 'listing'::text AS source_type,id::text AS source_id,source_revision FROM current_public_listings
-    UNION ALL SELECT 'faq',id::text,md5(to_jsonb(f)::text) FROM faqs f
-    UNION ALL SELECT 'estate',id::text,md5(to_jsonb(e)::text) FROM estates e
+    UNION ALL SELECT 'faq',id::text,md5(to_jsonb(f)::text) FROM faqs f WHERE f.published=true
+    UNION ALL SELECT 'estate',id::text,md5(to_jsonb(e)::text) FROM estates e WHERE e.published=true
     UNION ALL SELECT 'article',id::text,md5(to_jsonb(a)::text) FROM articles a WHERE a.published=true
     UNION ALL SELECT source_type::text,source_id,content_hash FROM ai_knowledge_sources
       WHERE source_type IN ('manual_public','district') AND published AND public_visibility='public'

@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { createHash } from "node:crypto";
 
+import { formatArea, formatHkd, formatManDisplay } from "@/lib/format";
 import { getSql, queryRows, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
 
 import type { AiKnowledgeChunk, AiKnowledgeSourceType, AiVisibility } from "./ai-types";
@@ -245,13 +246,14 @@ export async function searchPublicKnowledge(input: { query: string; limit?: numb
 async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
   const [faqs, estates, articles, listings] = await Promise.all([
     queryRows(
-      "SELECT id, scope, question, answer, md5(to_jsonb(f)::text) AS source_revision FROM faqs f ORDER BY scope, sort_order, created_at",
+      "SELECT id, scope, question, answer, md5(to_jsonb(f)::text) AS source_revision FROM faqs f WHERE f.published = true ORDER BY scope, sort_order, created_at",
     ),
     queryRows(
       `SELECT id, slug, name_zh, name_en, district_slug, developer, year_completed,
         phases, total_units, area_min, area_max, description, facilities, seo_title, seo_description,
         md5(to_jsonb(e)::text) AS source_revision
        FROM estates e
+       WHERE e.published = true
        ORDER BY name_zh`,
     ),
     queryRows(
@@ -470,6 +472,19 @@ function joinText(values: unknown[]) {
     .join("\n");
 }
 
+function formatSalePrice(value: unknown) {
+  const price = Number(value);
+  const hkd = formatHkd(price);
+  if (!hkd) return "待核實";
+  const man = formatManDisplay(price);
+  return man ? `${hkd}（${man}）` : hkd;
+}
+
+function formatRent(value: unknown) {
+  const hkd = formatHkd(Number(value));
+  return hkd ? `${hkd}／月` : "待核實";
+}
+
 function listingFacts(row: Record<string, unknown>) {
   const offerings = Array.isArray(row.offerings)
     ? (row.offerings as Array<Record<string, unknown>>)
@@ -477,10 +492,10 @@ function listingFacts(row: Record<string, unknown>) {
   const facts = [
     ...offerings.map((offer) =>
       offer.deal_type === "sale"
-        ? `出售：${offer.price ?? "待核實"}`
-        : `出租：${offer.rent ?? "待核實"}`,
+        ? `出售：${formatSalePrice(offer.price)}`
+        : `出租：${formatRent(offer.rent)}`,
     ),
-    row.saleable_area ? `實用面積：${row.saleable_area}` : null,
+    row.saleable_area ? `實用面積：${formatArea(Number(row.saleable_area)) ?? "待核實"}` : null,
     row.bedrooms ? `睡房：${row.bedrooms}` : null,
     row.bathrooms ? `浴室：${row.bathrooms}` : null,
     row.district_slug ? `地區：${row.district_slug}` : null,
