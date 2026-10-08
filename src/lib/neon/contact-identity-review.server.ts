@@ -186,17 +186,24 @@ async function findStop(conversationId: string): Promise<StopMessage | null> {
 }
 
 /**
- * The FX-08 opt-out assignments for a STOP stored in the review conversation, applied to the
- * contact a manager links it to ($4 message id, $5 text, $6 time; d.nso = apply it). The same
- * rules as ingest's OPT_OUT_ASSIGNMENTS: newer evidence wins and a new episode resets clears.
+ * The FX-08 opt-out assignments for the contact a manager links a review conversation to.
+ *  - d.nso: a STOP stored in the conversation ($4 message id, $5 text, $6 time), as
+ *    'customer_message'. The same rules as ingest's OPT_OUT_ASSIGNMENTS: newer evidence wins
+ *    and a new episode resets clears.
+ *  - d.nsr: a STOP the review recorded whose message can no longer be found, as
+ *    'staff_recorded' at the link time. The same rules as recording 拒收推廣 by hand: a new
+ *    episode at now(), an already opted-out contact keeps its earlier message evidence, and
+ *    marketing consent is withdrawn.
+ * d.nso and d.nsr never both hold.
  */
-const LINK_OPT_OUT = `opted_out_whatsapp=COALESCE(x.opted_out_whatsapp,false) OR d.nso,
-      opted_out_at=CASE WHEN d.nso AND (NOT COALESCE(x.opted_out_whatsapp,false) OR x.opted_out_at IS NULL OR $6::timestamptz>x.opted_out_at) THEN $6::timestamptz ELSE x.opted_out_at END,
-      opted_out_message_id=CASE WHEN d.nso AND (NOT COALESCE(x.opted_out_whatsapp,false) OR x.opted_out_at IS NULL OR $6::timestamptz>x.opted_out_at) THEN $4::text ELSE x.opted_out_message_id END,
-      opted_out_text=CASE WHEN d.nso AND (NOT COALESCE(x.opted_out_whatsapp,false) OR x.opted_out_at IS NULL OR $6::timestamptz>x.opted_out_at) THEN left($5::text,500) ELSE x.opted_out_text END,
-      opted_out_source=CASE WHEN d.nso AND (NOT COALESCE(x.opted_out_whatsapp,false) OR x.opted_out_at IS NULL OR $6::timestamptz>x.opted_out_at) THEN 'customer_message' ELSE x.opted_out_source END,
-      opted_out_cleared_at=CASE WHEN d.nso AND NOT COALESCE(x.opted_out_whatsapp,false) THEN NULL ELSE x.opted_out_cleared_at END,
-      opted_out_cleared_by=CASE WHEN d.nso AND NOT COALESCE(x.opted_out_whatsapp,false) THEN NULL ELSE x.opted_out_cleared_by END`;
+const LINK_OPT_OUT_OR_STAFF_RECORDED = `opted_out_whatsapp=CASE WHEN d.nsr THEN true ELSE COALESCE(x.opted_out_whatsapp,false) OR d.nso END,
+      opt_in_whatsapp=CASE WHEN d.nsr THEN false ELSE x.opt_in_whatsapp END,
+      opted_out_at=CASE WHEN d.nsr THEN now() WHEN d.nso AND (NOT COALESCE(x.opted_out_whatsapp,false) OR x.opted_out_at IS NULL OR $6::timestamptz>x.opted_out_at) THEN $6::timestamptz ELSE x.opted_out_at END,
+      opted_out_message_id=CASE WHEN d.nsr THEN CASE WHEN x.opted_out_whatsapp THEN x.opted_out_message_id END WHEN d.nso AND (NOT COALESCE(x.opted_out_whatsapp,false) OR x.opted_out_at IS NULL OR $6::timestamptz>x.opted_out_at) THEN $4::text ELSE x.opted_out_message_id END,
+      opted_out_text=CASE WHEN d.nsr THEN CASE WHEN x.opted_out_whatsapp THEN x.opted_out_text END WHEN d.nso AND (NOT COALESCE(x.opted_out_whatsapp,false) OR x.opted_out_at IS NULL OR $6::timestamptz>x.opted_out_at) THEN left($5::text,500) ELSE x.opted_out_text END,
+      opted_out_source=CASE WHEN d.nsr THEN 'staff_recorded' WHEN d.nso AND (NOT COALESCE(x.opted_out_whatsapp,false) OR x.opted_out_at IS NULL OR $6::timestamptz>x.opted_out_at) THEN 'customer_message' ELSE x.opted_out_source END,
+      opted_out_cleared_at=CASE WHEN d.nsr OR (d.nso AND NOT COALESCE(x.opted_out_whatsapp,false)) THEN NULL ELSE x.opted_out_cleared_at END,
+      opted_out_cleared_by=CASE WHEN d.nsr OR (d.nso AND NOT COALESCE(x.opted_out_whatsapp,false)) THEN NULL ELSE x.opted_out_cleared_by END`;
 
 /** How often a resolve re-reads after the review changed under it (a new message). */
 const MAX_ATTEMPTS = 3;
@@ -223,9 +230,11 @@ export type ResolveHooks = {
  *    contact with the WhatsApp profile name (or NULL), the member when free, source 'whatsapp'
  *    and opt_in_whatsapp=false: never a phone or consent.
  *  - A live STOP stored in the conversation (evidence.stopReceived) opts the chosen contact out
- *    with FX-08 evidence. If the STOP message cannot be found, nothing is linked
- *    (409 REVIEW_STOP_NOT_FOUND): FX-08's evidence model has no source for a STOP without its
- *    message, so the link is refused rather than made without the opt-out.
+ *    with FX-08 'customer_message' evidence. If the STOP message can no longer be found, the
+ *    link still goes ahead and the chosen contact is opted out as FX-08 'staff_recorded' at the
+ *    link time (FX-08's source for an opt-out with no message), with a crm_consent_events row
+ *    whose evidence_ref names the review and the audit's optOutSource, so a STOP is never
+ *    linked past.
  *  - The audit records what a link changed, so a wrong link can be reversed by hand (FX-18
  *    owns a real undo): the linked and previous contact, the reattached message ids, member
  *    fill, opt-out (by internal message id), lead opened and conversation reopened. No phone
@@ -250,10 +259,10 @@ export async function resolveContactIdentityReview(
     if (refused || !review) throw refused;
 
     let stop: StopMessage | null = null;
-    if (link && review.stop_received) {
-      stop = review.conversation_id ? await findStop(review.conversation_id) : null;
-      if (!stop) throw fail(409, "REVIEW_STOP_NOT_FOUND");
-    }
+    if (link && review.stop_received && review.conversation_id)
+      stop = await findStop(review.conversation_id);
+    // A recorded STOP whose message is gone: opt out as staff_recorded instead of refusing.
+    const staffRecordedStop = link && review.stop_received && !stop;
     await hooks.afterRead?.();
     const chosenKnown =
       input.action === "link_a"
@@ -281,7 +290,8 @@ export async function resolveContactIdentityReview(
           (r.reason='whatsapp_identity_conflict' AND ($2::text='link_new'
             OR ($2::text='link_a' AND r.contact_a IS NOT NULL)
             OR ($2::text='link_b' AND r.contact_b IS NOT NULL))
-            AND (NOT COALESCE((r.evidence->>'stopReceived')::boolean,false) OR $4::text IS NOT NULL))
+            AND (NOT COALESCE((r.evidence->>'stopReceived')::boolean,false) OR $4::text IS NOT NULL
+              OR $10::boolean))
           OR (r.reason='phone_format_duplicate' AND $2::text IN ('same_person','different_people','dismiss')))
         FOR UPDATE
       ), conv AS (
@@ -292,7 +302,9 @@ export async function resolveContactIdentityReview(
         SELECT conv.woztell_member_id AS member FROM conv WHERE conv.woztell_member_id IS NOT NULL
           AND NOT EXISTS(SELECT 1 FROM crm_contacts o WHERE o.whatsapp_member_id=conv.woztell_member_id)
       ), stop AS (
-        SELECT COALESCE((t.evidence->>'stopReceived')::boolean,false) AND $4::text IS NOT NULL AS yes
+        SELECT COALESCE((t.evidence->>'stopReceived')::boolean,false) AND $4::text IS NOT NULL AS yes,
+          COALESCE((t.evidence->>'stopReceived')::boolean,false) AND $4::text IS NULL
+            AND $10::boolean AS staff
         FROM target t
       ), unlinked AS (
         SELECT m.id,m.created_at,m.direction::text AS direction,m.payload FROM whatsapp_messages m
@@ -307,11 +319,14 @@ export async function resolveContactIdentityReview(
       ), new_contact AS (
         INSERT INTO crm_contacts(name,whatsapp_member_id,source,opt_in_whatsapp,opted_out_whatsapp,
           opted_out_at,opted_out_message_id,opted_out_text,opted_out_source)
-        SELECT (SELECT name FROM profile),(SELECT member FROM member_free),'whatsapp',false,s.yes,
-          CASE WHEN s.yes THEN $6::timestamptz END,CASE WHEN s.yes THEN $4::text END,
-          CASE WHEN s.yes THEN left($5::text,500) END,CASE WHEN s.yes THEN 'customer_message' END
+        SELECT (SELECT name FROM profile),(SELECT member FROM member_free),'whatsapp',false,
+          s.yes OR s.staff,
+          CASE WHEN s.yes THEN $6::timestamptz WHEN s.staff THEN now() END,
+          CASE WHEN s.yes THEN $4::text END,CASE WHEN s.yes THEN left($5::text,500) END,
+          CASE WHEN s.yes THEN 'customer_message' WHEN s.staff THEN 'staff_recorded' END
         FROM conv,stop s WHERE $2::text='link_new'
-        RETURNING id,whatsapp_member_id IS NOT NULL AS member_filled,opted_out_whatsapp AS opted_out
+        RETURNING id,whatsapp_member_id IS NOT NULL AS member_filled,opted_out_whatsapp AS opted_out,
+          opted_out_source AS opt_out_source
       ), chosen AS (
         SELECT CASE WHEN $2::text='link_a' THEN t.contact_a ELSE t.contact_b END AS id
         FROM target t, conv WHERE $2::text IN ('link_a','link_b')
@@ -326,18 +341,28 @@ export async function resolveContactIdentityReview(
       ), decision AS (
         SELECT x.id,
           (s.yes AND x.opted_out_message_id IS DISTINCT FROM $4::text) AS nso,
+          s.staff AS nsr,
           (x.whatsapp_member_id IS NULL AND EXISTS(SELECT 1 FROM member_free)) AS fill
         FROM crm_contacts x JOIN chosen c ON c.id=x.id, stop s WHERE $2::text IN ('link_a','link_b')
       ), linked_contact AS (
         UPDATE crm_contacts x SET
           whatsapp_member_id=CASE WHEN d.fill AND x.whatsapp_member_id IS NULL
             THEN (SELECT member FROM member_free) ELSE x.whatsapp_member_id END,
-          ${LINK_OPT_OUT},
+          ${LINK_OPT_OUT_OR_STAFF_RECORDED},
           updated_at=now()
-        FROM decision d WHERE x.id=d.id AND (d.nso OR d.fill)
+        FROM decision d WHERE x.id=d.id AND (d.nso OR d.nsr OR d.fill)
         RETURNING x.id,
           (d.fill AND x.whatsapp_member_id IS NOT DISTINCT FROM (SELECT member FROM member_free)) AS member_filled,
-          d.nso AS opted_out
+          d.nso OR d.nsr AS opted_out,
+          CASE WHEN d.nsr THEN 'staff_recorded' WHEN d.nso THEN 'customer_message' END AS opt_out_source
+      ), staff_recorded_consent AS (
+        -- The consent history row a 拒收推廣 record writes, naming this review as the evidence.
+        INSERT INTO crm_consent_events(contact_id,opted_in,source,evidence_ref,copy_version,actor_staff_id)
+        SELECT o.id,false,'customer_opt_out','identity-review:'||$1::text,'whatsapp-marketing-v1',$3::uuid
+        FROM (SELECT id,opt_out_source FROM linked_contact
+          UNION ALL SELECT id,opt_out_source FROM new_contact) o
+        WHERE o.opt_out_source='staff_recorded'
+        RETURNING id
       ), linked_conversation AS (
         -- A closed conversation reopens like it would for a new inbound message (FX-09).
         UPDATE whatsapp_conversations wc SET contact_id=c.id,
@@ -390,6 +415,8 @@ export async function resolveContactIdentityReview(
               OR COALESCE((SELECT member_filled FROM new_contact),false),
             'optOutApplied',COALESCE((SELECT opted_out FROM linked_contact),false)
               OR COALESCE((SELECT opted_out FROM new_contact),false),
+            'optOutSource',COALESCE((SELECT opt_out_source FROM linked_contact),
+              (SELECT opt_out_source FROM new_contact)),
             'optOutMessageId',CASE WHEN COALESCE((SELECT opted_out FROM linked_contact),false)
               OR COALESCE((SELECT opted_out FROM new_contact),false) THEN $9::uuid END,
             'leadOpenedId',(SELECT id FROM new_lead),
@@ -409,6 +436,7 @@ export async function resolveContactIdentityReview(
           note,
           review.version,
           stop?.id ?? null,
+          staffRecordedStop,
         ],
       },
       {

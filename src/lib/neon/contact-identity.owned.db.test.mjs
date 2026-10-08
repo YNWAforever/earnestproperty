@@ -1367,28 +1367,79 @@ test("FX-12 contact identity on owned Postgres", { timeout: 300000 }, async (t) 
       );
 
       await t.test(
-        "I1: stopReceived with no STOP message found refuses the link and writes nothing",
+        "I1: stopReceived with no STOP message found links and records a staff_recorded opt-out",
         async () => {
+          // FX-08 allows an opt-out with no message ('staff_recorded'). When the evidence says a
+          // STOP arrived but no stored message classifies as one, the link goes ahead and the
+          // linked contact is opted out as staff_recorded at the link time, never left open.
+          const markStop = (reviewId) =>
+            query(
+              `UPDATE crm_contact_identity_reviews SET evidence=evidence||'{"stopReceived":true}'::jsonb WHERE id=$1`,
+              [reviewId],
+            );
+          const assertStaffRecorded = async (contactId, reviewId, startedAt) => {
+            const row = await one(
+              `SELECT opted_out_whatsapp,opted_out_source,opted_out_message_id,opted_out_text,
+                 opted_out_at,opt_in_whatsapp FROM crm_contacts WHERE id=$1`,
+              [contactId],
+            );
+            assert.equal(row.opted_out_whatsapp, true);
+            assert.equal(row.opted_out_source, "staff_recorded");
+            assert.equal(row.opted_out_message_id, null);
+            assert.equal(row.opted_out_text, null);
+            assert.equal(row.opt_in_whatsapp, false);
+            assert.ok(row.opted_out_at.getTime() >= startedAt.getTime() - 1000);
+            // The consent history names the identity review as the evidence.
+            const events = await query(
+              "SELECT opted_in,evidence_ref,actor_staff_id FROM crm_consent_events WHERE contact_id=$1",
+              [contactId],
+            );
+            assert.deepEqual(
+              events.map((event) => ({ ...event })),
+              [
+                {
+                  opted_in: false,
+                  evidence_ref: "identity-review:" + reviewId,
+                  actor_staff_id: MANAGER,
+                },
+              ],
+            );
+            const [audit] = await auditFor(reviewId);
+            assert.equal(audit.metadata.optOutApplied, true);
+            assert.equal(audit.metadata.optOutSource, "staff_recorded");
+            assert.equal(audit.metadata.optOutMessageId, null);
+            assertNoIdentity(audit.metadata);
+          };
+
+          const B = id(1002);
           const { review: open } = await conflictFor(
-            id(1002),
+            B,
             "92",
             "synthetic-fx12-t4-f-m92a",
             "synthetic-fx12-t4-f-m92b",
           );
-          // The evidence says a STOP arrived, but no stored message classifies as one.
-          await query(
-            `UPDATE crm_contact_identity_reviews SET evidence=evidence||'{"stopReceived":true}'::jsonb WHERE id=$1`,
-            [open.id],
+          await markStop(open.id);
+          const [{ now: startedAt }] = await query("SELECT now() AS now");
+          const linked = await review.resolveContactIdentityReview(
+            { id: open.id, action: "link_b" },
+            managerActor,
           );
-          const before = await worldDigest();
-          for (const action of ["link_new", "link_b"])
-            await rejectsStatus(
-              review.resolveContactIdentityReview({ id: open.id, action }, managerActor),
-              409,
-              "REVIEW_STOP_NOT_FOUND",
-            );
-          assert.equal(await worldDigest(), before);
-          assert.equal((await reviewRow(open.id)).status, "open");
+          assert.deepEqual(linked, { ok: true, status: "linked", linkedContactId: B });
+          await assertStaffRecorded(B, open.id, startedAt);
+
+          const second = await conflictFor(
+            id(1008),
+            "98",
+            "synthetic-fx12-t4-f-m98a",
+            "synthetic-fx12-t4-f-m98b",
+          );
+          await markStop(second.review.id);
+          const created = await review.resolveContactIdentityReview(
+            { id: second.review.id, action: "link_new" },
+            managerActor,
+          );
+          assert.equal(created.status, "linked");
+          await assertStaffRecorded(created.linkedContactId, second.review.id, startedAt);
         },
       );
 
