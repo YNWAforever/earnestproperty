@@ -27,6 +27,10 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  identityReviewResolveError,
+  type IdentityReviewResolveError,
+} from "./contact-identity-review-errors";
+import {
   fetchContactIdentityReviews,
   resolveContactIdentityReviewItem,
 } from "@/lib/neon/contact-identity-review";
@@ -52,8 +56,8 @@ const IDENTITY_REVIEW_COPY = {
   confirmTitle: "確認處理？",
   confirm: "確認",
   success: "已處理。",
-  alreadyResolved: "此項目已由其他同事處理，請重新載入。",
-  notAllowed: "此操作不適用於這個項目。",
+  // 此項目已由其他同事處理，請重新載入。 and 此操作不適用於這個項目。 are in
+  // contact-identity-review-errors.ts with the resolve error mapping.
   empty: "暫時沒有需要核對的客戶記錄。",
   // New in Task 4, not in the copy table: column headings, for owner review.
   contactA: "客戶 A",
@@ -61,8 +65,6 @@ const IDENTITY_REVIEW_COPY = {
   actions: "處理",
   // New in fix round 1, for owner review.
   reasonColumn: "原因",
-  stopNotFound:
-    "此對話曾收到退訂（STOP）訊息，但系統未能核實該訊息，所以未有連結。請聯絡技術支援。",
   viewLeadOf: (name: string, n: number) => `查看「${name}」的查詢 ${n}`,
 } as const;
 // Existing admin copy, reused.
@@ -75,7 +77,6 @@ const RELOAD = "重新載入";
 const CANCEL = "取消";
 const NEXT_PAGE = "下一頁";
 const LOAD_FAILED = "暫時未能載入資料，請稍後再試。";
-const SUBMIT_FAILED = "提交失敗，請稍後再試。";
 
 /** `detail` tells two link choices apart when the names match: the side and the masked digits. */
 type Choice = { action: IdentityReviewAction; label: string; detail?: string };
@@ -246,7 +247,7 @@ export function ContactIdentityReviewTable({
 }
 
 type Pending = { row: IdentityReviewRow; choice: Choice };
-type DialogError = { message: string; reload: boolean };
+type DialogError = IdentityReviewResolveError;
 
 /** The open review list with its confirm dialog. Admin and manager only (the server enforces it). */
 export function ContactIdentityReviewList({
@@ -325,18 +326,7 @@ export function ContactIdentityReviewList({
       void load();
     } catch (error) {
       if (!mountedRef.current) return;
-      const status =
-        typeof error === "object" && error !== null && "status" in error
-          ? (error as { status: unknown }).status
-          : undefined;
-      const code = error instanceof Error ? error.message.trim() : "";
-      if (code === "REVIEW_STOP_NOT_FOUND")
-        setDialogError({ message: IDENTITY_REVIEW_COPY.stopNotFound, reload: true });
-      else if (status === 409 || code === "REVIEW_ALREADY_RESOLVED")
-        setDialogError({ message: IDENTITY_REVIEW_COPY.alreadyResolved, reload: true });
-      else if (code === "REVIEW_ACTION_NOT_ALLOWED")
-        setDialogError({ message: IDENTITY_REVIEW_COPY.notAllowed, reload: true });
-      else setDialogError({ message: SUBMIT_FAILED, reload: false });
+      setDialogError(identityReviewResolveError(error));
     } finally {
       if (mountedRef.current) setSubmitting(false);
     }

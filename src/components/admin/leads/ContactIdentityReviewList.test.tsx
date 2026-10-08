@@ -108,4 +108,31 @@ describe("ContactIdentityReviewList", () => {
     expect($.text()).toContain("暫時沒有需要核對的客戶記錄。");
     expect($("button").length).toBe(0);
   });
+
+  test("a resolve error maps to accurate existing copy, never 已由其他同事處理 for a changed review", async () => {
+    const { identityReviewResolveError } = await import("./contact-identity-review-errors");
+    const err = (message: string, status?: number) =>
+      Object.assign(new Error(message), status === undefined ? {} : { status });
+    // The review changed under the manager (new messages): reload and check, not "someone else".
+    expect(identityReviewResolveError(err("REVIEW_CHANGED", 409))).toEqual({
+      message: "資料版本已變更，請重新載入並核對後再儲存。",
+      reload: true,
+    });
+    expect(identityReviewResolveError(err("REVIEW_ALREADY_RESOLVED", 409))).toEqual({
+      message: "此項目已由其他同事處理，請重新載入。",
+      reload: true,
+    });
+    expect(identityReviewResolveError(err("REVIEW_ACTION_NOT_ALLOWED", 400))).toEqual({
+      message: "此操作不適用於這個項目。",
+      reload: true,
+    });
+    expect(identityReviewResolveError(err("boom", 500))).toEqual({
+      message: "提交失敗，請稍後再試。",
+      reload: false,
+    });
+    // The removed refusal has no copy left: 請聯絡技術支援 is never shown.
+    expect(identityReviewResolveError(err("REVIEW_STOP_NOT_FOUND", 409)).message).not.toContain(
+      "技術支援",
+    );
+  });
 });
