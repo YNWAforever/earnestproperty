@@ -18,17 +18,18 @@ Findings: F-06, L-04, F-04, F-24, F-22, L-05. F-05 is **skipped unless the owner
   redirectEntry(HOST_REDIRECT_SOURCE, `${origin.origin}/$1`, true, {
     has: [{ type: "host", value: FALLBACK_HOST }], // "earnestproperty.vercel.app"
   })
-  // HOST_REDIRECT_SOURCE = "/((?!api(?:/|$)|_serverFn(?:/|$)|w/|\\.well-known(?:/|$)).*)"
+  // HOST_REDIRECT_SOURCE = "/((?!api(?:/|$)|_serverFn(?:/|$)|w/|assets/|\\.well-known(?:/|$)).*)"
   ```
+  > **Shipped (2026-10-08 FX-13):** `assets/` is also excluded, because a tab left open on vercel.app keeps lazy-loading `/assets/*` chunks and a cross-origin 308 would break those imports. `HOST_REDIRECT_SOURCE` and `canonicalHostRedirects` are module-private; only `config` is exported.
   The `CANONICAL_HOST_REDIRECT_ENABLED` flag is deleted (fix plan Global constraints: "removes 7"). Vercel cannot condition a redirect on the HTTP method (fact 4). **"Never redirect a POST" is therefore delivered by path exclusion:** every POST-receiving machine route lives under `/api/` or `/_serverFn/` (facts 9-10), and a test enumerates `src/routes/api.*.ts` so a future API route cannot slip into the redirect.
 - **Preview deployments never redirect.** There are two independent guards. First, the rule is generated only in production builds. Second, even a production config matches only the exact host `earnestproperty.vercel.app`. Previews are served on `earnestproperty-git-<branch>-<team>.vercel.app` and `earnestproperty-<hash>-<team>.vercel.app`, which that host value cannot match (fact 5).
 - **Legacy PHP paths.** These are static `vercel.ts` entries, taken only from the audit's 24 h 404 list (L-04, audit `:150`). `/special_prop_detail.php?id=<n>` goes through the existing `/property-detail/$file` resolver, using a Vercel `has` query capture. No new app route is needed.
 - **Old search code.** This lives in the `/property/$listingNo` loader. It runs **only after** `fetchPropertyByListingNo` returns nothing, and only when the decoded parameter has the shape `b<name>$` (trailing literal `$`). A real listing can therefore never be redirected (facts 19-20).
 - **F-04.** A `search.middlewares: [stripSearchParams(DEFAULTS)]` on the three routes. TanStack Start's server load redirects only when the incoming `publicHref` differs from the canonical one it builds (fact 15). With the defaults stripped, the canonical of `/listings` is `/listings`, so the bare URL is served directly. The 28 internal hrefs that spell the defaults out are rewritten (fact 17), so the change adds no new 307s.
-- **No new env var, no migration, no provider call, no new `test:*` script, no `ci.yml` change.**
+- **No new env var, no migration, no provider call, no new `test:*` script, no `ci.yml` change.** (The one `package.json` change is the devDependency pin above, 2026-10-08 FX-13.)
 
 **Tech stack.**
-- Config tests: `node --test`. They load `vercel.ts` in a child process with `--experimental-strip-types` and controlled env, which is the pattern of `scripts/site-origin.test.mjs:34-58`. Sources are compiled with `path-to-regexp` 6.3.0. That is the same major version Vercel uses, already in `package-lock.json` (hoisted via `wrangler`). Nothing is added to `package.json`, and `bun.lockb` is untouched.
+- Config tests: `node --test`. They load `vercel.ts` in a child process with `--experimental-strip-types` and controlled env, which is the pattern of `scripts/site-origin.test.mjs:34-58`. Sources are compiled with `path-to-regexp` 6.3.0. That is the same major version Vercel uses, already in `package-lock.json` (hoisted via `wrangler`). > **Shipped (2026-10-08 FX-13):** `package.json` now pins `path-to-regexp` 6.3.0 as a devDependency (`package.json:224`, `package-lock.json:95`), so the test does not depend on a hoisted copy. `bun.lockb` was not regenerated.
 - Router behaviour tests: `node --test`, building a real `@tanstack/react-router` 1.170.41 router in memory.
 - Pure and source-scan tests: `node --test` (importing `.ts` directly, as `src/content/estate-registry.test.mjs` does). The pure 404-head helper uses `bun test`.
 
@@ -76,7 +77,7 @@ Findings: F-06, L-04, F-04, F-24, F-22, L-05. F-05 is **skipped unless the owner
 | 18 | **Search-schema source scans.** Several tests slice `const searchSchema = z.object({` out of the route files: `listings.contract.test.mjs:210`, `agents.contract.test.mjs:487`, `transactions.contract.test.mjs:43-58`, `videos.contract.test.mjs:9-10`. **The schemas must stay in the route files**, and the new middleware is added beside them. | as listed |
 | 19 | **How `/property/$listingNo` reads its parameter.** The loader calls `fetchPropertyByListingNo(params.listingNo)` and throws `notFound()` on a miss or a non-public status. When `public_listing_no` differs, it 301s to it (`property.$listingNo.tsx:135-160`). Params are `decodeURIComponent`-decoded (`router-core/src/new-process-route-tree.ts:786`). A raw `$` re-encodes as `%24`, which explains the audit's "307 then 404": first the canonical-href redirect, then the loader miss. | as listed |
 | 20 | **Real listing numbers include `B…`.** The production runtime-log 404 paths (2026-10-08, read-only) include `/property/B054645`, `/property/B050052`, `/property/B070102`, `/property/T029514`, `/property/A056377` and `/property/C007232`. FX-11b's number grammar (PR #237, `src/lib/ai/live-agent-intent.ts`) is `EP` + 3-8 digits, or one letter + optional `-`/space + 6 digits (`A056377`, `C-018613`). A `-R` suffix is handled in the loader (`:155`). **A rule on "starts with b" alone would catch real listings.** | Vercel runtime logs; PR #237 |
-| 21 | **The estate registry** has `nameZh`, `nameEn`, `aliases[]` and `hasPage` per entry (`src/content/estate-registry.ts:48-128,130+`). It has no imports, so `node --test` can import it as `.ts`. `/listings` accepts **`keyword`**, not `q` (`listings.tsx:85`). An unknown key is stripped by zod, and the result 307s to the bare URL. | as listed |
+| 21 | **The estate registry** has `nameZh`, `nameEn`, `aliases[]` and `hasPage` per entry (`src/content/estate-registry.ts:48-128,130+`). It has no imports, so `node --test` can import it as `.ts`. `/listings` accepts **`keyword`**, not `q` (`listings.tsx:85`). ~~An unknown key is stripped by zod, and the result 307s to the bare URL.~~ **Corrected (2026-10-08 FX-13):** unknown keys such as `ln` are kept, not stripped. `search.strict` is off and the router merges validated output into the incoming search (`router.ts:1833-1843`), so `/listings?foo=1` serves 200 and `/info_gallery.php?foo=1` ends at `/listings?foo=1`. | as listed |
 | 22 | **`/property-detail/$file` resolver.** It parses `^(\d+)\.html?$`, looks up `legacy_detail_id`, and 301s to `/property/<listing_no>`, else 301s to `/listings` (`src/routes/property-detail.$file.ts:10-36`). `legacy-detail.contract.test.mjs:11-26,45` pins it, together with `type: "host", value: FALLBACK_HOST` in `vercel.ts`. | as listed |
 | 23 | **L-05: the fix plan's lines are stale.** `property.$listingNo.tsx:543,576` are price and badge markup. The estate links are `:484` (JSON-LD `${SITE_URL}/estate/${estate.slug}`), `:517` (breadcrumb `` `/estate/${estate.slug}` ``) and `:863-864` (`<Link params={{ slug: estate.slug }}>`). All three are guarded on `estate` but **not** on `estate.slug`. `transactions.tsx:661` guards `estate?.slug`. `EstateDirectory.tsx:60` uses `encodeURIComponent(estate.slug)`, which yields `"null"` when the slug is null. The audit marks the source as GUESS. | as listed |
 | 24 | **The 404 head.** The root `head()` always returns `pageSeo.home.title`/description (`__root.tsx:82-107`). `NotFoundComponent` (`:40-73`) sets no head. Each match carries `status: 'pending'\|'success'\|'error'\|'notFound'` (`router-core/src/Matches.ts:134`), and `head` receives `matches` (`route.ts:1199-1225`). | as listed |
@@ -91,7 +92,7 @@ Findings: F-06, L-04, F-04, F-24, F-22, L-05. F-05 is **skipped unless the owner
 - **Permanent only when the target is final.** `permanent: true` (308) is for a fixed public page. A hop into a resolver (`/property-detail/:id.html`) and an unknown-estate keyword search use temporary codes (307/302).
 - **No new env var, no `VITE_*`.** `CANONICAL_HOST_REDIRECT_ENABLED` is removed from code, tests and docs.
 - **No new `test:*` script, no `ci.yml` edit** (keeps clear of #237 and #238, which both append scripts). New test files join existing CI-run scripts.
-- **Do not touch `bun.lockb` or `package-lock.json`.** No dependency is added. `path-to-regexp` and `@tanstack/react-router` are already installed.
+- **Do not touch `bun.lockb` or `package-lock.json`.** No dependency is added. `path-to-regexp` and `@tanstack/react-router` are already installed. (Shipped, 2026-10-08 FX-13: `path-to-regexp` 6.3.0 is pinned as a devDependency, so `package.json` and `package-lock.json` changed. `bun.lockb` did not.)
 - **Production is read-only.** Canary checks are `curl -I`/GET. The one POST, to the webhook, is an empty, unsigned request that the handler rejects with 401 before parsing (fact 9). It writes no receipt.
 - **Copy:** zh-HK. The only new user-visible text is the 404 title 「找不到頁面｜晉誠地產」 (audit F-22 wording) **[owner copy]** (Open question 5).
 - **Every PR passes** `npm run lint`, `npm run typecheck`, `npm run build`, `test:seo`, `test:listing-search`, `test:videos`, `test:transactions`, `test:property-experience`, `test:estate-conversion`, and `test:control-plane` (which runs `src/test-wiring.test.mjs`). Also the admin browser suites in `playwright.admin-owned.config.ts`.
@@ -112,6 +113,8 @@ Findings: F-06, L-04, F-04, F-24, F-22, L-05. F-05 is **skipped unless the owner
 | `rel="nofollow"` on rendered `/w/` anchors (audit F-24's second half) | FX-16 | robots `Disallow: /w/` is enough to stop crawling. |
 | `src/lib/ai/knowledge.server.ts:330` builds `/estate/${stringOrEmpty(row.slug)}` | after PR #237 merges | #237 rewrites that file. Touching it here would conflict. It yields `/estate/`, not `/estate/null`. |
 | Remove `earnestproperty.vercel.app` from `src/content/seo.ts:12` fallback and `src/lib/mls/importer.mjs:103` user agent | FX-19 | Local and test fallbacks only, no production effect. |
+| Legacy detail chain is 3 hops on www (4 from vercel.app) (2026-10-08 FX-13, final review I-2) | resolver follow-up | `/special_prop_detail.php?id=N` → 307 `/property-detail/N.html?id=N` → 301 `/property/<listing_no>` → 301 `/property/<public_no>` → 200. The last two hops are pre-existing (`property-detail.$file.ts:31`, `property.$listingNo.tsx:153-166`); FX-13 only puts a 307 in front. A later change can make the resolver target `public_listing_no` directly. Matrix row 10 uses `--max-redirs 4`, which only just passes from vercel.app. |
+| Old-search-code edge cases (2026-10-08 FX-13, final review M-8) | none | `/property/c5?deal=sale` becomes `/listings?deal=sale&deal=rent`, so `deal` falls back to `all`. A numeric estate name such as `b123$` becomes `keyword=123`, fails `z.string` and 307s to bare `/listings`. Both end on a 200 page and nobody is known to hit them. Noted only. |
 
 ---
 
@@ -201,6 +204,8 @@ Findings: F-06, L-04, F-04, F-24, F-22, L-05. F-05 is **skipped unless the owner
   - the query key carrying the listing id on `/special_prop_detail.php` and `/m/property_detail.php`, and 3 sample ids.
 
   Paste only **paths and counts** into the PR description, never IPs or user agents. **Do not add any path that this export or the audit does not show.**
+> **Shipped (2026-10-08 FX-13):** there was no 404 export, so only the audit's 8 paths ship. No `.json` or uppercase `special_prop_st` variants ship. `/eng/seccode_enquiry/seccode.php` is **not** redirected and returns 404: a known gap until a 404 export shows the real path. The `/?ln=sc|tc` self-redirect (Task 2 rule and its test) is deleted, because it looped in production.
+
 - **Modify `vercel.ts:84-105`.** Add these after `:105`, in this order:
   ```ts
   // L-04 (audit :150): old-site 404s, 24 h counts in brackets.
@@ -399,14 +404,15 @@ export function estatePath(slug: string | null | undefined): string | null;
 |---|---|---|
 | 1 | `curl -sI $P/` | 200, no `location` (previews never host-redirect) |
 | 2 | `curl -sI $P/listings` ; `$P/videos` ; `$P/transactions` | 200 each (F-04) |
-| 3 | `curl -sI "$P/listings?deal=all&page=1"` | 307 `location: /listings` |
+| 3 | `curl -sI "$P/listings?deal=all&page=1"` ; `curl -sI "$P/videos?sort=newest"` ; `curl -sI "$P/transactions?dealType=all&page=1"` | 307 `location: /listings` ; 307 `/videos` ; 307 `/transactions` |
 | 4 | `curl -sI "$P/listings?deal=sale"` | 200 |
 | 5 | `curl -sI $P/property` ; `$P/property/c5` | 308 `/listings` ; 308 `/listings?deal=rent` |
 | 6 | `curl -sI $P/info_gallery.php` ; `$P/vr.php` | 308 `/listings` |
 | 7 | `curl -sI $P/qrcode_page.php` ; `$P/seccode_enquiry/seccode.php` | 308 `/contact` |
-| 8 | `curl -sI $P/eng/special_prop_st.php` (+ each step-0 variant) | 308 `/listings` |
+| 7b | `curl -sI $P/eng/seccode_enquiry/seccode.php` | **404** (known gap, waiting for a 404 export) |
+| 8 | `curl -sI $P/eng/special_prop_st.php` | 308 `/listings` (no `.json` or uppercase variants ship) |
 | 9 | `curl -sI $P/unlucky_detail.php` ; `$P/mortgage.php` | 308 `/blog` ; 308 `/mortgage` |
-| 10 | `curl -sIL --max-redirs 4 "$P/special_prop_detail.php?id=<step-0 sample>"` | 307 → `/property-detail/<id>.html` → 301 → `/property/<no>` or `/listings` → 200 |
+| 10 | `curl -sIL --max-redirs 4 "$P/special_prop_detail.php?id=<a known legacy_detail_id, or any digits>"` | 307 `location: /property-detail/<id>.html?id=<id>` (Vercel merges the request query) → 301 `/property/<listing_no>` → (301 `/property/<public_no>?deal=…` when the numbers differ) → 200. With unknown digits: … → 301 `/listings` → 200 |
 | 11 | `curl -sIL --max-redirs 4 "$P/property/b%E7%A2%A7%E5%A0%A4%E5%8D%8A%E5%B3%B6%24"` | ends 200 on `/estate/bellagio` (a 307 for `%24` may precede the 301, fact 19) |
 | 12 | `curl -sI $P/property/<a live number from /sitemap.xml>` ; `$P/property/B054645` | 200 or the existing 301/404, **never** `/estate/` or `/listings?keyword=` |
 | 13 | `curl -sI $P/estate/null` | 404 |
@@ -414,6 +420,8 @@ export function estatePath(slug: string | null | undefined): string | null;
 | 15 | `curl -s $P/no-such-page \| grep -o "<title>[^<]*"` | `<title>找不到頁面｜晉誠地產` and status 404 |
 | 16 | `curl -s -o /dev/null -w "%{http_code}\n" -X POST $P/api/woztell/webhook` | 401 or 503 (preview config), **never 3xx** |
 | 17 | `curl -sI $P/w/doesnotexist` | not a redirect to www (today's tracked-link behaviour) |
+| 18 | `curl -sI "$P/?ln=tc"` | **200, no `location`** (the self-redirect loop is removed) |
+| 19 | `curl -sI "$P/info_gallery.php?foo=1"` ; `curl -sI "$P/listings?foo=1"` | 308 `location: /listings?foo=1` ; 200 (an unknown key is kept, no 307) |
 
 The host rule itself cannot be exercised on a preview, because Vercel routes by Host. It is proven by `scripts/vercel-config.test.mjs` and by the after-deploy canary.
 
@@ -421,16 +429,17 @@ The host rule itself cannot be exercised on a preview, because Vercel routes by 
 
 | # | Command | Expected |
 |---|---|---|
-| C1 | `curl -sI https://earnestproperty.vercel.app/` | 308 `location: https://www.earnestproperty.com/` |
+| C1 | `curl -sI https://earnestproperty.vercel.app/` ; `curl -sI https://earnestproperty.vercel.app/estate/bellagio` | 308 `location: https://www.earnestproperty.com/` ; exactly 308 `location: https://www.earnestproperty.com/estate/bellagio`. The second proves `$1` substitution; a literal `/$1` or a dropped path means Instant Rollback |
 | C2 | `curl -sI "https://earnestproperty.vercel.app/listings?deal=sale"` | 308 to `https://www.earnestproperty.com/listings?deal=sale` |
 | C3 | `curl -s -o /dev/null -w "%{http_code}\n" -X POST https://earnestproperty.vercel.app/api/woztell/webhook` | **401** (unsigned, rejected before parsing, nothing stored), never 308 |
 | C4 | `curl -s -o /dev/null -w "%{http_code}\n" -X POST https://earnestproperty.vercel.app/api/admin/control-plane/worker` | 401 (no bearer), never 308 |
-| C5 | `curl -sI https://earnestproperty.vercel.app/w/doesnotexist` ; `…/_serverFn/x` ; `…/api` | none is a 308 to www |
+| C5 | `curl -sI https://earnestproperty.vercel.app/w/doesnotexist` ; `…/_serverFn/x` ; `…/api` ; `…/assets/<chunk>.js` (name taken from C7) | none is a 308 to www; the asset is 200 JavaScript |
 | C6 | `curl -sI https://www.earnestproperty.com/listings` ; `/videos` ; `/transactions` | 200 |
 | C7 | An asset referenced by `https://www.earnestproperty.com/` (`curl -s … \| grep -o '/assets/[^"]*\.js' \| head -1`, then `curl -sI`) | 200, `content-type: …javascript` (2026-09-11 regression check) |
 | C8 | `/admin/operations` 「工作程序最後回報」 | under 15 minutes old (drains unaffected) |
 | C9 | WozTell sandbox message from the owner's test number | appears in `/admin/whatsapp` within a minute, from whichever webhook host is registered |
-| C10 | Vercel logs at 24 h | status-404 count for the L-04 paths near 0; `/listings` 307 count near 0 (was 932/day, audit `:289`); no `JOB_DRAIN_REDIRECTED` and no `[woztell] webhook REJECTED` beyond the C3 probe |
+| C10 | Vercel logs at 24 h | status-404 count for the L-04 paths near 0 (except the known `/eng/seccode_enquiry/seccode.php` gap); `/listings` 307 count near 0 (was 932/day, audit `:289`; URLs that spell out defaults such as `?deal=all` or `?page=1` still 307 once, by design); no `JOB_DRAIN_REDIRECTED` and no `[woztell] webhook REJECTED` beyond the C3 probe |
+| C11 | `curl -sI "https://www.earnestproperty.com/?ln=tc"` | 200 (it 308-looped before this deploy) |
 
 Then update the Status column for F-04, F-06, F-22, F-24, L-04 and L-05 in the audit doc and `CHANGELOG.md`.
 

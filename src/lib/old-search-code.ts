@@ -5,10 +5,10 @@
 import { estateRegistry } from "../content/estate-registry.ts";
 
 /** Old site search URLs: /property/b<estate name>$ (decoded param, trailing literal "$"). */
-export const OLD_SEARCH_CODE = /^b(.{1,40})\$$/u;
+const OLD_SEARCH_CODE = /^b(.{1,40})\$$/u;
 
 /** FX-11b public-number grammar; a match is never an old search code. */
-export const LISTING_NO_SHAPE = /^(?:EP-?\d{3,8}|[A-Za-z][- ]?\d{6})(?:-R)?$/i;
+const LISTING_NO_SHAPE = /^(?:EP-?\d{3,8}|[A-Za-z][- ]?\d{6})(?:-R)?$/i;
 
 export type OldSearchRedirect = { href: string; status: 301 | 302 };
 
