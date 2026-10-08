@@ -18,3 +18,14 @@ test("robots.txt disallows staff-only surfaces and points at the sitemap on SITE
   assert.match(source, /Sitemap: \$\{SITE_URL\}\/sitemap\.xml/);
   assert.doesNotMatch(source, /earnestproperty\.vercel\.app/);
 });
+
+// FX-13 F-24: /w/<code> is the tracked-link redirector. Its hits are not
+// pages, so crawlers should not spend budget on them.
+test("/w/ disallowed", () => {
+  const source = readFileSync("src/routes/robots[.]txt.ts", "utf8");
+  assert.match(source, /Disallow: \/w\//);
+  assert.match(source, /Disallow: \/admin/);
+  assert.match(source, /Disallow: \/auth/);
+  assert.match(source, /Disallow: \/account/);
+  assert.match(source, /Disallow: \/api/);
+});

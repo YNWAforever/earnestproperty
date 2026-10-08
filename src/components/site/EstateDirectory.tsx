@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Search, ArrowRight } from "lucide-react";
 import { SiteLink } from "@/components/site/SiteLink";
+import { estatePath } from "@/lib/estate-links";
 import { fetchNeonEstateDirectory } from "@/lib/neon/public-data";
 import {
   groupEstateDirectory,
@@ -56,16 +57,26 @@ export function EstateDirectory({
   const rows = (estates: NonNullable<typeof data>["rows"]) =>
     estates.map((estate) => (
       <div key={estate.slug} className="flex min-h-12 items-center gap-2 border-b border-border/40">
-        <SiteLink
-          href={`/estate/${encodeURIComponent(estate.slug)}`}
-          onClick={onLinkClick}
-          className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded px-2 text-sm font-medium hover:bg-accent hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
-        >
-          <span className="truncate">{estate.nameZh}</span>
-          <span className="text-xs font-normal tabular-nums text-muted-foreground">
-            {estate.total}
-          </span>
-        </SiteLink>
+        {/* No estate page link from an empty slug (FX-13 L-05: /estate/null). */}
+        {estatePath(estate.slug) ? (
+          <SiteLink
+            href={`/estate/${encodeURIComponent(estate.slug)}`}
+            onClick={onLinkClick}
+            className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded px-2 text-sm font-medium hover:bg-accent hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+          >
+            <span className="truncate">{estate.nameZh}</span>
+            <span className="text-xs font-normal tabular-nums text-muted-foreground">
+              {estate.total}
+            </span>
+          </SiteLink>
+        ) : (
+          <div className="flex min-h-11 min-w-0 flex-1 items-center gap-2 px-2 text-sm font-medium">
+            <span className="truncate">{estate.nameZh}</span>
+            <span className="text-xs font-normal tabular-nums text-muted-foreground">
+              {estate.total}
+            </span>
+          </div>
+        )}
         {(["sale", "rent"] as const).map((deal) => (
           <SiteLink
             key={deal}

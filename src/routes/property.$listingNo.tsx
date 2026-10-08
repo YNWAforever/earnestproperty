@@ -76,6 +76,7 @@ import { PropertyMediaContactLayout } from "@/components/property/property-media
 import { getPropertyDecision } from "@/components/property/property-decision.js";
 import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
 import { resolveEstateTransport } from "@/content/estate-pages";
+import { estatePath } from "@/lib/estate-links";
 import { listingSeo } from "@/lib/listing-seo";
 import { resolveOldSearchCode } from "@/lib/old-search-code";
 import { jsonLdScript } from "@/lib/schema";
@@ -355,9 +356,12 @@ function PropertyPage() {
 
   const agent = property.profiles;
   const estate = property.estates;
+  // Only a usable slug yields estate links (FX-13 L-05: /estate/null hits).
+  const estateHref = estatePath(estate?.slug);
+  const estateSlug = estateHref ? estate?.slug : undefined;
   const decision = getPropertyDecision({ dealType: property.deal_type, price: property.price });
   const branchContact = resolvePropertyBranchContact({
-    estateSlug: estate?.slug,
+    estateSlug,
     districtSlug: estate?.district_slug ?? property.district_slug,
   });
   const transportInfo = estate?.slug ? resolveEstateTransport(estate.slug) : null;
@@ -384,7 +388,7 @@ function PropertyPage() {
         name: "listing_view",
         payload: { listingNo: publicListingNo, dealType: property.deal_type },
       },
-      context: buildContext({ listingNo: publicListingNo, estateSlug: estate?.slug }),
+      context: buildContext({ listingNo: publicListingNo, estateSlug }),
     }),
     [publicListingNo],
   );
@@ -482,19 +486,19 @@ function PropertyPage() {
         itemListElement: [
           { "@type": "ListItem", position: 1, name: "首頁", item: SITE_URL },
           { "@type": "ListItem", position: 2, name: "搜尋放盤", item: `${SITE_URL}/listings` },
-          ...(estate
+          ...(estate && estateHref
             ? [
                 {
                   "@type": "ListItem",
                   position: 3,
                   name: estate.name_zh,
-                  item: `${SITE_URL}/estate/${estate.slug}`,
+                  item: `${SITE_URL}${estateHref}`,
                 },
               ]
             : []),
           {
             "@type": "ListItem",
-            position: estate ? 4 : 3,
+            position: estateHref ? 4 : 3,
             name: safeTitle,
             item: `${SITE_URL}/property/${publicPropertyNo(property)}`,
           },
@@ -521,7 +525,7 @@ function PropertyPage() {
           items={[
             { label: "首頁", href: "/" },
             { label: "搜尋放盤", href: "/listings" },
-            ...(estate ? [{ label: estate.name_zh, href: `/estate/${estate.slug}` }] : []),
+            ...(estate && estateHref ? [{ label: estate.name_zh, href: estateHref }] : []),
             { label: publicListingNo ? `編號 ${publicListingNo}` : "樓盤資料待核實" },
           ]}
         />
@@ -865,15 +869,17 @@ function PropertyPage() {
                     <Spec label="入伙年份" value={estate.year_completed ?? "—"} />
                     <Spec label="總單位" value={estate.total_units ?? "—"} />
                   </div>
-                  <div className="mt-4">
-                    <Link
-                      to="/estate/$slug"
-                      params={{ slug: estate.slug }}
-                      className="text-sm text-primary underline"
-                    >
-                      查看屋苑詳情 →
-                    </Link>
-                  </div>
+                  {estatePath(estate.slug) && (
+                    <div className="mt-4">
+                      <Link
+                        to="/estate/$slug"
+                        params={{ slug: estate.slug }}
+                        className="text-sm text-primary underline"
+                      >
+                        查看屋苑詳情 →
+                      </Link>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}

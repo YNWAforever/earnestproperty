@@ -12,6 +12,7 @@ export const ROBOTS_TXT = [
   "Disallow: /auth",
   "Disallow: /account",
   "Disallow: /api",
+  "Disallow: /w/",
   "",
   `Sitemap: ${SITE_URL}/sitemap.xml`,
   "",
