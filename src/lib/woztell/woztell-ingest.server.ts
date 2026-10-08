@@ -258,9 +258,15 @@ export async function ingestWoztellEvent(
     ), review_opt_out AS (
       -- Owner decision (Open question 2): a STOP in a conflicted message opts out every
       -- contact it matched, with the same FX-08 evidence. Nothing else is written.
+      -- After a manager link the same holds: another matched contact can still hold this
+      -- member (or the phone) and be sent a campaign through it, so it is opted out too.
+      -- The linked contact itself is written by updated_contact (one write per row).
       UPDATE crm_contacts c SET ${OPT_OUT_ASSIGNMENTS},updated_at=now()
       FROM opt_out o, review rv
-      WHERE c.id IN (SELECT id FROM matched) AND rv.yes AND o.new_opt_out RETURNING c.id
+      WHERE c.id IN (SELECT id FROM matched) AND o.new_opt_out
+        AND (rv.yes OR (EXISTS(SELECT 1 FROM staff_linked)
+          AND c.id IS DISTINCT FROM (SELECT id FROM staff_linked)))
+      RETURNING c.id
     ), new_contact AS (
       INSERT INTO crm_contacts(name,phone,normalized_phone,whatsapp_member_id,source,opt_in_whatsapp,opted_out_whatsapp,last_inbound_at,
         opted_out_at,opted_out_message_id,opted_out_text,opted_out_source,whatsapp_profile_name)

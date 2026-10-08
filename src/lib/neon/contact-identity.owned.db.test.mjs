@@ -1558,6 +1558,206 @@ test("FX-12 contact identity on owned Postgres", { timeout: 300000 }, async (t) 
           assertNoIdentity(stopAudit.metadata);
         },
       );
+
+      // ---- Final fix wave I-1: a STOP after a link opts out every matched contact ----
+      const { beginCampaignDispatch } = await import("../woztell/campaign-delivery.server.ts");
+      const [gateTemplate] = await query(
+        "INSERT INTO whatsapp_templates(element_name,status) VALUES('fx12_owned_gate','active') RETURNING id",
+      );
+      const [gateAudience] = await query(
+        "INSERT INTO whatsapp_audiences(name,created_by) VALUES('FX12 gate audience',$1) RETURNING id",
+        [ADMIN],
+      );
+      let gateSequence = 0;
+      // A one-recipient campaign already claimed by a running job: beginCampaignDispatch only
+      // reserves the row (no provider call). It returns the row when the send would go ahead.
+      const campaignReaches = async (contactId) => {
+        const tag = "fx12-gate-" + gateSequence++;
+        const [campaign] = await query(
+          "INSERT INTO whatsapp_campaigns(name,template_id,audience_id,status,created_by) VALUES($1,$2,$3,'sending',$4) RETURNING id",
+          [tag, gateTemplate.id, gateAudience.id, ADMIN],
+        );
+        const [job] = await query(
+          `INSERT INTO ops_jobs(job_type,payload_version,payload,status,attempt_count,lease_owner,lease_expires_at,idempotency_key)
+           VALUES('woztell.campaign.deliver',1,jsonb_build_object('campaignId',$1::text),'running',1,
+                  'fx12-gate-worker',now()+interval '5 minutes',$2) RETURNING id`,
+          [campaign.id, tag],
+        );
+        const [recipient] = await query(
+          `INSERT INTO whatsapp_campaign_recipients(campaign_id,contact_id,status,claim_job_id,claim_worker_id,claim_attempt)
+           VALUES($1,$2,'sending',$3,'fx12-gate-worker',1) RETURNING id`,
+          [campaign.id, contactId, job.id],
+        );
+        const reserved = await beginCampaignDispatch(campaign.id, recipient.id, {
+          jobId: job.id,
+          workerId: "fx12-gate-worker",
+          attempt: 1,
+        });
+        return reserved !== null;
+      };
+      const optOutOf = (contactId) =>
+        one(
+          "SELECT opted_out_whatsapp,opted_out_source,opted_out_message_id,opted_out_text FROM crm_contacts WHERE id=$1",
+          [contactId],
+        );
+      const assertStopEvidence = async (contactId, messageId) => {
+        const row = await optOutOf(contactId);
+        assert.equal(row.opted_out_whatsapp, true, contactId + " is not opted out");
+        assert.equal(row.opted_out_source, "customer_message");
+        assert.equal(row.opted_out_message_id, messageId);
+        assert.equal(row.opted_out_text, "STOP");
+      };
+
+      await t.test(
+        "I-1: after link_b, a STOP from the other member opts out that member's holder too",
+        async () => {
+          // Case a: X holds P and m1. W holds m2 (no phone) and is opted in. A message from
+          // (P, m2) opens a review (W is the member owner, X the phone owner).
+          const X1 = id(1100);
+          const W1 = id(1101);
+          const P1 = "85255550801";
+          await seed(X1, { phone: P1, member: "synthetic-fx12-i1-m1", name: "合成甲" });
+          await seed(W1, { member: "synthetic-fx12-i1-m2", name: "合成乙" });
+          await query("UPDATE crm_contacts SET opt_in_whatsapp=true WHERE id=$1", [W1]);
+          const first = await inbound({
+            messageId: "synthetic-fx12-i1-a-1",
+            member: "synthetic-fx12-i1-m2",
+            phone: P1,
+            text: "合成查詢",
+          });
+          assert.equal(first.identityReview, true);
+          const open = await openReviewFor(first.conversationId);
+          assert.equal(open.contact_a, W1);
+          assert.equal(open.contact_b, X1);
+          await review.resolveContactIdentityReview(
+            { id: open.id, action: "link_b" },
+            managerActor,
+          );
+          // W keeps m2 (the member was not free), so a campaign to W goes to m2.
+          assert.equal((await contactRow(W1)).whatsapp_member_id, "synthetic-fx12-i1-m2");
+          assert.equal(await campaignReaches(W1), true, "control: W is reachable before the STOP");
+
+          const stop = await inbound({
+            messageId: "synthetic-fx12-i1-a-stop",
+            member: "synthetic-fx12-i1-m2",
+            phone: P1,
+            text: "STOP",
+          });
+          assert.equal(stop.identityReview, false);
+          assert.equal(stop.contactId, X1);
+          await assertStopEvidence(X1, "synthetic-fx12-i1-a-stop");
+          await assertStopEvidence(W1, "synthetic-fx12-i1-a-stop");
+          assert.equal(await campaignReaches(W1), false, "a campaign must not reach W after STOP");
+          assert.equal(await campaignReaches(X1), false);
+          // The linked contact keeps its identity: nothing is filled from the message.
+          assert.equal((await contactRow(X1)).whatsapp_member_id, "synthetic-fx12-i1-m1");
+        },
+      );
+
+      await t.test(
+        "I-1: after link_a to the member owner, a STOP opts out the member-less phone owner",
+        async () => {
+          // X holds P and no member, opted in. W holds m4 and no phone. A message from (P, m4)
+          // opens a review. link_a links W; X keeps P, so a campaign to X goes to P.
+          const X2 = id(1110);
+          const W2 = id(1111);
+          const P2 = "85255550811";
+          await seed(X2, { phone: P2, name: "合成丙" });
+          await seed(W2, { member: "synthetic-fx12-i1-m4", name: "合成丁" });
+          await query("UPDATE crm_contacts SET opt_in_whatsapp=true WHERE id=$1", [X2]);
+          const first = await inbound({
+            messageId: "synthetic-fx12-i1-b-1",
+            member: "synthetic-fx12-i1-m4",
+            phone: P2,
+            text: "合成查詢",
+          });
+          assert.equal(first.identityReview, true);
+          const open = await openReviewFor(first.conversationId);
+          assert.equal(open.contact_a, W2);
+          assert.equal(open.contact_b, X2);
+          await review.resolveContactIdentityReview(
+            { id: open.id, action: "link_a" },
+            managerActor,
+          );
+          assert.equal((await contactRow(X2)).normalized_phone, P2);
+          assert.equal(await campaignReaches(X2), true, "control: X is reachable before the STOP");
+
+          await inbound({
+            messageId: "synthetic-fx12-i1-b-stop",
+            member: "synthetic-fx12-i1-m4",
+            phone: P2,
+            text: "STOP",
+          });
+          await assertStopEvidence(W2, "synthetic-fx12-i1-b-stop");
+          await assertStopEvidence(X2, "synthetic-fx12-i1-b-stop");
+          assert.equal(await campaignReaches(X2), false, "a campaign must not reach P after STOP");
+        },
+      );
+
+      await t.test(
+        "I-1: after a case (c) link, a STOP opts out the previous owner that keeps the member",
+        async () => {
+          // Z holds m5 and owns its conversation. A message from (V's phone, m5) resolves to V:
+          // the conversation belongs to another contact, so it goes to review. link_b moves the
+          // conversation to V; Z keeps m5, so a campaign to Z goes to m5.
+          const Z3 = id(1120);
+          const V3 = id(1121);
+          await seed(Z3, { phone: "85255550820", member: "synthetic-fx12-i1-m5", name: "合成戊" });
+          await seed(V3, { phone: "85255550821", name: "合成己" });
+          await query("UPDATE crm_contacts SET opt_in_whatsapp=true WHERE id=$1", [Z3]);
+          await query(
+            `INSERT INTO whatsapp_conversations(contact_id,woztell_member_id,channel_id,last_message_at,last_inbound_at)
+             VALUES($1,'synthetic-fx12-i1-m5',$2,now(),now())`,
+            [Z3, CHANNEL],
+          );
+          const first = await inbound({
+            messageId: "synthetic-fx12-i1-c-1",
+            member: "synthetic-fx12-i1-m5",
+            phone: "85255550821",
+            text: "合成查詢",
+          });
+          assert.equal(first.identityReview, true);
+          const open = await openReviewFor(first.conversationId);
+          assert.equal(open.contact_a, Z3);
+          assert.equal(open.contact_b, V3);
+          await review.resolveContactIdentityReview(
+            { id: open.id, action: "link_b" },
+            managerActor,
+          );
+          assert.equal((await contactRow(Z3)).whatsapp_member_id, "synthetic-fx12-i1-m5");
+          assert.equal(await campaignReaches(Z3), true, "control: Z is reachable before the STOP");
+
+          await inbound({
+            messageId: "synthetic-fx12-i1-c-stop",
+            member: "synthetic-fx12-i1-m5",
+            phone: "85255550821",
+            text: "STOP",
+          });
+          await assertStopEvidence(V3, "synthetic-fx12-i1-c-stop");
+          await assertStopEvidence(Z3, "synthetic-fx12-i1-c-stop");
+          assert.equal(await campaignReaches(Z3), false, "a campaign must not reach m5 after STOP");
+        },
+      );
+
+      await t.test(
+        "I-1: a non-STOP message after a link writes nothing to the other matched contacts",
+        async () => {
+          const W1 = id(1101);
+          const before = await one("SELECT md5(c::text) AS h FROM crm_contacts c WHERE id=$1", [
+            W1,
+          ]);
+          await inbound({
+            messageId: "synthetic-fx12-i1-a-after",
+            member: "synthetic-fx12-i1-m2",
+            phone: "85255550801",
+            text: "合成跟進",
+          });
+          assert.deepEqual(
+            await one("SELECT md5(c::text) AS h FROM crm_contacts c WHERE id=$1", [W1]),
+            before,
+          );
+        },
+      );
     });
   } finally {
     network.mock.restore();
