@@ -90,6 +90,7 @@ import { renderableFaqs } from "@/lib/faq";
 import { getYouTubeVideoId, isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 import { castlePeakRoadHomeFaqs } from "@/content/home-faq";
 import { jsonLdScript } from "@/lib/schema";
+import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
 
 // Vite resolves the import to a hashed, site-root-relative path. Facebook and X
 // reject a relative og:image outright, so it is absolutised here rather than in
@@ -167,6 +168,7 @@ export const Route = createFileRoute("/")({
       </p>
     </div>
   ),
+  headers: publicPageCacheHeaders,
   // Title and description come from the registry. They used to be duplicated
   // here with a divergent licence tail, so the rendered page and the sitemap
   // advertised two different descriptions for the same URL.

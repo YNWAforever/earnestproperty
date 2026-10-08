@@ -81,6 +81,7 @@ import { jsonLdScript } from "@/lib/schema";
 import { shareUrl } from "@/lib/share";
 import { useFavourite } from "@/lib/saved-listings";
 import { buildContext, track, useTrackPageView } from "@/lib/analytics/events";
+import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
 
 type PropertyDetail = NonNullable<Awaited<ReturnType<typeof fetchPropertyByListingNo>>>;
 // The head builds its title/description from the listing's own structured
@@ -254,6 +255,7 @@ export const Route = createFileRoute("/property/$listingNo")({
       </Link>
     </div>
   ),
+  headers: (ctx) => publicPageCacheHeaders(ctx, { require: (d) => Boolean(d?.property) }),
   component: PropertyPage,
 });
 

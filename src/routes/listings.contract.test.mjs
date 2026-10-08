@@ -500,3 +500,14 @@ test("ListingAlertForm is keyed by the current search so a result for search A n
   );
   assert.match(zeroResultsBlock, /<ListingAlertForm\b[^>]*\bkey=\{JSON\.stringify\(search\)\}/);
 });
+
+test("listings route caches through publicPageCacheHeaders", () => {
+  assert.match(
+    source,
+    /^import \{ publicPageCacheHeaders \} from "@\/lib\/http\/public-cache\.js";$/m,
+  );
+  assert.match(
+    source,
+    /errorComponent: ListingsErrorComponent,\n {2}headers: publicPageCacheHeaders,\n {2}component: ListingsPage,/,
+  );
+});

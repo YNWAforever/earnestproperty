@@ -35,6 +35,7 @@ import {
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
 import { jsonLdScript } from "@/lib/schema";
+import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
 
 type HubLoaderData = {
   inventories: Record<string, CorridorInventory>;
@@ -123,6 +124,7 @@ export const Route = createFileRoute("/castle-peak-road/")({
       path: castlePeakRoadHub.path,
     }),
   errorComponent: CastlePeakRoadRouteError,
+  headers: publicPageCacheHeaders,
   component: CastlePeakRoadHubPage,
 });
 

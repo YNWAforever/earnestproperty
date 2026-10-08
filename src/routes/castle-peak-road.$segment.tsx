@@ -24,6 +24,7 @@ import {
 import { renderableFaqs } from "@/lib/faq";
 import { sanitizeListingText } from "@/lib/format";
 import { jsonLdScript } from "@/lib/schema";
+import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
 
 type SegmentLoaderData = {
   segment: CorridorSegment;
@@ -78,6 +79,7 @@ export const Route = createFileRoute("/castle-peak-road/$segment")({
     return seo({ title: segment.title, description: segment.description, path: segment.path });
   },
   errorComponent: CastlePeakRoadSegmentError,
+  headers: publicPageCacheHeaders,
   component: CastlePeakRoadSegmentPage,
 });
 

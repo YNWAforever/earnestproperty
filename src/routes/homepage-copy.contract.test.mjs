@@ -166,3 +166,59 @@ test("homepage does not hide current timestamps when legacy source metadata is m
   assert.doesNotMatch(card, /property\.source_site &&/);
   assert.doesNotMatch(source, /即日新放盤/);
 });
+
+// FX-15 Task 3: anonymous public HTML is CDN-cached. Only these route files
+// may opt in, the root layout never does, and none of them (nor the root's
+// loader/beforeLoad) may read the request, so cached HTML is identical for
+// every visitor.
+const CDN_CACHED_ROUTES = [
+  "castle-peak-road.$segment.tsx",
+  "castle-peak-road.index.tsx",
+  "estate.$slug.tsx",
+  "index.tsx",
+  "listings.tsx",
+  "property.$listingNo.tsx",
+];
+
+test("only the five allowlisted route files call publicPageCacheHeaders", async () => {
+  const { readdir } = await import("node:fs/promises");
+  const files = (await readdir(new URL("./", import.meta.url))).filter((name) =>
+    /\.tsx?$/.test(name),
+  );
+  const callers = [];
+  for (const name of files) {
+    const text = await readFile(new URL(`./${name}`, import.meta.url), "utf8");
+    if (text.includes("publicPageCacheHeaders")) callers.push(name);
+  }
+  assert.deepEqual(callers.sort(), CDN_CACHED_ROUTES);
+  for (const name of CDN_CACHED_ROUTES) {
+    const text = await readFile(new URL(`./${name}`, import.meta.url), "utf8");
+    assert.match(
+      text,
+      /^\s*headers: (publicPageCacheHeaders|\(ctx\) => publicPageCacheHeaders\()/m,
+    );
+  }
+});
+
+test("__root.tsx has no headers option", async () => {
+  const root = await readFile(new URL("./__root.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(root, /^\s*headers\s*:/m);
+  assert.doesNotMatch(root, /publicPageCacheHeaders|Vercel-CDN-Cache-Control/);
+});
+
+test("no public route reads the request, cookies or headers during SSR", async () => {
+  for (const name of [...CDN_CACHED_ROUTES, "castle-peak-road.tsx", "__root.tsx"]) {
+    const text = await readFile(new URL(`./${name}`, import.meta.url), "utf8");
+    for (const reader of [
+      "getRequest",
+      "getCookie",
+      "getRequestHeader",
+      "getRequestIP",
+      "setCookie",
+      "setResponseHeader",
+      "document.cookie",
+    ]) {
+      assert.equal(text.includes(reader), false, `${name} uses ${reader}`);
+    }
+  }
+});

@@ -68,6 +68,7 @@ import {
   type PublicWaAction,
 } from "@/lib/whatsapp-enquiries/public-context";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
+import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
 
 const PAGE_SIZE = 12;
 
@@ -200,6 +201,7 @@ export const Route = createFileRoute("/listings")({
   },
   pendingComponent: ListingsPendingComponent,
   errorComponent: ListingsErrorComponent,
+  headers: publicPageCacheHeaders,
   component: ListingsPage,
 });
 

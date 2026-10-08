@@ -52,6 +52,7 @@ import { deriveEstateTag } from "@/lib/video-tags.js";
 import { renderableFaqs } from "@/lib/faq";
 import { jsonLdScript } from "@/lib/schema";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
+import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
 
 type EstateDetail = NonNullable<Awaited<ReturnType<typeof fetchEstateBySlug>>>;
 
@@ -211,6 +212,7 @@ export const Route = createFileRoute("/estate/$slug")({
       </Link>
     </div>
   ),
+  headers: publicPageCacheHeaders,
   component: EstatePage,
 });
 
