@@ -97,7 +97,6 @@ export function PropertyInquiryForm({
         <Label htmlFor="name">姓名 *</Label>
         <Input id="name" name="name" required maxLength={120} placeholder="陳先生" />
       </div>
-      <HoneypotField />
       <div>
         <Label htmlFor="phone">電話 *</Label>
         <Input id="phone" name="phone" required type="tel" maxLength={30} placeholder="9123 4567" />
@@ -130,6 +129,8 @@ export function PropertyInquiryForm({
           我同意透過 WhatsApp 接收樓盤資訊及推廣訊息。
         </Label>
       </div>
+      {/* After the last visible field: a keyboard "next" between real fields never lands in it. */}
+      <HoneypotField />
       <Button
         type="submit"
         className="w-full"

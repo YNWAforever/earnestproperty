@@ -287,8 +287,10 @@ function sourceWithLocalImports(file) {
 // This asserts the wiring, not the behaviour. That the handler actually returns
 // 401 is proved in src/lib/youtube-sync/youtube-http.test.ts ("cron rejects
 // missing or invalid bearer authorization"), which can call it directly because
-// it runs under bun. This file runs under node --test and cannot import .ts,
-// which is why it reads source text at all.
+// it runs under bun. This test reads source text because importing the route
+// modules pulls in server-only and DB code; Node can strip .ts types (see
+// src/lib/http/bearer-secret.test.mjs), so prefer a behavioural test for pure
+// helpers.
 test("any path scheduled in vercel.ts has a GET handler", () => {
   const vercelConfig = readFileSync("vercel.ts", "utf8");
   const cronBlock = vercelConfig.slice(

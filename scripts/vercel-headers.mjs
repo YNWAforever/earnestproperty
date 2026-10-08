@@ -37,8 +37,9 @@ export const SECURITY_HEADERS = [
     ],
   },
   // /w/* sets its own stricter Referrer-Policy: no-referrer (whatsapp-enquiries.server.ts).
+  // [wW]: Vercel matches `source` case-sensitively, but the router also serves /W/*.
   {
-    source: "/((?!w/).*)",
+    source: "/((?![wW]/).*)",
     headers: [{ key: "Referrer-Policy", value: "strict-origin-when-cross-origin" }],
   },
 ];

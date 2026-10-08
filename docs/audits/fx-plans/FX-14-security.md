@@ -1,6 +1,6 @@
 # FX-14: Security headers and public-form abuse protection. Implementation plan
 
-**Owner decisions:** _pending._ Until the owner answers, the defaults under "Open questions" apply. Fixed by the brief:
+**Owner decisions (2026-10-08):** every default under "Open questions" is accepted. A honeypot-flagged lead still raises the staff alert, tagged 「（疑似機械人）」, and the Task 5 **[owner copy]** is approved as written. Fixed by the brief:
 1. **Never drop a lead.** A honeypot-flagged submission is saved, gets the same on-page success message, and still raises the FX-05b staff WhatsApp alert.
 2. **No migration.** No new env var. No setting is removed, because none is made redundant (fact 22).
 3. **Cut from `main` (1216ab8d). Never stack on #239 (FX-13).** This batch's `vercel.ts` hunk is one import line, one type field and one `headers:` line, so either merge order rebases trivially (fact 3).
@@ -397,7 +397,7 @@ export function clientIpFromRequest(request: Request): string;
 
 **Browser (preview):**
 - Sign in as a staff test user. Open 客戶查詢, WhatsApp, 營運, 團隊 and 內容中心, upload one image and send nothing. Everything works, and the console shows only `[Report Only]` CSP messages, which are recorded (Owner action 2).
-- Submit the contact form once with the honeypot filled through DevTools, on the Neon branch only. The success line shows, the lead appears in 客戶查詢 with a 疑似機械人 timeline row, and `staff_notification_attempts` has a row for it.
+- Only on a preview whose `DATABASE_URL` is a Neon branch (skip otherwise; on a shared database this creates a real lead and sends a real alert): submit the contact form once with the honeypot filled through DevTools. The success line shows, the lead appears in 客戶查詢 with a 疑似機械人 timeline row, and `staff_notification_attempts` has a row for it.
 
 **After-deploy canary (production, read-only):** `curl -sI https://www.earnestproperty.com/`, `/admin`, and `/w/doesnotexist` show the row 1-2 headers, and `https://earnestproperty.vercel.app/` shows the row 1 headers. 「工作程序最後回報」 is under 15 minutes old (drains still authenticate). Then update the audit Status for B-02, B-05, B-07, B-08 and `CHANGELOG.md`.
 
@@ -411,7 +411,7 @@ export function clientIpFromRequest(request: Request): string;
 |---|---|---|---|
 | 1 | **Approve the [owner copy]** in Task 5 | Reply "copy OK" or give replacements. | Task 5 merge |
 | 2 | **CSP console sweep** (instead of a report endpoint, Open question 2) | On the preview, then on production after deploy: open `/`, `/listings`, a property with video and VR, `/contact`, `/videos`, an estate, `/blog`, `/mortgage`, `/admin` and the main admin pages in Chrome DevTools. Copy every `[Report Only]` line into the PR (no URLs with personal data). Repeat after 7 days on production. A clean second sweep unlocks the enforcing PR. | enforcing PR |
-| 3 | **Redeploy the cron worker** (optional, any time after merge) | `npx wrangler deploy` in `workers/cron`. Then `/admin/operations` 「工作程序最後回報」 updates within 10 minutes. **Undo:** `npx wrangler rollback`. | nothing (both versions interoperate) |
+| 3 | **Redeploy the cron worker** (optional, any time after merge) | `npx wrangler deploy` in `workers/cron`. Smoke-check `POST /wake/general` right after: the correct `CRON_SECRET` bearer gives 202 (it only nudges a drain) and a wrong one gives 401. Then `/admin/operations` 「工作程序最後回報」 updates within 10 minutes. **Undo:** `npx wrangler rollback`. | nothing (both versions interoperate) |
 | 4 | **Confirm nothing frames the site** | Tell us if any partner page, kiosk, WozTell widget or old Lovable preview shows earnestproperty.com inside another site. Default assumption: none (fact 7). | merge |
 | 5 | **Watch flagged submissions for 2 weeks** | Read-only on Neon: `SELECT subject_type, count(*) FROM audit_logs WHERE action='public_form.suspected_bot' AND created_at > now()-interval '14 days' GROUP BY 1;` If real customers appear (staff confirm by phone), tell us; the field name changes. | after merge |
 

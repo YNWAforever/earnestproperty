@@ -389,6 +389,12 @@ test("a flagged website inquiry still writes contact, lead, inquiry and alert jo
     assert.ok(sql.indexOf("bot_note AS (") > sql.indexOf("new_lead AS ("));
     assert.ok(sql.indexOf("bot_audit AS (") > sql.indexOf("new_lead AS ("));
     assert.doesNotMatch(sql, /FROM\s+bot_(note|audit)/);
+    // The note's contact comes from its own lead row, never a scalar subquery over `contact`
+    // that could raise "more than one row" and fail the whole intake.
+    const botNote = sql.slice(sql.indexOf("bot_note AS ("), sql.indexOf("bot_audit AS ("));
+    assert.match(botNote, /SELECT new_lead\.id, new_lead\.contact_id, 'suspected_bot'/);
+    assert.doesNotMatch(botNote, /\(SELECT/i);
+    assert.match(sql, /new_lead AS \([\s\S]*?RETURNING id, contact_id\n/);
     assert.match(sql, /\(SELECT count\(\*\) FROM lead_alert\) > 0 AS lead_alert_queued/);
   }
 });

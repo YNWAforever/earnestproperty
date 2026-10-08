@@ -165,3 +165,23 @@ test("the honeypot is not an accessible form control", () => {
     expect(exposed.length, `${label} exposes no textbox named 請勿填寫此欄`).toBe(0);
   }
 });
+
+test("the honeypot sits after the last visible field, directly before the submit button", () => {
+  for (const [label, render] of forms) {
+    const $ = render();
+    const wrapper = $("form input[name='website']").closest("[aria-hidden='true']");
+    expect(wrapper.next().is("button[type='submit']"), `${label}: next is submit`).toBe(true);
+    // Every real control (inputs, textareas, select triggers, checkboxes) comes earlier in DOM
+    // order, so an on-screen keyboard's "next" from 姓名 or 電話 cannot reach the honeypot.
+    const controls = $("form")
+      .find("input, textarea, button")
+      .toArray()
+      .filter((el) => $(el).attr("name") !== "website" && $(el).attr("type") !== "submit");
+    const all: unknown[] = $("form *").toArray();
+    const honeypotIndex = all.indexOf(wrapper.get(0)!);
+    expect(controls.length, `${label} has visible controls`).toBeGreaterThan(2);
+    for (const control of controls) {
+      expect(all.indexOf(control), `${label}: control before honeypot`).toBeLessThan(honeypotIndex);
+    }
+  }
+});

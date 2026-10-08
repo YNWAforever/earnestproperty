@@ -143,11 +143,11 @@ export async function persistWebsiteInquiry(query, input) {
         'new', routing.intent, 'website', $5
       FROM contact
       CROSS JOIN routing
-      RETURNING id
+      RETURNING id, contact_id
     ),
     bot_note AS (
       INSERT INTO crm_activities (lead_id, contact_id, activity_type, body)
-      SELECT new_lead.id, (SELECT id FROM contact), 'suspected_bot', ${botBody}
+      SELECT new_lead.id, new_lead.contact_id, 'suspected_bot', ${botBody}
       FROM new_lead WHERE ${botFlag}
       RETURNING id
     ),

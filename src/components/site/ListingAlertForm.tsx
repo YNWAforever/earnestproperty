@@ -138,7 +138,6 @@ export function ListingAlertForm({
             placeholder="陳先生"
           />
         </div>
-        <HoneypotField inputRef={honeypotRef} />
         <div>
           <Label htmlFor="alert-phone">電話 *</Label>
           <Input
@@ -176,6 +175,8 @@ export function ListingAlertForm({
           {LISTING_ALERT_CONSENT_TEXT}
         </Label>
       </div>
+      {/* After the last visible field: a keyboard "next" between real fields never lands in it. */}
+      <HoneypotField inputRef={honeypotRef} />
       <Button
         type="submit"
         className="mt-4 w-full sm:w-auto"

@@ -109,7 +109,6 @@ export function ContactInquiryForm() {
         <Label htmlFor="contact-name">姓名 *</Label>
         <Input id="contact-name" name="name" required maxLength={120} placeholder="陳先生" />
       </div>
-      <HoneypotField />
       <div>
         <Label htmlFor="contact-phone">電話 *</Label>
         <Input
@@ -192,6 +191,8 @@ export function ContactInquiryForm() {
           我同意透過 WhatsApp 接收樓盤資訊及推廣訊息。
         </Label>
       </div>
+      {/* After the last visible field: a keyboard "next" between real fields never lands in it. */}
+      <HoneypotField />
       <Button
         type="submit"
         className="w-full sm:w-auto"

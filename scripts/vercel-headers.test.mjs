@@ -87,7 +87,9 @@ test("only frame-ancestors is enforced; the full policy is report-only", () => {
 });
 
 test("tracked links keep their own no-referrer", () => {
-  for (const path of ["/w/abc", "/w/ABC123"]) {
+  // Vercel compiles `source` case-sensitively (routing-utils sourceToRegex, sensitive: true) while
+  // the router matches /W/ too, so the exclusion must cover both cases.
+  for (const path of ["/w/abc", "/w/ABC123", "/W/abc"]) {
     assert.equal(headersFor(path).has("referrer-policy"), false, path);
   }
   for (const path of ["/", "/wiki", "/api/x"]) {

@@ -123,7 +123,6 @@ export function ValuationLeadForm({ estateId }: { estateId?: string }) {
           placeholder="陳先生"
         />
       </div>
-      <HoneypotField inputRef={honeypotRef} />
       <div>
         <Label htmlFor="valuation-phone">電話 *</Label>
         <Input
@@ -172,6 +171,8 @@ export function ValuationLeadForm({ estateId }: { estateId?: string }) {
           {VALUATION_CONSENT_TEXT}
         </Label>
       </div>
+      {/* After the last visible field: a keyboard "next" between real fields never lands in it. */}
+      <HoneypotField inputRef={honeypotRef} />
       <Button
         type="submit"
         className="w-full"
