@@ -117,7 +117,7 @@
     "test:lead-integrity": "node --test src/lib/neon/lead-version.contract.test.mjs && bun test --no-env-file src/lib/neon/lead-version.test.ts src/lib/admin/lead-assignment.test.ts src/lib/admin/lead-save-errors.test.ts src/components/admin/leads/LeadConflictNotice.test.tsx",
     "test:lead-integrity:db": "node --experimental-test-module-mocks --test --test-concurrency=1 src/lib/neon/lead-integrity.owned.db.test.mjs",
     "test:phone-identity": "node --test src/lib/phone.test.mjs src/lib/phone.contract.test.mjs",
-    "test:contact-identity:db": "node --experimental-test-module-mocks --test --test-concurrency=1 src/lib/neon/contact-identity.owned.db.test.mjs",
+    "test:contact-identity:db": "node --experimental-test-module-mocks --test --test-concurrency=1 src/lib/neon/contact-identity.owned.db.test.mjs src/lib/woztell/woztell-ingest.owned.db.test.mjs",
     "test:admin-lead-conflict:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-lead-conflict.spec.ts",
     "test:staff-setup:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-staff-setup.spec.ts",
     "test:whatsapp-mobile:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-whatsapp-mobile.spec.ts",
