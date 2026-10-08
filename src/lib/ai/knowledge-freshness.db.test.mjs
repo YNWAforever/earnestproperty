@@ -14,7 +14,9 @@ test(
       await mockOwnedServerDb(mock, query, transaction);
       mock.module(new URL("src/lib/ai/provider.server.ts", repoRoot).href, {
         exports: {
-          embedAiTexts: async () => ({ ok: false }),
+          generateAiText: async () => {
+            throw new Error("knowledge tests must not call a model");
+          },
         },
       });
       const knowledge = await import("./knowledge.server.ts");
@@ -107,7 +109,7 @@ test(
         const [faq] = await query(
           "INSERT INTO faqs(scope,question,answer,published) VALUES('QA','FX11A 隱藏問題','FX11A_TOKEN',false) RETURNING id",
         );
-        await knowledge.rebuildAiKnowledgeIndex({ allowEmbeddings: false });
+        await knowledge.rebuildAiKnowledgeIndex();
         assert.equal((await knowledge.searchPublicKnowledge({ query: "FX11A" })).length, 0);
         const rows = await query(
           "SELECT published, public_visibility FROM ai_knowledge_sources WHERE source_type='faq' AND source_id=$1",
@@ -122,7 +124,7 @@ test(
         "unpublishing an indexed estate removes it from search before any rebuild",
         async () => {
           try {
-            await knowledge.rebuildAiKnowledgeIndex({ allowEmbeddings: false });
+            await knowledge.rebuildAiKnowledgeIndex();
             const before = await knowledge.searchPublicKnowledge({ query: "碧堤半島" });
             assert.ok(before.filter((r) => r.source_type === "estate").length >= 1);
             await query("UPDATE estates SET published=false WHERE slug='bellagio'");
@@ -137,7 +139,7 @@ test(
         await query(
           "INSERT INTO properties(listing_no,canonical_property_no,title_zh,deal_type,district_slug,status,price,saleable_area,description) VALUES('FX11A-SALE','FX11A-GROUP','FX11A單位測試','sale','sham-tseng','active',6800000,512,'FX11A單位描述')",
         );
-        await knowledge.rebuildAiKnowledgeIndex({ allowEmbeddings: false });
+        await knowledge.rebuildAiKnowledgeIndex();
         const chunks = await query(
           "SELECT chunk_text FROM ai_knowledge_chunks WHERE chunk_text LIKE '%FX11A單位測試%'",
         );

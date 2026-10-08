@@ -8,7 +8,6 @@ const config = {
   apiKey: "test-key-not-real",
   textModel: "test/model",
   enabled: true,
-  embeddingModel: null,
 };
 
 const input = { system: "system text", prompt: "prompt text" };

@@ -6,22 +6,15 @@ import { formatArea, formatHkd, formatManDisplay } from "@/lib/format";
 import { getSql, queryRows, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
 
 import type { AiKnowledgeChunk, AiKnowledgeSourceType, AiVisibility } from "./ai-types";
-import { getAiServerConfig } from "./config.server.ts";
 import {
   chunkKnowledgeText,
   filterPublicKnowledgeChunks,
   normalizeKnowledgeSource,
 } from "./knowledge.ts";
-import { embedAiTexts } from "./provider.server.ts";
 import {
   publicKnowledgeCurrentSourcesCte,
   publicKnowledgeRevisionGate,
 } from "./knowledge-freshness.server";
-
-// Must match the embedding column dimension in the ai_knowledge_chunks migration
-// (vector(1536)). A returned embedding of any other length cannot be stored, so we
-// surface it loudly instead of silently degrading search to a null vector.
-const EMBEDDING_DIMENSIONS = 1536;
 
 type RawSource = {
   source_type: AiKnowledgeSourceType;
@@ -88,16 +81,13 @@ export async function rebuildAiKnowledgeIndex(
   options: {
     checkpoint?: () => Promise<void>;
     sourceKeys?: ObservedKnowledgeSource[];
-    allowEmbeddings?: boolean;
   } = {},
 ) {
   const checkpoint = options.checkpoint ?? (async () => {});
   await checkpoint();
   const sources = await fetchPublicKnowledgeSources();
-  const embeddingModel = getAiServerConfig().embeddingModel;
   let indexedSources = 0;
   let indexedChunks = 0;
-  let embeddingDimensionFailures = 0;
 
   const sourceKeys = options.sourceKeys ? new Set(options.sourceKeys.map(sourceKey)) : null;
   for (const source of sources) {
@@ -117,13 +107,10 @@ export async function rebuildAiKnowledgeIndex(
     }));
     if (chunks.length === 0) continue;
 
+    // FX-11a (E-10): no embeddings are generated. Nothing ever read the stored vectors
+    // (search is keyword-based), so each chunk is stored with a NULL embedding.
     await checkpoint();
-    const embeddings =
-      options.allowEmbeddings === false
-        ? { ok: false as const, embeddings: [] as number[][] }
-        : await embedAiTexts(chunks.map((chunk) => chunk.text));
-    await checkpoint();
-    const preparedChunks = chunks.map<PreparedKnowledgeChunk>((chunk, index) => ({
+    const preparedChunks = chunks.map<PreparedKnowledgeChunk>((chunk) => ({
       sort_order: chunk.sort_order,
       chunk_text: chunk.text,
       summary: null,
@@ -138,12 +125,7 @@ export async function rebuildAiKnowledgeIndex(
       listing_id: source.listing_id ?? null,
       visibility: normalized.visibility,
       freshness_score: freshnessScore(normalized.source_type),
-      embedding: embeddingVectorString(embeddings.ok ? embeddings.embeddings[index] : null, {
-        model: embeddingModel,
-        onDimensionMismatch: () => {
-          embeddingDimensionFailures += 1;
-        },
-      }),
+      embedding: null,
       content_hash: chunk.content_hash,
     }));
 
@@ -163,13 +145,7 @@ export async function rebuildAiKnowledgeIndex(
   await reconcileUnobservedKnowledgeSources(options.sourceKeys);
   await checkpoint();
 
-  if (embeddingDimensionFailures > 0) {
-    console.error(
-      `[ai-knowledge] rebuild stored ${embeddingDimensionFailures} chunk(s) without embeddings due to dimension mismatch (model=${embeddingModel ?? "unknown"}, expected=${EMBEDDING_DIMENSIONS}). Semantic search is degraded for those chunks.`,
-    );
-  }
-
-  return { indexedSources, indexedChunks, embeddingDimensionFailures };
+  return { indexedSources, indexedChunks, embeddingDimensionFailures: 0 };
 }
 
 export type AiKnowledgeRebuildJobPayload = { requestedByStaffId: string };
@@ -518,7 +494,6 @@ export async function repairPublicKnowledgeIndex(
   const result = await rebuildAiKnowledgeIndex({
     ...options,
     sourceKeys: requests,
-    allowEmbeddings: false,
   });
   await (options.checkpoint ?? (async () => {}))();
   await queryRows(
@@ -541,25 +516,6 @@ function freshnessScore(sourceType: AiKnowledgeSourceType) {
   if (sourceType === "article") return 0.9;
   if (sourceType === "faq") return 0.85;
   return 0.8;
-}
-
-function embeddingVectorString(
-  value: number[] | null | undefined,
-  context: { model: string | null; onDimensionMismatch: () => void },
-) {
-  if (value === null || value === undefined) return null;
-  if (!Array.isArray(value)) return null;
-  if (value.length !== EMBEDDING_DIMENSIONS) {
-    // A non-empty embedding with the wrong dimension would otherwise be dropped to
-    // null and silently degrade search. Report the model + actual length and let the
-    // caller count the failure so rebuildAiKnowledgeIndex can flag it.
-    console.error(
-      `[ai-knowledge] embedding dimension mismatch: model=${context.model ?? "unknown"} expected=${EMBEDDING_DIMENSIONS} actual=${value.length}`,
-    );
-    context.onDimensionMismatch();
-    return null;
-  }
-  return `[${value.join(",")}]`;
 }
 
 function metadataRecord(value: unknown): Record<string, unknown> {

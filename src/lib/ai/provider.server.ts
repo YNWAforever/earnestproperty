@@ -280,64 +280,6 @@ export async function generateAiJson<T>(input: {
   return defaultClient.generateJson(input);
 }
 
-export async function embedAiTexts(values: string[]) {
-  const config = getAiServerConfig();
-  if (!config.enabled || !config.embeddingModel || !config.apiKey || values.length === 0) {
-    return { ok: false as const, embeddings: [] as number[][], error: "AI_EMBEDDINGS_DISABLED" };
-  }
-
-  const fail = (reason: AiFailureReason, status: number | null) => {
-    logProviderFailure(reason, status);
-    return {
-      ok: false as const,
-      embeddings: [] as number[][],
-      error: "AI_EMBEDDINGS_FAILED",
-      reason,
-    };
-  };
-
-  const outcome = await postToGateway(
-    "/embeddings",
-    config.apiKey,
-    { model: config.embeddingModel, input: values },
-    {
-      fetchImpl: (url, init) => fetch(url, init),
-      sleepImpl: sleep,
-      budgetMs: AI_TOTAL_BUDGET_MS,
-      maxRetries: AI_MAX_RETRIES,
-    },
-  );
-  if (!outcome.ok) return fail(outcome.reason, outcome.status);
-
-  const { response, signal } = outcome;
-  try {
-    const result = (await response.json()) as {
-      data?: Array<{ embedding?: unknown; index?: unknown }>;
-    };
-    // OpenAI-compatible embedding APIs return an `index` field and may reorder the
-    // items, so we must place each embedding at its declared position rather than
-    // trusting array order.
-    const data = result.data ?? [];
-    const embeddings = new Array<number[]>(values.length);
-    for (let position = 0; position < data.length; position += 1) {
-      const item = data[position];
-      const index = Number.isInteger(item?.index) ? (item.index as number) : position;
-      embeddings[index] = Array.isArray(item?.embedding) ? item.embedding.map(Number) : [];
-    }
-    if (
-      data.length !== values.length ||
-      embeddings.length !== values.length ||
-      embeddings.some((embedding) => !Array.isArray(embedding) || embedding.length === 0)
-    ) {
-      throw new AiResponseInvalidError();
-    }
-
-    return { ok: true as const, embeddings, error: null };
-  } catch {
-    return fail(readFailureReason(signal), response.status);
-  }
-}
-
 function gatewayHeaders(apiKey: string | null) {
   if (!apiKey) throw new Error("AI Gateway API key is not configured");
   return {

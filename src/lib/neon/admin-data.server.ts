@@ -66,7 +66,6 @@ import type {
 import { getAiServerConfig } from "../ai/config.server.ts";
 import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-enrichment.server.ts";
 import { cancelCrmAnalysisRun } from "../ai/crm-analysis-runs.server";
-import { rebuildAiKnowledgeIndex } from "../ai/knowledge.server.ts";
 import type { CrmSegmentFilters } from "../ai/ai-types";
 import { isYouTubeVideoUrl } from "../youtube-video-url.js";
 import {
@@ -1928,9 +1927,21 @@ export async function fetchAdminAiKnowledgeStatus(
 export async function rebuildAdminAiKnowledge(
   actor: StaffAccess,
 ): Promise<AdminAiKnowledgeRebuildResult> {
-  const result = await rebuildAiKnowledgeIndex();
-  await writeAudit(actor.staffId, "ai.knowledge.rebuild", "ai_knowledge", undefined, result);
-  return result;
+  // FX-11a (E-10): the rebuild runs as the ai.knowledge.rebuild background job, the
+  // same job and 5-minute idempotency window as POST /api/admin/ai/rebuild-knowledge.
+  const { enqueueJob } = await import("../control-plane/jobs.server");
+  const activeWindow = Math.floor(Date.now() / (5 * 60 * 1_000));
+  const job = await enqueueJob({
+    jobType: "ai.knowledge.rebuild",
+    payloadVersion: 1,
+    payload: { requestedByStaffId: actor.staffId },
+    idempotencyKey: `ai.knowledge.rebuild:${activeWindow}`,
+    actorStaffId: actor.staffId,
+  });
+  await writeAudit(actor.staffId, "ai.knowledge.rebuild.queued", "ai_knowledge", undefined, {
+    jobId: job.id,
+  });
+  return { jobId: job.id, status: job.status };
 }
 
 export async function fetchAdminCrmSegments(actor: StaffAccess): Promise<AdminCrmSegmentRow[]> {

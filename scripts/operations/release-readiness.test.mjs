@@ -525,3 +525,15 @@ test("admin remediation scheduled manual reruns or unbound receipt attempts are 
     assert.equal(remediationAssessment(packet).ready, false);
   }
 });
+
+test("ai.gateway readiness no longer lists the embedding model", () => {
+  const row = inventoryConfiguration({
+    AI_GATEWAY_API_KEY: "fixture-key",
+    AI_GATEWAY_MODEL: "fixture/model",
+  }).find((r) => r.capability === "ai.gateway");
+  assert.deepEqual(
+    row.variables.map((v) => v.name),
+    ["AI_GATEWAY_API_KEY", "AI_GATEWAY_MODEL"],
+  );
+  assert.equal(row.configured, true);
+});
