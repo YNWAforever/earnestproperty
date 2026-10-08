@@ -2,13 +2,12 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { runClaimedJobs } from "../lib/control-plane/jobs.server.ts";
 import { getNextJobDueAt } from "../lib/control-plane/jobs-next-due.ts";
+import { hasBearerSecret } from "../lib/http/bearer-secret.ts";
 import { queryRows } from "../lib/neon/db.server.ts";
 import { recordWorkerHeartbeat } from "../lib/control-plane/worker-heartbeat.server.ts";
 
 async function drainJobs({ request }: { request: Request }) {
-  const expected = process.env.CRON_SECRET;
-  const actual = request.headers.get("authorization");
-  if (!expected || actual !== `Bearer ${expected}`) {
+  if (!hasBearerSecret(request, process.env.CRON_SECRET)) {
     return Response.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
   }
 
