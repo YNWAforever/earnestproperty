@@ -69,7 +69,10 @@ function parseNumber(text) {
   if (HK_LOCAL.test(digits)) return "852" + digits;
   // One contiguous run of 10-15 digits keeps its behaviour: WozTell sends
   // international numbers without "+" (e.g. "8613812345678"), and the company
-  // number is configured the same way.
+  // number is configured the same way. Known edge (FX-12 final review Minor 8): a
+  // bare "85212345678" is kept as typed, while "+852 1234 5678" is null because a
+  // typed +852 must be a valid HK number; a bare WozTell 8-digit "5xxxxxxx" is HK
+  // as on main.
   if (digits.length >= 10 && digits.length <= 15) return digits;
   return null;
 }

@@ -214,8 +214,8 @@ export type ResolveHooks = {
 };
 
 /**
- * Lock the member (as ingest does) and the chosen contact's lead key (as the FX-09 trigger does),
- * then one statement: the review FOR UPDATE WHERE status='open' AND updated_at is the version
+ * Lock the member (as ingest does), then the chosen contact's row and its lead key (the order
+ * ingest and the FX-09 trigger take them in), then one statement: the review FOR UPDATE WHERE status='open' AND updated_at is the version
  * read just before, apply, and write one audit_logs row in the same CTE. A message (or a STOP)
  * stored after the pre-read changes updated_at, so the statement writes nothing and the resolve
  * re-reads: a STOP is never linked past.
@@ -271,12 +271,19 @@ export async function resolveContactIdentityReview(
           ? review.contact_b
           : null;
 
-    const [, , result] = await transactionRows([
+    const [, , , result] = await transactionRows([
       {
         statement: `SELECT pg_advisory_xact_lock(hashtextextended('woztell-member:'||wc.woztell_member_id,0))
           FROM crm_contact_identity_reviews r JOIN whatsapp_conversations wc ON wc.id=r.conversation_id
           WHERE r.id=$1::uuid AND wc.woztell_member_id IS NOT NULL AND $2::text LIKE 'link\\_%'`,
         params: [input.id, input.action],
+      },
+      {
+        // The chosen contact's row before its lead key: ingest updates the contact and then the
+        // FX-09 trigger takes the lead key, so a link and a message on that contact's own member
+        // take them in the same order and wait for each other instead of deadlocking.
+        statement: "SELECT id FROM crm_contacts WHERE id=$1::uuid FOR UPDATE",
+        params: [chosenKnown],
       },
       {
         statement: `SELECT pg_advisory_xact_lock(hashtextextended('whatsapp-lead:'||$1::text,0))
