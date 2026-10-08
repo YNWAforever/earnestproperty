@@ -96,10 +96,11 @@ function match(redirects, { host, path, query = {} }) {
     keys.forEach((key, index) => {
       if (typeof key.name === "string") named[key.name] = result[index + 1];
     });
-    return {
-      status: redirect.permanent ? 308 : 307,
-      location: substitute(redirect.destination, result, named),
-    };
+    // Vercel passes the request query through when the destination has none.
+    let location = substitute(redirect.destination, result, named);
+    const search = new URLSearchParams(query).toString();
+    if (search && !location.includes("?")) location += `?${search}`;
+    return { status: redirect.permanent ? 308 : 307, location };
   }
   return null;
 }
@@ -172,6 +173,35 @@ test("host redirect excludes /_serverFn, bare /api and /.well-known", () => {
   ]);
 });
 
+test("host redirect excludes /assets/* so open vercel.app tabs keep loading chunks", () => {
+  const redirects = loadRedirects(PROD);
+  assertOneHostRule(redirects);
+  assertNotRedirected(redirects, [
+    "/assets/x.js",
+    "/assets/index-abc123.js",
+    "/assets/img/logo.webp",
+  ]);
+});
+
+test("host redirect keeps the request query string", () => {
+  const redirects = loadRedirects(PROD);
+  const [rule] = hostRules(redirects);
+  // Shape: no query in the destination (so Vercel passes the caller's through)
+  // and no query condition that could drop or rewrite it.
+  assert.equal(rule.destination, `${WWW}/$1`);
+  assert.ok(!rule.destination.includes("?"), "destination must not carry its own query");
+  assert.equal(rule.has.length, 1);
+  assert.equal(rule.missing, undefined);
+  assert.deepEqual(
+    match(redirects, { host: FALLBACK_HOST, path: "/listings", query: { keyword: "x" } }),
+    { status: 308, location: `${WWW}/listings?keyword=x` },
+  );
+  assert.deepEqual(match(redirects, { host: FALLBACK_HOST, path: "/", query: { ln: "tc" } }), {
+    status: 308,
+    location: `${WWW}/?ln=tc`,
+  });
+});
+
 test("every API route file is excluded from the host redirect", () => {
   const paths = apiRoutePaths();
   assert.ok(paths.length >= 25, `expected at least 25 API routes, found ${paths.length}`);
@@ -195,6 +225,8 @@ test("redirects / on the vercel.app host", () => {
     "/_serverFnx": `${WWW}/_serverFnx`,
     "/.well-knownx": `${WWW}/.well-knownx`,
     "/xwell-known": `${WWW}/xwell-known`,
+    "/assetsx": `${WWW}/assetsx`,
+    "/assets": `${WWW}/assets`,
   };
   for (const [path, location] of Object.entries(cases)) {
     assert.deepEqual(

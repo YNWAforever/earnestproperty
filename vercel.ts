@@ -29,9 +29,11 @@ const detailRedirects = importedRedirects.map((redirect) =>
 const FALLBACK_HOST = "earnestproperty.vercel.app";
 // Machine and browser-runtime paths are never host-redirected: a cross-origin
 // 308 drops Authorization, WozTell may not follow it, and the cron worker
-// refuses it (JOB_DRAIN_REDIRECTED). Vercel cannot match on method.
-export const HOST_REDIRECT_EXCLUDED_PREFIXES = ["api", "_serverFn", "w/", ".well-known"] as const;
-export const HOST_REDIRECT_SOURCE = "/((?!api(?:/|$)|_serverFn(?:/|$)|w/|\\.well-known(?:/|$)).*)";
+// refuses it (JOB_DRAIN_REDIRECTED). Vercel cannot match on method. /assets/*
+// is excluded too: a tab left open on vercel.app keeps lazy-loading chunks
+// from it after a deploy, and a cross-origin 308 would break those imports.
+export const HOST_REDIRECT_SOURCE =
+  "/((?!api(?:/|$)|_serverFn(?:/|$)|w/|assets/|\\.well-known(?:/|$)).*)";
 export function canonicalHostRedirects(env = process.env): VercelRedirect[] {
   if (env.VERCEL_ENV !== "production") return [];
   const resolved = resolveSiteOrigin(env);
