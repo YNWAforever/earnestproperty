@@ -360,7 +360,9 @@ function validateGeneratedProposal(
       const item = evidenceById.get(id);
       if (item) facts.push(item.title, item.excerpt);
     }
-    const ungrounded = ungroundedNumbers(copilotValueText(patch.after), facts);
+    const ungrounded = ungroundedNumbers(copilotValueText(patch.after), facts, {
+      chineseNumerals: true,
+    });
     if (ungrounded.length === 0) return patch;
     // The number flags go first so the schema's 20-claim cap never drops them.
     const unsupportedClaims = [

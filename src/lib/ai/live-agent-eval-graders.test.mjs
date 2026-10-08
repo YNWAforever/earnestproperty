@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { extractNumbers, ungroundedNumbers } from "./number-grounding.js";
+import { CHINESE_NUMERAL_UNITS, extractNumbers, ungroundedNumbers } from "./number-grounding.js";
 import {
   AVAILABILITY_PHRASES,
   colloquialCharacters,
@@ -49,6 +49,52 @@ test("ungroundedNumbers accepts a rounded display of a DB price and rejects an i
   assert.deepEqual(ungroundedNumbers("碧堤半島 2座 售 $6.80M", ["碧堤半島 2座", "6800000.00"]), []);
   assert.deepEqual(ungroundedNumbers("[9] 碧堤半島", ["碧堤半島 2座"]), ["9"]);
   assert.deepEqual(ungroundedNumbers("沒有數字", []), []);
+});
+
+const CN = { chineseNumerals: true };
+
+test("Chinese numerals are off by default, so the live-agent eval graders are unchanged", () => {
+  assert.deepEqual(extractNumbers("碧堤半島 兩房"), []);
+  assert.deepEqual(extractNumbers("七百萬 第一期 三房兩廁"), []);
+  assert.deepEqual(ungroundedNumbers("碧堤半島 2 房", ["碧堤半島 兩房"]), ["2"]);
+});
+
+test("with chineseNumerals, a Chinese numeral before a counting unit or after 第 is a number", () => {
+  const values = (text) => extractNumbers(text, CN).map(({ raw, value }) => [raw, value]);
+  assert.deepEqual(values("兩房"), [["兩房", 2]]);
+  assert.deepEqual(values("三房兩廁"), [
+    ["三房", 3],
+    ["兩廁", 2],
+  ]);
+  assert.deepEqual(values("第一期"), [["第一期", 1]]);
+  assert.deepEqual(values("七百萬"), [["七百萬", 7000000]]);
+  assert.deepEqual(values("十二層"), [["十二層", 12]]);
+  assert.deepEqual(values("二十分鐘"), [["二十分鐘", 20]]);
+  assert.deepEqual(values("一百二十呎"), [["一百二十呎", 120]]);
+  assert.deepEqual(values("1.2億 與 三億"), [
+    ["1.2億", 120000000],
+    ["三億", 300000000],
+  ]);
+  assert.ok(CHINESE_NUMERAL_UNITS.includes("房"));
+  assert.ok(CHINESE_NUMERAL_UNITS.includes("萬"));
+});
+
+test("with chineseNumerals, ordinary words that contain a numeral produce no number", () => {
+  for (const word of ["一個", "一齊", "一定", "統一", "一手", "二手", "萬一", "千祈", "十分"]) {
+    assert.deepEqual(extractNumbers(word, CN), [], word);
+  }
+  assert.deepEqual(extractNumbers("一般首期為樓價一成至三成", CN), []);
+});
+
+test("with chineseNumerals, Chinese and Arabic numerals ground each other", () => {
+  assert.deepEqual(ungroundedNumbers("2 房", ["兩房"], CN), []);
+  assert.deepEqual(ungroundedNumbers("兩房", ["2 房"], CN), []);
+  assert.deepEqual(ungroundedNumbers("3房2廁", ["三房兩廁"], CN), []);
+  assert.deepEqual(ungroundedNumbers("第1期", ["第一期"], CN), []);
+  assert.deepEqual(ungroundedNumbers("七百萬", ["$7,000,000"], CN), []);
+  assert.deepEqual(ungroundedNumbers("$7,000,000", ["七百萬"], CN), []);
+  assert.deepEqual(ungroundedNumbers("700萬", ["七百萬"], CN), []);
+  assert.deepEqual(ungroundedNumbers("三房", ["兩房"], CN), ["三房"]);
 });
 
 test("containsPhonePattern", () => {

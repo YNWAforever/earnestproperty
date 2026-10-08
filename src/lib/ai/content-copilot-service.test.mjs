@@ -601,3 +601,42 @@ test("the number flag survives the 20-claim cap when the model already returned 
   assert.ok(claims.includes("數字未有來源：$7.2M"));
   assert.ok(claims.length <= 20);
 });
+
+test("the copilot treats Chinese and Arabic numerals as the same number", async () => {
+  const same = [
+    ["海景兩房", "海景 2 房"],
+    ["三房兩廁", "3房2廁"],
+    ["第一期", "第1期"],
+    ["海景 2 房", "海景兩房"],
+    ["售價七百萬", "售價 $7,000,000"],
+    ["售價 $7,000,000", "售價七百萬"],
+    ["售價七百萬", "售價 700萬"],
+    ["十二層高", "12 層高"],
+    ["步行二十分鐘", "步行 20 分鐘"],
+    ["實用一百二十呎", "實用 120 呎"],
+  ];
+  for (const [before, after] of same) {
+    const { proposal } = await generateEstatePatch({ before, after, claimType: "subjective" });
+    assert.deepEqual(proposal.patches[0].unsupportedClaims, [], `${before} → ${after}`);
+  }
+});
+
+test("the copilot flags a changed Chinese numeral with its raw text", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房",
+    after: "海景三房",
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, ["數字未有來源：三房"]);
+});
+
+test("the copilot does not read ordinary words with a numeral as numbers", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景單位",
+    after: "海景單位：一個家庭一齊住，一定統一管理，一手、二手都有，萬一有事千祈聯絡，十分方便",
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, []);
+});
