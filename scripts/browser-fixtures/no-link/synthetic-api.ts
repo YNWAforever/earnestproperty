@@ -60,6 +60,15 @@ const row = (id: string, name: string, external: string) => ({
   next_action: "reply",
   capabilities: { canReply: true, canCorrect: false },
   messages: Array.from({ length: 30 }, (_, n) => message(n + 1, id)),
+  // FX-12: with sessionStorage no-link-fixture-identity-review=true, 甲 awaits 身分待核對.
+  ...(id === ids.a && sessionStorage.getItem("no-link-fixture-identity-review") === "true"
+    ? {
+        identity_review: true,
+        identity_review_id: "7c000000-0000-4000-8000-00000000c001",
+        next_action: "review" as const,
+        can_resolve_identity_review: actor === "manager",
+      }
+    : {}),
 });
 const rows = [row(ids.a, "合成客戶甲", "4033349"), row(ids.b, "合成客戶乙", "4033350")];
 const state = {
@@ -93,6 +102,7 @@ const state = {
     unassignedLeads: 0,
     staleNewLeads: 0,
     leadsNeedingAttention: 0,
+    identityReviewsOpen: 0,
   },
   pendingAttention: [] as (() => void)[],
   todayTasks: [

@@ -626,6 +626,681 @@ test("FX-12 contact identity on owned Postgres", { timeout: 300000 }, async (t) 
         );
         assert.equal(n, 0);
       });
+
+      // ---- Task 4: the 「可能重複客戶」 / 「身分待核對」 list, resolution and reply gate ----
+      const review = await import("./contact-identity-review.server.ts");
+      const { readAdminPage } = await import("./admin-pagination.server.ts");
+      const { enqueueOutboundIntent } = await import("../woztell/outbound-intent.server.ts");
+      const actorFor = (staffId, role) => ({
+        staffId,
+        authUserId: "synthetic-fx12-" + staffId,
+        email: null,
+        name: null,
+        roles: [role],
+        bootstrap: false,
+      });
+      const managerActor = actorFor(MANAGER, "manager");
+      const adminActor = actorFor(ADMIN, "admin");
+      const agentActor = actorFor(AGENT, "agent");
+      const CHANNEL = "synthetic-fx12-channel";
+      let clock = Date.parse("2026-10-08T03:00:00.000Z");
+      const inbound = ({ messageId, member, phone, text, name = null, origin = "live_webhook" }) =>
+        ingestWoztellEvent(
+          {
+            direction: "inbound",
+            externalMessageId: messageId,
+            legacyExternalMessageId: null,
+            fromPhone: phone,
+            toPhone: null,
+            timestamp: new Date((clock += 60000)),
+            messageType: "TEXT",
+            text,
+            woztellMemberId: member,
+            channelId: CHANNEL,
+            appId: "synthetic-fx12-app",
+            memberName: name,
+            payload: {
+              type: "TEXT",
+              eventType: "INBOUND",
+              data: { text },
+              ...(name ? { memberExtra: { name } } : {}),
+            },
+          },
+          origin,
+          undefined,
+          { mode: "off" },
+        );
+      const seed = (contactId, { phone = null, member = null, name = "合成客戶" } = {}) =>
+        query(
+          `INSERT INTO crm_contacts(id,name,phone,normalized_phone,whatsapp_member_id,source)
+           VALUES($1,$2,$3,$3,$4,'whatsapp')`,
+          [contactId, name, phone, member],
+        );
+      const one = async (sql, params = []) => (await query(sql, params))[0];
+      const n = async (sql, params = []) => (await one(sql, params)).n;
+      const reviewRow = (reviewId) =>
+        one("SELECT * FROM crm_contact_identity_reviews WHERE id=$1", [reviewId]);
+      const openReviewFor = (conversationId) =>
+        one(
+          "SELECT * FROM crm_contact_identity_reviews WHERE conversation_id=$1 AND status='open'",
+          [conversationId],
+        );
+      const auditFor = (reviewId) =>
+        query(
+          "SELECT actor_id,action,subject_type,subject_id,metadata FROM audit_logs WHERE subject_id=$1",
+          [reviewId],
+        );
+      // Review rows, audit metadata and the list never hold a raw phone or member id.
+      const assertNoIdentity = (value) => {
+        // Random UUIDs can contain "852…" by chance; they are ids, not phones.
+        const text = JSON.stringify(value).replace(
+          /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi,
+          "<id>",
+        );
+        assert.doesNotMatch(text, /5555|852\d|synthetic-fx12-t4/, text);
+      };
+      const rejectsStatus = async (promise, status, body) => {
+        let error;
+        await assert.rejects(
+          promise.catch((caught) => {
+            error = caught;
+            throw caught;
+          }),
+        );
+        assert.ok(error instanceof Response, String(error));
+        assert.equal(error.status, status);
+        if (body) assert.equal(await error.text(), body);
+      };
+      // Everything a resolution could touch, as one digest.
+      const worldDigest = async () =>
+        (
+          await one(`SELECT md5(concat_ws('|',
+            (SELECT string_agg(t::text,',' ORDER BY t.id) FROM crm_contact_identity_reviews t),
+            (SELECT string_agg(t::text,',' ORDER BY t.id) FROM crm_contacts t),
+            (SELECT string_agg(t::text,',' ORDER BY t.id) FROM crm_leads t),
+            (SELECT string_agg(t::text,',' ORDER BY t.id) FROM whatsapp_conversations t),
+            (SELECT string_agg(t::text,',' ORDER BY t.id) FROM whatsapp_messages t),
+            (SELECT count(*) FROM audit_logs))) AS h`)
+        ).h;
+
+      // Case a (Task 3): X holds P and m1. A message from (P, m2) opens a review with
+      // contact_a NULL (no member owner) and contact_b X.
+      const X = id(900);
+      const P = "85255550901";
+      let caseA;
+      const openCaseA = async () => {
+        if (caseA) return caseA;
+        await seed(X, { phone: P, member: "synthetic-fx12-t4-m1", name: "陳太" });
+        const first = await inbound({
+          messageId: "synthetic-fx12-t4-a-1",
+          member: "synthetic-fx12-t4-m2",
+          phone: P,
+          text: "合成核對訊息一",
+        });
+        await inbound({
+          messageId: "synthetic-fx12-t4-a-2",
+          member: "synthetic-fx12-t4-m2",
+          phone: P,
+          text: "合成核對訊息二",
+        });
+        assert.equal(first.identityReview, true);
+        const open = await openReviewFor(first.conversationId);
+        assert.equal(open.contact_a, null);
+        assert.equal(open.contact_b, X);
+        caseA = { conversationId: first.conversationId, reviewId: open.id };
+        return caseA;
+      };
+
+      await t.test("only managers and admins can list or resolve", async () => {
+        const { reviewId } = await openCaseA();
+        const before = await worldDigest();
+        await rejectsStatus(review.listContactIdentityReviews({ status: "open" }, agentActor), 403);
+        await rejectsStatus(
+          review.resolveContactIdentityReview({ id: reviewId, action: "link_b" }, agentActor),
+          403,
+        );
+        assert.equal(await worldDigest(), before);
+        assert.equal((await server.getAdminAttentionCounts(agentActor)).identityReviewsOpen, 0);
+        const open = await n(
+          "SELECT count(*)::int AS n FROM crm_contact_identity_reviews WHERE status='open'",
+        );
+        assert.ok(open >= 1);
+        assert.equal(
+          (await server.getAdminAttentionCounts(managerActor)).identityReviewsOpen,
+          open,
+        );
+        assert.equal((await server.getAdminAttentionCounts(adminActor)).identityReviewsOpen, open);
+
+        const listed = await review.listContactIdentityReviews({ status: "open" }, managerActor);
+        assert.equal(listed.openCount, open);
+        const row = listed.rows.find((item) => item.id === reviewId);
+        assert.ok(row);
+        assert.equal(row.reason, "whatsapp_identity_conflict");
+        assert.equal(row.a, null);
+        assert.equal(row.b.id, X);
+        assert.equal(row.b.name, "陳太");
+        assert.equal(row.b.maskedPhone, "•••• 0901");
+        assert.equal(row.b.hasWhatsapp, true);
+        assert.equal(row.conversationId, caseA.conversationId);
+        assert.equal(row.messageCount, 2);
+        assertNoIdentity(listed);
+      });
+
+      await t.test(
+        "link_b attaches the stored messages to B and opens B's first lead",
+        async () => {
+          const { conversationId, reviewId } = await openCaseA();
+          assert.equal(
+            await n("SELECT count(*)::int AS n FROM crm_leads WHERE contact_id=$1", [X]),
+            0,
+          );
+          const messagesBefore = await query(
+            "SELECT id,text,created_at FROM whatsapp_messages WHERE conversation_id=$1 ORDER BY id",
+            [conversationId],
+          );
+          assert.equal(messagesBefore.length, 2);
+          const result = await review.resolveContactIdentityReview(
+            { id: reviewId, action: "link_b", note: "合成備註" },
+            managerActor,
+          );
+          assert.deepEqual(result, { ok: true, status: "linked", linkedContactId: X });
+
+          const conversation = await one(
+            "SELECT contact_id FROM whatsapp_conversations WHERE id=$1",
+            [conversationId],
+          );
+          assert.equal(conversation.contact_id, X);
+          // Reattached, not copied or lost.
+          assert.deepEqual(
+            await query(
+              "SELECT id,text,created_at FROM whatsapp_messages WHERE conversation_id=$1 ORDER BY id",
+              [conversationId],
+            ),
+            messagesBefore,
+          );
+          assert.equal(
+            await n(
+              "SELECT count(*)::int AS n FROM whatsapp_messages WHERE conversation_id=$1 AND contact_id IS DISTINCT FROM $2",
+              [conversationId, X],
+            ),
+            0,
+          );
+          const x = await contactRow(X);
+          assert.equal(x.whatsapp_member_id, "synthetic-fx12-t4-m1");
+          assert.equal(x.normalized_phone, P);
+          // FX-09 UPDATE path: X had no lead, so it gets exactly one.
+          assert.equal(
+            await n("SELECT count(*)::int AS n FROM crm_leads WHERE contact_id=$1", [X]),
+            1,
+          );
+          assert.equal(
+            (await one("SELECT opted_out_whatsapp FROM crm_contacts WHERE id=$1", [X]))
+              .opted_out_whatsapp,
+            false,
+          );
+
+          const resolved = await reviewRow(reviewId);
+          assert.equal(resolved.status, "linked");
+          assert.equal(resolved.resolved_by, MANAGER);
+          assert.equal(resolved.linked_contact_id, X);
+          assert.equal(resolved.resolution_note, "合成備註");
+          assert.ok(resolved.resolved_at);
+          const audit = await auditFor(reviewId);
+          assert.equal(audit.length, 1);
+          assert.equal(audit[0].action, "contact.identity_review.resolve");
+          assert.equal(audit[0].actor_id, MANAGER);
+          assert.deepEqual(audit[0].metadata, {
+            reviewId,
+            reason: "whatsapp_identity_conflict",
+            action: "link_b",
+          });
+          assertNoIdentity(audit[0].metadata);
+
+          // A contact that already has a lead gets no second one from a link.
+          const Y = id(901);
+          const L = id(902);
+          await seed(Y, { phone: "85255550902", member: "synthetic-fx12-t4-m3" });
+          await query(
+            "INSERT INTO crm_leads(id,contact_id,stage,intent,source) VALUES($1,$2,'contacted','buyer','website')",
+            [L, Y],
+          );
+          const other = await inbound({
+            messageId: "synthetic-fx12-t4-y-1",
+            member: "synthetic-fx12-t4-m4",
+            phone: "85255550902",
+            text: "合成核對訊息三",
+          });
+          const otherReview = await openReviewFor(other.conversationId);
+          const leadHash = await one("SELECT md5(l::text) AS h FROM crm_leads l WHERE id=$1", [L]);
+          await review.resolveContactIdentityReview(
+            { id: otherReview.id, action: "link_b" },
+            adminActor,
+          );
+          assert.equal(
+            await n("SELECT count(*)::int AS n FROM crm_leads WHERE contact_id=$1", [Y]),
+            1,
+          );
+          assert.deepEqual(
+            await one("SELECT md5(l::text) AS h FROM crm_leads l WHERE id=$1", [L]),
+            leadHash,
+          );
+        },
+      );
+
+      await t.test(
+        "after a manager links the conversation, the next message lands there and opens no new review",
+        async () => {
+          const { conversationId } = await openCaseA();
+          const reviewsBefore = await n(
+            "SELECT count(*)::int AS n FROM crm_contact_identity_reviews",
+          );
+          const xBefore = await contactRow(X);
+          const outcome = await inbound({
+            messageId: "synthetic-fx12-t4-a-3",
+            member: "synthetic-fx12-t4-m2",
+            phone: P,
+            text: "合成核對後訊息",
+          });
+          assert.equal(outcome.identityReview, false);
+          assert.equal(outcome.conversationId, conversationId);
+          assert.equal(outcome.contactId, X);
+          const message = await one("SELECT contact_id FROM whatsapp_messages WHERE text=$1", [
+            "合成核對後訊息",
+          ]);
+          assert.equal(message.contact_id, X);
+          assert.equal(
+            await n("SELECT count(*)::int AS n FROM crm_contact_identity_reviews"),
+            reviewsBefore,
+          );
+          const xAfter = await contactRow(X);
+          assert.equal(xAfter.whatsapp_member_id, xBefore.whatsapp_member_id);
+          assert.equal(xAfter.normalized_phone, xBefore.normalized_phone);
+        },
+      );
+
+      await t.test(
+        "link_new creates a contact with the member and no phone or consent",
+        async () => {
+          const W = id(910);
+          await seed(W, { phone: "85255550910", member: "synthetic-fx12-t4-m10" });
+          const wBefore = await one("SELECT md5(c::text) AS h FROM crm_contacts c WHERE id=$1", [
+            W,
+          ]);
+          const outcome = await inbound({
+            messageId: "synthetic-fx12-t4-n-1",
+            member: "synthetic-fx12-t4-m11",
+            phone: "85255550910",
+            text: "合成新客訊息",
+            name: "合成新客",
+          });
+          const open = await openReviewFor(outcome.conversationId);
+          const contactsBefore = await n("SELECT count(*)::int AS n FROM crm_contacts");
+          const result = await review.resolveContactIdentityReview(
+            { id: open.id, action: "link_new" },
+            managerActor,
+          );
+          assert.equal(result.status, "linked");
+          assert.ok(result.linkedContactId);
+          assert.notEqual(result.linkedContactId, W);
+          assert.equal(await n("SELECT count(*)::int AS n FROM crm_contacts"), contactsBefore + 1);
+          const created = await one("SELECT * FROM crm_contacts WHERE id=$1", [
+            result.linkedContactId,
+          ]);
+          assert.equal(created.name, "合成新客");
+          assert.equal(created.whatsapp_member_id, "synthetic-fx12-t4-m11");
+          assert.equal(created.phone, null);
+          assert.equal(created.normalized_phone, null);
+          assert.equal(created.opt_in_whatsapp, false);
+          assert.equal(created.opted_out_whatsapp, false);
+          assert.equal(created.source, "whatsapp");
+          assert.equal(
+            (
+              await one("SELECT contact_id FROM whatsapp_conversations WHERE id=$1", [
+                outcome.conversationId,
+              ])
+            ).contact_id,
+            result.linkedContactId,
+          );
+          assert.equal(
+            await n("SELECT count(*)::int AS n FROM crm_leads WHERE contact_id=$1", [
+              result.linkedContactId,
+            ]),
+            1,
+          );
+          // The phone owner is untouched.
+          assert.deepEqual(
+            await one("SELECT md5(c::text) AS h FROM crm_contacts c WHERE id=$1", [W]),
+            wBefore,
+          );
+          assert.equal((await reviewRow(open.id)).linked_contact_id, result.linkedContactId);
+        },
+      );
+
+      await t.test(
+        "a STOP received in the review conversation opts out the contact it is linked to",
+        async () => {
+          // (c′): the conversation belongs to Z (who does not hold the member), and a STOP
+          // arrives from a phone nobody holds. It matched no contact, so nobody was opted
+          // out at ingest. Linking to Z must apply it, with FX-08 evidence.
+          const Z = id(920);
+          await seed(Z, { phone: "85255550920", name: "合成業主" });
+          const [conversation] = await query(
+            `INSERT INTO whatsapp_conversations(contact_id,woztell_member_id,channel_id,last_message_at,last_inbound_at)
+             VALUES($1,'synthetic-fx12-t4-m20',$2,now(),now()) RETURNING id`,
+            [Z, CHANNEL],
+          );
+          const stop = await inbound({
+            messageId: "synthetic-fx12-t4-stop-1",
+            member: "synthetic-fx12-t4-m20",
+            phone: "85255550929",
+            text: "STOP",
+          });
+          assert.equal(stop.identityReview, true);
+          assert.equal(stop.conversationId, conversation.id);
+          const open = await openReviewFor(conversation.id);
+          assert.equal(open.contact_a, Z);
+          assert.equal(open.evidence.stopReceived, true);
+          assert.equal(open.evidence.optOutApplied, false);
+          assert.equal(
+            (await one("SELECT opted_out_whatsapp FROM crm_contacts WHERE id=$1", [Z]))
+              .opted_out_whatsapp,
+            false,
+          );
+          const stopMessage = await one(
+            "SELECT external_message_id,created_at FROM whatsapp_messages WHERE external_message_id=$1",
+            ["synthetic-fx12-t4-stop-1"],
+          );
+          await review.resolveContactIdentityReview(
+            { id: open.id, action: "link_a" },
+            managerActor,
+          );
+          const z = await one("SELECT * FROM crm_contacts WHERE id=$1", [Z]);
+          assert.equal(z.opted_out_whatsapp, true);
+          assert.equal(z.opted_out_source, "customer_message");
+          assert.equal(z.opted_out_message_id, "synthetic-fx12-t4-stop-1");
+          assert.equal(z.opted_out_text, "STOP");
+          assert.equal(z.opted_out_at.toISOString(), stopMessage.created_at.toISOString());
+
+          // link_new carries the STOP to the new contact too.
+          const W = id(921);
+          await seed(W, { phone: "85255550921", member: "synthetic-fx12-t4-m21" });
+          const conflicted = await inbound({
+            messageId: "synthetic-fx12-t4-stop-2",
+            member: "synthetic-fx12-t4-m22",
+            phone: "85255550921",
+            text: "退訂",
+          });
+          const second = await openReviewFor(conflicted.conversationId);
+          assert.equal(second.evidence.stopReceived, true);
+          const linked = await review.resolveContactIdentityReview(
+            { id: second.id, action: "link_new" },
+            managerActor,
+          );
+          const created = await one("SELECT * FROM crm_contacts WHERE id=$1", [
+            linked.linkedContactId,
+          ]);
+          assert.equal(created.opted_out_whatsapp, true);
+          assert.equal(created.opted_out_source, "customer_message");
+          assert.equal(created.opted_out_message_id, "synthetic-fx12-t4-stop-2");
+          assert.equal(created.opted_out_text, "退訂");
+          assert.equal(created.opt_in_whatsapp, false);
+        },
+      );
+
+      await t.test(
+        "a second resolve of the same review → 409 REVIEW_ALREADY_RESOLVED, and an action/reason mismatch → 400",
+        async () => {
+          const { reviewId } = await openCaseA();
+          let before = await worldDigest();
+          await rejectsStatus(
+            review.resolveContactIdentityReview({ id: reviewId, action: "link_b" }, managerActor),
+            409,
+            "REVIEW_ALREADY_RESOLVED",
+          );
+          await rejectsStatus(
+            review.resolveContactIdentityReview({ id: id(999), action: "dismiss" }, managerActor),
+            404,
+          );
+          assert.equal(await worldDigest(), before);
+
+          // A fresh case a review: link_a has no side A, and duplicate actions do not apply.
+          const V = id(930);
+          await seed(V, { phone: "85255550930", member: "synthetic-fx12-t4-m30" });
+          const outcome = await inbound({
+            messageId: "synthetic-fx12-t4-m-1",
+            member: "synthetic-fx12-t4-m31",
+            phone: "85255550930",
+            text: "合成不適用",
+          });
+          const open = await openReviewFor(outcome.conversationId);
+          before = await worldDigest();
+          for (const action of ["link_a", "same_person", "dismiss"])
+            await rejectsStatus(
+              review.resolveContactIdentityReview({ id: open.id, action }, managerActor),
+              400,
+              "REVIEW_ACTION_NOT_ALLOWED",
+            );
+          assert.equal(await worldDigest(), before);
+
+          // Two managers at once: exactly one wins, the other gets 409, one audit row.
+          const results = await Promise.allSettled([
+            review.resolveContactIdentityReview({ id: open.id, action: "link_b" }, managerActor),
+            review.resolveContactIdentityReview({ id: open.id, action: "link_new" }, adminActor),
+          ]);
+          assert.equal(results.filter((r) => r.status === "fulfilled").length, 1);
+          const loser = results.find((r) => r.status === "rejected");
+          assert.ok(loser.reason instanceof Response);
+          assert.equal(loser.reason.status, 409);
+          assert.equal((await auditFor(open.id)).length, 1);
+          assert.equal(
+            await n(
+              "SELECT count(*)::int AS n FROM crm_contacts WHERE whatsapp_member_id='synthetic-fx12-t4-m31'",
+            ),
+            results[1].status === "fulfilled" ? 1 : 0,
+          );
+        },
+      );
+
+      await t.test("duplicate decisions never merge or edit contacts", async () => {
+        const pairs = [
+          ["same_person", "same_person", 940],
+          ["different_people", "different_people", 950],
+          ["dismiss", "dismissed", 960],
+        ];
+        for (const [action, status, base] of pairs) {
+          const A = id(base);
+          const B = id(base + 1);
+          const digits = String(base).padStart(4, "0");
+          await query(
+            `INSERT INTO crm_contacts(id,name,phone,normalized_phone,source)
+             VALUES($1,'合成重複甲',$3,$3,'website'),($2,'合成重複乙',$4,$4,'whatsapp')`,
+            [A, B, "8525555" + digits, "5555" + digits],
+          );
+          await query(
+            "INSERT INTO crm_leads(id,contact_id,stage,intent,source) VALUES($1,$2,'new','buyer','website'),($3,$4,'new','tenant','whatsapp')",
+            [id(base + 2), A, id(base + 3), B],
+          );
+          await query(
+            `INSERT INTO whatsapp_conversations(contact_id,woztell_member_id,channel_id)
+             VALUES($1,$2,$3)`,
+            [B, "synthetic-fx12-t4-d" + base, CHANNEL],
+          );
+          const [dup] = await query(
+            `INSERT INTO crm_contact_identity_reviews(reason,contact_a,contact_b,evidence)
+             VALUES('phone_format_duplicate',$1,$2,'{"kind":"phone_format"}') RETURNING id`,
+            [A, B],
+          );
+          const pairDigest = () =>
+            one(
+              `SELECT md5(concat_ws('|',
+                (SELECT string_agg(c::text,',' ORDER BY c.id) FROM crm_contacts c WHERE c.id IN ($1,$2)),
+                (SELECT string_agg(l::text,',' ORDER BY l.id) FROM crm_leads l WHERE l.contact_id IN ($1,$2)),
+                (SELECT string_agg(w::text,',' ORDER BY w.id) FROM whatsapp_conversations w WHERE w.contact_id IN ($1,$2)))) AS h`,
+              [A, B],
+            );
+          const before = await pairDigest();
+          const contactsBefore = await n("SELECT count(*)::int AS n FROM crm_contacts");
+          for (const linkAction of ["link_a", "link_b", "link_new"])
+            await rejectsStatus(
+              review.resolveContactIdentityReview({ id: dup.id, action: linkAction }, managerActor),
+              400,
+              "REVIEW_ACTION_NOT_ALLOWED",
+            );
+          const result = await review.resolveContactIdentityReview(
+            { id: dup.id, action },
+            managerActor,
+          );
+          assert.deepEqual(result, { ok: true, status, linkedContactId: null });
+          assert.deepEqual(await pairDigest(), before);
+          assert.equal(await n("SELECT count(*)::int AS n FROM crm_contacts"), contactsBefore);
+          const resolved = await reviewRow(dup.id);
+          assert.equal(resolved.status, status);
+          assert.equal(resolved.linked_contact_id, null);
+          assert.equal(resolved.resolved_by, MANAGER);
+          const audit = await auditFor(dup.id);
+          assert.equal(audit.length, 1);
+          assert.deepEqual(audit[0].metadata, {
+            reviewId: dup.id,
+            reason: "phone_format_duplicate",
+            action,
+          });
+        }
+        const resolved = await review.listContactIdentityReviews(
+          { status: "resolved" },
+          managerActor,
+        );
+        const sample = resolved.rows.find((row) => row.status === "same_person");
+        assert.ok(sample);
+        assert.equal(sample.a.maskedPhone, "•••• 0940");
+        assert.equal(sample.b.maskedPhone, "•••• 0940");
+        assert.equal(sample.a.leadCount, 1);
+        assert.equal(sample.a.openLeadIds.length, 1);
+        assert.ok(sample.resolvedByName);
+        assertNoIdentity(resolved.rows);
+      });
+
+      await t.test("a reply to a conversation under review is refused", async () => {
+        const R = id(970);
+        await seed(R, { phone: "85255550970", member: "synthetic-fx12-t4-m70" });
+        const outcome = await inbound({
+          messageId: "synthetic-fx12-t4-r-1",
+          member: "synthetic-fx12-t4-m71",
+          phone: "85255550970",
+          text: "合成回覆門檻",
+        });
+        const reply = () =>
+          enqueueOutboundIntent(
+            {
+              requestId: crypto.randomUUID(),
+              conversationId: outcome.conversationId,
+              kind: "text",
+              payload: { text: "合成回覆" },
+            },
+            MANAGER,
+            null,
+          );
+        const intents = () =>
+          n("SELECT count(*)::int AS n FROM whatsapp_outbound_intents WHERE conversation_id=$1", [
+            outcome.conversationId,
+          ]);
+        await assert.rejects(reply(), { code: "IDENTITY_REVIEW_REQUIRED" });
+        assert.equal(await intents(), 0);
+        const open = await openReviewFor(outcome.conversationId);
+        await review.resolveContactIdentityReview({ id: open.id, action: "link_b" }, managerActor);
+        const queued = await reply();
+        assert.equal(queued.state, "queued");
+        assert.equal(await intents(), 1);
+      });
+
+      await t.test(
+        "the inbox marks the review conversation and counts it for managers",
+        async () => {
+          const before = {
+            manager: (await server.getAdminAttentionCounts(managerActor)).unansweredConversations,
+            agent: (await server.getAdminAttentionCounts(agentActor)).unansweredConversations,
+          };
+          const Q = id(980);
+          await seed(Q, { phone: "85255550980", member: "synthetic-fx12-t4-m80" });
+          const outcome = await inbound({
+            messageId: "synthetic-fx12-t4-i-1",
+            member: "synthetic-fx12-t4-m81",
+            phone: "85255550980",
+            text: "合成收件匣",
+          });
+          const open = await openReviewFor(outcome.conversationId);
+          const page = await readAdminPage({ resource: "conversations", limit: 100 }, managerActor);
+          const row = page.rows.find((item) => item.id === outcome.conversationId);
+          assert.ok(row);
+          assert.equal(row.identity_review, true);
+          assert.equal(row.identity_review_id, open.id);
+          assert.equal(row.next_action, "review");
+          assert.equal(
+            (await server.getAdminAttentionCounts(managerActor)).unansweredConversations,
+            before.manager + 1,
+          );
+          assert.equal(
+            (await server.getAdminAttentionCounts(agentActor)).unansweredConversations,
+            before.agent,
+          );
+          const managerDetail = await server.fetchAdminConversation(
+            outcome.conversationId,
+            managerActor,
+            false,
+          );
+          assert.equal(managerDetail.identity_review_id, open.id);
+          assert.equal(managerDetail.can_resolve_identity_review, true);
+
+          // Case c: the conversation's assigned agent sees the badge too, but cannot resolve.
+          const Z = id(985);
+          await seed(Z, { phone: "85255550985", member: "synthetic-fx12-t4-m85" });
+          const [owned] = await query(
+            `INSERT INTO whatsapp_conversations(contact_id,woztell_member_id,channel_id,assigned_agent_id,last_message_at,last_inbound_at)
+             VALUES($1,'synthetic-fx12-t4-m85',$2,$3,now(),now()) RETURNING id`,
+            [Z, CHANNEL, AGENT],
+          );
+          const V = id(986);
+          await seed(V, { phone: "85255550986" });
+          const conflicted = await inbound({
+            messageId: "synthetic-fx12-t4-i-2",
+            member: "synthetic-fx12-t4-m85",
+            phone: "85255550986",
+            text: "合成負責代理",
+          });
+          assert.equal(conflicted.identityReview, true);
+          assert.equal(conflicted.conversationId, owned.id);
+          const agentPage = await readAdminPage(
+            { resource: "conversations", limit: 100 },
+            agentActor,
+          );
+          const agentRow = agentPage.rows.find((item) => item.id === owned.id);
+          assert.ok(agentRow);
+          assert.equal(agentRow.identity_review, true);
+          assert.equal(agentRow.next_action, "review");
+          const agentDetail = await server.fetchAdminConversation(owned.id, agentActor, false);
+          assert.ok(agentDetail.identity_review_id);
+          assert.equal(agentDetail.can_resolve_identity_review, false);
+          await assert.rejects(
+            enqueueOutboundIntent(
+              {
+                requestId: crypto.randomUUID(),
+                conversationId: owned.id,
+                kind: "text",
+                payload: { text: "合成回覆" },
+              },
+              AGENT,
+              AGENT,
+            ),
+            { code: "IDENTITY_REVIEW_REQUIRED" },
+          );
+          await rejectsStatus(
+            review.resolveContactIdentityReview(
+              { id: agentDetail.identity_review_id, action: "link_a" },
+              agentActor,
+            ),
+            403,
+          );
+        },
+      );
     });
   } finally {
     network.mock.restore();

@@ -32,6 +32,14 @@ await build({
         replacement: resolve(root, "synthetic-analytics.ts"),
       },
       {
+        // FX-12: the leads route bundles the 可能重複客戶 list; its server calls stay synthetic.
+        find: /^@\/lib\/neon\/contact-identity-review$/,
+        replacement: resolve(
+          workspace,
+          "scripts/browser-fixtures/daily-work/identity-review-api.ts",
+        ),
+      },
+      {
         find: /^@\/lib\/neon\/(admin-data|whatsapp-assignment|staff-notifications|enquiry-resolution|forwarded-enquiries)$/,
         replacement: api,
       },

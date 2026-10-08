@@ -175,6 +175,9 @@ export type AdminConversationRow = {
   requested_staff_name?: string | null;
   confirmed_owner_name?: string | null;
   next_action?: "review" | "reply" | "triage" | "follow_up";
+  /** FX-12: the conversation awaits 身分待核對; replies are refused until a manager links it. */
+  identity_review?: boolean;
+  identity_review_id?: string | null;
   capabilities?: { canReply: boolean; canCorrect: boolean };
   id: string;
   status: string;
@@ -531,6 +534,8 @@ export type AdminConversationDetail = AdminConversationRow & {
   opted_out_source?: "customer_message" | "staff_recorded" | "legacy" | null;
   /** Server-computed, same role rule as can_clear_opt_out. The server fn enforces it again. */
   can_resolve_unknown_outbound?: boolean;
+  /** Server-computed, admin/manager only. The resolution server fn enforces it again. */
+  can_resolve_identity_review?: boolean;
   /** Managers and above only; agents get null. */
   unknown_outbound?: {
     id: string;
@@ -742,6 +747,8 @@ export type AdminAttentionCounts = {
   staleNewLeads: number;
   /** Distinct open leads that are unassigned or stale-new; a lead that is both counts once. */
   leadsNeedingAttention: number;
+  /** FX-12: open 可能重複客戶 / 身分待核對 reviews. Admin and manager only; 0 for agents. */
+  identityReviewsOpen: number;
 };
 
 export type AdminTodayTask = {

@@ -86,6 +86,7 @@ jobs:
       - run: npm run test:admin-lead-conflict:ui
       - run: npm run test:admin-campaign-review:ui
       - run: npm run test:admin-performance:ui
+      - run: npm run test:admin-identity-review:ui
       - run: npm run test:admin-link-bulk:ui
       - run: npm run test:public-forms:ui
       - uses: actions/setup-python@v5

@@ -16,6 +16,8 @@ const BASE = [
 const SHIM =
   "ALTER TABLE inquiries ADD COLUMN IF NOT EXISTS conversation_id uuid REFERENCES whatsapp_conversations(id);";
 const ACCESS = sql("20260929104000_whatsapp_enquiry_access.sql");
+// FX-12: the 可能重複客戶 count reads the review table (real migration).
+const REVIEWS = sql("20261013100000_contact_identity_review.sql");
 
 let db;
 let queryCount = 0;
@@ -35,7 +37,7 @@ const adminData = await import("./admin-data.server.ts");
 
 async function freshDb() {
   db = new PGlite({ extensions: { pgcrypto } });
-  for (const statement of [...BASE, SHIM, ACCESS]) await db.exec(statement);
+  for (const statement of [...BASE, SHIM, ACCESS, REVIEWS]) await db.exec(statement);
   queryCount = 0;
 }
 
@@ -173,6 +175,7 @@ test("counts follow each role's read scope", async () => {
       unassignedLeads: 2,
       staleNewLeads: 3,
       leadsNeedingAttention: 4,
+      identityReviewsOpen: 0,
     });
     // manager: C1 only; C3 is another branch and C5 is unassigned. Leads are unscoped.
     assert.deepEqual(await counts(actors.managerLido), {
@@ -180,6 +183,7 @@ test("counts follow each role's read scope", async () => {
       unassignedLeads: 2,
       staleNewLeads: 3,
       leadsNeedingAttention: 4,
+      identityReviewsOpen: 0,
     });
     // agentA: C1 · L2; never C3, C5, L1 or L7.
     assert.deepEqual(await counts(actors.agentA), {
@@ -187,6 +191,7 @@ test("counts follow each role's read scope", async () => {
       unassignedLeads: 0,
       staleNewLeads: 1,
       leadsNeedingAttention: 1,
+      identityReviewsOpen: 0,
     });
     // agentB: C3 · L7.
     assert.deepEqual(await counts(actors.agentB), {
@@ -194,6 +199,7 @@ test("counts follow each role's read scope", async () => {
       unassignedLeads: 0,
       staleNewLeads: 1,
       leadsNeedingAttention: 1,
+      identityReviewsOpen: 0,
     });
   });
 });

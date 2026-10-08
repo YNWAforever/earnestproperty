@@ -183,7 +183,19 @@ export async function enqueueOutboundIntent(
     ],
   );
   const row = rows[0];
-  if (!row) throw invalid("OUTBOUND_CONFLICT_OR_NOT_FOUND");
+  if (!row) {
+    // FX-12 Task 4: say why, read-only and only for a conversation the actor may read. The
+    // authorized CTE above stays the race-safe guard; this only names the refusal.
+    const [review] = await queryRows<{ open: boolean }>(
+      `SELECT ${identityReviewOpenSql("wc.id")} AS open FROM whatsapp_conversations wc
+       WHERE wc.id=$1::uuid AND ($3::uuid IS NULL OR wc.assigned_agent_id=$3::uuid)
+         AND wa_can_read_conversation($2::uuid,wc.id)`,
+      [input.conversationId, staffId, scope],
+    );
+    throw invalid(
+      review?.open === true ? "IDENTITY_REVIEW_REQUIRED" : "OUTBOUND_CONFLICT_OR_NOT_FOUND",
+    );
+  }
   if (row.job_queued) wakeAfterCommit("service");
   return { id: row.id, state: row.state };
 }

@@ -6,6 +6,7 @@ import {
   type AdminPageInput,
   type AdminPageResource,
 } from "./admin-pagination.ts";
+import { identityReviewOpenSql } from "../woztell/identity-review-sql.ts";
 const CMS_TABLES = {
   estates: "estates",
   articles: "articles",
@@ -61,7 +62,13 @@ export function buildAdminPageQuery(
         EXISTS(SELECT 1 FROM inquiries review_i WHERE review_i.conversation_id=w.id
           AND review_i.source='whatsapp' AND review_i.status NOT IN ('closed','resolved','spam')
           AND (review_i.association_review OR review_i.provider_thread_review)) AS association_review,
-        CASE WHEN i.association_review OR i.provider_thread_review THEN 'review'
+        -- FX-12: a 「身分待核對」 conversation. Every reader of the row sees the flag (the assigned
+        -- agent too); only managers can open the review itself.
+        ${identityReviewOpenSql("w.id")} AS identity_review,
+        (SELECT idr.id FROM crm_contact_identity_reviews idr WHERE idr.conversation_id=w.id
+          AND idr.reason='whatsapp_identity_conflict' AND idr.status='open' LIMIT 1) AS identity_review_id,
+        CASE WHEN ${identityReviewOpenSql("w.id")} THEN 'review'
+          WHEN i.association_review OR i.provider_thread_review THEN 'review'
           WHEN i.id IS NOT NULL AND i.first_human_response_at IS NULL THEN 'reply'
           WHEN w.assigned_agent_id IS NULL THEN 'triage'
           ELSE 'follow_up' END AS next_action,

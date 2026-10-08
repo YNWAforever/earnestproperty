@@ -1051,7 +1051,9 @@ export async function getAdminAttentionCounts(actor: StaffAccess) {
            AND wa_can_read_conversation($1::uuid, w.id)) AS unanswered_conversations,
        count(*) FILTER (WHERE open_leads.unassigned)::int AS unassigned_leads,
        count(*) FILTER (WHERE open_leads.stale_new)::int AS stale_new_leads,
-       count(*) FILTER (WHERE open_leads.unassigned OR open_leads.stale_new)::int AS leads_needing_attention
+       count(*) FILTER (WHERE open_leads.unassigned OR open_leads.stale_new)::int AS leads_needing_attention,
+       CASE WHEN $3::boolean THEN (SELECT count(*)::int FROM crm_contact_identity_reviews
+         WHERE status = 'open') ELSE 0 END AS identity_reviews_open
      FROM (
        SELECT l.assigned_agent_id IS NULL AS unassigned,
          l.stage = 'new' AND COALESCE(
@@ -1062,7 +1064,11 @@ export async function getAdminAttentionCounts(actor: StaffAccess) {
        WHERE l.stage NOT IN ('closed_won', 'closed_lost')
          AND ($2::uuid IS NULL OR l.assigned_agent_id = $2::uuid)
      ) open_leads`,
-    [actor.staffId, agentScope(actor)],
+    [
+      actor.staffId,
+      agentScope(actor),
+      actor.roles.some((role) => role === "admin" || role === "manager"),
+    ],
   );
   const row = rows[0] ?? {};
   return {
@@ -1070,6 +1076,8 @@ export async function getAdminAttentionCounts(actor: StaffAccess) {
     unassignedLeads: numberOrNull(row.unassigned_leads) ?? 0,
     staleNewLeads: numberOrNull(row.stale_new_leads) ?? 0,
     leadsNeedingAttention: numberOrNull(row.leads_needing_attention) ?? 0,
+    // FX-12: the 可能重複客戶 count. Admin and manager only; always 0 for anyone else.
+    identityReviewsOpen: numberOrNull(row.identity_reviews_open) ?? 0,
   };
 }
 
@@ -3220,7 +3228,10 @@ export async function fetchAdminConversation(
       u.actor_type AS unknown_actor_type,
       u.dispatch_started_at AS unknown_dispatch_started_at,
       u.error AS unknown_error,
-      u.resolvable AS unknown_resolvable
+      u.resolvable AS unknown_resolvable,
+      -- FX-12: the open 「身分待核對」 review on this conversation, for every reader of it.
+      (SELECT idr.id FROM crm_contact_identity_reviews idr WHERE idr.conversation_id = wc.id
+        AND idr.reason = 'whatsapp_identity_conflict' AND idr.status = 'open' LIMIT 1) AS identity_review_id
     FROM whatsapp_conversations wc
     LEFT JOIN crm_contacts c ON c.id = wc.contact_id
     LEFT JOIN LATERAL (
@@ -3302,6 +3313,9 @@ export async function fetchAdminConversation(
     // unscoped call with no UI behind it, so deny rather than assume.
     can_clear_opt_out: isManager,
     can_resolve_unknown_outbound: isManager,
+    identity_review_id: stringOrNull(conversation.identity_review_id),
+    // Only managers and admins resolve; the assigned agent sees the badge and alert only.
+    can_resolve_identity_review: isManager,
     unknown_outbound:
       isManager && conversation.unknown_id
         ? {

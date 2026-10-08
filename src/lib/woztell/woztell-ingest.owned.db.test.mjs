@@ -673,7 +673,8 @@ test("FX-12 WhatsApp ingest identity review (owned Postgres)", { timeout: 300000
           assert.equal(intent.state, "cancelled");
 
           const intentsBefore = await count("whatsapp_outbound_intents");
-          await assert.rejects(reply(), { code: "OUTBOUND_CONFLICT_OR_NOT_FOUND" });
+          // Task 4: the refusal now says why (IDENTITY_REVIEW_REQUIRED).
+          await assert.rejects(reply(), { code: "IDENTITY_REVIEW_REQUIRED" });
           assert.equal(await count("whatsapp_outbound_intents"), intentsBefore);
           // The case a review conversation (no contact) refuses too, for admin as well.
           assert.ok(caseA);
@@ -688,7 +689,7 @@ test("FX-12 WhatsApp ingest identity review (owned Postgres)", { timeout: 300000
               ADMIN,
               null,
             ),
-            { code: "OUTBOUND_CONFLICT_OR_NOT_FOUND" },
+            { code: "IDENTITY_REVIEW_REQUIRED" },
           );
         },
       );

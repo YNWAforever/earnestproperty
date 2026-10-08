@@ -2,6 +2,8 @@
 export * from "../no-link/synthetic-api";
 import { fetchAdminLead as baseLead } from "../no-link/synthetic-api";
 import { fetchAdminPage as basePage } from "../no-link/synthetic-api";
+import { fetchAdminAttentionCounts as baseAttention } from "../no-link/synthetic-api";
+import { syntheticIdentityReviewsOpen } from "./identity-review-api";
 import { ServerFnResponseError } from "@/lib/neon/server-fn-response";
 const now = "2026-10-03T00:00:00.000Z";
 const state = {
@@ -205,4 +207,15 @@ export async function updateAdminLead({ data }: { data: Record<string, unknown> 
   localStorage.setItem(leadUpdateKey(id), JSON.stringify(fields));
   state.leadUpdates.push({ actor: state.actor, input: { ...data } });
   return { ok: true, version, changed: [] };
+}
+
+// FX-12: the 可能重複客戶 count is a manager+ number; agents always get 0 (as on the server).
+export async function fetchAdminAttentionCounts() {
+  const counts = await baseAttention();
+  return {
+    ...counts,
+    identityReviewsOpen: ["admin", "manager"].includes(state.role)
+      ? syntheticIdentityReviewsOpen()
+      : 0,
+  };
 }
