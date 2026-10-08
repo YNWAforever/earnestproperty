@@ -20,6 +20,7 @@ type VercelConfig = {
   buildCommand: string;
   crons: Array<{ path: string; schedule: string }>;
   redirects: VercelRedirect[];
+  regions: string[];
 };
 
 const detailRedirects = importedRedirects.map((redirect) =>
@@ -46,6 +47,8 @@ export const config: VercelConfig = {
   buildCommand: "npm run build",
   // No recurring Vercel requests: manual sync remains available to staff.
   crons: [],
+  // F-01: run next to Neon (aws-ap-southeast-1); see FX-15 fact 3.
+  regions: ["sin1"],
   redirects: [
     ...canonicalHostRedirects(),
     ...detailRedirects,
