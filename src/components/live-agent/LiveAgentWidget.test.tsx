@@ -9,7 +9,10 @@ import {
   validateHandoffPhone,
 } from "@/lib/ai/live-agent";
 
-import { LiveAgentHandoffPanel } from "./LiveAgentWidget";
+import { LIVE_AGENT_REPLY_COPY, type LiveAgentCard } from "@/lib/ai/live-agent-reply";
+
+import { LiveAgentHandoffPanel, LiveAgentReplyCards } from "./LiveAgentWidget";
+import { nextHandoffOffered, readLiveAgentMessageResponse } from "./live-agent-widget-state";
 
 type PanelProps = Parameters<typeof LiveAgentHandoffPanel>[0];
 
@@ -156,4 +159,168 @@ test("the button agrees with validateHandoffPhone for the same inputs", () => {
     const enabled = handoffButton($).attr("disabled") === undefined;
     expect({ phone, enabled }).toEqual({ phone, enabled: validateHandoffPhone(phone).ok });
   }
+});
+
+// FX-11b: reply cards and the server-decided handoff offer.
+function renderCards(cards: LiveAgentCard[]) {
+  return load(renderToStaticMarkup(createElement(LiveAgentReplyCards, { cards })));
+}
+
+test("listing cards render internal links only", () => {
+  const $ = renderCards([
+    {
+      type: "listing",
+      title: "碧堤半島 2座 中層 A室",
+      lines: ["售 $6.80M", "實用 600 呎", "2 房"],
+      href: "/property/EP11001",
+    },
+    {
+      type: "more",
+      title: LIVE_AGENT_REPLY_COPY.more_link,
+      lines: [],
+      href: "/listings?deal=sale&bedrooms=2&estate=bellagio",
+    },
+  ]);
+
+  const links = $("a");
+  expect(links.length).toBe(2);
+  expect(links.map((_, element) => $(element).attr("href")).get()).toEqual([
+    "/property/EP11001",
+    "/listings?deal=sale&bedrooms=2&estate=bellagio",
+  ]);
+  expect($(links[0]).text()).toBe("碧堤半島 2座 中層 A室");
+  expect($(links[1]).text()).toBe("查看全部符合條件的盤源");
+  for (const link of links.toArray()) {
+    expect($(link).attr("target")).toBeUndefined();
+  }
+  const text = $("body").text();
+  expect(text).toContain("售 $6.80M");
+  expect(text).toContain("實用 600 呎");
+  expect(text).toContain("2 房");
+});
+
+test("a card with an unsafe href renders as text", () => {
+  for (const href of ["https://evil.test/x", "javascript:alert(1)", "//evil.test", "/admin"]) {
+    const $ = renderCards([{ type: "listing", title: "外部連結測試", lines: ["一行"], href }]);
+    expect($("a").length).toBe(0);
+    expect($("body").text()).toContain("外部連結測試");
+    expect($.html()).not.toContain("evil.test");
+    expect($.html()).not.toContain("javascript:");
+  }
+});
+
+test("an FAQ card shows the question and the answer verbatim", () => {
+  const answer = "深井小學校網為 62 校網。<b>不是 HTML</b>";
+  const $ = renderCards([
+    { type: "faq", title: "深井屬於哪個校網？", lines: [answer], href: null },
+  ]);
+
+  expect($("a").length).toBe(0);
+  expect($("li").length).toBe(1);
+  expect($("li p").first().text()).toBe("深井屬於哪個校網？");
+  expect($("li p").last().text()).toBe(answer);
+  expect($("b").length).toBe(0);
+});
+
+test("no cards renders nothing", () => {
+  expect(renderToStaticMarkup(createElement(LiveAgentReplyCards, { cards: [] }))).toBe("");
+});
+
+test("the panel opens when the server suggests a handoff and stays open", () => {
+  expect(nextHandoffOffered(false, { handoffSuggested: true })).toBe(true);
+  expect(nextHandoffOffered(true, { handoffSuggested: false })).toBe(true);
+  expect(nextHandoffOffered(false, {})).toBe(false);
+  expect(nextHandoffOffered(false, { handoffSuggested: "true" })).toBe(false);
+});
+
+test("the message response keeps well-formed cards and the reply text only", () => {
+  const listing = (n: number): LiveAgentCard => ({
+    type: "listing",
+    title: `盤 ${n}`,
+    lines: ["售 $1M"],
+    href: `/property/EP1100${n}`,
+  });
+  const parsed = readLiveAgentMessageResponse({
+    message: { message_text: "transcript text" },
+    handoffSuggested: false,
+    reply: {
+      kind: "listings",
+      text: LIVE_AGENT_REPLY_COPY.listings,
+      cards: [
+        listing(1),
+        { type: "listing", title: 7, lines: [], href: null },
+        { type: "script", title: "x", lines: [], href: null },
+        { type: "faq", title: "問", lines: ["答", 3], href: null },
+        null,
+        listing(2),
+        listing(3),
+        listing(4),
+        {
+          type: "more",
+          title: LIVE_AGENT_REPLY_COPY.more_link,
+          lines: [],
+          href: "/listings?deal=all",
+        },
+      ],
+    },
+  });
+
+  expect(parsed.text).toBe(LIVE_AGENT_REPLY_COPY.listings);
+  // At most three listing cards, plus the "more" link.
+  expect(parsed.cards.map((card) => card.title)).toEqual([
+    "盤 1",
+    "盤 2",
+    "盤 3",
+    LIVE_AGENT_REPLY_COPY.more_link,
+  ]);
+
+  expect(readLiveAgentMessageResponse({ message: { message_text: "舊回覆" } }).text).toBe("舊回覆");
+  expect(readLiveAgentMessageResponse({}).text).toBe("暫時未能回答，請稍後再試。");
+  expect(readLiveAgentMessageResponse({}).cards).toEqual([]);
+});
+
+test("a reply with nothing usable is flagged so the widget offers the handoff", () => {
+  const fallback = "暫時未能回答，請稍後再試。";
+  for (const body of [null, undefined, {}, "oops", { message: {} }, { reply: { text: "  " } }]) {
+    const parsed = readLiveAgentMessageResponse(body);
+    expect(parsed.text).toBe(fallback);
+    expect(parsed.usable).toBe(false);
+  }
+
+  // A listings reply whose cards were all rejected, or whose only listing has an unsafe href.
+  for (const cards of [
+    [],
+    [{ type: "listing", title: 7, lines: [], href: "/property/EP11001" }],
+    [{ type: "listing", title: "盤", lines: ["售 $1M"], href: "https://evil.test/x" }],
+    [
+      {
+        type: "more",
+        title: LIVE_AGENT_REPLY_COPY.more_link,
+        lines: [],
+        href: "/listings?deal=all",
+      },
+    ],
+  ]) {
+    const parsed = readLiveAgentMessageResponse({
+      reply: { kind: "listings", text: LIVE_AGENT_REPLY_COPY.listings, cards },
+    });
+    expect(parsed.text).toBe(LIVE_AGENT_REPLY_COPY.listings);
+    expect({ cards, usable: parsed.usable }).toEqual({ cards, usable: false });
+  }
+
+  // Usable replies.
+  expect(
+    readLiveAgentMessageResponse({
+      reply: {
+        kind: "listings",
+        text: LIVE_AGENT_REPLY_COPY.listings,
+        cards: [{ type: "listing", title: "盤", lines: [], href: "/property/EP11001" }],
+      },
+    }).usable,
+  ).toBe(true);
+  expect(
+    readLiveAgentMessageResponse({ reply: { kind: "faq", text: LIVE_AGENT_REPLY_COPY.faq } })
+      .usable,
+  ).toBe(true);
+  expect(readLiveAgentMessageResponse({ message: { message_text: "舊回覆" } }).usable).toBe(true);
 });

@@ -1,17 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { aiResultPresentation, conversationDeadline } from "./ai-result-presentation";
-import { shouldOfferHumanHandoff } from "../ai/live-agent";
+import { replyOffersHandoff } from "../ai/live-agent-reply";
 describe("truthful AI results", () => {
   test("source availability drives handoff without an invented probability", () => {
-    expect(
-      shouldOfferHumanHandoff({ confidence: 0, answerAvailable: true, userAskedForHuman: false }),
-    ).toBe(false);
-    expect(
-      shouldOfferHumanHandoff({ confidence: 0, answerAvailable: false, userAskedForHuman: false }),
-    ).toBe(true);
-    expect(
-      shouldOfferHumanHandoff({ confidence: 0, answerAvailable: true, userAskedForHuman: true }),
-    ).toBe(true);
+    const faq = { type: "faq" as const, title: "問題", lines: ["答案"], href: null };
+    expect(replyOffersHandoff({ kind: "faq", cards: [faq] }, false)).toBe(false);
+    expect(replyOffersHandoff({ kind: "no_match", cards: [] }, false)).toBe(true);
+    expect(replyOffersHandoff({ kind: "faq", cards: [faq] }, true)).toBe(true);
   });
   test("disabled, empty and legacy results never claim model success", () => {
     expect(aiResultPresentation({}).label).toBe("方法未核實");

@@ -282,7 +282,8 @@ test("blast recipients exclude no-consent and opted-out segment contacts with cl
 });
 
 test("public live agent only uses public chunks and offers handoff for uncertain answers", async () => {
-  const { canUseChunkForPublicAnswer, shouldOfferHumanHandoff } = await loadLiveAgent();
+  const { canUseChunkForPublicAnswer } = await loadLiveAgent();
+  const { replyOffersHandoff } = await import("./live-agent-reply.ts");
   assert.equal(
     canUseChunkForPublicAnswer({ visibility: "public", stale: false, published: true }),
     true,
@@ -299,8 +300,14 @@ test("public live agent only uses public chunks and offers handoff for uncertain
     canUseChunkForPublicAnswer({ visibility: "private", stale: false, published: true }),
     false,
   );
-  assert.equal(shouldOfferHumanHandoff({ confidence: 0.25, userAskedForHuman: false }), true);
-  assert.equal(shouldOfferHumanHandoff({ confidence: 0.9, userAskedForHuman: true }), true);
+  assert.equal(replyOffersHandoff({ kind: "no_match", cards: [] }, false), true);
+  assert.equal(
+    replyOffersHandoff(
+      { kind: "faq", cards: [{ type: "faq", title: "問題", lines: ["答案"], href: null }] },
+      true,
+    ),
+    true,
+  );
 });
 
 test("buildLiveAgentLeadInput creates CRM-safe lead payload", async () => {

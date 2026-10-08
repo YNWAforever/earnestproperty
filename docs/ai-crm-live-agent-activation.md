@@ -27,14 +27,14 @@ Keep all secrets in Vercel/server environment settings. Do not expose these name
 ## Staff Operations
 
 1. Rebuild AI knowledge from `/admin` after content, FAQ, estate, article, or active listing changes.
-2. Test the public live agent with public listing, estate, and FAQ questions. Confirm uncertain answers offer staff follow-up.
+2. Test the public live agent with public listing, estate, and FAQ questions. Its replies are deterministic (FX-11b): fixed copy plus cards from published FAQs, published estates and active public listings, with no model call. Confirm that any reply without a concrete answer offers the WhatsApp handoff.
 3. Create an AI CRM segment in `/admin/segments` by entering a natural-language audience prompt, then preview matched contacts.
 4. Review eligibility reasons before materializing a segment. Contacts without WhatsApp opt-in, opted-out contacts, and contacts without valid phone numbers are not blast-eligible.
 5. Queue WhatsApp only from the blast workflow after selecting an approved template, previewing the audience, saving campaign changes, and pressing Queue.
 
 ## Safety Rules
 
-- The public live agent uses only public, published, fresh knowledge chunks. It must not use CRM notes, WhatsApp messages, staff-only chunks, private chunks, stale chunks, or prompt text that tries to override rules.
+- The public live agent makes no model call and does not read knowledge chunks (FX-11b). It answers only from published FAQs, published estates and active public listings, and never uses CRM notes, WhatsApp messages or staff-only data.
 - AI may summarize, draft, suggest tags, suggest segments, and recommend next actions, but it never sends WhatsApp, queues blasts, or publishes CMS without staff action.
 - Sensitive or judgmental CRM tags stay suggested until staff review. Only factual tags derived from explicit CRM fields may auto-apply.
 - Opt-out is always respected. No-consent and opted-out contacts are ineligible for blast recipients with an explicit eligibility reason.
