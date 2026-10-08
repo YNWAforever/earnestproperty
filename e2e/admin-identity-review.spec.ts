@@ -63,7 +63,8 @@ async function openLeads(page: Page, role = "manager", search = "") {
     sessionStorage.setItem("daily-work-role", role);
   }, role);
   await page.goto(`${origin}/admin/leads${search}`);
-  await expect(page.getByRole("textbox", { name: "搜尋客戶查詢", exact: true })).toBeVisible();
+  // The quick filters stay in review mode; the lead search is hidden there.
+  await expect(page.getByRole("button", { name: "新查詢", exact: true })).toBeVisible();
   return errors;
 }
 const reviewCalls = (page: Page, name: string) =>
@@ -105,6 +106,9 @@ for (const [width, height] of [
     await expect(page.getByText("電話格式重複", { exact: true })).toBeVisible();
     // Masked phones only.
     expect(await page.locator("body").innerText()).not.toMatch(/\d{8}/);
+    // Review mode hides the lead-only search and counter, and reads no lead page after the switch.
+    await expect(page.getByRole("textbox", { name: "搜尋客戶查詢", exact: true })).toHaveCount(0);
+    await expect(page.getByText(/^顯示 \d+ 筆/)).toHaveCount(0);
     expect(await fits(page)).toBe(true);
     await settle(page);
     await page.screenshot({
@@ -168,6 +172,38 @@ test("a second tab's resolve shows 此項目已由其他同事處理，請重新
   await expect(dialog).toBeHidden();
   await expect(conflictRow(b)).toHaveCount(0);
   await context.close();
+});
+
+test("two unnamed sides: each link and the confirm dialog name the side and the masked digits", async ({
+  page,
+}) => {
+  await page.addInitScript(() => sessionStorage.setItem("identity-review-unnamed", "true"));
+  const errors = await openLeads(page, "manager", "?review=identity");
+  const row = page.locator('[data-review-id="7c000000-0000-4000-8000-00000000c003"]');
+  await expect(row.getByRole("button", { name: /客戶 A · •••• 0201/ })).toBeVisible();
+  await row.getByRole("button", { name: /客戶 B · •••• 0202/ }).click();
+  const dialog = page.getByRole("dialog", { name: "確認處理？" });
+  await expect(dialog).toContainText("連結到「未命名客戶」");
+  await expect(dialog).toContainText("客戶 B");
+  await expect(dialog).toContainText("•••• 0202");
+  await expect(dialog).not.toContainText("•••• 0201");
+  await dialog.getByRole("button", { name: "確認", exact: true }).click();
+  await expect(page.getByText("已處理。", { exact: true })).toBeVisible();
+  expect(await reviewCalls(page, "resolve")).toEqual([
+    { id: "7c000000-0000-4000-8000-00000000c003", action: "link_b", note: null },
+  ]);
+  for (const [width, height] of [
+    [375, 812],
+    [1440, 900],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await settle(page);
+    await page.screenshot({
+      path: `.audit/remediation-20261003/fx12-identity-review-unnamed-sides-${width}.png`,
+      fullPage: true,
+    });
+  }
+  expect(errors).toEqual([]);
 });
 
 test("an agent sees no 可能重複客戶 button", async ({ page }) => {

@@ -59,6 +59,11 @@ const IDENTITY_REVIEW_COPY = {
   contactA: "客戶 A",
   contactB: "客戶 B",
   actions: "處理",
+  // New in fix round 1, for owner review.
+  reasonColumn: "原因",
+  stopNotFound:
+    "此對話曾收到退訂（STOP）訊息，但系統未能核實該訊息，所以未有連結。請聯絡技術支援。",
+  viewLeadOf: (name: string, n: number) => `查看「${name}」的查詢 ${n}`,
 } as const;
 // Existing admin copy, reused.
 const UNNAMED = "未命名客戶";
@@ -72,7 +77,10 @@ const NEXT_PAGE = "下一頁";
 const LOAD_FAILED = "暫時未能載入資料，請稍後再試。";
 const SUBMIT_FAILED = "提交失敗，請稍後再試。";
 
-type Choice = { action: IdentityReviewAction; label: string };
+/** `detail` tells two link choices apart when the names match: the side and the masked digits. */
+type Choice = { action: IdentityReviewAction; label: string; detail?: string };
+const sideDetail = (side: string, contact: IdentityReviewContact) =>
+  `${side} · ${contact.maskedPhone ?? NO_PHONE}`;
 const contactName = (contact: IdentityReviewContact | null) => contact?.name ?? UNNAMED;
 
 /** The actions a row offers: links for a conflict (only to a side that exists), decisions for a duplicate. */
@@ -85,10 +93,22 @@ function identityReviewChoices(row: IdentityReviewRow): Choice[] {
     ];
   return [
     ...(row.a
-      ? [{ action: "link_a" as const, label: IDENTITY_REVIEW_COPY.linkTo(contactName(row.a)) }]
+      ? [
+          {
+            action: "link_a" as const,
+            label: IDENTITY_REVIEW_COPY.linkTo(contactName(row.a)),
+            detail: sideDetail(IDENTITY_REVIEW_COPY.contactA, row.a),
+          },
+        ]
       : []),
     ...(row.b
-      ? [{ action: "link_b" as const, label: IDENTITY_REVIEW_COPY.linkTo(contactName(row.b)) }]
+      ? [
+          {
+            action: "link_b" as const,
+            label: IDENTITY_REVIEW_COPY.linkTo(contactName(row.b)),
+            detail: sideDetail(IDENTITY_REVIEW_COPY.contactB, row.b),
+          },
+        ]
       : []),
     { action: "link_new", label: IDENTITY_REVIEW_COPY.linkNew },
   ];
@@ -105,9 +125,10 @@ function ContactCell({ contact }: { contact: IdentityReviewContact | null }) {
       {contact.optedOut ? <Badge variant="destructive">{OPTED_OUT}</Badge> : null}
       {contact.openLeadIds.length > 0 ? (
         <div className="flex flex-wrap gap-x-3 gap-y-1">
-          {contact.openLeadIds.map((leadId) => (
+          {contact.openLeadIds.map((leadId, index) => (
             <a
               key={leadId}
+              aria-label={IDENTITY_REVIEW_COPY.viewLeadOf(contactName(contact), index + 1)}
               href={`/admin/leads?lead=${encodeURIComponent(leadId)}`}
               className="text-xs text-primary underline-offset-4 hover:underline"
             >
@@ -145,7 +166,7 @@ export function ContactIdentityReviewTable({
           <Table className="md:min-w-[760px]">
             <TableHeader className="max-md:hidden">
               <TableRow>
-                <TableHead className="w-[28%]">{IDENTITY_REVIEW_COPY.title}</TableHead>
+                <TableHead className="w-[28%]">{IDENTITY_REVIEW_COPY.reasonColumn}</TableHead>
                 <TableHead>{IDENTITY_REVIEW_COPY.contactA}</TableHead>
                 <TableHead>{IDENTITY_REVIEW_COPY.contactB}</TableHead>
                 <TableHead className="w-[30%]">{IDENTITY_REVIEW_COPY.actions}</TableHead>
@@ -201,7 +222,14 @@ export function ContactIdentityReviewTable({
                             disabled={disabled}
                             onClick={() => onAction(row, choice)}
                           >
-                            {choice.label}
+                            <span className="flex flex-col">
+                              <span>{choice.label}</span>
+                              {choice.detail ? (
+                                <span className="text-xs font-normal text-muted-foreground tabular-nums">
+                                  {choice.detail}
+                                </span>
+                              ) : null}
+                            </span>
                           </Button>
                         ))}
                       </div>
@@ -302,7 +330,9 @@ export function ContactIdentityReviewList({
           ? (error as { status: unknown }).status
           : undefined;
       const code = error instanceof Error ? error.message.trim() : "";
-      if (status === 409 || code === "REVIEW_ALREADY_RESOLVED")
+      if (code === "REVIEW_STOP_NOT_FOUND")
+        setDialogError({ message: IDENTITY_REVIEW_COPY.stopNotFound, reload: true });
+      else if (status === 409 || code === "REVIEW_ALREADY_RESOLVED")
         setDialogError({ message: IDENTITY_REVIEW_COPY.alreadyResolved, reload: true });
       else if (code === "REVIEW_ACTION_NOT_ALLOWED")
         setDialogError({ message: IDENTITY_REVIEW_COPY.notAllowed, reload: true });
@@ -367,7 +397,14 @@ export function ContactIdentityReviewList({
         <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>{IDENTITY_REVIEW_COPY.confirmTitle}</DialogTitle>
-            <DialogDescription>{pending?.choice.label}</DialogDescription>
+            <DialogDescription className="flex flex-col">
+              <span>{pending?.choice.label}</span>
+              {pending?.choice.detail ? (
+                <span className="font-medium text-foreground tabular-nums">
+                  {pending.choice.detail}
+                </span>
+              ) : null}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="identity-review-note">{IDENTITY_REVIEW_COPY.noteLabel}</Label>

@@ -129,12 +129,15 @@ type ReviewState = {
   contact_b: string | null;
   conversation_id: string | null;
   stop_received: boolean;
+  /** Exact microsecond updated_at. Ingest bumps it on every stored message or opt-out. */
+  version: string;
 };
 const readReview = async (id: string) =>
   (
     await queryRows<ReviewState>(
       `SELECT id,reason,status,contact_a,contact_b,conversation_id,
-         COALESCE((evidence->>'stopReceived')::boolean,false) AS stop_received
+         COALESCE((evidence->>'stopReceived')::boolean,false) AS stop_received,
+         to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS version
        FROM crm_contact_identity_reviews WHERE id=$1::uuid`,
       [id],
     )
@@ -147,12 +150,39 @@ function actionAllowed(review: ReviewState, action: IdentityReviewAction) {
   return action === "link_new";
 }
 
-/** Why nothing was written: 404, then 400 (the action does not fit), then 409 (not open). */
-async function refusal(id: string, action: IdentityReviewAction) {
-  const review = await readReview(id);
+/** 404, then 400 (the action does not fit), then 409 (not open). Null: open and allowed. */
+function refusalFor(review: ReviewState | null, action: IdentityReviewAction) {
   if (!review) return fail(404, "Not found");
   if (!actionAllowed(review, action)) return fail(400, "REVIEW_ACTION_NOT_ALLOWED");
-  return fail(409, "REVIEW_ALREADY_RESOLVED");
+  if (review.status !== "open") return fail(409, "REVIEW_ALREADY_RESOLVED");
+  return null;
+}
+
+type StopMessage = { id: string; externalId: string; text: string; at: string };
+/**
+ * The newest unlinked inbound message in the conversation that the D4 classifier (the same
+ * isOptOutText ingest uses) calls a STOP. Every unlinked message is checked; the length filter
+ * only skips texts far longer than any opt-out word could be after normalisation.
+ */
+async function findStop(conversationId: string): Promise<StopMessage | null> {
+  const candidates = await queryRows<{
+    id: string;
+    external_message_id: string;
+    text: string;
+    at: string;
+  }>(
+    `SELECT id,external_message_id,text,
+       to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at
+     FROM whatsapp_messages WHERE conversation_id=$1::uuid AND contact_id IS NULL
+       AND direction::text='inbound' AND external_message_id IS NOT NULL
+       AND text IS NOT NULL AND char_length(text)<=256
+     ORDER BY created_at DESC,id DESC`,
+    [conversationId],
+  );
+  const found = candidates.find((message) => isOptOutText(message.text));
+  return found
+    ? { id: found.id, externalId: found.external_message_id, text: found.text, at: found.at }
+    : null;
 }
 
 /**
@@ -168,67 +198,95 @@ const LINK_OPT_OUT = `opted_out_whatsapp=COALESCE(x.opted_out_whatsapp,false) OR
       opted_out_cleared_at=CASE WHEN d.nso AND NOT COALESCE(x.opted_out_whatsapp,false) THEN NULL ELSE x.opted_out_cleared_at END,
       opted_out_cleared_by=CASE WHEN d.nso AND NOT COALESCE(x.opted_out_whatsapp,false) THEN NULL ELSE x.opted_out_cleared_by END`;
 
+/** How often a resolve re-reads after the review changed under it (a new message). */
+const MAX_ATTEMPTS = 3;
+
+export type ResolveHooks = {
+  /** Test seam: runs after the pre-read and before the locked transaction. */
+  afterRead?: () => Promise<void>;
+};
+
 /**
- * One statement: lock the review FOR UPDATE WHERE status='open', apply, and write one audit_logs
- * row ('contact.identity_review.resolve', metadata {reviewId, reason, action}; no phone) in the
- * same CTE. A link first takes the member's ingest advisory lock, so no message from that member
- * can be stored with no contact in between.
+ * Lock the member (as ingest does) and the chosen contact's lead key (as the FX-09 trigger does),
+ * then one statement: the review FOR UPDATE WHERE status='open' AND updated_at is the version
+ * read just before, apply, and write one audit_logs row in the same CTE. A message (or a STOP)
+ * stored after the pre-read changes updated_at, so the statement writes nothing and the resolve
+ * re-reads: a STOP is never linked past.
  *  - link_a / link_b / link_new: the conversation and every NULL-contact message move to the
- *    chosen contact (the FX-09 trigger's UPDATE path opens a first lead only if it has none).
- *    The chosen contact's member id is filled only when it is blank and no other contact holds
- *    the member. link_new inserts a contact with the WhatsApp profile name (or NULL), the member
- *    when free, source 'whatsapp' and opt_in_whatsapp=false: never a phone or consent.
- *  - A live STOP stored in the conversation (evidence.stopReceived) opts the chosen contact out,
- *    with FX-08 evidence, unless that contact already holds this message as its evidence.
+ *    chosen contact. Lead and conversation rules mirror a new inbound message (FX-09
+ *    20261009110000): a contact with no lead gets its first lead from the trigger's UPDATE path;
+ *    a contact whose leads are all closed gets a new lead when the newest reattached inbound
+ *    message is newer than its latest close, or the link reopened the conversation; a closed
+ *    conversation reopens when that message is at least as new as its last inbound. The owner
+ *    is kept only while active. No job is queued (the trigger queues none either).
+ *  - The chosen contact's member id is filled only when blank and free. link_new inserts a
+ *    contact with the WhatsApp profile name (or NULL), the member when free, source 'whatsapp'
+ *    and opt_in_whatsapp=false: never a phone or consent.
+ *  - A live STOP stored in the conversation (evidence.stopReceived) opts the chosen contact out
+ *    with FX-08 evidence. If the STOP message cannot be found, nothing is linked
+ *    (409 REVIEW_STOP_NOT_FOUND): FX-08's evidence model has no source for a STOP without its
+ *    message, so the link is refused rather than made without the opt-out.
+ *  - The audit records what a link changed, so a wrong link can be reversed by hand (FX-18
+ *    owns a real undo): the linked and previous contact, the reattached message ids, member
+ *    fill, opt-out (by internal message id), lead opened and conversation reopened. No phone
+ *    and no message text.
  *  - same_person / different_people / dismiss change only the review row. Nothing is merged.
  */
 export async function resolveContactIdentityReview(
   input: { id: string; action: IdentityReviewAction; note?: string | null },
   actor: StaffAccess,
+  hooks: ResolveHooks = {},
 ): Promise<IdentityReviewResolution> {
   requireReviewer(actor);
   if (!input || typeof input.id !== "string" || !UUID.test(input.id))
     throw fail(400, "VALIDATION_ERROR");
   if (!ACTIONS.includes(input.action)) throw fail(400, "VALIDATION_ERROR");
   const note = typeof input.note === "string" ? input.note.trim().slice(0, 500) || null : null;
-  const review = await readReview(input.id);
-  if (!review) throw fail(404, "Not found");
-  if (!actionAllowed(review, input.action)) throw fail(400, "REVIEW_ACTION_NOT_ALLOWED");
-  if (review.status !== "open") throw fail(409, "REVIEW_ALREADY_RESOLVED");
+  const link = CONFLICT_ACTIONS.includes(input.action);
 
-  // The STOP itself: the newest stored live-STOP text among the conversation's unlinked messages.
-  let stop: { id: string; text: string; at: string } | null = null;
-  if (review.stop_received && review.conversation_id && CONFLICT_ACTIONS.includes(input.action)) {
-    const candidates = await queryRows<{ external_message_id: string; text: string; at: string }>(
-      `SELECT external_message_id,text,
-         to_char(created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS at
-       FROM whatsapp_messages WHERE conversation_id=$1::uuid AND contact_id IS NULL
-         AND direction::text='inbound' AND external_message_id IS NOT NULL
-       ORDER BY created_at DESC,id DESC LIMIT 200`,
-      [review.conversation_id],
-    );
-    const found = candidates.find((message) => isOptOutText(message.text));
-    if (found) stop = { id: found.external_message_id, text: found.text, at: found.at };
-  }
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    const review = await readReview(input.id);
+    const refused = refusalFor(review, input.action);
+    if (refused || !review) throw refused;
 
-  const [, result] = await transactionRows([
-    {
-      statement: `SELECT pg_advisory_xact_lock(hashtextextended('woztell-member:'||wc.woztell_member_id,0))
-        FROM crm_contact_identity_reviews r JOIN whatsapp_conversations wc ON wc.id=r.conversation_id
-        WHERE r.id=$1::uuid AND wc.woztell_member_id IS NOT NULL AND $2::text LIKE 'link\\_%'`,
-      params: [input.id, input.action],
-    },
-    {
-      statement: `WITH target AS (
+    let stop: StopMessage | null = null;
+    if (link && review.stop_received) {
+      stop = review.conversation_id ? await findStop(review.conversation_id) : null;
+      if (!stop) throw fail(409, "REVIEW_STOP_NOT_FOUND");
+    }
+    await hooks.afterRead?.();
+    const chosenKnown =
+      input.action === "link_a"
+        ? review.contact_a
+        : input.action === "link_b"
+          ? review.contact_b
+          : null;
+
+    const [, , result] = await transactionRows([
+      {
+        statement: `SELECT pg_advisory_xact_lock(hashtextextended('woztell-member:'||wc.woztell_member_id,0))
+          FROM crm_contact_identity_reviews r JOIN whatsapp_conversations wc ON wc.id=r.conversation_id
+          WHERE r.id=$1::uuid AND wc.woztell_member_id IS NOT NULL AND $2::text LIKE 'link\\_%'`,
+        params: [input.id, input.action],
+      },
+      {
+        statement: `SELECT pg_advisory_xact_lock(hashtextextended('whatsapp-lead:'||$1::text,0))
+          WHERE $1::uuid IS NOT NULL`,
+        params: [chosenKnown],
+      },
+      {
+        statement: `WITH target AS (
         SELECT r.* FROM crm_contact_identity_reviews r
-        WHERE r.id=$1::uuid AND r.status='open' AND (
+        WHERE r.id=$1::uuid AND r.status='open' AND r.updated_at=$8::timestamptz AND (
           (r.reason='whatsapp_identity_conflict' AND ($2::text='link_new'
             OR ($2::text='link_a' AND r.contact_a IS NOT NULL)
-            OR ($2::text='link_b' AND r.contact_b IS NOT NULL)))
+            OR ($2::text='link_b' AND r.contact_b IS NOT NULL))
+            AND (NOT COALESCE((r.evidence->>'stopReceived')::boolean,false) OR $4::text IS NOT NULL))
           OR (r.reason='phone_format_duplicate' AND $2::text IN ('same_person','different_people','dismiss')))
         FOR UPDATE
       ), conv AS (
-        SELECT wc.id,wc.woztell_member_id FROM whatsapp_conversations wc
+        SELECT wc.id,wc.woztell_member_id,wc.contact_id AS previous_contact_id,wc.status,wc.last_inbound_at
+        FROM whatsapp_conversations wc
         JOIN target t ON wc.id=t.conversation_id AND t.reason='whatsapp_identity_conflict'
       ), member_free AS (
         SELECT conv.woztell_member_id AS member FROM conv WHERE conv.woztell_member_id IS NOT NULL
@@ -236,12 +294,16 @@ export async function resolveContactIdentityReview(
       ), stop AS (
         SELECT COALESCE((t.evidence->>'stopReceived')::boolean,false) AND $4::text IS NOT NULL AS yes
         FROM target t
+      ), unlinked AS (
+        SELECT m.id,m.created_at,m.direction::text AS direction,m.payload FROM whatsapp_messages m
+        JOIN conv ON m.conversation_id=conv.id WHERE m.contact_id IS NULL
+      ), newest AS (
+        SELECT max(created_at) AS at FROM unlinked WHERE direction='inbound'
       ), profile AS (
-        SELECT NULLIF(btrim(COALESCE(m.payload->'memberExtra'->>'name',
-          m.payload->'messageEvent'->'memberExtra'->>'name')),'') AS name
-        FROM whatsapp_messages m JOIN conv ON m.conversation_id=conv.id
-        WHERE m.contact_id IS NULL AND m.direction::text='inbound'
-        ORDER BY m.created_at DESC,m.id DESC LIMIT 1
+        SELECT NULLIF(btrim(COALESCE(u.payload->'memberExtra'->>'name',
+          u.payload->'messageEvent'->'memberExtra'->>'name')),'') AS name
+        FROM unlinked u WHERE u.direction='inbound'
+        ORDER BY u.created_at DESC,u.id DESC LIMIT 1
       ), new_contact AS (
         INSERT INTO crm_contacts(name,whatsapp_member_id,source,opt_in_whatsapp,opted_out_whatsapp,
           opted_out_at,opted_out_message_id,opted_out_text,opted_out_source)
@@ -249,11 +311,18 @@ export async function resolveContactIdentityReview(
           CASE WHEN s.yes THEN $6::timestamptz END,CASE WHEN s.yes THEN $4::text END,
           CASE WHEN s.yes THEN left($5::text,500) END,CASE WHEN s.yes THEN 'customer_message' END
         FROM conv,stop s WHERE $2::text='link_new'
-        RETURNING id
+        RETURNING id,whatsapp_member_id IS NOT NULL AS member_filled,opted_out_whatsapp AS opted_out
       ), chosen AS (
         SELECT CASE WHEN $2::text='link_a' THEN t.contact_a ELSE t.contact_b END AS id
         FROM target t, conv WHERE $2::text IN ('link_a','link_b')
         UNION ALL SELECT id FROM new_contact
+      ), lead_state AS (
+        -- The chosen contact's leads before the link, read as the FX-09 trigger reads them.
+        SELECT c.id AS contact_id,count(l.id)>0 AS has_any,
+          COALESCE(bool_or(l.stage NOT IN ('closed_won','closed_lost')),false) AS has_open,
+          max(l.updated_at) FILTER (WHERE l.stage IN ('closed_won','closed_lost')) AS latest_closed,
+          COALESCE(jsonb_agg(l.id) FILTER (WHERE l.id IS NOT NULL),'[]'::jsonb) AS before_ids
+        FROM chosen c LEFT JOIN crm_leads l ON l.contact_id=c.id WHERE c.id IS NOT NULL GROUP BY c.id
       ), decision AS (
         SELECT x.id,
           (s.yes AND x.opted_out_message_id IS DISTINCT FROM $4::text) AS nso,
@@ -261,20 +330,41 @@ export async function resolveContactIdentityReview(
         FROM crm_contacts x JOIN chosen c ON c.id=x.id, stop s WHERE $2::text IN ('link_a','link_b')
       ), linked_contact AS (
         UPDATE crm_contacts x SET
-          whatsapp_member_id=CASE WHEN d.fill THEN (SELECT member FROM member_free) ELSE x.whatsapp_member_id END,
+          whatsapp_member_id=CASE WHEN d.fill AND x.whatsapp_member_id IS NULL
+            THEN (SELECT member FROM member_free) ELSE x.whatsapp_member_id END,
           ${LINK_OPT_OUT},
           updated_at=now()
         FROM decision d WHERE x.id=d.id AND (d.nso OR d.fill)
-        RETURNING x.id
+        RETURNING x.id,
+          (d.fill AND x.whatsapp_member_id IS NOT DISTINCT FROM (SELECT member FROM member_free)) AS member_filled,
+          d.nso AS opted_out
       ), linked_conversation AS (
-        UPDATE whatsapp_conversations wc SET contact_id=c.id,updated_at=now()
-        FROM chosen c, conv WHERE wc.id=conv.id AND c.id IS NOT NULL RETURNING wc.id
+        -- A closed conversation reopens like it would for a new inbound message (FX-09).
+        UPDATE whatsapp_conversations wc SET contact_id=c.id,
+          status=CASE WHEN wc.status='closed' AND n.at IS NOT NULL
+            AND (wc.last_inbound_at IS NULL OR n.at>=wc.last_inbound_at) THEN 'open' ELSE wc.status END,
+          updated_at=now()
+        FROM chosen c, conv, newest n WHERE wc.id=conv.id AND c.id IS NOT NULL
+        RETURNING wc.id,(conv.status='closed' AND wc.status='open') AS reopened
       ), linked_messages AS (
-        -- Reattaches the stored messages. The FX-09 trigger's UPDATE path opens a first lead for
-        -- the chosen contact only if it has none. No crm_leads row is updated here.
+        -- Reattaches the stored messages. A contact with no lead gets its first lead from the
+        -- FX-09 trigger's UPDATE path. No crm_leads row is updated here.
         UPDATE whatsapp_messages m SET contact_id=c.id
         FROM chosen c, conv WHERE m.conversation_id=conv.id AND m.contact_id IS NULL AND c.id IS NOT NULL
-        RETURNING m.id
+        RETURNING m.id,m.created_at
+      ), new_lead AS (
+        -- FX-09's INSERT-path rule for a contact that has leads but none open: a new lead when
+        -- the newest reattached inbound message is newer than the latest close, or the link
+        -- reopened the conversation. The owner is kept only while active.
+        INSERT INTO crm_leads(contact_id,assigned_agent_id,stage,intent,source,note,created_at,updated_at)
+        SELECT c.id,CASE WHEN s.active THEN c.assigned_agent_id END,'new','unknown','whatsapp',
+          'WhatsApp 入站查詢；詳情見對話紀錄。',n.at,n.at
+        FROM lead_state ls JOIN crm_contacts c ON c.id=ls.contact_id
+        LEFT JOIN staff_users s ON s.id=c.assigned_agent_id
+        CROSS JOIN newest n CROSS JOIN linked_conversation lc
+        WHERE ls.has_any AND NOT ls.has_open AND n.at IS NOT NULL
+          AND (n.at>ls.latest_closed OR lc.reopened)
+        RETURNING id
       ), resolved AS (
         UPDATE crm_contact_identity_reviews r SET
           status=CASE WHEN $2::text LIKE 'link\\_%' THEN 'linked' WHEN $2::text='dismiss' THEN 'dismissed' ELSE $2::text END,
@@ -286,30 +376,64 @@ export async function resolveContactIdentityReview(
         INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata)
         SELECT $3::uuid,'contact.identity_review.resolve','crm_contact_identity_review',r.id,
           jsonb_build_object('reviewId',r.id,'reason',r.reason,'action',$2::text)
+          || CASE WHEN $2::text LIKE 'link\\_%' THEN jsonb_build_object(
+            'linkedContactId',r.linked_contact_id,
+            'newContact',EXISTS(SELECT 1 FROM new_contact),
+            'conversationId',(SELECT id FROM conv),
+            'previousConversationContactId',(SELECT previous_contact_id FROM conv),
+            'messagesLinked',(SELECT count(*)::int FROM linked_messages),
+            'messageIds',(SELECT COALESCE(jsonb_agg(lm.id ORDER BY lm.created_at,lm.id),'[]'::jsonb)
+              FROM (SELECT id,created_at FROM linked_messages ORDER BY created_at,id LIMIT 100) lm),
+            'firstMessageId',(SELECT id FROM linked_messages ORDER BY created_at,id LIMIT 1),
+            'lastMessageId',(SELECT id FROM linked_messages ORDER BY created_at DESC,id DESC LIMIT 1),
+            'memberFilled',COALESCE((SELECT member_filled FROM linked_contact),false)
+              OR COALESCE((SELECT member_filled FROM new_contact),false),
+            'optOutApplied',COALESCE((SELECT opted_out FROM linked_contact),false)
+              OR COALESCE((SELECT opted_out FROM new_contact),false),
+            'optOutMessageId',CASE WHEN COALESCE((SELECT opted_out FROM linked_contact),false)
+              OR COALESCE((SELECT opted_out FROM new_contact),false) THEN $9::uuid END,
+            'leadOpenedId',(SELECT id FROM new_lead),
+            'leadsBefore',COALESCE((SELECT before_ids FROM lead_state),'[]'::jsonb),
+            'conversationReopened',COALESCE((SELECT reopened FROM linked_conversation),false))
+          ELSE '{}'::jsonb END
         FROM resolved r RETURNING id
       )
-      SELECT r.status,r.linked_contact_id,
-        (SELECT count(*)::int FROM linked_messages) AS linked_messages,
-        (SELECT count(*)::int FROM linked_contact) AS contact_writes,
-        (SELECT count(*)::int FROM linked_conversation) AS linked_conversations,
-        (SELECT count(*)::int FROM audit) AS audits
-      FROM resolved r`,
-      params: [
-        input.id,
-        input.action,
-        actor.staffId,
-        stop?.id ?? null,
-        stop?.text ?? null,
-        stop?.at ?? null,
-        note,
-      ],
-    },
-  ]);
-  const row = (result as Record<string, unknown>[] | undefined)?.[0];
-  if (!row) throw await refusal(input.id, input.action);
-  return {
-    ok: true,
-    status: row.status as IdentityReviewStatus,
-    linkedContactId: row.linked_contact_id ? String(row.linked_contact_id) : null,
-  };
+      SELECT r.status,r.linked_contact_id FROM resolved r`,
+        params: [
+          input.id,
+          input.action,
+          actor.staffId,
+          stop?.externalId ?? null,
+          stop?.text ?? null,
+          stop?.at ?? null,
+          note,
+          review.version,
+          stop?.id ?? null,
+        ],
+      },
+      {
+        // The FX-09 trigger opens a first lead after the statement above, so its id is added to
+        // the audit here, in the same transaction (now() is the transaction start).
+        statement: `UPDATE audit_logs a SET metadata=(a.metadata||jsonb_build_object('leadOpenedId',
+            COALESCE(a.metadata->>'leadOpenedId',(SELECT l.id::text FROM crm_leads l
+              WHERE l.contact_id=(a.metadata->>'linkedContactId')::uuid
+                AND NOT (a.metadata->'leadsBefore') @> to_jsonb(l.id::text)
+              ORDER BY l.created_at DESC,l.id DESC LIMIT 1))))-'leadsBefore'
+          WHERE a.subject_id=$1::uuid AND a.action='contact.identity_review.resolve'
+            AND a.created_at=now() AND a.metadata ? 'linkedContactId'`,
+        params: [input.id],
+      },
+    ]);
+    const row = (result as Record<string, unknown>[] | undefined)?.[0];
+    if (row)
+      return {
+        ok: true,
+        status: row.status as IdentityReviewStatus,
+        linkedContactId: row.linked_contact_id ? String(row.linked_contact_id) : null,
+      };
+    // Nothing was written. Name why, or re-read when the review changed under us.
+    const refusedNow = refusalFor(await readReview(input.id), input.action);
+    if (refusedNow) throw refusedNow;
+  }
+  throw fail(409, "REVIEW_CHANGED");
 }

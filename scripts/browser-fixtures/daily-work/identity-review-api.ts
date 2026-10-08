@@ -68,6 +68,32 @@ const REVIEWS: IdentityReviewRow[] = [
     note: null,
   },
 ];
+// FX-12 fix round 1: with sessionStorage identity-review-unnamed=true, a third conflict whose
+// two sides are both unnamed (未命名客戶), so only the side and the masked digits tell them apart.
+if (sessionStorage.getItem("identity-review-unnamed") === "true")
+  REVIEWS.push({
+    ...REVIEWS[0],
+    id: "7c000000-0000-4000-8000-00000000c003",
+    a: {
+      ...contact(
+        "7c000000-0000-4000-8000-00000000a003",
+        "",
+        "0201",
+        "40000000-0000-4000-8000-000000000005",
+      ),
+      name: null,
+    },
+    b: {
+      ...contact(
+        "7c000000-0000-4000-8000-00000000b003",
+        "",
+        "0202",
+        "40000000-0000-4000-8000-000000000006",
+      ),
+      name: null,
+    },
+    conversationId: "7c000000-0000-4000-8000-00000000d003",
+  });
 const state = { calls: [] as { name: string; role: string; input: unknown }[] };
 declare global {
   interface Window {

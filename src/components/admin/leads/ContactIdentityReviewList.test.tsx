@@ -70,12 +70,30 @@ describe("ContactIdentityReviewList", () => {
     expect($.text()).toContain(
       "此 WhatsApp 訊息的帳戶與電話分屬不同客戶記錄。訊息已保存，請選擇正確客戶。",
     );
-    expect(buttons($)).toEqual(["連結到「陳太」", "連結到「陳生」", "建立新客戶"]);
+    expect(buttons($)).toEqual([
+      "連結到「陳太」客戶 A · •••• 0101",
+      "連結到「陳生」客戶 B · •••• 0102",
+      "建立新客戶",
+    ]);
   });
 
   test("a conflict row with no member owner offers no link to the missing side", () => {
     const $ = render([{ ...conflict, a: null }]);
-    expect(buttons($)).toEqual(["連結到「陳生」", "建立新客戶"]);
+    expect(buttons($)).toEqual(["連結到「陳生」客戶 B · •••• 0102", "建立新客戶"]);
+  });
+
+  test("two unnamed sides get link buttons that name the side and the masked digits", () => {
+    const $ = render([
+      {
+        ...conflict,
+        a: { ...conflict.a!, name: null },
+        b: { ...conflict.b!, name: null },
+      },
+    ]);
+    const [linkA, linkB] = buttons($);
+    expect(linkA).toBe("連結到「未命名客戶」客戶 A · •••• 0101");
+    expect(linkB).toBe("連結到「未命名客戶」客戶 B · •••• 0102");
+    expect(linkA).not.toBe(linkB);
   });
 
   test("a duplicate row offers 同一客戶（暫不合併）, 不同客戶 and 略過 and no link action", () => {

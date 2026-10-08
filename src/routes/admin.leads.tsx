@@ -526,9 +526,10 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
   );
 
   useEffect(() => {
-    if (!user) return;
+    // FX-12: the 可能重複客戶 list replaces the lead table, so the lead page is not read.
+    if (!user || reviewMode) return;
     refreshLeads();
-  }, [refreshLeads, user]);
+  }, [refreshLeads, user, reviewMode]);
 
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -938,75 +939,77 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
     <AdminShell title="客戶查詢" description="集中處理買樓、租樓及業主估價查詢。">
       <AdminToolbar
         filters={
-          <>
-            <div className="relative min-w-[14rem] flex-1 sm:flex-none">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              {/* Bound to local state, not to the router. It used to be
+          reviewMode ? null : (
+            <>
+              <div className="relative min-w-[14rem] flex-1 sm:flex-none">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                {/* Bound to local state, not to the router. It used to be
                   controlled by `filters.query`, so every character round-tripped
                   through an async navigation and anything typed faster than the
                   router committed was computed against a stale value and lost --
                   which a Chinese IME does constantly. */}
-              <Input
-                value={queryDraft}
-                onChange={(event) => setQueryDraft(event.target.value)}
-                onCompositionStart={() => {
-                  queryCompositionActive.current = true;
-                  setQueryIsComposing(true);
-                }}
-                onCompositionEnd={(event) => {
-                  queryCompositionActive.current = false;
-                  setQueryDraft(event.currentTarget.value);
-                  setQueryIsComposing(false);
-                }}
-                className="h-11 pl-9 lg:h-9"
-                placeholder="搜尋客戶、電話、放盤"
-                aria-label="搜尋客戶查詢"
-              />
-            </div>
+                <Input
+                  value={queryDraft}
+                  onChange={(event) => setQueryDraft(event.target.value)}
+                  onCompositionStart={() => {
+                    queryCompositionActive.current = true;
+                    setQueryIsComposing(true);
+                  }}
+                  onCompositionEnd={(event) => {
+                    queryCompositionActive.current = false;
+                    setQueryDraft(event.currentTarget.value);
+                    setQueryIsComposing(false);
+                  }}
+                  className="h-11 pl-9 lg:h-9"
+                  placeholder="搜尋客戶、電話、放盤"
+                  aria-label="搜尋客戶查詢"
+                />
+              </div>
 
-            <Select value={filters.stage} onValueChange={(value) => setFilter("stage", value)}>
-              <SelectTrigger className="h-11 w-[8.5rem] lg:h-9" aria-label="階段">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部階段</SelectItem>
-                {stageFilterOptions.map((stage) => (
-                  <SelectItem key={stage.value} value={stage.value}>
-                    {stage.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <Select value={filters.stage} onValueChange={(value) => setFilter("stage", value)}>
+                <SelectTrigger className="h-11 w-[8.5rem] lg:h-9" aria-label="階段">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部階段</SelectItem>
+                  {stageFilterOptions.map((stage) => (
+                    <SelectItem key={stage.value} value={stage.value}>
+                      {stage.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-            <Select
-              value={filters.agent_id}
-              onValueChange={(value) => setFilter("agent_id", value)}
-            >
-              <SelectTrigger className="h-11 w-[10rem] lg:h-9" aria-label="負責代理">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部代理</SelectItem>
-                <SelectItem value="unassigned">未指定代理</SelectItem>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agentLabel(agent)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              <Select
+                value={filters.agent_id}
+                onValueChange={(value) => setFilter("agent_id", value)}
+              >
+                <SelectTrigger className="h-11 w-[10rem] lg:h-9" aria-label="負責代理">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">全部代理</SelectItem>
+                  <SelectItem value="unassigned">未指定代理</SelectItem>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agentLabel(agent)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-11 lg:h-9"
-              onClick={resetFilters}
-            >
-              <RotateCcw className="h-4 w-4" />
-              重設
-            </Button>
-          </>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-11 lg:h-9"
+                onClick={resetFilters}
+              >
+                <RotateCcw className="h-4 w-4" />
+                重設
+              </Button>
+            </>
+          )
         }
         actions={
           <>
@@ -1021,9 +1024,11 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
                 "{n} Leads" read as a total and made filtering look like it had
                 deleted older leads. Say what the number actually is, and admit
                 the cap when we are sitting on it. */}
-            <Badge variant="secondary" className="h-11 rounded-md px-3 lg:h-9">
-              顯示 {filteredRows.length} 筆 / 共 {totalRows} 筆
-            </Badge>
+            {reviewMode ? null : (
+              <Badge variant="secondary" className="h-11 rounded-md px-3 lg:h-9">
+                顯示 {filteredRows.length} 筆 / 共 {totalRows} 筆
+              </Badge>
+            )}
           </>
         }
       />
@@ -1059,41 +1064,43 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
           </Button>
         ) : null}
       </div>
-      <details className="mb-4 rounded-lg border p-3">
-        <summary className="cursor-pointer text-sm font-medium">
-          進階篩選
-          {filters.intent !== "all" || filters.source !== "all" || filters.optIn !== "all"
-            ? "（已套用）"
-            : ""}
-        </summary>
-        <div className="mt-3 flex flex-wrap gap-3">
-          <AdminStatusSelect
-            ariaLabel="意圖篩選"
-            value={filters.intent}
-            options={[{ value: "all", label: "全部意圖" }, ...intentFilterOptions]}
-            onChange={(value) => setFilter("intent", value)}
-          />
-          <AdminStatusSelect
-            ariaLabel="來源篩選"
-            value={filters.source}
-            options={[{ value: "all", label: "全部來源" }, ...sourceFilterOptions]}
-            onChange={(value) => setFilter("source", value)}
-          />
-          <Select
-            value={filters.optIn}
-            onValueChange={(value) => setFilter("optIn", value as OptInFilter)}
-          >
-            <SelectTrigger className="h-11 w-[9rem] lg:h-9" aria-label="WhatsApp 推廣同意">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部推廣同意狀態</SelectItem>
-              <SelectItem value="yes">已同意推廣</SelectItem>
-              <SelectItem value="no">未有推廣同意</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </details>
+      {reviewMode ? null : (
+        <details className="mb-4 rounded-lg border p-3">
+          <summary className="cursor-pointer text-sm font-medium">
+            進階篩選
+            {filters.intent !== "all" || filters.source !== "all" || filters.optIn !== "all"
+              ? "（已套用）"
+              : ""}
+          </summary>
+          <div className="mt-3 flex flex-wrap gap-3">
+            <AdminStatusSelect
+              ariaLabel="意圖篩選"
+              value={filters.intent}
+              options={[{ value: "all", label: "全部意圖" }, ...intentFilterOptions]}
+              onChange={(value) => setFilter("intent", value)}
+            />
+            <AdminStatusSelect
+              ariaLabel="來源篩選"
+              value={filters.source}
+              options={[{ value: "all", label: "全部來源" }, ...sourceFilterOptions]}
+              onChange={(value) => setFilter("source", value)}
+            />
+            <Select
+              value={filters.optIn}
+              onValueChange={(value) => setFilter("optIn", value as OptInFilter)}
+            >
+              <SelectTrigger className="h-11 w-[9rem] lg:h-9" aria-label="WhatsApp 推廣同意">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部推廣同意狀態</SelectItem>
+                <SelectItem value="yes">已同意推廣</SelectItem>
+                <SelectItem value="no">未有推廣同意</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </details>
+      )}
       {reviewMode ? (
         <ContactIdentityReviewList
           focusId={filters.item ?? null}
