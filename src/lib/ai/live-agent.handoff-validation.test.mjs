@@ -74,6 +74,11 @@ test("validateHandoffPhone rejects blank as REQUIRED and malformed numbers as IN
     "00447700900123",
     // FX-12: "+" before an 8-digit HK landline is a landline, not an international number.
     "+2688 2988",
+    // FX-12 final fix wave: separate digit groups form a number only in a Hong Kong shape
+    // (4+4, or 852 then 8 or 4+4), the same rule as normalizePhone.
+    "91 23 45 67",
+    "9 1 2 3 4 5 6 7",
+    "8529123 4567",
   ]) {
     assert.deepEqual(
       validateHandoffPhone(invalid),

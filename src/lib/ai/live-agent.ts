@@ -1,4 +1,5 @@
 import { normalizeAdminPhone } from "../neon/admin-workflow.ts";
+import { hkLocalNumber, normalizePhone } from "../phone.js";
 
 export function canUseChunkForPublicAnswer(input: {
   visibility?: string;
@@ -60,36 +61,27 @@ function isLiveAgentPhoneErrorCode(value: unknown): value is LiveAgentPhoneError
   return value === "LIVE_AGENT_PHONE_REQUIRED" || value === "LIVE_AGENT_PHONE_INVALID";
 }
 
-// Deliberately small and local to the live agent: HK 8-digit mobiles (4-9 lead digit) with an
-// optional +852 / 00852 / 852 prefix, or a +country-code number of 8-15 digits. The normalised
-// value is digits only.
+// The shared normaliser (src/lib/phone.js) decides what number was typed, so the handoff and
+// every other customer path agree. On top of it the live agent is stricter: only digits,
+// spaces, hyphens and one leading "+" may be typed; a Hong Kong number must be a mobile (4-9
+// lead digit), including "+" before 8 digits (FX-12 owner decision); and any other country
+// needs a leading "+". The normalised value is digits only.
 export function validateHandoffPhone(raw: string | null | undefined): HandoffPhoneCheck {
   const text = (raw ?? "").trim();
   if (!text) return { ok: false, code: "LIVE_AGENT_PHONE_REQUIRED" };
 
   const compact = text.replace(/[\s-]/g, "");
-  if (/^[4-9]\d{7}$/.test(compact)) return { ok: true, normalized: `852${compact}` };
-
-  const hongKong = /^(?:\+852|00852|852)([4-9]\d{7})$/.exec(compact);
-  if (hongKong) return { ok: true, normalized: `852${hongKong[1]}` };
-  // Landlines and wrong-length Hong Kong numbers must not fall through to the generic
-  // international rule below.
-  if (compact.startsWith("+852") || compact.startsWith("00852")) {
-    return { ok: false, code: "LIVE_AGENT_PHONE_INVALID" };
-  }
-  // FX-12 owner decision: "+" typed before an 8-digit Hong Kong number is Hong Kong, so it
-  // gets the same mobile check as a bare 8-digit number and the same canonical 852 form.
-  const plusLocal = /^\+([2-9]\d{7})$/.exec(compact);
-  if (plusLocal) {
-    return /^[4-9]/.test(plusLocal[1])
-      ? { ok: true, normalized: `852${plusLocal[1]}` }
+  const canonical = /^\+?\d+$/.test(compact) ? normalizePhone(text) : null;
+  if (!canonical) return { ok: false, code: "LIVE_AGENT_PHONE_INVALID" };
+  const local = hkLocalNumber(canonical);
+  if (local) {
+    return /^[4-9]/.test(local)
+      ? { ok: true, normalized: canonical }
       : { ok: false, code: "LIVE_AGENT_PHONE_INVALID" };
   }
-
-  const international = /^\+([1-9]\d{7,14})$/.exec(compact);
-  if (international) return { ok: true, normalized: international[1] };
-
-  return { ok: false, code: "LIVE_AGENT_PHONE_INVALID" };
+  return compact.startsWith("+")
+    ? { ok: true, normalized: canonical }
+    : { ok: false, code: "LIVE_AGENT_PHONE_INVALID" };
 }
 
 export function liveAgentPhoneErrorMessage(code: LiveAgentPhoneErrorCode): string {

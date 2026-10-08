@@ -53,6 +53,11 @@ const INPUTS = [
   "-+14384031",
   "+9123 4567",
   "+2688 2988",
+  // Groupings the live agent used to join that the normaliser does not (final fix wave).
+  "91 23 45 67",
+  "9 1 2 3 4 5 6 7",
+  "8529123 4567",
+  "852 9123 45 67",
   // Garbage.
   "9123 4567 / 9876 5432",
   "Fax: 9123 4567",
