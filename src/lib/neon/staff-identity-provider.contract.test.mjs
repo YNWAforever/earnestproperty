@@ -86,7 +86,6 @@ test("provider adapter uses the configured base URL, forwards no credential, and
       headers: {
         accept: "application/json",
         "content-type": "application/json",
-        cookie: "better-auth.session_token=provider-secret",
       },
       body: null,
     },
@@ -104,6 +103,20 @@ test("provider adapter never forwards this app's own authorization header to Neo
 
   await provider.resolveUser({ authUserId: "auth-1", request: requestWithOnlyAppAuth });
 
+  assert.equal("authorization" in requests[0].headers, false);
+});
+
+test("password reset sends no visitor cookie", async () => {
+  const { provider, requests } = createProvider([response({ data: {} })]);
+
+  await provider.requestPasswordReset({
+    email: "agent@example.test",
+    redirectTo: "https://earnest.example.test/auth/reset-password",
+    request: authorizedRequest,
+  });
+
+  assert.equal(requests[0].path, "/request-password-reset");
+  assert.equal("cookie" in requests[0].headers, false);
   assert.equal("authorization" in requests[0].headers, false);
 });
 

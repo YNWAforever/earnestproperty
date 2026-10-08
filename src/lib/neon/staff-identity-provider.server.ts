@@ -37,7 +37,7 @@ function providerData(value: unknown) {
   return asRecord(body.data ?? body);
 }
 
-function forwardedHeaders(request: Request) {
+function forwardedHeaders() {
   const headers = new Headers({ accept: "application/json", "content-type": "application/json" });
   // Deliberately no `authorization`: no credential this server can forward is
   // accepted by Neon Auth's authenticated endpoints (its docs make admin
@@ -45,10 +45,10 @@ function forwardedHeaders(request: Request) {
   // which is why the default lifecycle dependencies serve identity reads,
   // session revocation and invitations from the local neon_auth tables
   // instead -- see staff-lifecycle.server.ts. The calls left on this adapter
-  // (request-password-reset) are public and need no credential; the browser
-  // cookie is passed through unchanged for parity when one exists.
-  const cookie = request.headers.get("cookie");
-  if (cookie) headers.set("cookie", cookie);
+  // (request-password-reset) are public and need no credential. No `cookie`
+  // either: the Neon Auth session cookie lives on neon.tech and never reaches
+  // this site, so the only cookies here are visitor ones (GA and the like)
+  // that Neon Auth has no business receiving.
   return headers;
 }
 
@@ -101,7 +101,7 @@ export function createStaffIdentityProvider(input: {
     try {
       response = await fetchImpl(url.toString(), {
         method,
-        headers: forwardedHeaders(input.request),
+        headers: forwardedHeaders(),
         ...(method === "POST" ? { body: JSON.stringify(input.body ?? {}) } : {}),
       });
     } catch {
