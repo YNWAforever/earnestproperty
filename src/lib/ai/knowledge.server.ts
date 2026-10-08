@@ -502,8 +502,8 @@ export async function repairPublicKnowledgeIndex(
     WHERE r.source_type::text=completed.source_type AND r.source_id=completed.source_id AND r.revision=completed.revision::bigint`,
     [JSON.stringify(requests)],
   );
-  // A batch may exceed the bounded work limit, or change during provider/DB
-  // work. Keep a new durable job for whatever has not been acknowledged by CAS.
+  // A batch may exceed the bounded work limit, or a source may change during the
+  // rebuild's DB work. Keep a new durable job for whatever has not been acknowledged by CAS.
   await queryRows(`INSERT INTO ops_jobs(job_type,payload_version,payload,status,max_attempts,idempotency_key)
     SELECT 'ai.knowledge.repair',1,jsonb_build_object('batchId',txid_current()::text),'queued',5,'ai.knowledge.repair:'||txid_current()::text
     WHERE EXISTS(SELECT 1 FROM ai_knowledge_repair_requests WHERE revision>completed_revision)

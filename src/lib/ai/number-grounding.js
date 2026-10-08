@@ -59,45 +59,107 @@ const CHINESE_DIGITS = {
   九: 9,
 };
 const CHINESE_SCALES = { 十: 10, 百: 100, 千: 1000 };
+// Opt-in only: marketing idioms that contain a numeral but state no number. Their spans are masked
+// before Chinese numerals are read (千萬唔好錯過 is not 10,000,000; 第一時間 is not 1). Longest first.
+export const CHINESE_NUMERAL_IDIOMS = Object.freeze([
+  "千萬唔",
+  "千萬不",
+  "千萬別",
+  "千萬要",
+  "千萬記得",
+  "千萬咪",
+  "十萬火急",
+  "第一時間",
+  "一時",
+  "一年四季",
+  "一應俱全",
+  "一流",
+  "一致",
+  "一站式",
+  "獨一無二",
+  "三五知己",
+  "四通八達",
+  "五星級",
+  "八達通",
+  "七彩",
+  "一路",
+  "一齊",
+  "一流會所",
+  "一手樓",
+  "二手樓",
+]);
+
+const CHINESE_IDIOMS_LONGEST_FIRST = [...CHINESE_NUMERAL_IDIOMS].sort(
+  (left, right) => right.length - left.length,
+);
 const CHINESE_UNIT_PATTERN = [...CHINESE_NUMERAL_UNITS]
   .sort((left, right) => right.length - left.length)
   .join("|");
+const CHINESE_BASE = "〇零一二兩两三四五六七八九十百千";
+// 第? then an optional Arabic lead before a scale (3百萬), a numeral run whose 萬/億 sections stay
+// in one number (一萬二千, 三億五千萬, 七百萬), then an optional counting unit.
 const CHINESE_NUMBER_RE = new RegExp(
-  `(第)?([〇零一二兩两三四五六七八九十百千]+)(${CHINESE_UNIT_PATTERN})?`,
+  String.raw`(第)?(?:(\d+(?:\.\d+)?)(?=[十百千]))?([${CHINESE_BASE}]+(?:[萬億][${CHINESE_BASE}]*)*)(${CHINESE_UNIT_PATTERN})?`,
   "g",
 );
 
-/** 十二 → 12, 二十 → 20, 一百二十 → 120, 二〇二四 → 2024. @param {string} numeral */
-function chineseNumeralValue(numeral) {
+/** Same-length mask, so match indexes still line up with the source. @param {string} source */
+function maskChineseIdioms(source) {
+  let masked = source;
+  for (const idiom of CHINESE_IDIOMS_LONGEST_FIRST) {
+    masked = masked.split(idiom).join("·".repeat(idiom.length));
+  }
+  return masked;
+}
+
+/**
+ * 十二 → 12, 一百二十 → 120, 一萬二千 → 12,000, 三億五千萬 → 350,000,000, 3百萬 → 3,000,000,
+ * 二〇二四 → 2024.
+ * @param {string} numeral
+ * @param {number | null} lead
+ */
+function chineseNumeralValue(numeral, lead) {
   const chars = [...numeral];
-  if (!chars.some((char) => char in CHINESE_SCALES)) {
+  if (lead === null && !chars.some((char) => char in CHINESE_SCALES || char in MULTIPLIERS)) {
     return Number(chars.map((char) => CHINESE_DIGITS[char]).join(""));
   }
-  let total = 0;
-  let digit = null;
+  let result = 0;
+  let current = 0;
+  let section = 0;
+  let digit = lead;
   for (const char of chars) {
     if (char in CHINESE_DIGITS) {
       digit = CHINESE_DIGITS[char];
+    } else if (char in CHINESE_SCALES) {
+      section += (digit ?? 1) * CHINESE_SCALES[char];
+      digit = null;
+    } else if (char === "萬") {
+      current += (section + (digit ?? 0)) * 1e4;
+      section = 0;
+      digit = null;
     } else {
-      total += (digit ?? 1) * CHINESE_SCALES[char];
+      result += (current + section + (digit ?? 0)) * 1e8;
+      current = 0;
+      section = 0;
       digit = null;
     }
   }
-  return total + (digit ?? 0);
+  return Math.round((result + current + section + (digit ?? 0)) * 1e6) / 1e6;
 }
 
 /** @param {string} source */
 function extractChineseNumbers(source) {
   const out = [];
-  for (const match of source.matchAll(CHINESE_NUMBER_RE)) {
-    const [raw, ordinal, numeral, unit] = match;
-    if (!ordinal && !unit) continue;
+  for (const match of maskChineseIdioms(source).matchAll(CHINESE_NUMBER_RE)) {
+    const [raw, ordinal, lead, numeral, unit] = match;
+    if (!ordinal && !unit && !lead && !/[萬億]/.test(numeral)) continue;
     const multiplier = unit && unit in MULTIPLIERS ? MULTIPLIERS[unit] : 1;
     out.push({
       raw,
-      value: chineseNumeralValue(numeral) * multiplier,
+      value: chineseNumeralValue(numeral, lead ? Number(lead) : null) * multiplier,
       tolerance: 0,
       index: match.index,
+      end: match.index + raw.length,
     });
   }
   return out;
@@ -123,8 +185,15 @@ export function extractNumbers(text, options) {
     out.push({ raw: match[0], value, tolerance: Math.round(tolerance * 1e6) / 1e6 });
   }
   if (!options?.chineseNumerals) return out;
-  const indexed = out.map((number, position) => ({ number, index: positions[position] }));
-  for (const { index, ...number } of extractChineseNumbers(source)) indexed.push({ number, index });
+  const chinese = extractChineseNumbers(source);
+  // An Arabic lead that a Chinese number already covers (the 3 of 3百萬) is not a second number.
+  const indexed = out
+    .map((number, position) => ({ number, index: positions[position] }))
+    .filter(
+      ({ number, index }) =>
+        !chinese.some((found) => index < found.end && index + number.raw.length > found.index),
+    );
+  for (const { index, end: _end, ...number } of chinese) indexed.push({ number, index });
   return indexed.sort((left, right) => left.index - right.index).map(({ number }) => number);
 }
 

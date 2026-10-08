@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { CHINESE_NUMERAL_UNITS, extractNumbers, ungroundedNumbers } from "./number-grounding.js";
+import {
+  CHINESE_NUMERAL_IDIOMS,
+  CHINESE_NUMERAL_UNITS,
+  extractNumbers,
+  ungroundedNumbers,
+} from "./number-grounding.js";
 import {
   AVAILABILITY_PHRASES,
   colloquialCharacters,
@@ -84,6 +89,55 @@ test("with chineseNumerals, ordinary words that contain a numeral produce no num
     assert.deepEqual(extractNumbers(word, CN), [], word);
   }
   assert.deepEqual(extractNumbers("一般首期為樓價一成至三成", CN), []);
+});
+
+test("with chineseNumerals, every listed idiom produces no number", () => {
+  assert.ok(CHINESE_NUMERAL_IDIOMS.length > 0);
+  for (const idiom of CHINESE_NUMERAL_IDIOMS) {
+    assert.deepEqual(extractNumbers(idiom, CN), [], idiom);
+  }
+  for (const phrase of [
+    "千萬唔好錯過",
+    "千萬不要錯過",
+    "千萬別遲",
+    "千萬要記住",
+    "千萬記得預約",
+    "千萬咪錯過",
+    "十萬火急",
+    "第一時間聯絡我們",
+    "一年四季都有海景",
+    "五星級會所",
+    "一流會所設施",
+    "一手樓與二手樓",
+  ]) {
+    assert.deepEqual(extractNumbers(phrase, CN), [], phrase);
+  }
+});
+
+test("with chineseNumerals, real units next to an idiom still count", () => {
+  const values = (text) => extractNumbers(text, CN).map(({ raw, value }) => [raw, value]);
+  assert.deepEqual(values("一間"), [["一間", 1]]);
+  assert.deepEqual(values("一年"), [["一年", 1]]);
+  assert.deepEqual(values("一樓"), [["一樓", 1]]);
+  assert.deepEqual(values("千萬唔好錯過兩房"), [["兩房", 2]]);
+});
+
+test("with chineseNumerals, compound and mixed numerals parse whole", () => {
+  const values = (text) => extractNumbers(text, CN).map(({ raw, value }) => [raw, value]);
+  assert.deepEqual(values("一萬二千呎"), [["一萬二千呎", 12000]]);
+  assert.deepEqual(values("三億五千萬"), [["三億五千萬", 350000000]]);
+  assert.deepEqual(values("3百萬"), [["3百萬", 3000000]]);
+  assert.deepEqual(values("七百萬"), [["七百萬", 7000000]]);
+  assert.deepEqual(ungroundedNumbers("3百萬", ["$3,000,000"], CN), []);
+  assert.deepEqual(ungroundedNumbers("12,000 呎", ["一萬二千呎"], CN), []);
+});
+
+test("the default-off output is unchanged for idioms and mixed numerals", () => {
+  assert.deepEqual(extractNumbers("千萬唔好錯過 第一時間"), []);
+  assert.deepEqual(
+    extractNumbers("3百萬").map(({ raw, value }) => [raw, value]),
+    [["3", 3]],
+  );
 });
 
 test("with chineseNumerals, Chinese and Arabic numerals ground each other", () => {

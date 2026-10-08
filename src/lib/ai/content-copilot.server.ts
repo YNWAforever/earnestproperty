@@ -366,7 +366,10 @@ function validateGeneratedProposal(
     if (ungrounded.length === 0) return patch;
     // The number flags go first so the schema's 20-claim cap never drops them.
     const unsupportedClaims = [
-      ...new Set([...ungrounded.map((raw) => `數字未有來源：${raw}`), ...patch.unsupportedClaims]),
+      ...new Set([
+        ...ungrounded.map((raw) => `數字未有來源：${raw.slice(0, 40)}`),
+        ...patch.unsupportedClaims,
+      ]),
     ].slice(0, 20);
     return { ...patch, unsupportedClaims };
   });

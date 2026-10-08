@@ -640,3 +640,27 @@ test("the copilot does not read ordinary words with a numeral as numbers", async
 
   assert.deepEqual(proposal.patches[0].unsupportedClaims, []);
 });
+
+test("a very long numeral run still gives a valid proposal with a short flag", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: `海景兩房單位 ${"9".repeat(600)}`,
+    claimType: "subjective",
+  });
+
+  const claims = proposal.patches[0].unsupportedClaims;
+  assert.equal(claims.length, 1);
+  assert.ok(claims[0].startsWith("數字未有來源："));
+  assert.ok(claims[0].length <= "數字未有來源：".length + 40);
+});
+
+test("the copilot does not read common marketing idioms as numbers", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景單位",
+    after:
+      "海景單位，千萬唔好錯過！第一時間聯絡我們，一年四季景觀一流，交通四通八達，會所設施一應俱全",
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, []);
+});

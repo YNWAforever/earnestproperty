@@ -6,6 +6,9 @@ export type NumberGroundingOptions = { chineseNumerals?: boolean };
 
 export declare const CHINESE_NUMERAL_UNITS: readonly string[];
 
+/** Idioms masked before Chinese numerals are read (千萬唔, 第一時間, 一年四季, …). */
+export declare const CHINESE_NUMERAL_IDIOMS: readonly string[];
+
 /** Each number in text with the tolerance its notation implies:
  *  "$6.80M" → { value: 6800000, tolerance: 5000 }; "680萬" / "680.5萬" → ×10000 (tolerance 500 for
  *  one decimal); "1.2億" → ×1e8; "$38,000" / "HK$38,000" → 38000; "512 呎" → 512; "2 房" / "2座" → 2;
