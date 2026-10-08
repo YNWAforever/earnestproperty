@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TARGETS, evaluateTargets, parseLabArgs, shouldBlock } from "./throttled-lab.mjs";
+import {
+  TARGETS,
+  evaluateTargets,
+  parseLabArgs,
+  redactShare,
+  shouldBlock,
+} from "./throttled-lab.mjs";
 
 test("targets are home 4000, listings 4000, property 3500 ms", () => {
   assert.deepEqual({ ...TARGETS }, { home: 4000, listings: 4000, property: 3500 });
@@ -73,6 +79,8 @@ test("parseLabArgs rejects an out path outside the workspace", () => {
     "--out=/tmp/x.json",
     "--out=C:\\x.json",
     "--out=a/../../x.json",
+    "--out=package.json",
+    "--out=scripts/x.json",
   ])
     assert.throws(() => parseLabArgs([bad]), TypeError, bad);
 });
@@ -100,4 +108,13 @@ test("the lab blocks api, w, admin, non-GET and wa.me requests", () => {
   ];
   for (const [url, method, blocked] of cases)
     assert.equal(shouldBlock(url, method), blocked, `${method} ${url}`);
+});
+
+test("redactShare removes the share link and token from error text", () => {
+  const share = "https://x.vercel.app/?_vercel_share=SECRETTOKEN123";
+  const text = `page.goto: Timeout navigating to "${share}" token SECRETTOKEN123 ${encodeURIComponent(share)}`;
+  const cleaned = redactShare(text, share);
+  assert.doesNotMatch(cleaned, /SECRETTOKEN123/);
+  assert.doesNotMatch(cleaned, /_vercel_share=SEC/);
+  assert.equal(redactShare("plain", null), "plain");
 });

@@ -55,9 +55,10 @@ export function parseLabArgs(argv) {
     path.isAbsolute(out) ||
     path.win32.isAbsolute(out) ||
     /^[A-Za-z]:/.test(out) ||
-    out.split(/[\\/]/).includes("..")
+    out.split(/[\\/]/).includes("..") ||
+    !path.posix.normalize(out.replace(/\\/g, "/")).startsWith(".cache/")
   )
-    throw new TypeError("out must be a workspace-relative path");
+    throw new TypeError("out must be a path under .cache/");
   const shareValue = argValue(argv, "share");
   const share = shareValue ? httpsUrl(shareValue, "share").href : null;
   return { base, property, runs, out, share };
@@ -230,5 +231,34 @@ async function main() {
   process.exitCode = summary.every((row) => row.pass) ? 0 : 1;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href)
-  await main();
+/** Removes the share link (a credential) and any vercel share token from text. */
+export function redactShare(text, share) {
+  let out = String(text);
+  if (share) {
+    for (const form of [share, encodeURI(share), encodeURIComponent(share)])
+      out = out.split(form).join("[share-url]");
+    try {
+      const u = new URL(share);
+      for (const value of u.searchParams.values())
+        if (value.length > 3) out = out.split(value).join("[redacted]");
+    } catch {
+      // Not a URL: nothing more to redact.
+    }
+  }
+  return out.replace(/(_vercel_share=)[^&s"')]+/g, "$1[redacted]");
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  const shareArg = process.argv.find((arg) => arg.startsWith("--share="))?.slice(8);
+  const fail = (error) => {
+    console.error(`throttled-lab failed: ${redactShare(error?.message ?? error, shareArg)}`);
+    process.exit(2);
+  };
+  process.on("unhandledRejection", fail);
+  process.on("uncaughtException", fail);
+  try {
+    await main();
+  } catch (error) {
+    fail(error);
+  }
+}
