@@ -1,9 +1,9 @@
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Client } from "@neondatabase/serverless";
 import { createVercelBlobStore } from "../../src/lib/media/vercel-blob.mjs";
-import { ensureMediaVariants } from "../../src/lib/media/remote-variants.mjs";
+import { ensureMediaVariants, failureReason } from "../../src/lib/media/remote-variants.mjs";
 import {
   findMediaVariantSet,
   saveMediaVariantSet,
@@ -20,11 +20,12 @@ const PENDING =
   "WHERE a.owner_type='mls-shared' AND a.content_hash IS NOT NULL AND s.asset_id IS NULL " +
   "AND a.id::text > $1";
 
-const KNOWN_ARG = /^--(apply|limit=.*|checkpoint=.*|confirm-db-host=.*)$/;
+const KNOWN_ARG = /^--(apply|skip-failed|limit=.*|checkpoint=.*|confirm-db-host=.*)$/;
 export function parseBackfillArgs(argv) {
   const unknown = argv.find((arg) => !KNOWN_ARG.test(arg));
   if (unknown) throw new TypeError("Unknown argument: " + unknown);
   const apply = argv.includes("--apply");
+  const skipFailed = argv.includes("--skip-failed");
   const limitValue = argv.find((arg) => arg.startsWith("--limit="))?.slice(8) ?? "50";
   const limit = Number(limitValue);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
@@ -37,7 +38,7 @@ export function parseBackfillArgs(argv) {
   const hostArg = argv.find((arg) => arg.startsWith("--confirm-db-host="));
   const confirmDbHost = hostArg === undefined ? null : hostArg.slice(18);
   if (confirmDbHost === "") throw new TypeError("--confirm-db-host needs a host name");
-  return { apply, limit, checkpoint, confirmDbHost };
+  return { apply, limit, checkpoint, confirmDbHost, skipFailed };
 }
 
 // The host part of DATABASE_URL. The URL itself, with its password, is never echoed.
@@ -129,7 +130,7 @@ export async function runBackfill({
   }
   let checkpoint = (await readCheckpoint(options.checkpoint)) ?? { lastAssetId: ZERO_ID };
   if (!/^[0-9a-f-]{36}$/i.test(checkpoint?.lastAssetId ?? ""))
-    throw new TypeError("Invalid checkpoint");
+    throw corruptCheckpoint(options.checkpoint);
   const db = await connect(env.DATABASE_URL);
   try {
     const query = db.query;
@@ -172,7 +173,23 @@ export async function runBackfill({
     const blobStore = createBlobStore(env.BLOB_READ_WRITE_TOKEN);
     let ready = 0;
     let unavailable = 0;
+    const skipped = [];
+    const stop = (row, reason) =>
+      new Error(
+        "Stopped at asset " +
+          row.id +
+          " (" +
+          redact(reason || "variant upload or save failed", env) +
+          "). " +
+          (ready + unavailable) +
+          " photos finished in this run. The original photo is untouched and the " +
+          "checkpoint still points before this asset, so a rerun starts here.",
+      );
     for (const row of rows) {
+      // ensureMediaVariants throws only before any write: input checks and the lookup
+      // ("lookup"), then reading, hashing, decoding and size checks ("source"). Blob
+      // and save errors come back as status "failed" instead.
+      let phase = "lookup";
       let set;
       try {
         set = await ensure(
@@ -180,25 +197,27 @@ export async function runBackfill({
           {
             allowedHosts,
             readSource: () => readOwnedSource(row.url, allowedHosts),
-            find: (id, hash) => findMediaVariantSet(query, id, hash),
+            find: async (id, hash) => {
+              const found = await findMediaVariantSet(query, id, hash);
+              phase = "source";
+              return found;
+            },
             put: (value) => blobStore.put(value),
             save: (value) => saveMediaVariantSet(query, value),
           },
         );
       } catch (error) {
-        set = { status: "failed", reason: error?.message };
+        const reason = redact(failureReason(error), env);
+        if (!(options.skipFailed && phase === "source")) throw stop(row, reason);
+        // --skip-failed: an unreadable source is noted and passed; nothing was written.
+        skipped.push({ id: row.id, reason });
+        log(JSON.stringify({ skipped: row.id, reason }));
+        checkpoint = { lastAssetId: row.id };
+        await writeCheckpoint(options.checkpoint, checkpoint);
+        continue;
       }
-      if (set?.status !== "ready" && set?.status !== "unavailable")
-        throw new Error(
-          "Stopped at asset " +
-            row.id +
-            " (" +
-            redact(set?.reason ?? "variant upload or save failed", env) +
-            "). " +
-            (ready + unavailable) +
-            " photos finished in this run. The original photo is untouched and the " +
-            "checkpoint still points before this asset, so a rerun starts here.",
-        );
+      // A write failure always stops the run, with or without --skip-failed.
+      if (set?.status !== "ready" && set?.status !== "unavailable") throw stop(row, set?.reason);
       if (set.status === "ready") ready += 1;
       else unavailable += 1;
       checkpoint = { lastAssetId: row.id };
@@ -210,27 +229,48 @@ export async function runBackfill({
         dbHost,
         ready,
         unavailable,
+        skipped,
         processed: rows.length,
         remaining: Math.max(0, remaining - rows.length),
         lastAssetId: checkpoint.lastAssetId,
       }),
     );
+    // Skipped photos still have no variants, so the run reports a non-zero exit.
+    return { exitCode: skipped.length ? 1 : 0, skipped };
   } finally {
     await db.end();
   }
 }
 
-async function readCheckpointFile(file) {
+const corruptCheckpoint = (file) =>
+  new Error(
+    "Checkpoint " +
+      file +
+      " is unreadable. Delete it to restart from the beginning; finished photos are skipped.",
+  );
+export async function readCheckpointFile(file) {
+  let text;
   try {
-    return JSON.parse(await readFile(file, "utf8"));
+    text = await readFile(file, "utf8");
   } catch (error) {
     if (error?.code === "ENOENT") return null;
     throw error;
   }
+  let value;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    throw corruptCheckpoint(file);
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(value?.lastAssetId ?? "")) throw corruptCheckpoint(file);
+  return value;
 }
-async function writeCheckpointFile(file, value) {
+// Write a temp file and rename it, so an interrupted write never leaves a torn checkpoint.
+export async function writeCheckpointFile(file, value) {
   await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, JSON.stringify(value) + "\n");
+  const temp = file + ".tmp";
+  await writeFile(temp, JSON.stringify(value) + "\n");
+  await rename(temp, file);
 }
 async function connectNeon(databaseUrl) {
   const client = new Client({ connectionString: databaseUrl, connectionTimeoutMillis: 15000 });
@@ -244,13 +284,14 @@ async function connectNeon(databaseUrl) {
 async function main() {
   const env = process.env;
   try {
-    await runBackfill({
+    const result = await runBackfill({
       options: parseBackfillArgs(process.argv.slice(2)),
       env,
       connect: connectNeon,
       readCheckpoint: readCheckpointFile,
       writeCheckpoint: writeCheckpointFile,
     });
+    if (result?.exitCode) process.exitCode = result.exitCode;
   } catch (error) {
     console.error("backfill-remote-variants: " + redact(error?.message ?? error, env));
     process.exitCode = 1;

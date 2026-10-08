@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
+import path from "node:path";
 import test from "node:test";
-import { assertApplyTarget, parseBackfillArgs, runBackfill } from "./backfill-remote-variants.mjs";
+import { failureReason } from "../../src/lib/media/remote-variants.mjs";
+import {
+  assertApplyTarget,
+  parseBackfillArgs,
+  readCheckpointFile,
+  runBackfill,
+  writeCheckpointFile,
+} from "./backfill-remote-variants.mjs";
 
 const HOST = "ep-quiet-sky-a1b2c3.ap-southeast-1.aws.neon.tech";
 const DATABASE_URL = `postgres://owner:s3cret-pass@${HOST}/neondb?sslmode=require`;
@@ -22,6 +30,7 @@ test("backfill defaults to dry-run and bounds batch/checkpoint inputs", () => {
     limit: 50,
     checkpoint: ".cache/media-variant-backfill.json",
     confirmDbHost: null,
+    skipFailed: false,
   });
   assert.deepEqual(
     parseBackfillArgs([
@@ -30,8 +39,16 @@ test("backfill defaults to dry-run and bounds batch/checkpoint inputs", () => {
       "--checkpoint=.cache/test.json",
       `--confirm-db-host=${HOST}`,
     ]),
-    { apply: true, limit: 50, checkpoint: ".cache/test.json", confirmDbHost: HOST },
+    {
+      apply: true,
+      limit: 50,
+      checkpoint: ".cache/test.json",
+      confirmDbHost: HOST,
+      skipFailed: false,
+    },
   );
+  assert.equal(parseBackfillArgs(["--apply", "--skip-failed"]).skipFailed, true);
+  assert.equal(parseBackfillArgs(["--apply"]).skipFailed, false);
   for (const input of [
     ["--limit=0"],
     ["--limit=101"],
@@ -192,35 +209,134 @@ test("apply resumes from the checkpoint and saves it after every finished photo"
   for (const { statement } of h.statements) assert.match(statement.trimStart(), /^SELECT\b/i);
 });
 
-test("apply stops on the first failed photo, names it, and leaves the rest untouched", async () => {
-  for (const failure of ["failed-status", "throws"]) {
-    const ensured = [];
-    const h = harness({
-      rows: ids.map(candidate),
-      ensure: async (input) => {
-        ensured.push(input.assetId);
-        if (input.assetId === ids[1]) {
-          if (failure === "throws")
-            throw new Error(`Vercel Blob upload failed: 403 ${TOKEN} ${DATABASE_URL}`);
-          return { status: "failed", variants: [] };
-        }
-        return { status: "ready", variants: [{}] };
-      },
-    });
+const APPLY = ["--apply", `--confirm-db-host=${HOST}`];
+// The real ensureMediaVariants: Blob and save errors come back as status "failed" with
+// a log-safe reason; source errors (read, hash, decode, size) throw after the lookup.
+const failsAt = (failId, outcome) => async (input, ports) => {
+  await ports.find(input.assetId, input.sourceHash);
+  if (input.assetId === failId) {
+    if (outcome === "source") throw new Error(`Owned source read failed ${TOKEN}`);
+    return {
+      status: "failed",
+      variants: [],
+      reason: failureReason(new Error(`Vercel Blob upload failed: 403 ${DATABASE_URL}`)),
+    };
+  }
+  return { status: "ready", variants: [{}] };
+};
+function failHarness(ensure) {
+  const ensured = [];
+  const h = harness({ rows: ids.map(candidate) });
+  h.deps.ensure = async (input, ports) => {
+    ensured.push(input.assetId);
+    return ensure(input, ports);
+  };
+  h.deps.connect = async () => ({
+    query: async (statement) => {
+      h.statements.push({ statement });
+      if (/to_regclass/.test(statement)) return [{ ready: true }];
+      if (/count\(\*\)/.test(statement)) return [{ remaining: 3 }];
+      if (/media_variant_sets s JOIN/.test(statement)) return [];
+      return ids.map(candidate);
+    },
+    end: async () => {},
+  });
+  return { h, ensured };
+}
+
+test("apply stops on the first failed photo, shows the redacted reason, and leaves the rest untouched", async () => {
+  for (const argv of [APPLY, [...APPLY, "--skip-failed"]]) {
+    const { h, ensured } = failHarness(failsAt(ids[1], "write"));
     await assert.rejects(
-      runBackfill({
-        options: parseBackfillArgs(["--apply", `--confirm-db-host=${HOST}`]),
-        env: ENV,
-        ...h.deps,
-      }),
+      runBackfill({ options: parseBackfillArgs(argv), env: ENV, ...h.deps }),
       (error) => {
-        assert.match(error.message, new RegExp(ids[1]));
-        assert.doesNotMatch(error.message, /s3cret-pass|secret-token-value/);
+        assert.match(error.message, new RegExp("Stopped at asset " + ids[1]));
+        assert.match(error.message, /Vercel Blob upload failed: 403/);
+        assert.doesNotMatch(error.message, /s3cret-pass|secret-token-value|postgres:\/\//);
         return true;
       },
     );
     assert.deepEqual(ensured, ids.slice(0, 2));
     assert.deepEqual(h.checkpoints, [{ lastAssetId: ids[0] }]);
+  }
+});
+
+test("a source error stops the run by default", async () => {
+  const { h, ensured } = failHarness(failsAt(ids[1], "source"));
+  await assert.rejects(
+    runBackfill({ options: parseBackfillArgs(APPLY), env: ENV, ...h.deps }),
+    (error) => {
+      assert.match(error.message, /Stopped at asset .*Owned source read failed/);
+      assert.doesNotMatch(error.message, /secret-token-value/);
+      return true;
+    },
+  );
+  assert.deepEqual(ensured, ids.slice(0, 2));
+  assert.deepEqual(h.checkpoints, [{ lastAssetId: ids[0] }]);
+});
+
+test("--skip-failed passes a source error, advances the checkpoint and exits 1", async () => {
+  const { h, ensured } = failHarness(failsAt(ids[1], "source"));
+  const result = await runBackfill({
+    options: parseBackfillArgs([...APPLY, "--skip-failed"]),
+    env: ENV,
+    ...h.deps,
+  });
+  assert.deepEqual(ensured, ids);
+  assert.deepEqual(
+    h.checkpoints,
+    ids.map((lastAssetId) => ({ lastAssetId })),
+  );
+  assert.equal(result.exitCode, 1);
+  assert.deepEqual(
+    result.skipped.map((item) => item.id),
+    [ids[1]],
+  );
+  const lines = h.logs.map((line) => JSON.parse(line));
+  assert.deepEqual(lines[0].skipped, ids[1]);
+  assert.match(lines[0].reason, /Owned source read failed/);
+  const report = lines.at(-1);
+  assert.equal(report.ready, 2);
+  assert.deepEqual(
+    report.skipped.map((item) => item.id),
+    [ids[1]],
+  );
+  assert.doesNotMatch(h.logs.join("\n"), /secret-token-value|s3cret-pass/);
+});
+
+test("--skip-failed never skips a lookup or input error", async () => {
+  const { h } = failHarness(async () => {
+    throw new Error("connection reset during variant lookup");
+  });
+  await assert.rejects(
+    runBackfill({
+      options: parseBackfillArgs([...APPLY, "--skip-failed"]),
+      env: ENV,
+      ...h.deps,
+    }),
+    /Stopped at asset/,
+  );
+  assert.deepEqual(h.checkpoints, []);
+});
+
+test("checkpoint writes are atomic and a corrupt checkpoint says to delete it", async () => {
+  const { mkdtemp, readFile, readdir, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const dir = await mkdtemp(path.join(tmpdir(), "variant-backfill-"));
+  try {
+    const file = path.join(dir, "nested", "checkpoint.json");
+    assert.equal(await readCheckpointFile(file), null);
+    await writeCheckpointFile(file, { lastAssetId: ids[0] });
+    await writeCheckpointFile(file, { lastAssetId: ids[1] });
+    assert.deepEqual(await readCheckpointFile(file), { lastAssetId: ids[1] });
+    assert.deepEqual(await readdir(path.dirname(file)), ["checkpoint.json"]);
+    assert.equal(await readFile(file, "utf8"), JSON.stringify({ lastAssetId: ids[1] }) + "\n");
+    for (const torn of ['{"lastAssetId":"0000', '{"lastAssetId":"x"}']) {
+      await writeFile(file, torn);
+      await assert.rejects(readCheckpointFile(file), /unreadable\. Delete it to restart/);
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });
 

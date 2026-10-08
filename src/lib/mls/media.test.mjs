@@ -2337,6 +2337,15 @@ test("publish pipeline writes ready variants with no flag set", async () => {
     [160, 320, 640],
   );
   assert.equal(result.images[0], "https://owned.example/" + fixture.blobStore.puts[0].pathname);
+  // Only variant files opt in to overwrite; the original upload never does.
+  const [original, ...variants] = fixture.blobStore.puts;
+  assert.doesNotMatch(original.pathname, /^mls-variants\//);
+  assert.equal("allowOverwrite" in original, false);
+  assert.equal(variants.length, 3);
+  for (const put of variants) {
+    assert.match(put.pathname, /^mls-variants\//);
+    assert.equal(put.allowOverwrite, true);
+  }
 });
 
 test("variant upload or save failure never fails the import or drops the original photo", async () => {

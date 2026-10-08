@@ -62,7 +62,9 @@ Backfill existing photos (Owner action 5, production writes, owner only). On you
 1. `node scripts/media/backfill-remote-variants.mjs` (dry run, the default; SELECTs only) prints `dbHost`, `remaining`, `estimatedBlobWrites` (`remaining` x 5) and `estimatedStorageMb`. It stops with the migration name if `20260927172000_media_asset_variants` is not applied.
 2. Check those numbers against your Vercel Blob plan's monthly operation and storage limits on the Usage page. Each photo adds about 0.2 to 0.4 MB across its variants.
 3. `node scripts/media/backfill-remote-variants.mjs --apply --limit=50 --confirm-db-host=<host part of DATABASE_URL>`. The host must equal the `dbHost` the dry run printed, or the script refuses before any query. Repeat until `remaining` is 0. The checkpoint `.cache/media-variant-backfill.json` resumes where it stopped, a rerun skips finished photos, and the first failure stops the batch with the asset ID, without touching the original photo or any listing row.
-4. Spot check: a property page's `img` now has a `srcset`.
+   If a batch stops on a source error (`Owned source read failed`, `Image source hash mismatch`, `Invalid or oversized image`, a size limit), rerun the same command with `--skip-failed`. Skipped photos are logged with a reason, the run ends with exit code 1 and a `skipped` list, and you send those IDs to the developer. Write errors (Blob or save) still stop the run with their reason.
+4. Finish with one dry run on a fresh checkpoint: `node scripts/media/backfill-remote-variants.mjs --checkpoint=.cache/final-check.json`. Confirm `remaining` is 0. Anything left is a photo narrower than 160 px (no variants needed), a skipped photo, or one added during the backfill; rerun step 3 with that checkpoint for the last case.
+5. Spot check: a property page's `img` now has a `srcset`.
 
 Undo: none needed. Pages use the original URL whenever a variant set is missing. The script never prints `DATABASE_URL` or the Blob token, only the host.
 

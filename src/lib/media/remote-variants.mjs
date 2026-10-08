@@ -8,6 +8,15 @@ const MAX_SOURCE_BYTES = 16 * 1024 * 1024;
 const MAX_PIXELS = 20_000_000;
 const IMAGE_FORMATS = new Set(["jpeg", "png", "webp", "avif"]);
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+// A short, log-safe cause: no URL query strings, connection strings or Blob tokens.
+export function failureReason(error) {
+  return String(error?.message || "variant upload or save failed")
+    .replace(/\b(?:postgres(?:ql)?|mysql|redis):\/\/\S+/gi, "[redacted-url]")
+    .replace(/(https?:\/\/[^\s?#]+)[?#]\S*/gi, "$1")
+    .replace(/vercel_blob_rw_\S+/gi, "[redacted-token]")
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .slice(0, 200);
+}
 function sourceHost(sourceUrl, allowedHosts) {
   let url;
   try {
@@ -94,7 +103,14 @@ export async function ensureMediaVariants(input, ports) {
         "-" +
         width +
         ".webp";
-      const uploaded = await ports.put({ pathname, body, contentType: "image/webp" });
+      // Paths are keyed by content hash and width, so a retry after a half-written
+      // set may replace an identical earlier upload.
+      const uploaded = await ports.put({
+        pathname,
+        body,
+        contentType: "image/webp",
+        allowOverwrite: true,
+      });
       const url = new URL(uploaded?.url);
       if (
         uploaded?.pathname !== pathname ||
@@ -115,13 +131,14 @@ export async function ensureMediaVariants(input, ports) {
     };
     await ports.save(set);
     return set;
-  } catch {
+  } catch (error) {
     return {
       assetId: input.assetId,
       sourceHash: input.sourceHash,
       sourceUrl: input.sourceUrl,
       variants: [],
       status: "failed",
+      reason: failureReason(error),
     };
   }
 }
