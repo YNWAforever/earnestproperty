@@ -81,13 +81,13 @@ import {
   fetchFeaturedProperties,
   fetchFaqs,
   fetchListingCountsByEstate,
-  type CmsVideo,
   type EstateSummary,
   type FeaturedProperty,
   type FaqItem,
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
 import { getYouTubeVideoId, isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
+import { toHomeVideos, type HomeVideo } from "@/lib/home-videos.js";
 import { castlePeakRoadHomeFaqs } from "@/content/home-faq";
 import { jsonLdScript } from "@/lib/schema";
 import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
@@ -97,6 +97,9 @@ import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
 // the meta block — `new URL` keeps working if the asset ever moves to a CDN and
 // the import starts returning a full URL.
 const HERO_OG_IMAGE = new URL(heroImage, SITE_URL).href;
+
+// One row of three on desktop; more than that belongs on /videos.
+const HOME_VIDEO_COUNT = 3;
 
 export const Route = createFileRoute("/")({
   loader: async () => {
@@ -157,7 +160,21 @@ export const Route = createFileRoute("/")({
       corridorFaqs,
       counts: Object.fromEntries(counts),
       agents: agentProfiles.slice(0, 6),
-      cmsVideos,
+      // Three trimmed cards, not every channel video: YouTube descriptions were
+      // ~80 KB of the dehydrated loader data for a section that shows titles.
+      homeVideos: toHomeVideos(
+        featured
+          .filter((p: FeaturedProperty) => isYouTubeVideoUrl(p.video_url))
+          .map((p: FeaturedProperty) => ({
+            key: `listing-${p.id}`,
+            title: publicPropertyTitle(p),
+            url: p.video_url as string,
+            eyebrow: `${p.estates?.name_zh ?? "深井 / 青山公路"} · ${propertyDealLabel(p)}`,
+            listingNo: publicPropertyNo(p),
+          })),
+        cmsVideos,
+        HOME_VIDEO_COUNT,
+      ),
     };
   },
   errorComponent: ({ error }) => (
@@ -198,32 +215,6 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
-// One row of three on desktop; more than that belongs on /videos.
-const HOME_VIDEO_COUNT = 3;
-
-type HomeVideo = {
-  key: string;
-  title: string;
-  url: string;
-  eyebrow: string;
-  /** Set for listing walkthroughs, so the card can deep-link to the property. */
-  listingNo: string | null;
-};
-
-// Staff sometimes promote a listing's own walkthrough to the official channel,
-// so the same YouTube video can appear once via `featured` and once via
-// `cmsVideos` -- dedupe by video id (falling back to the raw URL for anything
-// that isn't a recognised YouTube link) before the section is capped to three.
-function dedupeVideosByUrl(videos: HomeVideo[]): HomeVideo[] {
-  const seen = new Set<string>();
-  return videos.filter((video) => {
-    const id = getYouTubeVideoId(video.url) ?? video.url;
-    if (seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
-}
-
 function HomePage() {
   const {
     estates,
@@ -234,7 +225,7 @@ function HomePage() {
     corridorFaqs: corridorFaqRows,
     counts,
     agents,
-    cmsVideos,
+    homeVideos,
   } = Route.useLoaderData();
   const faqs = renderableFaqs(faqRows as FaqItem[]);
   // The CMS wins when a 青山公路 scope exists; otherwise the derived set in
@@ -249,28 +240,6 @@ function HomePage() {
   const navigate = useNavigate({ from: "/" });
   const [searchType, setSearchType] = useState("sale");
   const [searchKeyword, setSearchKeyword] = useState("");
-
-  // 精選樓盤影片 prefers real listing walkthroughs (derived free from `featured`,
-  // which already selects video_url) and tops up from the curated channel videos,
-  // so the section stays populated whichever of the two the client has filled in.
-  const homeVideos: HomeVideo[] = dedupeVideosByUrl([
-    ...featured
-      .filter((p: FeaturedProperty) => isYouTubeVideoUrl(p.video_url))
-      .map((p: FeaturedProperty) => ({
-        key: `listing-${p.id}`,
-        title: publicPropertyTitle(p),
-        url: p.video_url as string,
-        eyebrow: `${p.estates?.name_zh ?? "深井 / 青山公路"} · ${propertyDealLabel(p)}`,
-        listingNo: publicPropertyNo(p),
-      })),
-    ...cmsVideos.map((video: CmsVideo) => ({
-      key: `cms-${video.id}`,
-      title: video.title || "晉誠地產 YouTube影片",
-      url: video.video_url,
-      eyebrow: "官方頻道",
-      listingNo: null,
-    })),
-  ]).slice(0, HOME_VIDEO_COUNT);
 
   function submitHeroSearch() {
     navigate({
@@ -451,7 +420,7 @@ function HomePage() {
       ) : null}
 
       {/* CORE ESTATES */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 defer-render">
         <SectionHeader title="深井核心屋苑" desc="紮根深井青山公路廿多年，每個屋苑我哋都非常熟悉" />
         <CoreEstateGrid
           estates={estates}
@@ -467,7 +436,7 @@ function HomePage() {
       </section>
 
       {/* CASTLE PEAK ROAD ESTATES */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 defer-render">
         <SectionHeader title="青山公路屋苑" desc="掃管笏、青山灣、小欖一帶屋苑，我哋同樣熟悉" />
         <CoreEstateGrid
           estates={castlePeakRoadDbEstates}
@@ -485,7 +454,7 @@ function HomePage() {
       </section>
 
       {/* WHY US */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 defer-render">
         <SectionHeader title="為何選晉誠" />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <Feature
@@ -512,7 +481,7 @@ function HomePage() {
       </section>
 
       {/* AGENT TEAM PREVIEW */}
-      <section className="bg-muted/40">
+      <section className="bg-muted/40 defer-render">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
             {/* No `desc` -- the tagline this used to carry ("熟悉深井、青山
@@ -575,7 +544,7 @@ function HomePage() {
       </section>
 
       {/* MARKET INFO */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 defer-render">
         <SectionHeader eyebrow="市場資訊" title="最新樓市動態" />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Feature
@@ -600,7 +569,7 @@ function HomePage() {
       </section>
 
       {/* ABOUT PREVIEW */}
-      <section className="border-y border-border bg-card">
+      <section className="border-y border-border bg-card defer-render">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
           <div>
             <div className="flex flex-wrap items-center gap-3">
@@ -630,7 +599,7 @@ function HomePage() {
       </section>
 
       {/* BRANCH NETWORK */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 defer-render">
         <SectionHeader eyebrow="分行網絡" title="我們的分行" desc="歡迎親臨門市傾盤。" />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {SITE_BRANCHES.map((branch) => {
@@ -681,7 +650,7 @@ function HomePage() {
 
       {/* FAQ */}
       {faqs.length > 0 && (
-        <section className="bg-card border-y border-border">
+        <section className="bg-card border-y border-border defer-render">
           <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
             <SectionHeader eyebrow="常見問題" title="深井買樓租樓 FAQ" />
             <Accordion type="single" collapsible className="mt-8">
@@ -704,7 +673,7 @@ function HomePage() {
           above. Its questions are deliberately different from
           castlePeakRoadHub.faqs, which /castle-peak-road already publishes. */}
       {corridorFaqs.length > 0 && (
-        <section className="border-b border-border">
+        <section className="border-b border-border defer-render">
           <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
             <SectionHeader eyebrow="常見問題" title="青山公路屋苑買樓租樓 FAQ" />
             <Accordion type="single" collapsible className="mt-8">
@@ -760,7 +729,7 @@ function HomePage() {
       />
 
       {/* CTA BAND */}
-      <section className="border-y border-border bg-card">
+      <section className="border-y border-border bg-card defer-render">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-4 py-14 text-center sm:px-6 lg:flex-row lg:justify-between lg:text-left lg:px-8">
           <div>
             <h2 className="text-2xl font-bold text-foreground sm:text-3xl">

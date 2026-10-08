@@ -343,3 +343,23 @@ test("the footer year cannot cause a hydration mismatch on a cached page", async
   assert.match(footer, /timeZone: "Asia\/Hong_Kong", year: "numeric"/);
   assert.match(footer, /key=\{mounted \? "client" : "server"\} suppressHydrationWarning/);
 });
+
+test("the loader returns homeVideos and never cmsVideos", () => {
+  const loaderAll = source.slice(source.indexOf("loader:"), source.indexOf("errorComponent"));
+  const loader = loaderAll.slice(loaderAll.lastIndexOf("return {"));
+  assert.match(loader, /homeVideos/);
+  assert.doesNotMatch(loader, /^ {6}cmsVideos\b/m);
+  assert.doesNotMatch(source.slice(source.indexOf("function HomePage")), /cmsVideos/);
+});
+
+test("hero, 最新放盤 and 精選樓盤影片 sections are not deferred", () => {
+  const start = source.indexOf("function HomePage");
+  const body = source.slice(start);
+  const cut = body.indexOf("{/* CORE ESTATES */}");
+  assert.ok(cut > 0);
+  assert.doesNotMatch(body.slice(0, cut), /defer-render/);
+  const rest = body.slice(cut);
+  const sections = rest.match(/<section\b[^>]*>/g) ?? [];
+  assert.ok(sections.length >= 10);
+  for (const tag of sections) assert.match(tag, /defer-render/);
+});

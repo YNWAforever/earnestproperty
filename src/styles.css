@@ -225,3 +225,11 @@
     }
   }
 }
+
+/* FX-15 F-11: skip layout and paint for below-fold home sections until they
+   near the viewport. Content stays in the SSR HTML (SEO), and `auto` remembers
+   the real height after first render, so scrolling does not jump. */
+@utility defer-render {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 900px;
+}

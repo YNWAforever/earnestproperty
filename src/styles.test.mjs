@@ -85,3 +85,11 @@ test("variable Noto faces cover all existing weights with local files and matchi
     "5.3.0",
   );
 });
+
+test("defer-render uses content-visibility auto with a remembered intrinsic size", () => {
+  const css = read("src/styles.css");
+  const block = css.match(/@utility defer-render\s*\{([^}]*)\}/);
+  assert.ok(block, "expected an @utility defer-render block");
+  assert.match(block[1], /content-visibility:\s*auto/);
+  assert.match(block[1], /contain-intrinsic-size:\s*auto\s+\d+px/);
+});
