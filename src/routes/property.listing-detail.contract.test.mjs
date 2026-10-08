@@ -113,7 +113,7 @@ function buildLoader() {
   const snippet = `
 ${unavailableMatch[0]}
 async function loader(params, deps) {
-  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches, resolveWhatsappLinks = async()=>({enabled:false,links:[],fallbackHref:null,actions:[]}), activePropertyOfferings = p=>p.offerings??[p], publicPropertyNo=p=>p.public_listing_no??p.listing_no, publicPropertyTitle=p=>p.title_zh??"", sanitizeListingText=s=>s, resolvePublicWaAction=offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}), resolveWebsiteActions=offers=>({actions:offers.map(offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}))}) } = deps;
+  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches, resolveWhatsappLinks = async()=>({enabled:false,links:[],fallbackHref:null,actions:[]}), activePropertyOfferings = p=>p.offerings??[p], publicPropertyNo=p=>p.public_listing_no??p.listing_no, publicPropertyTitle=p=>p.title_zh??"", sanitizeListingText=s=>s, resolvePublicWaAction=offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}), resolveWebsiteActions=offers=>({actions:offers.map(offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}))}), resolveOldSearchCode = () => null } = deps;
   const SITE_CONTACT = { whatsappPhone: "" };
   ${body}
 }
@@ -251,6 +251,25 @@ test("loader: offline/inactive/draft (and a missing listing_no) throw notFound b
     caught = err;
   }
   assert.equal(caught, NOT_FOUND);
+});
+
+// FX-13 Task 2: old-site search codes (/property/b<estate>$) are tried only
+// after the real lookup misses, so a real number such as B054645 is never caught.
+test("old search code is checked only after the listing lookup misses", () => {
+  const loaderStart = routeSource.indexOf("loader: async ({ params }) => {");
+  assert.ok(loaderStart !== -1, "expected the route loader");
+  const lookupIdx = routeSource.indexOf("fetchPropertyByListingNo(params.listingNo)", loaderStart);
+  const resolveIdx = routeSource.indexOf("resolveOldSearchCode(params.listingNo)", loaderStart);
+  assert.ok(lookupIdx !== -1, "expected the listing lookup in the loader");
+  assert.ok(resolveIdx !== -1, "expected resolveOldSearchCode(params.listingNo) in the loader");
+  assert.ok(resolveIdx > lookupIdx, "the old search code must be checked after the lookup");
+  const missIdx = routeSource.lastIndexOf("if (!property) {", resolveIdx);
+  assert.ok(missIdx > lookupIdx, "resolveOldSearchCode must sit inside if (!property)");
+  assert.doesNotMatch(
+    routeSource.slice(missIdx, resolveIdx),
+    /}/,
+    "resolveOldSearchCode must be inside the if (!property) block, not after it",
+  );
 });
 
 // --- head(): noindex only for sold/rented --------------------------------

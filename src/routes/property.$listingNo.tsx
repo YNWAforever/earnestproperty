@@ -77,6 +77,7 @@ import { getPropertyDecision } from "@/components/property/property-decision.js"
 import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
 import { resolveEstateTransport } from "@/content/estate-pages";
 import { listingSeo } from "@/lib/listing-seo";
+import { resolveOldSearchCode } from "@/lib/old-search-code";
 import { jsonLdScript } from "@/lib/schema";
 import { shareUrl } from "@/lib/share";
 import { useFavourite } from "@/lib/saved-listings";
@@ -136,6 +137,12 @@ export const Route = createFileRoute("/property/$listingNo")({
   validateSearch: z.object({ deal: z.enum(["sale", "rent"]).optional() }),
   loader: async ({ params }) => {
     const property = await fetchPropertyByListingNo(params.listingNo);
+    // Old-site search URLs (/property/b<estate>$) are tried only after the real
+    // lookup misses, so a real listing number is never mistaken for one.
+    if (!property) {
+      const legacy = resolveOldSearchCode(params.listingNo);
+      if (legacy) throw redirect({ href: legacy.href, statusCode: legacy.status });
+    }
     // offline/inactive/draft never was, or no longer is, genuinely public --
     // treat identically to a listing_no that doesn't exist. sold/rented falls
     // through to the normal branch below and gets its own real state.

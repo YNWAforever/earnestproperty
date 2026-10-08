@@ -91,23 +91,40 @@ export const config: VercelConfig = {
     redirectEntry("/eng/", "/", true),
     redirectEntry("/profile.php", "/about", true),
     redirectEntry("/contactus.php", "/contact", true),
-    redirectEntry("/property", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/c1", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/c1/", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/c2", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/c2/", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/c5", "/listings?deal=rent&page=1", true),
-    redirectEntry("/property/c5/", "/listings?deal=rent&page=1", true),
+    redirectEntry("/property", "/listings", true),
+    redirectEntry("/property/", "/listings", true),
+    redirectEntry("/property/c1", "/listings", true),
+    redirectEntry("/property/c1/", "/listings", true),
+    redirectEntry("/property/c2", "/listings", true),
+    redirectEntry("/property/c2/", "/listings", true),
+    redirectEntry("/property/c5", "/listings?deal=rent", true),
+    redirectEntry("/property/c5/", "/listings?deal=rent", true),
     redirectEntry("/listprop.php", "/contact", true),
     redirectEntry("/companynews.php", "/blog", true),
     redirectEntry("/news_content.php", "/blog", true),
-    redirectEntry("/mortgage.php", "/contact", true),
+    redirectEntry("/mortgage.php", "/mortgage", true),
     redirectEntry("/mortgage_rate.php", "/contact", true),
     redirectEntry("/school.php", "/blog", true),
     redirectEntry("/bankval.php", "/contact", true),
     redirectEntry("/unlucky.php", "/blog", true),
     redirectEntry("/tran_trends.php", "/blog", true),
+    // L-04 (audit :150): old-site 404s, 24 h counts in brackets.
+    redirectEntry("/info_gallery.php", "/listings", true), // 707
+    redirectEntry("/vr.php", "/listings", true), // 52
+    redirectEntry("/qrcode_page.php", "/contact", true), // 590 -- Open question 1
+    redirectEntry("/eng/special_prop_st.php", "/listings", true), // 987 incl. variants
+    redirectEntry("/seccode_enquiry/seccode.php", "/contact", true), // 209 incl. /eng
+    redirectEntry("/unlucky_detail.php", "/blog", true), // 64, same target as /unlucky.php
+    // Detail pages go through the legacy-id resolver (src/routes/property-detail.$file.ts),
+    // temporary because the final page depends on properties.legacy_detail_id.
+    redirectEntry("/special_prop_detail.php", "/property-detail/:legacyId.html", false, {
+      has: [{ type: "query", key: "id", value: "(?<legacyId>\\d+)" }],
+    }),
+    redirectEntry("/special_prop_detail.php", "/listings", true), // 189 incl. the above
+    redirectEntry("/m/property_detail.php", "/property-detail/:legacyId.html", false, {
+      has: [{ type: "query", key: "id", value: "(?<legacyId>\\d+)" }],
+    }),
+    redirectEntry("/m/property_detail.php", "/listings", true), // 14
   ],
 };
 

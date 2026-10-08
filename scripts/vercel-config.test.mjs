@@ -288,3 +288,165 @@ test("the opt-in flag is gone", () => {
 test("the host rule is first", () => {
   assert.equal(loadRedirects(PROD)[0].has?.[0]?.type, "host");
 });
+
+// --- FX-13 Task 2 (L-04): legacy old-site redirects -------------------------
+
+const WWW_HOST = "www.earnestproperty.com";
+
+// The audit's 24 h 404 list (audit :150). Counts are the audit's, per path.
+// No Vercel 404 export was available, so no .json/uppercase variants and no
+// /eng seccode path are added: only what the audit shows.
+const LEGACY_404_PATHS = [
+  "/info_gallery.php", // 707
+  "/qrcode_page.php", // 590
+  "/eng/special_prop_st.php", // 987 incl. variants
+  "/special_prop_detail.php", // 189
+  "/seccode_enquiry/seccode.php", // 209 incl. /eng
+  "/unlucky_detail.php", // 64
+  "/vr.php", // 52
+  "/m/property_detail.php", // 14
+];
+
+function nonHostRules(redirects) {
+  return redirects.filter((redirect) => !redirect.has?.some((h) => h.type === "host"));
+}
+
+// "/castle-peak-road/$segment" -> /^\/castle-peak-road\/[^/]+$/
+function fileRoutePatterns() {
+  const source = readFileSync("src/routeTree.gen.ts", "utf8");
+  const paths = new Set([...source.matchAll(/fullPath: '([^']+)'/g)].map((m) => m[1]));
+  return [...paths].map((path) => {
+    const pattern = path
+      .split("/")
+      .map((segment) =>
+        segment.startsWith("$") ? "[^/]+" : segment.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      )
+      .join("/");
+    return { path, regex: new RegExp(`^${pattern}$`) };
+  });
+}
+
+async function estateHasPage(slug) {
+  const { getEstateEntry } = await import("../src/content/estate-registry.ts");
+  try {
+    return getEstateEntry(slug).hasPage;
+  } catch {
+    return false;
+  }
+}
+
+test("every legacy path in the 24h 404 list has a redirect", () => {
+  const rules = nonHostRules(loadRedirects(PROD));
+  for (const path of LEGACY_404_PATHS) {
+    assert.notEqual(match(rules, { host: WWW_HOST, path }), null, `${path} must redirect`);
+    assert.notEqual(
+      match(loadRedirects(PROD), { host: WWW_HOST, path }),
+      null,
+      `${path} on ${WWW_HOST} must redirect`,
+    );
+  }
+  // The id rides along as a query: Vercel passes the request query through to a
+  // destination that has none, and the /property-detail resolver ignores it.
+  assert.deepEqual(
+    match(rules, { host: WWW_HOST, path: "/special_prop_detail.php", query: { id: "6621030" } }),
+    { status: 307, location: "/property-detail/6621030.html?id=6621030" },
+  );
+  assert.deepEqual(match(rules, { host: WWW_HOST, path: "/special_prop_detail.php" }), {
+    status: 308,
+    location: "/listings",
+  });
+  assert.deepEqual(
+    match(rules, { host: WWW_HOST, path: "/m/property_detail.php", query: { id: "6621030" } }),
+    { status: 307, location: "/property-detail/6621030.html?id=6621030" },
+  );
+  assert.deepEqual(match(rules, { host: WWW_HOST, path: "/m/property_detail.php" }), {
+    status: 308,
+    location: "/listings",
+  });
+  // A non-numeric id is not a legacy id: the permanent fallback takes it.
+  assert.equal(
+    match(rules, { host: WWW_HOST, path: "/special_prop_detail.php", query: { id: "abc" } })
+      ?.status,
+    308,
+  );
+});
+
+test("every redirect destination is an existing route", async () => {
+  const routes = fileRoutePatterns();
+  const rules = nonHostRules(loadRedirects(PROD));
+  assert.ok(rules.length > 20);
+  for (const rule of rules) {
+    const path = rule.destination.split("?")[0];
+    if (path === "/") continue;
+    if (path === "/property-detail/:oldId.html" || path === "/property-detail/:legacyId.html") {
+      assert.ok(routes.some((route) => route.path === "/property-detail/$file"));
+      continue;
+    }
+    const estate = /^\/estate\/([^/]+)$/.exec(path);
+    if (estate) {
+      assert.ok(await estateHasPage(estate[1]), `${rule.source} -> ${path}: estate has no page`);
+      continue;
+    }
+    const segment = /^\/castle-peak-road\/([^/]+)$/.exec(path);
+    if (segment) {
+      const { getCastlePeakRoadSegment } = await import("../src/content/castle-peak-road.ts");
+      assert.ok(getCastlePeakRoadSegment(segment[1]), `${rule.source} -> ${path}: unknown segment`);
+      continue;
+    }
+    assert.ok(
+      routes.some((route) => !route.path.includes("$") && route.regex.test(path)),
+      `${rule.source} -> ${rule.destination}: no file route for ${path}`,
+    );
+  }
+});
+
+test("legacy redirects have no duplicate sources and no chains", () => {
+  const rules = nonHostRules(loadRedirects(PROD));
+  const keys = rules.map((rule) => rule.source + JSON.stringify(rule.has ?? []));
+  assert.equal(new Set(keys).size, keys.length, "duplicate source + has");
+  for (const rule of rules) {
+    const [path, search = ""] = rule.destination.split("?");
+    // /property-detail/:oldId.html is an app route, not a vercel rule.
+    if (path.startsWith("/property-detail/")) {
+      assert.ok(!rules.some((other) => other.source.startsWith("/property-detail/")));
+      continue;
+    }
+    for (const other of rules) {
+      if (other === rule || other.has) continue;
+      assert.notEqual(path, other.source, `${rule.source} -> ${path} chains into ${other.source}`);
+    }
+    const query = Object.fromEntries(new URLSearchParams(search));
+    const next = match(
+      rules.filter((other) => other !== rule),
+      { host: WWW_HOST, path, query },
+    );
+    assert.equal(next, null, `${rule.source} -> ${rule.destination} redirects again`);
+  }
+});
+
+test("old /property redirects point at the bare listings URL", () => {
+  const rules = nonHostRules(loadRedirects(PROD));
+  for (const rule of rules) {
+    assert.doesNotMatch(rule.destination, /deal=all/, rule.source);
+    assert.doesNotMatch(rule.destination, /page=1/, rule.source);
+  }
+  for (const path of ["/property", "/property/", "/property/c1", "/property/c1/", "/property/c2"]) {
+    assert.deepEqual(match(rules, { host: WWW_HOST, path }), {
+      status: 308,
+      location: "/listings",
+    });
+  }
+  for (const path of ["/property/c5", "/property/c5/"]) {
+    assert.deepEqual(match(rules, { host: WWW_HOST, path }), {
+      status: 308,
+      location: "/listings?deal=rent",
+    });
+  }
+});
+
+test("mortgage.php reaches the mortgage page", () => {
+  assert.deepEqual(match(loadRedirects(PROD), { host: WWW_HOST, path: "/mortgage.php" }), {
+    status: 308,
+    location: "/mortgage",
+  });
+});
