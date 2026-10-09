@@ -507,7 +507,7 @@ function PropertyPage() {
         : null;
 
   return (
-    <Container className="py-8 pb-32 lg:pb-8">
+    <Container className="py-8">
       {/* Breadcrumb + actions */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Breadcrumbs

@@ -144,14 +144,19 @@ function RootComponent() {
   const showLiveAgentWidget = isPublicWidgetPath(location.pathname);
   const showStickyWhatsAppBar = shouldShowStickyWhatsAppBar(location.pathname);
   const showSiteChrome = isPublicSitePath(location.pathname);
+  // Wherever a mobile bottom bar exists (the generic sticky bar, or the property
+  // page's own), the launcher docks into its right slot as a 44x44 icon.
+  const dockLauncher = showStickyWhatsAppBar || location.pathname.startsWith("/property/");
 
   const content = (
     <>
-      {/* The sticky WhatsApp bar is `fixed` at bottom-16 (above the 問樓助手
-          bubble) and ~52px tall, so the page needs ~116px reserved -- pb-16
-          only cleared the offset, leaving the footer's last lines under the
-          bar with no way to scroll past it. */}
-      <div className={`flex min-h-screen flex-col ${showStickyWhatsAppBar ? "pb-32 lg:pb-0" : ""}`}>
+      {/* Both mobile bars are `fixed` at bottom-0 and 61px tall (1px border +
+          8px + 44px link + 8px) plus the safe-area inset, so the page reserves
+          exactly that; otherwise the footer's last links (and on /property/*
+          the whole footer bottom) sit under the bar with no way to scroll clear. */}
+      <div
+        className={`flex min-h-screen flex-col ${dockLauncher ? "pb-[calc(3.8125rem+env(safe-area-inset-bottom))] lg:pb-0" : ""}`}
+      >
         {showSiteChrome && (
           <script
             type="application/ld+json"
@@ -167,7 +172,7 @@ function RootComponent() {
         {showSiteChrome ? <SiteFooter /> : null}
       </div>
       {showStickyWhatsAppBar ? <StickyWhatsAppBar /> : null}
-      {showLiveAgentWidget ? <LiveAgentLauncher /> : null}
+      {showLiveAgentWidget ? <LiveAgentLauncher docked={dockLauncher} /> : null}
       {!isAnalyticsPrivatePath(location.pathname) ? (
         <AnalyticsProvider pathname={location.pathname} documentIsolationApproved />
       ) : null}

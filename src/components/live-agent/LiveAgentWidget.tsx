@@ -13,6 +13,11 @@ import {
 } from "@/lib/ai/live-agent";
 import { isInternalCardHref, type LiveAgentCard } from "@/lib/ai/live-agent-reply";
 
+import {
+  liveAgentTriggerClass,
+  liveAgentTriggerIconClass,
+  liveAgentTriggerLabelClass,
+} from "./live-agent-trigger";
 import { nextHandoffOffered, readLiveAgentMessageResponse } from "./live-agent-widget-state";
 
 const liveAgentEndpoints = {
@@ -143,7 +148,11 @@ export function LiveAgentReplyCards({ cards }: { cards: LiveAgentCard[] }) {
   );
 }
 
-export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boolean } = {}) {
+export function LiveAgentWidget({
+  initiallyOpen = false,
+  docked = false,
+  triggerClassName = liveAgentTriggerClass(docked),
+}: { initiallyOpen?: boolean; docked?: boolean; triggerClassName?: string } = {}) {
   const [open, setOpen] = useState(initiallyOpen);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [accessToken, setAccessToken] = useState<string | null>(null);
@@ -279,12 +288,9 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen} modal={false}>
       <DialogPrimitive.Trigger asChild>
-        <Button
-          className="fixed bottom-4 right-4 z-50 h-11 rounded-full px-4 shadow-lg sm:bottom-5 sm:right-5"
-          type="button"
-        >
-          <MessageCircle className="mr-2 h-5 w-5" />
-          問樓助手
+        <Button aria-label="問樓助手" className={triggerClassName} type="button">
+          <MessageCircle className={liveAgentTriggerIconClass(docked)} />
+          <span className={liveAgentTriggerLabelClass(docked)}>問樓助手</span>
         </Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>

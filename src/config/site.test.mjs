@@ -185,11 +185,6 @@ test("a sticky mobile WhatsApp bar is mounted site-wide, suppressed where a page
   assert.match(bar, /whatsappUrl\(/);
   assert.match(
     bar,
-    /bottom-16/,
-    "must sit above the 問樓助手 bubble (fixed at bottom-4/5), not on top of it",
-  );
-  assert.match(
-    bar,
     /lg:hidden/,
     "desktop already has the header WhatsApp button and mega-menu CTA",
   );
@@ -205,11 +200,50 @@ test("a sticky mobile WhatsApp bar is mounted site-wide, suppressed where a page
   // showing both would duplicate the CTA.
   assert.match(root, /pathname\.startsWith\("\/property\/"\)/);
   assert.match(root, /"\/admin", "\/auth", "\/account", "\/dashboard"/);
-  // The bar is `fixed`, so a page needs bottom padding reserved or its own
-  // last content (e.g. footer) sits underneath it with no way to scroll clear.
-  // pb-16 only matched the bar's bottom-16 offset and left the bar's own
-  // ~52px height covering the footer; the reservation must clear both.
-  assert.match(root, /showStickyWhatsAppBar \? "pb-32 lg:pb-0" : ""/);
+});
+
+// FX-16 F-07: the bar floated at bottom-16 above a separate 問樓助手 pill,
+// 121 px of chrome (15 % of a 375x812 screen) over hero and empty-search CTAs.
+test("the sticky bar sits at bottom-0 on the safe area and reserves the launcher slot", () => {
+  const bar = readFileSync("src/components/site/StickyWhatsAppBar.tsx", "utf8");
+  const aside = bar.match(/<aside[\s\S]*?className="([^"]*)"/)?.[1] ?? "";
+  assert.match(aside, /fixed inset-x-0 bottom-0/, "the bar must touch the viewport bottom");
+  assert.doesNotMatch(bar, /bottom-16/);
+  assert.match(
+    aside,
+    /pb-\[calc\(0\.5rem\+env\(safe-area-inset-bottom\)\)\]/,
+    "the home indicator must not sit on the link",
+  );
+  assert.match(aside, /pr-\[3\.75rem\]/, "44 px icon + 12 px edge + 4 px gap for the chat icon");
+  assert.match(aside, /lg:hidden/, "desktop already has the header WhatsApp button");
+  assert.match(bar, /min-h-11/, "the WhatsApp link must be a 44 px tap target");
+});
+
+test("the root reserves the bar height and docks the launcher wherever a mobile bar exists", () => {
+  const root = readFileSync("src/routes/__root.tsx", "utf8");
+  // 61 px = 1 px border + 8 px + 44 px link + 8 px; the e2e spec measures it.
+  assert.match(
+    root,
+    /const dockLauncher = showStickyWhatsAppBar \|\| location\.pathname\.startsWith\("\/property\/"\);/,
+  );
+  assert.match(root, /<LiveAgentLauncher docked=\{dockLauncher\} \/>/);
+  // The bar is `fixed`, so the page reserves exactly its height or the footer's
+  // last links sit underneath it with no way to scroll clear. This includes
+  // /property/*, whose own bar would otherwise cover the site footer.
+  assert.match(
+    root,
+    /dockLauncher \? "pb-\[calc\(3\.8125rem\+env\(safe-area-inset-bottom\)\)\] lg:pb-0" : ""/,
+  );
+  assert.doesNotMatch(root, /pb-32/);
+
+  const launcher = readFileSync("src/components/live-agent/LiveAgentLauncher.tsx", "utf8");
+  const trigger = readFileSync("src/components/live-agent/live-agent-trigger.ts", "utf8");
+  // lg+ keeps today's floating pill byte for byte; only phones get the 44x44 icon.
+  assert.match(
+    trigger,
+    /"fixed bottom-4 right-4 z-50 h-11 rounded-full px-4 shadow-lg sm:bottom-5 sm:right-5"/,
+  );
+  assert.match(launcher, /aria-label="問樓助手"/);
 });
 
 test("homepage and navigation include Ting Kau content entry points", () => {

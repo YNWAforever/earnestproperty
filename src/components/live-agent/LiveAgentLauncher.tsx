@@ -1,19 +1,36 @@
 import { useState, useEffect, type ComponentType } from "react";
 import { MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-export function LiveAgentLauncher() {
-  const [Widget, setWidget] = useState<ComponentType<{ initiallyOpen?: boolean }> | null>(null);
+
+import {
+  liveAgentTriggerClass,
+  liveAgentTriggerIconClass,
+  liveAgentTriggerLabelClass,
+} from "./live-agent-trigger";
+
+type LiveAgentWidgetProps = {
+  initiallyOpen?: boolean;
+  docked?: boolean;
+  triggerClassName?: string;
+};
+
+export function LiveAgentLauncher({ docked = false }: { docked?: boolean } = {}) {
+  const [Widget, setWidget] = useState<ComponentType<LiveAgentWidgetProps> | null>(null);
   const [ready, setReady] = useState(false);
   useEffect(() => setReady(true), []);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  if (Widget) return <Widget initiallyOpen />;
+  if (Widget) {
+    return (
+      <Widget initiallyOpen docked={docked} triggerClassName={liveAgentTriggerClass(docked)} />
+    );
+  }
   return (
     <Button
       type="button"
       disabled={loading || !ready}
       aria-label="問樓助手"
-      className="fixed bottom-4 right-4 z-50 h-11 rounded-full px-4 shadow-lg sm:bottom-5 sm:right-5"
+      className={liveAgentTriggerClass(docked)}
       onClick={async () => {
         setLoading(true);
         setFailed(false);
@@ -27,8 +44,10 @@ export function LiveAgentLauncher() {
         }
       }}
     >
-      <MessageCircle className="mr-2 h-5 w-5" />
-      {loading ? "載入中…" : failed ? "重試問樓助手" : "問樓助手"}
+      <MessageCircle className={liveAgentTriggerIconClass(docked)} />
+      <span className={liveAgentTriggerLabelClass(docked)}>
+        {loading ? "載入中…" : failed ? "重試問樓助手" : "問樓助手"}
+      </span>
     </Button>
   );
 }

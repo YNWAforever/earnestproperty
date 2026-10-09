@@ -191,6 +191,14 @@
     border-color: var(--color-border);
   }
 
+  /* FX-16 F-07: a focused field or an in-page anchor scrolls clear of the
+     fixed mobile action bar instead of landing underneath it. */
+  @media (width < 64rem) {
+    html:has([data-sticky-whatsapp-bar], [data-property-mobile-actions]) {
+      scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+    }
+  }
+
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
