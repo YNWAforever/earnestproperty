@@ -1,3 +1,4 @@
+import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import {
   type FormEvent,
@@ -138,32 +139,6 @@ const campaignStatusLabels: Record<string, string> = {
   cancelled: "已取消",
 };
 
-/** Server refusal codes on this screen, as staff copy. Existing page strings
- * are reused where one already says the same thing. */
-const campaignErrorLabels: Record<string, string> = {
-  NOTHING_TO_RETRY: "沒有可重新發送的失敗收件人，請重新整理。",
-  // A stale 發送中 row with no live job also keeps a campaign busy (FX-10b
-  // Task 3 review M2), so staff are told where to look if it never clears.
-  CAMPAIGN_STILL_SENDING:
-    "Campaign 仍在發送中，請待發送完成或暫停後再試。如長時間仍顯示此訊息，請到「系統營運」核對發送工作。",
-  CAMPAIGN_NOT_RETRYABLE: "此 Campaign 目前的狀態不可重新發送。",
-  CAMPAIGN_HAS_DELIVERY_HISTORY:
-    "此 Campaign 已開始發送，不可更改範本或收件群組；如需不同內容，請建立新 Campaign。",
-  "Campaign not found": "找不到此 campaign，請重新整理後再試",
-  "Not found": "找不到此 campaign，請重新整理後再試",
-  RETRY_COUNT_CHANGED: "可重新發送的人數已改變，未有重新排入任何人。請核對最新數字後再確認。",
-  TEMPLATE_NOT_ACTIVE: "範本未核准或無法讀取，請先核實",
-  NO_ELIGIBLE_RECIPIENTS: "收件人預覽已過期或沒有合資格收件人，請重新預覽",
-  INVALID_CAMPAIGN_STATUS: "目前 Campaign 狀態不能加入發送佇列",
-  CAMPAIGN_NOT_ELIGIBLE: "目前 Campaign 狀態不能加入發送佇列",
-  AUDIENCE_NOT_FOUND: "此 campaign 未設定收件群組",
-  CAMPAIGN_CANCEL_NOT_ELIGIBLE: "此 Campaign 目前的狀態不可取消，請重新整理。",
-  // FX-10b final fix wave: the 發送… approval count and the finish action.
-  SEND_COUNT_CHANGED: "尚待發送人數已改變，未有加入發送佇列。請核對最新數字後再確認。",
-  CAMPAIGN_NOT_FINISHABLE: "此 Campaign 目前的狀態不可結束，請重新整理。",
-  CAMPAIGN_HAS_SENDABLE: "仍有尚待發送的收件人，請按「發送…」發送，或重新整理。",
-  FINISH_STATE_CHANGED: "Campaign 資料剛有變更，未有結束。請核對最新數字後再試。",
-};
 const RETRY_PREVIEW_ERROR = "未能讀取重新發送資料，請稍後再試。";
 const SEND_PREVIEW_ERROR = "未能讀取尚待發送人數，請稍後再試。";
 /** A lost or unreadable re-queue response: the outcome is unknown, never success. */
@@ -532,7 +507,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       toast.success(isUpdate ? "Campaign 已儲存" : "Campaign 已新增");
     } catch (err) {
       if (!isWorkspaceCurrent()) return;
-      toast.error(staffErrorText(err, campaignErrorText(errorText(err))));
+      toast.error(staffErrorText(err, campaignErrorText(errorCode(err))));
     } finally {
       if (isWorkspaceCurrent()) {
         setSaving(false);
@@ -935,7 +910,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       setConfirmError(
         cancelReadbackRef.current
           ? `取消結果未能確認，請先查回原 Campaign 狀態。${knownCampaignErrorText(err)}`
-          : campaignErrorText(errorText(err)),
+          : campaignErrorText(errorCode(err)),
       );
     } finally {
       cancellingRef.current = false;
@@ -2541,7 +2516,7 @@ function RetryConfirmationDetails({
         ) : null}
       </dl>
       {preview.retryable <= 0 ? (
-        <p className="text-sm text-muted-foreground">{campaignErrorLabels.NOTHING_TO_RETRY}</p>
+        <p className="text-sm text-muted-foreground">{ADMIN_ERROR_CODES.NOTHING_TO_RETRY}</p>
       ) : null}
       {preview.unknownTotal > 0 ? (
         <div className="rounded-md border border-destructive/30 p-3 text-sm">
@@ -2692,13 +2667,15 @@ function assertNoServerError(result: unknown) {
 
 /** Staff copy for a server code; never the raw code itself. */
 function campaignErrorText(code: string) {
-  return campaignErrorLabels[code] ?? "操作失敗，請重試。";
+  if (code === "Not found") return "找不到此 campaign，請重新整理後再試";
+  return ADMIN_ERROR_CODES[code] ?? "操作失敗，請重試。";
 }
 
 /** Staff copy for a known code inside an error, or "" so callers that add it
  * to an "outcome unknown" sentence never append a contradicting fallback. */
 function knownCampaignErrorText(error: unknown) {
-  return campaignErrorLabels[errorText(error)] ?? "";
+  const code = errorCode(error);
+  return code === "Not found" ? "" : (ADMIN_ERROR_CODES[code] ?? "");
 }
 
 /** 401 and 403 are definite refusals with their own copy (the wording used
@@ -2710,8 +2687,13 @@ function staffErrorText(error: unknown, fallback: string) {
   return fallback;
 }
 
-function errorText(error: unknown) {
+/** The raw server code, for the lookups below that key on it. */
+function errorCode(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   return String(error);
+}
+
+function errorText(error: unknown) {
+  return adminErrorMessage(error);
 }

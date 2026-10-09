@@ -1,3 +1,4 @@
+import { adminErrorMessage } from "@/components/admin/admin-error-text";
 import {
   type ReactNode,
   useCallback,
@@ -2029,7 +2030,9 @@ function assertNoMutationError(result: unknown) {
 }
 
 function errorText(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return String(error);
+  // Bulk codes stay raw: the caller maps them through bulkErrorLabels.
+  const raw = error instanceof Error ? error.message : error;
+  if (typeof raw === "string" && Object.prototype.hasOwnProperty.call(bulkErrorLabels, raw))
+    return raw;
+  return adminErrorMessage(error);
 }

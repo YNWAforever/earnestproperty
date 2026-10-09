@@ -1,3 +1,4 @@
+import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
 import { cmsEditorHasChanges } from "@/components/admin/cms-editor-state";
 import { CmsDistrictField, CmsImageField } from "@/components/admin/CmsEditorFields";
 import { uploadAdminMedia } from "@/lib/admin/media-upload";
@@ -3147,21 +3148,11 @@ function assertNoServerError(result: unknown) {
 }
 
 function errorText(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return "操作失敗，請稍後再試";
+  return adminErrorMessage(error, "操作失敗，請稍後再試");
 }
 
-const CMS_ERROR_MESSAGES: Record<string, string> = {
-  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新。本機修改已保留，請使用比較目前發布版本。",
-  CMS_REVISION_NOT_FOUND: "找不到此版本，可能已被更新，請重新載入頁面。",
-  CMS_REVISION_MISMATCH: "版本資料不符，請重新載入頁面後再試一次。",
-  CMS_RESOURCE_NOT_FOUND: "找不到此資源，可能已被其他人刪除或封存，請重新載入頁面。",
-  CMS_MEDIA_IN_USE: "此媒體仍被其他內容使用，未能封存。",
-};
-
 function cmsErrorMessage(code: string): string {
-  return CMS_ERROR_MESSAGES[code] ?? "操作失敗，請重試。";
+  return ADMIN_ERROR_CODES[code] ?? "操作失敗，請重試。";
 }
 
 /**
@@ -3186,7 +3177,7 @@ async function callCms<T>(call: () => Promise<T>): Promise<T> {
         : 0;
     if (status === 401) throw new Error("登入已過期，請重新登入後再試。");
     if (status === 403) throw new Error("你的角色沒有此操作的權限，請聯絡管理員或主管。");
-    throw new Error(cmsErrorMessage(errorText(err)));
+    throw new Error(cmsErrorMessage(err instanceof Error ? err.message : String(err)));
   }
   if (
     result &&

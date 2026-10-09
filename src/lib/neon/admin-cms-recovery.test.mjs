@@ -357,6 +357,7 @@ test("dedicated publish retains unsaved local edits and refuses a stale reviewed
     callCms: () => {
       throw new Error("must not dispatch");
     },
+    adminErrorMessage: (err, fallback) => err?.message ?? fallback,
     toast: { error: (message) => errors.push(message) },
   });
   await handlePublish();

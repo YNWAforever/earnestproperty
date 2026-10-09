@@ -1,3 +1,4 @@
+import { adminErrorMessage } from "@/components/admin/admin-error-text";
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { StaffNotificationPanel } from "@/components/admin/StaffNotificationPanel";
 import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContext";
@@ -2408,10 +2409,16 @@ function assertNoMutationError(result: unknown) {
   if ((result as { ok?: unknown }).ok === false) throw new Error("操作失敗");
 }
 
-function errorText(error: unknown) {
+function rawMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return String(error);
+  return typeof error === "string" ? error : "";
+}
+
+function errorText(error: unknown) {
+  // This screen's own codes map first; the rest (and any status) goes through the shared rule.
+  const raw = rawMessage(error);
+  const mapped = formatReplyError(raw);
+  return adminErrorMessage(mapped !== raw ? mapped : error);
 }
 
 const REPLY_DRAFT_STORAGE_PREFIX = "earnest:whatsapp:reply-drafts";
