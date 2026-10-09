@@ -18,8 +18,10 @@ export function normalizePhoneDigits(phone: string | null | undefined): string |
   if (!phone) return null;
 
   const hasPlus = phone.trim().startsWith("+");
-  const digits = phone.replace(/\D/g, "");
+  let digits = phone.replace(/\D/g, "");
   if (!digits) return null;
+  // "00" is the international call prefix ("00852 2688 2988"); HK numbers never start with 0.
+  if (!hasPlus && digits.startsWith("00") && digits.length >= 10) digits = digits.slice(2);
 
   if (hasPlus) {
     return digits.length >= 8 ? digits : null;

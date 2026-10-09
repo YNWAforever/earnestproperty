@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { MapPin, Phone, MessageCircle, Mail, Clock } from "lucide-react";
 import { SITE_BRANCHES, SITE_CONTACT, whatsappUrl, type SiteBranch } from "@/config/site";
-import { toWhatsAppHref } from "@/lib/contact-links";
+import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 import { canonicalLink, pageSeo } from "@/content/seo";
 import { districtLabelForSlug } from "@/lib/listing-seo";
 import { branchLocalBusinessSchema, jsonLdScript } from "@/lib/schema";
@@ -113,7 +113,7 @@ function ContactPage() {
                     {branch.address}
                   </p>
                   <a
-                    href={`tel:${branch.phone}`}
+                    href={toTelHref(branch.phone) ?? undefined}
                     className="mt-3 flex items-center gap-2 text-base font-semibold text-primary hover:underline"
                   >
                     <Phone className="h-4 w-4 text-primary" />
@@ -154,7 +154,7 @@ function ContactPage() {
             icon={<Phone className="h-5 w-5" />}
             label="總機"
             value={SITE_CONTACT.phoneDisplay || "聯絡我們"}
-            href={SITE_CONTACT.phoneTel ? `tel:${SITE_CONTACT.phoneTel}` : "/contact"}
+            href={toTelHref(SITE_CONTACT.phoneTel) ?? "/contact"}
           />
           <Row
             icon={<Mail className="h-5 w-5" />}
