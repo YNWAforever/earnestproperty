@@ -23,7 +23,6 @@ import {
   Users,
   Newspaper,
   Store,
-  TrendingUp,
   Video,
   UserRound,
 } from "lucide-react";
@@ -575,18 +574,12 @@ function HomePage() {
       {/* MARKET INFO */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader eyebrow="市場資訊" title="最新樓市動態" />
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid gap-5 sm:grid-cols-2">
           <Feature
             icon={<Newspaper className="h-5 w-5" />}
             title="市場分析"
             desc="深井、青山公路、汀九樓市觀察。"
             href="/blog"
-          />
-          <Feature
-            icon={<TrendingUp className="h-5 w-5" />}
-            title="晉誠地產最新成交"
-            desc="追蹤近期成交及區內價格走勢。"
-            href="/transactions"
           />
           <Feature
             icon={<Building2 className="h-5 w-5" />}

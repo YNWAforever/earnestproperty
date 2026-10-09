@@ -152,11 +152,6 @@ export function SiteFooter() {
                 </Link>
               </li>
               <li>
-                <Link to="/transactions" className="opacity-80 hover:opacity-100">
-                  晉誠地產最新成交
-                </Link>
-              </li>
-              <li>
                 <Link to="/" hash="owner-valuation" className="opacity-80 hover:opacity-100">
                   業主放盤 / 免費估價
                 </Link>

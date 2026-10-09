@@ -270,14 +270,12 @@ test("homepage and navigation include Ting Kau content entry points", () => {
     "汀九",
     "YouTube影片",
     "屋苑開箱",
-    "晉誠地產最新成交",
     "深井 青山公路 汀九買樓租樓",
     "準備搵深井 青山公路筍盤",
     "深井 青山公路 汀九我哋比你更熟",
     "/district/ting-kau",
     "/videos",
     "/estate-reviews",
-    "/transactions",
   ]) {
     assert.match(combined, new RegExp(text));
   }
@@ -413,7 +411,6 @@ test("header exposes approved mega menu structure and controls", () => {
     "代理團隊",
     "聯絡門市",
     "YouTube影片",
-    "晉誠地產最新成交",
     "屋苑開箱",
     "市場分析",
     "關於晉誠",
@@ -426,7 +423,6 @@ test("header exposes approved mega menu structure and controls", () => {
     "/listings?deal=rent",
     "/#owner-valuation",
     "/videos",
-    "/transactions",
   ]) {
     assert.equal(source.includes(text), true, `${text} should appear in the header source`);
   }
@@ -796,4 +792,35 @@ test("source files avoid the older disallowed listing wording", () => {
     assert.equal(combined.includes(phrase), false, `${phrase} is no longer approved copy`);
   }
   assert.equal(combined.includes(required), true, `${required} should be the listing wording`);
+});
+
+test("the 最新成交 entry points are hidden while D7 holds", () => {
+  const header = readFileSync("src/components/site/SiteHeader.tsx", "utf8");
+  const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
+  const home = readFileSync("src/routes/index.tsx", "utf8");
+
+  for (const [name, source] of [
+    ["header", header],
+    ["footer", footer],
+    ["home", home],
+  ]) {
+    assert.equal(source.includes("晉誠地產最新成交"), false, `${name} must not link 最新成交`);
+    assert.equal(
+      source.includes("追蹤近期成交及區內價格走勢"),
+      false,
+      `${name} must not carry the 成交 blurb`,
+    );
+    assert.equal(source.includes('to: "/transactions"'), false, `${name} nav item`);
+    assert.equal(source.includes('<Link to="/transactions"'), false, `${name} link`);
+    assert.equal(source.includes('href="/transactions"'), false, `${name} card`);
+  }
+
+  // The kept market entries, and the home grid sized for two cards.
+  for (const text of ["YouTube影片", "屋苑開箱", "市場分析", "觀看最新影片"]) {
+    assert.equal(header.includes(text), true, `${text} stays in the header`);
+  }
+  assert.match(home, /mt-10 grid gap-5 sm:grid-cols-2">/);
+
+  // Hidden, not removed: the page and its sitemap entry are untouched.
+  assert.equal(existsSync("src/routes/transactions.tsx"), true);
 });

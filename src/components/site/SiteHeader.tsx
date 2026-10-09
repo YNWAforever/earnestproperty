@@ -166,11 +166,6 @@ const megaMenus: MegaMenuGroup[] = [
         label: "YouTube影片",
         description: "觀看晉誠地產頻道及樓盤影片。",
       },
-      {
-        to: "/transactions",
-        label: "晉誠地產最新成交",
-        description: "追蹤近期成交及區內價格走勢。",
-      },
     ],
     links: [
       { to: "/estate-reviews", label: "屋苑開箱", description: "以實地內容了解屋苑優劣。" },
