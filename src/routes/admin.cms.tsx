@@ -22,6 +22,8 @@ import {
 import { toast } from "sonner";
 
 import { CmsPublicationCompare } from "@/components/admin/CmsPublicationCompare";
+import { CmsRestoreConfirm } from "@/components/admin/CmsRestoreConfirm";
+import { useCmsCanRestore } from "@/components/admin/use-cms-can-restore";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminContentCopilot } from "@/components/admin/AdminContentCopilot";
@@ -2050,6 +2052,8 @@ function EstateDialog({
     : false;
   const [imageUploading, setImageUploading] = useState(false);
   const [confirmingPublish, setConfirmingPublish] = useState(false);
+  const canRestore = useCmsCanRestore();
+  const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
   const { requestClose: requestDirtyClose, dialog } = useDirtyCloseGuard({
     isDirty: isDirty || imageUploading,
     onClose,
@@ -2208,11 +2212,27 @@ function EstateDialog({
               <CmsRevisionHistory
                 resourceId={estate.id}
                 revisions={revisions}
-                onRestoreRevision={(revisionId) => {
+                canRestore={canRestore}
+                onRequestRestore={(revision) => {
                   if (imageUploading) {
                     toast.info("圖片上載中，請等待完成後再還原版本。");
                     return;
                   }
+                  setPendingRestore(revision);
+                }}
+              />
+              <CmsRestoreConfirm
+                resource="estate"
+                revision={pendingRestore}
+                savedPayload={savedPayload}
+                form={{ ...estate }}
+                savedDraft={revisions?.find((revision) => revision.state === "draft")}
+                isPending={saving}
+                onOpenChange={(open) => {
+                  if (!open) setPendingRestore(null);
+                }}
+                onConfirm={(revisionId) => {
+                  setPendingRestore(null);
                   onRestoreRevision(revisionId);
                 }}
               />
@@ -2283,6 +2303,8 @@ function ArticleDialog({
     : false;
   const [imageUploading, setImageUploading] = useState(false);
   const [confirmingPublish, setConfirmingPublish] = useState(false);
+  const canRestore = useCmsCanRestore();
+  const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
   const { requestClose: requestDirtyClose, dialog } = useDirtyCloseGuard({
     isDirty: isDirty || imageUploading,
     onClose,
@@ -2413,11 +2435,27 @@ function ArticleDialog({
               <CmsRevisionHistory
                 resourceId={article.id}
                 revisions={revisions}
-                onRestoreRevision={(revisionId) => {
+                canRestore={canRestore}
+                onRequestRestore={(revision) => {
                   if (imageUploading) {
                     toast.info("圖片上載中，請等待完成後再還原版本。");
                     return;
                   }
+                  setPendingRestore(revision);
+                }}
+              />
+              <CmsRestoreConfirm
+                resource="article"
+                revision={pendingRestore}
+                savedPayload={savedPayload}
+                form={{ ...article }}
+                savedDraft={revisions?.find((revision) => revision.state === "draft")}
+                isPending={saving}
+                onOpenChange={(open) => {
+                  if (!open) setPendingRestore(null);
+                }}
+                onConfirm={(revisionId) => {
+                  setPendingRestore(null);
                   onRestoreRevision(revisionId);
                 }}
               />
@@ -2726,15 +2764,21 @@ const CMS_REVISION_STATE_LABELS: Record<CmsRevisionSummary["state"], string> = {
   archived: "已封存",
 };
 
-/** Read-only version history for the two revision-engine-backed dialogs. */
+/** Version history for the two revision-engine-backed dialogs.
+ *
+ * 還原 never fires on one click: it asks the dialog to open CmsRestoreConfirm. It is not
+ * offered on draft rows (the restore operation refuses drafts) or to roles the server
+ * refuses (agents). */
 function CmsRevisionHistory({
   resourceId,
   revisions,
-  onRestoreRevision,
+  canRestore,
+  onRequestRestore,
 }: {
   resourceId: string | undefined;
   revisions: CmsRevisionSummary[] | null;
-  onRestoreRevision: (revisionId: string) => void;
+  canRestore: boolean;
+  onRequestRestore: (revision: CmsRevisionSummary) => void;
 }) {
   if (!resourceId || !revisions) return null;
   return (
@@ -2752,15 +2796,17 @@ function CmsRevisionHistory({
                   v{revision.versionNumber} · {formatDateTime(revision.createdAt)}
                 </span>
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => onRestoreRevision(revision.id)}
-              >
-                <History className="h-4 w-4" />
-                還原
-              </Button>
+              {canRestore && revision.state !== "draft" ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onRequestRestore(revision)}
+                >
+                  <History className="h-4 w-4" />
+                  還原
+                </Button>
+              ) : null}
             </li>
           ))}
         </ul>

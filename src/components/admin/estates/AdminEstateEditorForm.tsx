@@ -6,6 +6,8 @@ import { toast } from "sonner";
 
 import { CmsPublicationCompare } from "@/components/admin/CmsPublicationCompare";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
+import { CmsRestoreConfirm } from "@/components/admin/CmsRestoreConfirm";
+import { useCmsCanRestore } from "@/components/admin/use-cms-can-restore";
 import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,6 +87,35 @@ function createInitialForm(payload?: Record<string, CmsPayloadValue> | null, res
 }
 
 type FormState = ReturnType<typeof createInitialForm>;
+
+/** This form's own field labels, so 還原 and 與已發布版本比較 name fields as staff see them here. */
+const ESTATE_EDITOR_LABELS: Record<string, string> = {
+  slug: "Slug",
+  name_zh: "中文名",
+  name_en: "英文名",
+  district_slug: "地區 slug（舊）",
+  developer: "發展商",
+  hero_image: "Hero 圖片",
+  year_completed: "落成年份",
+  phases: "期數",
+  total_units: "伙數",
+  area_min: "面積下限",
+  area_max: "面積上限",
+  facilities: "設施（每行一項）",
+  description: "描述",
+  aliases: "別名（每行一個）",
+  address: "地址",
+  blocks: "座數",
+  district_id: "地區（新，district_id）",
+  lat: "緯度 (lat)",
+  lng: "經度 (lng)",
+  avg_saleable_psf: "平均實呎 (avg_saleable_psf)",
+  transport_note: "交通備註",
+  school_net_code: "校網編號",
+  verified_at: "核實狀態",
+  seo_title: "SEO 標題",
+  seo_description: "SEO 描述",
+};
 
 function parseNullableNumber(value: string) {
   const trimmed = value.trim();
@@ -197,7 +228,8 @@ export function AdminEstateEditorForm({
   const [publishing, setPublishing] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [confirmingPublish, setConfirmingPublish] = useState(false);
-  const [pendingRestoreId, setPendingRestoreId] = useState<string | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
+  const canRestore = useCmsCanRestore();
   const [pendingFaqDeleteId, setPendingFaqDeleteId] = useState<string | null>(null);
   const [districts, setDistricts] = useState<DistrictOption[]>([]);
   const [revisions, setRevisions] = useState<CmsRevisionSummary[] | null>(null);
@@ -416,6 +448,7 @@ export function AdminEstateEditorForm({
           resourceType="estate"
           resourceId={form.id}
           localPayload={buildPayload(form, reviewed?.payload ?? payload)}
+          labels={ESTATE_EDITOR_LABELS}
         />
         <section>
           <h2 className="mb-3 text-sm font-semibold text-muted-foreground">基本資料</h2>
@@ -771,15 +804,17 @@ export function AdminEstateEditorForm({
                         {new Date(revision.createdAt).toLocaleDateString("zh-HK")}
                       </span>
                     </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setPendingRestoreId(revision.id)}
-                    >
-                      <History className="h-4 w-4" />
-                      還原
-                    </Button>
+                    {canRestore && revision.state !== "draft" ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPendingRestore(revision)}
+                      >
+                        <History className="h-4 w-4" />
+                        還原
+                      </Button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -853,19 +888,20 @@ export function AdminEstateEditorForm({
           void handlePublish();
         }}
       />
-      <AdminConfirmDialog
-        open={pendingRestoreId !== null}
-        title="還原此版本？"
-        description="還原會以該版本內容建立新草稿，並覆蓋目前表單內未儲存的修改。"
-        confirmLabel="還原"
+      <CmsRestoreConfirm
+        resource="estate"
+        revision={pendingRestore}
+        savedPayload={pristine}
+        form={form}
+        labels={ESTATE_EDITOR_LABELS}
+        savedDraft={revisions?.find((revision) => revision.state === "draft")}
         isPending={saving}
         onOpenChange={(open) => {
-          if (!open) setPendingRestoreId(null);
+          if (!open) setPendingRestore(null);
         }}
-        onConfirm={() => {
-          const id = pendingRestoreId;
-          setPendingRestoreId(null);
-          if (id) void handleRestore(id);
+        onConfirm={(revisionId) => {
+          setPendingRestore(null);
+          void handleRestore(revisionId);
         }}
       />
       <AdminConfirmDialog

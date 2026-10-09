@@ -156,3 +156,47 @@ test("image upload reports pending until success or failure and applies only suc
     assert.deepEqual(values, fails ? [] : ["/images/new.jpg"]);
   }
 });
+
+test("restore asks first and is hidden on draft rows and for agents", () => {
+  assert.doesNotMatch(source, /onClick=\{\(\) => onRestoreRevision\(/);
+  const history = source.slice(
+    source.indexOf("function CmsRevisionHistory("),
+    source.indexOf("function KnowledgeMetric("),
+  );
+  assert.match(history, /canRestore: boolean/);
+  assert.match(history, /onRequestRestore: \(revision: CmsRevisionSummary\) => void/);
+  const guard = history.indexOf('canRestore && revision.state !== "draft"');
+  assert.ok(guard > 0, "還原 must render only for restorers on non-draft rows");
+  const button = history.indexOf("還原", guard);
+  assert.ok(button > guard, "the 還原 button sits inside the guard");
+  assert.match(history.slice(guard, button), /onClick=\{\(\) => onRequestRestore\(revision\)\}/);
+  for (const kind of ["Estate", "Article"]) {
+    const body = source.slice(source.indexOf(`function ${kind}Dialog(`)).split("\nfunction ")[0];
+    assert.match(body, /useCmsCanRestore\(\)/, `${kind} reads the staff session role`);
+    assert.match(body, /<CmsRestoreConfirm/, `${kind} confirms before restoring`);
+    assert.match(
+      body,
+      /savedDraft=\{revisions\?\.find\(\(revision\) => revision\.state === "draft"\)/,
+    );
+  }
+  const estateEditor = readFileSync(
+    new URL("../components/admin/estates/AdminEstateEditorForm.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(estateEditor, /<CmsRestoreConfirm/);
+  assert.doesNotMatch(estateEditor, /還原會以該版本內容建立新草稿，並覆蓋目前表單內未儲存的修改。/);
+  assert.match(estateEditor, /canRestore && revision\.state !== "draft"/);
+});
+
+test("compare no longer prints raw JSON", () => {
+  const compare = readFileSync(
+    new URL("../components/admin/CmsPublicationCompare.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(compare, /JSON\.stringify\(comparison\.published/);
+  assert.match(compare, /cmsFieldDiff\(/);
+  assert.match(compare, /與已發布版本比較/);
+  assert.match(compare, /複製本機修改（備份）/);
+  assert.match(compare, /本機修改備份（可複製）/);
+  assert.doesNotMatch(compare, /比較目前發布版本（保留本機修改）/);
+});

@@ -521,3 +521,44 @@ test("estate editor can display the nullable facilities returned for Hoi Wan Hin
     "display must preserve the authoritative payload for comparison",
   );
 });
+
+test("restore confirmed after a concurrent publish keeps today's conflict rules and never touches the publication", async () => {
+  const old = {
+    ...draft,
+    id: "old",
+    state: "superseded",
+    version_number: 1,
+    payload: { title: "Old", slug: "test", content: "historical" },
+  };
+  const live = { ...publication, payload: { ...publication.payload } };
+  const { api, queries } = fixture({
+    actor: "mia",
+    roles: ["manager"],
+    publication: live,
+    history: [old],
+  });
+  // The restore dialog opens on what the editor loaded: publication v3.
+  const opened = await api.fetchAdminCmsEditor(input, {});
+  assert.equal(opened.editState.currentPublishedVersion, 3);
+  // Before 還原 is confirmed, someone else publishes v5.
+  live.version_number = 5;
+  live.payload = { title: "Concurrent", slug: "test", content: "published meanwhile" };
+  const before = structuredClone(live);
+  const restored = await api.restoreAdminCmsRevision({ revisionId: "old" }, {});
+  // Restore sends only the chosen revision, creates a new draft on the current base, and
+  // leaves the published version exactly as the concurrent publisher left it.
+  const restoreCall = queries.find(({ params }) => params[0] === "restore");
+  assert.deepEqual(Array.from(restoreCall.params.slice(4, 7)), [null, null, null]);
+  assert.equal(restored.editState.basePublishedVersion, 5);
+  assert.equal(restored.editState.restoredFromRevisionId, "old");
+  assert.equal(restored.editState.payload.content, "historical");
+  assert.deepEqual(live, before);
+  // A save from the stale editor state the dialog was opened on is still refused.
+  await assert.rejects(
+    api.saveAdminCmsDraft(
+      { ...input, payload: { title: "Stale", slug: "test" }, basePublishedVersion: 3 },
+      {},
+    ),
+    /CMS_REVISION_CONFLICT/,
+  );
+});
