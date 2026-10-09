@@ -34,7 +34,6 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     "saveAdminCampaign",
     "materializeCampaignRecipients",
     "sendAdminCampaignQueue",
-    "queueAdminCampaign",
     "cancelAdminCampaign",
     "finishCampaignWithoutSending",
     "fetchLeadLiveAgentTranscript",
@@ -426,4 +425,52 @@ test("FAQ reorder rejects invalid batches and skips empty database work", async 
   changedRows = [];
   assert.deepEqual(await reorder([first, second], actor), { ok: true });
   assert.equal(audits.length, 1, "unchanged order must not write an audit entry");
+});
+
+// FX-17a D-13 / G-25: the browser-callable queueAdminCampaign flipped a campaign
+// to queued WITHOUT re-materialising its recipients, so opt-outs, lapsed
+// consent and duplicate phones were not re-checked. 發送… is the only way in.
+test("the only browser-callable campaign send path re-materialises recipients", () => {
+  const client = read("src/lib/neon/admin-data.ts");
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const queueRoute = read("src/routes/api.admin.campaigns.$id.queue.ts");
+
+  // No client export, no server-fn wrapper, no handler that reaches the bare queue.
+  assert.doesNotMatch(client, /export\s+(?:async\s+function|const)\s+queueAdminCampaign\b/);
+  assert.doesNotMatch(client, /queueAdminCampaignServer/);
+  assert.doesNotMatch(client, /adminData\.queueAdminCampaign\(/);
+  assert.doesNotMatch(client, /\bqueueAdminCampaign\b/);
+  // The uncalled server alias is gone too; the server function itself stays
+  // (sendAdminCampaignQueue and the owned DB suites call it).
+  assert.doesNotMatch(server, /export\s+async\s+function\s+queueCampaign\b/);
+  assert.match(server, /export\s+async\s+function\s+queueAdminCampaign\(/);
+
+  // The real path: the queue route calls sendAdminCampaignQueue, which
+  // validates, then materialises, and only then queues.
+  assert.match(queueRoute, /adminData\.sendAdminCampaignQueue\(params\.id, staff/);
+  assert.doesNotMatch(queueRoute, /adminData\.queueAdminCampaign\(/);
+  const start = server.indexOf("export async function sendAdminCampaignQueue(");
+  const end = server.slice(start).search(/\r?\n}\r?\n/) + start;
+  assert.ok(start >= 0 && end > start);
+  const send = server.slice(start, end);
+  const validate = send.indexOf("validateAdminCampaignQueueability(id)");
+  const materialise = send.indexOf("materializeCampaignRecipients(id, actor)");
+  const queue = send.indexOf("queueAdminCampaign(id, actor, options)");
+  assert.ok(validate >= 0 && materialise > validate && queue > materialise);
+  assert.match(send, /if \(!materialization\.ok\)\s*return/);
+
+  // No other screen or admin helper can reach the bare queue.
+  for (const file of ["src/routes/admin.blasts.tsx", "src/lib/admin/blast-review.ts"]) {
+    assert.doesNotMatch(read(file), /\bqueueAdminCampaign\b/, file);
+  }
+});
+
+// FX-17a D-13: 已排期 never sent anything by itself. The send-queue cron only
+// picks up campaigns already in queued/sending, so a scheduled row waits for 發送….
+test("no cron or job path sends a campaign because it is 已排期", () => {
+  const cron = read("src/routes/api.admin.jobs.send-queue.ts");
+  assert.match(cron, /WHERE campaign\.status IN \('queued', 'sending'\)/);
+  assert.doesNotMatch(cron, /'scheduled'/);
+  const server = read("src/lib/neon/admin-data.server.ts");
+  assert.doesNotMatch(server, /scheduled_at\s*(?:<=|<|>=|>)\s*now\(\)/);
 });

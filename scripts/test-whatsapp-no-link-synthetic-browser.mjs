@@ -1442,7 +1442,8 @@ try {
       await open(page, `${origin}/admin/blasts`);
       await page.getByRole("button", { name: "新增 Campaign", exact: true }).click();
       const edit = page.getByRole("dialog", { name: "新增 Campaign", exact: true });
-      await expect(edit.getByText("計劃發送時間（需人手確認）", { exact: true })).toBeVisible();
+      // FX-17a D-13: the schedule field is gone; campaigns go out only through 發送….
+      await expect(edit.getByText("計劃發送時間", { exact: false })).toHaveCount(0);
       await edit.getByLabel("Campaign audience", { exact: true }).click();
       await expect(page.getByRole("option").filter({ hasText: "深井租客" })).toBeVisible();
       await expect(page.getByRole("option").filter({ hasText: "荃灣買家" })).toBeVisible();

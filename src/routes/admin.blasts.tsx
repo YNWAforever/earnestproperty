@@ -62,7 +62,7 @@ import {
 import { useDirtyCloseGuard, useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { describeTemplateParameters } from "@/lib/woztell/template-preview";
-import { isCampaignDraftDirty } from "@/lib/admin/blast-review";
+import { campaignSavePayload, isCampaignDraftDirty } from "@/lib/admin/blast-review";
 import {
   cancelAdminCampaign,
   fetchAdminBlastOptions,
@@ -483,11 +483,8 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
 
     setSaving(true);
     try {
-      const payload = {
-        ...campaignDraft,
-        name: campaignDraft.name.trim(),
-        scheduled_at: nullIfBlank(campaignDraft.scheduled_at ?? ""),
-      };
+      // scheduled_at goes back exactly as loaded (FX-17a D-13).
+      const payload = campaignSavePayload(campaignDraft);
       // Whether this was a create or an update is decided BEFORE the request:
       // `id` afterwards is the saved row's id, which is always truthy, so the
       // 已新增 branch was unreachable and creating a campaign said 已儲存.
@@ -1327,7 +1324,6 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                       <TableHead>收件群組</TableHead>
                       <TableHead>收件人預覽</TableHead>
                       <TableHead>送達狀況</TableHead>
-                      <TableHead>預定時間</TableHead>
                       <TableHead>狀態</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
@@ -1402,9 +1398,6 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                           </TableCell>
                           <TableCell className="min-w-40">
                             <CampaignDeliveryCell campaign={campaign} />
-                          </TableCell>
-                          <TableCell className="min-w-36">
-                            {formatDate(campaign.scheduled_at)}
                           </TableCell>
                           <TableCell>
                             <CampaignStatusBadge
@@ -1594,6 +1587,9 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
 
       <CampaignDialog
         campaign={campaignDraft}
+        allowScheduled={
+          campaignDraft?.status === "scheduled" || savedCampaignDraft?.status === "scheduled"
+        }
         options={options}
         preview={preview}
         previewLoading={previewLoading}
@@ -1822,6 +1818,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
 
 function CampaignDialog({
   campaign,
+  allowScheduled,
   options,
   preview,
   previewLoading,
@@ -1838,6 +1835,8 @@ function CampaignDialog({
   onCancel,
 }: {
   campaign: AdminCampaignInput | null;
+  /** Only a campaign that is (or was loaded as) 已排期 may keep that status. */
+  allowScheduled: boolean;
   options: AdminBlastOptions | null;
   preview: AdminAudiencePreview | null;
   previewLoading: boolean;
@@ -1926,27 +1925,14 @@ function CampaignDialog({
                   <SelectContent>
                     <SelectItem value="draft">草稿（不可發送）</SelectItem>
                     <SelectItem value="review">待審核</SelectItem>
-                    <SelectItem value="scheduled">已排期</SelectItem>
+                    {/* FX-17a D-13: nothing ever delivered on a schedule, so a
+                        new campaign cannot pick 已排期. An existing 已排期 row
+                        keeps it so the Select is never blank; it is sent, like
+                        待審核, only through 發送…. */}
+                    {allowScheduled ? <SelectItem value="scheduled">已排期</SelectItem> : null}
                   </SelectContent>
                 </Select>
               </Field>
-              {/* Labelled 「僅作記錄」 because nothing delivers on it: the cron in
-                  api.admin.jobs.send-queue.ts only picks up campaigns already in
-                  queued/sending, so scheduled_at is never read by any delivery
-                  path. Staff previously set a date here and reasonably expected
-                  the blast to go out then. Implementing real scheduling means
-                  enabling unattended sending, which is the owner's call. */}
-              <div>
-                <TextField
-                  label="計劃發送時間（需人手確認）"
-                  type="datetime-local"
-                  value={campaign.scheduled_at ?? ""}
-                  onChange={(value) => onChange({ ...campaign, scheduled_at: nullIfBlank(value) })}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  系統不會自動發送。到時仍需人手按「發送…」。
-                </p>
-              </div>
             </div>
 
             <TemplateDetails

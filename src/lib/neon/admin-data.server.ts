@@ -4619,10 +4619,6 @@ export async function updateInquiryStatus(id: string, status: string, actor: Sta
   return { ok: true };
 }
 
-export async function queueCampaign(id: string, actor: StaffAccess) {
-  return queueAdminCampaign(id, actor);
-}
-
 // Public, unauthenticated write path -- backs /listings' zero-results
 // notify-me form. Deliberately does NOT write into
 // crm_contacts/crm_leads/inquiries the way createWebsiteInquiry above does:

@@ -495,8 +495,7 @@ test("admin routes expose functional workflows, not only read-only tables", () =
     "clearRowPreviews: true",
     // Per-recipient outcome, so a mostly-failed blast cannot look clean.
     "CampaignDeliveryCell",
-    // scheduled_at is never read by any delivery path; the label must say so.
-    "僅作記錄",
+    // The schedule field itself is gone (FX-17a D-13); see the dedicated test below.
   ]) {
     assert.match(read("src/routes/admin.blasts.tsx"), new RegExp(text));
   }
@@ -1183,4 +1182,36 @@ test("WhatsApp settings screen has no build-time UI flag or save guard", () => {
   const source = read("src/routes/admin.whatsapp-settings.tsx");
   assert.doesNotMatch(source, /UiFlags|rollout/);
   assert.doesNotMatch(source, /allowReviewedSave/);
+});
+
+// FX-17a D-13: nothing ever delivered on the schedule field, so it is gone. 已排期
+// is offered only to a campaign that already has it (so the Select is never
+// blank for such a row); a new campaign is 草稿 or 待審核 and is sent by 發送….
+test("the campaign form has no schedule field and shows 已排期 only for a scheduled row", () => {
+  const source = read("src/routes/admin.blasts.tsx");
+  assert.doesNotMatch(source, /計劃發送時間/);
+  assert.doesNotMatch(source, /系統不會自動發送。到時仍需人手按/);
+  assert.doesNotMatch(source, /<TableHead>預定時間<\/TableHead>/);
+  assert.doesNotMatch(source, /formatDate\(campaign\.scheduled_at\)/);
+  assert.doesNotMatch(source, /type="datetime-local"/);
+  // The draft's scheduled_at is passed through, never re-derived from an input.
+  assert.doesNotMatch(source, /scheduled_at:\s*nullIfBlank\(/);
+  assert.match(source, /campaignSavePayload\(campaignDraft\)/);
+
+  const dialog = source.slice(source.indexOf("function CampaignDialog("));
+  const select = dialog.slice(dialog.indexOf('<Field label="狀態">'));
+  const content = select.slice(0, select.indexOf("</SelectContent>"));
+  assert.match(content, /<SelectItem value="draft">草稿（不可發送）<\/SelectItem>/);
+  assert.match(content, /<SelectItem value="review">待審核<\/SelectItem>/);
+  assert.match(
+    content,
+    /\{allowScheduled \? <SelectItem value="scheduled">已排期<\/SelectItem> : null\}/,
+  );
+  assert.match(
+    source,
+    /allowScheduled=\{\s*campaignDraft\?\.status === "scheduled" \|\|\s*savedCampaignDraft\?\.status === "scheduled"\s*\}/,
+  );
+  // An existing 已排期 row can still be sent through 發送… (which re-materialises).
+  assert.match(source, /const queueableStatuses = new Set\(\["review", "scheduled"\]\)/);
+  assert.match(source, /scheduled: "已排期"/);
 });

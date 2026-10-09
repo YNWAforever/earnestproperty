@@ -1885,20 +1885,6 @@ export async function sendAdminCampaignQueue(
   };
 }
 
-const queueAdminCampaignServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string }) => data)
-  .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin", "manager"]);
-    const adminData = await import("./admin-data.server");
-    return adminData.queueAdminCampaign(data.id, staff);
-  });
-
-export async function queueAdminCampaign(options: { data: { id: string } }) {
-  return callStaffServerFn(async () =>
-    queueAdminCampaignServer(await withStaffAuthHeaders(options)),
-  );
-}
-
 const cancelAdminCampaignServer = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
