@@ -1859,7 +1859,7 @@ function CampaignDialog({
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{campaign?.id ? "編輯 Campaign" : "新增 Campaign"}</DialogTitle>
-          <DialogDescription>範本、收件群組、預定時間及狀態。</DialogDescription>
+          <DialogDescription>範本、收件群組及狀態。</DialogDescription>
         </DialogHeader>
         {campaign ? (
           <form className="grid gap-4" onSubmit={onSubmit}>

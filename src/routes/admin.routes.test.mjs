@@ -1191,7 +1191,8 @@ test("the campaign form has no schedule field and shows 已排期 only for a sch
   const source = read("src/routes/admin.blasts.tsx");
   assert.doesNotMatch(source, /計劃發送時間/);
   assert.doesNotMatch(source, /系統不會自動發送。到時仍需人手按/);
-  assert.doesNotMatch(source, /<TableHead>預定時間<\/TableHead>/);
+  // No column, no dialog description: 預定時間 is gone from the screen entirely.
+  assert.doesNotMatch(source, /預定時間/);
   assert.doesNotMatch(source, /formatDate\(campaign\.scheduled_at\)/);
   assert.doesNotMatch(source, /type="datetime-local"/);
   // The draft's scheduled_at is passed through, never re-derived from an input.

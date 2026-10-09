@@ -2247,6 +2247,70 @@ test(
         },
       );
 
+      // FX-17a D-13 fix round 1: a save without a schedule time keeps the stored
+      // one, and 已排期 can be kept but never chosen, on the real SQL.
+      await t.test(
+        "a save without scheduled_at keeps the stored time; 已排期 is kept but never chosen",
+        async () => {
+          const stored = "2026-10-01T02:00:00.000Z";
+          const [row] = await query(
+            "INSERT INTO whatsapp_campaigns(name,template_id,audience_id,status,scheduled_at,created_by) VALUES('Owned FX-17a save campaign',$1,$2,'scheduled',$3,$4) RETURNING id",
+            [template.id, audience.id, stored, staff.id],
+          );
+          const stored_ = async () =>
+            (
+              await query("SELECT status, scheduled_at FROM whatsapp_campaigns WHERE id=$1", [
+                row.id,
+              ])
+            )[0];
+          const base = {
+            id: row.id,
+            name: "Owned FX-17a save campaign",
+            template_id: template.id,
+            audience_id: audience.id,
+          };
+          // Kept as 已排期, with the field omitted, then with "": time unchanged.
+          assert.deepEqual(
+            await adminData.saveAdminCampaign({ ...base, status: "scheduled" }, actor),
+            {
+              id: row.id,
+            },
+          );
+          assert.equal(new Date((await stored_()).scheduled_at).toISOString(), stored);
+          assert.equal(
+            (
+              await adminData.saveAdminCampaign(
+                { ...base, status: "review", scheduled_at: "" },
+                actor,
+              )
+            ).id,
+            row.id,
+          );
+          const afterReview = await stored_();
+          assert.equal(afterReview.status, "review");
+          assert.equal(new Date(afterReview.scheduled_at).toISOString(), stored);
+          // Once moved out, it cannot be moved back in; a new campaign cannot start in it.
+          assert.deepEqual(
+            await adminData.saveAdminCampaign({ ...base, status: "scheduled" }, actor),
+            { id: "", error: "INVALID_CAMPAIGN_STATUS" },
+          );
+          assert.equal((await stored_()).status, "review");
+          const { id: _id, ...fresh } = base;
+          assert.deepEqual(
+            await adminData.saveAdminCampaign({ ...fresh, status: "scheduled" }, actor),
+            { id: "", error: "INVALID_CAMPAIGN_STATUS" },
+          );
+          assert.equal(
+            (
+              await query("SELECT count(*)::int AS n FROM whatsapp_campaigns WHERE name=$1", [
+                base.name,
+              ])
+            )[0].n,
+            1,
+          );
+        },
+      );
+
       // FX-17a D-13: 已排期 and its time never sent anything. A campaign in that
       // status waits (no job, no recipients) until 發送…, which re-materialises
       // the audience with the opt-out, consent and duplicate-phone checks.

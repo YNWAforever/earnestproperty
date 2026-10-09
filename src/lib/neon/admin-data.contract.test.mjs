@@ -255,6 +255,81 @@ test("campaign save rejects delivery statuses before any database write", async 
   );
 });
 
+// FX-17a D-13 fix round 1: the server mirrors the form. A save without a schedule
+// time keeps the stored one, and 已排期 can be kept but never chosen.
+test("campaign save keeps a stored scheduled_at and never moves a campaign into 已排期", async () => {
+  const source = read("src/lib/neon/admin-data.server.ts");
+  const file = ts.createSourceFile("admin-data.server.ts", source, ts.ScriptTarget.Latest, true);
+  const declaration = file.statements.find(
+    (statement) =>
+      ts.isFunctionDeclaration(statement) && statement.name?.text === "saveAdminCampaign",
+  );
+  assert.ok(declaration);
+  const executable = ts.transpileModule(declaration.getText(file).replace(/^export\s+/, ""), {
+    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const queries = [];
+  let answer = (sql) => (/^\s*SELECT/.test(sql) ? [] : [{ id: "campaign-1" }]);
+  const save = new Function(
+    "requireNonEmpty",
+    "queryRows",
+    "writeAudit",
+    "stringOrEmpty",
+    "campaignHasDeliveryHistorySql",
+    executable + "\nreturn saveAdminCampaign;",
+  )(
+    () => {},
+    async (sql, params) => {
+      queries.push({ sql, params });
+      return answer(sql);
+    },
+    async () => {},
+    String,
+    campaignHasDeliveryHistorySql,
+  );
+  const actor = { staffId: "manager-1" };
+  const input = { name: "Campaign", template_id: null, audience_id: null, status: "review" };
+
+  // Create: 已排期 is refused before any write.
+  assert.deepEqual(await save({ ...input, status: "scheduled", scheduled_at: null }, actor), {
+    id: "",
+    error: "INVALID_CAMPAIGN_STATUS",
+  });
+  assert.equal(queries.length, 0);
+
+  // Update without the field, or with "", sends null and the SQL keeps the stored value.
+  for (const scheduled of [{}, { scheduled_at: "" }, { scheduled_at: null }]) {
+    queries.length = 0;
+    assert.deepEqual(await save({ ...input, ...scheduled, id: "campaign-1" }, actor), {
+      id: "campaign-1",
+    });
+    assert.equal(queries[0].params[4], null);
+  }
+  const update = queries[0].sql;
+  assert.match(
+    update,
+    /scheduled_at=COALESCE\(\$5::timestamptz, whatsapp_campaigns\.scheduled_at\)/,
+  );
+  assert.doesNotMatch(update, /scheduled_at=\$5\b/);
+  assert.match(
+    update,
+    /AND \(\$4::whatsapp_campaign_status <> 'scheduled' OR status = 'scheduled'\)/,
+  );
+
+  // Update into 已排期 from another status matches no row and says why.
+  queries.length = 0;
+  answer = (sql) => (/^\s*SELECT/.test(sql) ? [{ status: "review", has_history: false }] : []);
+  assert.deepEqual(await save({ ...input, status: "scheduled", id: "campaign-1" }, actor), {
+    id: "",
+    error: "INVALID_CAMPAIGN_STATUS",
+  });
+  // A row that is already 已排期 keeps it.
+  answer = (sql) => (/^\s*SELECT/.test(sql) ? [] : [{ id: "campaign-1" }]);
+  assert.deepEqual(await save({ ...input, status: "scheduled", id: "campaign-1" }, actor), {
+    id: "campaign-1",
+  });
+});
+
 test("campaign cancellation only changes active campaigns and their pending recipients", async () => {
   const source = read("src/lib/neon/admin-data.server.ts");
   const file = ts.createSourceFile("admin-data.server.ts", source, ts.ScriptTarget.Latest, true);

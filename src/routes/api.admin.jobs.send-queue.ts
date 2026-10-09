@@ -57,12 +57,13 @@ async function findEligibleCampaigns() {
     // row the admin route reads, or the two paths would derive different keys
     // for one run and enqueue the same delivery twice.
     //
-    // The fallback is created_at, NOT updated_at: saveAdminCampaign writes
-    // status unconditionally, so a campaign can reach 'queued' without ever
-    // going through queueAdminCampaign and therefore with reviewed_at still
-    // NULL. updated_at changes on every subsequent write, which would hand this
-    // cron a new idempotency key -- and so a new delivery job -- after any edit.
-    // created_at is immutable, so that campaign still enqueues exactly once.
+    // The fallback is created_at, NOT updated_at. Today only queueAdminCampaign
+    // sets 'queued', and it always stamps reviewed_at (saveAdminCampaign accepts
+    // draft/review/scheduled only), so the fallback is defensive: a queued row
+    // with reviewed_at NULL (older data, or a manual fix) must still get one
+    // stable key. updated_at changes on every write, which would hand this cron a
+    // new idempotency key -- and so a new delivery job -- after any edit.
+    // created_at is immutable, so such a campaign still enqueues exactly once.
     `SELECT DISTINCT recipient.campaign_id::text AS campaign_id,
             COALESCE(campaign.reviewed_at, campaign.created_at)::text AS queue_run_at
      FROM whatsapp_campaign_recipients recipient
