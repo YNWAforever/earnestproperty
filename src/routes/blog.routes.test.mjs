@@ -175,7 +175,13 @@ test("blog list renders a category filter for every named category plus an 全�
     /CATEGORY_FILTERS = \["全部", \.\.\.BLOG_CATEGORIES\]/,
     "category filter should cover 全部 plus every BLOG_CATEGORIES entry, not a hand-picked subset",
   );
-  assert.match(source, /aria-pressed=\{selectedCategory === category\}/);
+});
+
+test("blog filters are links with exact matching and no aria-pressed", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.doesNotMatch(source, /aria-pressed/);
+  assert.match(source, /activeOptions=\{\{ exact: true \}\}/);
+  assert.match(source, /role="group" aria-label="按分類篩選文章"/);
 });
 
 test("blog list renders a client-side search box over the loaded articles", () => {

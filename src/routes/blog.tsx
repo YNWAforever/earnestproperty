@@ -178,7 +178,7 @@ function BlogPage() {
                 key={category}
                 to="/blog"
                 search={category === "全部" ? {} : { category }}
-                aria-pressed={selectedCategory === category}
+                activeOptions={{ exact: true }}
                 className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
                   selectedCategory === category
                     ? "border-primary bg-secondary text-secondary-foreground"

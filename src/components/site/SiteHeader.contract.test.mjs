@@ -60,3 +60,11 @@ test("WhatsApp header CTAs render one interactive anchor each", () => {
   assert.doesNotMatch(headerSource, /<a[^>]*href=\{WHATSAPP_URL\}[^>]*>\s*<Button/s);
   assert.match(headerSource, /<Button[^>]*asChild[^>]*>\s*<a[^>]*href=\{WHATSAPP_URL\}/s);
 });
+
+// F-09: a section match is not the current page.
+test('a section match says aria-current="true"; only the same pathname says "page"', () => {
+  assert.match(
+    headerSource,
+    /aria-current=\{\s*active\s*\?\s*hrefPathname\(itemHref\(item\)\) === hrefPathname\(currentHref\)\s*\?\s*"page"\s*:\s*"true"\s*:\s*undefined\s*\}/,
+  );
+});

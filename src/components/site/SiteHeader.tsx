@@ -256,7 +256,13 @@ function HeaderNavLink({
       href={itemHref(item)}
       onClick={onClick}
       className={linkClassName}
-      aria-current={active ? "page" : undefined}
+      aria-current={
+        active
+          ? hrefPathname(itemHref(item)) === hrefPathname(currentHref)
+            ? "page"
+            : "true"
+          : undefined
+      }
     >
       {item.label}
     </SiteLink>
