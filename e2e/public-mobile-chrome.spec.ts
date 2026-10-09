@@ -334,3 +334,72 @@ test("at 1440 px no bar shows and the launcher is the pill (right 20, bottom 20,
   }
   await page.screenshot({ path: resolve(SHOTS, "fx16-bar-1440.png") });
 });
+
+// FX-16 F-21: the mortgage result follows the field being typed (300 ms debounce), and only the
+// 每月供款 row is a live region. The real calculator renders from `?scene=mortgage`.
+async function openMortgage(page: Page, width: number, height = HEIGHT) {
+  pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.setViewportSize({ width, height });
+  await page.route("**/*", (route) =>
+    new URL(route.request().url()).origin === origin &&
+    ["GET", "HEAD"].includes(route.request().method())
+      ? route.continue()
+      : route.abort(),
+  );
+  await page.goto(`${origin}/?scene=mortgage`);
+  await expect(page.getByLabel("樓價", { exact: true }).last()).toBeVisible();
+}
+
+const monthlyValue = (page: Page) =>
+  page.getByText("每月供款", { exact: true }).locator("xpath=following-sibling::span");
+
+test("typing a price updates 每月供款 without blur", async ({ page }) => {
+  await openMortgage(page, 375);
+  const price = page.locator("#property-price");
+  const before = await monthlyValue(page).innerText();
+  await price.click();
+  await price.fill("6500000");
+  await expect(monthlyValue(page)).not.toHaveText(before);
+  // 6.5M at 70 % over 30 years at 3.25 % is about HK$19,8xx a month.
+  await expect(monthlyValue(page)).toHaveText(/^HK\$19,8\d{2}$/);
+  await expect(price).toBeFocused();
+  await expect(page.getByText("編輯中，暫無法顯示結果")).toBeHidden();
+});
+
+test("only the 每月供款 row is a live region", async ({ page }) => {
+  await openMortgage(page, 375);
+  const live = page.locator("[aria-live]");
+  await expect(live).toHaveCount(1);
+  await expect(live).toHaveAttribute("aria-live", "polite");
+  await expect(live).toHaveAttribute("aria-atomic", "true");
+  await expect(live.getByText("每月供款", { exact: true })).toBeVisible();
+  await expect(live.getByText("貸款金額", { exact: true })).toHaveCount(0);
+});
+
+test("an invalid draft shows the existing 編輯中 panel and never NaN or $0", async ({ page }) => {
+  await openMortgage(page, 375);
+  const price = page.locator("#property-price");
+  await price.click();
+  await price.fill("abc");
+  const panel = page.getByRole("status").filter({ hasText: "編輯中，暫無法顯示結果" });
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("請輸入有效的「樓價」以繼續。");
+  const text = await page.locator("body").innerText();
+  expect(text).not.toMatch(/NaN|Infinity/);
+  // Back to a valid draft: the panel goes, the result returns.
+  await price.fill("7000000");
+  await expect(panel).toBeHidden();
+  await expect(monthlyValue(page)).toHaveText(/^HK\$[\d,]+$/);
+});
+
+test("the mortgage page passes axe at 375 and 1440 px", async ({ page }) => {
+  for (const [width, height] of [
+    [375, HEIGHT],
+    [1440, 900],
+  ] as const) {
+    await openMortgage(page, width, height);
+    const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa"]).analyze();
+    expect(results.violations.map((violation) => violation.id)).toEqual([]);
+  }
+});

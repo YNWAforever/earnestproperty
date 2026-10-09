@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Building2,
   Calculator,
@@ -33,6 +33,7 @@ import {
   MORTGAGE_INPUT_LIMITS,
   calculateMortgage,
   commitMortgageDraft,
+  liveMortgageInputs,
   mortgageInputsFromSearch,
   normalizeMortgageInputs,
   parseMortgageDraft,
@@ -222,13 +223,19 @@ function ResultRow({
   label,
   value,
   emphasized = false,
+  live = false,
 }: {
   label: string;
   value: string;
   emphasized?: boolean;
+  /** Announce changes: only the 每月供款 row is a live region, so typing is not read out row by row. */
+  live?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-b-0">
+    <div
+      className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-b-0"
+      {...(live ? { "aria-live": "polite", "aria-atomic": true } : {})}
+    >
       <span className="text-sm text-muted-foreground">{label}</span>
       <span
         className={
@@ -239,6 +246,17 @@ function ResultRow({
       </span>
     </div>
   );
+}
+
+const LIVE_RESULT_DELAY_MS = 300;
+
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
 }
 
 export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
@@ -253,10 +271,22 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
   // state only -- no localStorage, no server round-trip: this is a
   // "compare while you're on the page" tool, not a saved-search feature.
   const [scenarios, setScenarios] = useState<MortgageScenario[]>([]);
-  const result = useMemo(
-    () => (state.editingField === null ? calculateMortgage(state.inputs) : null),
-    [state.editingField, state.inputs],
+  // While a field is being typed the result follows its draft, 300 ms after the last keystroke.
+  // A draft that is invalid, out of range or empty (when required) shows the 編輯中 panel.
+  const editingKey = state.editingField;
+  const editingDraft = editingKey === null ? "" : state.drafts[editingKey];
+  const typed = useMemo(
+    () => ({ key: editingKey, draft: editingDraft }),
+    [editingKey, editingDraft],
   );
+  const debouncedTyped = useDebouncedValue(typed, LIVE_RESULT_DELAY_MS);
+  // A newly focused field has not been debounced yet: preview its current draft straight away.
+  const liveDraft = debouncedTyped.key === typed.key ? debouncedTyped.draft : typed.draft;
+  const result = useMemo(() => {
+    if (editingKey === null) return calculateMortgage(state.inputs);
+    const live = liveMortgageInputs(state.inputs, editingKey, liveDraft);
+    return live === null ? null : calculateMortgage(live);
+  }, [editingKey, liveDraft, state.inputs]);
   const scenarioSummaries = useMemo(
     () => scenarios.map((scenario) => ({ scenario, result: calculateMortgage(scenario.inputs) })),
     [scenarios],
@@ -312,7 +342,8 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
   };
 
   const handleSaveScenario = () => {
-    setScenarios((current) => saveMortgageScenario(current, state.inputs));
+    if (result === null) return;
+    setScenarios((current) => saveMortgageScenario(current, result.inputs));
     track(
       { name: "mortgage_scenario_save", payload: { scenarioCount: scenarios.length + 1 } },
       buildContext(),
@@ -498,7 +529,7 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
               </div>
             </div>
 
-            <div className="mt-5" aria-live="polite">
+            <div className="mt-5">
               {result === null ? (
                 <div
                   role="status"
@@ -506,9 +537,7 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
                 >
                   <p className="font-semibold text-foreground">編輯中，暫無法顯示結果</p>
                   <p className="mt-1">
-                    {activeDraftIsInvalid
-                      ? `請輸入有效的「${INPUT_LABELS[state.editingField!]}」以繼續。`
-                      : `請完成編輯「${INPUT_LABELS[state.editingField!]}」以更新預算結果。`}
+                    {`請輸入有效的「${INPUT_LABELS[state.editingField!]}」以繼續。`}
                   </p>
                 </div>
               ) : (
@@ -517,6 +546,7 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
                     label="每月供款"
                     value={formatMoney(result.monthlyPayment)}
                     emphasized
+                    live
                   />
                   <ResultRow
                     label="壓力測試後每月供款"
@@ -557,7 +587,7 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
                     </Button>
                   </div>
                   {scenarios.length >= MAX_MORTGAGE_SCENARIOS ? (
-                    <p className="mt-1 text-right text-xs text-muted-foreground">
+                    <p className="mt-1 text-right text-sm text-muted-foreground">
                       已達 {MAX_MORTGAGE_SCENARIOS} 個方案上限，請先在下方移除一個方案再儲存新方案。
                     </p>
                   ) : null}

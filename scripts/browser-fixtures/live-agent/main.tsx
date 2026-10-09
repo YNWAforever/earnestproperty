@@ -10,12 +10,14 @@
 // - `?scene=property-unavailable`: a property page with no bar, as for a sold, rented, not-found
 //   or failed listing (the route renders no PropertyDecisionActions there).
 // - `?scene=plain`: a normal page with no bar (as /dashboard).
+// - `?scene=mortgage`: the real MortgageCalculator (FX-16 F-21, live results while typing).
 // The default scene loads the widget lazily (the same chunk the launcher imports), so a spec can
 // delay or fail that chunk to see the launcher's loading and retry states.
 import { lazy, Suspense, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { LiveAgentLauncher } from "@/components/live-agent/LiveAgentLauncher";
 import { PropertyDecisionActions } from "@/components/property/PropertyDecisionActions";
+import { MortgageCalculator } from "@/components/site/MortgageCalculator";
 import { StickyWhatsAppBar } from "@/components/site/StickyWhatsAppBar";
 import { MOBILE_ACTION_BAR_RESERVE_CLASS } from "@/components/site/mobile-action-bar";
 import { SITE_BRANCHES } from "@/config/site";
@@ -113,6 +115,7 @@ export function Scene() {
   }
   if (scene === "property-unavailable") return <ChromePage heading="Property fixture, no bar" />;
   if (scene === "plain") return <ChromePage />;
+  if (scene === "mortgage") return <MortgageCalculator initialSearch={{}} />;
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
       <h1 className="text-lg font-semibold">Live agent fixture</h1>
