@@ -401,6 +401,12 @@ describe("facts the generator must not get wrong", () => {
     expect(description).toContain("浪翠園");
   });
 
+  test("the context sentence makes no 成交紀錄 claim", () => {
+    const description = listingSeoDescription(bareUnit);
+    expect(description).toContain("一頁睇齊浪翠園同屋苑其他放盤同交通配套。");
+    expect(description).not.toContain("成交紀錄");
+  });
+
   test("does not repeat 同屋苑成交紀錄 in both the context line and the CTA", () => {
     const description = listingSeoDescription(bareUnit);
     expect(description.match(/成交紀錄/g)?.length ?? 0).toBeLessThanOrEqual(1);

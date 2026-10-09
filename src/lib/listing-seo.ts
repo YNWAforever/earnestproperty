@@ -473,7 +473,7 @@ export function listingSeoDescription(input: ListingSeoInput): string {
   //    true statement rather than filler, and it varies by estate.
   if (displayWidth(description) < DESCRIPTION_MIN_UNITS) {
     const context = estate
-      ? `一頁睇齊${estate}成交紀錄、同屋苑其他放盤同交通配套。`
+      ? `一頁睇齊${estate}同屋苑其他放盤同交通配套。`
       : district
         ? `一頁睇齊${district}放盤比較、成交紀錄同交通配套。`
         : null;
