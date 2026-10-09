@@ -70,7 +70,9 @@ test.afterEach(async ({ page }, info) => {
 const json = (route: Route, body: unknown, status = 200) =>
   route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
-type Scene = "chrome" | "property" | "desktop";
+type Scene = "chrome" | "property" | "property-unavailable" | "plain";
+const BAR_SCENES = ["chrome", "property"] as const;
+const NO_BAR_SCENES = ["property-unavailable", "plain"] as const;
 
 async function open(page: Page, scene: Scene, width: number, height = HEIGHT) {
   pageErrors = [];
@@ -92,8 +94,13 @@ async function open(page: Page, scene: Scene, width: number, height = HEIGHT) {
   await expect(launcher(page)).toBeEnabled();
 }
 
+const rootPadding = (page: Page) =>
+  page.evaluate(() =>
+    parseFloat(getComputedStyle(document.getElementById("root")!.firstElementChild!).paddingBottom),
+  );
+
 const launcher = (page: Page) => page.getByRole("button", { name: "問樓助手", exact: true });
-const bar = (page: Page, scene: Scene) =>
+const bar = (page: Page, scene: (typeof BAR_SCENES)[number]) =>
   page.locator(
     scene === "chrome" ? "[data-sticky-whatsapp-bar]" : "[data-property-mobile-actions]",
   );
@@ -148,10 +155,7 @@ for (const width of WIDTHS) {
       expect(rect.bottom).toBe(HEIGHT);
       expect(rect.height).toBeLessThanOrEqual(HEIGHT * 0.1);
       // The page reserves exactly the bar's height: no more, no less.
-      const reserved = await page.evaluate(
-        () => getComputedStyle(document.getElementById("root")!.firstElementChild!).paddingBottom,
-      );
-      expect(parseFloat(reserved)).toBe(rect.height);
+      expect(await rootPadding(page)).toBe(rect.height);
     }
   });
 
@@ -172,19 +176,47 @@ for (const width of WIDTHS) {
     }
   });
 
-  test(`the docked icon opens the chat panel and closing it returns the icon to the bar at ${width}px`, async ({
+  test(`the docked icon opens the chat panel and closing it returns focus and the icon to the bar at ${width}px`, async ({
     page,
   }) => {
-    await open(page, "chrome", width);
-    const before = await box(launcher(page));
-    await launcher(page).click();
-    await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page.getByText(WELCOME, { exact: true })).toBeVisible();
-    await expect(page.getByRole("textbox", { name: "即時客服訊息" })).toBeFocused();
-    await page.getByRole("button", { name: "關閉即時客服" }).click();
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    expect(await box(launcher(page))).toEqual(before);
-    await expectTappable(launcher(page));
+    for (const scene of BAR_SCENES) {
+      await open(page, scene, width);
+      const before = await box(launcher(page));
+      await launcher(page).click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await expect(page.getByText(WELCOME, { exact: true })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "即時客服訊息" })).toBeFocused();
+      await page.getByRole("button", { name: "關閉即時客服" }).click();
+      await expect(page.getByRole("dialog")).toHaveCount(0);
+      await expect(launcher(page)).toBeFocused();
+      expect(await box(launcher(page))).toEqual(before);
+      await expectTappable(launcher(page));
+    }
+  });
+
+  test(`a page with no bar (sold, rented, not-found or failed listing; plain page) keeps main's labelled pill and reserves nothing at ${width}px`, async ({
+    page,
+  }) => {
+    for (const scene of NO_BAR_SCENES) {
+      await open(page, scene, width);
+      await expect(page.locator("[data-mobile-action-bar]")).toHaveCount(0);
+      expect(await rootPadding(page)).toBe(0);
+      // main's mobile pill: bottom-4 right-4, 44 px tall, rounded, label visible.
+      const pill = await box(launcher(page));
+      expect(width - pill.right).toBe(16);
+      expect(HEIGHT - pill.bottom).toBe(16);
+      expect(pill.height).toBe(44);
+      expect(pill.width).toBeGreaterThan(44);
+      await expect(launcher(page).getByText("問樓助手", { exact: true })).toBeVisible();
+      await expectTappable(launcher(page));
+      await launcher(page).click();
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await page.getByRole("button", { name: "關閉即時客服" }).click();
+      await expect(launcher(page)).toBeFocused();
+      if (width === 375) {
+        await page.screenshot({ path: resolve(SHOTS, `fx16-bar-${width}-${scene}.png`) });
+      }
+    }
   });
 
   test(`property bar: 致電, WhatsApp and 計月供 keep their full label with no overflow at ${width}px`, async ({
@@ -208,7 +240,7 @@ for (const width of WIDTHS) {
   test(`axe finds no violations in the chrome and property scenes at ${width}px`, async ({
     page,
   }) => {
-    for (const scene of ["chrome", "property"] as const) {
+    for (const scene of [...BAR_SCENES, ...NO_BAR_SCENES]) {
       await open(page, scene, width);
       const results = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa", "best-practice"])
@@ -243,21 +275,63 @@ test("no layout shift as the bar and the docked launcher mount at 375px", async 
   expect(shift).toBe(0);
 });
 
-test("at 1440 px no bar renders and the launcher box equals main's (right 20, bottom 20, height 44, label visible)", async ({
+test("docked, the loading and retry states stay perceivable (name, spinner, alert dot) at 375px", async ({
   page,
 }) => {
-  await open(page, "desktop", 1440, 900);
-  const main = await box(launcher(page));
-  expect(1440 - main.right).toBe(20);
-  expect(900 - main.bottom).toBe(20);
-  expect(main.height).toBe(44);
+  await open(page, "chrome", 375);
+  let release: () => void = () => undefined;
+  const held = new Promise<void>((done) => (release = done));
+  // Registered last, so it wins over open()'s catch-all for the lazy widget chunk.
+  await page.route("**/assets/LiveAgentWidget-*.js", async (route) => {
+    await held;
+    await route.abort();
+  });
+  await launcher(page).click();
+  const loading = page.getByRole("button", { name: "載入中…", exact: true });
+  await expect(loading).toBeVisible();
+  await expect(loading.locator("svg.animate-spin")).toBeVisible();
+  await expect(loading.locator("svg").first()).toBeHidden();
+  release();
+  const retry = page.getByRole("button", { name: "重試問樓助手", exact: true });
+  await expect(retry).toBeEnabled();
+  await expect(retry.locator("[data-live-agent-failed]")).toBeVisible();
+  await expectTappable(retry);
+  // The failed chunk is expected here; only page errors from other causes would fail the test.
+  pageErrors = pageErrors.filter(
+    (message) => !/LiveAgentWidget|dynamically imported/i.test(message),
+  );
+  await page.screenshot({ path: resolve(SHOTS, "fx16-bar-375-retry.png") });
+});
 
-  for (const scene of ["chrome", "property"] as const) {
+test("without a bar the retry state is main's: visible label, no dot, at 375px", async ({
+  page,
+}) => {
+  await open(page, "plain", 375);
+  await page.route("**/assets/LiveAgentWidget-*.js", (route) => route.abort());
+  await launcher(page).click();
+  const retry = page.getByRole("button", { name: "重試問樓助手", exact: true });
+  await expect(retry.getByText("重試問樓助手", { exact: true })).toBeVisible();
+  await expect(retry.locator("[data-live-agent-failed]")).toBeHidden();
+  pageErrors = pageErrors.filter(
+    (message) => !/LiveAgentWidget|dynamically imported/i.test(message),
+  );
+});
+
+test("at 1440 px no bar shows and the launcher is the pill (right 20, bottom 20, height 44, label visible) in every scene", async ({
+  page,
+}) => {
+  let pill: Box | null = null;
+  for (const scene of [...BAR_SCENES, ...NO_BAR_SCENES]) {
     await open(page, scene, 1440, 900);
-    await expect(bar(page, scene)).toBeHidden();
-    await expect(launcher(page)).toHaveText("問樓助手");
-    await expect(launcher(page).getByText("問樓助手")).toBeVisible();
-    expect(await box(launcher(page))).toEqual(main);
+    await expect(page.locator("[data-mobile-action-bar]")).toBeHidden();
+    expect(await rootPadding(page)).toBe(0);
+    await expect(launcher(page).getByText("問樓助手", { exact: true })).toBeVisible();
+    const current = await box(launcher(page));
+    expect(1440 - current.right).toBe(20);
+    expect(900 - current.bottom).toBe(20);
+    expect(current.height).toBe(44);
+    expect(current).toEqual(pill ?? current);
+    pill = current;
     const radius = await launcher(page).evaluate(
       (element) => getComputedStyle(element).borderRadius,
     );

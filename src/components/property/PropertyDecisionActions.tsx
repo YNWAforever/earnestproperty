@@ -10,6 +10,7 @@ import { resolvePublicWaAction } from "@/lib/whatsapp-enquiries/public-context";
 import { calculateMortgage } from "@/lib/mortgage";
 import type { NeonBranchRecord } from "@/lib/neon/public-data.types";
 import { buildContext, track } from "@/lib/analytics/events";
+import { mobileActionBarAttribute } from "@/components/site/mobile-action-bar";
 
 import { getPropertyDecision } from "./property-decision.js";
 
@@ -331,6 +332,7 @@ export function PropertyDecisionActions({
       <div
         className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pr-[3.75rem] shadow-lg backdrop-blur lg:hidden"
         data-property-mobile-actions
+        {...mobileActionBarAttribute}
       >
         <div
           className={`mx-auto grid max-w-6xl gap-2 ${decision.showMortgage ? "grid-cols-3" : "grid-cols-2"}`}

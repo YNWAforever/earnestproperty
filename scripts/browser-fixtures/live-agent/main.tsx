@@ -2,29 +2,47 @@
 // calls are answered by the Playwright spec (e2e/live-agent-cards.spec.ts) with fixed JSON, so
 // no database, provider or network is involved.
 //
-// FX-16 F-07 adds three scenes for e2e/public-mobile-chrome.spec.ts. Each mirrors the public
-// root (`__root.tsx`): the same page reservation, the real mobile bar and the real launcher.
-// - `?scene=chrome`: long content, an owner-form stand-in, a footer, StickyWhatsAppBar and the
-//   docked launcher.
-// - `?scene=property`: the same page with the property bar (PropertyDecisionActions) instead.
-// - `?scene=desktop`: the undocked launcher only, i.e. main's pill.
-import type { ReactNode } from "react";
+// FX-16 F-07 adds scenes for e2e/public-mobile-chrome.spec.ts. Each mirrors the public root
+// (`__root.tsx`): the same reservation class and the same launcher, both imported from the code
+// the root uses, so the fixture exercises the root's real dock/reserve rule (a bar in the DOM).
+// - `?scene=chrome`: long content, an owner-form stand-in, a footer and StickyWhatsAppBar.
+// - `?scene=property`: the same page with the property bar (PropertyDecisionActions) inside main.
+// - `?scene=property-unavailable`: a property page with no bar, as for a sold, rented, not-found
+//   or failed listing (the route renders no PropertyDecisionActions there).
+// - `?scene=plain`: a normal page with no bar (as /dashboard).
+// The default scene loads the widget lazily (the same chunk the launcher imports), so a spec can
+// delay or fail that chunk to see the launcher's loading and retry states.
+import { lazy, Suspense, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { LiveAgentLauncher } from "@/components/live-agent/LiveAgentLauncher";
-import { LiveAgentWidget } from "@/components/live-agent/LiveAgentWidget";
 import { PropertyDecisionActions } from "@/components/property/PropertyDecisionActions";
 import { StickyWhatsAppBar } from "@/components/site/StickyWhatsAppBar";
+import { MOBILE_ACTION_BAR_RESERVE_CLASS } from "@/components/site/mobile-action-bar";
 import { SITE_BRANCHES } from "@/config/site";
 import "@/styles.css";
 
+const LazyLiveAgentWidget = lazy(() =>
+  import("@/components/live-agent/LiveAgentWidget").then((module) => ({
+    default: module.LiveAgentWidget,
+  })),
+);
+
 // The generic bar is an <aside> outside <main> (root); the property bar renders inside the
 // route, so inside <main>, exactly as on the site.
-export function ChromePage({ bar, barInMain = false }: { bar: ReactNode; barInMain?: boolean }) {
+export function ChromePage({
+  bar = null,
+  barInMain = false,
+  heading = "Mobile chrome fixture",
+}: {
+  bar?: ReactNode;
+  barInMain?: boolean;
+  heading?: string;
+}) {
   return (
     <>
-      <div className="flex min-h-screen flex-col pb-[calc(3.8125rem+env(safe-area-inset-bottom))] lg:pb-0">
+      <div className={`flex min-h-screen flex-col ${MOBILE_ACTION_BAR_RESERVE_CLASS}`}>
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
-          <h1 className="text-lg font-semibold">Mobile chrome fixture</h1>
+          <h1 className="text-lg font-semibold">{heading}</h1>
           {Array.from({ length: 60 }, (_, index) => (
             <p className="mt-3 text-sm" key={index}>
               段落 {index + 1}：深井、青山公路及汀九一帶的物業資料。
@@ -66,7 +84,7 @@ export function ChromePage({ bar, barInMain = false }: { bar: ReactNode; barInMa
         </footer>
       </div>
       {barInMain ? null : bar}
-      <LiveAgentLauncher docked />
+      <LiveAgentLauncher />
     </>
   );
 }
@@ -93,11 +111,14 @@ export function Scene() {
       />
     );
   }
-  if (scene === "desktop") return <LiveAgentLauncher docked={false} />;
+  if (scene === "property-unavailable") return <ChromePage heading="Property fixture, no bar" />;
+  if (scene === "plain") return <ChromePage />;
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
       <h1 className="text-lg font-semibold">Live agent fixture</h1>
-      <LiveAgentWidget initiallyOpen />
+      <Suspense fallback={null}>
+        <LazyLiveAgentWidget initiallyOpen />
+      </Suspense>
     </main>
   );
 }

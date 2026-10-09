@@ -200,11 +200,12 @@ test("the property bar sits at bottom-0 with the same launcher slot", () => {
   assert.equal(actions.match(/className="[^"]*\bhidden\b[^"]*\bmin-\[420px\]:inline"/g)?.length, 3);
   // The route no longer reserves 128 px of its own; the root reserves the bar's height.
   assert.doesNotMatch(route, /pb-32/);
-  const launcher = readFileSync(
-    new URL("../live-agent/LiveAgentLauncher.tsx", import.meta.url),
-    "utf8",
-  );
-  assert.match(launcher, /docked\?: boolean/);
+  // The launcher docks only beside a bar that is really in the DOM. The property bar
+  // carries the marker; the sold/rented branch renders PropertyUnavailableNotice and no
+  // bar, so the launcher stays main's labelled pill there (as do not-found and error).
+  assert.match(actions, /data-property-mobile-actions\s+\{\.\.\.mobileActionBarAttribute\}/);
+  assert.match(route, /isUnavailable \? \(\s*<PropertyUnavailableNotice/);
+  assert.doesNotMatch(route, /mobileActionBarAttribute|StickyWhatsAppBar/);
 });
 
 test("property.$listingNo.tsx sanitizes title/description/address before rendering (DR-4)", () => {

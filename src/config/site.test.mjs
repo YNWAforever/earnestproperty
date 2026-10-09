@@ -219,31 +219,48 @@ test("the sticky bar sits at bottom-0 on the safe area and reserves the launcher
   assert.match(bar, /min-h-11/, "the WhatsApp link must be a 44 px tap target");
 });
 
-test("the root reserves the bar height and docks the launcher wherever a mobile bar exists", () => {
+test("the root reserves the bar height and docks the launcher only where a mobile bar renders", () => {
   const root = readFileSync("src/routes/__root.tsx", "utf8");
-  // 61 px = 1 px border + 8 px + 44 px link + 8 px; the e2e spec measures it.
+  const bar = readFileSync("src/components/site/StickyWhatsAppBar.tsx", "utf8");
+  const rule = readFileSync("src/components/site/mobile-action-bar.ts", "utf8");
+  // One rule, keyed on the bar being in the DOM: a /property/* page that renders no bar
+  // (sold, rented, not found, load error) keeps main's labelled pill and no padding.
+  assert.match(bar, /\{\.\.\.mobileActionBarAttribute\}/);
   assert.match(
     root,
-    /const dockLauncher = showStickyWhatsAppBar \|\| location\.pathname\.startsWith\("\/property\/"\);/,
+    /import \{ MOBILE_ACTION_BAR_RESERVE_CLASS \} from "@\/components\/site\/mobile-action-bar"/,
   );
-  assert.match(root, /<LiveAgentLauncher docked=\{dockLauncher\} \/>/);
-  // The bar is `fixed`, so the page reserves exactly its height or the footer's
-  // last links sit underneath it with no way to scroll clear. This includes
-  // /property/*, whose own bar would otherwise cover the site footer.
   assert.match(
     root,
-    /dockLauncher \? "pb-\[calc\(3\.8125rem\+env\(safe-area-inset-bottom\)\)\] lg:pb-0" : ""/,
+    /className=\{`flex min-h-screen flex-col \$\{MOBILE_ACTION_BAR_RESERVE_CLASS\}`\}/,
+  );
+  assert.match(root, /<LiveAgentLauncher \/>/);
+  assert.doesNotMatch(
+    root,
+    /dockLauncher|docked=/,
+    "no pathname guess about whether a bar renders",
   );
   assert.doesNotMatch(root, /pb-32/);
+  // The bar is `fixed`, so the page reserves exactly its height (61 px = 1 px border + 8 px +
+  // 44 px link + 8 px; the e2e spec measures it) or the footer's last links sit under it.
+  assert.match(
+    rule,
+    /"max-lg:\[html:has\(\[data-mobile-action-bar\]\)_&\]:pb-\[calc\(3\.8125rem\+env\(safe-area-inset-bottom\)\)\]"/,
+  );
 
   const launcher = readFileSync("src/components/live-agent/LiveAgentLauncher.tsx", "utf8");
   const trigger = readFileSync("src/components/live-agent/live-agent-trigger.ts", "utf8");
-  // lg+ keeps today's floating pill byte for byte; only phones get the 44x44 icon.
+  // Without a bar, and at lg+, the trigger is today's floating pill byte for byte.
   assert.match(
     trigger,
     /"fixed bottom-4 right-4 z-50 h-11 rounded-full px-4 shadow-lg sm:bottom-5 sm:right-5"/,
   );
-  assert.match(launcher, /aria-label="問樓助手"/);
+  // Loading and retry stay perceivable when the visible label is hidden (docked).
+  assert.match(
+    launcher,
+    /const label = loading \? "載入中…" : failed \? "重試問樓助手" : "問樓助手";/,
+  );
+  assert.match(launcher, /aria-label=\{label\}/);
 });
 
 test("homepage and navigation include Ting Kau content entry points", () => {

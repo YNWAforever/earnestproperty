@@ -2,6 +2,7 @@ import { MessageCircle } from "lucide-react";
 
 import { whatsappUrl } from "@/config/site";
 import { buildContext, track } from "@/lib/analytics/events";
+import { mobileActionBarAttribute } from "./mobile-action-bar";
 
 /**
  * Site-wide mobile-only sticky WhatsApp CTA (audit item 14: "no sticky
@@ -20,6 +21,7 @@ export function StickyWhatsAppBar() {
       aria-label="WhatsApp 即時查詢"
       className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pr-[3.75rem] shadow-lg backdrop-blur lg:hidden"
       data-sticky-whatsapp-bar
+      {...mobileActionBarAttribute}
     >
       <a
         href={href}
