@@ -50,6 +50,7 @@ const agentCapabilities = {
   auditRead: false,
   migrationsPlan: false,
   migrationsApply: false,
+  diagnosticsRead: false,
 };
 
 test("job commands follow guarded backend states", () => {

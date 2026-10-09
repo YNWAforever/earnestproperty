@@ -1,3 +1,4 @@
+import type { StaffNotificationView } from "./staff-notification-view.js";
 export type StaffNotificationStatus =
   | "pending"
   | "acknowledged"
@@ -42,4 +43,8 @@ export type StaffNotificationPage = {
   available: boolean;
   items: StaffNotificationItem[];
   nextCursor: string | null;
+};
+/** The list as it reaches the browser: attempts carry no diagnostics unless admin (FX-17a). */
+export type StaffNotificationViewPage = Omit<StaffNotificationPage, "items"> & {
+  items: StaffNotificationView[];
 };

@@ -119,18 +119,24 @@ test("assignment context authorizes real staff_role enum and assigned conversati
         ports,
       );
       assert.equal(context.assignment_version, 0);
-      assert.equal(context.assigned_agent_id, agent);
+      // FX-17a G-11: staff ids are admin-only diagnostics.
+      if (role === "admin") assert.equal(context.diagnostics.assignedAgentId, agent);
+      else assert.equal(context.diagnostics, null);
     }
     const otherBranchContext = await readAssignmentContext(
       otherConversation,
       { staffId: manager, roles: ["manager"] },
       ports,
     );
-    assert.equal(
-      otherBranchContext.assigned_agent_id,
-      outsider,
-      "a manager can read a conversation assigned to another branch (FX-06, org-wide)",
+    // A manager can read a conversation assigned to another branch (FX-06, org-wide).
+    assert.equal(otherBranchContext.assignment_version, 0);
+    assert.equal(otherBranchContext.diagnostics, null);
+    const otherBranchAdmin = await readAssignmentContext(
+      otherConversation,
+      { staffId: admin, roles: ["admin"] },
+      ports,
     );
+    assert.equal(otherBranchAdmin.diagnostics.assignedAgentId, outsider);
     await assert.rejects(
       readAssignmentContext(
         "10000000-0000-4000-8000-000000000099",

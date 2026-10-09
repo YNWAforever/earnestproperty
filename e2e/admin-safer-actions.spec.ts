@@ -324,3 +324,78 @@ test("the three confirmations fit a 375 px screen", async ({ page }) => {
   await page.screenshot({ path: `${SHOTS}/not-opt-out-375.png`, animations: "disabled" });
   expect(await outboundCalls(page)).toEqual([]);
 });
+
+// FX-17a G-11: diagnostics reach admins only. The fixture applies the same pure view functions
+// the server uses, keyed on the synthetic actor's role; the server tests prove the stripping.
+const staffId = "20000000-0000-4000-8000-000000000001";
+const technicalStorage = { "no-link-fixture-staff-work": "true" };
+const agentStorage = { ...technicalStorage, "no-link-fixture-actor": "agent-a" };
+const adminStorage = {
+  ...technicalStorage,
+  "no-link-fixture-actor": "manager",
+  "no-link-fixture-role": "admin",
+};
+
+const fitsWidth = (page: Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+// Below 1024 px the conversation opens as a dialog over the inbox; close it to reach the panel.
+async function closeConversationIfMobile(page: Page, width: number) {
+  if (width >= 1024) return;
+  await page.getByRole("button", { name: "關閉", exact: true }).filter({ visible: true }).click();
+  await expect(page.getByRole("region", { name: "查詢及分派證據" })).toHaveCount(0);
+}
+
+for (const width of [1440, 375]) {
+  test(`an agent sees no 技術資料 in the inbox; an admin can open it (${width} px)`, async ({
+    page,
+  }) => {
+    const height = width < 768 ? 812 : 900;
+    await page.setViewportSize({ width, height });
+    await open(page, ids.a, agentStorage);
+    const evidence = page.getByRole("region", { name: "查詢及分派證據" });
+    await expect(evidence).toContainText("已確認負責人：合成同事甲");
+    for (const gone of ["技術資料", "支援診斷", "接手支援診斷"])
+      await expect(page.getByText(gone, { exact: true })).toHaveCount(0);
+    const absentForAgent = [staffId, "private_note_posted", "synthetic-model", "requested_staff"];
+    for (const absent of absentForAgent)
+      expect(await page.locator("body").innerText()).not.toContain(absent);
+    expect(await fitsWidth(page)).toBe(true);
+    await page.screenshot({ path: `${SHOTS}/technical-inbox-agent-${width}.png` });
+    await closeConversationIfMobile(page, width);
+    const panel = page.getByRole("region", { name: "我的接手工作" });
+    await expect(panel).toContainText("A074714");
+    // The attempt line keeps transport, state and an HK time.
+    await expect(panel).toContainText("Inbox 內部備註（不代表同事手機通知）：供應商已接納");
+    await expect(panel).toContainText(" · 接納 ");
+    await expect(panel.getByText("技術資料", { exact: true })).toHaveCount(0);
+    await panel.screenshot({ path: `${SHOTS}/technical-card-agent-${width}.png` });
+    expect(errors.get(page)).toEqual([]);
+    await page.close();
+
+    const adminPage = await page.context().newPage();
+    await adminPage.setViewportSize({ width, height });
+    await open(adminPage, ids.a, adminStorage);
+    await expect(adminPage.getByRole("region", { name: "查詢及分派證據" })).toContainText(
+      "已確認負責人：合成同事甲",
+    );
+    expect(await adminPage.locator("body").innerText()).not.toContain(staffId);
+    // Closed by default. On a phone only the open conversation's disclosure is reachable.
+    const triggers = adminPage.getByRole("button", { name: "技術資料", exact: true });
+    await expect(triggers).toHaveCount(width >= 1024 ? 2 : 1);
+    for (const trigger of await triggers.all()) await trigger.click();
+    await expect(adminPage.getByText(`建議同事 ID：${staffId}`)).toBeVisible();
+    await expect(adminPage.getByText("配對原因：requested_staff")).toBeVisible();
+    expect(await fitsWidth(adminPage)).toBe(true);
+    await adminPage.screenshot({ path: `${SHOTS}/technical-inbox-admin-${width}.png` });
+    await closeConversationIfMobile(adminPage, width);
+    const adminPanel = adminPage.getByRole("region", { name: "我的接手工作" });
+    if (width < 1024)
+      await adminPanel.getByRole("button", { name: "技術資料", exact: true }).click();
+    await expect(adminPanel).toContainText("證據類型：private_note_posted");
+    await expect(adminPanel).toContainText("接納來源：synthetic-model");
+    expect(await fitsWidth(adminPage)).toBe(true);
+    await adminPanel.screenshot({ path: `${SHOTS}/technical-card-admin-${width}.png` });
+    // afterEach checks the fixture page; hand it the admin page's captured errors.
+    errors.set(page, errors.get(adminPage)!);
+  });
+}

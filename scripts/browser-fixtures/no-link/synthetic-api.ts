@@ -12,7 +12,10 @@ import {
   type ForwardedEnquiryInput,
   type LeadContactUpdateInput,
 } from "../../../src/lib/whatsapp-enquiries/forwarded-enquiries";
+import { toAssignmentContextView } from "../../../src/lib/whatsapp-enquiries/assignment-view.js";
 export const actor = sessionStorage.getItem("no-link-fixture-actor") ?? "agent-a";
+// FX-17a: "admin" signs the synthetic actor in as an admin (diagnostics are admin-only).
+const roleOverride = sessionStorage.getItem("no-link-fixture-role");
 export const ids = {
   a: "10000000-0000-4000-8000-000000000001",
   b: "10000000-0000-4000-8000-000000000002",
@@ -69,12 +72,12 @@ const rows = [
 const state = {
   calls: [] as { name: string; input: unknown }[],
   membershipMode: "ok",
-  membershipRole: actor === "manager" ? "manager" : "agent",
+  membershipRole: roleOverride ?? (actor === "manager" ? "manager" : "agent"),
   membershipBinding: actor === "agent-b" ? ids.staffB : ids.staff,
   pendingMembership: [] as { release: () => void }[],
   refreshMembership: async (
     _mode = "ok",
-    _role = actor === "manager" ? "manager" : "agent",
+    _role = roleOverride ?? (actor === "manager" ? "manager" : "agent"),
     _binding = ids.staff,
   ) => {},
   pushInbound: (_id: string, _text: string) => {},
@@ -138,7 +141,7 @@ Object.assign(window, {
 const fixture = () => (window as unknown as { noLinkFixture: typeof state }).noLinkFixture;
 fixture().refreshMembership = async (
   mode = "ok",
-  role = actor === "manager" ? "manager" : "agent",
+  role = roleOverride ?? (actor === "manager" ? "manager" : "agent"),
   binding = ids.staff,
 ) => {
   Object.assign(fixture(), {
@@ -347,31 +350,36 @@ export async function getWhatsappAssignment({ conversationId }: { conversationId
     return { kind: "error", code: "forbidden", requestId: "synthetic-denied" };
   const staffName =
     sessionStorage.getItem("no-link-fixture-names") === "missing" ? null : "合成同事甲";
+  // The server's own view function, keyed on the synthetic session's role.
   return {
     kind: "ok",
-    context: {
-      proposedStaffId: ids.staff,
-      proposedStaffName: staffName,
-      proposalReason: "requested_staff",
-      confirmed_staff_id: ids.staff,
-      confirmed_staff_name: staffName,
-      assignment_state: sessionStorage.getItem("no-link-fixture-assignment") ?? "confirmed",
-      desired_staff_id: null,
-      desired_staff_name: null,
-      enquiries: [
-        {
-          id: conversationId === ids.a ? ids.enquiry : ids.enquiryB,
-          property: conversationId === ids.a ? "A074714" : "A074715",
-          source: "28Hse",
-          dealType: "sale",
-          requestedStaffId: ids.staff,
-          requestedStaffName: staffName,
-          firstResponseAt: null,
-          dueAt: null,
-          review: sessionStorage.getItem("no-link-fixture-enquiry-review") === "true",
-        },
-      ],
-    },
+    context: toAssignmentContextView(
+      {
+        proposedStaffId: ids.staff,
+        proposedStaffName: staffName,
+        proposalReason: "requested_staff",
+        confirmed_staff_id: ids.staff,
+        confirmed_staff_name: staffName,
+        assignment_state: sessionStorage.getItem("no-link-fixture-assignment") ?? "confirmed",
+        assignment_version: 1,
+        desired_staff_id: null,
+        desired_staff_name: null,
+        enquiries: [
+          {
+            id: conversationId === ids.a ? ids.enquiry : ids.enquiryB,
+            property: conversationId === ids.a ? "A074714" : "A074715",
+            source: "28Hse",
+            dealType: "sale",
+            requestedStaffId: ids.staff,
+            requestedStaffName: staffName,
+            firstResponseAt: null,
+            dueAt: null,
+            review: sessionStorage.getItem("no-link-fixture-enquiry-review") === "true",
+          },
+        ],
+      },
+      { diagnostics: fixture().membershipRole === "admin" },
+    ),
   };
 }
 export async function getWhatsappEnquiryQueue() {

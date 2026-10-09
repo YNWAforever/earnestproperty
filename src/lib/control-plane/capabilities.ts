@@ -8,6 +8,7 @@ export type OperationsCapabilities = {
   auditRead: boolean;
   migrationsPlan: boolean;
   migrationsApply: boolean;
+  diagnosticsRead: boolean;
 };
 
 export function operationsCapabilitiesForRoles(
@@ -20,5 +21,6 @@ export function operationsCapabilitiesForRoles(
     auditRead: hasPermission(roles, "audit.read"),
     migrationsPlan: hasPermission(roles, "system.migrations.plan"),
     migrationsApply: hasPermission(roles, "system.migrations.apply"),
+    diagnosticsRead: hasPermission(roles, "system.diagnostics.read"),
   };
 }

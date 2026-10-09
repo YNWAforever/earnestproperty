@@ -11,6 +11,8 @@ import {
   selectAssignment,
   selectNoLinkAssignment,
 } from "./assignment-policy.ts";
+import { toAssignmentContextView, type AssignmentContextView } from "./assignment-view.js";
+import { canReadDiagnostics } from "../control-plane/permissions.ts";
 type Ports = { query: typeof queryRows; transaction: typeof transactionRows };
 const defaultPorts: Ports = { query: queryRows, transaction: transactionRows };
 type Actor = Pick<StaffAccess, "staffId" | "roles">;
@@ -129,13 +131,16 @@ export async function readAssignmentContext(
         [proposal.staffId],
       )
     : [];
-  return {
-    ...row,
-    proposedStaffName: proposedStaff?.name ?? null,
-    assignment_version: Number(row.assignment_version),
-    proposedStaffId: proposal.staffId,
-    proposalReason: proposal.reason,
-  } as AssignmentContextDto;
+  // FX-17a G-11: diagnostics are stripped here, on the server, for every role but admin.
+  return toAssignmentContextView(
+    {
+      ...row,
+      proposedStaffName: proposedStaff?.name ?? null,
+      proposedStaffId: proposal.staffId,
+      proposalReason: proposal.reason,
+    },
+    { diagnostics: canReadDiagnostics(actor.roles) },
+  );
 }
 const mappingSchema = z
   .object({
@@ -428,34 +433,8 @@ export async function readEnquiryQueue(actor: Actor, ports: Ports = defaultPorts
   );
 }
 
-export type AssignmentContextDto = {
-  proposedStaffId: string | null;
-  proposedStaffName: string | null;
-  proposalReason: string;
-  assignment_version: number;
-  assignment_lock: boolean;
-  confirmed_staff_id: string | null;
-  confirmed_staff_name: string | null;
-  assigned_agent_id: string | null;
-  request_id: string | null;
-  desired_staff_id: string | null;
-  desired_staff_name: string | null;
-  assignment_state: string | null;
-  evidence: Record<string, string | boolean> | null;
-  enquiries:
-    | {
-        id: string;
-        property: string | null;
-        source: string | null;
-        requestedStaffId: string | null;
-        requestedStaffName: string | null;
-        dealType: string | null;
-        firstResponseAt: string | null;
-        dueAt: string | null;
-        review: boolean;
-      }[]
-    | null;
-};
+/** What `readAssignmentContext` returns: the role-scoped view (FX-17a G-11). */
+export type AssignmentContextDto = AssignmentContextView;
 export type StaffChannelDto = {
   id: string;
   staff_id: string;

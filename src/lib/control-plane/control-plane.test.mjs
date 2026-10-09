@@ -40,6 +40,7 @@ test("operations capabilities expose no protected panels beyond each role", () =
     auditRead: false,
     migrationsPlan: false,
     migrationsApply: false,
+    diagnosticsRead: false,
   });
   assert.deepEqual(operationsCapabilitiesForRoles(["manager"]), {
     jobsRead: true,
@@ -48,8 +49,10 @@ test("operations capabilities expose no protected panels beyond each role", () =
     auditRead: true,
     migrationsPlan: false,
     migrationsApply: false,
+    diagnosticsRead: false,
   });
   assert.equal(operationsCapabilitiesForRoles(["admin"]).migrationsApply, true);
+  assert.equal(operationsCapabilitiesForRoles(["admin"]).diagnosticsRead, true);
   assert.deepEqual(operationsCapabilitiesForRoles(["unknown"]), {
     jobsRead: false,
     jobsRetry: false,
@@ -57,6 +60,7 @@ test("operations capabilities expose no protected panels beyond each role", () =
     auditRead: false,
     migrationsPlan: false,
     migrationsApply: false,
+    diagnosticsRead: false,
   });
 });
 

@@ -13,6 +13,8 @@ export const controlPlanePermissions = [
   "system.migrations.plan",
   "system.migrations.apply",
   "audit.read",
+  // FX-17a G-11: staff ids, request ids, proposal reasons and provider evidence. Admin only.
+  "system.diagnostics.read",
 ] as const;
 
 export type ControlPlanePermission = (typeof controlPlanePermissions)[number];
@@ -42,6 +44,11 @@ export function hasPermission(roles: readonly string[], permission: ControlPlane
       ? rolePermissions[role].has(permission)
       : false,
   );
+}
+
+/** Whether the server may send diagnostics (ids, provider evidence) to this actor. */
+export function canReadDiagnostics(roles: readonly string[]): boolean {
+  return hasPermission(roles, "system.diagnostics.read");
 }
 
 export async function requireStaffPermission(

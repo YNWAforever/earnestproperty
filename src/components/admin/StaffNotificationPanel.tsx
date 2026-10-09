@@ -6,18 +6,16 @@ import {
   confirmStaffNotification,
   askStaffNotificationHelp,
 } from "@/lib/neon/staff-notifications";
-import type {
-  StaffNotificationItem,
-  StaffNotificationPage,
-} from "@/lib/neon/staff-notifications.types";
+import type { StaffNotificationViewPage } from "@/lib/neon/staff-notifications.types";
+import type { StaffNotificationView } from "@/lib/neon/staff-notification-view.js";
 export function StaffNotificationPanel({
   refreshKey,
   onOpen,
 }: {
   refreshKey: number | null;
-  onOpen: (item: StaffNotificationItem) => void;
+  onOpen: (item: StaffNotificationView) => void;
 }) {
-  const [page, setPage] = useState<StaffNotificationPage | null>(null),
+  const [page, setPage] = useState<StaffNotificationViewPage | null>(null),
     [status, setStatus] = useState<"pending" | "all">("pending"),
     [cursor, setCursor] = useState<string | null>(null),
     [error, setError] = useState(""),
@@ -58,7 +56,7 @@ export function StaffNotificationPanel({
       active = false;
     };
   }, [cursor, status, refreshKey, revision]);
-  async function perform(item: StaffNotificationItem, reason?: string) {
+  async function perform(item: StaffNotificationView, reason?: string) {
     if (pending.current || !freshRef.current || !item.canAct) return;
     if (reason !== undefined && !reason.trim()) return;
     pending.current = true;

@@ -48,3 +48,23 @@ test("viewer holds exactly system.health.read and audit.read, nothing else", () 
 test("an unrecognized role grants no permission", () => {
   assert.equal(hasPermission(["not-a-real-role"], "system.health.read"), false);
 });
+
+test("only admin holds system.diagnostics.read (FX-17a G-11)", async () => {
+  const { canReadDiagnostics } = await import("./permissions.ts");
+  assert.equal(hasPermission(["admin"], "system.diagnostics.read"), true);
+  assert.equal(canReadDiagnostics(["admin"]), true);
+  for (const role of ["manager", "agent", "viewer", "not-a-real-role"]) {
+    assert.equal(hasPermission([role], "system.diagnostics.read"), false, role);
+    assert.equal(canReadDiagnostics([role]), false, role);
+  }
+  assert.equal(canReadDiagnostics([]), false);
+  assert.equal(canReadDiagnostics(["manager", "agent"]), false);
+  assert.equal(canReadDiagnostics(["agent", "admin"]), true);
+});
+
+test("operations capabilities carry diagnosticsRead for admin only", async () => {
+  const { operationsCapabilitiesForRoles } = await import("./capabilities.ts");
+  assert.equal(operationsCapabilitiesForRoles(["admin"]).diagnosticsRead, true);
+  for (const role of ["manager", "agent", "viewer"])
+    assert.equal(operationsCapabilitiesForRoles([role]).diagnosticsRead, false, role);
+});

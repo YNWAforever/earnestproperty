@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import type { StaffNotificationItem } from "@/lib/neon/staff-notifications.types";
+import type { StaffNotificationView } from "@/lib/neon/staff-notification-view.js";
+import { formatHkDateTime } from "@/lib/format";
+import { AdminTechnicalDetails } from "./AdminTechnicalDetails";
 const states: Record<string, string> = {
   pending: "待確認接手",
   acknowledged: "已確認接手",
@@ -16,7 +18,7 @@ export function StaffNotificationCard({
   onConfirm,
   onHelp,
 }: {
-  item: StaffNotificationItem;
+  item: StaffNotificationView;
   busy: boolean;
   onOpen: () => void;
   onConfirm: () => void;
@@ -65,26 +67,36 @@ export function StaffNotificationCard({
                   : a.state === "unknown"
                     ? "發送結果不明（需核對）"
                     : a.state}
-              {a.evidenceKind ? ` · ${a.evidenceKind}` : ""}
-              {a.acceptedAt ? ` · 接納 ${a.acceptedAt}（${a.acceptedSource ?? "來源未核實"}）` : ""}
-              {a.deliveredAt
-                ? ` · 送達 ${a.deliveredAt}（${a.deliveredSource ?? "來源未核實"}）`
-                : ""}
-              {a.readAt ? ` · 已讀 ${a.readAt}（${a.readSource ?? "來源未核實"}）` : ""}
-              {a.error ? ` · ${a.error}` : ""}
+              {a.acceptedAt ? ` · 接納 ${formatHkDateTime(a.acceptedAt) ?? a.acceptedAt}` : ""}
+              {a.deliveredAt ? ` · 送達 ${formatHkDateTime(a.deliveredAt) ?? a.deliveredAt}` : ""}
+              {a.readAt ? ` · 已讀 ${formatHkDateTime(a.readAt) ?? a.readAt}` : ""}
             </li>
           ))
         ) : (
           <li>工作已記錄；未有外部通知證據。</li>
         )}
       </ul>
-      <details className="text-xs">
-        <summary className="cursor-pointer">接手支援診斷</summary>
-        <p>查詢：{item.inquiryId}</p>
-        <p>
-          接手工作：{item.id} · 分派版本：{item.assignmentVersion}
-        </p>
-      </details>
+      <AdminTechnicalDetails
+        rows={
+          item.diagnostics
+            ? [
+                { label: "查詢", value: item.inquiryId },
+                { label: "接手工作", value: `${item.id} · 分派版本：${item.assignmentVersion}` },
+                ...item.diagnostics.attempts.flatMap((d) =>
+                  (
+                    [
+                      ["證據類型", d.evidenceKind],
+                      ["接納來源", d.acceptedSource],
+                      ["送達來源", d.deliveredSource],
+                      ["已讀來源", d.readSource],
+                      ["錯誤代碼", d.error],
+                    ] as const
+                  ).flatMap(([label, value]) => (value ? [{ label, value }] : [])),
+                ),
+              ]
+            : null
+        }
+      />
       <div className="flex gap-2">
         <Button variant="outline" onClick={onOpen}>
           查看查詢
