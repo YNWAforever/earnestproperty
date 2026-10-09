@@ -244,7 +244,11 @@ function BlogArticlePage() {
     return (
       <div className="mx-auto max-w-3xl px-6 py-24 text-center">
         <h1 className="text-2xl font-bold">文章不存在</h1>
-        <Link to="/blog" className="mt-4 inline-block text-sm font-semibold text-primary">
+        <Link
+          to="/blog"
+          activeOptions={{ exact: true }}
+          className="mt-4 inline-block text-sm font-semibold text-primary"
+        >
           返回 Blog
         </Link>
       </div>

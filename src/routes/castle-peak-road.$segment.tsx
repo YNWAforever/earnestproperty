@@ -117,7 +117,9 @@ function CastlePeakRoadSegmentError({ error }: { error: unknown }) {
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button onClick={() => router.invalidate()}>重新載入</Button>
           <Button asChild variant="outline">
-            <Link to="/castle-peak-road">返回青山公路總覽</Link>
+            <Link to="/castle-peak-road" activeOptions={{ exact: true }}>
+              返回青山公路總覽
+            </Link>
           </Button>
         </div>
       </div>
@@ -224,7 +226,7 @@ function CastlePeakRoadSegmentPage() {
               </a>
             </Button>
             <Button asChild variant="outline">
-              <Link to="/castle-peak-road">
+              <Link to="/castle-peak-road" activeOptions={{ exact: true }}>
                 返回青山公路總覽
                 <ArrowRight className="h-4 w-4" />
               </Link>

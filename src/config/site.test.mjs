@@ -465,7 +465,7 @@ test("property experience navigation exposes the mortgage calculator everywhere"
 
   assert.match(header, /to: "\/mortgage", label: "按揭計算機"/);
   assert.match(header, /menuMobileItems\(menu\)/);
-  assert.match(footer, /<Link to="\/mortgage"[\s\S]*?按揭計算機/);
+  assert.match(footer, /<Link\s+to="\/mortgage"[\s\S]*?按揭計算機/);
 });
 
 test("sitemap includes property experience routes and only discovered public agent profiles", () => {
@@ -570,9 +570,9 @@ test("privacy, disclaimer and terms pages exist and are linked from the footer, 
 
   const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
   assert.match(footer, /法律 Legal/);
-  assert.match(footer, /<Link to="\/privacy"/);
-  assert.match(footer, /<Link to="\/disclaimer"/);
-  assert.match(footer, /<Link to="\/terms"/);
+  assert.match(footer, /<Link\s+to="\/privacy"/);
+  assert.match(footer, /<Link\s+to="\/disclaimer"/);
+  assert.match(footer, /<Link\s+to="\/terms"/);
 
   // The licence number appeared twice -- once from SITE_CONTACT.licenceNo, once
   // hardcoded as a literal "C-018613" -- so the two could silently drift apart.
@@ -811,7 +811,7 @@ test("the 最新成交 entry points are hidden while D7 holds", () => {
       `${name} must not carry the 成交 blurb`,
     );
     assert.equal(source.includes('to: "/transactions"'), false, `${name} nav item`);
-    assert.equal(source.includes('<Link to="/transactions"'), false, `${name} link`);
+    assert.doesNotMatch(source, /<Link\s+to="\/transactions"/, `${name} link`);
     assert.equal(source.includes('href="/transactions"'), false, `${name} card`);
   }
 

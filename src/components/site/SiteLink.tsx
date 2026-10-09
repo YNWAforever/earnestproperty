@@ -49,7 +49,10 @@ export function SiteLink({ href, children, ...props }: SharedProps & { href: str
     className: props.className,
     onClick: props.onClick,
     activeProps: props.activeProps,
-    activeOptions: props.activeOptions,
+    // The router marks a fuzzy (prefix) match aria-current="page", overriding any
+    // caller value, so a link to a section root would claim to be the current
+    // page on every page beneath it. Exact matching is the default here.
+    activeOptions: props.activeOptions ?? { exact: true },
     title: props.title,
     "aria-label": props["aria-label"],
     "aria-current": props["aria-current"],

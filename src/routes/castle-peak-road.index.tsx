@@ -156,7 +156,7 @@ function SegmentCard({
           </span>
           <ArrowRight className="h-4 w-4 text-primary transition group-hover:translate-x-1" />
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">{summary.scopeLabel}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{summary.scopeLabel}</p>
       </div>
     </Link>
   );
@@ -179,7 +179,9 @@ function CastlePeakRoadRouteError({ error }: { error: unknown }) {
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button onClick={() => router.invalidate()}>重新載入</Button>
           <Button asChild variant="outline">
-            <Link to="/castle-peak-road">返回青山公路總覽</Link>
+            <Link to="/castle-peak-road" activeOptions={{ exact: true }}>
+              返回青山公路總覽
+            </Link>
           </Button>
         </div>
       </div>
@@ -327,11 +329,20 @@ function AreaComparisonSection() {
 
   return (
     <Container className="py-12">
-      <h2 className="text-2xl font-bold text-primary">兩個生活圈比較</h2>
+      <h2 id="area-comparison-heading" className="text-2xl font-bold text-primary">
+        兩個生活圈比較
+      </h2>
       <p className="mt-1 text-sm text-muted-foreground">
         以下內容摘自各生活圈原有的地區介紹文字，方便同版面比較。
       </p>
-      <div className="mt-4 max-w-full overflow-x-auto rounded-md border">
+      {/* Scrolls sideways at 375px, so keyboard users need to reach it (axe
+          scrollable-region-focusable); the region is named by the heading. */}
+      <div
+        tabIndex={0}
+        role="region"
+        aria-labelledby="area-comparison-heading"
+        className="mt-4 max-w-full overflow-x-auto rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      >
         <table className="w-full min-w-[560px] text-left text-sm">
           <thead className="bg-muted text-xs text-muted-foreground">
             <tr>
