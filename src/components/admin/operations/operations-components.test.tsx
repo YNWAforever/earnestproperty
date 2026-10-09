@@ -642,6 +642,6 @@ test("retrying a delivery job warns that it may send again; other jobs do not", 
     expect(renderToStaticMarkup(<JobCommandWarning command={command} />)).toBe("");
   expect(jobsSource).toContain("jobCommandDescription");
   // The list opens on 失敗, so the unknown-outcome read-back must also look without filters.
-  expect(jobsSource).toContain("fetchOperationsJobs({ limit: 25 }, isCurrent)");
+  expect(jobsSource).toMatch(/fetchOperationsJobs\(\s*\{ ids: \[unconfirmedJob\.current\] \}/);
   expect(jobsSource).not.toMatch(/description=\{[^}]*job\.id/);
 });

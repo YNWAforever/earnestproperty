@@ -8,6 +8,7 @@ declare global {
   interface Window {
     operationsFixture: {
       mode: string;
+      crowded: boolean;
       calls: { name: string; id?: string }[];
       releaseOldRead: null | (() => void);
     };
@@ -201,7 +202,8 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(
         page.getByRole("button", { name: `重試工作 ${job}`, exact: true }),
       ).toBeDisabled();
-      await expect(repairRow(page)).toContainText("失敗");
+      // The status badge itself, not the 原因 column (which also contains 失敗).
+      await expect(repairRow(page).getByText("失敗", { exact: true })).toBeVisible();
       await page.evaluate(() => (window.operationsFixture.mode = "ok"));
       await page.getByRole("button", { name: "重新載入背景工作", exact: true }).click();
       await showAllStatuses(page);
@@ -211,6 +213,28 @@ for (const width of [1440, 1280, 768, 390]) {
           () => window.operationsFixture.calls.filter((call) => call.name === "retry").length,
         ),
       ).toBe(1);
+    });
+    test("an old retried job is read back by id when newer jobs fill the first page", async ({
+      page,
+    }) => {
+      await open(page);
+      await page.evaluate(() => {
+        window.operationsFixture.crowded = true;
+        window.operationsFixture.mode = "unknown";
+      });
+      await page.getByRole("button", { name: "重新載入背景工作", exact: true }).click();
+      await page.getByRole("button", { name: `重試工作 ${job}`, exact: true }).click();
+      await page.getByRole("button", { name: "重試", exact: true }).click();
+      await expect(page.getByText("指令結果未明", { exact: false })).toBeVisible();
+      await page.evaluate(() => (window.operationsFixture.mode = "ok"));
+      await page.getByRole("button", { name: "重新載入背景工作", exact: true }).click();
+      // 30 newer jobs fill the page, so only a read by id can find the retried job.
+      await expect(page.getByText("指令結果未明", { exact: false })).toHaveCount(0);
+      expect(
+        await page.evaluate(
+          () => window.operationsFixture.calls.filter((call) => call.name === "jobs-by-id").length,
+        ),
+      ).toBeGreaterThan(0);
     });
     test("read failure preserves visible jobs and restricted actor cannot retry", async ({
       page,

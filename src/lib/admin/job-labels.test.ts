@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 import {
   DELIVERY_JOB_TYPES,
@@ -97,4 +97,39 @@ test("every registered job type is classified as sending WhatsApp or not, so the
     "woztell.enquiry.staff.notify",
   ])
     expect(DELIVERY_JOB_TYPES).toContain(type);
+});
+
+/** Error codes the job code paths throw, read from source (not a hand-written list). */
+function throwableErrorCodes(): string[] {
+  const dirs = ["../control-plane", "../whatsapp-enquiries", "../woztell"];
+  const codes = new Set<string>();
+  const walk = (dir: URL) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const child = new URL(entry.name + (entry.isDirectory() ? "/" : ""), dir);
+      if (entry.isDirectory()) walk(child);
+      else if (/\.server\.ts$/.test(entry.name) && !/\.test\./.test(entry.name))
+        for (const match of readFileSync(child, "utf8").matchAll(
+          /\bcode(?::|\s*===)\s*"([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)"|retryableJobError\(\s*"([A-Z][A-Z0-9_]+)"/g,
+        ))
+          codes.add(match[1] ?? match[2]);
+    }
+  };
+  for (const dir of dirs) walk(new URL(dir + "/", import.meta.url));
+  return [...codes].sort();
+}
+
+test("codes the job paths can throw: unmapped ones are reported for owner wording, not failed", () => {
+  const codes = throwableErrorCodes();
+  expect(codes.length).toBeGreaterThan(10);
+  const unmapped = codes.filter((code) => !Object.hasOwn(JOB_FAILURE_REASONS, code));
+  // These show 處理失敗（未分類原因）。 until the owner approves wording.
+  if (unmapped.length) console.warn(`unmapped job error codes: ${unmapped.join(", ")}`);
+  // The codes the approved table already covers must still be found in source, so the table
+  // cannot drift into describing codes nothing throws.
+  for (const code of [
+    "WOZTELL_PROVIDER_TIMEOUT",
+    "WOZTELL_CAMPAIGN_PAUSED",
+    "WOZTELL_CONFIGURATION_UNAVAILABLE",
+  ])
+    expect(codes).toContain(code);
 });

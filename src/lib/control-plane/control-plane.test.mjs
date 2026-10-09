@@ -1020,3 +1020,26 @@ test("terminal campaign recovery preserves lock order, dispatched ambiguity, and
   assert.doesNotMatch(source, /sendWoztellResponse|deliverWoztellCampaign/);
   assert.doesNotMatch(source, /SET[\s\S]*dispatch_started_at\s*=/);
 });
+
+test("jobs list can be read by id: validated UUIDs, capped at 25, read-only and same permission", async () => {
+  const { MAX_JOB_ID_FILTER, parseJobIdsParam } = await import("./job-ids-filter.ts");
+  const a = "40000000-0000-4000-8000-000000000001";
+  const b = "40000000-0000-4000-8000-000000000002";
+  assert.deepEqual(parseJobIdsParam(`${a},${b}`), [a, b]);
+  assert.deepEqual(parseJobIdsParam(`${a},${a.toUpperCase()}`), [a]);
+  assert.equal(parseJobIdsParam("not-a-uuid"), null);
+  assert.equal(parseJobIdsParam(`${a},`), null);
+  assert.equal(parseJobIdsParam(`${a}' OR 1=1`), null);
+  const many = Array.from(
+    { length: MAX_JOB_ID_FILTER + 1 },
+    (_, i) => `40000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+  );
+  assert.equal(parseJobIdsParam(many.slice(0, MAX_JOB_ID_FILTER).join(",")).length, 25);
+  assert.equal(parseJobIdsParam(many.join(",")), null);
+  const route = readFileSync("src/routes/api.admin.control-plane.jobs.ts", "utf8");
+  const server = readFileSync("src/lib/control-plane/jobs.server.ts", "utf8");
+  assert.match(route, /requireStaffPermission\(request, "system\.jobs\.read"\)/);
+  assert.match(route, /parseJobIdsParam/);
+  assert.match(server, /\$6::uuid\[\] IS NULL OR id = ANY\(\$6::uuid\[\]\)/);
+  assert.match(server, /input\.ids\?\.length \? input\.ids\.slice\(0, 25\) : null/);
+});

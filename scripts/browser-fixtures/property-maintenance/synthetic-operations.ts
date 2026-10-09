@@ -42,8 +42,18 @@ const noCodeJob: JobListItem = {
   errorCode: null,
   updatedAt: "2026-10-03T00:40:00Z",
 };
+// 30 newer succeeded jobs: with them the retried (older) job is past the first page of 25.
+const crowd: JobListItem[] = Array.from({ length: 30 }, (_, index) => ({
+  ...job,
+  id: `40000000-0000-4000-8000-${String(100 + index).padStart(12, "0")}`,
+  jobType: "ai.knowledge.rebuild",
+  status: "succeeded",
+  errorCode: null,
+  updatedAt: `2026-10-04T01:${String(index).padStart(2, "0")}:00Z`,
+}));
 const state = {
   mode: "ok",
+  crowded: false,
   calls: [] as { name: string; id?: string }[],
   releaseOldRead: null as null | (() => void),
 };
@@ -68,8 +78,10 @@ export async function fetchOperationsHealth() {
     },
   };
 }
-export async function fetchOperationsJobs(filters: { status?: string; jobType?: string } = {}) {
-  call("jobs");
+export async function fetchOperationsJobs(
+  filters: { status?: string; jobType?: string; ids?: string[]; limit?: number } = {},
+) {
+  call(filters.ids ? "jobs-by-id" : "jobs");
   if (state.mode === "read-fail")
     throw new OperationsClientError(
       "未能載入背景工作，請稍後核對。",
@@ -78,11 +90,15 @@ export async function fetchOperationsJobs(filters: { status?: string; jobType?: 
       "synthetic-read-ref",
       false,
     );
-  const saved = rows().filter(
-    (row) =>
-      (!filters.status || row.status === filters.status) &&
-      (!filters.jobType || row.jobType === filters.jobType),
-  );
+  const saved = [...rows(), ...(state.crowded ? crowd : [])]
+    .filter(
+      (row) =>
+        (!filters.status || row.status === filters.status) &&
+        (!filters.jobType || row.jobType === filters.jobType) &&
+        (!filters.ids || filters.ids.includes(row.id)),
+    )
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+    .slice(0, filters.limit ?? 25);
   if (state.mode === "deferred")
     await new Promise<void>((done) => {
       state.releaseOldRead = done;

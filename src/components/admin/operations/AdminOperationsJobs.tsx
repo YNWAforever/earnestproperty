@@ -231,6 +231,7 @@ export function AdminOperationsJobs({
   const [pendingCommand, setPendingCommand] = useState<JobCommand | null>(null);
   const requestSequence = useRef(0);
   const unconfirmedJob = useRef<string | null>(null);
+  const readbackInFlight = useRef(false);
   const [readbackRequired, setReadbackRequired] = useState(false);
   const previousPulse = useRef(pulse);
 
@@ -259,12 +260,18 @@ export function AdminOperationsJobs({
         if (request !== requestSequence.current || !isCurrent()) return;
         if (unconfirmedJob.current) {
           let seen = result.data.rows.some((job) => job.id === unconfirmedJob.current);
-          // The list now opens on 失敗, so a retry that did go through leaves the job out of it.
-          // Read the job back without the filters, or the lock could never be cleared.
-          if (!seen && (status !== "all" || jobType !== "")) {
-            const unfiltered = await fetchOperationsJobs({ limit: 25 }, isCurrent);
-            if (request !== requestSequence.current || !isCurrent()) return;
-            seen = unfiltered.data.rows.some((job) => job.id === unconfirmedJob.current);
+          // The list now opens on 失敗, so a retry that did go through leaves the job out of it,
+          // and an old job can be far past the first page. Read the locked job by id, once at a
+          // time (a 30s refresh does not stack a second request on one still in flight).
+          if (!seen && (status !== "all" || jobType !== "") && !readbackInFlight.current) {
+            readbackInFlight.current = true;
+            try {
+              const byId = await fetchOperationsJobs({ ids: [unconfirmedJob.current] }, isCurrent);
+              if (request !== requestSequence.current || !isCurrent()) return;
+              seen = byId.data.rows.some((job) => job.id === unconfirmedJob.current);
+            } finally {
+              readbackInFlight.current = false;
+            }
           }
           if (seen) {
             unconfirmedJob.current = null;
