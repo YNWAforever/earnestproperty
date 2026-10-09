@@ -878,9 +878,6 @@ function PropertyPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm leading-7 text-muted-foreground">
-                    此屋苑的交通資料仍待核對。請按實際出發地及時段查閱路線。
-                  </p>
                   <Link
                     to="/castle-peak-road"
                     className="mt-4 inline-block text-sm text-primary underline"
