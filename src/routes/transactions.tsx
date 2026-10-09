@@ -364,14 +364,14 @@ function buildActiveFilterChips(
   if (search.minPrice !== undefined) {
     chips.push({
       key: "minPrice",
-      label: `最低 HK$${search.minPrice.toLocaleString()}`,
+      label: `最低 HK$${search.minPrice.toLocaleString("zh-HK")}`,
       removeKeys: ["minPrice"],
     });
   }
   if (search.maxPrice !== undefined) {
     chips.push({
       key: "maxPrice",
-      label: `最高 HK$${search.maxPrice.toLocaleString()}`,
+      label: `最高 HK$${search.maxPrice.toLocaleString("zh-HK")}`,
       removeKeys: ["maxPrice"],
     });
   }

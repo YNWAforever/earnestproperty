@@ -59,6 +59,7 @@ The four build-time UI switches were removed in FX-05a (2026-10); the screens ar
 
 Backfill existing photos (Owner action 5, production writes, owner only). On your machine, with production `DATABASE_URL`, `BLOB_READ_WRITE_TOKEN` and `MLS_OWNED_BLOB_HOSTS=<the Blob host, e.g. sehe3hq90qgbyxqa.public.blob.vercel-storage.com>`:
 
+0. Requires Node 22 or newer (CI uses 24). `node scripts/media/backfill-remote-variants.mjs --help` lists the flags.
 1. `node scripts/media/backfill-remote-variants.mjs` (dry run, the default; SELECTs only) prints `dbHost`, `remaining`, `estimatedBlobWrites` (`remaining` x 5) and `estimatedStorageMb`. It stops with the migration name if `20260927172000_media_asset_variants` is not applied.
 2. Check those numbers against your Vercel Blob plan's monthly operation and storage limits on the Usage page. Each photo adds about 0.2 to 0.4 MB across its variants.
 3. `node scripts/media/backfill-remote-variants.mjs --apply --limit=50 --confirm-db-host=<host part of DATABASE_URL>`. The host must equal the `dbHost` the dry run printed, or the script refuses before any query. Repeat until `remaining` is 0. The checkpoint `.cache/media-variant-backfill.json` resumes where it stopped, a rerun skips finished photos, and the first failure stops the batch with the asset ID, without touching the original photo or any listing row.

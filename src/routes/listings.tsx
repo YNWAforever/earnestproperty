@@ -219,10 +219,10 @@ function describeListingSearch(
     // applied). Suppressing them here too keeps the summary from claiming a
     // filter that wasn't actually applied.
     search.deal !== "all" && search.minPrice
-      ? `最低 $${search.minPrice.toLocaleString()}`
+      ? `最低 $${search.minPrice.toLocaleString("zh-HK")}`
       : undefined,
     search.deal !== "all" && search.maxPrice
-      ? `最高 $${search.maxPrice.toLocaleString()}`
+      ? `最高 $${search.maxPrice.toLocaleString("zh-HK")}`
       : undefined,
     search.bedrooms !== undefined
       ? `${search.bedrooms === 4 ? "4+" : search.bedrooms} 房`
@@ -354,14 +354,14 @@ function buildActiveFilterChips(
   if (search.deal !== "all" && search.minPrice !== undefined) {
     chips.push({
       key: "minPrice",
-      label: `最低 $${search.minPrice.toLocaleString()}`,
+      label: `最低 $${search.minPrice.toLocaleString("zh-HK")}`,
       removeKeys: ["minPrice"],
     });
   }
   if (search.deal !== "all" && search.maxPrice !== undefined) {
     chips.push({
       key: "maxPrice",
-      label: `最高 $${search.maxPrice.toLocaleString()}`,
+      label: `最高 $${search.maxPrice.toLocaleString("zh-HK")}`,
       removeKeys: ["maxPrice"],
     });
   }
@@ -1086,7 +1086,7 @@ function ListingsPage() {
         size="compact"
         eyebrow="放盤搜尋"
         title="搜尋放盤"
-        lead={`共 ${total.toLocaleString()} 個放盤符合篩選條件`}
+        lead={`共 ${total.toLocaleString("zh-HK")} 個放盤符合篩選條件`}
       />
 
       <Container className="grid gap-6 py-8 lg:grid-cols-[280px_1fr]">

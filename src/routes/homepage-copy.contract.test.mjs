@@ -346,9 +346,11 @@ test("the footer year cannot cause a hydration mismatch on a cached page", async
 
 test("the loader returns homeVideos and never cmsVideos", () => {
   const loaderAll = source.slice(source.indexOf("loader:"), source.indexOf("errorComponent"));
-  const loader = loaderAll.slice(loaderAll.lastIndexOf("return {"));
+  const loader = loaderAll
+    .slice(loaderAll.lastIndexOf("return {"))
+    .replace(/toHomeVideos\([\s\S]*?HOME_VIDEO_COUNT,?\s*\)/, "");
   assert.match(loader, /homeVideos/);
-  assert.doesNotMatch(loader, /^ {6}cmsVideos\b/m);
+  assert.doesNotMatch(loader, /^\s*cmsVideos\s*[,:]/m);
   assert.doesNotMatch(source.slice(source.indexOf("function HomePage")), /cmsVideos/);
 });
 
@@ -358,8 +360,66 @@ test("hero, 最新放盤 and 精選樓盤影片 sections are not deferred", () =
   const cut = body.indexOf("{/* CORE ESTATES */}");
   assert.ok(cut > 0);
   assert.doesNotMatch(body.slice(0, cut), /defer-render/);
-  const rest = body.slice(cut);
-  const sections = rest.match(/<section\b[^>]*>/g) ?? [];
-  assert.ok(sections.length >= 10);
-  for (const tag of sections) assert.match(tag, /defer-render/);
+});
+
+test("no section before an in-page anchor target is deferred, and the sections after the form are", async () => {
+  const body = source.slice(source.indexOf("function HomePage"));
+  // Safari has no scroll anchoring: a deferred section above the target resizes
+  // after the jump and pushes the target out of view.
+  const header = await readFile(
+    new URL("../components/site/SiteHeader.tsx", import.meta.url),
+    "utf8",
+  );
+  const ids = [...body.matchAll(/\bid="([a-z][\w-]*)"/g)].map((m) => m[1]);
+  const targets = ids.filter((id) => header.includes("#" + id));
+  assert.ok(targets.includes("owner-valuation"));
+  for (const id of targets) {
+    const before = body.slice(0, body.indexOf(`id="${id}"`));
+    assert.doesNotMatch(before, /defer-render/, `deferred section above #${id}`);
+  }
+  const after = body.slice(body.indexOf('id="owner-valuation"'));
+  const afterSections = after.match(/<section\b[^>]*>/g) ?? [];
+  assert.ok(afterSections.length >= 1);
+  for (const tag of afterSections) assert.match(tag, /defer-render/);
+});
+
+test("public number formatting passes zh-HK and matches en-US output", async () => {
+  assert.equal((1234567.5).toLocaleString("zh-HK"), (1234567.5).toLocaleString("en-US"));
+  const files = [
+    "../routes/listings.tsx",
+    "../routes/estate.$slug.tsx",
+    "../routes/castle-peak-road.index.tsx",
+    "../routes/district.sham-tseng.tsx",
+    "../routes/transactions.tsx",
+    "../components/site/CorridorInventory.tsx",
+    "../components/site/EstateMarketSnapshot.tsx",
+    "../content/core-estates.ts",
+  ];
+  for (const f of files) {
+    const text = await readFile(new URL(f, import.meta.url), "utf8");
+    assert.doesNotMatch(text, /toLocale(Date)?String\(\)/, `${f} formats without a locale`);
+  }
+});
+
+test("home videos match the pre-change selection for a mixed featured and CMS fixture", async () => {
+  const { toHomeVideos } = await import("../lib/home-videos.js");
+  // Old logic: [featured walkthroughs..., cms...] deduped by video id, first three.
+  const listing = (n, yt) => ({
+    key: `listing-${n}`,
+    title: `T${n}`,
+    url: `https://www.youtube.com/watch?v=${yt}`,
+    eyebrow: "e",
+    listingNo: `N${n}`,
+  });
+  const cms = (id, yt) => ({ id, title: "", video_url: `https://youtu.be/${yt}` });
+  const out = toHomeVideos(
+    [listing(1, "aaaaaaaaaaa"), listing(2, "bbbbbbbbbbb")],
+    [cms("x", "bbbbbbbbbbb"), cms("y", "ccccccccccc"), cms("z", "ddddddddddd")],
+    3,
+  );
+  assert.deepEqual(
+    out.map((v) => v.key),
+    ["listing-1", "listing-2", "cms-y"],
+  );
+  assert.equal(out[2].title, "晉誠地產 YouTube影片");
 });

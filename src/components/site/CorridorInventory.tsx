@@ -88,7 +88,7 @@ function ListingColumn({
         <div>
           <h3 className="text-xl font-semibold text-primary">{title}</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            即時真盤：{total.toLocaleString()} 個
+            即時真盤：{total.toLocaleString("zh-HK")} 個
           </p>
         </div>
       </div>

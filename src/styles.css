@@ -19,8 +19,8 @@
  */
 
 @theme inline {
-  --font-sans: "Inter", "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", system-ui, sans-serif;
-  --font-display: "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK HK", "Noto Sans CJK TC", system-ui, sans-serif;
+  --font-display: "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK HK", "Noto Sans CJK TC", "Inter", system-ui, sans-serif;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

@@ -110,10 +110,10 @@ export const CORE_ESTATES_PREVIEW_COUNT = 8;
 
 /**
  * Renders a missing figure as an em dash. The card previously did
- * `(units ?? 0).toLocaleString()`, which printed a confident "0 個單位" and "$0"
+ * `(units ?? 0).toLocaleString("zh-HK")`, which printed a confident "0 個單位" and "$0"
  * for anything the DB had not filled in.
  */
 export function estateFigure(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-  return value.toLocaleString();
+  return value.toLocaleString("zh-HK");
 }

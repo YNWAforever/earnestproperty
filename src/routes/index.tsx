@@ -420,7 +420,7 @@ function HomePage() {
       ) : null}
 
       {/* CORE ESTATES */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 defer-render">
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader title="深井核心屋苑" desc="紮根深井青山公路廿多年，每個屋苑我哋都非常熟悉" />
         <CoreEstateGrid
           estates={estates}
@@ -436,7 +436,7 @@ function HomePage() {
       </section>
 
       {/* CASTLE PEAK ROAD ESTATES */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 defer-render">
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader title="青山公路屋苑" desc="掃管笏、青山灣、小欖一帶屋苑，我哋同樣熟悉" />
         <CoreEstateGrid
           estates={castlePeakRoadDbEstates}
@@ -454,7 +454,7 @@ function HomePage() {
       </section>
 
       {/* WHY US */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 defer-render">
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader title="為何選晉誠" />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           <Feature
@@ -481,7 +481,7 @@ function HomePage() {
       </section>
 
       {/* AGENT TEAM PREVIEW */}
-      <section className="bg-muted/40 defer-render">
+      <section className="bg-muted/40">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
             {/* No `desc` -- the tagline this used to carry ("熟悉深井、青山
@@ -544,7 +544,7 @@ function HomePage() {
       </section>
 
       {/* MARKET INFO */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 defer-render">
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader eyebrow="市場資訊" title="最新樓市動態" />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           <Feature
@@ -569,7 +569,7 @@ function HomePage() {
       </section>
 
       {/* ABOUT PREVIEW */}
-      <section className="border-y border-border bg-card defer-render">
+      <section className="border-y border-border bg-card">
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
           <div>
             <div className="flex flex-wrap items-center gap-3">
@@ -599,7 +599,7 @@ function HomePage() {
       </section>
 
       {/* BRANCH NETWORK */}
-      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8 defer-render">
+      <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader eyebrow="分行網絡" title="我們的分行" desc="歡迎親臨門市傾盤。" />
         <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {SITE_BRANCHES.map((branch) => {
@@ -650,7 +650,7 @@ function HomePage() {
 
       {/* FAQ */}
       {faqs.length > 0 && (
-        <section className="bg-card border-y border-border defer-render">
+        <section className="bg-card border-y border-border">
           <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
             <SectionHeader eyebrow="常見問題" title="深井買樓租樓 FAQ" />
             <Accordion type="single" collapsible className="mt-8">
@@ -673,7 +673,7 @@ function HomePage() {
           above. Its questions are deliberately different from
           castlePeakRoadHub.faqs, which /castle-peak-road already publishes. */}
       {corridorFaqs.length > 0 && (
-        <section className="border-b border-border defer-render">
+        <section className="border-b border-border">
           <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
             <SectionHeader eyebrow="常見問題" title="青山公路屋苑買樓租樓 FAQ" />
             <Accordion type="single" collapsible className="mt-8">

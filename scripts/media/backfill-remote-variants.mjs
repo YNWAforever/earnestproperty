@@ -20,8 +20,22 @@ const PENDING =
   "WHERE a.owner_type='mls-shared' AND a.content_hash IS NOT NULL AND s.asset_id IS NULL " +
   "AND a.id::text > $1";
 
+export const BACKFILL_HELP = [
+  "Usage: node scripts/media/backfill-remote-variants.mjs [flags]",
+  "Requires Node 22 or newer (uses the global WebSocket).",
+  "",
+  "  (no flags)              dry run: SELECTs only, prints dbHost and remaining counts",
+  "  --apply                 write variants to Blob and the database",
+  "  --confirm-db-host=HOST  required with --apply; must equal the dry run's dbHost",
+  "  --limit=N               photos per run, 1..100 (default 50)",
+  "  --checkpoint=PATH       workspace-relative checkpoint file (default .cache/media-variant-backfill.json)",
+  "  --skip-failed           skip unreadable source photos instead of stopping (exit code 1)",
+  "  --help                  print this text",
+].join("\n");
+
 const KNOWN_ARG = /^--(apply|skip-failed|limit=.*|checkpoint=.*|confirm-db-host=.*)$/;
 export function parseBackfillArgs(argv) {
+  if (argv.includes("--help")) return { help: true };
   const unknown = argv.find((arg) => !KNOWN_ARG.test(arg));
   if (unknown) throw new TypeError("Unknown argument: " + unknown);
   const apply = argv.includes("--apply");
@@ -284,8 +298,13 @@ async function connectNeon(databaseUrl) {
 async function main() {
   const env = process.env;
   try {
+    const options = parseBackfillArgs(process.argv.slice(2));
+    if (options.help) {
+      console.log(BACKFILL_HELP);
+      return;
+    }
     const result = await runBackfill({
-      options: parseBackfillArgs(process.argv.slice(2)),
+      options,
       env,
       connect: connectNeon,
       readCheckpoint: readCheckpointFile,

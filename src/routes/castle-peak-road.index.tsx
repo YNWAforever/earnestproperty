@@ -154,7 +154,8 @@ function SegmentCard({
       <div className="mt-5 border-t pt-4 text-sm">
         <div className="flex items-center justify-between">
           <span className="font-semibold text-primary">
-            售 {summary.saleTotal.toLocaleString()} ・ 租 {summary.rentTotal.toLocaleString()}
+            售 {summary.saleTotal.toLocaleString("zh-HK")} ・ 租{" "}
+            {summary.rentTotal.toLocaleString("zh-HK")}
           </span>
           <ArrowRight className="h-4 w-4 text-primary transition group-hover:translate-x-1" />
         </div>
@@ -394,7 +395,7 @@ function PriceSnapshotSection({
           <div key={segment.slug} className="rounded-lg border bg-card p-5">
             <h3 className="font-bold text-primary">{segment.nameZh}</h3>
             <p className="mt-2 text-2xl font-semibold text-primary">
-              ${snapshot.latestPsf.toLocaleString()}{" "}
+              ${snapshot.latestPsf.toLocaleString("zh-HK")}{" "}
               <span className="text-sm font-normal">/ 呎</span>
             </p>
             <DataNote

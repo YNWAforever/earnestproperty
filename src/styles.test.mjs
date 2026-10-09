@@ -34,11 +34,11 @@ test("__root.tsx self-hosts Inter only and preloads its Latin 400 file; Chinese 
   assert.doesNotMatch(source, /noto-sans-tc/);
   assert.match(
     css,
-    /--font-sans: "Inter", "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", system-ui, sans-serif;/,
+    /--font-sans: "Inter", "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK HK", "Noto Sans CJK TC", system-ui, sans-serif;/,
   );
   assert.match(
     css,
-    /--font-display: "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", "Inter", system-ui, sans-serif;/,
+    /--font-display: "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK HK", "Noto Sans CJK TC", "Inter", system-ui, sans-serif;/,
   );
   assert.doesNotMatch(css, /Noto Sans TC Variable/);
   assert.match(

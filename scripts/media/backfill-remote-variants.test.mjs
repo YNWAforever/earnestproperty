@@ -422,3 +422,11 @@ test("real SQL on in-process Postgres: counts, resumes and writes only the varia
     await db.close();
   }
 });
+
+test("--help prints the flags and the Node 22 requirement", async () => {
+  const { BACKFILL_HELP } = await import("./backfill-remote-variants.mjs");
+  for (const flag of ["--apply", "--confirm-db-host", "--limit", "--checkpoint", "--skip-failed"])
+    assert.ok(BACKFILL_HELP.includes(flag), flag);
+  assert.match(BACKFILL_HELP, /Node 22/);
+  assert.deepEqual(parseBackfillArgs(["--help"]), { help: true });
+});
