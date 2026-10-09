@@ -30,12 +30,25 @@ const BOILERPLATE_MARKERS = Object.freeze([
 ]);
 
 /**
+ * Strips U+FFFC (the object-replacement character YouTube leaves where an
+ * embedded chip or link was), collapses the doubled spaces that leaves, trims.
+ *
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
+export function cleanVideoText(value) {
+  if (typeof value !== "string") return "";
+  return value.replace(/￼/g, "").replace(/ {2,}/g, " ").trim();
+}
+
+/**
  * @param {string | null | undefined} value
  * @param {number} [maxLength]
  * @returns {string | null}
  */
 export function summarizeVideoDescription(value, maxLength = 120) {
   if (typeof value !== "string") return null;
+  value = cleanVideoText(value);
 
   let cutIndex = value.length;
   for (const marker of BOILERPLATE_MARKERS) {

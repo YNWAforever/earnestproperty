@@ -56,3 +56,24 @@ test("AllVideoSchemas receives the rendered subset, not the full loader data", (
   assert.match(source, /<AllVideoSchemas\s+cmsVideos=\{visibleCmsVideos\}/);
   assert.match(source, /listingVideos=\{matchingListingVideos\}/);
 });
+
+// F-15: chips with no videos are noise (every chip read 0 before any row had a
+// category), but 全部, the selected chip and a direct-URL chip must survive.
+test("category chips render only for categories with videos", () => {
+  assert.match(
+    source,
+    /\.filter\(\s*\(entry\) => entry\.count > 0 \|\| entry\.category === category,?\s*\)/,
+  );
+  assert.match(source, /categoryCounts\.length > 0/);
+  assert.match(source, /全部 \{cmsVideos\.length\}/);
+});
+
+test("VideoObject description is summarised, not raw", () => {
+  assert.match(source, /description: summarizeVideoDescription\(video\.description\)/);
+  assert.doesNotMatch(source, /description: video\.description,/);
+});
+
+test("titles pass through cleanVideoText", () => {
+  assert.match(source, /cleanVideoText\(video\.title\)/);
+  assert.match(source, /import \{ cleanVideoText, summarizeVideoDescription \}/);
+});
