@@ -283,7 +283,18 @@ export async function fetchAdminConversation({ data }: { data: { id: string } })
     });
   }
   if (!readable(data.id)) return null;
-  const found = { ...rows.find((r) => r.id === data.id)!, messages: [] };
+  // The production detail read has no customer_display_name (only the list read does).
+  const { customer_display_name: _listOnly, ...row } = rows.find((r) => r.id === data.id)!;
+  // With sessionStorage no-link-fixture-distinct-detail=true the detail differs from its list
+  // row in name and phone, and carries a phone-like member id (the send target), so a test can
+  // tell which record a confirmation was built from.
+  const distinct =
+    sessionStorage.getItem("no-link-fixture-distinct-detail") === "true"
+      ? data.id === ids.a
+        ? { name: "合成客戶甲（詳情）", phone: "+852 6111 2222", woztell_member_id: "85263334444" }
+        : { name: "合成客戶乙（詳情）", phone: "+852 6555 6666", woztell_member_id: "85267778888" }
+      : {};
+  const found = { ...row, ...distinct, messages: [] };
   // With sessionStorage no-link-fixture-near-miss=true, a manager sees the 「可能要求退訂」 flag
   // (確認退訂 / 不是退訂) and the consent dialog; every save stays a forbidden mutation.
   return sessionStorage.getItem("no-link-fixture-near-miss") === "true"

@@ -12,14 +12,15 @@ import {
 } from "@/lib/admin/whatsapp-link-export-api";
 import type { LinkPageFilter } from "@/lib/neon/whatsapp-link-management.types";
 import type { TrackingLink } from "@/lib/neon/whatsapp-enquiries.types";
-import { staffActionErrorText } from "@/components/admin/admin-error-text";
+import { ADMIN_GENERIC_ERROR, staffActionErrorText } from "@/components/admin/admin-error-text";
 
 type Page = Awaited<ReturnType<typeof getWhatsappTrackingLinksPage>>;
 type Item = Page["items"][number];
 const control = "min-h-11 rounded-md border bg-background px-3 text-sm";
 const codeUrl = (code: string) => `${window.location.origin}/w/${code}`;
-// Same labels as the 來源 filter.
-const placementLabels: Record<string, string> = {
+// One map for the 來源 filter options and the 停用 confirmation, typed by the placement enum so
+// a new source cannot get a filter option without a label (or show its raw value).
+const placementLabels: Record<TrackingLink["placementSource"], string> = {
   website: "網站",
   "28hse": "28hse",
   youtube: "YouTube",
@@ -90,7 +91,7 @@ export function WhatsappLinksTable({
     try {
       await task();
     } catch (cause) {
-      setError(staffActionErrorText(cause, "操作未完成，請重試。"));
+      setError(staffActionErrorText(cause, ADMIN_GENERIC_ERROR));
     } finally {
       setBusy(false);
     }
@@ -149,7 +150,7 @@ export function WhatsappLinksTable({
       await save(link, false);
       setPendingDisable(null);
     } catch (cause) {
-      setDisableError(staffActionErrorText(cause, "操作未完成，請重試。"));
+      setDisableError(staffActionErrorText(cause, ADMIN_GENERIC_ERROR));
     } finally {
       disabling.current = false;
       setBusy(false);
@@ -230,10 +231,11 @@ export function WhatsappLinksTable({
             }
           >
             <option value="">全部</option>
-            <option value="website">網站</option>
-            <option value="28hse">28hse</option>
-            <option value="youtube">YouTube</option>
-            <option value="other">其他</option>
+            {Object.entries(placementLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
           </select>
         </label>
         <label className="text-sm">

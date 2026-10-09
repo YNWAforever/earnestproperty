@@ -6,10 +6,14 @@ import { spawnSync } from "node:child_process";
 import { test, expect, type Page } from "@playwright/test";
 
 // FX-17a G-24: a sending or consent confirmation names the customer it acts on, from the
-// conversation that the action targets, with the phone masked to its last four digits.
+// conversation that the action targets, with the number masked to its last four digits.
 // Owned no-link fixture only: no network, DB or provider dispatch.
 type FixtureWindow = {
-  noLinkFixture: { calls: { name: string; input?: unknown }[] };
+  noLinkFixture: {
+    calls: { name: string; input?: unknown }[];
+    delayDetail: boolean;
+    releaseLateDetail: null | (() => void);
+  };
   noLinkOutboundFixture: {
     calls: { name: string; input: { data: { conversationId: string; templateId?: string } } }[];
   };
@@ -18,10 +22,32 @@ const ids = {
   a: "10000000-0000-4000-8000-000000000001",
   b: "10000000-0000-4000-8000-000000000002",
 };
+// With no-link-fixture-distinct-detail the list row, the detail's contact and the send target
+// (member id) all differ, so each check shows which record a confirmation was built from.
 const customers = {
-  a: { name: "合成客戶甲", phone: "+852 5550 1234", masked: "••••1234" },
-  b: { name: "合成客戶乙", phone: "+852 5550 5678", masked: "••••5678" },
+  a: {
+    rowName: "合成客戶甲",
+    rowPhone: "+852 5550 1234",
+    name: "合成客戶甲（詳情）",
+    phone: "+852 6111 2222",
+    contactMasked: "••••2222",
+    member: "85263334444",
+    targetMasked: "••••4444",
+  },
+  b: {
+    rowName: "合成客戶乙",
+    rowPhone: "+852 5550 5678",
+    name: "合成客戶乙（詳情）",
+    phone: "+852 6555 6666",
+    contactMasked: "••••6666",
+    member: "85267778888",
+    targetMasked: "••••8888",
+  },
 };
+type Customer = (typeof customers)["a"];
+const allNumbers = Object.values(customers).flatMap((c) =>
+  [c.rowPhone, c.phone, c.member].map((n) => n.replace(/\D/g, "")),
+);
 const SHOTS = ".audit/fx17a-safer-actions";
 let server: Server, origin: string;
 const errors = new WeakMap<Page, string[]>();
@@ -77,11 +103,11 @@ async function open(page: Page, conversation: string, storage: Record<string, st
   const captured: string[] = [];
   errors.set(page, captured);
   page.on("pageerror", (error) => captured.push(error.message));
-  // No log line may carry a customer's full number.
+  // No log line may carry a full number (list phone, contact phone or member id).
   page.on("console", (message) => {
-    for (const customer of Object.values(customers))
-      if (message.text().replace(/\s/g, "").includes(customer.phone.replace(/\s/g, "").slice(-8)))
-        captured.push("Full phone number logged");
+    const digits = message.text().replace(/\D/g, "");
+    if (allNumbers.some((number) => digits.includes(number.slice(-8))))
+      captured.push("Full phone number logged");
   });
   await page.route("**/*", (route) => {
     const request = route.request();
@@ -96,10 +122,16 @@ async function open(page: Page, conversation: string, storage: Record<string, st
   await page.goto(origin + "/admin/whatsapp?conversation=" + conversation);
 }
 
-const templateStorage = {
+const templateBase = {
   "no-link-fixture-actor": "agent-a",
   "no-link-fixture-window": "expired",
   "no-link-fixture-reply-template": "true",
+};
+const templateStorage = { ...templateBase, "no-link-fixture-distinct-detail": "true" };
+const consentStorage = {
+  "no-link-fixture-actor": "manager",
+  "no-link-fixture-near-miss": "true",
+  "no-link-fixture-distinct-detail": "true",
 };
 const outboundCalls = (page: Page) =>
   page.evaluate(() => (window as unknown as FixtureWindow).noLinkOutboundFixture.calls);
@@ -113,22 +145,21 @@ async function openTemplateConfirm(page: Page) {
   return dialog;
 }
 
-/** The dialog names exactly this customer, masked, and nothing in it carries a full number. */
-async function expectNames(
+/** Names `shown` from its detail with `masked`; never the other customer, the row or a full number. */
+async function expectOnly(
   dialog: ReturnType<Page["getByRole"]>,
-  shown: (typeof customers)["a"],
-  other: (typeof customers)["a"],
+  shown: Customer,
+  masked: string,
+  other: Customer,
 ) {
   await expect(dialog).toContainText(`客戶：${shown.name}`);
-  await expect(dialog).toContainText(shown.masked);
-  await expect(dialog).not.toContainText(other.name);
-  await expect(dialog).not.toContainText(other.masked);
-  const html = await dialog.evaluate((node) => node.outerHTML.replace(/\s/g, ""));
-  for (const customer of Object.values(customers)) {
-    const digits = customer.phone.replace(/\s/g, "");
-    expect(html).not.toContain(digits);
-    expect(html).not.toContain(digits.slice(-8));
-  }
+  await expect(dialog).toContainText(masked);
+  for (const absent of [other.name, other.contactMasked, other.targetMasked])
+    await expect(dialog).not.toContainText(absent);
+  // The list row's phone never feeds the label.
+  await expect(dialog).not.toContainText("••••" + shown.rowPhone.slice(-4));
+  const digits = (await dialog.evaluate((node) => node.outerHTML)).replace(/\D/g, "");
+  for (const number of allNumbers) expect(digits).not.toContain(number.slice(-8));
 }
 
 test("the template confirmation names the open conversation's customer and masked phone, and changes when another conversation is opened", async ({
@@ -136,25 +167,28 @@ test("the template confirmation names the open conversation's customer and maske
 }) => {
   await open(page, ids.a, templateStorage);
   let dialog = await openTemplateConfirm(page);
+  // The digits are the member id the send goes to, not the contact's CRM phone.
   await expect(dialog).toContainText(
-    `將向 ${customers.a.name}（${customers.a.masked}）傳送已審批範本「synthetic_reply」。範本一經傳送即無法收回。`,
+    `將向 ${customers.a.name}（${customers.a.targetMasked}）傳送已審批範本「synthetic_reply」。範本一經傳送即無法收回。`,
   );
   await expect(dialog.getByRole("definition").first()).toHaveText(customers.a.name);
-  await expectNames(dialog, customers.a, customers.b);
+  await expect(dialog).not.toContainText(customers.a.contactMasked);
+  await expectOnly(dialog, customers.a, customers.a.targetMasked, customers.b);
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await expect(dialog).toHaveCount(0);
 
   // Open the other conversation from the inbox: the confirmation now names its customer.
   await page
-    .getByRole("button", { name: new RegExp(customers.b.name) })
+    .getByRole("button", { name: new RegExp(customers.b.rowName) })
     .first()
     .click();
   await expect(page.getByRole("heading", { name: customers.b.name, level: 2 })).toBeVisible();
   dialog = await openTemplateConfirm(page);
   await expect(dialog).toContainText(
-    `將向 ${customers.b.name}（${customers.b.masked}）傳送已審批範本「synthetic_reply」。`,
+    `將向 ${customers.b.name}（${customers.b.targetMasked}）傳送已審批範本「synthetic_reply」。`,
   );
-  await expectNames(dialog, customers.b, customers.a);
+  await expect(dialog).not.toContainText(customers.b.contactMasked);
+  await expectOnly(dialog, customers.b, customers.b.targetMasked, customers.a);
   await page.screenshot({ path: `${SHOTS}/template-confirm-1440.png`, animations: "disabled" });
 
   // The displayed identity is the send target: confirming sends to conversation B, once.
@@ -164,6 +198,51 @@ test("the template confirmation names the open conversation's customer and maske
     .toBe(1);
   const [sent] = (await outboundCalls(page)).filter((c) => c.name === "template");
   expect(sent.input.data.conversationId).toBe(ids.b);
+});
+
+test("a member id that is not a phone number shows 未有電話, never the CRM phone", async ({
+  page,
+}) => {
+  // Default fixture detail: member id "synthetic-member", contact phone +852 5550 1234.
+  await open(page, ids.a, templateBase);
+  const dialog = await openTemplateConfirm(page);
+  await expect(dialog).toContainText(`將向 ${customers.a.rowName}（未有電話）傳送已審批範本`);
+  await expect(dialog).not.toContainText("••••");
+  await dialog.getByRole("button", { name: "取消", exact: true }).click();
+  expect(await outboundCalls(page)).toEqual([]);
+});
+
+test("confirming during a URL switch, before the next conversation loads, sends nothing", async ({
+  page,
+}) => {
+  await open(page, ids.b, templateStorage);
+  await expect(page.getByRole("heading", { name: customers.b.name, level: 2 })).toBeVisible();
+  const dialog = await openTemplateConfirm(page);
+  // Back/forward or a Command Center link moves the URL to A while A's detail is held back, so
+  // B's detail and this dialog are still on screen while A is the selected conversation.
+  await page.evaluate((a) => {
+    (window as unknown as FixtureWindow).noLinkFixture.delayDetail = true;
+    history.pushState(history.state, "", `/admin/whatsapp?conversation=${a}`);
+    dispatchEvent(new PopStateEvent("popstate", { state: history.state }));
+  }, ids.a);
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Boolean((window as unknown as FixtureWindow).noLinkFixture.releaseLateDetail),
+      ),
+    )
+    .toBe(true);
+  await expect(dialog).toContainText(customers.b.name);
+  await dialog.getByRole("button", { name: "傳送", exact: true }).click();
+  await expect(page.getByText("請先選擇對話", { exact: true })).toBeVisible();
+  expect(await outboundCalls(page)).toEqual([]);
+  // When A arrives the panel re-keys and the stale confirmation is gone.
+  await page.evaluate(() =>
+    (window as unknown as FixtureWindow).noLinkFixture.releaseLateDetail!(),
+  );
+  await expect(page.getByRole("heading", { name: customers.a.name, level: 2 })).toBeVisible();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  expect(await outboundCalls(page)).toEqual([]);
 });
 
 test("cancelling the template confirmation sends nothing", async ({ page }) => {
@@ -183,30 +262,29 @@ test("cancelling the template confirmation sends nothing", async ({ page }) => {
 });
 
 test("the consent dialog and 不是退訂 name the customer", async ({ page }) => {
-  await open(page, ids.b, {
-    "no-link-fixture-actor": "manager",
-    "no-link-fixture-near-miss": "true",
-  });
+  await open(page, ids.b, consentStorage);
   await expect(page.getByRole("heading", { name: customers.b.name, level: 2 })).toBeVisible();
+  // These change the contact, so they show the contact's phone.
+  const line = `客戶：${customers.b.name}（${customers.b.contactMasked}）`;
 
   await page.getByRole("button", { name: "管理 WhatsApp 推廣同意", exact: true }).click();
   let dialog = page.getByRole("dialog", { name: "WhatsApp 推廣同意" });
-  await expect(dialog).toContainText(`客戶：${customers.b.name}（${customers.b.masked}）`);
-  await expectNames(dialog, customers.b, customers.a);
+  await expect(dialog).toContainText(line);
+  await expectOnly(dialog, customers.b, customers.b.contactMasked, customers.a);
   await page.screenshot({ path: `${SHOTS}/consent-1440.png`, animations: "disabled" });
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 
   await page.getByRole("button", { name: "確認退訂", exact: true }).click();
   dialog = page.getByRole("dialog", { name: "WhatsApp 推廣同意" });
-  await expect(dialog).toContainText(`客戶：${customers.b.name}（${customers.b.masked}）`);
+  await expect(dialog).toContainText(line);
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
 
   await page.getByRole("button", { name: "不是退訂", exact: true }).click();
   dialog = page.getByRole("alertdialog", { name: "不是退訂要求？" });
-  await expect(dialog).toContainText(`客戶：${customers.b.name}（${customers.b.masked}）`);
-  await expectNames(dialog, customers.b, customers.a);
+  await expect(dialog).toContainText(line);
+  await expectOnly(dialog, customers.b, customers.b.contactMasked, customers.a);
   await page.screenshot({ path: `${SHOTS}/not-opt-out-1440.png`, animations: "disabled" });
   await dialog.getByRole("button", { name: "取消", exact: true }).click();
   await expect(dialog).toHaveCount(0);
@@ -222,11 +300,7 @@ test("the consent dialog and 不是退訂 name the customer", async ({ page }) =
 
 test("the three confirmations fit a 375 px screen", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  await open(page, ids.a, {
-    ...templateStorage,
-    "no-link-fixture-actor": "manager",
-    "no-link-fixture-near-miss": "true",
-  });
+  await open(page, ids.a, { ...templateStorage, ...consentStorage });
   const fits = () => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
   const dialog = await openTemplateConfirm(page);
   await expect(dialog).toContainText(`客戶：${customers.a.name}`);
@@ -236,7 +310,7 @@ test("the three confirmations fit a 375 px screen", async ({ page }) => {
 
   await page.getByRole("button", { name: "管理 WhatsApp 推廣同意", exact: true }).click();
   await expect(page.getByRole("dialog", { name: "WhatsApp 推廣同意" })).toContainText(
-    `客戶：${customers.a.name}（${customers.a.masked}）`,
+    `客戶：${customers.a.name}（${customers.a.contactMasked}）`,
   );
   expect(await fits()).toBe(true);
   await page.screenshot({ path: `${SHOTS}/consent-375.png`, animations: "disabled" });
@@ -244,7 +318,7 @@ test("the three confirmations fit a 375 px screen", async ({ page }) => {
 
   await page.getByRole("button", { name: "不是退訂", exact: true }).click();
   await expect(page.getByRole("alertdialog", { name: "不是退訂要求？" })).toContainText(
-    `客戶：${customers.a.name}（${customers.a.masked}）`,
+    `客戶：${customers.a.name}（${customers.a.contactMasked}）`,
   );
   expect(await fits()).toBe(true);
   await page.screenshot({ path: `${SHOTS}/not-opt-out-375.png`, animations: "disabled" });

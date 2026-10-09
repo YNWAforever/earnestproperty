@@ -1,6 +1,10 @@
 import { adminErrorMessage } from "@/components/admin/admin-error-text";
 import { CustomerConfirmDetails } from "@/components/admin/CustomerConfirmLine";
-import { customerConfirmLabel, type CustomerConfirmLabel } from "@/lib/admin/customer-label";
+import {
+  customerConfirmLabel,
+  templateRecipientLabel,
+  type CustomerConfirmLabel,
+} from "@/lib/admin/customer-label";
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { StaffNotificationPanel } from "@/components/admin/StaffNotificationPanel";
 import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContext";
@@ -1828,9 +1832,9 @@ function ConversationWorkspace({
         {showTemplateSend ? (
           <TemplateSendPanel
             key={detail.id}
-            customer={customerConfirmLabel({
+            customer={templateRecipientLabel({
               name: detail.customer_display_name ?? detail.name,
-              phone: detail.phone,
+              memberId: detail.woztell_member_id,
             })}
             templates={templates}
             loading={templatesLoading}
@@ -1970,7 +1974,7 @@ function TemplateSendPanel({
   sending,
   onSend,
 }: {
-  /** The open conversation's customer: the same detail whose id the send targets. */
+  /** The open conversation's customer and send target (its member id), from the detail sent to. */
   customer: CustomerConfirmLabel;
   templates: AdminWhatsappTemplateRow[];
   loading: boolean;
@@ -2062,7 +2066,7 @@ function TemplateSendPanel({
             : `將向 ${customer.name}（${customer.phone}）傳送已審批範本。範本一經傳送即無法收回。`
         }
         confirmLabel="傳送"
-        disabled={disabled}
+        disabled={disabled || !selected}
         isPending={sending}
         onOpenChange={setConfirmOpen}
         onConfirm={() => {
