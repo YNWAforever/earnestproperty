@@ -100,6 +100,7 @@ function AgentProfilePage() {
     telephone: contact.phone,
     image: profile.avatar_url,
     url: profile.public_slug ? `${SITE_URL}/agents/${profile.public_slug}` : SITE_URL,
+    licenceNo: profile.licence_no,
   });
   const agentSlug = profile.public_slug ?? profile.id;
   useTrackPageView(

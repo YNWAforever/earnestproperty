@@ -4,6 +4,7 @@ import { MapPin, Phone, MessageCircle, Mail, Clock } from "lucide-react";
 import { SITE_BRANCHES, SITE_CONTACT, whatsappUrl, type SiteBranch } from "@/config/site";
 import { toWhatsAppHref } from "@/lib/contact-links";
 import { canonicalLink, pageSeo } from "@/content/seo";
+import { districtLabelForSlug } from "@/lib/listing-seo";
 import { branchLocalBusinessSchema, jsonLdScript } from "@/lib/schema";
 import { AppImage } from "@/components/media/AppImage";
 import { Container } from "@/components/layout/Container";
@@ -18,6 +19,8 @@ const branchesSchema = {
       name: branch.name,
       address: branch.address,
       telephone: branch.phone,
+      addressLocality: branch.addressLocality,
+      areaServed: branch.districtSlugs.flatMap((slug) => districtLabelForSlug(slug) ?? []),
       image: branch.photo,
     }),
   ),

@@ -46,7 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SITE_URL, canonicalLink } from "@/content/seo";
-import { organizationRef } from "@/lib/schema";
+import { listingOffersSchema, organizationRef, residenceSchema } from "@/lib/schema";
 import {
   fetchPropertyByListingNo,
   fetchSimilarListings,
@@ -408,33 +408,12 @@ function PropertyPage() {
 
   const propertyUrl = `${SITE_URL}/property/${publicPropertyNo(property)}`;
   const residenceId = `${propertyUrl}#residence`;
-  // A sold/rented listing has no active offering; describe the last known
-  // deal as SoldOut rather than emitting `offers: []`, which is invalid.
-  const schemaOffers = offerings.length
-    ? offerings.map((offer) => ({
-        "@type": "Offer",
-        price: Number(offer.deal_type === "rent" ? offer.rent : offer.price) || undefined,
-        priceCurrency: "HKD",
-        businessFunction:
-          offer.deal_type === "rent"
-            ? "http://purl.org/goodrelations/v1#LeaseOut"
-            : "http://purl.org/goodrelations/v1#Sell",
-        availability: "https://schema.org/InStock",
-        url: propertyUrl,
-        seller: organizationRef(),
-        itemOffered: { "@id": residenceId },
-      }))
-    : [
-        {
-          "@type": "Offer",
-          price: Number(isRent ? property.rent : property.price) || undefined,
-          priceCurrency: "HKD",
-          availability: "https://schema.org/SoldOut",
-          url: propertyUrl,
-          seller: organizationRef(),
-          itemOffered: { "@id": residenceId },
-        },
-      ];
+  const schemaOffers = listingOffersSchema({
+    propertyUrl,
+    residenceId,
+    offerings,
+    fallback: { isRent, price: property.price, rent: property.rent },
+  });
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -452,24 +431,18 @@ function PropertyPage() {
         offers: schemaOffers,
         provider: organizationRef(),
       },
-      {
-        "@type": "Residence",
-        "@id": residenceId,
+      residenceSchema({
+        residenceId,
+        propertyUrl,
         name: safeTitle,
-        url: propertyUrl,
-        ...(realImages.length ? { image: realImages } : {}),
-        address: {
-          "@type": "PostalAddress",
-          streetAddress: safeAddress ?? undefined,
-          addressLocality: estate?.name_zh ?? undefined,
-          addressRegion: "Hong Kong",
-        },
-        floorSize: property.saleable_area
-          ? { "@type": "QuantitativeValue", value: property.saleable_area, unitCode: "FTK" }
-          : undefined,
-        numberOfRooms: property.bedrooms ?? undefined,
-        numberOfBathroomsTotal: property.bathrooms ?? undefined,
-      },
+        images: realImages,
+        streetAddress: safeAddress,
+        districtSlug: estate?.district_slug ?? property.district_slug ?? null,
+        estate: estate ? { name_zh: estate.name_zh, lat: estate.lat, lng: estate.lng } : null,
+        saleableArea: property.saleable_area,
+        bedrooms: property.bedrooms,
+        bathrooms: property.bathrooms,
+      }),
       {
         "@type": "BreadcrumbList",
         itemListElement: [
