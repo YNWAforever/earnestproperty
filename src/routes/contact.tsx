@@ -179,7 +179,7 @@ function ContactPage() {
           both consent-related elements per this task's structural
           requirement.
         */}
-          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
             我們只會使用你於下方提供的資料回覆你的查詢及提供相關服務，詳情請參閱
             <a href="/privacy" className="text-primary underline underline-offset-2">
               《私隱政策》

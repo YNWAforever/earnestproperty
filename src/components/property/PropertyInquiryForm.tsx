@@ -133,7 +133,7 @@ export function PropertyInquiryForm({
         {submitting ? "提交中…" : "提交查詢"}
       </Button>
       <FormStatus state={status} id={PROPERTY_FORM_STATUS_ID} />
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         按提交即表示同意我們透過上述聯絡方式回覆查詢。
       </p>
     </form>

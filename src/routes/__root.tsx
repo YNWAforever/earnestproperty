@@ -46,9 +46,7 @@ function NotFoundComponent() {
     <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-md text-center">
         <p className="text-sm font-semibold text-primary">404</p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight text-primary sm:text-4xl">
-          找不到這個頁面
-        </h1>
+        <h1 className="mt-3 text-3xl font-bold text-primary sm:text-4xl">找不到這個頁面</h1>
         <p className="mt-4 text-base leading-7 text-muted-foreground">
           你要找的頁面可能已移除或連結已更新。可以返回首頁，或直接搜尋放盤。
         </p>

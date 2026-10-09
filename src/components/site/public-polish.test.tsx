@@ -33,3 +33,24 @@ test("footer and contact phone links are tel:+852", () => {
   expect(contact).not.toContain("`tel:${branch.phone}`");
   expect(contact).not.toContain("`tel:${SITE_CONTACT.phoneTel}`");
 });
+
+test("CJK heading components carry no tracking-tight", () => {
+  const files: Array<[string, RegExp]> = [
+    ["src/components/site/PageHero.tsx", /tracking-tight/],
+    ["src/components/layout/SectionHeading.tsx", /tracking-tight/],
+    ["src/components/layout/Prose.tsx", /tracking-tight/],
+    ["src/routes/__root.tsx", /tracking-tight/],
+    ["src/routes/blog.tsx", /tracking-tight/],
+    ["src/routes/index.tsx", /tracking-tight/],
+    ["src/routes/property.$listingNo.tsx", /tracking-tight/],
+  ];
+  for (const [path, pattern] of files)
+    expect([path, pattern.test(source(path))]).toEqual([path, false]);
+});
+
+test("the home H1 keeps words together", () => {
+  const home = source("src/routes/index.tsx");
+  const h1 = home.match(/<h1 className="([^"]*)">\s*深井 青山公路 汀九買樓租樓/);
+  expect(h1).not.toBeNull();
+  expect(h1?.[1]).toContain("break-keep");
+});

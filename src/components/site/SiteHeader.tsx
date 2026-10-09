@@ -291,7 +291,7 @@ function MegaMenuLink({
         {item.label}
       </span>
       {item.description ? (
-        <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+        <span className="mt-1 block text-sm leading-5 text-muted-foreground">
           {item.description}
         </span>
       ) : null}

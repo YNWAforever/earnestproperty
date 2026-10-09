@@ -173,7 +173,7 @@ function CastlePeakRoadRouteError({ error }: { error: unknown }) {
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           晉誠地產的即時放盤資料暫時未能載入。你可以重新整理資料，或稍後再回來查看青山公路沿線真盤。
         </p>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground">
           {error instanceof Error ? error.message : "暫時未能載入資料，請稍後再試。"}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
@@ -245,7 +245,7 @@ function CorridorSchematic() {
           西（近屯門）
         </span>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 text-sm text-muted-foreground">
         示意圖只反映沿線東西相對位置，並非實際地圖座標；如需準確路線及地圖，請以地圖應用程式為準。
       </p>
     </Container>

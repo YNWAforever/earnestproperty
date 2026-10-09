@@ -515,7 +515,7 @@ function PropertyPage() {
           </span>
           <FreshnessStamp updatedAt={property.updated_at} />
         </div>
-        <h1 id="property-title" className="mt-3 text-3xl font-bold tracking-tight">
+        <h1 id="property-title" className="mt-3 text-3xl font-bold">
           {safeTitle}
         </h1>
         {safeAddress ? (
@@ -943,7 +943,7 @@ function PropertyPage() {
             )}
 
             {/* Disclaimer */}
-            <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
+            <p className="mt-8 text-sm leading-relaxed text-muted-foreground">
               免責聲明：以上資料只供參考，實際以業主提供及現場為準。本公司不會就資料的準確性、完整性負責。圖片可能經美化處理，買家或租客應親身核實所有資料。
             </p>
           </>

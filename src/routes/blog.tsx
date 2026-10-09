@@ -232,7 +232,7 @@ function BlogPage() {
                     {article.reading_minutes ?? 5} 分鐘閱讀
                   </span>
                 </div>
-                <h2 className="mt-4 text-2xl font-semibold tracking-tight group-hover:text-primary">
+                <h2 className="mt-4 text-2xl font-semibold group-hover:text-primary">
                   {article.title}
                 </h2>
                 <p className="mt-3 text-sm leading-7 text-muted-foreground">{article.excerpt}</p>
@@ -250,7 +250,7 @@ function BlogPage() {
         </section>
 
         <section className="mt-10">
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             文章資料來源及審閱制度請參閱
             <Link to="/blog/editorial-standards" className="ml-1 text-primary underline">
               編採及事實查核標準
