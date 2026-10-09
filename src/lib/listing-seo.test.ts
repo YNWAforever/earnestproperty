@@ -401,6 +401,14 @@ describe("facts the generator must not get wrong", () => {
     expect(description).toContain("浪翠園");
   });
 
+  test("a leading (晉誠地產…) tag in the source title never reaches the description", () => {
+    const description = listingSeoDescription({
+      listing_no: "Z-1",
+      title_zh: "(晉誠地產筍盤推介) 9座極高層樓皇橋海!附設靚裝修!有匙即看!",
+    });
+    expect(description).not.toContain("晉誠地產筍盤推介");
+  });
+
   test("the context sentence makes no 成交紀錄 claim", () => {
     const description = listingSeoDescription(bareUnit);
     expect(description).toContain("一頁睇齊浪翠園同屋苑其他放盤同交通配套。");

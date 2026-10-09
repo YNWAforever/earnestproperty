@@ -94,7 +94,7 @@ export function stripUnsupportedVrClaim(raw: string, videoUrl?: string | null): 
 }
 export function normalizePublicListingTitle(raw: string, videoUrl?: string | null) {
   const cleaned = stripUnsupportedVrClaim(raw, videoUrl)
-    .replace(/^(?:[!！★☆🔥✨\s]|【(?:筍盤|獨家|急售|推介)】)+/gu, "")
+    .replace(/^(?:[!！★☆🔥✨\s]|【(?:筍盤|獨家|急售|推介)】|[(（]晉誠地產[^)）]*[)）])+/gu, "")
     .replace(/\bPatry\b/gi, "Party")
     .replace(/(?:\s*[!！]){2,}/g, "")
     .replace(/\s+/g, " ")

@@ -150,6 +150,7 @@ function cleanSourceTitle(value: unknown, videoUrl?: string | null): string | nu
   const raw = text(value);
   if (!raw) return null;
   const cleaned = raw
+    .replace(/^\s*[(（]晉誠地產[^)）]*[)）]\s*/, "")
     .replace(/\s*-\s*晉誠地產\s*$/, "")
     .replace(/\s*[#＃]\S+\s*$/, "")
     .replace(/\s+(售盤|租盤|放盤)$/, "")
