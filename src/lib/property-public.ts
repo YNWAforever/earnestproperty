@@ -92,9 +92,19 @@ export function stripUnsupportedVrClaim(raw: string, videoUrl?: string | null): 
     .replace(/\bVR\s*(?:實景|睇樓|全景)/gi, " ")
     .replace(/(?:^|\s)VR(?=\s|$|[!！])/gi, " ");
 }
+// One rule for the leading 「(晉誠地產…)」 / 「（晉誠地產…）」 agency tag, shared by
+// the public headline and the SEO title/description subject.
+const TITLE_JUNK = "[!！★☆🔥✨\\s]|【(?:筍盤|獨家|急售|推介)】";
+const AGENCY_TAG = "[(（]晉誠地產[^)）]*[)）]";
+const LEADING_TITLE_NOISE = new RegExp(`^(?:${TITLE_JUNK}|${AGENCY_TAG})+`, "u");
+const LEADING_AGENCY_TAG = new RegExp(`^((?:${TITLE_JUNK})*)(?:${AGENCY_TAG})+`, "u");
+/** Removes only a leading agency tag; everything else is returned untouched. */
+export function stripLeadingAgencyTag(raw: string): string {
+  return raw.replace(LEADING_AGENCY_TAG, "$1");
+}
 export function normalizePublicListingTitle(raw: string, videoUrl?: string | null) {
   const cleaned = stripUnsupportedVrClaim(raw, videoUrl)
-    .replace(/^(?:[!！★☆🔥✨\s]|【(?:筍盤|獨家|急售|推介)】|[(（]晉誠地產[^)）]*[)）])+/gu, "")
+    .replace(LEADING_TITLE_NOISE, "")
     .replace(/\bPatry\b/gi, "Party")
     .replace(/(?:\s*[!！]){2,}/g, "")
     .replace(/\s+/g, " ")

@@ -118,6 +118,29 @@ describe("listingSeoTitle", () => {
   });
 });
 
+describe("listingSeoTitle source-title tag", () => {
+  const rest = "9座極高層樓皇橋海!附設靚裝修!有匙即看!";
+  const titleFor = (title_zh: string) => listingSeoTitle({ listing_no: "Z-1", title_zh });
+  const plain = titleFor(rest);
+  for (const tagged of [
+    `(晉誠地產筍盤推介) ${rest}`,
+    `（晉誠地產筍盤推介）${rest}`,
+    `（晉誠地產獨家)${rest}`,
+    `  (晉誠地產筍盤推介)${rest}`,
+  ]) {
+    test(`loses only the leading tag: ${tagged.slice(0, 12)}`, () => {
+      expect(titleFor(tagged)).toBe(plain);
+    });
+  }
+  test("a tag in the middle is kept", () => {
+    const mid = "碧堤半島(晉誠地產推介)高層海景";
+    expect(titleFor(mid)).toContain("(晉誠地產推介)");
+  });
+  test("a tag after leading 【筍盤】 is removed, the 【筍盤】 itself is not", () => {
+    expect(titleFor(`【筍盤】(晉誠地產推介) ${rest}`)).toBe(titleFor(`【筍盤】 ${rest}`));
+  });
+});
+
 describe("listingSeoDescription", () => {
   test("composes the unit's own facts, the price and a call to action", () => {
     const description = listingSeoDescription(richUnit);
@@ -167,20 +190,43 @@ describe("listingSeoDescription", () => {
     );
   });
 
-  test("body filler never restates a fact already in the description", () => {
-    const description = listingSeoDescription({
+  describe("generated 實用面積 filler in the body", () => {
+    const unit = {
       listing_no: "T027001",
       title_zh: "碧堤半島 高層 4房",
       estates: { name_zh: "碧堤半島", district_slug: "sham-tseng" },
-      deal_type: "sale",
+      deal_type: "sale" as const,
       price: 12_680_000,
       saleable_area: 901,
       bedrooms: 4,
+      bathrooms: 3,
       floor: "高層",
-      description: "碧堤半島，高層，實用面積。",
-    });
-    expect(description).not.toContain("實用面積");
-    expect(description.match(/碧堤半島/g)?.length ?? 0).toBe(1);
+      orientation: "南",
+    };
+    const facts = "深井碧堤半島 高層 4 房單位。實用 901 呎，南，3 廁。售 $1,268萬，呎價 $14,073。";
+    const cta = "WhatsApp 即時預約睇樓或免費估價。晉誠地產 C-018613。";
+
+    const cases: Array<[string, string, string]> = [
+      ["the generated filler alone is removed", "碧堤半島，高層，實用面積。", `${facts}${cta}`],
+      ["the filler without its full stop is removed", "碧堤半島，高層，實用面積", `${facts}${cta}`],
+      [
+        "digit commas and ！ in a body stay byte-identical",
+        "建築 1,100 呎！即睇即議",
+        `${facts}建築 1,100 呎！即睇即議。${cta}`,
+      ],
+      ["a short informative clause is kept", "南向，海", `${facts}南向，海。${cta}`],
+      [
+        "the filler is cut out of a longer body and the rest is kept",
+        "碧堤半島，高層，實用面積，業主自住",
+        `${facts}業主自住。${cta}`,
+      ],
+      ["a body without the filler is unchanged", "業主誠意放售", `${facts}業主誠意放售。${cta}`],
+    ];
+    for (const [name, body, expected] of cases) {
+      test(name, () => {
+        expect(listingSeoDescription({ ...unit, description: body })).toBe(expected);
+      });
+    }
   });
 
   test("keeps the call to action even when the body copy is long", () => {
