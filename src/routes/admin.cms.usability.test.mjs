@@ -200,3 +200,39 @@ test("compare no longer prints raw JSON", () => {
   assert.match(compare, /本機修改備份（可複製）/);
   assert.doesNotMatch(compare, /比較目前發布版本（保留本機修改）/);
 });
+
+test("restore baseline is never null while a record is open, and the dialog closes rather than unmounting", () => {
+  for (const kind of ["Estate", "Article"]) {
+    const body = source.slice(source.indexOf(`function ${kind}Dialog(`)).split("\nfunction ")[0];
+    assert.match(body, /useOpeningSnapshot\(/, `${kind} keeps the form as it was opened`);
+    assert.match(body, /openingForm=\{opening/);
+  }
+  const confirm = readFileSync(
+    new URL("../components/admin/CmsRestoreConfirm.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(confirm, /open=\{revision !== null\}/);
+  assert.doesNotMatch(confirm, /\n\s+open\n/);
+  for (const [file, phrase] of [
+    ["../components/admin/admin-error-text.ts", "請使用與已發布版本比較。"],
+    ["./admin.cms.tsx", "請先與已發布版本比較並核對內容。"],
+  ]) {
+    const text = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.ok(text.includes(phrase), `${file} names the compare button as 與已發布版本比較`);
+    assert.ok(!text.includes("比較目前發布版本"), `${file} still names the old button`);
+  }
+});
+
+test("confirm dialogs hand focus back to the button that opened them", () => {
+  // Checked in Chromium (FX-17a fix round 1): these dialogs open from state, with no
+  // AlertDialogTrigger, so without this Radix drops focus on <body> instead of on 還原.
+  const dialog = readFileSync(
+    new URL("../components/admin/AdminConfirmDialog.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(dialog, /onOpenAutoFocus=\{\(\) => \{[\s\S]*?openerRef\.current =/);
+  assert.match(
+    dialog,
+    /onCloseAutoFocus=\{\(event\) => \{[\s\S]*?event\.preventDefault\(\);\s*opener\.focus\(\);/,
+  );
+});

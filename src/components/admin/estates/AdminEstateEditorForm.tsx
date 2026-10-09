@@ -8,6 +8,7 @@ import { CmsPublicationCompare } from "@/components/admin/CmsPublicationCompare"
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { CmsRestoreConfirm } from "@/components/admin/CmsRestoreConfirm";
 import { useCmsCanRestore } from "@/components/admin/use-cms-can-restore";
+import { ESTATE_EDITOR_LABELS } from "./estate-editor-labels";
 import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -87,35 +88,6 @@ function createInitialForm(payload?: Record<string, CmsPayloadValue> | null, res
 }
 
 type FormState = ReturnType<typeof createInitialForm>;
-
-/** This form's own field labels, so 還原 and 與已發布版本比較 name fields as staff see them here. */
-const ESTATE_EDITOR_LABELS: Record<string, string> = {
-  slug: "Slug",
-  name_zh: "中文名",
-  name_en: "英文名",
-  district_slug: "地區 slug（舊）",
-  developer: "發展商",
-  hero_image: "Hero 圖片",
-  year_completed: "落成年份",
-  phases: "期數",
-  total_units: "伙數",
-  area_min: "面積下限",
-  area_max: "面積上限",
-  facilities: "設施（每行一項）",
-  description: "描述",
-  aliases: "別名（每行一個）",
-  address: "地址",
-  blocks: "座數",
-  district_id: "地區（新，district_id）",
-  lat: "緯度 (lat)",
-  lng: "經度 (lng)",
-  avg_saleable_psf: "平均實呎 (avg_saleable_psf)",
-  transport_note: "交通備註",
-  school_net_code: "校網編號",
-  verified_at: "核實狀態",
-  seo_title: "SEO 標題",
-  seo_description: "SEO 描述",
-};
 
 function parseNullableNumber(value: string) {
   const trimmed = value.trim();

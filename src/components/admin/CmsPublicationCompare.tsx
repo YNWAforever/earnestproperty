@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fetchAdminCmsEditor } from "@/lib/neon/admin-cms";
 import type { CmsPayloadValue } from "@/lib/neon/admin-cms.types";
 import { cmsFieldDiff, type CmsDiffResource } from "@/lib/admin/cms-field-diff";
@@ -77,7 +77,9 @@ export function CmsCompareResult({
           <TableBody>
             {changes.map((change) => (
               <TableRow key={change.key}>
-                <TableCell className="align-top font-medium">{change.label}</TableCell>
+                <TableHead scope="row" className="h-auto py-2 align-top font-medium">
+                  {change.label}
+                </TableHead>
                 <TableCell className="align-top whitespace-normal">
                   <CompareValue value={change.before} />
                 </TableCell>
@@ -119,7 +121,12 @@ export function CmsPublicationCompare({
   const [error, setError] = useState(false);
   const [loading, setLoading] = useState(false);
   // Shown only when the clipboard refuses: the same local edits, ready to copy by hand.
-  const [backup, setBackup] = useState<string | null>(null);
+  const [backup, setBackup] = useState<{ text: string } | null>(null);
+  const backupRef = useRef<HTMLTextAreaElement>(null);
+  // When the clipboard refuses, take staff straight to the box they now copy from by hand.
+  useEffect(() => {
+    if (backup !== null) backupRef.current?.focus();
+  }, [backup]);
   if (!resourceId) return null;
 
   return (
@@ -153,7 +160,11 @@ export function CmsPublicationCompare({
         <Button
           type="button"
           variant="outline"
-          onClick={async () => setBackup(await copyCmsLocalBackup(localPayload))}
+          onClick={async () => {
+            // A fresh object each failure, so a repeated failure moves focus again.
+            const text = await copyCmsLocalBackup(localPayload);
+            setBackup(text === null ? null : { text });
+          }}
         >
           複製本機修改（備份）
         </Button>
@@ -176,7 +187,7 @@ export function CmsPublicationCompare({
       {backup !== null ? (
         <label className="block space-y-1 text-sm">
           本機修改備份（可複製）
-          <Textarea readOnly rows={8} value={backup} />
+          <Textarea ref={backupRef} readOnly rows={8} value={backup.text} />
         </label>
       ) : null}
     </section>

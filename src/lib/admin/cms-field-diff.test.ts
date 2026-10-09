@@ -122,3 +122,69 @@ test("a caller can label extra keys its own form shows, so they are not counted 
   expect(changes).toEqual([{ key: "address", label: "地址", before: "舊地址", after: "新地址" }]);
   expect(otherChanged).toBe(0);
 });
+
+test("numeric strings compare by value however they are written", () => {
+  expect(
+    cmsFieldDiff(
+      "estate",
+      { area_min: 500, area_max: "1.50", year_completed: "2001" },
+      { area_min: "500.0", area_max: 1.5, year_completed: 2001 },
+    ),
+  ).toEqual({ changes: [], otherChanged: 0 });
+  expect(cmsFieldDiff("estate", { area_min: 500 }, { area_min: "550" }).changes).toEqual([
+    { key: "area_min", label: "面積下限（平方呎）", before: "500", after: "550" },
+  ]);
+});
+
+test("nested objects compare with a stable key order and arrays of objects read as key: value", () => {
+  const labels = { meta: "Meta", rooms: "Rooms" };
+  expect(
+    cmsFieldDiff(
+      "estate",
+      { meta: { a: 1, b: { c: 2, d: 3 } } },
+      { meta: { b: { d: 3, c: 2 }, a: 1 } },
+      labels,
+    ),
+  ).toEqual({ changes: [], otherChanged: 0 });
+  expect(
+    cmsFieldDiff("estate", { geo: { x: 1, y: 2 } }, { geo: { y: 2, x: 1 } }).otherChanged,
+  ).toBe(0);
+  const { changes } = cmsFieldDiff(
+    "estate",
+    { rooms: [{ name: "會所", floor: 1 }] },
+    { rooms: [{ name: "會所", floor: 2 }, { name: "泳池" }] },
+    labels,
+  );
+  expect(changes).toEqual([
+    {
+      key: "rooms",
+      label: "Rooms",
+      before: "floor: 1、name: 會所",
+      after: "floor: 2、name: 會所；name: 泳池",
+    },
+  ]);
+  expect(JSON.stringify(changes)).not.toContain("[object Object]");
+});
+
+test("dates show in Hong Kong time and compare by instant", () => {
+  expect(
+    cmsFieldDiff(
+      "article",
+      { published_at: "2026-10-01T02:30:00.000Z" },
+      { published_at: "2026-10-01T10:30:00+08:00" },
+    ),
+  ).toEqual({ changes: [], otherChanged: 0 });
+  expect(
+    cmsFieldDiff("article", { published_at: null }, { published_at: "2026-10-01T02:30:00.000Z" })
+      .changes,
+  ).toEqual([
+    { key: "published_at", label: "發布日期", before: "（空白）", after: "01/10/2026 10:30" },
+  ]);
+  const verified = cmsFieldDiff(
+    "estate",
+    { verified_at: "2026-10-08T09:15:00.000Z" },
+    { verified_at: null },
+    { verified_at: "核實狀態" },
+  ).changes[0];
+  expect(verified.before).toBe("08/10/2026 17:15");
+});

@@ -24,6 +24,7 @@ import { toast } from "sonner";
 import { CmsPublicationCompare } from "@/components/admin/CmsPublicationCompare";
 import { CmsRestoreConfirm } from "@/components/admin/CmsRestoreConfirm";
 import { useCmsCanRestore } from "@/components/admin/use-cms-can-restore";
+import { useOpeningSnapshot } from "@/components/admin/use-opening-snapshot";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminContentCopilot } from "@/components/admin/AdminContentCopilot";
@@ -2054,6 +2055,7 @@ function EstateDialog({
   const [confirmingPublish, setConfirmingPublish] = useState(false);
   const canRestore = useCmsCanRestore();
   const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
+  const openingEstate = useOpeningSnapshot(estate);
   const { requestClose: requestDirtyClose, dialog } = useDirtyCloseGuard({
     isDirty: isDirty || imageUploading,
     onClose,
@@ -2225,6 +2227,7 @@ function EstateDialog({
                 resource="estate"
                 revision={pendingRestore}
                 savedPayload={savedPayload}
+                openingForm={openingEstate}
                 form={{ ...estate }}
                 savedDraft={revisions?.find((revision) => revision.state === "draft")}
                 isPending={saving}
@@ -2254,7 +2257,7 @@ function EstateDialog({
             open={confirmingPublish}
             onOpenChange={setConfirmingPublish}
             title="確認發佈內容"
-            description="此操作會將已儲存草稿公開。請先比較目前發布版本並核對內容。"
+            description="此操作會將已儲存草稿公開。請先與已發布版本比較並核對內容。"
             confirmLabel="確認發佈"
             disabled={imageUploading || isDirty || !savedPayload}
             isPending={publishing}
@@ -2305,6 +2308,7 @@ function ArticleDialog({
   const [confirmingPublish, setConfirmingPublish] = useState(false);
   const canRestore = useCmsCanRestore();
   const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
+  const openingArticle = useOpeningSnapshot(article);
   const { requestClose: requestDirtyClose, dialog } = useDirtyCloseGuard({
     isDirty: isDirty || imageUploading,
     onClose,
@@ -2448,6 +2452,7 @@ function ArticleDialog({
                 resource="article"
                 revision={pendingRestore}
                 savedPayload={savedPayload}
+                openingForm={openingArticle}
                 form={{ ...article }}
                 savedDraft={revisions?.find((revision) => revision.state === "draft")}
                 isPending={saving}
@@ -2477,7 +2482,7 @@ function ArticleDialog({
             open={confirmingPublish}
             onOpenChange={setConfirmingPublish}
             title="確認發佈內容"
-            description="此操作會將已儲存草稿公開。請先比較目前發布版本並核對內容。"
+            description="此操作會將已儲存草稿公開。請先與已發布版本比較並核對內容。"
             confirmLabel="確認發佈"
             disabled={imageUploading || isDirty || !savedPayload}
             isPending={publishing}

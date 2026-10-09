@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { cmsFieldDiff, type CmsDiffResource } from "@/lib/admin/cms-field-diff";
 import type { CmsRevisionSummary } from "@/lib/neon/admin-cms.types";
@@ -22,11 +23,17 @@ function when(value: string) {
  * happens it says which unsaved form fields and which saved draft will be replaced.
  * Cancelling changes nothing; confirming hands the version back to the caller's existing
  * restore call.
+ *
+ * Unsaved fields are measured against the saved payload, or, before that has loaded for the
+ * open record, against the form as it was opened, so a clean form is never listed as edited.
+ * Once a version has been chosen the dialog stays mounted and closes (rather than vanishing),
+ * so focus returns to the 還原 button that opened it.
  */
 export function CmsRestoreConfirm({
   resource,
   revision,
   savedPayload,
+  openingForm,
   form,
   savedDraft,
   labels,
@@ -37,8 +44,10 @@ export function CmsRestoreConfirm({
   resource: CmsDiffResource;
   /** The version to restore; the dialog is open while this is set. */
   revision: CmsRevisionSummary | null;
-  /** What the form was loaded from or last saved as. */
+  /** What the form was loaded from or last saved as; null until it has loaded. */
   savedPayload: Record<string, unknown> | null;
+  /** The form as it was opened, the baseline while `savedPayload` is null. */
+  openingForm?: Record<string, unknown> | null;
   /** The form as it is now. */
   form: Record<string, unknown>;
   /** The staff member's own saved draft, which restore retires. */
@@ -49,18 +58,23 @@ export function CmsRestoreConfirm({
   onOpenChange: (open: boolean) => void;
   onConfirm: (revisionId: string) => void;
 }) {
-  if (!revision) return null;
-  const { changes, otherChanged } = cmsFieldDiff(resource, savedPayload, form, labels);
+  // The last chosen version keeps the dialog's text in place while it closes.
+  const [shown, setShown] = useState(revision);
+  if (revision && revision !== shown) setShown(revision);
+  const target = revision ?? shown;
+  if (!target) return null;
+  const baseline = savedPayload ?? openingForm ?? {};
+  const { changes, otherChanged } = cmsFieldDiff(resource, baseline, form, labels);
   const clean = changes.length === 0 && otherChanged === 0;
   return (
     <AdminConfirmDialog
-      open
+      open={revision !== null}
       title="還原此版本？"
-      description={`還原會以 v${revision.versionNumber}（${REVISION_STATE_LABELS[revision.state]}，${when(revision.createdAt)}）的內容建立新草稿。以下內容會被取代：`}
+      description={`還原會以 v${target.versionNumber}（${REVISION_STATE_LABELS[target.state]}，${when(target.createdAt)}）的內容建立新草稿。以下內容會被取代：`}
       confirmLabel="還原"
       isPending={isPending}
       onOpenChange={onOpenChange}
-      onConfirm={() => onConfirm(revision.id)}
+      onConfirm={() => onConfirm(target.id)}
     >
       <ul className="list-disc space-y-1 pl-5 text-sm">
         {clean ? <li>目前沒有未儲存的修改。</li> : null}

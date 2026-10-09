@@ -56,7 +56,7 @@ const STAFF_ACTION_CODE_MESSAGES: Record<string, string> = {
 
 /** CMS revision-engine codes. Moved here from admin.cms.tsx and AdminEstateEditorForm.tsx. */
 const CMS_ERROR_MESSAGES: Record<string, string> = {
-  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新。本機修改已保留，請使用比較目前發布版本。",
+  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新。本機修改已保留，請使用與已發布版本比較。",
   CMS_REVISION_NOT_FOUND: "找不到此版本，可能已被更新，請重新載入頁面。",
   CMS_REVISION_MISMATCH: "版本資料不符，請重新載入頁面後再試一次。",
   CMS_RESOURCE_NOT_FOUND: "找不到此資源，可能已被其他人刪除或封存，請重新載入頁面。",

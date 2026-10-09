@@ -50,6 +50,7 @@ function render(props: Partial<Parameters<typeof CmsRestoreConfirm>[0]> = {}) {
         resource: "estate",
         revision: target,
         savedPayload,
+        openingForm: null,
         form: { ...savedPayload, id: "estate-1" },
         savedDraft: null,
         onOpenChange() {},
@@ -93,6 +94,40 @@ test("unsaved changes to unlabelled fields are still counted, never reported as 
     .map((_, el) => $(el).text())
     .get();
   expect(items).toEqual(["另有 1 項系統欄位不同。"]);
+});
+
+test("before the saved draft has loaded, only edits since the record was opened are listed", () => {
+  // The 內容中心 dialog can show history before its saved payload has matched the open
+  // record. The form as it was opened is then the baseline, never an empty record.
+  const opened = { ...savedPayload, id: "estate-1" };
+  const clean = render({ savedPayload: null, openingForm: opened, form: { ...opened } });
+  expect(
+    clean("li")
+      .map((_, el) => clean(el).text())
+      .get(),
+  ).toEqual(["目前沒有未儲存的修改。"]);
+  const edited = render({
+    savedPayload: null,
+    openingForm: opened,
+    form: { ...opened, name_zh: "海景花園二期" },
+  });
+  expect(
+    edited("li")
+      .map((_, el) => edited(el).text())
+      .get(),
+  ).toEqual(["目前表單內未儲存的修改：中文名"]);
+});
+
+test("a saved payload, when present, is the baseline rather than the opening form", () => {
+  const $ = render({
+    openingForm: { ...savedPayload, name_zh: "開啟時的名稱" },
+    form: { ...savedPayload, id: "estate-1" },
+  });
+  expect(
+    $("li")
+      .map((_, el) => $(el).text())
+      .get(),
+  ).toEqual(["目前沒有未儲存的修改。"]);
 });
 
 test("renders nothing until a version is chosen", () => {

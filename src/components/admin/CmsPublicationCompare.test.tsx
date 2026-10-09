@@ -68,3 +68,21 @@ test("long values clamp to three lines with a 顯示全部 toggle", () => {
   expect($(".line-clamp-3").length).toBe(1);
   expect($("button").text()).toBe("顯示全部");
 });
+
+test("each row is headed by its field name and dates read in Hong Kong time", () => {
+  const $ = render({
+    resourceType: "article",
+    published: { title: "舊", published_at: "2026-10-01T02:30:00.000Z" },
+    version: 4,
+    local: { title: "新", published_at: "2026-10-08T09:15:00.000Z" },
+  });
+  expect(
+    $('tbody th[scope="row"]')
+      .map((_, el) => $(el).text())
+      .get(),
+  ).toEqual(["標題", "發布日期"]);
+  expect($("tbody td").length).toBe(4);
+  expect($.text()).toContain("01/10/2026 10:30");
+  expect($.text()).toContain("08/10/2026 17:15");
+  expect($.text()).not.toContain("T02:30");
+});
