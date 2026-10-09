@@ -36,12 +36,12 @@ const message = (n: number, id: string) => ({
   error: null,
   created_at: new Date(Date.now() - (31 - n) * 1000).toISOString(),
 });
-const row = (id: string, name: string, external: string) => ({
+const row = (id: string, name: string, external: string, phone: string) => ({
   id,
   name,
   customer_display_name: name,
   status: "open",
-  phone: null,
+  phone,
   contact_id: null,
   assigned_agent_id: ids.staff,
   woztell_member_id: "synthetic-member",
@@ -61,7 +61,11 @@ const row = (id: string, name: string, external: string) => ({
   capabilities: { canReply: true, canCorrect: false },
   messages: Array.from({ length: 30 }, (_, n) => message(n + 1, id)),
 });
-const rows = [row(ids.a, "合成客戶甲", "4033349"), row(ids.b, "合成客戶乙", "4033350")];
+// Distinct synthetic numbers (FX-17a): confirmations show only the last four digits.
+const rows = [
+  row(ids.a, "合成客戶甲", "4033349", "+852 5550 1234"),
+  row(ids.b, "合成客戶乙", "4033350", "+852 5550 5678"),
+];
 const state = {
   calls: [] as { name: string; input: unknown }[],
   membershipMode: "ok",
@@ -278,7 +282,23 @@ export async function fetchAdminConversation({ data }: { data: { id: string } })
       fixture().releaseLateDetail = done;
     });
   }
-  return readable(data.id) ? { ...rows.find((r) => r.id === data.id)!, messages: [] } : null;
+  if (!readable(data.id)) return null;
+  const found = { ...rows.find((r) => r.id === data.id)!, messages: [] };
+  // With sessionStorage no-link-fixture-near-miss=true, a manager sees the 「可能要求退訂」 flag
+  // (確認退訂 / 不是退訂) and the consent dialog; every save stays a forbidden mutation.
+  return sessionStorage.getItem("no-link-fixture-near-miss") === "true"
+    ? {
+        ...found,
+        contact_id: data.id.replace(/^1/, "5"),
+        can_clear_opt_out: actor === "manager",
+        opt_out_near_miss: {
+          messageId: found.id.slice(0, 24) + "000000000099",
+          text: "可唔可以停一停先",
+          at: now,
+          exact: false,
+        },
+      }
+    : found;
 }
 export async function fetchAdminConversationAiAssist({
   data,

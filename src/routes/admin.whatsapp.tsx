@@ -1,4 +1,6 @@
 import { adminErrorMessage } from "@/components/admin/admin-error-text";
+import { CustomerConfirmDetails } from "@/components/admin/CustomerConfirmLine";
+import { customerConfirmLabel, type CustomerConfirmLabel } from "@/lib/admin/customer-label";
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { StaffNotificationPanel } from "@/components/admin/StaffNotificationPanel";
 import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContext";
@@ -1740,6 +1742,10 @@ function ConversationWorkspace({
                   key={detail.contact_id}
                   contactId={detail.contact_id}
                   onSaved={onConsentSaved}
+                  customer={customerConfirmLabel({
+                    name: detail.customer_display_name ?? detail.name,
+                    phone: detail.phone,
+                  })}
                 />
               ) : null}
               <ResolveUnknownOutboundDialog detail={detail} onChanged={onConsentSaved} />
@@ -1822,6 +1828,10 @@ function ConversationWorkspace({
         {showTemplateSend ? (
           <TemplateSendPanel
             key={detail.id}
+            customer={customerConfirmLabel({
+              name: detail.customer_display_name ?? detail.name,
+              phone: detail.phone,
+            })}
             templates={templates}
             loading={templatesLoading}
             error={templatesError}
@@ -1951,6 +1961,7 @@ function AiAssistPanel({
  * a template name that does not exist anywhere in the system.
  */
 function TemplateSendPanel({
+  customer,
   templates,
   loading,
   error,
@@ -1959,6 +1970,8 @@ function TemplateSendPanel({
   sending,
   onSend,
 }: {
+  /** The open conversation's customer: the same detail whose id the send targets. */
+  customer: CustomerConfirmLabel;
   templates: AdminWhatsappTemplateRow[];
   loading: boolean;
   error: string | null;
@@ -2045,8 +2058,8 @@ function TemplateSendPanel({
         title="確認傳送範本？"
         description={
           selected
-            ? `將向客戶傳送已審批範本「${selected.element_name}」。範本一經傳送即無法收回。`
-            : "將向客戶傳送已審批範本。範本一經傳送即無法收回。"
+            ? `將向 ${customer.name}（${customer.phone}）傳送已審批範本「${selected.element_name}」。範本一經傳送即無法收回。`
+            : `將向 ${customer.name}（${customer.phone}）傳送已審批範本。範本一經傳送即無法收回。`
         }
         confirmLabel="傳送"
         disabled={disabled}
@@ -2059,7 +2072,9 @@ function TemplateSendPanel({
             setConfirmOpen(false);
           })();
         }}
-      />
+      >
+        <CustomerConfirmDetails customer={customer} />
+      </AdminConfirmDialog>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
+import { CustomerConfirmLine } from "@/components/admin/CustomerConfirmLine";
 import { WhatsappConsentDialog } from "@/components/admin/WhatsappConsentDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { clearAccidentalWhatsappOptOut, dismissOptOutNearMiss } from "@/lib/neon/admin-data";
+import { customerConfirmLabel } from "@/lib/admin/customer-label";
 import type { AdminConversationDetail } from "@/lib/neon/admin-data.types";
 import { optOutReplyState } from "@/lib/neon/admin-workflow";
 import { dismissReasonError, nearMissConsentPreset, optOutReviewFlagCopy } from "./safety-copy";
@@ -32,6 +34,14 @@ function clearErrorText(error: unknown) {
     return "退訂狀態剛有更新，請重新載入後再核對。";
   if (code.includes("Forbidden")) return "你沒有權限清除此退訂。";
   return "未能清除，請稍後重試。";
+}
+
+/** The customer these actions change: the same detail that supplies contact_id and id. */
+function customerOf(detail: AdminConversationDetail) {
+  return customerConfirmLabel({
+    name: detail.customer_display_name ?? detail.name,
+    phone: detail.phone,
+  });
 }
 
 function evidenceLine(detail: AdminConversationDetail) {
@@ -207,6 +217,7 @@ function DismissNearMissButton({
         }}
         onConfirm={() => void submit()}
       >
+        <CustomerConfirmLine customer={customerOf(detail)} />
         <Textarea
           value={reason}
           disabled={busy}
@@ -280,6 +291,7 @@ export function OptOutEvidenceNotice({
             onSaved={onChanged}
             preset={nearMissConsentPreset(nearMiss.messageId)}
             triggerLabel="確認退訂"
+            customer={customerOf(detail)}
           />
           <DismissNearMissButton
             key={"dismiss-" + nearMiss.messageId}

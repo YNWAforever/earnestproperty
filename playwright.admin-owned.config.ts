@@ -14,6 +14,7 @@ export default defineConfig({
     "admin-performance-readback.spec.ts",
     "admin-link-bulk-owned.spec.ts",
     "admin-attention.spec.ts",
+    "admin-safer-actions.spec.ts",
     "public-form-feedback.spec.ts",
     "live-agent-cards.spec.ts",
   ],

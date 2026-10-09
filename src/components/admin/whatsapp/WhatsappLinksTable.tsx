@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { WhatsappCoveragePanel } from "./WhatsappCoveragePanel";
+import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { callStaffServerFn } from "@/lib/neon/staff-server-fn";
@@ -17,6 +18,13 @@ type Page = Awaited<ReturnType<typeof getWhatsappTrackingLinksPage>>;
 type Item = Page["items"][number];
 const control = "min-h-11 rounded-md border bg-background px-3 text-sm";
 const codeUrl = (code: string) => `${window.location.origin}/w/${code}`;
+// Same labels as the 來源 filter.
+const placementLabels: Record<string, string> = {
+  website: "網站",
+  "28hse": "28hse",
+  youtube: "YouTube",
+  other: "其他",
+};
 
 export function WhatsappLinksTable({
   revision,
@@ -41,6 +49,10 @@ export function WhatsappLinksTable({
   const [error, setError] = useState("");
   const [copyFallback, setCopyFallback] = useState("");
   const [notice, setNotice] = useState("");
+  // 停用 asks first (G-26); 重新啟用 restores routing and stays one click.
+  const [pendingDisable, setPendingDisable] = useState<Item | null>(null);
+  const [disableError, setDisableError] = useState<string | null>(null);
+  const disabling = useRef(false);
   function updateFilter(next: LinkPageFilter) {
     setFilter(next);
     setCursor(undefined);
@@ -124,6 +136,24 @@ export function WhatsappLinksTable({
     setEditing(null);
     setNotice("已儲存新版本；短連結不變。");
     reload();
+  }
+  async function confirmDisable() {
+    const link = pendingDisable;
+    if (!link || disabling.current) return;
+    disabling.current = true;
+    setBusy(true);
+    setDisableError(null);
+    setError("");
+    setNotice("");
+    try {
+      await save(link, false);
+      setPendingDisable(null);
+    } catch (cause) {
+      setDisableError(staffActionErrorText(cause, "操作未完成，請重試。"));
+    } finally {
+      disabling.current = false;
+      setBusy(false);
+    }
   }
   async function copy(link: Item) {
     const url = codeUrl(link.code);
@@ -359,7 +389,12 @@ export function WhatsappLinksTable({
                 size="sm"
                 variant="outline"
                 disabled={busy}
-                onClick={() => void run(() => save(link, !link.enabled))}
+                onClick={() => {
+                  if (link.enabled) {
+                    setDisableError(null);
+                    setPendingDisable(link);
+                  } else void run(() => save(link, true));
+                }}
               >
                 {link.enabled ? "停用" : "重新啟用"}
               </Button>
@@ -395,6 +430,53 @@ export function WhatsappLinksTable({
           下一頁
         </Button>
       </div>
+      <AdminConfirmDialog
+        open={pendingDisable !== null}
+        title="停用此來源連結？"
+        description="停用後，客戶開啟此連結會改為聯絡公司總台，查詢不會再記錄為來自這個投放。之後可重新啟用。"
+        confirmLabel="停用"
+        confirmVariant="destructive"
+        isPending={busy && pendingDisable !== null}
+        error={disableError}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingDisable(null);
+            setDisableError(null);
+          }
+        }}
+        onConfirm={() => void confirmDisable()}
+      >
+        {pendingDisable ? (
+          <dl className="grid gap-1 rounded-md border bg-muted/40 p-3 text-sm">
+            <div className="flex gap-1">
+              <dt className="shrink-0 text-muted-foreground">樓盤：</dt>
+              <dd className="min-w-0 break-words font-medium">
+                {pendingDisable.publicListingNo ?? "一般查詢"} ·{" "}
+                {pendingDisable.dealType === "sale"
+                  ? "售"
+                  : pendingDisable.dealType === "rent"
+                    ? "租"
+                    : "—"}
+              </dd>
+            </div>
+            <div className="flex gap-1">
+              <dt className="shrink-0 text-muted-foreground">投放位置：</dt>
+              <dd className="min-w-0 break-all">
+                {placementLabels[pendingDisable.placementSource] ?? pendingDisable.placementSource}
+                {pendingDisable.sourcePlacementId ? ` · ${pendingDisable.sourcePlacementId}` : ""}
+              </dd>
+            </div>
+            <div className="flex gap-1">
+              <dt className="shrink-0 text-muted-foreground">連結：</dt>
+              <dd className="min-w-0 break-all font-mono">/w/{pendingDisable.code}</dd>
+            </div>
+            <div className="flex gap-1">
+              <dt className="shrink-0 text-muted-foreground">指定同事：</dt>
+              <dd className="min-w-0 break-words">{pendingDisable.requestedStaffName ?? "總台"}</dd>
+            </div>
+          </dl>
+        ) : null}
+      </AdminConfirmDialog>
       {editing ? (
         <div
           role="dialog"
