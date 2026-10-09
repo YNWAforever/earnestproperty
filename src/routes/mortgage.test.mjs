@@ -104,6 +104,14 @@ test("mortgage calculator exposes practical controls, results, and official refe
     /live\s+stale=\{result === null\}/,
     "the 每月供款 live row is always mounted and only its content changes",
   );
+  assert.doesNotMatch(
+    component,
+    /stale && "opacity-50"/,
+    "opacity drops the dimmed row below 4.5:1",
+  );
+  assert.match(component, /aria-hidden=\{stale \? true : undefined\}/);
+  assert.match(component, /stale \? "text-muted-foreground"/);
+  assert.match(component, /\{stale \? <span className="sr-only">編輯中無法顯示<\/span> : null\}/);
 });
 
 test("mortgage calculator has no remaining English UI copy from the pre-translation baseline", () => {

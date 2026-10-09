@@ -85,6 +85,26 @@ test("every audited text pair meets 4.5:1 and every UI pair 3:1", () => {
     );
   }
   add("white on destructive", white, color("--destructive"), 4.5);
+  // Badge destructive hover (bg-destructive/90) and the admin team 邀請失敗 badge
+  // (text-destructive on bg-destructive/5), over every surface they sit on.
+  for (const [where, base] of [
+    ["card", card],
+    ["surface", surface],
+    ["muted", color("--muted")],
+  ]) {
+    add(
+      `destructive-foreground on destructive/90 over ${where} (badge hover)`,
+      color("--destructive-foreground"),
+      over(color("--destructive"), 0.9, base),
+      4.5,
+    );
+    add(
+      `destructive on destructive/5 over ${where} (admin team badge)`,
+      color("--destructive"),
+      over(color("--destructive"), 0.05, base),
+      4.5,
+    );
+  }
   add("white on whatsapp", white, color("--whatsapp"), 4.5);
   add("white on whatsapp-hover", white, color("--whatsapp-hover"), 4.5);
   add("whatsapp text on card", color("--whatsapp"), card, 4.5);
@@ -101,6 +121,17 @@ test("every audited text pair meets 4.5:1 and every UI pair 3:1", () => {
     .filter((p) => p.got < p.min)
     .map((p) => `${p.label}: ${p.got.toFixed(2)} < ${p.min}`);
   assert.deepEqual(failures, []);
+});
+
+test("the badge classes are the ones the contrast pairs above measure", () => {
+  const badge = readFileSync(new URL("src/components/ui/badge.tsx", root), "utf8");
+  assert.match(badge, /bg-destructive text-destructive-foreground shadow hover:bg-destructive\/90/);
+  const team = readFileSync(
+    new URL("src/components/admin/team/AdminTeamStatusBadge.tsx", root),
+    "utf8",
+  );
+  assert.match(team, /"border-destructive\/20 bg-destructive\/5 text-destructive"/);
+  assert.doesNotMatch(team, /bg-destructive\/10/);
 });
 
 test("--brand-primary, --primary and SITE_THEME_COLOR are unchanged", () => {

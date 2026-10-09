@@ -8,8 +8,9 @@ import { mobileActionBarAttribute } from "./mobile-action-bar";
  * Site-wide mobile-only sticky WhatsApp CTA (audit item 14: "no sticky
  * WhatsApp/bottom conversion bar"). FX-16 F-07: it sits at bottom-0 on the
  * safe area, and its right padding (`pr-[3.75rem]`: 44 px icon + 12 px edge +
- * 4 px gap) is the slot the docked 問樓助手 icon fills (LiveAgentLauncher
- * `docked`), so the two never stack. The page reserves the bar's height in
+ * 4 px gap) is the slot the docked 問樓助手 icon fills. Docking is keyed on
+ * `html:has([data-mobile-action-bar])` (see `mobile-action-bar.ts`), which this
+ * bar's marker attribute satisfies, so the two never stack. The page reserves the bar's height in
  * `__root.tsx`. `lg:hidden`: desktop already has the header's WhatsApp
  * button and mega-menu CTA, and keeps the floating 問樓助手 pill.
  */

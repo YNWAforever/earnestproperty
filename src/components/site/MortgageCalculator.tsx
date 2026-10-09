@@ -237,20 +237,23 @@ function ResultRow({
 }) {
   return (
     <div
-      className={cn(
-        "flex items-center justify-between gap-4 border-b border-border py-3 last:border-b-0",
-        stale && "opacity-50",
-      )}
+      className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-b-0"
       {...(live ? { "aria-live": "polite", "aria-atomic": true } : {})}
     >
       <span className="text-sm text-muted-foreground">{label}</span>
+      {/* While stale the old figure stays on screen, dimmed with text-muted-foreground (4.5:1,
+          unlike opacity), but is hidden from assistive technology, which hears the existing
+          編輯中無法顯示 instead of a figure that no longer matches the inputs. */}
       <span
-        className={
-          emphasized ? "text-xl font-bold tabular-nums text-primary" : "font-semibold tabular-nums"
-        }
+        aria-hidden={stale ? true : undefined}
+        className={cn(
+          emphasized ? "text-xl font-bold tabular-nums" : "font-semibold tabular-nums",
+          stale ? "text-muted-foreground" : emphasized && "text-primary",
+        )}
       >
         {value}
       </span>
+      {stale ? <span className="sr-only">編輯中無法顯示</span> : null}
     </div>
   );
 }
