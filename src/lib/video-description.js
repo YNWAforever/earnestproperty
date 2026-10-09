@@ -38,7 +38,10 @@ const BOILERPLATE_MARKERS = Object.freeze([
  */
 export function cleanVideoText(value) {
   if (typeof value !== "string") return "";
-  return value.replace(/￼/g, "").replace(/ {2,}/g, " ").trim();
+  return value
+    .replace(/\uFFFC/g, "")
+    .replace(/ {2,}/g, " ")
+    .trim();
 }
 
 /**
@@ -63,4 +66,42 @@ export function summarizeVideoDescription(value, maxLength = 120) {
   if (summary.length <= maxLength) return summary;
 
   return `${summary.slice(0, maxLength).trimEnd()}…`;
+}
+
+const PHONE_PATTERN =
+  /(?<!\d)(?:(?:致電|電話|手機|聯絡|聯繫|熱線|WhatsApp|WA|Tel|Mobile|Phone)\s*(?:號碼)?\s*[:：]?\s*)*(?:\(?\+?852\)?[\s-]*)?[2-9]\d{3}[\s-]?\d{4}(?!\d)/gi;
+
+/**
+ * Removes Hong Kong phone numbers (8 digits, optional 852 prefix, optional
+ * label such as 電話：) from text bound for structured data. Fullwidth digits
+ * are normalised first. Listing ids and prices have no 8-digit run and are
+ * left alone.
+ *
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
+export function redactPhoneNumbers(value) {
+  if (typeof value !== "string") return "";
+  const ascii = value.replace(/[\uFF10-\uFF19]/g, (c) =>
+    String.fromCharCode(c.charCodeAt(0) - 0xfee0),
+  );
+  return ascii
+    .replace(PHONE_PATTERN, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/([，,、；;])\s*(?=[，,、；;。.！!]|$)/g, "")
+    .replace(/^[\s，,、；;:：-]+|[\s，,、；;:：-]+$/g, "")
+    .trim();
+}
+
+/**
+ * Summary for JSON-LD: the card summary with any phone number removed. Null
+ * when nothing is left, so the schema falls back to the video name.
+ *
+ * @param {string | null | undefined} value
+ * @returns {string | null}
+ */
+export function summarizeVideoDescriptionForSchema(value) {
+  const summary = redactPhoneNumbers(summarizeVideoDescription(value, 10000));
+  if (!summary) return null;
+  return summary.length <= 120 ? summary : `${summary.slice(0, 120).trimEnd()}…`;
 }

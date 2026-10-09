@@ -69,11 +69,11 @@ test("category chips render only for categories with videos", () => {
 });
 
 test("VideoObject description is summarised, not raw", () => {
-  assert.match(source, /description: summarizeVideoDescription\(video\.description\)/);
+  assert.match(source, /description: summarizeVideoDescriptionForSchema\(video\.description\)/);
   assert.doesNotMatch(source, /description: video\.description,/);
 });
 
 test("titles pass through cleanVideoText", () => {
   assert.match(source, /cleanVideoText\(video\.title\)/);
-  assert.match(source, /import \{ cleanVideoText, summarizeVideoDescription \}/);
+  assert.match(source, /import \{[^}]*cleanVideoText[^}]*\} from "@\/lib\/video-description\.js"/);
 });

@@ -27,7 +27,12 @@ import { canonicalLink, pageSeo } from "@/content/seo";
 import { VIDEO_CATEGORIES } from "@/content/video-categories";
 import { fetchVideosPageData, type CmsVideo, type VideoListing } from "@/lib/queries";
 import { jsonLdScript, videoObjectSchema } from "@/lib/schema";
-import { cleanVideoText, summarizeVideoDescription } from "@/lib/video-description.js";
+import {
+  cleanVideoText,
+  redactPhoneNumbers,
+  summarizeVideoDescription,
+  summarizeVideoDescriptionForSchema,
+} from "@/lib/video-description.js";
 import { buildTagCounts, deriveEstateTag } from "@/lib/video-tags.js";
 import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/youtube-video-url.js";
 import { buildContext, track } from "@/lib/analytics/events";
@@ -489,8 +494,8 @@ function AllVideoSchemas({
   const schemas = [
     ...cmsVideos.map((video) => ({
       key: `cms-${video.id}`,
-      name: cleanVideoText(video.title) || "晉誠地產 YouTube影片",
-      description: summarizeVideoDescription(video.description),
+      name: redactPhoneNumbers(cleanVideoText(video.title)) || "晉誠地產 YouTube影片",
+      description: summarizeVideoDescriptionForSchema(video.description),
       url: video.video_url,
       uploadDate: video.created_at,
     })),
