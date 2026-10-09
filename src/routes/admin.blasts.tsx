@@ -59,7 +59,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
+import { useDirtyCloseGuard, useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { describeTemplateParameters } from "@/lib/woztell/template-preview";
 import { isCampaignDraftDirty } from "@/lib/admin/blast-review";
@@ -1163,6 +1163,12 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       description: "你為此收件群組輸入的資料尚未儲存，關閉後會遺失。確定要關閉嗎？",
     });
 
+  // Leaving the page (nav link, back, tab close) drops the same drafts the two close
+  // guards above protect; the dialogs themselves never touch the router.
+  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(
+    hasUnsavedCampaignChanges || hasUnsavedAudienceChanges,
+  );
+
   const queueBlockReason = !cancelJournalReady
     ? (cancelJournalError ?? "正在讀取取消操作記錄")
     : cancelNeedsReadback
@@ -1624,6 +1630,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
 
       {campaignCloseGuard}
       {audienceCloseGuard}
+      {leaveGuardDialog}
 
       <AdminConfirmDialog
         open={!!pendingSend}

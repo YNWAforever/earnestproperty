@@ -62,7 +62,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { VIDEO_CATEGORIES } from "@/content/video-categories";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
+import { useDirtyCloseGuard, useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { parseAdminFaqImport } from "@/lib/admin/faq-import";
 import { isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 import {
@@ -1931,11 +1931,13 @@ function CmsVideoDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const videoDirty = useEditingDirty(video);
   const { requestClose, dialog } = useDirtyCloseGuard({
-    isDirty: useEditingDirty(video),
+    isDirty: videoDirty,
     onClose,
     description: "你未儲存的影片修改會遺失。",
   });
+  const { dialog: leaveGuard } = useRouteLeaveGuard(videoDirty);
   return (
     <>
       <Dialog open={!!video} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
@@ -2016,6 +2018,7 @@ function CmsVideoDialog({
         </DialogContent>
       </Dialog>
       {dialog}
+      {leaveGuard}
     </>
   );
 }
@@ -2061,6 +2064,7 @@ function EstateDialog({
     onClose,
     description: "你未儲存的屋苑 SEO 修改會遺失。",
   });
+  const { dialog: leaveGuard } = useRouteLeaveGuard(isDirty || imageUploading);
   function requestClose() {
     if (imageUploading) {
       toast.info("圖片上載中，請等待完成後再關閉。其他欄位仍可編輯。");
@@ -2269,6 +2273,7 @@ function EstateDialog({
         </DialogContent>
       </Dialog>
       {dialog}
+      {leaveGuard}
     </>
   );
 }
@@ -2314,6 +2319,7 @@ function ArticleDialog({
     onClose,
     description: "你未儲存的文章修改會遺失。",
   });
+  const { dialog: leaveGuard } = useRouteLeaveGuard(isDirty || imageUploading);
   function requestClose() {
     if (imageUploading) {
       toast.info("圖片上載中，請等待完成後再關閉。其他欄位仍可編輯。");
@@ -2494,6 +2500,7 @@ function ArticleDialog({
         </DialogContent>
       </Dialog>
       {dialog}
+      {leaveGuard}
     </>
   );
 }
@@ -2513,11 +2520,13 @@ function FaqDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const faqDirty = useEditingDirty(faq);
   const { requestClose, dialog } = useDirtyCloseGuard({
-    isDirty: useEditingDirty(faq),
+    isDirty: faqDirty,
     onClose,
     description: "你未儲存的 FAQ 修改會遺失。",
   });
+  const { dialog: leaveGuard } = useRouteLeaveGuard(faqDirty);
   return (
     <>
       <Dialog open={!!faq} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
@@ -2569,6 +2578,7 @@ function FaqDialog({
         </DialogContent>
       </Dialog>
       {dialog}
+      {leaveGuard}
     </>
   );
 }

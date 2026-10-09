@@ -1025,3 +1025,25 @@ test.describe("375", () => {
   test.use({ viewport: { width: 375, height: 812 } });
   retryTests();
 });
+// FX-17a G-20: typing into a new campaign then leaving the page must ask 尚未儲存.
+test.describe("leave guard", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  test("typing in a new campaign then clicking a nav link asks 尚未儲存; cancelling keeps the draft", async ({
+    page,
+  }) => {
+    await open(page);
+    await page.getByRole("button", { name: "新增 Campaign", exact: true }).first().click();
+    const name = page.getByLabel("Campaign 名稱");
+    await name.fill("未儲存的推廣");
+    // The open dialog makes the sidebar inert for the pointer; fire the link's own click.
+    await page
+      .locator('nav[aria-label="後台選單"] a[href="/admin/leads"]')
+      .evaluate((link) => (link as HTMLElement).click());
+    const prompt = page.getByRole("alertdialog", { name: "尚未儲存" });
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole("button", { name: "取消" }).click();
+    await expect(prompt).not.toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/blasts/);
+    await expect(page.getByLabel("Campaign 名稱")).toHaveValue("未儲存的推廣");
+  });
+});
