@@ -39,9 +39,9 @@ test("listing videos are scoped to 樓盤實拍 when any other category is activ
   assert.match(source, /if \(category && category !== "樓盤實拍"\) return \[\];/);
 });
 
-test("category chip row renders every named category with a live count", () => {
+test("category chip row renders the visible chips with a live count", () => {
   assert.match(source, /categoryCounts\.map\(\(entry\) =>/);
-  assert.match(source, /VIDEO_CATEGORIES\.map\(\(cat\) => \(\{ category: cat, count:/);
+  assert.match(source, /visibleCategoryChips\(cmsVideos, VIDEO_CATEGORIES, category\)/);
 });
 
 // DR-6: VideoObject JSON-LD used to be emitted for every video in the raw
@@ -57,23 +57,12 @@ test("AllVideoSchemas receives the rendered subset, not the full loader data", (
   assert.match(source, /listingVideos=\{matchingListingVideos\}/);
 });
 
-// F-15: chips with no videos are noise (every chip read 0 before any row had a
-// category), but 全部, the selected chip and a direct-URL chip must survive.
-test("category chips render only for categories with videos", () => {
-  assert.match(
-    source,
-    /\.filter\(\s*\(entry\) => entry\.count > 0 \|\| entry\.category === category,?\s*\)/,
-  );
+// F-15: the chip and JSON-LD behaviour lives in tested helpers
+// (video-description.test.mjs); this only pins that the route uses them.
+test("the route wires the category group, JSON-LD text and titles to the helpers", () => {
   assert.match(source, /categoryCounts\.length > 0/);
-  assert.match(source, /全部 \{cmsVideos\.length\}/);
-});
-
-test("VideoObject description is summarised, not raw", () => {
-  assert.match(source, /description: summarizeVideoDescriptionForSchema\(video\.description\)/);
+  assert.match(source, /全部 {cmsVideos.length}/);
+  assert.match(source, /\.\.\.videoSchemaText\(video, /);
   assert.doesNotMatch(source, /description: video\.description,/);
-});
-
-test("titles pass through cleanVideoText", () => {
   assert.match(source, /cleanVideoText\(video\.title\)/);
-  assert.match(source, /import \{[^}]*cleanVideoText[^}]*\} from "@\/lib\/video-description\.js"/);
 });

@@ -68,27 +68,100 @@ export function summarizeVideoDescription(value, maxLength = 120) {
   return `${summary.slice(0, maxLength).trimEnd()}…`;
 }
 
-const PHONE_PATTERN =
-  /(?<!\d)(?:(?:致電|電話|手機|聯絡|聯繫|熱線|WhatsApp|WA|Tel|Mobile|Phone)\s*(?:號碼)?\s*[:：]?\s*)*(?:\(?\+?852\)?[\s-]*)?[2-9]\d{3}[\s-]?\d{4}(?!\d)/gi;
+// Digit runs may be joined by spaces, dots, hyphens, slashes or a closing
+// bracket, e.g. "91 23 45 67", "9123.4567", "(852) 2688-2988". The leading
+// "(" / "+" belong to the run so they are removed with it.
+const DIGIT_RUN = /[(+]*\d+(?:(?:[ .\-/]+|\)[ .\-/]*)\d+)*/g;
+const DATE_DIGITS = /^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/;
+const UNIT_AFTER = /^\s*(?:萬|億|元|呎|尺|平方呎|sq\.?\s*ft)/i;
+const PRICE_BEFORE = /(?:\$|HK\$|價|售|租|呎價|高度)\s*$/i;
+const LABEL_BEFORE =
+  /(?:(?:致電|電話|手機|聯絡|WhatsApp|Whatsapp|Tel|Call|chat)\s*(?:號碼)?\s*[:：]?\s*)+$/i;
+
+/** @param {string} digits */
+function isHkPhoneDigits(digits) {
+  return /^[2-9]\d{7}$/.test(digits) || /^852[2-9]\d{7}$/.test(digits);
+}
 
 /**
- * Removes Hong Kong phone numbers (8 digits, optional 852 prefix, optional
- * label such as 電話：) from text bound for structured data. Fullwidth digits
- * are normalised first. Listing ids and prices have no 8-digit run and are
- * left alone.
+ * Finds [start, end) ranges of Hong Kong phone numbers in `text`, which must
+ * already be normalised to ASCII digits (same length as the original).
+ *
+ * @param {string} text
+ * @returns {Array<[number, number]>}
+ */
+function findPhoneRanges(text) {
+  /** @type {Array<[number, number]>} */
+  const ranges = [];
+  for (const run of text.matchAll(DIGIT_RUN)) {
+    const runStart = run.index ?? 0;
+    const groups = [...run[0].matchAll(/\d+/g)].map((g) => ({
+      start: runStart + (g.index ?? 0),
+      end: runStart + (g.index ?? 0) + g[0].length,
+      digits: g[0],
+    }));
+    let i = 0;
+    while (i < groups.length) {
+      let digits = "";
+      let matched = -1;
+      for (let j = i; j < groups.length; j += 1) {
+        digits += groups[j].digits;
+        if (digits.length > 11) break;
+        if (!isHkPhoneDigits(digits)) continue;
+        const start = i === 0 ? runStart : groups[i].start;
+        let end = groups[j].end;
+        // "(9123 4567)": the run owns the opening bracket, so take its pair too.
+        const body = text.slice(start, end);
+        if (text[end] === ")" && body.split("(").length > body.split(")").length) end += 1;
+        const exempt =
+          DATE_DIGITS.test(digits) ||
+          UNIT_AFTER.test(text.slice(end)) ||
+          PRICE_BEFORE.test(text.slice(0, start));
+        if (exempt) continue;
+        ranges.push([start, end]);
+        matched = j;
+        break;
+      }
+      i = matched === -1 ? i + 1 : matched + 1;
+    }
+  }
+  return ranges;
+}
+
+/**
+ * Removes Hong Kong phone numbers (8 digits starting 2-9, optionally with an
+ * 852 prefix; any spacing, dots, hyphens or slashes; fullwidth digits) and a
+ * directly preceding label such as 電話：from text bound for structured data.
+ * Prices (價 6800 0000, 680萬), areas (512呎), compact dates and listing ids are
+ * kept. Residual risk: an 8-digit landline that looks exactly like a date is
+ * kept.
  *
  * @param {string | null | undefined} value
  * @returns {string}
  */
 export function redactPhoneNumbers(value) {
   if (typeof value !== "string") return "";
-  const ascii = value.replace(/[\uFF10-\uFF19]/g, (c) =>
-    String.fromCharCode(c.charCodeAt(0) - 0xfee0),
-  );
-  return ascii
-    .replace(PHONE_PATTERN, "")
+  const normalised = value
+    .replace(/[\uFF10-\uFF19]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/\u3000/g, " ");
+  const ranges = findPhoneRanges(normalised);
+  if (ranges.length === 0) return value;
+
+  let out = normalised;
+  for (const [start, end] of [...ranges].reverse()) {
+    const label = LABEL_BEFORE.exec(out.slice(0, start));
+    const from = label ? start - label[0].length : start;
+    out = out.slice(0, from) + out.slice(end);
+  }
+
+  return out
+    .replace(/(?:https?:\/\/)?wa\.me\/?(?![\w])/gi, "")
+    .replace(/[（(]\s*[）)]/g, "")
+    .replace(/\bchat\s*(?=[.。,，!！]|$)/gi, "")
+    .replace(/(^|\s)\/+(?=\s|$)/g, "$1")
+    .replace(/[ \t]+([,.，。、；;!！])/g, "$1")
+    .replace(/([，,、；;。.！!])(?:\s*[，,、；;])+/g, "$1")
     .replace(/[ \t]{2,}/g, " ")
-    .replace(/([，,、；;])\s*(?=[，,、；;。.！!]|$)/g, "")
     .replace(/^[\s，,、；;:：-]+|[\s，,、；;:：-]+$/g, "")
     .trim();
 }
@@ -104,4 +177,19 @@ export function summarizeVideoDescriptionForSchema(value) {
   const summary = redactPhoneNumbers(summarizeVideoDescription(value, 10000));
   if (!summary) return null;
   return summary.length <= 120 ? summary : `${summary.slice(0, 120).trimEnd()}…`;
+}
+
+/**
+ * The name and description a VideoObject carries for a CMS video. Both are
+ * phone-free; the name falls back when redaction leaves nothing.
+ *
+ * @param {{ title?: string | null; description?: string | null }} video
+ * @param {string} fallbackName
+ * @returns {{ name: string; description: string | null }}
+ */
+export function videoSchemaText(video, fallbackName) {
+  return {
+    name: redactPhoneNumbers(cleanVideoText(video.title)) || fallbackName,
+    description: summarizeVideoDescriptionForSchema(video.description),
+  };
 }

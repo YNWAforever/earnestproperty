@@ -6,7 +6,9 @@ import {
   redactPhoneNumbers,
   summarizeVideoDescription,
   summarizeVideoDescriptionForSchema,
+  videoSchemaText,
 } from "./video-description.js";
+import { visibleCategoryChips } from "./video-category-chips.js";
 
 const OBJ = "\uFFFC";
 
@@ -31,35 +33,130 @@ test("summarizeVideoDescription returns null for whitespace-only input", () => {
   assert.equal(summarizeVideoDescription(`${OBJ}${OBJ}`), null);
 });
 
-test("redactPhoneNumbers removes HK numbers in every written form, with labels", () => {
-  const cases = [
-    ["睇樓請打 9123 4567 預約", "睇樓請打 預約"],
-    ["預約電話：91234567。", "預約。"],
-    ["WhatsApp: 9123-4567", "WhatsApp: 9123-4567"],
-    ["手機 +852 9123 4567 陳生", "陳生"],
-    ["Tel (852) 2688 2988", ""],
-    ["聯絡 +852-91234567", ""],
-    ["電話：９１２３４５６７", ""],
-  ];
-  for (const [input, expected] of cases) {
-    const out = redactPhoneNumbers(input);
-    assert.doesNotMatch(out, /[2-9]\d{3}[\s-]?\d{4}/, input);
-    if (!input.startsWith("WhatsApp")) assert.equal(out, expected, input);
-  }
-  assert.equal(redactPhoneNumbers("WhatsApp: 9123-4567"), "");
-});
+const LEAKS = [
+  ["double space", "打 9123  4567 預約", "打 預約"],
+  ["single space", "睇樓請打 9123 4567 預約", "睇樓請打 預約"],
+  ["dot", "9123.4567", ""],
+  ["pairs", "91 23 45 67", ""],
+  ["slash", "9123/4567", ""],
+  ["hyphen", "9123-4567", ""],
+  ["plain", "預約電話：91234567。", "預約。"],
+  ["+852 spaced", "+852 9123 4567", ""],
+  ["+852 hyphen", "+852-91234567", ""],
+  ["(852) landline", "(852) 2688-2988", ""],
+  ["852 bare", "85291234567", ""],
+  ["fullwidth digits", "電話：９１２３４５６７", ""],
+  ["fullwidth space", "９１２３　４５６７", ""],
+  ["WhatsApp label", "WhatsApp: 9123-4567 陳生", "陳生"],
+  ["Whatsapp label", "Whatsapp 9123 4567", ""],
+  ["手機 label", "手機 +852 9123 4567 陳生", "陳生"],
+  ["Tel label", "Tel (852) 2688 2988", ""],
+  ["Call label", "Call 6123 4567 now", "now"],
+  ["致電 label", "致電 61234567 睇樓", "睇樓"],
+  ["聯絡 label", "聯絡 +852-91234567", ""],
+  ["after id run", "T027001 9123 4567", "T027001"],
+  ["two numbers", "9123 4567 / 2688 2988 查詢", "查詢"],
+];
 
-test("redactPhoneNumbers keeps listing ids, prices and areas", () => {
-  const text = "A056377 C-018613 售680萬 實用512呎 2026-09-01";
-  assert.equal(redactPhoneNumbers(text), text);
+for (const [name, input, expected] of LEAKS) {
+  test(`redactPhoneNumbers removes: ${name}`, () => {
+    assert.equal(redactPhoneNumbers(input), expected);
+  });
+}
+
+const KEPT = [
+  ["price after 價", "價 6800 0000"],
+  ["price in 萬", "6800萬"],
+  ["price in 萬 spaced", "成交 6800 萬"],
+  ["price with $", "$68000000"],
+  ["price with HK$", "HK$ 6800 0000"],
+  ["price after 售", "售 68000000"],
+  ["rent after 租", "租 20000000"],
+  ["height", "高度 20000000 呎"],
+  ["area in 呎", "512呎"],
+  ["area in 平方呎", "20000000 平方呎"],
+  ["area sq ft", "20000000 sq ft"],
+  ["compact date", "20260901"],
+  ["spaced date", "2026 0901"],
+  ["hyphen date", "2026-09-01"],
+  ["year", "2026年9月"],
+  ["listing id", "A056377"],
+  ["company licence", "C-018613"],
+  ["long id", "T0270012345"],
+];
+
+for (const [name, input] of KEPT) {
+  test(`redactPhoneNumbers keeps: ${name}`, () => {
+    assert.equal(redactPhoneNumbers(input), input);
+  });
+}
+
+const STUBS = [
+  ["empty fullwidth brackets", "睇樓（9123 4567）", "睇樓"],
+  ["empty brackets", "Call (9123 4567) now", "now"],
+  ["wa.me stub", "wa.me/85291234567 查詢", "查詢"],
+  ["chat stub", "WhatsApp chat 91234567.", "."],
+  ["doubled punctuation", "睇樓，9123 4567，歡迎", "睇樓，歡迎"],
+  ["trailing separator", "歡迎查詢：9123 4567", "歡迎查詢"],
+];
+
+for (const [name, input, expected] of STUBS) {
+  test(`redactPhoneNumbers cleans stubs: ${name}`, () => {
+    assert.equal(redactPhoneNumbers(input), expected);
+  });
+}
+
+test("redactPhoneNumbers handles non-strings", () => {
+  assert.equal(redactPhoneNumbers(null), "");
+  assert.equal(redactPhoneNumbers(undefined), "");
 });
 
 test("summarizeVideoDescriptionForSchema drops a phone placed before a marker", () => {
-  const out = summarizeVideoDescriptionForSchema("一梯兩伙，電話：9123 4567\n樓盤編號：T027001");
-  assert.equal(out, "一梯兩伙");
-  assert.equal(summarizeVideoDescriptionForSchema("9123 4567"), null);
-  assert.doesNotMatch(
-    summarizeVideoDescriptionForSchema("致電 +852 6123 4567 睇樓，售680萬 A056377") ?? "",
-    /\d{4}\s?\d{4}/,
+  assert.equal(
+    summarizeVideoDescriptionForSchema("一梯兩伙，電話：9123 4567\n樓盤編號：T027001"),
+    "一梯兩伙",
   );
+  assert.equal(summarizeVideoDescriptionForSchema("9123 4567"), null);
+  assert.equal(
+    summarizeVideoDescriptionForSchema("致電 +852 6123 4567 睇樓，售680萬 A056377"),
+    "睇樓，售680萬 A056377",
+  );
+});
+
+test("videoSchemaText gives a phone-free name and description", () => {
+  const out = videoSchemaText(
+    {
+      title: "￼深井三房 致電 9123 4567",
+      description: "海景單位 whatsapp 9123.4567\n樓盤編號：T027001\n營業員 9876 5432",
+    },
+    "FALLBACK",
+  );
+  assert.deepEqual(out, { name: "深井三房", description: "海景單位" });
+  assert.equal(
+    videoSchemaText({ title: "9123 4567", description: null }, "FALLBACK").name,
+    "FALLBACK",
+  );
+  assert.equal(videoSchemaText({ title: null, description: "" }, "FALLBACK").description, null);
+});
+
+test("visibleCategoryChips hides empty categories but keeps the selected one", () => {
+  const cats = ["樓盤實拍", "屋苑開箱", "市場評論"];
+  const none = visibleCategoryChips([{ category: null }, {}], cats, undefined);
+  assert.deepEqual(none, []);
+  const some = visibleCategoryChips(
+    [{ category: "屋苑開箱" }, { category: "屋苑開箱" }, { category: "樓盤實拍" }],
+    cats,
+    undefined,
+  );
+  assert.deepEqual(some, [
+    { category: "樓盤實拍", count: 1 },
+    { category: "屋苑開箱", count: 2 },
+  ]);
+  assert.deepEqual(visibleCategoryChips([], cats, "市場評論"), [
+    { category: "市場評論", count: 0 },
+  ]);
+  assert.deepEqual(visibleCategoryChips([{ category: "樓盤實拍" }], cats, "市場評論"), [
+    { category: "樓盤實拍", count: 1 },
+    { category: "市場評論", count: 0 },
+  ]);
 });

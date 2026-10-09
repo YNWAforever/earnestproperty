@@ -29,10 +29,10 @@ import { fetchVideosPageData, type CmsVideo, type VideoListing } from "@/lib/que
 import { jsonLdScript, videoObjectSchema } from "@/lib/schema";
 import {
   cleanVideoText,
-  redactPhoneNumbers,
   summarizeVideoDescription,
-  summarizeVideoDescriptionForSchema,
+  videoSchemaText,
 } from "@/lib/video-description.js";
+import { visibleCategoryChips } from "@/lib/video-category-chips.js";
 import { buildTagCounts, deriveEstateTag } from "@/lib/video-tags.js";
 import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/youtube-video-url.js";
 import { buildContext, track } from "@/lib/analytics/events";
@@ -104,17 +104,10 @@ function VideosPage() {
   // Category is a real admin-assigned column (see video-categories.ts's own
   // doc comment for why it can't be derived like the estate tag above), so an
   // uncategorised video simply doesn't count toward any chip -- never guessed.
-  const categoryCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const video of cmsVideos) {
-      if (video.category) counts.set(video.category, (counts.get(video.category) ?? 0) + 1);
-    }
-    // A chip with no videos is noise, so it is dropped -- except the one the URL
-    // selected, which must stay visible (and pressed) even when it has 0 results.
-    return VIDEO_CATEGORIES.map((cat) => ({ category: cat, count: counts.get(cat) ?? 0 })).filter(
-      (entry) => entry.count > 0 || entry.category === category,
-    );
-  }, [cmsVideos, category]);
+  const categoryCounts = useMemo(
+    () => visibleCategoryChips(cmsVideos, VIDEO_CATEGORIES, category),
+    [cmsVideos, category],
+  );
 
   // The chip row collapses to the top 8, but the URL can name any estate. A link
   // to a long-tail estate filtered correctly while leaving every chip
@@ -494,8 +487,7 @@ function AllVideoSchemas({
   const schemas = [
     ...cmsVideos.map((video) => ({
       key: `cms-${video.id}`,
-      name: redactPhoneNumbers(cleanVideoText(video.title)) || "晉誠地產 YouTube影片",
-      description: summarizeVideoDescriptionForSchema(video.description),
+      ...videoSchemaText(video, "晉誠地產 YouTube影片"),
       url: video.video_url,
       uploadDate: video.created_at,
     })),
