@@ -68,15 +68,25 @@ export function summarizeVideoDescription(value, maxLength = 120) {
   return `${summary.slice(0, maxLength).trimEnd()}…`;
 }
 
-// Digit runs may be joined by spaces, dots, hyphens, slashes or a closing
-// bracket, e.g. "91 23 45 67", "9123.4567", "(852) 2688-2988". The leading
-// "(" / "+" belong to the run so they are removed with it.
-const DIGIT_RUN = /[(+]*\d+(?:(?:[ .\-/]+|\)[ .\-/]*)\d+)*/g;
+// Characters allowed between digit groups of one phone number (1 to 3 of them):
+// any whitespace (NBSP, narrow NBSP, ideographic space, newline, tab), any
+// Unicode dash (hyphen, non-breaking hyphen, en/em dash, fullwidth hyphen),
+// the minus sign, and . , 、 _ / ・ · • . Text is NFKC-normalised first, so
+// fullwidth digits and punctuation are already ASCII by the time this applies.
+const SEPARATOR_CHARS = String.raw`\s\p{Pd}−.,、_/・·•`;
+// e.g. "91 23 45 67", "9123.4567", "(852) 2688-2988". The leading "(" / "+"
+// belong to the run so they are removed with it.
+const DIGIT_RUN = new RegExp(
+  String.raw`[(+]*\d+(?:(?:[${SEPARATOR_CHARS}]{1,3}|\)[${SEPARATOR_CHARS}]{0,3})\d+)*`,
+  "gu",
+);
 const DATE_DIGITS = /^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/;
 const UNIT_AFTER = /^\s*(?:萬|億|元|呎|尺|平方呎|sq\.?\s*ft)/i;
-const PRICE_BEFORE = /(?:\$|HK\$|價|售|租|呎價|高度)\s*$/i;
+// 售 and 租 are not here on purpose: "租 91234567" is a phone. "租 $28,000" is
+// kept by the "$" and "售 680萬" by the unit suffix.
+const PRICE_BEFORE = /(?:\$|HK\$|價|呎價|高度)\s*$/i;
 const LABEL_BEFORE =
-  /(?:(?:致電|電話|手機|聯絡|WhatsApp|Whatsapp|Tel|Call|chat)\s*(?:號碼)?\s*[:：]?\s*)+$/i;
+  /(?:(?:致電|電話|手機|聯絡|WhatsApp|Tel|Call|chat)\s*(?:號碼)?\s*[:：]?\s*)+$/i;
 
 /** @param {string} digits */
 function isHkPhoneDigits(digits) {
@@ -85,7 +95,7 @@ function isHkPhoneDigits(digits) {
 
 /**
  * Finds [start, end) ranges of Hong Kong phone numbers in `text`, which must
- * already be normalised to ASCII digits (same length as the original).
+ * already be NFKC-normalised.
  *
  * @param {string} text
  * @returns {Array<[number, number]>}
@@ -113,10 +123,13 @@ function findPhoneRanges(text) {
         // "(9123 4567)": the run owns the opening bracket, so take its pair too.
         const body = text.slice(start, end);
         if (text[end] === ")" && body.split("(").length > body.split(")").length) end += 1;
+        // A phone label right before the number always wins over every exemption.
+        const before = text.slice(0, start);
         const exempt =
-          DATE_DIGITS.test(digits) ||
-          UNIT_AFTER.test(text.slice(end)) ||
-          PRICE_BEFORE.test(text.slice(0, start));
+          !LABEL_BEFORE.test(before) &&
+          (DATE_DIGITS.test(digits) ||
+            UNIT_AFTER.test(text.slice(end)) ||
+            PRICE_BEFORE.test(before));
         if (exempt) continue;
         ranges.push([start, end]);
         matched = j;
@@ -141,17 +154,34 @@ function findPhoneRanges(text) {
  */
 export function redactPhoneNumbers(value) {
   if (typeof value !== "string") return "";
-  const normalised = value
-    .replace(/[\uFF10-\uFF19]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
-    .replace(/\u3000/g, " ");
+  // Scan an NFKC copy (fullwidth digits and punctuation become ASCII) but cut the
+  // original, so the remaining zh-HK text keeps its own punctuation. Each source
+  // character is normalised on its own, which keeps a map back to the original.
+  let normalised = "";
+  /** @type {number[]} */
+  const starts = [];
+  /** @type {number[]} */
+  const ends = [];
+  let offset = 0;
+  for (const char of value) {
+    const folded = char.normalize("NFKC");
+    for (let k = 0; k < folded.length; k += 1) {
+      starts.push(offset);
+      ends.push(offset + char.length);
+    }
+    normalised += folded;
+    offset += char.length;
+  }
   const ranges = findPhoneRanges(normalised);
   if (ranges.length === 0) return value;
 
-  let out = normalised;
+  let out = value;
   for (const [start, end] of [...ranges].reverse()) {
-    const label = LABEL_BEFORE.exec(out.slice(0, start));
-    const from = label ? start - label[0].length : start;
-    out = out.slice(0, from) + out.slice(end);
+    const cutStart = starts[start];
+    const cutEnd = ends[end - 1];
+    const label = LABEL_BEFORE.exec(out.slice(0, cutStart));
+    const from = label ? cutStart - label[0].length : cutStart;
+    out = out.slice(0, from) + out.slice(cutEnd);
   }
 
   return out

@@ -70,8 +70,10 @@ const KEPT = [
   ["price in 萬 spaced", "成交 6800 萬"],
   ["price with $", "$68000000"],
   ["price with HK$", "HK$ 6800 0000"],
-  ["price after 售", "售 68000000"],
-  ["rent after 租", "租 20000000"],
+  ["price after 售 with unit", "售 680萬"],
+  ["rent after 租 with $", "租 $28,000"],
+  ["rent in 萬", "租 2萬8"],
+  ["rent in 元", "租 28000000 元"],
   ["height", "高度 20000000 呎"],
   ["area in 呎", "512呎"],
   ["area in 平方呎", "20000000 平方呎"],
@@ -159,4 +161,57 @@ test("visibleCategoryChips hides empty categories but keeps the selected one", (
     { category: "樓盤實拍", count: 1 },
     { category: "市場評論", count: 0 },
   ]);
+});
+
+// Fix round 3: every separator form, and labels always win over exemptions.
+const SEPARATOR_LEAKS = [
+  ["NBSP", "9123 4567"],
+  ["narrow NBSP", "9123 4567"],
+  ["ideographic space", "9123　4567"],
+  ["en dash", "9123–4567"],
+  ["em dash", "9123—4567"],
+  ["fullwidth hyphen", "9123－4567"],
+  ["non-breaking hyphen", "9123‑4567"],
+  ["minus sign", "9123−4567"],
+  ["fullwidth digits with fullwidth hyphen", "９１２３－４５６７"],
+  ["fullwidth full stop", "9123．4567"],
+  ["fullwidth slash with spaces", "9123 ／ 4567"],
+  ["middle dot", "9123·4567"],
+  ["katakana middle dot", "9123・4567"],
+  ["bullet", "9123•4567"],
+  ["newline", "9123\n4567"],
+  ["tab", "9123\t4567"],
+  ["comma", "9123,4567"],
+  ["ideographic comma", "9123、4567"],
+  ["underscore", "9123_4567"],
+  ["comma and space", "9123, 4567"],
+];
+
+for (const [name, input] of SEPARATOR_LEAKS) {
+  test(`redactPhoneNumbers removes with separator: ${name}`, () => {
+    assert.equal(redactPhoneNumbers(input), "");
+  });
+}
+
+const LABEL_WINS = [
+  ["rent prefix, no marker", "租 91234567", "租"],
+  ["sale prefix, no marker", "售 91234567", "售"],
+  ["label then 元", "聯絡 9123 4567 元", "元"],
+  ["label then 呎", "WhatsApp 9123 4567 呎", "呎"],
+  ["label then 呎 without space", "電話 9123 4567呎", "呎"],
+  ["label then 萬", "Tel 9123 4567 萬", "萬"],
+  ["label after 價", "價 電話 9123 4567", "價"],
+  ["label then compact date shape", "致電 20260901", ""],
+  ["chat label then 呎", "chat 61234567 呎", "呎"],
+];
+
+for (const [name, input, expected] of LABEL_WINS) {
+  test(`redactPhoneNumbers label wins: ${name}`, () => {
+    assert.equal(redactPhoneNumbers(input), expected);
+  });
+}
+
+test("redactPhoneNumbers keeps the original punctuation around a removed number", () => {
+  assert.equal(redactPhoneNumbers("睇樓，致電 9123 4567，歡迎"), "睇樓，歡迎");
+  assert.equal(redactPhoneNumbers("查詢（９１２３ ４５６７）"), "查詢");
 });
