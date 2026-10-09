@@ -161,7 +161,8 @@ export const Route = createFileRoute("/sitemap.xml")({
         const listingLastmod = new Map(
           listings.map((listing) => [
             `/property/${listing.public_listing_no}`,
-            listing.updated_at?.slice(0, 10) ?? null,
+            // The full timestamp: lastmodFor takes the HKT calendar date from it.
+            listing.updated_at ?? null,
           ]),
         );
         const listingPaths = Array.from(listingLastmod.keys());

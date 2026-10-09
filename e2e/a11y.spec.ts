@@ -31,6 +31,9 @@ type Target = { name: string; path: string | ((page: Page) => Promise<string | n
 const firstHref = (selector: string, from: string) => async (page: Page) => {
   const response = await page.goto(from);
   if (!response || response.status() >= 400) return null;
+  // count() does not wait, so a page with no cards returns null (a clean local skip) instead of
+  // getAttribute() waiting out the 30 s test timeout.
+  if ((await page.locator(selector).count()) === 0) return null;
   return page.locator(selector).first().getAttribute("href");
 };
 
@@ -40,8 +43,11 @@ const PAGES: Target[] = [
   { name: "3 listings sale page 2", path: "/listings?deal=sale&page=2&sort=newest" },
   { name: "4 listings rent", path: "/listings?deal=rent&page=1&sort=newest" },
   {
-    name: "5 property (first card on listings)",
-    path: firstHref('a[href^="/property/"]', "/listings?deal=all&page=1"),
+    // Discovered from the sale list (not deal=all, which is newest first and can be a rent
+    // listing, duplicating page 6), so the sale layout -- the 計月供 bar and mortgage teaser -- is
+    // always scanned.
+    name: "5 property sale (first card on sale listings)",
+    path: firstHref('a[href^="/property/"]', "/listings?deal=sale&page=1&sort=newest"),
   },
   {
     name: "6 property rent (first card on rent listings)",

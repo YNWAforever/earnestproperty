@@ -11,12 +11,29 @@
  *   authored date (`articlePublishedAt`).
  * - everything else (home, hubs, agents ...): no tracked date, so null.
  *
+ * Dates are Hong Kong calendar dates: a timestamp that carries a zone (`Z`,
+ * `+00`, `+08:00` ...) is converted to HKT (UTC+8, no DST) before the date is
+ * taken, so an edit at 00:30 HKT is dated that day, not the previous UTC day.
+ * A bare `YYYY-MM-DD` (an authored date) is already a calendar date.
+ *
  * Pure JS so `node --test` exercises it without a build step.
  */
 
+const HKT_OFFSET_MS = 8 * 60 * 60 * 1000;
+const ZONED_TIMESTAMP =
+  /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)\s*(Z|[+-]\d{2}(?::?\d{2})?)$/i;
+
 /** @param {unknown} value */
 function day(value) {
-  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}/.test(value)) return null;
+  const zoned = value.trim().match(ZONED_TIMESTAMP);
+  if (zoned) {
+    // Postgres text output writes `+00`; Date.parse wants `+00:00`.
+    const zone = /^[+-]\d{2}$/.test(zoned[3]) ? `${zoned[3]}:00` : zoned[3];
+    const ms = Date.parse(`${zoned[1]}T${zoned[2]}${zone}`);
+    if (!Number.isNaN(ms)) return new Date(ms + HKT_OFFSET_MS).toISOString().slice(0, 10);
+  }
+  return value.slice(0, 10);
 }
 
 /**

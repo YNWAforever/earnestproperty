@@ -206,6 +206,29 @@ test("a CMS row's updated_at wins over the authored date", async () => {
   );
 });
 
+test("lastmod is the Hong Kong calendar date, not the UTC one", async () => {
+  const { lastmodFor } = await lastmodModule();
+  const at = (updatedAt) =>
+    lastmodFor(
+      "/property/T027001",
+      sources({ listings: new Map([["/property/T027001", updatedAt]]) }),
+    );
+  // An edit at 00:30 HKT on 9 October is 16:30 UTC on 8 October.
+  assert.equal(at("2026-10-08T16:30:00.000Z"), "2026-10-09");
+  assert.equal(at("2026-10-08 16:30:00.123+00"), "2026-10-09");
+  assert.equal(at("2026-10-09T00:30:00+08:00"), "2026-10-09");
+  // 23:59 HKT stays on its own day.
+  assert.equal(at("2026-10-09T15:59:00.000Z"), "2026-10-09");
+  assert.equal(
+    lastmodFor("/estate/bellagio", sources({ estates: { bellagio: "2026-10-08T16:30:00Z" } })),
+    "2026-10-09",
+  );
+  // The route hands lastmodFor the full timestamp, not a UTC date it sliced itself.
+  assert.doesNotMatch(readSitemapSource(), /updated_at\?\.slice\(0, 10\)/);
+  // An authored calendar date is used as written.
+  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", sources()), "2026-06-22");
+});
+
 test("a page with no tracked date has no lastmod element", async () => {
   const { lastmodFor } = await lastmodModule();
   const withNullListing = sources({ listings: new Map([["/property/R000001", null]]) });
