@@ -247,82 +247,93 @@ test(
             const ports = { query, transaction };
             const requestId = id(40);
             const evidence = { providerStatus: "synthetic_accepted", verified: true };
-            await query(
-              "INSERT INTO whatsapp_assignment_requests(id,conversation_id,desired_staff_id,requested_by,version,reason,state,evidence) VALUES($1,$2,$3,$4,99,'fx17a-synthetic','unknown',$5::jsonb)",
-              [requestId, ids.convB, ids.agentB, ids.admin, JSON.stringify(evidence)],
-            );
-            await query(
-              "UPDATE whatsapp_conversations SET pending_assignment_id=$1,assignment_lock=true WHERE id=$2",
-              [requestId, ids.convB],
-            );
             // requested_staff_id is fixed at intake, so a second enquiry carries it.
             const requestedEnquiry = id(33);
-            await query(
-              "INSERT INTO inquiries(id,source,name,status,conversation_id,requested_staff_id,association_review,provider_thread_review) VALUES($1,'whatsapp','合成指定客戶','new',$2,$3,false,false)",
-              [requestedEnquiry, ids.convB, ids.agentB],
-            );
-            const byId = (rows) => [...rows].sort((a, b) => a.id.localeCompare(b.id));
-            const staffIds = [
-              ids.admin,
-              ids.managerNoBranch,
-              ids.managerA,
-              ids.inactiveManager,
-              ids.agentA,
-              ids.agentB,
-              ids.viewer,
-            ];
-            for (const [staffId, role] of [
-              [ids.agentB, "agent"],
-              [ids.managerNoBranch, "manager"],
-              [ids.managerA, "manager"],
-            ]) {
-              const result = await readAssignmentContext(
+            try {
+              await query(
+                "INSERT INTO whatsapp_assignment_requests(id,conversation_id,desired_staff_id,requested_by,version,reason,state,evidence) VALUES($1,$2,$3,$4,99,'fx17a-synthetic','unknown',$5::jsonb)",
+                [requestId, ids.convB, ids.agentB, ids.admin, JSON.stringify(evidence)],
+              );
+              await query(
+                "UPDATE whatsapp_conversations SET pending_assignment_id=$1,assignment_lock=true WHERE id=$2",
+                [requestId, ids.convB],
+              );
+              await query(
+                "INSERT INTO inquiries(id,source,name,status,conversation_id,requested_staff_id,association_review,provider_thread_review) VALUES($1,'whatsapp','合成指定客戶','new',$2,$3,false,false)",
+                [requestedEnquiry, ids.convB, ids.agentB],
+              );
+              const byId = (rows) => [...rows].sort((a, b) => a.id.localeCompare(b.id));
+              const staffIds = [
+                ids.admin,
+                ids.managerNoBranch,
+                ids.managerA,
+                ids.inactiveManager,
+                ids.agentA,
+                ids.agentB,
+                ids.viewer,
+              ];
+              for (const [staffId, role] of [
+                [ids.agentB, "agent"],
+                [ids.managerNoBranch, "manager"],
+                [ids.managerA, "manager"],
+              ]) {
+                const result = await readAssignmentContext(
+                  ids.convB,
+                  { staffId, roles: [role] },
+                  ports,
+                );
+                const payload = JSON.stringify(result);
+                for (const staff of staffIds)
+                  assert.ok(!payload.includes(staff), `${role} payload carries staff id ${staff}`);
+                assert.ok(!payload.includes(requestId), `${role} payload carries the request id`);
+                for (const absent of ["evidence", "proposalReason", "synthetic_accepted", "Lock"])
+                  assert.ok(!payload.includes(absent), `${role} payload carries ${absent}`);
+                assert.equal(result.diagnostics, null);
+                // What the inbox still needs: names, booleans, the state and the enquiry ids.
+                assert.equal(result.confirmed, true);
+                assert.equal(result.confirmedStaffName, "合成 agent");
+                assert.equal(result.desired, true);
+                assert.equal(result.desiredStaffName, "合成 agent");
+                assert.equal(result.assignmentState, "unknown");
+                assert.deepEqual(
+                  byId(result.enquiries).map((e) => [e.id, e.requested, e.requestedStaffName]),
+                  [
+                    [ids.enquiryB, false, null],
+                    [requestedEnquiry, true, "合成 agent"],
+                  ],
+                );
+              }
+              const admin = await readAssignmentContext(
                 ids.convB,
-                { staffId, roles: [role] },
+                { staffId: ids.admin, roles: ["admin"] },
                 ports,
               );
-              const payload = JSON.stringify(result);
-              for (const staff of staffIds)
-                assert.ok(!payload.includes(staff), `${role} payload carries staff id ${staff}`);
-              assert.ok(!payload.includes(requestId), `${role} payload carries the request id`);
-              for (const absent of ["evidence", "proposalReason", "synthetic_accepted", "Lock"])
-                assert.ok(!payload.includes(absent), `${role} payload carries ${absent}`);
-              assert.equal(result.diagnostics, null);
-              // What the inbox still needs: names, booleans, the state and the enquiry ids.
-              assert.equal(result.confirmed, true);
-              assert.equal(result.confirmedStaffName, "合成 agent");
-              assert.equal(result.desired, true);
-              assert.equal(result.desiredStaffName, "合成 agent");
-              assert.equal(result.assignmentState, "unknown");
-              assert.deepEqual(
-                byId(result.enquiries).map((e) => [e.id, e.requested, e.requestedStaffName]),
-                [
-                  [ids.enquiryB, false, null],
-                  [requestedEnquiry, true, "合成 agent"],
-                ],
+              assert.equal(admin.diagnostics.requestId, requestId);
+              assert.deepEqual(admin.diagnostics.evidence, evidence);
+              assert.equal(admin.diagnostics.confirmedStaffId, ids.agentB);
+              assert.equal(admin.diagnostics.desiredStaffId, ids.agentB);
+              assert.equal(admin.diagnostics.assignedAgentId, ids.agentB);
+              assert.equal(admin.diagnostics.assignmentLock, true);
+              assert.equal(typeof admin.diagnostics.proposalReason, "string");
+              assert.deepEqual(byId(admin.diagnostics.enquiries), [
+                { id: ids.enquiryB, requestedStaffId: null },
+                { id: requestedEnquiry, requestedStaffId: ids.agentB },
+              ]);
+            } finally {
+              // Restore the seeded state for the subtests that follow: unlink and remove the
+              // request, remove the extra enquiry, and prove both are gone.
+              await query(
+                "UPDATE whatsapp_conversations SET pending_assignment_id=NULL,assignment_lock=false WHERE id=$1",
+                [ids.convB],
               );
+              await query("DELETE FROM inquiries WHERE id=$1", [requestedEnquiry]);
+              await query("DELETE FROM whatsapp_assignment_requests WHERE id=$1", [requestId]);
+              const [left] = await query(
+                "SELECT (SELECT count(*) FROM inquiries WHERE id=$1)::int AS inquiries,(SELECT count(*) FROM whatsapp_assignment_requests WHERE id=$2)::int AS requests",
+                [requestedEnquiry, requestId],
+              );
+              assert.deepEqual(left, { inquiries: 0, requests: 0 });
             }
-            const admin = await readAssignmentContext(
-              ids.convB,
-              { staffId: ids.admin, roles: ["admin"] },
-              ports,
-            );
-            assert.equal(admin.diagnostics.requestId, requestId);
-            assert.deepEqual(admin.diagnostics.evidence, evidence);
-            assert.equal(admin.diagnostics.confirmedStaffId, ids.agentB);
-            assert.equal(admin.diagnostics.desiredStaffId, ids.agentB);
-            assert.equal(admin.diagnostics.assignedAgentId, ids.agentB);
-            assert.equal(admin.diagnostics.assignmentLock, true);
-            assert.equal(typeof admin.diagnostics.proposalReason, "string");
-            assert.deepEqual(byId(admin.diagnostics.enquiries), [
-              { id: ids.enquiryB, requestedStaffId: null },
-              { id: requestedEnquiry, requestedStaffId: ids.agentB },
-            ]);
-            // Restore the seeded state for the subtests that follow.
-            await query(
-              "UPDATE whatsapp_conversations SET pending_assignment_id=NULL,assignment_lock=false WHERE id=$1",
-              [ids.convB],
-            );
           },
         );
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PGlite } from "@electric-sql/pglite";
 import { readFile } from "node:fs/promises";
-import { readAssignmentContext } from "./assignment.server.ts";
+import { readAssignmentContext, readEnquiryQueue } from "./assignment.server.ts";
 
 const admin = "00000000-0000-4000-8000-000000000001";
 const manager = "00000000-0000-4000-8000-000000000002";
@@ -36,7 +36,8 @@ test("assignment context authorizes real staff_role enum and assigned conversati
         public_listing_no text, placement_source text, requested_staff_id uuid,
         property_id uuid, first_human_response_at timestamptz,
         response_due_at timestamptz, association_review boolean,
-        created_at timestamptz, enquiry_owner_staff_id uuid, attribution_method text, link_open_id uuid
+        created_at timestamptz, enquiry_owner_staff_id uuid, attribution_method text, link_open_id uuid,
+        service_state text
       );
       CREATE TABLE properties(id uuid PRIMARY KEY, agent_id uuid, deal_type text);
       CREATE TABLE whatsapp_staff_channels(
@@ -164,6 +165,32 @@ test("assignment context authorizes real staff_role enum and assigned conversati
         (error) => error instanceof Response && error.status === 403,
       );
     }
+    // FX-17a fix round 1 (M-1): the Command Center queue says whether an owner is confirmed,
+    // never who. No admin screen reads the id, so no role receives it.
+    await db.query("UPDATE whatsapp_conversations SET confirmed_staff_id=$1 WHERE id=$2", [
+      agent,
+      conversation,
+    ]);
+    await db.query(
+      "INSERT INTO inquiries(id,conversation_id,source,status,association_review,created_at,service_state,requested_staff_id,enquiry_owner_staff_id) VALUES($1,$2,'whatsapp','new',false,now(),'active',$3,$3)",
+      ["30000000-0000-4000-8000-000000000001", conversation, agent],
+    );
+    for (const [id, role] of [
+      [manager, "manager"],
+      [admin, "admin"],
+    ]) {
+      const queue = await readEnquiryQueue({ staffId: id, roles: [role] }, ports);
+      assert.equal(queue.length, 1, role);
+      assert.equal(queue[0].confirmed, true, role);
+      const payload = JSON.stringify(queue);
+      for (const staff of [admin, manager, agent, outsider])
+        assert.ok(!payload.includes(staff), `${role} queue carries staff id ${staff}`);
+      assert.ok(!payload.includes("confirmed_staff_id"), role);
+    }
+    await assert.rejects(
+      readEnquiryQueue({ staffId: agent, roles: ["agent"] }, ports),
+      (error) => error instanceof Response && error.status === 403,
+    );
   } finally {
     await db.close();
   }

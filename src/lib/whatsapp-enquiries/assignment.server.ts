@@ -428,7 +428,7 @@ export async function readEnquiryQueue(actor: Actor, ports: Ports = defaultPorts
   const { query: queryRows, transaction: transactionRows } = ports;
   await requireActiveManager(actor, queryRows);
   return queryRows<EnquiryQueueDto>(
-    `SELECT i.id,i.conversation_id,i.public_listing_no,i.service_state,i.response_due_at,i.association_review,w.confirmed_staff_id,r.state AS assignment_state FROM inquiries i JOIN whatsapp_conversations w ON w.id=i.conversation_id LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE i.source='whatsapp' AND wa_can_read_enquiry($1::uuid,i.id) AND i.status NOT IN ('closed','resolved','spam') AND (i.first_human_response_at IS NULL OR i.association_review OR r.state IN ('failed','unknown')) ORDER BY i.response_due_at ASC NULLS LAST,i.created_at ASC LIMIT 100`,
+    `SELECT i.id,i.conversation_id,i.public_listing_no,i.service_state,i.response_due_at,i.association_review,(w.confirmed_staff_id IS NOT NULL) AS confirmed,r.state AS assignment_state FROM inquiries i JOIN whatsapp_conversations w ON w.id=i.conversation_id LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE i.source='whatsapp' AND wa_can_read_enquiry($1::uuid,i.id) AND i.status NOT IN ('closed','resolved','spam') AND (i.first_human_response_at IS NULL OR i.association_review OR r.state IN ('failed','unknown')) ORDER BY i.response_due_at ASC NULLS LAST,i.created_at ASC LIMIT 100`,
     [actor.staffId],
   );
 }
@@ -458,7 +458,8 @@ export type EnquiryQueueDto = {
   service_state: string;
   response_due_at: string | null;
   association_review: boolean;
-  confirmed_staff_id: string | null;
+  /** FX-17a: whether a provider-confirmed owner exists; the staff id is never sent. */
+  confirmed: boolean;
   assignment_state: string | null;
 };
 

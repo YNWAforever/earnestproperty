@@ -8,11 +8,7 @@ import {
   type TransactionStatement,
 } from "./db.server.ts";
 import type { StaffAccess } from "./auth.server.ts";
-import type {
-  TrackingLinkInput,
-  TrackingLink,
-  WhatsappEnquiry,
-} from "./whatsapp-enquiries.types.ts";
+import type { TrackingLinkInput, TrackingLink } from "./whatsapp-enquiries.types.ts";
 import {
   mintReference,
   shouldMintReference,
@@ -332,48 +328,6 @@ export async function resolveTrackingLinks(
   return { enabled, fallbackHref, ...resolved };
 }
 
-export async function listEnquiries(
-  conversationId: string,
-  actor: StaffAccess,
-  query = queryRows,
-): Promise<WhatsappEnquiry[]> {
-  const privileged = actor.roles.some((r) => r === "admin" || r === "manager");
-  if (!privileged && !actor.roles.includes("agent"))
-    throw new Response("Forbidden", { status: 403 });
-  const [allowed] = await query(
-    "SELECT i.id FROM inquiries i WHERE i.conversation_id=$1::uuid AND i.source='whatsapp' AND wa_can_read_enquiry($2::uuid,i.id) LIMIT 1",
-    [conversationId, actor.staffId],
-  );
-  if (!allowed) throw new Response("Forbidden", { status: 403 });
-  const rows = await query(
-    `SELECT i.*,c.assigned_agent_id AS conversation_assignee_id,c.confirmed_staff_id AS provider_confirmed_id FROM inquiries i JOIN whatsapp_conversations c ON c.id=i.conversation_id WHERE i.conversation_id=$1::uuid AND i.source='whatsapp' AND wa_can_read_enquiry($2::uuid,i.id) ORDER BY i.created_at DESC LIMIT 100`,
-    [conversationId, actor.staffId],
-  );
-  return rows.map((r) => ({
-    id: String(r.id),
-    conversationId: String(r.conversation_id),
-    name: r.name as string | null,
-    propertyId: r.property_id as string | null,
-    publicListingNo: r.public_listing_no as string | null,
-    placementSource: String(r.placement_source),
-    attributionMethod: String(r.attribution_method),
-    requestedStaffId: r.requested_staff_id as string | null,
-    entryPointType: String(r.entry_point_type),
-    serviceState: String(r.service_state),
-    associationReview: r.association_review === true,
-    customerMessageAt: r.customer_message_at as string | null,
-    webhookReceivedAt: String(r.webhook_received_at),
-    responseDueAt: r.response_due_at as string | null,
-    firstHumanResponseAt: r.first_human_response_at as string | null,
-    effectsEligible: r.effects_eligible === true,
-    crmLeadId: r.crm_lead_id as string | null,
-    enquiryOwnerStaffId: r.enquiry_owner_staff_id as string | null,
-    conversationAssigneeId: r.conversation_assignee_id as string | null,
-    providerConfirmedStaffId: r.provider_confirmed_id as string | null,
-    enquiryVersion: Number(r.enquiry_version ?? 0),
-    providerThreadReview: r.association_review === true || r.provider_thread_review === true,
-  }));
-}
 type TrackedRedirectStage = "config" | "rate" | "link" | "offer" | "phone" | "alias" | "open";
 /** Never throws. Any error → 302 companyFallbackLocation() + X-WA-Tracking: untracked + one log line. */
 export async function trackedRedirect(

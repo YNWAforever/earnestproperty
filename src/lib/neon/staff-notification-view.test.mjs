@@ -96,6 +96,29 @@ test("a non-admin list carries no evidence kind, source or error code on any att
   }
 });
 
+test("no role's list carries a colleague's staff id (fix round 1, I-1)", async () => {
+  // requestedStaffId and handlerStaffId are read by no screen, so they leave the server for no
+  // one, admin included. The payload holds neither UUID nor either key.
+  for (const roles of [["agent"], ["manager"], ["admin"]]) {
+    const payload = JSON.stringify(await listAs(roles));
+    for (const uuid of [staff, handler])
+      assert.ok(!payload.includes(uuid), `${roles}: staff id ${uuid}`);
+    for (const key of ["requestedStaffId", "handlerStaffId"])
+      assert.ok(!payload.includes(`"${key}":`), `${roles}: ${key}`);
+  }
+});
+
+test("the view is an allowlist: an unknown server field reaches no role", async () => {
+  const { toStaffNotificationView } = await import("./staff-notification-view.js");
+  for (const diagnostics of [false, true]) {
+    const view = toStaffNotificationView(
+      { id: "n", futureSecret: "x", attempts: [{ transport: "t", state: "s", futureSecret: "y" }] },
+      { diagnostics },
+    );
+    assert.ok(!JSON.stringify(view).includes("futureSecret"), `diagnostics=${diagnostics}`);
+  }
+});
+
 test("an admin list keeps every attempt's evidence under diagnostics", async () => {
   const page = await listAs(["admin"]);
   const [attempt] = page.items[0].attempts;
@@ -135,11 +158,10 @@ test("toStaffNotificationView is pure and leaves the input untouched", async () 
   assert.deepEqual(item, before);
   assert.equal(view.diagnostics, null);
   assert.equal(JSON.stringify(view).includes("woztell_"), false);
-  assert.deepEqual(toStaffNotificationView({ id: "n", attempts: null }, { diagnostics: false }), {
-    id: "n",
-    attempts: [],
-    diagnostics: null,
-  });
+  const empty = toStaffNotificationView({ id: "n", attempts: null }, { diagnostics: false });
+  assert.equal(empty.id, "n");
+  assert.deepEqual(empty.attempts, []);
+  assert.equal(empty.diagnostics, null);
 });
 
 test("the handler's list branch maps through toStaffNotificationView with canReadDiagnostics", () => {

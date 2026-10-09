@@ -14,15 +14,16 @@ export type StaffNotificationAttemptView = {
   deliveredAt: string | null;
   readAt: string | null;
 };
-export type StaffNotificationView = Omit<StaffNotificationItem, "attempts"> & {
+export type StaffNotificationView = Omit<
+  StaffNotificationItem,
+  "attempts" | "requestedStaffId" | "handlerStaffId"
+> & {
   attempts: StaffNotificationAttemptView[];
   /** Admin only (`system.diagnostics.read`); null for every other role. */
   diagnostics: null | { attempts: StaffNotificationAttemptDiagnostics[] };
 };
-export function toStaffNotificationView<T extends Record<string, unknown>>(
-  item: T,
+/** Allowlisted view; colleague staff ids are never included. */
+export function toStaffNotificationView(
+  item: StaffNotificationItem,
   opts: { diagnostics: boolean },
-): Omit<T, "attempts"> & {
-  attempts: StaffNotificationAttemptView[];
-  diagnostics: null | { attempts: StaffNotificationAttemptDiagnostics[] };
-};
+): StaffNotificationView;

@@ -241,7 +241,7 @@ export function WhatsappEnquiryQueue() {
               href={`/admin/whatsapp?conversation=${encodeURIComponent(String(r.conversation_id))}`}
             >
               {String(r.public_listing_no ?? "一般查詢")} ·{" "}
-              {r.confirmed_staff_id ? "已確認分派" : "未確認分派"} ·{" "}
+              {r.confirmed ? "已確認分派" : "未確認分派"} ·{" "}
               {r.association_review ? "需要核實" : String(r.assignment_state ?? "待人手回覆")} ·{" "}
               {r.response_due_at ? `期限 ${String(r.response_due_at)}` : "期限未設定"}
             </a>

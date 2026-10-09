@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 import { ChevronDown } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { staffSessionStore } from "@/components/admin/staff-session";
-import { canReadDiagnostics } from "@/lib/control-plane/permissions";
+import { canReadDiagnostics } from "@/lib/control-plane/role-permissions";
 
 export type TechnicalDetailRow = { label: string; value: string };
 
