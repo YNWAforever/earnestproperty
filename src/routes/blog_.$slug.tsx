@@ -303,7 +303,7 @@ function BlogArticlePage() {
         eyebrow={
           <span className="inline-flex flex-wrap items-center gap-3">
             {article.category && (
-              <span className="rounded-full bg-primary/10 px-3 py-1 font-medium text-primary">
+              <span className="rounded-full bg-secondary px-3 py-1 font-medium text-secondary-foreground">
                 {article.category}
               </span>
             )}

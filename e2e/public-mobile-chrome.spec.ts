@@ -248,12 +248,7 @@ for (const width of WIDTHS) {
       const found = results.violations.flatMap((violation) =>
         violation.nodes.map((node) => `${scene} ${violation.id}: ${node.target.join(" ")}`),
       );
-      // Known and owned by FX-16 Task 2 (F-08): the property WhatsApp button is white on
-      // #25D366 (1.98:1) until the --whatsapp token lands. Only that one node is tolerated;
-      // Task 2 deletes this filter.
-      expect(
-        found.filter((entry) => entry !== String.raw`property color-contrast: .bg-\[\#25D366\]`),
-      ).toEqual([]);
+      expect(found).toEqual([]);
     }
   });
 }

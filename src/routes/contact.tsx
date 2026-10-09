@@ -127,7 +127,7 @@ function ContactPage() {
                       href={branchWhatsappHref}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-2 flex items-center gap-2 text-sm font-medium text-[#25D366] hover:underline"
+                      className="mt-2 flex items-center gap-2 text-sm font-medium text-whatsapp hover:underline"
                     >
                       <MessageCircle className="h-4 w-4 shrink-0" />
                       WhatsApp 查詢

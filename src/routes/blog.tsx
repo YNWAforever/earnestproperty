@@ -181,7 +181,7 @@ function BlogPage() {
                 aria-pressed={selectedCategory === category}
                 className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
                   selectedCategory === category
-                    ? "border-primary bg-primary/10 text-primary"
+                    ? "border-primary bg-secondary text-secondary-foreground"
                     : "border-input bg-background text-muted-foreground hover:bg-muted"
                 }`}
               >
@@ -223,7 +223,7 @@ function BlogPage() {
                 )}
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   {article.category && (
-                    <span className="rounded-full bg-primary/10 px-3 py-1 font-medium text-primary">
+                    <span className="rounded-full bg-secondary px-3 py-1 font-medium text-secondary-foreground">
                       {article.category}
                     </span>
                   )}

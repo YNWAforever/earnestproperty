@@ -343,7 +343,7 @@ export function PropertyDecisionActions({
               {callLabel}
             </a>
           </Button>
-          <Button asChild size="sm" className="bg-[#25D366] px-2 text-white hover:bg-[#1ebe57]">
+          <Button asChild size="sm" className="bg-whatsapp px-2 text-white hover:bg-whatsapp-hover">
             <a
               href={whatsappHref ?? "/contact"}
               target={hasWhatsapp ? "_blank" : undefined}

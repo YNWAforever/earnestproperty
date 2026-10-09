@@ -30,7 +30,7 @@ export function StickyWhatsAppBar() {
         onClick={() =>
           track({ name: "whatsapp_cta_click", payload: { source: "sticky-bar" } }, buildContext())
         }
-        className="mx-auto flex min-h-11 max-w-6xl items-center justify-center gap-2 rounded-md bg-[#08783f] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#066333]"
+        className="mx-auto flex min-h-11 max-w-6xl items-center justify-center gap-2 rounded-md bg-whatsapp px-4 py-2.5 text-sm font-semibold text-white hover:bg-whatsapp-hover"
       >
         <MessageCircle className="h-4 w-4" />
         WhatsApp 即時查詢
