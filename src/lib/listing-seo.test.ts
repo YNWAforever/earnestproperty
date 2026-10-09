@@ -148,6 +148,41 @@ describe("listingSeoDescription", () => {
     expect(authored.startsWith(description)).toBe(true);
   });
 
+  test("T027001's description equals the approved text", () => {
+    const description = listingSeoDescription({
+      listing_no: "T027001",
+      title_zh: "碧堤半島 高層 4房",
+      estates: { name_zh: "碧堤半島", district_slug: "sham-tseng" },
+      deal_type: "sale",
+      price: 12_680_000,
+      saleable_area: 901,
+      bedrooms: 4,
+      bathrooms: 3,
+      floor: "高層",
+      orientation: "南",
+      description: "碧堤半島，高層，實用面積。",
+    });
+    expect(description).toBe(
+      "深井碧堤半島 高層 4 房單位。實用 901 呎，南，3 廁。售 $1,268萬，呎價 $14,073。WhatsApp 即時預約睇樓或免費估價。晉誠地產 C-018613。",
+    );
+  });
+
+  test("body filler never restates a fact already in the description", () => {
+    const description = listingSeoDescription({
+      listing_no: "T027001",
+      title_zh: "碧堤半島 高層 4房",
+      estates: { name_zh: "碧堤半島", district_slug: "sham-tseng" },
+      deal_type: "sale",
+      price: 12_680_000,
+      saleable_area: 901,
+      bedrooms: 4,
+      floor: "高層",
+      description: "碧堤半島，高層，實用面積。",
+    });
+    expect(description).not.toContain("實用面積");
+    expect(description.match(/碧堤半島/g)?.length ?? 0).toBe(1);
+  });
+
   test("keeps the call to action even when the body copy is long", () => {
     // The bug this pins: appending sentences until the budget ran out dropped
     // the CTA, because it was appended last.

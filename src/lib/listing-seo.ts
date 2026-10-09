@@ -269,6 +269,27 @@ function restates(existing: string, segment: string): boolean {
   return parts.length > 1 && parts.every((part) => haystack.includes(part));
 }
 
+const FACT_LABEL_CLAUSE = /^(?:實用|建築)?面積$/;
+
+/** The body's clauses that are neither a restatement of `existing` nor a bare
+ * field label. Whole clauses only, so nothing is cut mid-phrase. */
+function novelBodyClauses(body: string | null, existing: string): string {
+  if (!body) return "";
+  return body
+    .split(/[。！!]/)
+    .map((sentence) =>
+      sentence
+        .split(/[，,]/)
+        .map((clause) => clause.trim())
+        .filter(
+          (clause) => clause && !FACT_LABEL_CLAUSE.test(clause) && !restates(existing, clause),
+        )
+        .join("，"),
+    )
+    .filter(Boolean)
+    .join("。");
+}
+
 /**
  * The SEO 標題 for a listing detail page.
  *
@@ -436,10 +457,12 @@ export function listingSeoDescription(input: ListingSeoInput): string {
   // 5. Body copy, but only as filler when the structured facts left the
   //    snippet thin -- and clause-trimmed, never mid-word sliced. This is what
   //    replaces the old `description.slice(0, 150)`.
-  const body = text(input.description);
+  //    A body clause is kept only when it states something the description
+  //    does not already say; a bare field label (實用面積) says nothing.
+  const body = novelBodyClauses(text(input.description), description);
   if (body && displayWidth(description) < DESCRIPTION_MIN_UNITS) {
     const filler = truncateToWidth(body, bodyBudget - displayWidth(description) - 2);
-    if (filler) description += `${filler}。`;
+    if (filler) description += `${filler.replace(/[。]+$/, "")}。`;
   }
 
   // 6. A 28hse-ingested row carries no `description` at all, so for the
