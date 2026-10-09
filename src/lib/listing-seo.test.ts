@@ -461,6 +461,13 @@ describe("facts the generator must not get wrong", () => {
     expect(description).not.toContain("成交紀錄");
   });
 
+  test("the district context sentence makes no 成交紀錄 claim either", () => {
+    // No estate, so step 6 falls back to the district sentence (owner-approved 2026-10-09).
+    const description = listingSeoDescription({ ...bareUnit, estates: undefined });
+    expect(description).toContain("一頁睇齊荃灣放盤比較同交通配套。");
+    expect(description).not.toContain("成交紀錄");
+  });
+
   test("does not repeat 同屋苑成交紀錄 in both the context line and the CTA", () => {
     const description = listingSeoDescription(bareUnit);
     expect(description.match(/成交紀錄/g)?.length ?? 0).toBeLessThanOrEqual(1);
