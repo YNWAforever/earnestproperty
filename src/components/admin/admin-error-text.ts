@@ -17,6 +17,8 @@ const ADMIN_ERROR_MESSAGES: Record<string, string> = {
   "staff-email-unverified":
     "你的登入電郵尚未完成驗證，帳戶未連結職員記錄。請先完成電郵驗證，然後重新登入；如沒有驗證途徑，請聯絡管理員。",
   "Failed to fetch": "無法連線到伺服器，請檢查網絡後重試。",
+  "Load failed": "無法連線到伺服器，請檢查網絡後重試。",
+  "NetworkError when attempting to fetch resource.": "無法連線到伺服器，請檢查網絡後重試。",
 };
 
 export function adminErrorText(message: string) {
@@ -99,6 +101,16 @@ export const ADMIN_ERROR_CODES: Readonly<Record<string, string>> = {
 export const ADMIN_GENERIC_ERROR = "操作未完成，請重試。";
 
 const CJK = /[㐀-鿿]/;
+// CJK text can still be raw database or stack output with a Chinese value inside it.
+const TECHNICAL =
+  /\b(?:SELECT|INSERT|UPDATE|DELETE)\s|ERROR:|\b(?:relation|column)\s+"|invalid input syntax|violates|\n\s+at\s|\bat\s+\S+\.(?:ts|tsx|js|mjs)\b/i;
+
+/** Our own zh-HK message, minus a leading English code ("CODE: 請..."), or undefined. */
+function ownZhMessage(message: string | undefined): string | undefined {
+  if (!message || !CJK.test(message) || TECHNICAL.test(message)) return undefined;
+  const stripped = message.replace(/^[A-Z][A-Z0-9_]+:\s*/, "");
+  return CJK.test(stripped) ? stripped : undefined;
+}
 
 function statusOf(error: unknown): number | undefined {
   if (typeof error !== "object" || error === null || !("status" in error)) return undefined;
@@ -124,8 +136,8 @@ function warnRaw(error: unknown) {
 /**
  * The one rule for any failed staff action or load. Never returns English, SQL or a stack.
  * 1. A status-bearing error (ServerFnResponseError, a thrown Response, any `{ status }`)
- *    maps 401/403/404/409 to existing copy, else its body code through ADMIN_ERROR_CODES,
- *    else `fallback`.
+ *    passes our own zh-HK body through, else maps its body code through ADMIN_ERROR_CODES,
+ *    else 401/403/404/409 to existing copy, else `fallback`.
  * 2. A message (Error, string or `{ message }`) maps as a known code, then the legacy
  *    ADMIN_ERROR_MESSAGES / duplicate-key rule (Error and `{ message }` only), then passes
  *    through when it contains CJK (our own zh-HK), else `fallback`.
@@ -135,7 +147,11 @@ export function adminErrorMessage(error: unknown, fallback: string = ADMIN_GENER
   const message = messageOf(error)?.trim();
   const status = statusOf(error);
   if (status !== undefined) {
-    const mapped = STAFF_ACTION_STATUS_MESSAGES[status] ?? (message && ADMIN_ERROR_CODES[message]);
+    // Our zh-HK body first, then a specific code, then the status text.
+    const mapped =
+      ownZhMessage(message) ??
+      (message ? ADMIN_ERROR_CODES[message] : undefined) ??
+      STAFF_ACTION_STATUS_MESSAGES[status];
     if (mapped) return mapped;
     warnRaw(error);
     return fallback;
@@ -147,7 +163,8 @@ export function adminErrorMessage(error: unknown, fallback: string = ADMIN_GENER
       const legacy = adminErrorText(message);
       if (legacy !== message) return legacy;
     }
-    if (CJK.test(message)) return message;
+    const own = ownZhMessage(message);
+    if (own) return own;
   }
   warnRaw(error);
   return fallback;

@@ -917,7 +917,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         ...current,
         [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
       }));
-      const message = formatReplyError(errorText(err));
+      const message = formatReplyError(errorText(err, SEND_UNCERTAIN_ERROR));
       // The send is persisted as a failed message server-side, but the timeline
       // was never refetched on this path -- so the pane still showed the
       // pre-send state and a toast that vanished in ~4s was the only trace. The
@@ -993,7 +993,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         ...current,
         [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
       }));
-      const message = formatReplyError(errorText(err));
+      const message = formatReplyError(errorText(err, SEND_UNCERTAIN_ERROR));
       setReplyError(message);
       toast.error(message);
       await refreshConversations();
@@ -1048,7 +1048,9 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
       await loadConversationDetail(targetId, { background: true });
     } catch (error) {
       if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
-        setReplyError(`未能確認傳送結果。${formatReplyError(errorText(error))}`);
+        setReplyError(
+          `未能確認傳送結果。${formatReplyError(errorText(error, SEND_UNCERTAIN_ERROR))}`,
+        );
     } finally {
       outboundBusy.current = false;
       if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId) {
@@ -2414,11 +2416,14 @@ function rawMessage(error: unknown) {
   return typeof error === "string" ? error : "";
 }
 
-function errorText(error: unknown) {
+/** A send that fails with an unknown reason may still have been delivered. */
+const SEND_UNCERTAIN_ERROR = "未能確認傳送結果，請先核對狀態，不要直接重送。";
+
+function errorText(error: unknown, fallback?: string) {
   // This screen's own codes map first; the rest (and any status) goes through the shared rule.
   const raw = rawMessage(error);
   const mapped = formatReplyError(raw);
-  return adminErrorMessage(mapped !== raw ? mapped : error);
+  return adminErrorMessage(mapped !== raw ? mapped : error, fallback);
 }
 
 const REPLY_DRAFT_STORAGE_PREFIX = "earnest:whatsapp:reply-drafts";

@@ -710,7 +710,11 @@ function AdminCms() {
       await refreshAfterWrite("已刪除");
     } catch (err) {
       const message = errorText(err);
-      setFaqDeleteError(message === "Not found" ? "此 FAQ 已被刪除，請重新載入頁面。" : message);
+      setFaqDeleteError(
+        err instanceof Error && err.message === "Not found"
+          ? "此 FAQ 已被刪除，請重新載入頁面。"
+          : message,
+      );
     } finally {
       setFaqDeleting(false);
     }

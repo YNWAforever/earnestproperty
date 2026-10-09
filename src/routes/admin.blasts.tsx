@@ -2675,7 +2675,7 @@ function campaignErrorText(code: string) {
  * to an "outcome unknown" sentence never append a contradicting fallback. */
 function knownCampaignErrorText(error: unknown) {
   const code = errorCode(error);
-  return code === "Not found" ? "" : (ADMIN_ERROR_CODES[code] ?? "");
+  return campaignErrorText(code) === "操作失敗，請重試。" ? "" : campaignErrorText(code);
 }
 
 /** 401 and 403 are definite refusals with their own copy (the wording used

@@ -132,10 +132,93 @@ test("no admin route keeps a raw errorText", () => {
     "segments",
     "whatsapp",
   ];
-  for (const f of files) {
-    const src = read(`src/routes/admin.${f}.tsx`);
-    const m = src.match(/function errorText\(error: unknown\)[^{]*\{([\s\S]*?)\n\}/);
+  const paths = [
+    ...files.map((f) => `src/routes/admin.${f}.tsx`),
+    "src/lib/admin/operations/operations-route-state.ts",
+  ];
+  for (const f of paths) {
+    const src = read(f);
+    const m = src.match(/function errorText\(error: unknown[^)]*\)[^{]*\{([\s\S]*?)\n\}/);
     expect(m, f).not.toBeNull();
     expect(m![1], f).toContain("adminErrorMessage");
   }
+});
+
+const SEND_UNCERTAIN = "未能確認傳送結果，請先核對狀態，不要直接重送。";
+
+test("status-bearing errors keep our own zh-HK body, then a specific code, then the status text", () => {
+  expect(
+    adminErrorMessage(new ServerFnResponseError("請選擇有效日期，最多 90 日。", 400), fallback),
+  ).toBe("請選擇有效日期，最多 90 日。");
+  expect(adminErrorMessage(new ServerFnResponseError("資料暫時未能讀取，請稍後再試。", 503))).toBe(
+    "資料暫時未能讀取，請稍後再試。",
+  );
+  const consent = "CONSENT_EVIDENCE_REQUIRED: 請使用「管理 WhatsApp 推廣同意」記錄同意憑證。";
+  expect(adminErrorMessage(new ServerFnResponseError(consent, 409))).toBe(
+    "請使用「管理 WhatsApp 推廣同意」記錄同意憑證。",
+  );
+  expect(adminErrorMessage(new ServerFnResponseError("CMS_REVISION_CONFLICT", 409))).toBe(
+    ADMIN_ERROR_CODES.CMS_REVISION_CONFLICT,
+  );
+  expect(adminErrorMessage(new ServerFnResponseError("Conflict", 409))).toBe(
+    "資料版本已變更，請重新載入並核對後再儲存。",
+  );
+  expect(adminErrorMessage(new ServerFnResponseError('relation "x" 不存在', 500), fallback)).toBe(
+    fallback,
+  );
+});
+
+test("CJK text that looks like SQL or a stack trace falls back", () => {
+  for (const m of [
+    'invalid input syntax for type uuid: "客戶"',
+    'column "名稱" does not exist',
+    "SELECT 名稱 FROM leads",
+    "INSERT 失敗",
+    "ERROR: 客戶 重複",
+    'relation "客戶" does not exist',
+    "客戶資料錯誤\n    at load (/app/x.ts:1:1)",
+    "客戶 at /app/server/x.ts failed",
+  ]) {
+    expect(adminErrorMessage(new Error(m))).toBe("操作未完成，請重試。");
+  }
+});
+
+test("Safari and Firefox network errors read as the network message", () => {
+  const net = "無法連線到伺服器，請檢查網絡後重試。";
+  expect(adminErrorMessage(new TypeError("Load failed"))).toBe(net);
+  expect(adminErrorMessage(new Error("NetworkError when attempting to fetch resource."))).toBe(net);
+});
+
+test("an unknown send error never invites a retry", () => {
+  for (const e of [
+    new Error("OUTBOUND_ALREADY_RESOLVED"),
+    new Error("WOZTELL_500"),
+    { status: 500 },
+    null,
+  ]) {
+    const text = adminErrorMessage(e, SEND_UNCERTAIN);
+    expect(text).toBe(SEND_UNCERTAIN);
+    expect(text).not.toContain("請重試");
+  }
+  const src = read("src/routes/admin.whatsapp.tsx");
+  expect(src).toContain(`const SEND_UNCERTAIN_ERROR = "${SEND_UNCERTAIN}"`);
+  expect(
+    src.match(/formatReplyError\(errorText\((?:err|error), SEND_UNCERTAIN_ERROR\)\)/g),
+  ).toHaveLength(3);
+});
+
+test("code-keyed screens still read the raw code", () => {
+  const cms = read("src/routes/admin.cms.tsx");
+  expect(cms).toContain("cmsErrorMessage(err instanceof Error ? err.message : String(err))");
+  expect(cms).toContain('err instanceof Error && err.message === "Not found"');
+  const blasts = read("src/routes/admin.blasts.tsx");
+  expect(blasts).toContain("campaignErrorText(errorCode(err))");
+  expect(blasts).toContain(
+    'if (code === "Not found") return "找不到此 campaign，請重新整理後再試";',
+  );
+  const leads = read("src/routes/admin.leads.tsx");
+  expect(leads).toContain("hasOwnProperty.call(bulkErrorLabels, raw))");
+  expect(leads).toContain("bulkErrorLabels[errorText(err)] ?? errorText(err)");
+  const wa = read("src/routes/admin.whatsapp.tsx");
+  expect(wa).toContain("const mapped = formatReplyError(raw);");
 });
