@@ -25,24 +25,29 @@ test("styles.css still keeps --coral as a working alias (not retired in P1 -- se
   assert.match(source, /--coral:\s*var\(--brand-primary\);/);
 });
 
-// P7c: fonts are self-hosted via @fontsource (no Google Fonts CDN request at
-// all) instead of a preloaded external stylesheet -- this replaces the old
-// "preloads the Google Fonts stylesheet" assertion, which stopped describing
-// real behavior once that migration landed.
-test("__root.tsx self-hosts fonts via @fontsource and preloads the real Inter woff2 file", () => {
+// D6 (FX-15 F-02): Inter stays self-hosted for Latin; Chinese uses the system
+// CJK font, so no Noto web font is downloaded.
+test("__root.tsx self-hosts Inter only and preloads its Latin 400 file; Chinese uses the system stack", () => {
   const source = read("src/routes/__root.tsx");
+  const css = read("src/styles.css");
   assert.match(source, /import "@fontsource\/inter\/400\.css";/);
-  assert.match(source, /import "@fontsource-variable\/noto-sans-tc\/wght\.css";/);
-  assert.doesNotMatch(source, /import "@fontsource\/noto-sans-tc\//);
-  assert.match(read("src/styles.css"), /--font-sans: "Inter", "Noto Sans TC Variable"/);
-  assert.match(read("src/styles.css"), /--font-display: "Noto Sans TC Variable", "Inter"/);
+  assert.doesNotMatch(source, /noto-sans-tc/);
+  assert.match(
+    css,
+    /--font-sans: "Inter", "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", system-ui, sans-serif;/,
+  );
+  assert.match(
+    css,
+    /--font-display: "PingFang HK", "PingFang TC", "Microsoft JhengHei", "Noto Sans TC", "Noto Sans CJK TC", "Inter", system-ui, sans-serif;/,
+  );
+  assert.doesNotMatch(css, /Noto Sans TC Variable/);
   assert.match(
     source,
     /import interLatin400 from "@fontsource\/inter\/files\/inter-latin-400-normal\.woff2\?url";/,
   );
   assert.match(
     source,
-    /rel:\s*"preload",\s*\n\s*as:\s*"font",\s*\n\s*type:\s*"font\/woff2",\s*\n\s*href:\s*interLatin400,/,
+    /rel:\s*"preload",\s*as:\s*"font",\s*type:\s*"font\/woff2",\s*href:\s*interLatin400,/,
   );
   assert.doesNotMatch(source, /fonts\.googleapis\.com|fonts\.gstatic\.com/);
 });
@@ -62,27 +67,6 @@ test("the homepage hero headline uses text-balance and a non-breaking brand span
     heading,
     /whitespace-nowrap[^>]*>晉誠地產/,
     "晉誠地產 should not be allowed to break mid-word",
-  );
-});
-
-test("variable Noto faces cover all existing weights with local files and matching family", () => {
-  const css = read("node_modules/@fontsource-variable/noto-sans-tc/wght.css");
-  const metadata = JSON.parse(read("node_modules/@fontsource-variable/noto-sans-tc/metadata.json"));
-  assert.equal(metadata.variable.wght.min, "100");
-  assert.equal(metadata.variable.wght.max, "900");
-  const faces = css.match(/@font-face\s*\{[^}]+\}/g);
-  assert.ok(faces.length > 1);
-  for (const face of faces) {
-    assert.match(face, /font-family: 'Noto Sans TC Variable'/);
-    assert.match(face, /font-weight: 100 900/);
-    assert.match(face, /font-display: swap/);
-    assert.match(face, /src: url\(\.\/files\/[^)]+\.woff2\)/);
-    assert.match(face, /unicode-range:/);
-    assert.doesNotMatch(face, /https?:/);
-  }
-  assert.equal(
-    JSON.parse(read("package.json")).dependencies["@fontsource-variable/noto-sans-tc"],
-    "5.3.0",
   );
 });
 
