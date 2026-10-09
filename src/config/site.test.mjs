@@ -169,7 +169,7 @@ test("site config exposes all public branch contact details", () => {
 test("footer phone and email links meet the 44px tap-target guideline", () => {
   const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
 
-  const phoneLink = footer.match(/<a\s+href=\{toTelHref\(branch\.phone\) \?\? undefined\}[^>]*>/)?.[0] ?? "";
+  const phoneLink = footer.match(/<PhoneLink\s+phone=\{branch\.phone\}[^>]*>/)?.[0] ?? "";
   assert.match(phoneLink, /className="inline-flex min-h-11 items-center/);
 
   const mailLink =

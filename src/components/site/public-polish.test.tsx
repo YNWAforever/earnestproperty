@@ -29,7 +29,7 @@ test("footer and contact phone links are tel:+852", () => {
   for (const branch of SITE_BRANCHES) expect(hrefs).toContain(toTelHref(branch.phone)!);
 
   const contact = source("src/routes/contact.tsx");
-  expect(contact).toContain("toTelHref(branch.phone)");
+  expect(contact).toContain("<PhoneLink");
   expect(contact).not.toContain("`tel:${branch.phone}`");
   expect(contact).not.toContain("`tel:${SITE_CONTACT.phoneTel}`");
 });
@@ -53,4 +53,15 @@ test("the home H1 keeps words together", () => {
   const h1 = home.match(/<h1 className="([^"]*)">\s*深井 青山公路 汀九買樓租樓/);
   expect(h1).not.toBeNull();
   expect(h1?.[1]).toContain("break-keep");
+});
+
+test("a phone that cannot be dialled renders as plain text, not an inert link", async () => {
+  const { PhoneLink } = await import("./PhoneLink");
+  const good = load(
+    renderToStaticMarkup(createElement(PhoneLink, { phone: "2688 2988", children: "x" })),
+  );
+  expect(good("a").attr("href")).toBe("tel:+85226882988");
+  const bad = load(renderToStaticMarkup(createElement(PhoneLink, { phone: "123", children: "x" })));
+  expect(bad("a")).toHaveLength(0);
+  expect(bad("span").text()).toBe("x");
 });

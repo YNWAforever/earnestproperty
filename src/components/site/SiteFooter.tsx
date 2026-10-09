@@ -4,7 +4,7 @@ import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { estatesWithPage } from "@/content/estate-registry";
 import { clientAreaGroupsInNavOrder } from "@/content/client-area-presentation";
 import { SiteLink } from "@/components/site/SiteLink";
-import { toTelHref } from "@/lib/contact-links";
+import { PhoneLink } from "@/components/site/PhoneLink";
 // "2688 2988", matching how the same numbers are printed elsewhere on the
 // site (estate-pages.ts's contactPhones), instead of the raw "26882988".
 function displayPhone(phone: string) {
@@ -206,13 +206,13 @@ export function SiteFooter() {
                       well under the 44px guideline -- inline-flex + min-h-11
                       expands the tappable box without changing the visual size
                       of the text itself. */}
-                  <a
-                    href={toTelHref(branch.phone) ?? undefined}
+                  <PhoneLink
+                    phone={branch.phone}
                     className="inline-flex min-h-11 items-center gap-2"
                   >
                     <Phone className="h-4 w-4 text-brand-bright" />
                     {displayPhone(branch.phone)}
-                  </a>
+                  </PhoneLink>
                 </li>
               ))}
               <li className="opacity-80">

@@ -403,3 +403,72 @@ test("the mortgage page passes axe at 375 and 1440 px", async ({ page }) => {
     expect(results.violations.map((violation) => violation.id)).toEqual([]);
   }
 });
+
+const liveRow = (page: Page) => page.locator("[aria-live]");
+
+test("typing through out-of-range values with pauses keeps one live region mounted", async ({
+  page,
+}) => {
+  await openMortgage(page, 375);
+  await page.evaluate(() => {
+    const node = document.querySelector("[aria-live]")!;
+    (window as unknown as { __liveNode: Element }).__liveNode = node;
+  });
+  const price = page.locator("#property-price");
+  await price.click();
+  await price.fill("");
+  const heights: number[] = [];
+  for (const key of "6500000") {
+    await price.pressSequentially(key, { delay: 0 });
+    // Longer than the 300 ms debounce: each prefix (6, 65, ... 650000) settles out of range.
+    await page.waitForTimeout(450);
+    heights.push((await box(page.locator("section[aria-labelledby=mortgage-results]"))).height);
+    await expect(liveRow(page)).toHaveCount(1);
+    expect(
+      await page.evaluate(
+        () =>
+          (window as unknown as { __liveNode: Element }).__liveNode ===
+          document.querySelector("[aria-live]"),
+      ),
+    ).toBe(true);
+  }
+  // The results block never collapses or jumps while the draft is unusable.
+  expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+  await expect(monthlyValue(page)).toHaveText(/^HK\$19,8\d{2}$/);
+});
+
+test("aria-invalid and the result change together, with pauses between keystrokes", async ({
+  page,
+}) => {
+  await openMortgage(page, 375);
+  const price = page.locator("#property-price");
+  await price.click();
+  await price.fill("");
+  await price.pressSequentially("6", { delay: 0 });
+  await price.pressSequentially("x", { delay: 0 });
+  // Inside the debounce window the field is not yet flagged and the old result is still shown.
+  await expect(price).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByText("編輯中，暫無法顯示結果")).toBeHidden();
+  await page.waitForTimeout(450);
+  await expect(price).toHaveAttribute("aria-invalid", "true");
+  await expect(
+    page.getByRole("status").filter({ hasText: "請輸入有效的「樓價」以繼續。" }),
+  ).toBeVisible();
+  await price.fill("7000000");
+  await page.waitForTimeout(450);
+  await expect(price).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByText("編輯中，暫無法顯示結果")).toBeHidden();
+});
+
+test("an out-of-range draft keeps the 請完成編輯 sentence and an invalid one the 請輸入有效 sentence", async ({
+  page,
+}) => {
+  await openMortgage(page, 375);
+  const price = page.locator("#property-price");
+  await price.click();
+  await price.fill("999999");
+  const panel = page.getByRole("status").filter({ hasText: "編輯中，暫無法顯示結果" });
+  await expect(panel).toContainText("請完成編輯「樓價」以更新預算結果。");
+  await price.fill("abc");
+  await expect(panel).toContainText("請輸入有效的「樓價」以繼續。");
+});

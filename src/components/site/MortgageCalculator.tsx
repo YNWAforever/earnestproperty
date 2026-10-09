@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
   Calculator,
@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -224,16 +225,22 @@ function ResultRow({
   value,
   emphasized = false,
   live = false,
+  stale = false,
 }: {
   label: string;
   value: string;
   emphasized?: boolean;
   /** Announce changes: only the 每月供款 row is a live region, so typing is not read out row by row. */
   live?: boolean;
+  /** The value is the last valid one while the draft cannot be previewed. */
+  stale?: boolean;
 }) {
   return (
     <div
-      className="flex items-center justify-between gap-4 border-b border-border py-3 last:border-b-0"
+      className={cn(
+        "flex items-center justify-between gap-4 border-b border-border py-3 last:border-b-0",
+        stale && "opacity-50",
+      )}
       {...(live ? { "aria-live": "polite", "aria-atomic": true } : {})}
     >
       <span className="text-sm text-muted-foreground">{label}</span>
@@ -250,12 +257,16 @@ function ResultRow({
 
 const LIVE_RESULT_DELAY_MS = 300;
 
-function useDebouncedValue<T>(value: T, delayMs: number): T {
+function useDebouncedValue<T>(value: T, delayMs: number, isImmediate: (next: T) => boolean): T {
   const [debounced, setDebounced] = useState(value);
   useEffect(() => {
+    if (isImmediate(debounced)) {
+      setDebounced(value);
+      return;
+    }
     const timer = setTimeout(() => setDebounced(value), delayMs);
     return () => clearTimeout(timer);
-  }, [value, delayMs]);
+  }, [value, delayMs, debounced, isImmediate]);
   return debounced;
 }
 
@@ -279,7 +290,12 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
     () => ({ key: editingKey, draft: editingDraft }),
     [editingKey, editingDraft],
   );
-  const debouncedTyped = useDebouncedValue(typed, LIVE_RESULT_DELAY_MS);
+  // Focusing another field previews its draft at once; only typing is debounced.
+  const settledForOtherField = useCallback(
+    (settled: typeof typed) => settled.key !== editingKey,
+    [editingKey],
+  );
+  const debouncedTyped = useDebouncedValue(typed, LIVE_RESULT_DELAY_MS, settledForOtherField);
   // A newly focused field has not been debounced yet: preview its current draft straight away.
   const liveDraft = debouncedTyped.key === typed.key ? debouncedTyped.draft : typed.draft;
   const result = useMemo(() => {
@@ -287,13 +303,19 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
     const live = liveMortgageInputs(state.inputs, editingKey, liveDraft);
     return live === null ? null : calculateMortgage(live);
   }, [editingKey, liveDraft, state.inputs]);
+  // The results block keeps the last valid result on screen (and the 每月供款 live row mounted)
+  // while the draft is not previewable, so the block never collapses and the live region is
+  // never re-inserted: only its text changes.
+  const lastResultRef = useRef(result);
+  if (result !== null) lastResultRef.current = result;
+  const shown = result ?? lastResultRef.current!;
   const scenarioSummaries = useMemo(
     () => scenarios.map((scenario) => ({ scenario, result: calculateMortgage(scenario.inputs) })),
     [scenarios],
   );
   const canSaveScenario = result !== null && scenarios.length < MAX_MORTGAGE_SCENARIOS;
-  const activeDraftParse =
-    state.editingField === null ? null : parseMortgageDraft(state.drafts[state.editingField]);
+  // From the same debounced draft as the result, so aria-invalid and the result change together.
+  const activeDraftParse = state.editingField === null ? null : parseMortgageDraft(liveDraft);
   const activeDraftIsInvalid =
     state.editingField !== null &&
     (activeDraftParse?.status === "invalid" ||
@@ -530,48 +552,45 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
             </div>
 
             <div className="mt-5">
-              {result === null ? (
+              <ResultRow
+                label="每月供款"
+                value={formatMoney(shown.monthlyPayment)}
+                emphasized
+                live
+                stale={result === null}
+              />
+              {/* Results and the 編輯中 panel share one grid cell, so the block keeps the height of
+                  the full results whichever shows. */}
+              <div className="grid">
                 <div
-                  role="status"
-                  className="rounded-md border border-border bg-muted/40 p-4 text-sm leading-6 text-muted-foreground"
+                  className={cn("col-start-1 row-start-1", result === null && "invisible")}
+                  aria-hidden={result === null ? true : undefined}
+                  inert={result === null}
                 >
-                  <p className="font-semibold text-foreground">編輯中，暫無法顯示結果</p>
-                  <p className="mt-1">
-                    {`請輸入有效的「${INPUT_LABELS[state.editingField!]}」以繼續。`}
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <ResultRow
-                    label="每月供款"
-                    value={formatMoney(result.monthlyPayment)}
-                    emphasized
-                    live
-                  />
                   <ResultRow
                     label="壓力測試後每月供款"
-                    value={formatMoney(result.stressedMonthlyPayment)}
+                    value={formatMoney(shown.stressedMonthlyPayment)}
                   />
-                  <ResultRow label="貸款金額" value={formatMoney(result.loanAmount)} />
-                  <ResultRow label="首期" value={formatMoney(result.deposit)} />
-                  <ResultRow label="住宅印花稅" value={formatMoney(result.stampDuty)} />
+                  <ResultRow label="貸款金額" value={formatMoney(shown.loanAmount)} />
+                  <ResultRow label="首期" value={formatMoney(shown.deposit)} />
+                  <ResultRow label="住宅印花稅" value={formatMoney(shown.stampDuty)} />
                   {/* Purely additive: sums calculateMortgage's already-computed
                     deposit + stampDuty fields -- same computation and wording
                     as PropertyDecisionActions.tsx's mortgage teaser card. */}
                   <ResultRow
                     label="預計上會現金需求（首期＋印花稅）"
-                    value={formatMoney(result.deposit + result.stampDuty)}
+                    value={formatMoney(shown.deposit + shown.stampDuty)}
                   />
-                  <ResultRow label="全期總利息" value={formatMoney(result.totalInterest)} />
+                  <ResultRow label="全期總利息" value={formatMoney(shown.totalInterest)} />
                   <ResultRow
                     label="債務供款比率"
-                    value={formatPercent(result.dsr, result.inputs.monthlyIncome !== undefined)}
+                    value={formatPercent(shown.dsr, shown.inputs.monthlyIncome !== undefined)}
                   />
                   <ResultRow
                     label="壓力測試後債務供款比率"
                     value={formatPercent(
-                      result.stressedDsr,
-                      result.inputs.monthlyIncome !== undefined,
+                      shown.stressedDsr,
+                      shown.inputs.monthlyIncome !== undefined,
                     )}
                   />
                   <div className="mt-4 flex justify-end">
@@ -591,8 +610,21 @@ export function MortgageCalculator({ initialSearch }: MortgageCalculatorProps) {
                       已達 {MAX_MORTGAGE_SCENARIOS} 個方案上限，請先在下方移除一個方案再儲存新方案。
                     </p>
                   ) : null}
-                </>
-              )}
+                </div>
+                {result === null ? (
+                  <div
+                    role="status"
+                    className="col-start-1 row-start-1 self-start rounded-md border border-border bg-muted/40 p-4 text-sm leading-6 text-muted-foreground"
+                  >
+                    <p className="font-semibold text-foreground">編輯中，暫無法顯示結果</p>
+                    <p className="mt-1">
+                      {activeDraftIsInvalid
+                        ? `請輸入有效的「${INPUT_LABELS[state.editingField!]}」以繼續。`
+                        : `請完成編輯「${INPUT_LABELS[state.editingField!]}」以更新預算結果。`}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
             <div className="mt-6 rounded-md border border-coral/25 bg-coral/5 p-4 text-sm leading-6 text-muted-foreground">

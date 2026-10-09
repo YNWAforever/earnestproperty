@@ -89,8 +89,20 @@ test("mortgage calculator exposes practical controls, results, and official refe
   );
   assert.match(
     component,
-    /editingField === null \? calculateMortgage\(state\.inputs\) : null/,
-    "results must not be calculated from a hidden committed value during keyboard editing",
+    /liveMortgageInputs\(state\.inputs, editingKey, liveDraft\)/,
+    "while editing, the result is previewed from the debounced draft, never from a hidden value",
+  );
+  assert.match(component, /useDebouncedValue\(typed, LIVE_RESULT_DELAY_MS, /);
+  assert.match(component, /const LIVE_RESULT_DELAY_MS = 300;/);
+  assert.match(
+    component,
+    /activeDraftIsInvalid\s*\?\s*`請輸入有效的「\$\{INPUT_LABELS\[state\.editingField!\]\}」以繼續。`\s*:\s*`請完成編輯「\$\{INPUT_LABELS\[state\.editingField!\]\}」以更新預算結果。`/,
+    "both editing-panel sentences stay: invalid/empty drafts and out-of-range drafts",
+  );
+  assert.match(
+    component,
+    /live\s+stale=\{result === null\}/,
+    "the 每月供款 live row is always mounted and only its content changes",
   );
 });
 
@@ -159,7 +171,7 @@ test("mortgage calculator shows a cash-required-at-closing figure matching Prope
   // card already uses -- this must not become a second, differently-worded
   // implementation of the same figure.
   assert.match(component, /預計上會現金需求（首期＋印花稅）/);
-  assert.match(component, /result\.deposit \+ result\.stampDuty/);
+  assert.match(component, /shown\.deposit \+ shown\.stampDuty/);
 });
 
 test("mortgage calculator collapses the annual amortization table behind a toggle, default collapsed", () => {

@@ -10,6 +10,7 @@ import { AppImage } from "@/components/media/AppImage";
 import { Container } from "@/components/layout/Container";
 import { ContactInquiryForm } from "@/components/site/ContactInquiryForm";
 import { PageHero } from "@/components/site/PageHero";
+import { PhoneLink } from "@/components/site/PhoneLink";
 
 const branchesSchema = {
   "@context": "https://schema.org",
@@ -112,13 +113,13 @@ function ContactPage() {
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     {branch.address}
                   </p>
-                  <a
-                    href={toTelHref(branch.phone) ?? undefined}
+                  <PhoneLink
+                    phone={branch.phone}
                     className="mt-3 flex items-center gap-2 text-base font-semibold text-primary hover:underline"
                   >
                     <Phone className="h-4 w-4 text-primary" />
                     {branch.phone}
-                  </a>
+                  </PhoneLink>
                   {branch.hours ? (
                     <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                       <Clock className="h-4 w-4 shrink-0 text-primary" />
