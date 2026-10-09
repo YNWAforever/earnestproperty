@@ -243,7 +243,7 @@ for (const width of WIDTHS) {
     for (const scene of [...BAR_SCENES, ...NO_BAR_SCENES]) {
       await open(page, scene, width);
       const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa", "best-practice"])
+        .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
         .analyze();
       const found = results.violations.flatMap((violation) =>
         violation.nodes.map((node) => `${scene} ${violation.id}: ${node.target.join(" ")}`),
@@ -252,6 +252,19 @@ for (const width of WIDTHS) {
     }
   });
 }
+
+test("axe finds no violations in the fixture scenes at 1440px", async ({ page }) => {
+  for (const scene of ["chrome", "property", "plain"] as const) {
+    await open(page, scene, 1440, 900);
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"])
+      .analyze();
+    const found = results.violations.flatMap((violation) =>
+      violation.nodes.map((node) => `${scene} ${violation.id}: ${node.target.join(" ")}`),
+    );
+    expect(found).toEqual([]);
+  }
+});
 
 test("no layout shift as the bar and the docked launcher mount at 375px", async ({ page }) => {
   await open(page, "chrome", 375);
