@@ -23,14 +23,23 @@ const loaded = {
 describe("transaction form dirty state", () => {
   test("a loaded transaction is clean; one edited field is dirty; saving makes it clean", () => {
     const pristine = createInitialTransactionForm(loaded, "Staff");
-    expect(isTransactionFormDirty({ ...pristine }, pristine, false)).toBe(false);
-    expect(isTransactionFormDirty({ ...pristine, price: "9000000" }, pristine, false)).toBe(true);
-    expect(isTransactionFormDirty({ ...pristine, price: "9000000" }, pristine, true)).toBe(false);
+    expect(isTransactionFormDirty({ ...pristine }, pristine)).toBe(false);
+    const edited = { ...pristine, price: "9000000" };
+    expect(isTransactionFormDirty(edited, pristine)).toBe(true);
+    // Saving re-baselines to the saved values.
+    expect(isTransactionFormDirty(edited, edited)).toBe(false);
+  });
+
+  test("after a save, a further edit is dirty again and reverting it is clean", () => {
+    const pristine = createInitialTransactionForm(loaded, "Staff");
+    const saved = { ...pristine, price: "9000000" };
+    expect(isTransactionFormDirty({ ...saved, unit: "9Z" }, saved)).toBe(true);
+    expect(isTransactionFormDirty({ ...saved, unit: pristine.unit }, saved)).toBe(false);
   });
 
   test("a new blank form is clean until a field is typed into", () => {
     const pristine = createInitialTransactionForm(undefined, "Staff");
-    expect(isTransactionFormDirty({ ...pristine }, pristine, false)).toBe(false);
-    expect(isTransactionFormDirty({ ...pristine, unit: "5B" }, pristine, false)).toBe(true);
+    expect(isTransactionFormDirty({ ...pristine }, pristine)).toBe(false);
+    expect(isTransactionFormDirty({ ...pristine, unit: "5B" }, pristine)).toBe(true);
   });
 });

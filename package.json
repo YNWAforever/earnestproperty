@@ -123,6 +123,7 @@
     "test:property-sync:recovery:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-property-sync-recovery.spec.ts",
     "test:admin-daily-work:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-daily-work.spec.ts e2e/admin-attention.spec.ts e2e/admin-safer-actions.spec.ts",
     "test:admin-campaign-review:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-campaign-review.spec.ts",
+    "test:admin-leave-guards:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-leave-guards.spec.ts",
     "test:admin-campaign:db": "node --experimental-test-module-mocks --test src/lib/neon/campaign-recovery-owned.db.test.mjs",
     "test:admin-performance:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-performance-readback.spec.ts",
     "test:admin-link-bulk:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-link-bulk-owned.spec.ts",

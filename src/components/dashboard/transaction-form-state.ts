@@ -24,17 +24,13 @@ export function createInitialTransactionForm(
 export type TransactionFormState = ReturnType<typeof createInitialTransactionForm>;
 
 /**
- * True only when the form differs from the state it was loaded with. Once the
- * record is saved nothing is left to lose, so the leave guard must not fire on
- * the save's own navigation.
+ * True only when the form differs from its baseline: the state it was loaded
+ * with, or the values last saved. After a save the caller re-baselines to the
+ * saved values, so the save's own navigation is never blocked while a LATER
+ * edit makes the form dirty again.
  */
-export function isTransactionFormDirty(
-  form: TransactionFormState,
-  pristine: TransactionFormState,
-  saved: boolean,
-) {
-  if (saved) return false;
-  return (Object.keys(pristine) as Array<keyof TransactionFormState>).some(
-    (key) => form[key] !== pristine[key],
+export function isTransactionFormDirty(form: TransactionFormState, baseline: TransactionFormState) {
+  return (Object.keys(baseline) as Array<keyof TransactionFormState>).some(
+    (key) => form[key] !== baseline[key],
   );
 }

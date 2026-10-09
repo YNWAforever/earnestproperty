@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -88,10 +89,12 @@ export function TransactionForm({ transaction, staffName, onSaved }: Props) {
   const formRef = useRef<HTMLFormElement>(null);
   const [estates, setEstates] = useState<Estate[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [pristine] = useState(() => createInitialTransactionForm(transaction, staffName));
-  const [form, setForm] = useState(pristine);
-  const [saved, setSaved] = useState(false);
-  const isDirty = isTransactionFormDirty(form, pristine, saved);
+  // The dirty baseline: the loaded values, replaced by the saved values after each save.
+  const [baseline, setBaseline] = useState(() =>
+    createInitialTransactionForm(transaction, staffName),
+  );
+  const [form, setForm] = useState(baseline);
+  const isDirty = isTransactionFormDirty(form, baseline);
   const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
@@ -173,9 +176,11 @@ export function TransactionForm({ transaction, staffName, onSaved }: Props) {
       return;
     }
     toast.success(transaction ? "已更新" : "已新增");
-    // Must precede onSaved(): that navigates, and the leave guard would otherwise
-    // ask 尚未儲存 about the very save that just succeeded.
-    setSaved(true);
+    // Re-baseline to what was just saved, and render it NOW: onSaved() navigates, the
+    // router reads the blocker registered by the last committed render, and an
+    // ordinary state update after an await would still show the form as dirty.
+    // Edits made after this point differ from the baseline and are guarded again.
+    flushSync(() => setBaseline(form));
     if (result.id) onSaved(result.id);
   }
 

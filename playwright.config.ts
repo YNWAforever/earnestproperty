@@ -13,6 +13,7 @@ export default defineConfig({
     "**/admin-property-sync-recovery.spec.ts",
     "**/admin-daily-work.spec.ts",
     "**/admin-campaign-review.spec.ts",
+    "**/admin-leave-guards.spec.ts",
     "**/admin-performance-readback.spec.ts",
     "**/admin-link-bulk-owned.spec.ts",
     "**/admin-attention.spec.ts",

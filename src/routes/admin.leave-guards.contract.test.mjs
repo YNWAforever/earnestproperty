@@ -19,14 +19,18 @@ function ${name}(`);
   return next < 0 ? rest : rest.slice(0, next);
 }
 
-test("TransactionForm mounts the leave guard on real edits and marks itself saved before onSaved", () => {
+test("TransactionForm mounts the leave guard on real edits and re-baselines (flushed) before onSaved", () => {
   const source = read("src/components/dashboard/TransactionForm.tsx");
   has(source, /useRouteLeaveGuard\(isDirty\)/, "TransactionForm must call useRouteLeaveGuard");
   has(source, /isTransactionFormDirty\(/, "dirty must compare against the loaded form");
   has(source, /\{leaveGuardDialog\}/, "the guard dialog must be rendered");
-  const saved = source.indexOf("setSaved(true)");
+  const saved = source.indexOf("flushSync(() => setBaseline(form))");
   const onSaved = source.indexOf("onSaved(result.id)");
-  assert.ok(saved >= 0 && onSaved > saved, "setSaved(true) must precede onSaved(");
+  assert.ok(saved >= 0 && onSaved > saved, "the re-baseline must be flushed before onSaved(");
+  assert.ok(
+    !source.includes("setSaved"),
+    "no sticky saved flag: later edits must re-arm the guard",
+  );
 });
 
 for (const [name, closeGuard] of [
