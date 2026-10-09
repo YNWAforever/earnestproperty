@@ -16,6 +16,14 @@ declare global {
 let server: Server, origin: string;
 const evidence: { name: string; status: string; width: number }[] = [];
 const job = "40000000-0000-4000-8000-000000000001";
+const timeoutJob = "40000000-0000-4000-8000-000000000002";
+const noCodeJob = "40000000-0000-4000-8000-000000000003";
+const repairRow = (page: Page) => page.getByRole("row").filter({ hasText: "更新 AI 知識庫" });
+// FX-17a G-09: the list opens on 失敗, so a job that is no longer failed needs 所有狀態.
+async function showAllStatuses(page: Page) {
+  await page.getByRole("combobox", { name: "按狀態篩選背景工作" }).click();
+  await page.getByRole("option", { name: "所有狀態", exact: true }).click();
+}
 test.beforeAll(async () => {
   assert.ok(!process.env.PLAYWRIGHT_BASE_URL);
   assert.equal(
@@ -91,7 +99,7 @@ async function open(page: Page, actor = "admin") {
   await page.goto(origin + "/admin/operations?tab=jobs");
   await expect(page.getByRole("heading", { name: "系統營運", exact: true })).toBeVisible();
   if (actor === "admin" || actor === "manager")
-    await expect(page.getByText("ai.knowledge.repair", { exact: true })).toBeVisible();
+    await expect(page.getByText("更新 AI 知識庫", { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 }
 for (const width of [1440, 1280, 768, 390]) {
@@ -123,13 +131,13 @@ for (const width of [1440, 1280, 768, 390]) {
       ).toBe(0);
       await page.getByRole("button", { name: `重試工作 ${job}`, exact: true }).click();
       await page.getByRole("button", { name: "重試", exact: true }).click();
-      await expect(page.getByRole("row").filter({ hasText: "ai.knowledge.repair" })).toContainText(
-        "等候中",
-      );
+      // Read back: the job left the 失敗 list, and shows 等候中 under 所有狀態.
+      await expect(repairRow(page)).toHaveCount(0);
+      await showAllStatuses(page);
+      await expect(repairRow(page)).toContainText("等候中");
       await page.reload();
-      await expect(page.getByRole("row").filter({ hasText: "ai.knowledge.repair" })).toContainText(
-        "等候中",
-      );
+      await showAllStatuses(page);
+      await expect(repairRow(page)).toContainText("等候中");
       await page.getByRole("tab", { name: "審計記錄", exact: true }).click();
       await expect(page.getByText("job.retry", { exact: true })).toBeVisible();
       await expect(page.getByText("synthetic-retry-ref", { exact: true })).toBeVisible();
@@ -137,8 +145,11 @@ for (const width of [1440, 1280, 768, 390]) {
         jobs: JSON.parse(localStorage.getItem("operations-fixture-jobs")!),
         audit: JSON.parse(localStorage.getItem("operations-fixture-audit")!),
       }));
-      expect(saved.jobs).toHaveLength(1);
-      expect(saved.jobs[0].id).toBe(job);
+      expect(saved.jobs).toHaveLength(3);
+      expect(saved.jobs.filter((row: { status: string }) => row.status === "queued")).toHaveLength(
+        1,
+      );
+      expect(saved.jobs.find((row: { id: string }) => row.id === job).status).toBe("queued");
       expect(saved.audit[0].resource_id).toBe(job);
     });
     test("unknown command reads original job before another attempt", async ({ page }) => {
@@ -162,9 +173,11 @@ for (const width of [1440, 1280, 768, 390]) {
       ).toBeDisabled();
       await page.evaluate(() => (window.operationsFixture.mode = "ok"));
       await page.getByRole("button", { name: "重新載入背景工作", exact: true }).click();
-      await expect(page.getByRole("row").filter({ hasText: "ai.knowledge.repair" })).toContainText(
-        "等候中",
-      );
+      // The retry did go through, so the job is no longer in the 失敗 list; the read-back
+      // still clears the lock because it looks for the job without the filters.
+      await expect(repairRow(page)).toHaveCount(0);
+      await showAllStatuses(page);
+      await expect(repairRow(page)).toContainText("等候中");
       expect(
         await page.evaluate(
           () => window.operationsFixture.calls.filter((call) => call.name === "retry").length,
@@ -188,14 +201,11 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(
         page.getByRole("button", { name: `重試工作 ${job}`, exact: true }),
       ).toBeDisabled();
-      await expect(page.getByRole("row").filter({ hasText: "ai.knowledge.repair" })).toContainText(
-        "失敗",
-      );
+      await expect(repairRow(page)).toContainText("失敗");
       await page.evaluate(() => (window.operationsFixture.mode = "ok"));
       await page.getByRole("button", { name: "重新載入背景工作", exact: true }).click();
-      await expect(page.getByRole("row").filter({ hasText: "ai.knowledge.repair" })).toContainText(
-        "等候中",
-      );
+      await showAllStatuses(page);
+      await expect(repairRow(page)).toContainText("等候中");
       expect(
         await page.evaluate(
           () => window.operationsFixture.calls.filter((call) => call.name === "retry").length,
@@ -211,7 +221,7 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(page.getByRole("tabpanel").getByRole("alert")).toContainText(
         "synthetic-read-ref",
       );
-      await expect(page.getByText("ai.knowledge.repair", { exact: true })).toBeVisible();
+      await expect(page.getByText("更新 AI 知識庫", { exact: true })).toBeVisible();
       expect(
         await page.evaluate(
           () => window.operationsFixture.calls.filter((call) => call.name === "retry").length,
@@ -222,6 +232,79 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(page.getByRole("button", { name: `重試工作 ${job}`, exact: true })).toHaveCount(
         0,
       );
+    });
+    test("the jobs tab opens on 失敗, shows 原因, and the type select narrows the list", async ({
+      page,
+    }) => {
+      await open(page, "manager");
+      await expect(page.getByRole("combobox", { name: "按狀態篩選背景工作" })).toContainText(
+        "失敗",
+      );
+      await expect(page.getByRole("columnheader", { name: "原因", exact: true })).toBeVisible();
+      const timeout = page.getByRole("row").filter({ hasText: "推廣活動發送" });
+      await expect(timeout).toContainText("WhatsApp 服務沒有及時回應。");
+      // A code the table does not know, and a failed job with no stored code.
+      await expect(repairRow(page)).toContainText("處理失敗（未分類原因）。");
+      await expect(page.getByRole("row").filter({ hasText: "回覆期限檢查" })).toContainText(
+        "失敗，未有記錄原因。",
+      );
+      // Neither the raw type, the raw code nor the job id is on screen for a manager.
+      await expect(page.getByText("woztell.campaign.deliver")).toHaveCount(0);
+      await expect(page.getByText("WOZTELL_PROVIDER_TIMEOUT")).toHaveCount(0);
+      await expect(page.getByText(timeoutJob)).toHaveCount(0);
+      await page.getByRole("combobox", { name: "按工作類型篩選" }).click();
+      await page.getByRole("option", { name: "推廣活動發送", exact: true }).click();
+      await expect(timeout).toHaveCount(1);
+      await expect(repairRow(page)).toHaveCount(0);
+      await expect(page.getByRole("row").filter({ hasText: "回覆期限檢查" })).toHaveCount(0);
+      await page.screenshot({
+        path: `.audit/fx-17a-admin/jobs-manager-${width}.png`,
+        fullPage: true,
+      });
+    });
+    test("a manager sees no 技術資料; an admin sees the job id inside it", async ({ page }) => {
+      await open(page, "manager");
+      await expect(page.getByRole("button", { name: "技術資料" })).toHaveCount(0);
+      await open(page, "admin");
+      await expect(page.getByRole("button", { name: "技術資料" })).toHaveCount(3);
+      await expect(page.getByText(`工作編號：${timeoutJob}`)).toHaveCount(0);
+      await page
+        .getByRole("row")
+        .filter({ hasText: "推廣活動發送" })
+        .getByRole("button", { name: "技術資料" })
+        .click();
+      await expect(page.getByText(`工作編號：${timeoutJob}`)).toBeVisible();
+      await expect(page.getByText("工作類型代碼：woztell.campaign.deliver")).toBeVisible();
+      await expect(page.getByText("錯誤代碼：WOZTELL_PROVIDER_TIMEOUT")).toBeVisible();
+      await page.screenshot({
+        path: `.audit/fx-17a-admin/jobs-admin-${width}.png`,
+        fullPage: true,
+      });
+    });
+    test("retrying a delivery job warns that it may send again", async ({ page }) => {
+      await open(page);
+      const warning = "重試可能會再次發送 WhatsApp 訊息。請先核對客戶或同事是否已收到，才重試。";
+      await page.getByRole("button", { name: `重試工作 ${timeoutJob}`, exact: true }).click();
+      const dialog = page.getByRole("alertdialog");
+      await expect(dialog).toContainText("推廣活動發送：WhatsApp 服務沒有及時回應。");
+      await expect(dialog).toContainText(warning);
+      await expect(dialog).not.toContainText(timeoutJob);
+      await dialog.getByRole("button", { name: "取消", exact: true }).click();
+      // A job that sends nothing gets no warning.
+      await page.getByRole("button", { name: `重試工作 ${noCodeJob}`, exact: true }).click();
+      await expect(page.getByRole("alertdialog")).toContainText(
+        "回覆期限檢查：失敗，未有記錄原因。",
+      );
+      await expect(page.getByRole("alertdialog")).not.toContainText(warning);
+      await page
+        .getByRole("alertdialog")
+        .getByRole("button", { name: "取消", exact: true })
+        .click();
+      expect(
+        await page.evaluate(
+          () => window.operationsFixture.calls.filter((call) => call.name === "retry").length,
+        ),
+      ).toBe(0);
     });
   });
 }

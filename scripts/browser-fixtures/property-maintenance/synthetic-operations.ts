@@ -22,6 +22,26 @@ const job: JobListItem = {
   createdAt: "2026-10-03T00:00:00Z",
   updatedAt: "2026-10-03T01:00:00Z",
 };
+// FX-17a G-09: a failed job with a known provider code, and one that stored no code at all.
+export const syntheticJobIds = {
+  repair: job.id,
+  timeout: "40000000-0000-4000-8000-000000000002",
+  noCode: "40000000-0000-4000-8000-000000000003",
+};
+const timeoutJob: JobListItem = {
+  ...job,
+  id: syntheticJobIds.timeout,
+  jobType: "woztell.campaign.deliver",
+  errorCode: "WOZTELL_PROVIDER_TIMEOUT",
+  updatedAt: "2026-10-03T00:50:00Z",
+};
+const noCodeJob: JobListItem = {
+  ...job,
+  id: syntheticJobIds.noCode,
+  jobType: "woztell.enquiry.sla.check",
+  errorCode: null,
+  updatedAt: "2026-10-03T00:40:00Z",
+};
 const state = {
   mode: "ok",
   calls: [] as { name: string; id?: string }[],
@@ -33,7 +53,8 @@ declare global {
   }
 }
 window.operationsFixture = state;
-const rows = (): JobListItem[] => JSON.parse(localStorage.getItem(key) ?? JSON.stringify([job]));
+const rows = (): JobListItem[] =>
+  JSON.parse(localStorage.getItem(key) ?? JSON.stringify([job, timeoutJob, noCodeJob]));
 const call = (name: string, id?: string) => state.calls.push({ name, id });
 export async function fetchOperationsHealth() {
   call("health");
@@ -47,7 +68,7 @@ export async function fetchOperationsHealth() {
     },
   };
 }
-export async function fetchOperationsJobs() {
+export async function fetchOperationsJobs(filters: { status?: string; jobType?: string } = {}) {
   call("jobs");
   if (state.mode === "read-fail")
     throw new OperationsClientError(
@@ -57,7 +78,11 @@ export async function fetchOperationsJobs() {
       "synthetic-read-ref",
       false,
     );
-  const saved = rows();
+  const saved = rows().filter(
+    (row) =>
+      (!filters.status || row.status === filters.status) &&
+      (!filters.jobType || row.jobType === filters.jobType),
+  );
   if (state.mode === "deferred")
     await new Promise<void>((done) => {
       state.releaseOldRead = done;
@@ -91,7 +116,7 @@ export async function retryOperationsJob(id: string) {
       false,
     );
   const saved = rows();
-  saved[0].status = "queued";
+  saved.find((row) => row.id === id)!.status = "queued";
   localStorage.setItem(key, JSON.stringify(saved));
   if (state.mode === "unknown")
     throw new OperationsClientError(

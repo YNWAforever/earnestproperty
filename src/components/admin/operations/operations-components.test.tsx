@@ -1,8 +1,14 @@
-import { expect, test } from "bun:test";
+import { expect, mock, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AdminOperationsOverview } from "./AdminOperationsOverview";
+import {
+  DELIVERY_JOB_TYPES,
+  JOB_RETRY_RESEND_WARNING,
+  jobTypeOptions,
+} from "@/lib/admin/job-labels";
+import type { StaffSession } from "@/lib/neon/admin-data.types";
 import { AdminOperationsReceipts, ReceiptsTable } from "./AdminOperationsReceipts";
 import {
   canShowReceiptRetry,
@@ -30,6 +36,21 @@ import type {
   JobListItem,
   JobStatus,
 } from "@/lib/admin/operations/operations-types";
+let staffSession: StaffSession = {
+  status: "ok",
+  staffId: "s",
+  email: null,
+  name: null,
+  roles: ["manager"],
+};
+mock.module("@/lib/neon/admin-data", () => ({ fetchStaffSession: async () => staffSession }));
+const { staffSessionStore } = await import("@/components/admin/staff-session");
+const { DEFAULT_JOB_STATUS, JobCommandWarning, JobsTable } = await import("./AdminOperationsJobs");
+async function signInAs(role: "admin" | "manager") {
+  staffSession = { status: "ok", staffId: "s", email: null, name: null, roles: [role] };
+  staffSessionStore.reset();
+  await staffSessionStore.refresh("user");
+}
 const jobsSource =
   readFileSync(new URL("./AdminOperationsJobs.tsx", import.meta.url), "utf8") +
   readFileSync(new URL("./operations-jobs-utils.ts", import.meta.url), "utf8");
@@ -510,4 +531,117 @@ test("attempts past the cap display as 20+ for exhausted rows only", () => {
     "20",
   );
   expect(receiptAttemptsLabel(receiptRow({ attemptCount: 3 }))).toBe("3");
+});
+
+const failedJob = (overrides: Partial<JobListItem> = {}): JobListItem => ({
+  id: "7917a000-0000-4000-8000-000000000071",
+  jobType: "woztell.campaign.deliver",
+  payloadVersion: 1,
+  status: "failed",
+  attemptCount: 3,
+  maxAttempts: 3,
+  runAfter: "2026-10-09T00:00:00.000Z",
+  leaseExpiresAt: null,
+  errorCode: "WOZTELL_PROVIDER_TIMEOUT",
+  createdAt: "2026-10-09T00:00:00.000Z",
+  updatedAt: "2026-10-09T00:00:00.000Z",
+  ...overrides,
+});
+const adminCapabilities = {
+  ...agentCapabilities,
+  jobsRead: true,
+  jobsRetry: true,
+  jobsCancel: true,
+};
+const renderJobs = (rows: JobListItem[], diagnosticsRead = false) =>
+  renderToStaticMarkup(
+    <JobsTable
+      rows={rows}
+      capabilities={{ ...adminCapabilities, diagnosticsRead }}
+      busy={false}
+      emptyContent="目前沒有失敗的背景工作。"
+      onCommand={() => undefined}
+    />,
+  );
+
+test("a failed job shows its zh-HK reason and type label, not the UUID", async () => {
+  await signInAs("manager");
+  const job = failedJob();
+  const html = renderJobs([
+    job,
+    failedJob({
+      id: "7917a000-0000-4000-8000-000000000072",
+      errorCode: null,
+      jobType: "x.unknown",
+    }),
+  ]);
+  expect(html).toContain("推廣活動發送");
+  expect(html).toContain("原因");
+  expect(html).toContain("WhatsApp 服務沒有及時回應。");
+  expect(html).toContain("失敗，未有記錄原因。");
+  expect(html).toContain("其他工作");
+  expect(html).not.toContain("woztell.campaign.deliver");
+  expect(html).not.toContain("WOZTELL_PROVIDER_TIMEOUT");
+  // The visible cells never print the job id; it lives in 技術資料 for admins only.
+  expect(html.replace(/aria-label="[^"]*"/g, "")).not.toContain(job.id);
+  expect(renderJobs([], false)).toContain("目前沒有失敗的背景工作。");
+});
+
+test("技術資料 renders only with diagnosticsRead", async () => {
+  const job = failedJob();
+  await signInAs("manager");
+  expect(renderJobs([job], false)).not.toContain("技術資料");
+  // Capability set but a manager session: the component still renders nothing.
+  expect(renderJobs([job], true)).not.toContain("技術資料");
+  await signInAs("admin");
+  expect(renderJobs([job], false)).not.toContain("技術資料");
+  const admin = renderJobs([job], true);
+  expect(admin).toContain("技術資料");
+  // Closed by default: the ids mount only when opened.
+  expect(admin.replace(/aria-label="[^"]*"/g, "")).not.toContain(job.id);
+  const { AdminTechnicalDetails } = await import("@/components/admin/AdminTechnicalDetails");
+  const { createElement } = await import("react");
+  const open = renderToStaticMarkup(
+    createElement(AdminTechnicalDetails, {
+      defaultOpen: true,
+      rows: [
+        { label: "工作類型代碼", value: job.jobType },
+        { label: "工作編號", value: job.id },
+        { label: "錯誤代碼", value: "WOZTELL_PROVIDER_TIMEOUT" },
+      ],
+    }),
+  );
+  expect(open).toContain(`工作編號：${job.id}`);
+  expect(jobsSource).toContain("工作類型代碼");
+  expect(jobsSource).toContain("錯誤代碼");
+});
+
+test("the status filter starts on 失敗 and the type select lists all types", () => {
+  expect(DEFAULT_JOB_STATUS).toBe("failed");
+  expect(jobsSource).toMatch(/useState<"all" \| JobStatus>\(DEFAULT_JOB_STATUS\)/);
+  const options = jobTypeOptions();
+  expect(options[0]).toEqual({ value: "all", label: "所有類型" });
+  expect(options).toHaveLength(16);
+  // A free-text input and a separate apply button are gone: the select applies on change.
+  expect(jobsSource).not.toContain("套用篩選");
+  expect(jobsSource).not.toContain("輸入工作類型篩選");
+});
+
+test("retrying a delivery job warns that it may send again; other jobs do not", () => {
+  expect(DELIVERY_JOB_TYPES.length).toBeGreaterThanOrEqual(4);
+  for (const jobType of DELIVERY_JOB_TYPES) {
+    const html = renderToStaticMarkup(
+      <JobCommandWarning command={{ action: "retry", job: failedJob({ jobType }) }} />,
+    );
+    expect(html).toContain(JOB_RETRY_RESEND_WARNING);
+  }
+  for (const command of [
+    { action: "retry" as const, job: failedJob({ jobType: "ai.knowledge.repair" }) },
+    { action: "cancel" as const, job: failedJob({ jobType: "woztell.campaign.deliver" }) },
+  ])
+    expect(renderToStaticMarkup(<JobCommandWarning command={command} />)).toBe("");
+  expect(jobsSource).toContain("jobCommandDescription");
+  // The list opens on 失敗, so the unknown-outcome read-back must also look without filters.
+  expect(jobsSource).toContain("fetchOperationsJobs({ limit: 25 }, isCurrent)");
+  expect(jobsSource).not.toMatch(/description=\{[^}]*job\.id/);
 });
