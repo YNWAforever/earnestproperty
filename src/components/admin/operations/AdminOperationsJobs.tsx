@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { LoaderCircle, RefreshCw, RotateCcw, XCircle } from "lucide-react";
 import { toast } from "sonner";
 
+import { adminErrorMessage } from "@/components/admin/admin-error-text";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminTechnicalDetails } from "@/components/admin/AdminTechnicalDetails";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +67,7 @@ function operationsErrorMessage(error: unknown) {
   if (error instanceof OperationsClientError) {
     return error.requestId ? `${error.message}（支援參考編號：${error.requestId}）` : error.message;
   }
-  return error instanceof Error ? error.message : "未能載入背景工作。";
+  return adminErrorMessage(error, "未能載入背景工作。");
 }
 
 function formatDate(value: string | null) {
@@ -243,8 +244,8 @@ export function AdminOperationsJobs({
     }: { mode?: JobRowMergeMode; cursor?: string; background?: boolean } = {}) => {
       if (!active || !capabilities.jobsRead || !isCurrent()) return;
       const request = ++requestSequence.current;
-      // A background tick must not set `loading`: the filter controls are
-      // disabled on it, so a 30s poll interrupted typing mid-word.
+      // A background tick must not set `loading`, so a 30s refresh does not flash the
+      // loading state over the list.
       if (!background) setLoading(true);
       setError(null);
       try {
@@ -263,7 +264,7 @@ export function AdminOperationsJobs({
           // The list now opens on 失敗, so a retry that did go through leaves the job out of it,
           // and an old job can be far past the first page. Read the locked job by id, once at a
           // time (a 30s refresh does not stack a second request on one still in flight).
-          if (!seen && (status !== "all" || jobType !== "") && !readbackInFlight.current) {
+          if (!seen && !readbackInFlight.current) {
             readbackInFlight.current = true;
             try {
               const byId = await fetchOperationsJobs({ ids: [unconfirmedJob.current] }, isCurrent);

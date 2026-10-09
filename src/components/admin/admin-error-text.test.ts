@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
-import { adminErrorMessage, ADMIN_ERROR_CODES, staffActionErrorText } from "./admin-error-text";
+import {
+  adminErrorMessage,
+  ADMIN_ERROR_CODES,
+  sendMayHaveReachedServer,
+  staffActionErrorText,
+} from "./admin-error-text";
 import { ServerFnResponseError } from "@/lib/neon/server-fn-response";
 
 const fallback = "操作未完成，請重試。";
@@ -205,6 +210,37 @@ test("an unknown send error never invites a retry", () => {
   expect(
     src.match(/formatReplyError\(errorText\((?:err|error), SEND_UNCERTAIN_ERROR\)\)/g),
   ).toHaveLength(3);
+});
+
+test("a network or 401 failure on a send may have reached the server, a pre-flight failure may not", () => {
+  for (const e of [
+    new TypeError("Failed to fetch"),
+    new TypeError("Load failed"),
+    new Error("NetworkError when attempting to fetch resource."),
+    new ServerFnResponseError("Unauthorized", 401),
+    Object.assign(new Error("Unauthorized"), { code: "Unauthorized" }),
+  ]) {
+    expect(sendMayHaveReachedServer(e)).toBe(true);
+  }
+  // withStaffAuthHeaders fails before any request is sent and keeps its own message.
+  const preflight = new Error("登入服務暫時無法使用，請稍後再試。");
+  for (const e of [preflight, new Error("OUTBOUND_RECONCILIATION_REQUIRED"), null]) {
+    expect(sendMayHaveReachedServer(e)).toBe(false);
+  }
+  expect(adminErrorMessage(preflight, SEND_UNCERTAIN)).toBe("登入服務暫時無法使用，請稍後再試。");
+  // The route short-circuits to the uncertain line before the retry wording is reached.
+  const src = read("src/routes/admin.whatsapp.tsx");
+  expect(src).toContain("if (fallback && sendMayHaveReachedServer(error)) return fallback;");
+  // The read-back error is the uncertain line alone, not prefixed with the same sentence.
+  expect(src).not.toContain("未能確認傳送結果。${formatReplyError");
+});
+
+test("the operations screen never shows raw error text and always clears its read-back lock", () => {
+  const jobs = read("src/components/admin/operations/AdminOperationsJobs.tsx");
+  expect(jobs).toContain('return adminErrorMessage(error, "未能載入背景工作。");');
+  expect(jobs).not.toContain("error instanceof Error ? error.message");
+  expect(jobs).toContain("if (!seen && !readbackInFlight.current) {");
+  expect(jobs).not.toContain('!seen && (status !== "all"');
 });
 
 test("code-keyed screens still read the raw code", () => {

@@ -170,6 +170,25 @@ export function adminErrorMessage(error: unknown, fallback: string = ADMIN_GENER
   return fallback;
 }
 
+/**
+ * True when a failed send may already have reached the server: a network drop or a 401
+ * response. Pre-flight failures (no request sent) have their own zh-HK text and are not matched.
+ */
+export function sendMayHaveReachedServer(error: unknown): boolean {
+  if (statusOf(error) === 401) return true;
+  const message = messageOf(error)?.trim();
+  if (!message) return false;
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code: unknown }).code)
+      : "";
+  return (
+    code === "Unauthorized" ||
+    message === "Unauthorized" ||
+    ADMIN_ERROR_MESSAGES[message] === ADMIN_ERROR_MESSAGES["Failed to fetch"]
+  );
+}
+
 /** @deprecated alias kept for FX-10a callers */
 export function staffActionErrorText(error: unknown, fallback: string): string {
   return adminErrorMessage(error, fallback);

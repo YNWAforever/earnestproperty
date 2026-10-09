@@ -1,4 +1,4 @@
-import { adminErrorMessage } from "@/components/admin/admin-error-text";
+import { adminErrorMessage, sendMayHaveReachedServer } from "@/components/admin/admin-error-text";
 import { CustomerConfirmDetails } from "@/components/admin/CustomerConfirmLine";
 import {
   customerConfirmLabel,
@@ -1054,9 +1054,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
       await loadConversationDetail(targetId, { background: true });
     } catch (error) {
       if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
-        setReplyError(
-          `未能確認傳送結果。${formatReplyError(errorText(error, SEND_UNCERTAIN_ERROR))}`,
-        );
+        setReplyError(formatReplyError(errorText(error, SEND_UNCERTAIN_ERROR)));
     } finally {
       outboundBusy.current = false;
       if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId) {
@@ -2440,6 +2438,9 @@ const SEND_UNCERTAIN_ERROR = "未能確認傳送結果，請先核對狀態，�
 
 function errorText(error: unknown, fallback?: string) {
   // This screen's own codes map first; the rest (and any status) goes through the shared rule.
+  // On a send path (a fallback is given), a network or 401 failure may come after the request
+  // reached the server, so it must not invite a retry.
+  if (fallback && sendMayHaveReachedServer(error)) return fallback;
   const raw = rawMessage(error);
   const mapped = formatReplyError(raw);
   return adminErrorMessage(mapped !== raw ? mapped : error, fallback);

@@ -14,6 +14,7 @@ export default defineConfig({
     "**/admin-daily-work.spec.ts",
     "**/admin-campaign-review.spec.ts",
     "**/admin-leave-guards.spec.ts",
+    "**/admin-safer-actions.spec.ts",
     "**/admin-performance-readback.spec.ts",
     "**/admin-link-bulk-owned.spec.ts",
     "**/admin-attention.spec.ts",
