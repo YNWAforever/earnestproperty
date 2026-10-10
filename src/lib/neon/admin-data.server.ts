@@ -2416,12 +2416,17 @@ export async function saveAdminFaq(input: AdminFaqInput, actor: StaffAccess) {
     // alone (DO UPDATE ... WHERE f.published returns no row) and reported, so
     // an import never rewrites a hidden answer while claiming success. A
     // re-import of the same answer writes no audit row.
+    // prior locks the live match before ins writes it, so the audit `before`
+    // is the committed answer a racing import left, not this snapshot's. ins
+    // reads prior through an InitPlan to force that order: read only by audit,
+    // prior would run after ins and FOR UPDATE would skip the row ins changed.
     const rows = await queryRows<{ id: string; inserted: boolean; version: string }>(
       `WITH prior AS (
-         SELECT f.* FROM faqs f WHERE f.scope = $1 AND f.question = $2
+         SELECT f.* FROM faqs f WHERE f.scope = $1 AND f.question = $2 FOR UPDATE
        ), ins AS (
          INSERT INTO faqs AS f (scope, question, answer, sort_order)
-         VALUES ($1, $2, $3, $4)
+         SELECT $1::text, $2::text, $3::text, $4::integer
+         WHERE (SELECT count(*) FROM prior) >= 0
          ON CONFLICT (scope, question) DO UPDATE
            SET answer = EXCLUDED.answer
            WHERE f.published

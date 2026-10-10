@@ -305,6 +305,58 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
       );
 
       await t.test(
+        "an import racing a committed answer change audits the committed answer as before",
+        async () => {
+          const faqId = await insertFaq(131, "匯入競爭？", "甲");
+          const holder = await pool.connect();
+          let imported;
+          try {
+            await holder.query("BEGIN");
+            await holder.query("UPDATE faqs SET answer='乙' WHERE id=$1", [faqId]);
+            imported = server
+              .saveAdminFaq(
+                {
+                  scope: FAQ_SCOPE,
+                  question: "匯入競爭？",
+                  answer: "丙",
+                  sort_order: 131,
+                  upsert: true,
+                },
+                admin,
+              )
+              .then(
+                (value) => ({ value }),
+                (error) => ({ error }),
+              );
+            let waited = false;
+            for (let i = 0; i < 200 && !waited; i++) {
+              waited =
+                (
+                  await query(
+                    `SELECT 1 FROM pg_stat_activity
+                     WHERE wait_event_type = 'Lock' AND query LIKE '%WITH prior AS%'`,
+                  )
+                ).length > 0;
+              if (!waited) await new Promise((resolve) => setTimeout(resolve, 25));
+            }
+            assert.ok(waited, "the import must wait for the held row");
+            await holder.query("COMMIT");
+          } finally {
+            holder.release();
+          }
+          const result = await imported;
+          assert.ifError(result.error);
+          assert.equal(result.value.id, faqId);
+          assert.equal((await faqRow(faqId)).answer, "丙");
+          const rows = await audits(faqId);
+          assert.equal(rows.length, 1);
+          assert.equal(rows[0].action, "faq.update");
+          assert.deepEqual(rows[0].metadata.before, { answer: "乙" });
+          assert.deepEqual(rows[0].metadata.after, { answer: "丙" });
+        },
+      );
+
+      await t.test(
         "a FAQ save without a version is refused with 400 and writes nothing",
         async () => {
           const faqId = await insertFaq(102, "管理費？", "每月");
