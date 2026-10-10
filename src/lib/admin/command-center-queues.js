@@ -7,7 +7,7 @@ export const COMMAND_CENTER_QUEUES = [
   { key: "high_score", label: "AI 高分查詢" },
   { key: "overdue", label: "逾期跟進" },
   { key: "unassigned", label: "未指派" },
-  { key: "live_agent", label: "問樓助手" },
+  { key: "live_agent", label: "問樓助手轉介" },
   { key: "whatsapp_blocked", label: "WhatsApp 受阻" },
   { key: "whatsapp", label: "WhatsApp" },
   { key: "all", label: "全部" },

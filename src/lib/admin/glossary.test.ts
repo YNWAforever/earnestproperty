@@ -19,7 +19,8 @@ function walk(dir: string, out: string[] = []) {
 }
 
 const rel = (file: string) => relative(root, file).replaceAll("\\", "/");
-const isSource = (file: string) => /\.tsx?$/.test(file) && !/\.test\.[tj]sx?$/.test(file);
+const isSource = (file: string) =>
+  /\.(tsx?|m?js)$/.test(file) && !/\.test\.(tsx?|m?js)$/.test(file);
 
 const adminFiles = [
   ...readdirSync(join(root, "src/routes"))
@@ -110,6 +111,8 @@ test("the approved status labels are the ones the table gives", () => {
 
 const REJECTED_VARIANTS = [
   "物業管理",
+  "銷售線索",
+  "支援參考編號",
   "追蹤連結",
   "WhatsApp 群發",
   "未分配",
@@ -187,7 +190,7 @@ const APPROVED_PLACEMENTS: Array<[file: string, text: string]> = [
   ["src/routes/admin.leads.tsx", '<SelectItem value="unassigned">未指派</SelectItem>'],
   ["src/routes/admin.leads.tsx", '<SelectItem value="none">未指派</SelectItem>'],
   ["src/lib/admin/command-center-queues.js", '{ key: "unassigned", label: "未指派" }'],
-  ["src/lib/admin/command-center-queues.js", '{ key: "live_agent", label: "問樓助手" }'],
+  ["src/lib/admin/command-center-queues.js", '{ key: "live_agent", label: "問樓助手轉介" }'],
   ["src/routes/admin.leads_.command-center.tsx", 'RECENT_HANDOFF: "問樓助手新轉介"'],
   ["src/routes/admin.leads_.command-center.tsx", 'label: "新問樓助手轉介"'],
   ["src/routes/admin.cms.tsx", 'title="確認發布內容"'],

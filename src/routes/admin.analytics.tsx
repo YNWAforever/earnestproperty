@@ -425,13 +425,13 @@ function AdminAnalyticsWorkspace() {
                         日期
                       </th>
                       <th scope="col" className="p-3">
-                        查詢
+                        查詢紀錄
                       </th>
                       <th scope="col" className="p-3">
-                        已連結線索
+                        已連結客戶查詢的查詢紀錄
                       </th>
                       <th scope="col" className="p-3">
-                        銷售線索
+                        客戶查詢
                       </th>
                       <th scope="col" className="p-3">
                         對話

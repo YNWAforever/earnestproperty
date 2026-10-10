@@ -321,6 +321,6 @@ function safeOperationsRefreshError(error: unknown): string {
     typeof error === "object" &&
     "requestId" in error &&
     typeof error.requestId === "string"
-    ? `未能重新載入營運總覽，請稍後再試。（支援參考編號：${error.requestId}）`
+    ? `未能重新載入營運總覽，請稍後再試。（參考編號：${error.requestId}）`
     : "未能重新載入營運總覽，請稍後再試。";
 }

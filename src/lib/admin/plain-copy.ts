@@ -55,6 +55,11 @@ export function linkReadinessText(readiness: string): string {
   return LINK_READINESS_LABELS[readiness] ?? "未有數據";
 }
 
+function dueText(value: unknown): string {
+  const formatted = typeof value === "string" ? formatHkDateTime(value) : null;
+  return formatted ? `期限 ${formatted}` : "期限未設定";
+}
+
 export function enquiryQueueRowText(r: Record<string, unknown>): string {
   return [
     String(r.public_listing_no ?? "一般查詢"),
@@ -62,6 +67,6 @@ export function enquiryQueueRowText(r: Record<string, unknown>): string {
     r.association_review
       ? "需要核實"
       : assignmentStateText(r.assignment_state as string | null | undefined, "待人手回覆"),
-    r.response_due_at ? `期限 ${hkTime(r.response_due_at as string, "期限未設定")}` : "期限未設定",
+    dueText(r.response_due_at),
   ].join(" · ");
 }

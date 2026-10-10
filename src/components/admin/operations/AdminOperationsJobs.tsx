@@ -65,7 +65,7 @@ const statusOptions: Array<{ value: "all" | JobStatus; label: string }> = [
 
 function operationsErrorMessage(error: unknown) {
   if (error instanceof OperationsClientError) {
-    return error.requestId ? `${error.message}（支援參考編號：${error.requestId}）` : error.message;
+    return error.requestId ? `${error.message}（參考編號：${error.requestId}）` : error.message;
   }
   return adminErrorMessage(error, "未能載入背景工作。");
 }

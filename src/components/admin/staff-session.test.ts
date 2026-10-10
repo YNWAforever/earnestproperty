@@ -2,7 +2,12 @@ import { describe, expect, test } from "bun:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { createStaffSessionStore, staffSessionDenialCopy } from "./staff-session";
+import {
+  confirmFirstLoginChecklistFor,
+  createStaffSessionStore,
+  navRolesForStaffSession,
+  staffSessionDenialCopy,
+} from "./staff-session";
 import type { StaffSession } from "@/lib/neon/admin-data.types";
 
 const adminSession: StaffSession = {
@@ -120,5 +125,84 @@ describe("staffSessionDenialCopy", () => {
   test("unauthorized asks for a fresh sign-in", () => {
     const copy = staffSessionDenialCopy("unauthorized");
     expect(copy.description).toContain("重新登入");
+  });
+});
+
+describe("navRolesForStaffSession", () => {
+  test("a lookup still loading lists no links", () => {
+    expect(navRolesForStaffSession(null, false)).toEqual([]);
+  });
+
+  test("a lookup that finished and failed keeps every link (the server still enforces)", () => {
+    expect(navRolesForStaffSession(null, true)).toBeNull();
+  });
+
+  test("a denial lists no links and a resolved session lists its roles", () => {
+    expect(navRolesForStaffSession({ status: "denied", reason: "forbidden" }, true)).toEqual([]);
+    expect(navRolesForStaffSession(adminSession, true)).toEqual(["admin"]);
+  });
+
+  test("the hook reports a lookup as settled only once it has answered for this user", async () => {
+    const store = createStaffSessionStore(async () => {
+      throw new Error("down");
+    });
+    const seen: Array<{ settled: boolean }> = [];
+    function Probe() {
+      const { settled } = store.useStaffSession("user-1");
+      seen.push({ settled });
+      return null;
+    }
+    renderToStaticMarkup(createElement(Probe));
+    expect(seen[0]?.settled).toBe(false);
+    await store.refresh("user-1");
+    renderToStaticMarkup(createElement(Probe));
+    expect(seen[1]?.settled).toBe(true);
+  });
+});
+
+describe("confirmFirstLoginChecklistFor", () => {
+  function setup(current: { id: string | null }, confirm: () => Promise<void>) {
+    const writes: string[] = [];
+    const hides: number[] = [];
+    return {
+      writes,
+      hides,
+      run: (staffId: string) =>
+        confirmFirstLoginChecklistFor({
+          staffId,
+          currentStaffId: () => current.id,
+          confirm,
+          cacheDone: (id) => writes.push(id),
+          hidePanel: () => hides.push(1),
+        }),
+    };
+  }
+
+  test("caches and hides when the account is unchanged", async () => {
+    const current = { id: "a" };
+    const t = setup(current, async () => {});
+    await t.run("a");
+    expect(t.writes).toEqual(["a"]);
+    expect(t.hides).toHaveLength(1);
+  });
+
+  test("an account switch during the save caches only under the captured id and keeps the new panel", async () => {
+    const current = { id: "a" };
+    const t = setup(current, async () => {
+      current.id = "b";
+    });
+    await t.run("a");
+    expect(t.writes).toEqual(["a"]);
+    expect(t.hides).toHaveLength(0);
+  });
+
+  test("a failed save writes nothing and reports the error", async () => {
+    const current = { id: "a" };
+    const t = setup(current, async () => {
+      throw new Error("x");
+    });
+    expect(await t.run("a")).toBe(false);
+    expect(t.writes).toEqual([]);
+    expect(t.hides).toHaveLength(0);
   });
 });

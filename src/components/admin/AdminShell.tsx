@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
@@ -34,7 +34,12 @@ import {
   withAttentionTitle,
 } from "@/components/admin/admin-attention";
 import { adminErrorText } from "@/components/admin/admin-error-text";
-import { staffSessionDenialCopy, useStaffSession } from "@/components/admin/staff-session";
+import {
+  confirmFirstLoginChecklistFor,
+  navRolesForStaffSession,
+  staffSessionDenialCopy,
+  useStaffSession,
+} from "@/components/admin/staff-session";
 import { Button } from "@/components/ui/button";
 import {
   confirmFirstLoginChecklist,
@@ -377,16 +382,14 @@ export function AdminShell({
   const {
     session: staffSession,
     loading: rechecking,
+    settled: staffLookupSettled,
     refresh: refreshStaffSession,
   } = useStaffSession(user?.id ?? null);
   const staffReady = staffSession?.status === "ok";
-  // A denial is a definite answer: no entry. null (not known yet, or the lookup failed) lists
-  // every entry; the server still enforces.
-  const staffRoles = staffReady
-    ? staffSession.roles
-    : staffSession?.status === "denied"
-      ? []
-      : null;
+  // A denial is a definite answer: no entry. While the lookup is still loading there are no
+  // links either; null (every entry) is only for a lookup that finished and failed, and the
+  // server still enforces.
+  const staffRoles = navRolesForStaffSession(staffSession, staffLookupSettled);
   const [showFirstLogin, setShowFirstLogin] = useState(false);
   const [checklistSaving, setChecklistSaving] = useState(false);
   const [checklistError, setChecklistError] = useState(false);
@@ -430,24 +433,27 @@ export function AdminShell({
       current = false;
     };
   }, [checklistStaffId]);
+  const checklistStaffIdRef = useRef<string | null>(checklistStaffId);
+  checklistStaffIdRef.current = checklistStaffId;
   async function confirmChecklist() {
     if (!checklistStaffId) return;
     setChecklistSaving(true);
     setChecklistError(false);
-    try {
-      await confirmFirstLoginChecklist();
-    } catch {
-      setChecklistSaving(false);
-      setChecklistError(true);
-      return;
-    }
-    try {
-      localStorage.setItem(`earnest:first-login-checklist:${checklistStaffId}`, "done");
-    } catch {
-      // cache is optional
-    }
+    const saved = await confirmFirstLoginChecklistFor({
+      staffId: checklistStaffId,
+      currentStaffId: () => checklistStaffIdRef.current,
+      confirm: confirmFirstLoginChecklist,
+      cacheDone: (staffId) => {
+        try {
+          localStorage.setItem(`earnest:first-login-checklist:${staffId}`, "done");
+        } catch {
+          // cache is optional
+        }
+      },
+      hidePanel: () => setShowFirstLogin(false),
+    });
     setChecklistSaving(false);
-    setShowFirstLogin(false);
+    if (!saved) setChecklistError(true);
   }
 
   // Waiting-work counts for the nav badges and the tab title. Only admin, manager and agent

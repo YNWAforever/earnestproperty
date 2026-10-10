@@ -1,7 +1,11 @@
 import { useEffect, useSyncExternalStore } from "react";
 
 import { fetchStaffSession } from "@/lib/neon/admin-data";
-import type { StaffSession, StaffSessionDenialReason } from "@/lib/neon/admin-data.types";
+import type {
+  StaffAccessRole,
+  StaffSession,
+  StaffSessionDenialReason,
+} from "@/lib/neon/admin-data.types";
 
 export type StaffSessionSnapshot = {
   userId: string | null;
@@ -84,6 +88,8 @@ export function createStaffSessionStore(fetcher: () => Promise<StaffSession>) {
     return {
       session: current.session,
       loading: current.loading,
+      /** A lookup for this user has answered (success or failure) and is not re-checking. */
+      settled: userId !== null && snapshot.userId === userId && !snapshot.loading,
       refresh: () => (userId ? refresh(userId) : Promise.resolve(null)),
     };
   }
@@ -94,6 +100,39 @@ export function createStaffSessionStore(fetcher: () => Promise<StaffSession>) {
 export const staffSessionStore = createStaffSessionStore(fetchStaffSession);
 
 /** Read (and lazily load) the signed-in user's staff session from any component. */
+export function navRolesForStaffSession(
+  session: StaffSession | null,
+  settled: boolean,
+): StaffAccessRole[] | null {
+  if (session?.status === "ok") return session.roles;
+  if (session?.status === "denied") return [];
+  // No answer yet: no links. Only a lookup that finished and failed shows everything (the
+  // server still enforces every read and write).
+  return settled ? null : [];
+}
+
+/**
+ * Save the first-login checklist for `staffId`. If the signed-in account changed while the
+ * save was in flight, the cache is still written under the captured id (the server saved it
+ * for that account) but the panel of the new account is left alone.
+ */
+export async function confirmFirstLoginChecklistFor(args: {
+  staffId: string;
+  currentStaffId: () => string | null;
+  confirm: () => Promise<unknown>;
+  cacheDone: (staffId: string) => void;
+  hidePanel: () => void;
+}): Promise<boolean> {
+  try {
+    await args.confirm();
+  } catch {
+    return false;
+  }
+  args.cacheDone(args.staffId);
+  if (args.currentStaffId() === args.staffId) args.hidePanel();
+  return true;
+}
+
 export function useStaffSession(userId: string | null) {
   return staffSessionStore.useStaffSession(userId);
 }

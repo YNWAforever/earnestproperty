@@ -112,6 +112,16 @@ test("no ISO timestamp or raw code renders in the enquiry context, link cards or
   expect(rowText).toContain(ASSIGNMENT_STATE_LABELS.executing);
   expect(rowText).toContain(`期限 ${formatHkDateTime("2026-09-12T12:00:00Z")}`);
 
+  const badDue = enquiryQueueRowText({
+    public_listing_no: "SYNTHETIC",
+    confirmed: false,
+    association_review: false,
+    assignment_state: "executing",
+    response_due_at: "not-a-date",
+  });
+  expect(badDue.match(/期限未設定/g)).toHaveLength(1);
+  expect(badDue).not.toContain("期限 期限未設定");
+
   const linkHtml = renderToStaticMarkup(createElement(LinkCardFacts, { link }));
   expectPlain(linkHtml);
   expect(linkHtml).toContain("開啟 未有數據 · 帶來查詢 未有數據");

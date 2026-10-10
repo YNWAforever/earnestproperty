@@ -29,7 +29,7 @@ import { canConfirmMigrationApply, migrationPlanShouldClear } from "./operations
 
 function migrationErrorMessage(error: unknown, fallback: string) {
   if (error instanceof OperationsClientError) {
-    return error.requestId ? `${fallback}（支援參考編號：${error.requestId}）` : fallback;
+    return error.requestId ? `${fallback}（參考編號：${error.requestId}）` : fallback;
   }
   return fallback;
 }
