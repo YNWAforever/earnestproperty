@@ -8,6 +8,7 @@ import {
   propertyDealLabel,
   activePropertyOfferings,
   selectPropertyOffering,
+  normalizePublicListingTitle,
 } from "./property-public";
 const sale = {
   id: "s",
@@ -104,4 +105,29 @@ test("VR claims need a supported HTTPS tour rather than a video or title keyword
   expect(verifiedVrTourUrl(tour)).toBe(tour);
   expect(publicPropertyTitle({ ...sale, title_zh: title, video_url: tour })).toBe(title);
   expect(verifiedVrTourUrl("http://my.matterport.com/show/?m=abc123")).toBeNull();
+});
+
+describe("a leading (晉誠地產…) tag is removed from the public title and nothing else changes", () => {
+  const rest = "9座極高層樓皇橋海!附設靚裝修!有匙即看!";
+  test("half-width brackets", () => {
+    expect(normalizePublicListingTitle(`(晉誠地產筍盤推介) ${rest}`)).toBe(rest);
+  });
+  test("full-width brackets", () => {
+    expect(normalizePublicListingTitle(`（晉誠地產筍盤推介）${rest}`)).toBe(rest);
+    expect(normalizePublicListingTitle(`（晉誠地產獨家)${rest}`)).toBe(rest);
+  });
+  test("a title with no tag stays identical", () => {
+    expect(normalizePublicListingTitle(rest)).toBe(rest);
+  });
+  test("a tag in the middle of the title is kept", () => {
+    const mid = "碧堤半島(晉誠地產推介)高層海景";
+    expect(normalizePublicListingTitle(mid)).toBe(mid);
+  });
+  test("an empty title keeps the fallback", () => {
+    expect(normalizePublicListingTitle("")).toBe("物業放盤");
+    expect(normalizePublicListingTitle("(晉誠地產筍盤推介)")).toBe("物業放盤");
+  });
+  test("publicPropertyTitle applies it too", () => {
+    expect(publicPropertyTitle({ ...sale, title_zh: `(晉誠地產筍盤推介) ${rest}` })).toBe(rest);
+  });
 });

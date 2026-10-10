@@ -1,5 +1,6 @@
 // Session-only presentation model; no Auth, DB, provider or real notification.
 import type { StaffNotificationItem } from "../../../src/lib/neon/staff-notifications.types";
+import { toStaffNotificationView } from "../../../src/lib/neon/staff-notification-view.js";
 const actor = sessionStorage.getItem("no-link-fixture-actor") ?? "agent-a";
 const storage = "no-link-fixture-staff-work-record";
 const notificationId = "60000000-0000-4000-8000-000000000001";
@@ -58,7 +59,10 @@ export async function fetchMyStaffNotifications(input: { status?: string }) {
   if (model.readFailure) throw Error("Synthetic staff work read unavailable");
   if (!allowed() || sessionStorage.getItem("no-link-fixture-staff-work") !== "true")
     return { available: true, items: [], nextCursor: null };
-  const item = record();
+  // The server's own view function, keyed on the synthetic session's role (FX-17a).
+  const role = (window as unknown as { noLinkFixture?: { membershipRole?: string } }).noLinkFixture
+    ?.membershipRole;
+  const item = toStaffNotificationView(record(), { diagnostics: role === "admin" });
   return {
     available: true,
     items: input.status === "pending" && item.workState !== "pending" ? [] : [item],

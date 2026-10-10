@@ -117,9 +117,10 @@ test("Phase3 isolated synthetic assignment and response evidence", { skip: !url 
     await t.test("AT30 manager lock returns visible protected exception in context", async () => {
       await request(c);
       const context = await readAssignmentContext(conv, actor, ports);
-      assert.equal(context.assignment_lock, true);
-      assert.equal(context.proposedStaffId, null);
-      assert.equal(context.proposalReason, "protected_owner_unavailable");
+      // FX-17a G-11: the lock and the proposal reason are admin-only diagnostics.
+      assert.equal(context.diagnostics.assignmentLock, true);
+      assert.equal(context.diagnostics.proposedStaffId, null);
+      assert.equal(context.diagnostics.proposalReason, "protected_owner_unavailable");
       assert.equal(typeof context.assignment_version, "number");
     });
     await t.test("AT28 unmapped staff cannot execute or become confirmed", async () => {

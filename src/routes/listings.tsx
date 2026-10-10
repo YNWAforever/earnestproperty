@@ -660,7 +660,7 @@ function FilterFields({
           />
         </div>
         {isAllDeals && (
-          <p className="mt-1.5 text-xs text-muted-foreground">
+          <p className="mt-1.5 text-sm text-muted-foreground">
             售價同月租唔同單位，揀「售盤」或「租盤」先可以設定價格。
           </p>
         )}
@@ -1018,7 +1018,7 @@ function ListingsErrorComponent({ error }: { error: unknown }) {
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           即時放盤資料暫時未能載入。可以重新載入，或返回搜尋首頁調整篩選條件再試一次。
         </p>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground">
           {error instanceof Error ? error.message : "暫時未能載入資料，請稍後再試。"}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">

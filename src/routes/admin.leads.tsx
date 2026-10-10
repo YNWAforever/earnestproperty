@@ -1,3 +1,4 @@
+import { adminErrorMessage } from "@/components/admin/admin-error-text";
 import {
   type ReactNode,
   useCallback,
@@ -27,6 +28,7 @@ import { ForwardedEnquiryForm } from "@/components/admin/whatsapp/ForwardedEnqui
 import { ForwardedEnquiryEvidence } from "@/components/admin/whatsapp/ForwardedEnquiryEvidence";
 import { RelatedLeadConversations } from "@/components/admin/whatsapp/RelatedLeadConversations";
 import { LeadChatTranscript } from "@/components/admin/LeadChatTranscript";
+import { leadTimelineHasNoFollowUp } from "@/lib/admin/crm-presentation";
 import { LeadContactEditor } from "@/components/admin/whatsapp/LeadContactEditor";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
@@ -1649,6 +1651,12 @@ function LeadDetailEditor({
         </div>
 
         <div className="mt-5 space-y-3">
+          {/* Only system flags (e.g. 疑似機械人) so far: still not followed up, rows shown below. */}
+          {lead.activities.length > 0 && leadTimelineHasNoFollowUp(lead.activities) ? (
+            <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              未有跟進紀錄
+            </p>
+          ) : null}
           {lead.activities.length === 0 ? (
             <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
               未有跟進紀錄
@@ -1979,6 +1987,7 @@ function formatActivityType(type: string) {
     call: "電話",
     viewing: "睇樓",
     follow_up: "跟進",
+    suspected_bot: "疑似機械人",
   };
   return labels[type] ?? type;
 }
@@ -2029,7 +2038,9 @@ function assertNoMutationError(result: unknown) {
 }
 
 function errorText(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return String(error);
+  // Bulk codes stay raw: the caller maps them through bulkErrorLabels.
+  const raw = error instanceof Error ? error.message : error;
+  if (typeof raw === "string" && Object.prototype.hasOwnProperty.call(bulkErrorLabels, raw))
+    return raw;
+  return adminErrorMessage(error);
 }

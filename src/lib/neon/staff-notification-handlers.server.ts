@@ -6,6 +6,9 @@ import {
   acknowledgeStaffAssignment,
   requestStaffAssignmentHelp,
 } from "./staff-notifications.server.ts";
+import { toStaffNotificationView } from "./staff-notification-view.js";
+import type { StaffNotificationViewPage } from "./staff-notifications.types";
+import { canReadDiagnostics } from "../control-plane/permissions.ts";
 const defaults = { requireStaffAccess, query: queryRows, transaction: transactionRows };
 export async function handleStaffNotificationRequest<A extends "list" | "ack" | "help">(
   request: Request,
@@ -23,11 +26,25 @@ export async function handleStaffNotificationRequest<A extends "list" | "ack" | 
   const actor = await deps.requireStaffAccess(request, ["admin", "manager", "agent"]);
   return (
     action === "list"
-      ? await listMyStaffNotifications(data, actor, deps.query)
+      ? await listViews(data, actor, deps.query)
       : action === "ack"
         ? await acknowledgeStaffAssignment(data, actor, deps)
         : await requestStaffAssignmentHelp(data, actor, deps)
   ) as A extends "list"
-    ? Awaited<ReturnType<typeof listMyStaffNotifications>>
+    ? Awaited<ReturnType<typeof listViews>>
     : Awaited<ReturnType<typeof acknowledgeStaffAssignment>>;
+}
+// FX-17a G-11: provider evidence is stripped here, on the server, for every role but admin.
+async function listViews(
+  data: unknown,
+  actor: Parameters<typeof listMyStaffNotifications>[1],
+  query: typeof queryRows,
+): Promise<StaffNotificationViewPage> {
+  const page = await listMyStaffNotifications(data, actor, query);
+  return {
+    ...page,
+    items: page.items.map((item) =>
+      toStaffNotificationView(item, { diagnostics: canReadDiagnostics(actor.roles) }),
+    ),
+  };
 }

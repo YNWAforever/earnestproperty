@@ -70,8 +70,14 @@ function attemptKey(parts: string[]) {
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 
-/** Plan copy table: 網站查詢 · 樓盤查詢 {listing_no} (樓盤查詢 when the number is unknown). */
+/** Plan copy table: 網站查詢 · 樓盤查詢 {listing_no} (樓盤查詢 when the number is unknown).
+ * A honeypot-flagged lead is still alerted, tagged 「（疑似機械人）」 (FX-14 B-05). */
 function sourceLabel(lead: Record<string, unknown>) {
+  const label = baseSourceLabel(lead);
+  return lead.suspected_bot === true ? `${label}（疑似機械人）` : label;
+}
+
+function baseSourceLabel(lead: Record<string, unknown>) {
   if (lead.source !== "website") return "新查詢";
   if (!lead.property_id) return "網站查詢";
   const listingNo = String(lead.listing_no ?? "").trim();
@@ -133,7 +139,7 @@ export async function handleLeadStaffAlert(
     await context.checkpoint();
     summary.unknown += (await reconcile(leadId, query, context)).unknown;
     [lead] = await query(
-      "SELECT l.id,l.source,l.property_id,p.listing_no,c.name FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE l.id=$1::uuid",
+      "SELECT l.id,l.source,l.property_id,p.listing_no,c.name,EXISTS(SELECT 1 FROM crm_activities a WHERE a.lead_id=l.id AND a.activity_type='suspected_bot') AS suspected_bot FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE l.id=$1::uuid",
       [leadId],
     );
     // lead_missing: attempt.lead_id references crm_leads, so no row can be kept;

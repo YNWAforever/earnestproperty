@@ -12,14 +12,10 @@ test(
   async (t) => {
     await withOwnedPostgres(async ({ query, transaction }) => {
       await mockOwnedServerDb(mock, query, transaction);
-      let duringGenerate = async () => {};
-      let providerOk = true;
       mock.module(new URL("src/lib/ai/provider.server.ts", repoRoot).href, {
         exports: {
-          embedAiTexts: async () => ({ ok: false }),
           generateAiText: async () => {
-            await duringGenerate();
-            return { ok: providerOk, text: "OLD_PRICE_UNSAFE" };
+            throw new Error("knowledge tests must not call a model");
           },
         },
       });
@@ -56,30 +52,10 @@ test(
         assert.equal((await knowledge.searchPublicKnowledge({ query: "測試海景" })).length, 0);
       });
       await indexCurrent();
-      await t.test(
-        "unchanged source retains its revision and can produce a cited answer",
-        async () => {
-          const [current] = await knowledge.searchPublicKnowledge({ query: "測試海景" });
-          assert.match(current.source_revision ?? "", /^[a-f0-9]{32}$/);
-          const answer = await knowledge.answerFromPublicKnowledge({ question: "測試海景" });
-          assert.equal(answer.answer, "OLD_PRICE_UNSAFE");
-          assert.equal(answer.citations.length, 1);
-        },
-      );
-      await t.test(
-        "provider fallback also discards excerpt if price changes in flight",
-        async () => {
-          providerOk = false;
-          duringGenerate = async () => {
-            await query("UPDATE properties SET price=12500000 WHERE id=$1", [property.id]);
-          };
-          const answer = await knowledge.answerFromPublicKnowledge({ question: "測試海景" });
-          assert.doesNotMatch(answer.answer, /售價|OLD_PRICE_UNSAFE/);
-          assert.deepEqual(answer.citations, []);
-          providerOk = true;
-          duringGenerate = async () => {};
-        },
-      );
+      await t.test("unchanged source retains its revision", async () => {
+        const [current] = await knowledge.searchPublicKnowledge({ query: "測試海景" });
+        assert.match(current.source_revision ?? "", /^[a-f0-9]{32}$/);
+      });
       await indexCurrent();
       await t.test("manual protected description changes full revision", async () => {
         await query("UPDATE properties SET description='人手核實新資料' WHERE id=$1", [
@@ -108,16 +84,6 @@ test(
         },
       );
       await indexCurrent();
-      await t.test("model in flight cannot release old answer or fallback excerpt", async () => {
-        duringGenerate = async () => {
-          await query("UPDATE properties SET price=12000000 WHERE id=$1", [property.id]);
-        };
-        const answer = await knowledge.answerFromPublicKnowledge({ question: "測試海景" });
-        assert.doesNotMatch(answer.answer, /OLD_PRICE_UNSAFE|10000000/);
-        assert.deepEqual(answer.citations, []);
-        duringGenerate = async () => {};
-      });
-      await indexCurrent();
       await t.test("withdrawal excludes indexed source despite stale=false", async () => {
         await query("UPDATE properties SET status='inactive' WHERE id=$1", [property.id]);
         assert.equal((await knowledge.searchPublicKnowledge({ query: "測試海景" })).length, 0);
@@ -138,6 +104,50 @@ test(
         assert.equal((await knowledge.searchPublicKnowledge({ query: "測試按揭" })).length, 1);
         await query("DELETE FROM faqs WHERE id=$1", [faq.id]);
         assert.equal((await knowledge.searchPublicKnowledge({ query: "測試按揭" })).length, 0);
+      });
+      await t.test("unpublished FAQ never in context", async () => {
+        const [faq] = await query(
+          "INSERT INTO faqs(scope,question,answer,published) VALUES('QA','FX11A 隱藏問題','FX11A_TOKEN',false) RETURNING id",
+        );
+        await knowledge.rebuildAiKnowledgeIndex();
+        assert.equal((await knowledge.searchPublicKnowledge({ query: "FX11A" })).length, 0);
+        const rows = await query(
+          "SELECT published, public_visibility FROM ai_knowledge_sources WHERE source_type='faq' AND source_id=$1",
+          [faq.id],
+        );
+        for (const row of rows) {
+          assert.equal(row.published, false);
+          assert.equal(row.public_visibility, "staff");
+        }
+      });
+      await t.test(
+        "unpublishing an indexed estate removes it from search before any rebuild",
+        async () => {
+          try {
+            await knowledge.rebuildAiKnowledgeIndex();
+            const before = await knowledge.searchPublicKnowledge({ query: "碧堤半島" });
+            assert.ok(before.filter((r) => r.source_type === "estate").length >= 1);
+            await query("UPDATE estates SET published=false WHERE slug='bellagio'");
+            const after = await knowledge.searchPublicKnowledge({ query: "碧堤半島" });
+            assert.equal(after.filter((r) => r.source_type === "estate").length, 0);
+          } finally {
+            await query("UPDATE estates SET published=true WHERE slug='bellagio'");
+          }
+        },
+      );
+      await t.test("listing chunk text carries HK$ and 呎 units", async () => {
+        await query(
+          "INSERT INTO properties(listing_no,canonical_property_no,title_zh,deal_type,district_slug,status,price,saleable_area,description) VALUES('FX11A-SALE','FX11A-GROUP','FX11A單位測試','sale','sham-tseng','active',6800000,512,'FX11A單位描述')",
+        );
+        await knowledge.rebuildAiKnowledgeIndex();
+        const chunks = await query(
+          "SELECT chunk_text FROM ai_knowledge_chunks WHERE chunk_text LIKE '%FX11A單位測試%'",
+        );
+        assert.ok(chunks.length >= 1);
+        const text = chunks.map((c) => c.chunk_text).join(" ");
+        assert.ok(text.includes("出售：$6,800,000（680萬）"), text);
+        assert.ok(text.includes("實用面積：512 呎"), text);
+        assert.ok(!text.includes("出售：6800000"), text);
       });
     });
   },

@@ -1,3 +1,4 @@
+import { adminErrorMessage } from "@/components/admin/admin-error-text";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Brain, RefreshCw, Save, Users } from "lucide-react";
@@ -709,7 +710,5 @@ function EligibilityBadge({
 }
 
 function errorText(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return "Action failed";
+  return adminErrorMessage(error);
 }

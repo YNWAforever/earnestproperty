@@ -229,9 +229,9 @@ for (const width of [1440, 1280, 768, 390])
     });
     test("workspace boundary: operations role narrowing clears private rows", async ({ page }) => {
       await openScope(page, "/admin/operations?tab=jobs");
-      await expect(page.getByText("ai.knowledge.repair", { exact: true })).toBeVisible();
+      await expect(page.getByText("更新 AI 知識庫", { exact: true })).toBeVisible();
       await changeScope(page);
-      await expect(page.getByText("ai.knowledge.repair", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("更新 AI 知識庫", { exact: true })).toHaveCount(0);
       await expect(page.getByRole("button", { name: `重試工作 ${job}`, exact: true })).toHaveCount(
         0,
       );
@@ -240,7 +240,7 @@ for (const width of [1440, 1280, 768, 390])
       page,
     }) => {
       await openScope(page, "/admin/operations?tab=jobs");
-      await expect(page.getByText("ai.knowledge.repair", { exact: true })).toBeVisible();
+      await expect(page.getByText("更新 AI 知識庫", { exact: true })).toBeVisible();
       await page.evaluate(() => (window.operationsFixture.mode = "deferred-command"));
       await page.getByRole("button", { name: `重試工作 ${job}`, exact: true }).click();
       await page.getByRole("button", { name: "重試", exact: true }).click();

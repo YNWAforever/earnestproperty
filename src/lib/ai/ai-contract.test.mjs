@@ -60,15 +60,12 @@ test("AI modules expose the expected public and server-only contracts", () => {
       ["AiKnowledgeChunk", "CrmAiProfile", "CrmSegment", "LiveAgentSession"],
     ],
     ["src/lib/ai/config.server.ts", ["getAiServerConfig", "isAiEnabled"]],
-    ["src/lib/ai/provider.server.ts", ["generateAiText", "generateAiJson", "embedAiTexts"]],
+    ["src/lib/ai/provider.server.ts", ["generateAiText", "generateAiJson"]],
     [
       "src/lib/ai/knowledge.ts",
       ["chunkKnowledgeText", "normalizeKnowledgeSource", "filterPublicKnowledgeChunks"],
     ],
-    [
-      "src/lib/ai/knowledge.server.ts",
-      ["rebuildAiKnowledgeIndex", "searchPublicKnowledge", "answerFromPublicKnowledge"],
-    ],
+    ["src/lib/ai/knowledge.server.ts", ["rebuildAiKnowledgeIndex", "searchPublicKnowledge"]],
     [
       "src/lib/ai/crm-rules.ts",
       ["classifyAiTagSafety", "canAutoApplyAiTag", "suggestFactualTags", "scoreLeadProfile"],
@@ -84,13 +81,9 @@ test("AI modules expose the expected public and server-only contracts", () => {
     ],
     [
       "src/lib/ai/live-agent.ts",
-      [
-        "canUseChunkForPublicAnswer",
-        "buildLiveAgentLeadInput",
-        "shouldOfferHumanHandoff",
-        "validateHandoffPhone",
-      ],
+      ["canUseChunkForPublicAnswer", "buildLiveAgentLeadInput", "validateHandoffPhone"],
     ],
+    ["src/lib/ai/live-agent-reply.ts", ["replyOffersHandoff"]],
     [
       "src/lib/ai/live-agent.server.ts",
       ["createLiveAgentSession", "answerLiveAgentMessage", "requestLiveAgentHandoff"],
@@ -113,6 +106,9 @@ test("AI modules expose the expected public and server-only contracts", () => {
       );
     }
   }
+  // FX-11b: the public handoff decision is replyOffersHandoff (live-agent-reply.ts); the old
+  // confidence-based helper is gone.
+  assert.doesNotMatch(read("src/lib/ai/live-agent.ts"), /shouldOfferHumanHandoff/);
 });
 
 test("AI knowledge rebuild checks job ownership around provider and database work", () => {
@@ -121,8 +117,10 @@ test("AI knowledge rebuild checks job ownership around provider and database wor
   const operation = functionSource(source, "runAiKnowledgeRebuildOperation");
   const checkpoints = rebuild.match(/await checkpoint\(\)/g) ?? [];
 
-  assert.ok(checkpoints.length >= 8, "rebuild should checkpoint throughout each source");
-  assert.match(rebuild, /await checkpoint\(\);\s*const embeddings =[\s\S]*?await embedAiTexts/);
+  // FX-11a (E-10): 7, not 8 -- the pair of checkpoints around the removed embedding
+  // call became one.
+  assert.ok(checkpoints.length >= 7, "rebuild should checkpoint throughout each source");
+  assert.doesNotMatch(rebuild, /embedAiTexts|embedding model/i);
   assert.match(
     rebuild,
     /await checkpoint\(\);\s*const publishedChunks = await replaceKnowledgeChunks/,
@@ -132,6 +130,28 @@ test("AI knowledge rebuild checks job ownership around provider and database wor
   assert.match(publication, /pg_advisory_xact_lock/);
   assert.match(publication, /current_source\.source_revision=\$3/);
   assert.match(operation, /rebuild\(\{ checkpoint: deps\.checkpoint \}\)/);
+});
+
+// FX-11a (E-10): nothing ever read the stored vectors, so the rebuild stopped paying
+// for them. The provider, the index and the config no longer know about embeddings.
+test("knowledge rebuild never calls an embedding provider", () => {
+  const provider = read("src/lib/ai/provider.server.ts");
+  const knowledge = read("src/lib/ai/knowledge.server.ts");
+  const config = read("src/lib/ai/config.server.ts");
+  assert.doesNotMatch(provider, /embedAiTexts|\/embeddings/);
+  assert.doesNotMatch(knowledge, /embedAiTexts/);
+  assert.doesNotMatch(knowledge, /EMBEDDING_DIMENSIONS/);
+  assert.doesNotMatch(config, /EMBEDDING_MODEL|embeddingModel/);
+});
+
+test("the rebuild server function enqueues the job and never rebuilds in-request", () => {
+  const rebuild = functionSource(
+    read("src/lib/neon/admin-data.server.ts"),
+    "rebuildAdminAiKnowledge",
+  );
+  assert.match(rebuild, /jobType: "ai\.knowledge\.rebuild"/);
+  assert.match(rebuild, /`ai\.knowledge\.rebuild:\$\{activeWindow\}`/);
+  assert.doesNotMatch(rebuild, /rebuildAiKnowledgeIndex/);
 });
 
 test("server-only AI secrets stay out of browser-safe modules", () => {
@@ -209,10 +229,9 @@ test("client secret scan rejects a real source sentinel for every protected secr
   }
 });
 
-test("public AI answers are sourced only from public knowledge, not CRM or WhatsApp data", () => {
+test("public knowledge search reads only public, published, current chunks", () => {
   const source = read("src/lib/ai/knowledge.server.ts");
   const search = functionSource(source, "searchPublicKnowledge");
-  const answer = functionSource(source, "answerFromPublicKnowledge");
 
   assert.match(search, /c\.visibility = 'public'/);
   assert.match(search, /s\.public_visibility = 'public'/);
@@ -222,8 +241,6 @@ test("public AI answers are sourced only from public knowledge, not CRM or Whats
   assert.match(source, /knowledgeSearchTokens/);
   assert.match(source, /\\u3400-\\u9fff/);
   assert.doesNotMatch(search, /\b(?:crm_|whatsapp_)/i);
-  assert.match(answer, /searchPublicKnowledge\(\{ query: input\.question, limit: 6 \}\)/);
-  assert.doesNotMatch(answer, /\b(?:crm_|whatsapp_|fetchCrm|Conversation)/i);
 });
 
 test("public live-agent APIs validate sessions and expose only public session fields", () => {

@@ -4,6 +4,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { AdminConversationDetail } from "@/lib/neon/admin-data.types";
 import { OptOutEvidenceNotice } from "./OptOutEvidenceNotice";
 import { nearMissConsentPreset } from "./safety-copy";
+import { CustomerConfirmLine } from "@/components/admin/CustomerConfirmLine";
+import { customerConfirmLabel } from "@/lib/admin/customer-label";
 
 const MIN = 60 * 1000;
 const iso = (offsetMs: number) => new Date(Date.now() + offsetMs).toISOString();
@@ -181,4 +183,26 @@ test("near-miss is not shown when the contact is already opted out", () => {
   expect(html).toContain("已退訂推廣");
   expect(html).not.toContain("可能要求退訂");
   expect(html).not.toContain("不是退訂");
+});
+
+test("不是退訂 and the consent dialog name the customer with the phone masked", () => {
+  const line = (d: AdminConversationDetail) =>
+    renderToStaticMarkup(
+      createElement(CustomerConfirmLine, {
+        customer: customerConfirmLabel({
+          name: d.customer_display_name ?? d.name,
+          phone: d.phone,
+        }),
+      }),
+    );
+  const named = line(detail({ customer_display_name: "陳小姐", phone: "+852 9123 4567" }));
+  expect(named).toContain("客戶：陳小姐（••••4567）");
+  expect(named).not.toContain("9123");
+  expect(line(detail({ name: null, phone: null }))).toContain("客戶：WhatsApp 客戶（未有電話）");
+  // The list's display name falls back to the phone; the line never shows it.
+  const phoneAsName = line(
+    detail({ customer_display_name: "+852 9123 4567", phone: "+852 9123 4567" }),
+  );
+  expect(phoneAsName).toContain("客戶：WhatsApp 客戶（••••4567）");
+  expect(phoneAsName).not.toContain("9123");
 });

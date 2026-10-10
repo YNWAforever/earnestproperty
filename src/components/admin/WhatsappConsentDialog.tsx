@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { setWhatsappMarketingConsent } from "@/lib/neon/admin-data";
+import type { CustomerConfirmLabel } from "@/lib/admin/customer-label";
+import { CustomerConfirmLine } from "@/components/admin/CustomerConfirmLine";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -25,8 +27,11 @@ export function WhatsappConsentDialog({
   onSaved,
   preset,
   triggerLabel = "管理 WhatsApp 推廣同意",
+  customer,
 }: {
   contactId: string;
+  /** Who this contact is, from the same conversation detail that supplies contactId. */
+  customer?: CustomerConfirmLabel;
   onSaved: () => void;
   /** Prefills the form (FX-08 near-miss confirm). Omitted: the dialog behaves as before. */
   preset?: WhatsappConsentPreset;
@@ -79,6 +84,7 @@ export function WhatsappConsentDialog({
             客戶查詢並不等於同意推廣。請先核實客戶意願，並填寫內部憑證編號。
           </DialogDescription>
         </DialogHeader>
+        {customer ? <CustomerConfirmLine customer={customer} /> : null}
         <label className="grid gap-2">
           客戶意願
           <select

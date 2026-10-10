@@ -783,3 +783,72 @@ for (const width of [1440, 1280, 768, 390]) {
     ).toBe(0);
   });
 }
+// FX-17a G-26: 停用 asks first and names the placement; 重新啟用 stays one click.
+async function setupOneLink(page: Page, width: number) {
+  await page.addInitScript(() => sessionStorage.setItem("owned-link-bulk-links", "one"));
+  await setup(page, width);
+  await expect(page.getByText("/w/Syn17aA", { exact: true })).toBeVisible();
+}
+const linkSaves = (page: Page) =>
+  page.evaluate(() => window.ownedLinkBulk.calls.filter((c) => c.name === "saveLink"));
+for (const width of [1440, 375]) {
+  test(`停用 asks first, names the placement, and cancelling sends no save ${width}`, async ({
+    page,
+  }) => {
+    await setupOneLink(page, width);
+    const card = page.getByRole("listitem").filter({ hasText: "/w/Syn17aA" });
+    await card.getByRole("button", { name: "停用", exact: true }).click();
+    const dialog = page.getByRole("alertdialog", { name: "停用此來源連結？" });
+    await expect(dialog).toContainText(
+      "停用後，客戶開啟此連結會改為聯絡公司總台，查詢不會再記錄為來自這個投放。之後可重新啟用。",
+    );
+    const rows = await dialog
+      .locator("dl > div")
+      .evaluateAll((items) => items.map((item) => item.textContent));
+    expect(rows).toEqual([
+      "樓盤：A000001 · 售",
+      "投放位置：28hse · 4033349",
+      "連結：/w/Syn17aA",
+      "指定同事：合成同事甲",
+    ]);
+    await page.screenshot({
+      path: `.audit/fx17a-safer-actions/link-disable-${width}.png`,
+      animations: "disabled",
+    });
+    await dialog.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(card.getByRole("button", { name: "停用", exact: true })).toBeFocused();
+    await card.getByRole("button", { name: "停用", exact: true }).click();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    expect(await linkSaves(page)).toEqual([]);
+    await expect(card).toContainText("可用 · v3");
+  });
+  test(`confirming 停用 saves once with the expected version ${width}`, async ({ page }) => {
+    await setupOneLink(page, width);
+    const card = page.getByRole("listitem").filter({ hasText: "/w/Syn17aA" });
+    await card.getByRole("button", { name: "停用", exact: true }).click();
+    const dialog = page.getByRole("alertdialog", { name: "停用此來源連結？" });
+    await dialog.getByRole("button", { name: "停用", exact: true }).evaluate((button) => {
+      (button as HTMLButtonElement).click();
+      (button as HTMLButtonElement).click();
+    });
+    await expect(dialog).toHaveCount(0);
+    await expect(card).toContainText("停用 · v4");
+    const saves = await linkSaves(page);
+    expect(saves).toHaveLength(1);
+    expect(saves[0].input).toMatchObject({
+      id: "71000000-0000-4000-8000-000000000500",
+      expectedVersion: 3,
+      enabled: false,
+    });
+    // Re-enabling restores routing, so it stays one click (owner default).
+    await card.getByRole("button", { name: "重新啟用", exact: true }).click();
+    await expect(page.getByRole("alertdialog")).toHaveCount(0);
+    await expect(card).toContainText("可用 · v5");
+    expect((await linkSaves(page)).map((c) => c.input)).toMatchObject([
+      { expectedVersion: 3, enabled: false },
+      { expectedVersion: 4, enabled: true },
+    ]);
+  });
+}

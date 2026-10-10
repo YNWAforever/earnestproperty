@@ -46,7 +46,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SITE_URL, canonicalLink } from "@/content/seo";
-import { organizationRef } from "@/lib/schema";
+import { listingOffersSchema, organizationRef, residenceSchema } from "@/lib/schema";
 import {
   fetchPropertyByListingNo,
   fetchSimilarListings,
@@ -419,33 +419,12 @@ function PropertyPage() {
 
   const propertyUrl = `${SITE_URL}/property/${publicPropertyNo(property)}`;
   const residenceId = `${propertyUrl}#residence`;
-  // A sold/rented listing has no active offering; describe the last known
-  // deal as SoldOut rather than emitting `offers: []`, which is invalid.
-  const schemaOffers = offerings.length
-    ? offerings.map((offer) => ({
-        "@type": "Offer",
-        price: Number(offer.deal_type === "rent" ? offer.rent : offer.price) || undefined,
-        priceCurrency: "HKD",
-        businessFunction:
-          offer.deal_type === "rent"
-            ? "http://purl.org/goodrelations/v1#LeaseOut"
-            : "http://purl.org/goodrelations/v1#Sell",
-        availability: "https://schema.org/InStock",
-        url: propertyUrl,
-        seller: organizationRef(),
-        itemOffered: { "@id": residenceId },
-      }))
-    : [
-        {
-          "@type": "Offer",
-          price: Number(isRent ? property.rent : property.price) || undefined,
-          priceCurrency: "HKD",
-          availability: "https://schema.org/SoldOut",
-          url: propertyUrl,
-          seller: organizationRef(),
-          itemOffered: { "@id": residenceId },
-        },
-      ];
+  const schemaOffers = listingOffersSchema({
+    propertyUrl,
+    residenceId,
+    offerings,
+    fallback: { isRent, price: property.price, rent: property.rent },
+  });
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -463,24 +442,18 @@ function PropertyPage() {
         offers: schemaOffers,
         provider: organizationRef(),
       },
-      {
-        "@type": "Residence",
-        "@id": residenceId,
+      residenceSchema({
+        residenceId,
+        propertyUrl,
         name: safeTitle,
-        url: propertyUrl,
-        ...(realImages.length ? { image: realImages } : {}),
-        address: {
-          "@type": "PostalAddress",
-          streetAddress: safeAddress ?? undefined,
-          addressLocality: estate?.name_zh ?? undefined,
-          addressRegion: "Hong Kong",
-        },
-        floorSize: property.saleable_area
-          ? { "@type": "QuantitativeValue", value: property.saleable_area, unitCode: "FTK" }
-          : undefined,
-        numberOfRooms: property.bedrooms ?? undefined,
-        numberOfBathroomsTotal: property.bathrooms ?? undefined,
-      },
+        images: realImages,
+        streetAddress: safeAddress,
+        districtSlug: estate?.district_slug ?? property.district_slug ?? null,
+        estate: estate ? { name_zh: estate.name_zh, lat: estate.lat, lng: estate.lng } : null,
+        saleableArea: property.saleable_area,
+        bedrooms: property.bedrooms,
+        bathrooms: property.bathrooms,
+      }),
       {
         "@type": "BreadcrumbList",
         itemListElement: [
@@ -518,7 +491,7 @@ function PropertyPage() {
         : null;
 
   return (
-    <Container className="py-8 pb-32 lg:pb-8">
+    <Container className="py-8">
       {/* Breadcrumb + actions */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Breadcrumbs
@@ -553,7 +526,7 @@ function PropertyPage() {
           </span>
           <FreshnessStamp updatedAt={property.updated_at} />
         </div>
-        <h1 id="property-title" className="mt-3 text-3xl font-bold tracking-tight">
+        <h1 id="property-title" className="mt-3 text-3xl font-bold">
           {safeTitle}
         </h1>
         {safeAddress ? (
@@ -918,9 +891,6 @@ function PropertyPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm leading-7 text-muted-foreground">
-                    此屋苑的交通資料仍待核對。請按實際出發地及時段查閱路線。
-                  </p>
                   <Link
                     to="/castle-peak-road"
                     className="mt-4 inline-block text-sm text-primary underline"
@@ -983,7 +953,7 @@ function PropertyPage() {
             )}
 
             {/* Disclaimer */}
-            <p className="mt-8 text-xs leading-relaxed text-muted-foreground">
+            <p className="mt-8 text-sm leading-relaxed text-muted-foreground">
               免責聲明：以上資料只供參考，實際以業主提供及現場為準。本公司不會就資料的準確性、完整性負責。圖片可能經美化處理，買家或租客應親身核實所有資料。
             </p>
           </>

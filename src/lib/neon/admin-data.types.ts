@@ -645,10 +645,7 @@ export type AdminAiKnowledgeStatus = {
   lastIndexedAt: string | null;
 };
 
-export type AdminAiKnowledgeRebuildResult = {
-  indexedSources: number;
-  indexedChunks: number;
-};
+export type AdminAiKnowledgeRebuildResult = { jobId: string; status: string };
 
 export type AdminLeadAiProfile = {
   analysis?: Partial<import("../ai/ai-types").CrmAnalysisRunMeta> & {

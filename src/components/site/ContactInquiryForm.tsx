@@ -20,6 +20,7 @@ import {
   submitContactInquiry,
 } from "@/lib/contact-inquiry-form";
 import { FormStatus, type FormStatusState } from "@/components/site/FormStatus";
+import { HoneypotField } from "@/components/site/HoneypotField";
 
 const CONTACT_FORM_STATUS_ID = "contact-form-status";
 
@@ -75,6 +76,7 @@ export function ContactInquiryForm() {
         raw,
         consentWhatsapp,
         submitFn: (payload) => createWebsiteInquiry({ data: payload }),
+        website: fd.get("website") ?? undefined,
       });
 
       switch (outcome.status) {
@@ -102,7 +104,7 @@ export function ContactInquiryForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 max-w-md space-y-3">
+    <form onSubmit={handleSubmit} className="relative mt-4 max-w-md space-y-3">
       <div>
         <Label htmlFor="contact-name">姓名 *</Label>
         <Input id="contact-name" name="name" required maxLength={120} placeholder="陳先生" />
@@ -189,6 +191,8 @@ export function ContactInquiryForm() {
           我同意透過 WhatsApp 接收樓盤資訊及推廣訊息。
         </Label>
       </div>
+      {/* After the last visible field: a keyboard "next" between real fields never lands in it. */}
+      <HoneypotField />
       <Button
         type="submit"
         className="w-full sm:w-auto"
@@ -198,7 +202,7 @@ export function ContactInquiryForm() {
         {submitting ? "提交中…" : "提交查詢"}
       </Button>
       <FormStatus state={status} id={CONTACT_FORM_STATUS_ID} />
-      <p className="text-xs text-muted-foreground">
+      <p className="text-sm text-muted-foreground">
         按提交即表示同意我們透過上述聯絡方式回覆查詢。
         如你已曾登記，提交查詢不會更改現有推廣訊息設定；職員會另行確認你的要求。
       </p>

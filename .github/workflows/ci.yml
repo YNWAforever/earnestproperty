@@ -85,9 +85,11 @@ jobs:
       - run: npm run test:admin-daily-work:ui
       - run: npm run test:admin-lead-conflict:ui
       - run: npm run test:admin-campaign-review:ui
+      - run: npm run test:admin-leave-guards:ui
       - run: npm run test:admin-performance:ui
       - run: npm run test:admin-link-bulk:ui
       - run: npm run test:public-forms:ui
+      - run: npm run test:live-agent:ui
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
@@ -155,6 +157,7 @@ jobs:
       - run: npm run test:admin-golden:db
       - run: npm run test:lead-integrity:db
       - run: npm run test:ai-knowledge:db
+      - run: npm run test:live-agent:eval:db
       - run: npm run test:crm-analysis:db
       - run: npm run test:conversation-assist:db
       - run: npm run test:whatsapp-setup:db

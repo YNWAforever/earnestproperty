@@ -33,6 +33,7 @@ import { LiveAgentLauncher } from "@/components/live-agent/LiveAgentLauncher";
 import { SiteHeader } from "@/components/site/SiteHeader";
 import { SiteFooter } from "@/components/site/SiteFooter";
 import { StickyWhatsAppBar } from "@/components/site/StickyWhatsAppBar";
+import { MOBILE_ACTION_BAR_RESERVE_CLASS } from "@/components/site/mobile-action-bar";
 import { Toaster } from "@/components/ui/sonner";
 import { pageSeo, SITE_NAME, SITE_OG_IMAGE, SITE_THEME_COLOR, SITE_URL } from "@/content/seo";
 import { isNotFound, notFoundHead } from "@/lib/not-found-head";
@@ -46,9 +47,7 @@ function NotFoundComponent() {
     <div className="mx-auto max-w-7xl px-4 py-24 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-md text-center">
         <p className="text-sm font-semibold text-primary">404</p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight text-primary sm:text-4xl">
-          找不到這個頁面
-        </h1>
+        <h1 className="mt-3 text-3xl font-bold text-primary sm:text-4xl">找不到這個頁面</h1>
         <p className="mt-4 text-base leading-7 text-muted-foreground">
           你要找的頁面可能已移除或連結已更新。可以返回首頁，或直接搜尋放盤。
         </p>
@@ -152,11 +151,11 @@ function RootComponent() {
 
   const content = (
     <>
-      {/* The sticky WhatsApp bar is `fixed` at bottom-16 (above the 問樓助手
-          bubble) and ~52px tall, so the page needs ~116px reserved -- pb-16
-          only cleared the offset, leaving the footer's last lines under the
-          bar with no way to scroll past it. */}
-      <div className={`flex min-h-screen flex-col ${showStickyWhatsAppBar ? "pb-32 lg:pb-0" : ""}`}>
+      {/* Whenever a mobile bottom bar is in the DOM (the generic sticky bar, or the
+          property page's own), the page reserves exactly its height below lg and the
+          launcher docks into its right slot (mobile-action-bar.ts). Without that, the
+          footer's last links sit under the fixed bar with no way to scroll clear. */}
+      <div className={`flex min-h-screen flex-col ${MOBILE_ACTION_BAR_RESERVE_CLASS}`}>
         {showSiteChrome && (
           <script
             type="application/ld+json"
@@ -207,7 +206,7 @@ function isPublicWidgetPath(pathname: string) {
 }
 
 // /property/$listingNo has its own listing-aware mobile action bar
-// (PropertyDecisionActions) with the same wa.me + bottom-16 convention, so the
+// (PropertyDecisionActions, also bottom-0 with the launcher slot), so the
 // generic bar would duplicate it. /admin, /auth, /account, /dashboard are
 // staff/system surfaces, not conversion pages.
 function shouldShowStickyWhatsAppBar(pathname: string) {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const loadKnowledge = () => import("./knowledge.ts");
@@ -163,7 +164,6 @@ test("scoreLeadProfile gives higher score to opted-in urgent matched leads", asy
     budget_min: null,
     budget_max: null,
     preferred_estates: [],
-    timeline: null,
     opt_in_whatsapp: false,
     last_activity_days: 90,
   });
@@ -172,13 +172,34 @@ test("scoreLeadProfile gives higher score to opted-in urgent matched leads", asy
     budget_min: 8000000,
     budget_max: 10000000,
     preferred_estates: ["bellagio"],
-    timeline: "30_days",
     opt_in_whatsapp: true,
     last_activity_days: 1,
   });
 
   assert.ok(warm > cold);
   assert.ok(warm <= 100);
+});
+
+test("lead score ignores the model-guessed timeline", async () => {
+  const { scoreLeadProfile } = await loadCrmRules();
+  const lead = {
+    intent: "buyer",
+    budget_min: 8000000,
+    budget_max: 10000000,
+    preferred_estates: ["bellagio"],
+    opt_in_whatsapp: false,
+    last_activity_days: 30,
+  };
+  const withoutTimeline = scoreLeadProfile(lead);
+  const withTimeline = scoreLeadProfile({ ...lead, timeline: "30_days" });
+
+  assert.equal(withTimeline, withoutTimeline);
+  const source = await readFile(new URL("./crm-rules.ts", import.meta.url), "utf8");
+  // Only the function's code counts: a comment elsewhere in the file may mention the timeline.
+  const scoreFunction = source.match(/export function scoreLeadProfile\([\s\S]*?\r?\n\}\r?\n/);
+  assert.ok(scoreFunction, "scoreLeadProfile not found in crm-rules.ts");
+  const code = scoreFunction[0].replace(/\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
+  assert.doesNotMatch(code, /\btimeline\b/);
 });
 
 test("parseSegmentPromptToFilters maps common Hong Kong property audience language", async () => {
@@ -282,7 +303,8 @@ test("blast recipients exclude no-consent and opted-out segment contacts with cl
 });
 
 test("public live agent only uses public chunks and offers handoff for uncertain answers", async () => {
-  const { canUseChunkForPublicAnswer, shouldOfferHumanHandoff } = await loadLiveAgent();
+  const { canUseChunkForPublicAnswer } = await loadLiveAgent();
+  const { replyOffersHandoff } = await import("./live-agent-reply.ts");
   assert.equal(
     canUseChunkForPublicAnswer({ visibility: "public", stale: false, published: true }),
     true,
@@ -299,8 +321,14 @@ test("public live agent only uses public chunks and offers handoff for uncertain
     canUseChunkForPublicAnswer({ visibility: "private", stale: false, published: true }),
     false,
   );
-  assert.equal(shouldOfferHumanHandoff({ confidence: 0.25, userAskedForHuman: false }), true);
-  assert.equal(shouldOfferHumanHandoff({ confidence: 0.9, userAskedForHuman: true }), true);
+  assert.equal(replyOffersHandoff({ kind: "no_match", cards: [] }, false), true);
+  assert.equal(
+    replyOffersHandoff(
+      { kind: "faq", cards: [{ type: "faq", title: "問題", lines: ["答案"], href: null }] },
+      true,
+    ),
+    true,
+  );
 });
 
 test("buildLiveAgentLeadInput creates CRM-safe lead payload", async () => {

@@ -9,24 +9,27 @@ still a stub. Written against `main` at the point all of P0–P7 had merged
 
 ### 1. Vercel AI Gateway — `src/lib/ai/provider.server.ts`
 
+> 2026-10-08 FX-11a: no embeddings any more, and `AI_GATEWAY_EMBEDDING_MODEL` is
+> removed. The client has a 15 s total budget with 1 retry, and each failure
+> logs `[ai] provider_failed` with its `reason` and `status`.
+
 Hits `https://ai-gateway.vercel.sh/v1` directly via `fetch` (OpenAI-compatible
-REST, not the Vercel AI SDK) for both chat completions and embeddings.
-Config: `AI_GATEWAY_API_KEY`, `AI_GATEWAY_MODEL` (chat), and
-`AI_GATEWAY_EMBEDDING_MODEL` (embeddings) — all read in
+REST, not the Vercel AI SDK) for chat completions only.
+Config: `AI_GATEWAY_API_KEY` and `AI_GATEWAY_MODEL` (chat), both read in
 `src/lib/ai/config.server.ts`. The model is a plain `"provider/model"` string
 passed straight through with no hardcoded model name in code, matching AI
-Gateway's own convention. `fetchWithRetry` adds a 20s hard timeout and up to
-2 retries with backoff on 429/5xx.
+Gateway's own convention. Each call has a 15 s total budget, with at most 1
+retry, and only when enough of the budget is left. A failure logs
+`[ai] provider_failed` with `{ reason, status }`, and the caller gets its fallback.
 
 **What it powers:**
-- `src/lib/ai/knowledge.server.ts` — the live agent's knowledge base:
-  `embedAiTexts()` embeds content chunks (from `chunkKnowledgeText()`,
-  `knowledge.ts`) into `ai_knowledge_chunks`, `answerFromPublicKnowledge()`
-  does the retrieval + `generateAiText()` completion at query time. This is
-  the RAG layer behind `src/lib/ai/live-agent.server.ts` (the public
-  live-agent widget's actual answers) and `admin.cms-copilot` — not a stub;
-  real embeddings, real completions, gated only by whether the env vars are
-  set (`enabled: Boolean(apiKey && textModel)`).
+- `src/lib/ai/knowledge.server.ts` — the staff knowledge base: content chunks
+  (from `chunkKnowledgeText()`, `knowledge.ts`) are written to
+  `ai_knowledge_chunks` for staff tools such as `admin.cms-copilot`. Since
+  2026-10-08 (FX-11a) the rebuild generates no embeddings and makes no provider call. The public live-agent
+  widget no longer uses it: since FX-11b its replies are deterministic
+  (`src/lib/ai/live-agent-reply.server.ts`), built only from published FAQs,
+  published estates and the public listing search, with no model call.
 - `src/lib/ai/crm-enrichment.server.ts` — AI tagging/classification of CRM
   leads (`CrmAiProfile`/`CrmAiTag`), with a safety gate
   (`classifyAiTagSafety`/`canAutoApplyAiTag`) before anything auto-applies.
@@ -57,8 +60,8 @@ model-only generation without it.
 admin bootstrap, the Cloudflare Container MLS pipeline, and YouTube sync —
 thoroughly, each with a comment explaining what breaks if it's unset. It has
 **no entry at all** for `AI_GATEWAY_API_KEY`, `AI_GATEWAY_MODEL`,
-`AI_GATEWAY_EMBEDDING_MODEL`, `OPENCODE_GO_BASE_URL`, `OPENCODE_GO_API_KEY`,
-`OPENCODE_GO_MODEL`, or `TAVILY_API_KEY` — all 7 are real, live-checked
+`OPENCODE_GO_BASE_URL`, `OPENCODE_GO_API_KEY`,
+`OPENCODE_GO_MODEL`, or `TAVILY_API_KEY` — all 6 are real, live-checked
 (`process.env.X` grep-confirmed) environment variables gating genuinely built
 features. A developer following `.env.example` alone would never learn these
 exist. **Recommended next step, not done as part of this handoff**: add an
@@ -70,8 +73,8 @@ format constraints).
 
 | Feature | Status |
 |---|---|
-| Live agent (public widget) knowledge answers | **Real** — AI Gateway chat completion over embedded knowledge chunks |
-| Live agent → human handoff | **Real** — `shouldOfferHumanHandoff()` (`live-agent.ts`), routes to a real staff inbox conversation |
+| Live agent (public widget) answers | **Real, deterministic** (FX-11b) — fixed copy plus cards from published FAQs, published estates and the public listing search (`live-agent-reply.server.ts`); no model call |
+| Live agent → human handoff | **Real** — `replyOffersHandoff()` (`live-agent-reply.ts`), routes to a real staff inbox conversation |
 | Admin CMS content copilot (estate/article copy drafting) | **Real** — opencode-go provider, optional Tavily grounding |
 | CRM AI lead tagging/scoring | **Real**, with an explicit auto-apply safety gate — not everything the model suggests gets applied automatically |
 | Analytics event `track()` (`src/lib/analytics/events.ts`, P7d) | **Deliberately a stub** — real taxonomy, real wiring at 18 call sites, but `track()` itself is a DEV-only `console.debug`, a true no-op in production. No analytics provider has been chosen yet (master plan open input #11); this is not an oversight, it's the documented scope of P7d. |

@@ -983,6 +983,88 @@ test("FX-08 unknown outcomes (owned Postgres)", { timeout: 300000 }, async (t) =
         },
       );
 
+      await t.test(
+        "FX-17a I-1: the template confirmation's digits are the member id the send goes to",
+        async () => {
+          const { fetchAdminConversation } = await import("../neon/admin-data.server.ts");
+          const { templateRecipientLabel, customerConfirmLabel } =
+            await import("../admin/customer-label.ts");
+          const [template] = await query(
+            "INSERT INTO whatsapp_templates(element_name,status) VALUES('fx17a_recipient','active') RETURNING id",
+          );
+          // A conversation whose CRM phone (edited, ••••2222) differs from its member (••••3333).
+          const conversation = async (member) => {
+            const contactId = randomUUID();
+            const conversationId = randomUUID();
+            await query(
+              "INSERT INTO crm_contacts(id,name,phone,source,whatsapp_member_id,last_inbound_at) VALUES($1,'合成收件人','+852 9111 2222','test',$2,now())",
+              [contactId, member],
+            );
+            await query(
+              `INSERT INTO whatsapp_conversations(id,contact_id,woztell_member_id,channel_id,last_message_at,last_inbound_at,assigned_agent_id,confirmed_staff_id)
+               VALUES($1,$2,$3,$4,now(),now(),$5,$5)`,
+              [conversationId, contactId, member, CHANNEL, MANAGER],
+            );
+            return conversationId;
+          };
+          // The real template enqueue and dispatch reservation; only the provider send is fake.
+          const sendTemplate = async (conversationId) => {
+            const { id: intentId } = await enqueueOutboundIntent(
+              {
+                requestId: randomUUID(),
+                conversationId,
+                kind: "template",
+                payload: { templateId: template.id },
+              },
+              MANAGER,
+              null,
+            );
+            const [job] = await query(
+              "UPDATE ops_jobs SET status='running',lease_owner='synthetic-worker',lease_expires_at=now()+interval '5 minutes' WHERE idempotency_key=$1 RETURNING id",
+              ["woztell.reply:" + intentId],
+            );
+            const sentTo = [];
+            await deliverOutboundIntent(intentId, {
+              checkpoint: async () => {},
+              job: { jobId: job.id, workerId: "synthetic-worker" },
+              send: async (reservation) => {
+                sends++;
+                sentTo.push(reservation.memberId);
+                return { ok: true, body: { ok: 1, messageId: "fx17a-" + intentId } };
+              },
+            });
+            return sentTo;
+          };
+          const label = (detail) =>
+            templateRecipientLabel({
+              name: detail.customer_display_name ?? detail.name,
+              memberId: detail.woztell_member_id,
+            });
+
+          const phoneMember = "85296663333";
+          const phoneConversation = await conversation(phoneMember);
+          const detail = await fetchAdminConversation(phoneConversation, manager, false);
+          assert.equal(detail.phone, "+852 9111 2222");
+          assert.deepEqual(label(detail), { name: "合成收件人", phone: "••••3333" });
+          // The consent dialogs keep the contact's phone: they change the contact, not a send.
+          assert.equal(
+            customerConfirmLabel({ name: detail.name, phone: detail.phone }).phone,
+            "••••2222",
+          );
+          const sentTo = await sendTemplate(phoneConversation);
+          assert.deepEqual(sentTo, [phoneMember]);
+          assert.equal(label(detail).phone, "••••" + sentTo[0].replace(/\D/g, "").slice(-4));
+
+          // An opaque member id is still where the send goes, but it is not a phone number:
+          // the dialog says 未有電話 instead of the CRM phone or digits picked out of the id.
+          const opaqueMember = "64b7f2e1a9c3d4e5f6a70812";
+          const opaqueConversation = await conversation(opaqueMember);
+          const opaque = await fetchAdminConversation(opaqueConversation, manager, false);
+          assert.deepEqual(label(opaque), { name: "合成收件人", phone: "未有電話" });
+          assert.deepEqual(await sendTemplate(opaqueConversation), [opaqueMember]);
+        },
+      );
+
       await t.test("revert file is ignored by the migration runner and drift check", async () => {
         // The runner applies only `.sql` files directly inside neon/migrations
         // (non-recursive readdirSync), and the drift check reads MIGRATION_VERSIONS.

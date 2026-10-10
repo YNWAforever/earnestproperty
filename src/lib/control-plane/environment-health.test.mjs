@@ -72,3 +72,25 @@ test("env is restored in place, key by key", () => {
     marker,
   );
 });
+
+// FX-11a (E-10): embeddings are gone, so the gateway needs only a key and a model.
+test("ai.gateway is healthy with only the key and model", () => {
+  const names = ["AI_GATEWAY_API_KEY", "AI_GATEWAY_MODEL"];
+  const saved = names.map((key) => [key, Object.hasOwn(process.env, key), process.env[key]]);
+  const gateway = () => environmentChecks().find((check) => check.key === "ai.gateway");
+  try {
+    for (const name of names) delete process.env[name];
+    process.env.AI_GATEWAY_API_KEY = "fixture-key";
+    process.env.AI_GATEWAY_MODEL = "fixture/model";
+    const row = gateway();
+    assert.equal(row.status, "healthy");
+    assert.deepEqual(row.details, { apiKey: true, model: true });
+    delete process.env.AI_GATEWAY_MODEL;
+    assert.equal(gateway().status, "degraded");
+  } finally {
+    for (const [key, had, value] of saved) {
+      if (had) process.env[key] = value;
+      else delete process.env[key];
+    }
+  }
+});
