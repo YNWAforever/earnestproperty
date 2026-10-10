@@ -54,6 +54,11 @@ const STAFF_ACTION_CODE_MESSAGES: Record<string, string> = {
   WA_LINK_PUBLIC_OFFER_UNAVAILABLE: "目前租售盤已下架或版本改變",
 };
 
+/** FX-18a B-04: transaction verify and publish. */
+const TRANSACTION_ERROR_MESSAGES: Record<string, string> = {
+  TRANSACTION_VERIFY_FORBIDDEN: "只有經理或管理員可以核實及公開發布成交。",
+};
+
 /** CMS revision-engine codes. Moved here from admin.cms.tsx and AdminEstateEditorForm.tsx. */
 const CMS_ERROR_MESSAGES: Record<string, string> = {
   CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新。本機修改已保留，請使用與已發布版本比較。",
@@ -100,6 +105,7 @@ const CAMPAIGN_ERROR_MESSAGES: Record<string, string> = {
 export const ADMIN_ERROR_CODES: Readonly<Record<string, string>> = {
   ...STAFF_ACTION_CODE_MESSAGES,
   ...CMS_ERROR_MESSAGES,
+  ...TRANSACTION_ERROR_MESSAGES,
   ...CAMPAIGN_ERROR_MESSAGES,
 };
 

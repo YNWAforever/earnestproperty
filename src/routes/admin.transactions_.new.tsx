@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { TransactionForm } from "@/components/dashboard/TransactionForm";
 import { Button } from "@/components/ui/button";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 
 export const Route = createFileRoute("/admin/transactions_/new")({
@@ -16,6 +17,10 @@ export const Route = createFileRoute("/admin/transactions_/new")({
 function NewAdminTransactionPage() {
   const navigate = useNavigate();
   const { user } = useNeonAuth();
+  const { session: staffSession } = useStaffSession(user?.id ?? null);
+  const canVerify =
+    staffSession?.status === "ok" &&
+    (staffSession.roles.includes("admin") || staffSession.roles.includes("manager"));
 
   return (
     <AdminShell
@@ -43,6 +48,7 @@ function NewAdminTransactionPage() {
         </Button>
         <TransactionForm
           staffName={user?.name ?? undefined}
+          canVerify={canVerify}
           onSaved={(id) => navigate({ to: "/admin/transactions/$id", params: { id } })}
         />
       </div>

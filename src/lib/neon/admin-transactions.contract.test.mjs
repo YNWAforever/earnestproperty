@@ -727,3 +727,65 @@ test("embedded DB hides cross-branch finance status and filters only visible tra
     await db.close();
   }
 });
+
+const VERIFY_BASE = {
+  estate_id: "estate-1",
+  deal_type: "sale",
+  price: 10_000_000,
+  saleable_area: 500,
+  deal_date: "2026-08-01",
+  unit: null,
+  block: null,
+  floor_band: null,
+  source: null,
+  source_url: null,
+};
+
+test("an agent's verified:true or published:true never reaches SQL", async () => {
+  for (const change of [
+    { verified: true },
+    { verified: true, published: true },
+    { id: "txn-1", verified: true },
+    { id: "txn-1", verified: true, published: true },
+  ]) {
+    const { calls, query } = recorder();
+    const server = await loadAdminDataServerWithInjectedQuery(query);
+    let refusal;
+    try {
+      await server.saveAdminTransaction({ ...VERIFY_BASE, ...change }, AGENT_ACTOR);
+    } catch (error) {
+      refusal = error;
+    }
+    assert.ok(refusal instanceof Response && refusal.status === 403);
+    assert.equal(await refusal.text(), "TRANSACTION_VERIFY_FORBIDDEN");
+    assert.equal(calls.length, 0, "a refused agent verify reached SQL");
+  }
+});
+
+test("an agent's update SQL cannot match a verified or published row", async () => {
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  await assert.rejects(
+    server.saveAdminTransaction({ ...VERIFY_BASE, id: "txn-1", verified: false }, AGENT_ACTOR),
+    (error) => error instanceof Response && error.status === 403,
+  );
+  assert.match(calls[0].text, /UPDATE transactions/);
+  assert.match(calls[0].text, /AND verification_state <> 'verified'/);
+  assert.match(calls[0].text, /published = false/);
+});
+
+test("manager and admin may verify and publish, with no row-state guard on their update", async () => {
+  for (const actor of [ADMIN_ACTOR, { staffId: "manager-1", roles: ["manager"] }]) {
+    const { calls, query } = recorder();
+    const server = await loadAdminDataServerWithInjectedQuery(query);
+    await server.saveAdminTransaction(
+      { ...VERIFY_BASE, id: "txn-1", verified: true, published: true },
+      actor,
+    );
+    assert.ok(calls[0].params.includes("verified"));
+    assert.ok(calls[0].params.includes(true));
+    assert.match(calls[0].text, /UPDATE transactions/);
+    // The row-state guard is for agents only; staff with the role skip it.
+    assert.doesNotMatch(calls[0].text, /AND verification_state <> 'verified'/);
+  }
+});

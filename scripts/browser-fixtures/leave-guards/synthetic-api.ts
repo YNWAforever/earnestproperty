@@ -45,7 +45,8 @@ transactions.set("70000000-0000-4000-8000-0000000000aa", {
   floor_band: "中層",
   source: "合成來源",
   source_url: null,
-  verification_state: "verified",
+  // B-04: the fixture session is an agent, who cannot edit a verified deal.
+  verification_state: "unverified",
   published: false,
   agent_id: null,
   agent_name: null,

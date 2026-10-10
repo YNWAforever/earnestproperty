@@ -103,6 +103,7 @@ function EditAdminTransactionPage() {
           <>
             <TransactionForm
               transaction={transaction}
+              canVerify={canSeeFinance}
               onSaved={() => {
                 void fetchAdminTransaction({ data: { id } })
                   .then((data) => setTransaction(data as AdminTransactionRow | null))

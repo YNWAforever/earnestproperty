@@ -853,6 +853,109 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
         assert.equal((await audits(faqId)).length, 0);
         assert.equal((await audits(videoId)).length, 0);
       });
+
+      await t.test(
+        "agent cannot set verified or published, and cannot edit a verified or published transaction; manager and admin can",
+        async () => {
+          const estateId = id(901);
+          await query(
+            "INSERT INTO estates(id,slug,name_zh) VALUES($1,'synthetic-fx18a','測試屋苑')",
+            [estateId],
+          );
+          const draft = (overrides = {}) => ({
+            estate_id: estateId,
+            deal_type: "sale",
+            price: 8_000_000,
+            saleable_area: 400,
+            deal_date: "2026-08-01",
+            unit: null,
+            block: null,
+            floor_band: null,
+            source: "synthetic",
+            source_url: null,
+            verified: false,
+            ...overrides,
+          });
+          const txRow = async (txId) =>
+            (await query("SELECT * FROM transactions WHERE id=$1", [txId]))[0];
+          const FORBIDDEN = "TRANSACTION_VERIFY_FORBIDDEN";
+
+          // An agent creates an unverified deal, and may keep editing it.
+          const { id: ownId } = await server.saveAdminTransaction(draft(), agent);
+          assert.equal((await txRow(ownId)).verification_state, "unverified");
+          await server.saveAdminTransaction(draft({ id: ownId, price: 8_100_000 }), agent);
+          assert.equal(Number((await txRow(ownId)).price), 8_100_000);
+
+          // The agent cannot verify or publish it, create one verified, or publish alone.
+          const countBefore = (await query("SELECT count(*)::int AS n FROM transactions"))[0].n;
+          for (const change of [{ verified: true }, { verified: true, published: true }]) {
+            await rejectsWith(
+              server.saveAdminTransaction(draft({ id: ownId, ...change }), agent),
+              403,
+              FORBIDDEN,
+            );
+            await rejectsWith(server.saveAdminTransaction(draft(change), agent), 403, FORBIDDEN);
+          }
+          const afterRefusals = await txRow(ownId);
+          assert.equal(afterRefusals.verification_state, "unverified");
+          assert.equal(afterRefusals.published, false);
+          assert.equal(Number(afterRefusals.price), 8_100_000);
+          assert.equal(
+            (await query("SELECT count(*)::int AS n FROM transactions"))[0].n,
+            countBefore,
+          );
+
+          // A manager verifies and publishes it; a manager's other edits still work.
+          await server.saveAdminTransaction(
+            draft({ id: ownId, verified: true, published: true }),
+            manager,
+          );
+          const verified = await txRow(ownId);
+          assert.equal(verified.verification_state, "verified");
+          assert.equal(verified.published, true);
+
+          // The agent now cannot edit it, even with the verified flags left off or on.
+          for (const change of [
+            { price: 1 },
+            { price: 9_000_000, verified: false },
+            { price: 9_000_000, verified: true, published: true },
+          ]) {
+            await assert.rejects(
+              server.saveAdminTransaction(draft({ id: ownId, ...change }), agent),
+              (error) => error instanceof Response && error.status === 403,
+            );
+          }
+          const untouched = await txRow(ownId);
+          assert.equal(Number(untouched.price), 8_000_000);
+          assert.equal(untouched.verification_state, "verified");
+          assert.equal(untouched.published, true);
+
+          // A verified-but-unpublished row (set by an admin) is also closed to the agent.
+          const { id: heldId } = await server.saveAdminTransaction(
+            draft({ verified: true, published: false }),
+            admin,
+          );
+          assert.equal((await txRow(heldId)).verification_state, "verified");
+          assert.equal((await txRow(heldId)).published, false);
+          await assert.rejects(
+            server.saveAdminTransaction(draft({ id: heldId, price: 2 }), {
+              ...agent,
+              staffId: AGENT,
+            }),
+            (error) => error instanceof Response && error.status === 403,
+          );
+          assert.equal(Number((await txRow(heldId)).price), 8_000_000);
+
+          // Manager and admin may still edit and un-verify a verified deal.
+          await server.saveAdminTransaction(
+            draft({ id: ownId, price: 8_200_000, verified: true }),
+            admin,
+          );
+          assert.equal(Number((await txRow(ownId)).price), 8_200_000);
+          await server.saveAdminTransaction(draft({ id: ownId, verified: false }), manager);
+          assert.equal((await txRow(ownId)).verification_state, "unverified");
+        },
+      );
     });
   } finally {
     network.mock.restore();

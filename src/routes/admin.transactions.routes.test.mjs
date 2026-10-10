@@ -43,3 +43,12 @@ test("transaction editor gates the private attribution panel by resolved staff r
   assert.match(source, /canSeeFinance/);
   assert.match(source, /<TransactionAttributionEditor/);
 });
+
+test("both transaction routes pass canVerify from the admin-or-manager check", () => {
+  const edit = read("src/routes/admin.transactions_.$id.tsx");
+  assert.match(edit, /canVerify=\{canSeeFinance\}/);
+  const create = read("src/routes/admin.transactions_.new.tsx");
+  assert.match(create, /useStaffSession/);
+  assert.match(create, /includes\("admin"\)\s*\|\|\s*staffSession\.roles\.includes\("manager"\)/);
+  assert.match(create, /canVerify=\{canVerify\}/);
+});

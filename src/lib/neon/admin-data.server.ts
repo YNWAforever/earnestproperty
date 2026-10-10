@@ -128,6 +128,7 @@ import { UNKNOWN_RESOLUTION_MIN_AGE_MINUTES } from "../woztell/outbound-resoluti
 import { readOptOutNearMiss } from "./whatsapp-opt-out-near-miss.server";
 import { optOutVersionSql } from "./whatsapp-opt-out.server";
 import { wakeAfterCommit } from "../control-plane/job-wake.server";
+import { canVerifyTransactions } from "./transaction-verify-policy";
 
 /**
  * Row-ownership scope for the acting staff member.
@@ -1506,6 +1507,11 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
   ) {
     throw new Response("Invalid transaction", { status: 400 });
   }
+  // B-04: checked before any SQL, so an agent's verified/published never reaches the database.
+  const canVerify = canVerifyTransactions(actor.roles);
+  if (!canVerify && (input.verified === true || input.published === true)) {
+    throw new Response("TRANSACTION_VERIFY_FORBIDDEN", { status: 403 });
+  }
   const scope = agentScope(actor);
   const saleablePsf =
     input.saleable_area > 0 ? Math.round(input.price / input.saleable_area) : null;
@@ -1553,6 +1559,11 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
           published = $13,
           verified_at = CASE WHEN $12::transaction_verification_state = 'verified' THEN COALESCE(verified_at, now()) ELSE NULL END
         WHERE id = $14${scope !== null ? " AND agent_id = $15" : ""}
+          ${
+            // B-04 row-state guard: a non-manager UPDATE can never match a verified or
+            // published row, so a race or a bypass of the TS check still cannot write it.
+            canVerify ? "" : "AND verification_state <> 'verified' AND published = false"
+          }
           AND NOT EXISTS (
             SELECT 1 FROM transaction_performance performance
             WHERE performance.transaction_id = transactions.id
