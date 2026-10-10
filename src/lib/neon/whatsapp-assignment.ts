@@ -57,27 +57,6 @@ const settingsServer = createServerFn({ method: "GET" }).handler(async () => {
 export async function getWhatsappStaffChannels() {
   return callStaffServerFn(settingsServer, {});
 }
-const saveServer = createServerFn({ method: "POST" })
-  .inputValidator(
-    (data: {
-      staffId: string;
-      inboxUserId: string;
-      folderId: string;
-      routingNodeId: string;
-      branchId: string | null;
-      verificationRef: string;
-      eligible: boolean;
-      expectedVersion: number | null;
-    }) => data,
-  )
-  .handler(async ({ data }) => {
-    const { requireStaffAccess } = await import("./auth.server");
-    const actor = await requireStaffAccess(getRequest(), ["admin", "manager"]);
-    return (await import("../whatsapp-enquiries/assignment.server")).saveStaffChannel(data, actor);
-  });
-export async function saveWhatsappStaffChannel(data: Parameters<typeof saveServer>[0]["data"]) {
-  return callStaffServerFn(saveServer, { data });
-}
 const queueServer = createServerFn({ method: "GET" }).handler(async () => {
   const { requireStaffAccess } = await import("./auth.server");
   const actor = await requireStaffAccess(getRequest(), ["admin", "manager"]);

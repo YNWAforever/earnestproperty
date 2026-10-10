@@ -119,7 +119,6 @@ const staffCalls: [keyof typeof staffModules, string, unknown[]][] = [
   ["staff-reference-admin", "disableStaffReference", [{ id: uuid }]],
   ["whatsapp-assignment", "getWhatsappAssignment", [{ conversationId: uuid }]],
   ["whatsapp-assignment", "getWhatsappStaffChannels", []],
-  ["whatsapp-assignment", "saveWhatsappStaffChannel", [{ staffId: uuid }]],
   ["whatsapp-assignment", "getWhatsappEnquiryQueue", []],
   ["whatsapp-assignment", "saveReviewedWhatsappStaffChannel", [{ staffId: uuid }]],
   ["whatsapp-assignment", "retireWhatsappStaffChannel", [{ mappingId: uuid }]],
@@ -232,7 +231,7 @@ test("a denied chunk commit is not recorded as completed and the batch does not 
 });
 
 test("every staff, notification and enquiry wrapper rejects a resolved 401, 403 and 409 Response", async () => {
-  expect(staffTable).toHaveLength(39);
+  expect(staffTable).toHaveLength(38);
   for (const [name, call, args] of staffTable) {
     expect({ name, type: typeof call }).toEqual({ name, type: "function" });
     for (const status of [401, 403, 409]) {
