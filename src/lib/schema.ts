@@ -24,9 +24,10 @@ import { districtLabelForSlug } from "@/lib/listing-seo";
  * hypothetical: listing title_zh/address/description come from the admin CMS and
  * from the scraped legacy site (src/lib/mls/), FAQ and article bodies come from
  * the CMS, and agent names/job titles come from staff profiles. Pages are
- * server-rendered, so the payload reaches anonymous visitors, and admin auth is
- * cookie-based with no CSP -- an XSS here escalates an agent-role account to
- * admin.
+ * server-rendered, so the payload reaches anonymous visitors, and staff auth is
+ * a bearer token held by the admin client; the site's CSP is report-only until
+ * FX-14's follow-up enforces it -- an XSS here escalates an agent-role account
+ * to admin.
  *
  * Escaping `<` and `>` as </> is valid JSON and valid JSON-LD (the
  * parser unescapes them back to the original characters), so consumers such as

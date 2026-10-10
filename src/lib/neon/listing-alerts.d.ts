@@ -15,6 +15,8 @@ export type ListingAlertPersistenceInput = {
   consentVersion: string;
   consentedAt: string;
   utm: ListingAlertUtm;
+  /** Honeypot flag: adds an audit row; never drops the alert. */
+  suspectedBot?: boolean;
 };
 
 export type ListingAlertQuery = (

@@ -4563,6 +4563,7 @@ export async function createWebsiteInquiry(input: {
   listingNo?: string | null;
   property_id?: string | null;
   consentWhatsapp?: boolean;
+  suspectedBot?: boolean;
 }) {
   // Public, untrusted path: agent assignment is never accepted from the client.
   const normalizedPhone = normalizeAdminPhone(input.phone);
@@ -4581,6 +4582,7 @@ export async function createWebsiteInquiry(input: {
     listingNo: requestedListingNo,
     propertyId: requestedPropertyId,
     consentWhatsapp: optInWhatsapp,
+    suspectedBot: input.suspectedBot === true,
   });
   // The alert job committed with the lead; wake only for a fresh insert, never a replay.
   if (result.leadAlertQueued) {
@@ -4634,6 +4636,7 @@ export async function createListingAlert(input: {
   email?: string | null;
   filters?: Record<string, unknown>;
   utm?: Record<string, string>;
+  suspectedBot?: boolean;
 }) {
   const email = input.email ? input.email : null;
   return persistListingAlert(queryRows, {
@@ -4649,6 +4652,7 @@ export async function createListingAlert(input: {
     consentVersion: LISTING_ALERT_CONSENT_VERSION,
     consentedAt: new Date().toISOString(),
     utm: input.utm ?? {},
+    suspectedBot: input.suspectedBot === true,
   });
 }
 
@@ -4660,6 +4664,7 @@ export async function createValuationLead(input: {
   estateId?: string | null;
   notes?: string | null;
   utm?: Record<string, string>;
+  suspectedBot?: boolean;
 }) {
   const email = input.email ? input.email : null;
   const notes = input.notes ? input.notes : null;
@@ -4678,6 +4683,7 @@ export async function createValuationLead(input: {
     consentVersion: VALUATION_CONSENT_VERSION,
     consentedAt: new Date().toISOString(),
     utm: input.utm ?? {},
+    suspectedBot: input.suspectedBot === true,
   });
 }
 

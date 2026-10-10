@@ -5,6 +5,7 @@ import { z } from "zod";
 import { writeAudit as defaultWriteAudit } from "@/lib/control-plane/audit.server";
 import { requireStaffPermission as defaultRequireStaffPermission } from "@/lib/control-plane/permissions";
 import { createOperationContext } from "@/lib/control-plane/request-context";
+import { hasBearerSecret } from "@/lib/http/bearer-secret";
 import type { StaffAccess } from "@/lib/neon/auth.server";
 
 import { runYouTubeSync } from "./youtube-sync.server";
@@ -117,8 +118,7 @@ export function createYouTubeSyncHttpHandlers(overrides: Partial<Dependencies> =
   }
 
   async function cron(request: Request, mode: YouTubeSyncMode) {
-    const expected = dependencies.cronSecret();
-    if (!expected || request.headers.get("authorization") !== `Bearer ${expected}`) {
+    if (!hasBearerSecret(request, dependencies.cronSecret())) {
       return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
     }
     try {
