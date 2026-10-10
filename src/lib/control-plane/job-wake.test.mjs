@@ -79,7 +79,7 @@ test("job drains have one business-hours Cloudflare sweep and no Vercel schedule
   assert.match(worker, /sweepLanes\(/);
   assert.match(worker, /createLaneDrain\(/);
   assert.match(worker, /getByName\(lane\)\.signal\(\)/);
-  assert.match(worker, /authorization.*Bearer/);
+  assert.match(worker, /hasBearerSecret\(request, env\.CRON_SECRET\)/);
   // The cron sweeps; it must never signal(), which would reset the failure backoff every tick.
   assert.doesNotMatch(worker.slice(worker.indexOf("async scheduled(")), /\.signal\(\)/);
   assert.match(vercel, /crons:\s*\[\s*\]/);

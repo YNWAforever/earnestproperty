@@ -50,7 +50,7 @@ src/content/      SEO copy, estate/corridor content constants
 src/config/       site.ts (contact/CTA config), site-branches, site-team
 src/components/ui shadcn primitives — vendored, keep in sync with upstream
 neon/migrations/  timestamped .sql, applied via `npm run neon:migrate`
-vercel.ts         Vercel config-as-TS: redirects (no crons; not vercel.json)
+vercel.ts         Vercel config-as-TS: redirects + security headers (from scripts/vercel-headers.mjs); no crons
 ```
 
 ## Conventions

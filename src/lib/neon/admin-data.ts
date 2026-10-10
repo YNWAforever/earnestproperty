@@ -14,6 +14,7 @@ import { withStaffAuthHeaders } from "@/auth";
 import { requireStaffPermission } from "../control-plane/permissions";
 import { ServerFnResponseError, unwrapServerFnResponse } from "./server-fn-response.ts";
 import { deriveAgentProfileEditorContext } from "./staff-security-policy";
+import { isHoneypotFilled } from "../public-form-honeypot";
 import { WEBSITE_LISTING_NO_PATTERN } from "./website-inquiry.js";
 import type { TransactionPerformanceInput } from "./transaction-performance.types.ts";
 
@@ -675,6 +676,8 @@ const websiteInquirySchema = z
     listingNo: z.string().regex(WEBSITE_LISTING_NO_PATTERN).optional(),
     property_id: z.string().trim().uuid().optional(),
     consentWhatsapp: z.boolean().default(false),
+    // Invisible honeypot: any type or length is accepted, so it can never fail a submission.
+    website: z.unknown().optional(),
   })
   // Public, untrusted path: never accept a caller-supplied agent assignment.
   .strip();
@@ -718,8 +721,11 @@ const createWebsiteInquiryServer = createServerFn({ method: "POST" })
       });
     }
 
+    // Flag, never drop: a filled honeypot still saves, alerts and returns the normal result.
+    const { website, ...fields } = data;
+    const suspectedBot = isHoneypotFilled(website);
     const adminData = await import("./admin-data.server");
-    return adminData.createWebsiteInquiry(data);
+    return adminData.createWebsiteInquiry({ ...fields, suspectedBot });
   });
 
 // /listings' zero-results notify-me form. The filter payload is the
@@ -771,6 +777,8 @@ const listingAlertSchema = z
     // silently persisting with no evidence consent was ever given.
     consent: z.literal(true),
     utm: listingAlertUtmSchema.default({}),
+    // Invisible honeypot: any type or length is accepted, so it can never fail a submission.
+    website: z.unknown().optional(),
   })
   // Public, untrusted path: strip anything else, including a caller-supplied
   // consent_text/consent_version -- those are always the server's own
@@ -809,8 +817,10 @@ export const createListingAlert = createServerFn({ method: "POST" })
       });
     }
 
+    const { website, ...fields } = data;
+    const suspectedBot = isHoneypotFilled(website);
     const adminData = await import("./admin-data.server");
-    return adminData.createListingAlert(data);
+    return adminData.createListingAlert({ ...fields, suspectedBot });
   });
 
 // OwnerValuationPanel's structured form, offered ALONGSIDE its existing
@@ -848,6 +858,8 @@ const valuationLeadSchema = z
     // given.
     consent: z.literal(true),
     utm: valuationLeadUtmSchema.default({}),
+    // Invisible honeypot: any type or length is accepted, so it can never fail a submission.
+    website: z.unknown().optional(),
   })
   // Public, untrusted path: strip anything else, including a caller-supplied
   // consentText/consentVersion/consentedAt -- those are always the server's
@@ -884,8 +896,10 @@ export const createValuationLead = createServerFn({ method: "POST" })
       });
     }
 
+    const { website, ...fields } = data;
+    const suspectedBot = isHoneypotFilled(website);
     const adminData = await import("./admin-data.server");
-    return adminData.createValuationLead(data);
+    return adminData.createValuationLead({ ...fields, suspectedBot });
   });
 
 const updateAdminInquiryStatusServer = createServerFn({ method: "POST" })

@@ -1,14 +1,6 @@
-import { timingSafeEqual } from "node:crypto";
 import { createFileRoute } from "@tanstack/react-router";
+import { hasBearerSecret } from "@/lib/http/bearer-secret";
 import { latestRunPublisher } from "@/lib/mls/status-publisher.mjs";
-
-function hasValidAuthorization(request: Request, expectedSecret: string) {
-  const actual = request.headers.get("authorization") ?? "";
-  const expected = `Bearer ${expectedSecret}`;
-  const actualBytes = Buffer.from(actual, "utf8");
-  const expectedBytes = Buffer.from(expected, "utf8");
-  return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
-}
 
 export const Route = createFileRoute("/api/mls-sync")({
   server: {
@@ -27,7 +19,7 @@ export const Route = createFileRoute("/api/mls-sync")({
           );
         }
 
-        if (!hasValidAuthorization(request, cronSecret)) {
+        if (!hasBearerSecret(request, cronSecret)) {
           return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
         }
 

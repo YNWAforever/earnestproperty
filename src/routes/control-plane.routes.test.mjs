@@ -66,11 +66,40 @@ test("audit service uses keyset pagination and re-sanitizes stored metadata", ()
   assert.doesNotMatch(source, /OFFSET/i);
 });
 
+// FX-14 Task 2 / B-07: one timing-safe helper, and not one status or body moves.
+// Machine callers (the Cloudflare worker, the property sync, YouTube) treat any
+// other status as a failed drain, so each route keeps the exact 401 body it had.
+test("each cron route keeps its status codes", () => {
+  const routes = [
+    ["src/routes/api.admin.control-plane.worker.ts", '{ ok: false, error: "UNAUTHORIZED" }'],
+    ["src/routes/api.admin.jobs.send-queue.ts", '{ ok: false, error: "Unauthorized" }'],
+    ["src/routes/api.admin.whatsapp.service-worker.ts", '{ error: "UNAUTHORIZED" }'],
+    ["src/routes/api.mls-sync.ts", '{ ok: false, error: "Unauthorized" }'],
+    ["src/lib/youtube-sync/youtube-http.server.ts", '{ ok: false, error: "Unauthorized" }'],
+  ];
+  for (const [file, body] of routes) {
+    const source = readFileSync(file, "utf8");
+    assert.match(source, /hasBearerSecret\(/, `${file} uses hasBearerSecret`);
+    assert.ok(
+      source.includes(`Response.json(${body}, { status: 401 })`),
+      `${file} keeps its 401 body ${body}`,
+    );
+    assert.doesNotMatch(source, /!==\s*`Bearer/, `${file} has no plain Bearer comparison`);
+    assert.doesNotMatch(source, /hasValidAuthorization/, `${file} has no private helper`);
+  }
+  const mls = readFileSync("src/routes/api.mls-sync.ts", "utf8");
+  assert.ok(mls.indexOf("status: 503") > 0, "mls-sync keeps its not-configured 503");
+  assert.ok(
+    mls.indexOf("status: 503") < mls.indexOf("hasBearerSecret("),
+    "mls-sync answers 503 before checking the bearer",
+  );
+});
+
 test("control-plane worker requires cron authorization and returns counts only", () => {
   const source = readFileSync("src/routes/api.admin.control-plane.worker.ts", "utf8");
   assert.match(source, /process\.env\.CRON_SECRET/);
-  assert.match(source, /request\.headers\.get\("authorization"\)/);
-  assert.match(source, /actual !== `Bearer \$\{expected\}`/);
+  assert.match(source, /hasBearerSecret\(request, process\.env\.CRON_SECRET\)/);
+  assert.doesNotMatch(source, /!==\s*`Bearer/);
   assert.match(source, /runClaimedJobs/);
   for (const key of ["claimed", "succeeded", "retried", "failed", "cancelled"]) {
     assert.match(source, new RegExp(key));
@@ -258,8 +287,10 @@ function sourceWithLocalImports(file) {
 // This asserts the wiring, not the behaviour. That the handler actually returns
 // 401 is proved in src/lib/youtube-sync/youtube-http.test.ts ("cron rejects
 // missing or invalid bearer authorization"), which can call it directly because
-// it runs under bun. This file runs under node --test and cannot import .ts,
-// which is why it reads source text at all.
+// it runs under bun. This test reads source text because importing the route
+// modules pulls in server-only and DB code; Node can strip .ts types (see
+// src/lib/http/bearer-secret.test.mjs), so prefer a behavioural test for pure
+// helpers.
 test("any path scheduled in vercel.ts has a GET handler", () => {
   const vercelConfig = readFileSync("vercel.ts", "utf8");
   const cronBlock = vercelConfig.slice(

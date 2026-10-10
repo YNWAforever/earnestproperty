@@ -8,7 +8,7 @@ const vercel = readFileSync(new URL("../../vercel.ts", import.meta.url), "utf8")
 
 test("mls route is protected and read-only", () => {
   assert.match(source, /createFileRoute\(["']\/api\/mls-sync["']\)/);
-  assert.match(source, /authorization/i);
+  assert.match(source, /hasBearerSecret\(request, cronSecret\)/);
   assert.match(source, /CRON_SECRET/);
   assert.match(source, /status:\s*401/);
   assert.match(source, /DATABASE_URL/);
