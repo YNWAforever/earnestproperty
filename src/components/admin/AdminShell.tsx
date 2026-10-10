@@ -376,8 +376,13 @@ export function AdminShell({
     refresh: refreshStaffSession,
   } = useStaffSession(user?.id ?? null);
   const staffReady = staffSession?.status === "ok";
-  // null (not known yet, or the lookup failed) lists every entry; the server still enforces.
-  const staffRoles = staffReady ? staffSession.roles : null;
+  // A denial is a definite answer: no entry. null (not known yet, or the lookup failed) lists
+  // every entry; the server still enforces.
+  const staffRoles = staffReady
+    ? staffSession.roles
+    : staffSession?.status === "denied"
+      ? []
+      : null;
   const [showFirstLogin, setShowFirstLogin] = useState(false);
   useEffect(() => {
     if (staffSession?.status !== "ok") {

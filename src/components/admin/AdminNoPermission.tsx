@@ -8,7 +8,7 @@ import { ShieldAlert } from "lucide-react";
 export function AdminNoPermission() {
   return (
     <div
-      role="alert"
+      role="status"
       data-admin-no-permission
       className="rounded-lg border border-amber-700/30 bg-amber-50 p-5 text-sm text-amber-950"
     >

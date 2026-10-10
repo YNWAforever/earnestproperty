@@ -24,7 +24,10 @@ const FIRST_READ = {
     file: "src/lib/neon/admin-data.ts",
     anchor: "const fetchCommandCenterServer",
   },
-  "/admin/listings": { file: "src/lib/neon/admin-properties.ts", anchor: "" },
+  "/admin/listings": {
+    file: "src/lib/neon/admin-properties.ts",
+    anchor: "async function staff()",
+  },
   "/admin/property-sync": {
     file: "src/lib/neon/admin-property-sync.ts",
     anchor: "const readServer",
@@ -39,7 +42,10 @@ const FIRST_READ = {
     file: "src/lib/neon/admin-data.ts",
     anchor: "const fetchAdminCrmSegmentsServer",
   },
-  "/admin/whatsapp-links": { file: "src/lib/neon/whatsapp-link-management.ts", anchor: "" },
+  "/admin/whatsapp-links": {
+    file: "src/lib/neon/whatsapp-link-management.ts",
+    anchor: "const page = createServerFn",
+  },
   "/admin/whatsapp-settings": {
     file: "src/lib/neon/whatsapp-assignment.ts",
     anchor: "const settingsServer",

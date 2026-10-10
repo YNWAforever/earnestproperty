@@ -628,6 +628,8 @@ for (const width of [1440, 1280, 768, 390]) {
         window.dailyWorkFixture.changeContext("actor-a", "agent", "staff-a", true),
       );
       await expect(page.getByText("此帳戶不是職員帳戶", { exact: true })).toBeVisible();
+      // A denial is a definite answer: no admin destination is offered (unlike a failed lookup).
+      await expect(page.locator('nav[aria-label="後台選單"] a')).toHaveCount(0);
       expect(await calls(page, "overview")).toHaveLength(before);
       await page.evaluate(() => window.dailyWorkFixture.changeContext("actor-a", "agent"));
       await expect(card(page, "開放查詢")).toContainText("2");
