@@ -15,8 +15,6 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
 
   const exports = [
     "fetchAdminAgents",
-    "saveAdminEstate",
-    "saveAdminArticle",
     "saveAdminFaq",
     "deleteAdminFaq",
     "restoreAdminFaq",
@@ -186,8 +184,6 @@ test("property mutation keeps Copilot content fields explicit and scoped", () =>
   const types = read("src/lib/neon/admin-data.types.ts");
   assert.match(types, /title_en:\s*string\s*\|\s*null/);
   assert.match(types, /features:\s*string\[\]/);
-  assert.match(server, /title_en = \$21/);
-  assert.match(server, /features = \$22::text\[\]/);
   assert.match(server, /video_url, agent_id, title_en, features/);
   assert.match(server, /input\.features \?\? \[\]/);
 });
@@ -564,4 +560,14 @@ test("FAQ and video saves write their audit row in the same statement", () => {
     assert.match(body, /INSERT INTO audit_logs/, name);
     assert.match(body, /cmsRowVersionSql\(/, name);
   }
+});
+
+test("no browser-callable hard delete or unversioned CMS writer remains", () => {
+  const client = read("src/lib/neon/admin-data.ts");
+  const server = read("src/lib/neon/admin-data.server.ts");
+  for (const name of ["deleteAdminProperty", "saveAdminEstate", "saveAdminArticle"]) {
+    assert.doesNotMatch(client, new RegExp(`\\b${name}(Server)?\\b`), `${name} in admin-data.ts`);
+    assert.doesNotMatch(server, new RegExp(`\\b${name}\\b`), `${name} in admin-data.server.ts`);
+  }
+  assert.doesNotMatch(server, /DELETE\s+FROM\s+properties/i);
 });

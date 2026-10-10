@@ -30,7 +30,6 @@ import type {
   AdminAgentProfileRow,
   AdminBranchOption,
   AdminLeadAiProfile,
-  AdminArticleInput,
   AdminCmsVideoInput,
   AdminAudienceInput,
   AdminCampaignInput,
@@ -42,7 +41,6 @@ import type {
   AdminConversationAiAssist,
   AdminConversationRow,
   AdminConversationUpdateInput,
-  AdminEstateInput,
   AdminFaqInput,
   AdminLeadActivityInput,
   AdminLeadRow,
@@ -1262,6 +1260,10 @@ export async function listAdminDistrictOptions() {
 }
 
 export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffAccess) {
+  // Create-only. Edits go through the versioned workspace
+  // (saveAdminPropertyManagement); this path has no version check.
+  if (input.id) throw new Response("PROPERTY_EDIT_USE_WORKSPACE", { status: 400 });
+
   const validRequiredText = (value: unknown, max: number) =>
     typeof value === "string" && value.trim().length > 0 && value.trim().length <= max;
   const validOptionalAmount = (value: number | null) =>
@@ -1320,40 +1322,8 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
     input.features ?? [],
   ];
 
-  const rows = input.id
-    ? await queryRows(
-        `
-        UPDATE properties SET
-          listing_no = $1,
-          title_zh = $2,
-          deal_type = $3::deal_type,
-          estate_id = $4,
-          district_slug = $5,
-          address = $6,
-          price = $7,
-          rent = $8,
-          saleable_area = $9,
-          bedrooms = $10,
-          bathrooms = $11,
-          floor = $12,
-          description = $13,
-          status = $14::property_status,
-          featured = $15,
-          images = $16::text[],
-          seo_title = $17,
-          seo_description = $18,
-          video_url = $19,
-          agent_id = $20,
-          title_en = $21,
-          features = $22::text[],
-          updated_at = now()
-        WHERE id = $23${scope !== null ? " AND agent_id = $24" : ""}
-        RETURNING id
-        `,
-        scope !== null ? [...params, input.id, scope] : [...params, input.id],
-      )
-    : await queryRows(
-        `
+  const rows = await queryRows(
+    `
         INSERT INTO properties (
           listing_no, title_zh, deal_type, estate_id, district_slug, address, price, rent,
           saleable_area, bedrooms, bathrooms, floor, description, status, featured, images,
@@ -1362,15 +1332,11 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
         VALUES ($1, $2, $3::deal_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::property_status, $15, $16::text[], $17, $18, $19, $20, $21, $22::text[])
         RETURNING id
         `,
-        params,
-      );
+    params,
+  );
 
-  if (input.id && !rows[0]) {
-    if (scope !== null) throw new Response("Forbidden", { status: 403 });
-    return { id: "", error: "Not found" };
-  }
   const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(actor.staffId, input.id ? "property.update" : "property.create", "property", id);
+  await writeAudit(actor.staffId, "property.create", "property", id);
   return { id };
 }
 
@@ -1391,13 +1357,6 @@ export async function updateAdminPropertyStatus(
     return { ok: false, error: "Not found" };
   }
   await writeAudit(actor.staffId, "property.status", "property", id, { status });
-  return { ok: true };
-}
-
-export async function deleteAdminProperty(id: string, actor: StaffAccess) {
-  const rows = await queryRows("DELETE FROM properties WHERE id = $1 RETURNING id", [id]);
-  if (!rows[0]) return { ok: false, error: "Not found" };
-  await writeAudit(actor.staffId, "property.delete", "property", id);
   return { ok: true };
 }
 
@@ -2320,105 +2279,6 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
     throw new Response(CMS_ROW_CHANGED, { status: 409 });
   }
   return { id: input.id, version: row.new_version ?? row.current_version };
-}
-
-export async function saveAdminEstate(input: AdminEstateInput, actor: StaffAccess) {
-  const rows = input.id
-    ? await queryRows(
-        `UPDATE estates SET slug=$1, name_zh=$2, name_en=$3, district_slug=$4, developer=$5,
-          year_completed=$6, phases=$7, total_units=$8, area_min=$9, area_max=$10,
-          description=$11, hero_image=$12, facilities=$13::text[], seo_title=$14,
-          seo_description=$15, updated_at=now()
-         WHERE id=$16 RETURNING id`,
-        [
-          input.slug,
-          input.name_zh,
-          input.name_en,
-          input.district_slug,
-          input.developer,
-          input.year_completed,
-          input.phases,
-          input.total_units,
-          input.area_min,
-          input.area_max,
-          input.description,
-          input.hero_image,
-          input.facilities,
-          input.seo_title,
-          input.seo_description,
-          input.id,
-        ],
-      )
-    : await queryRows(
-        `INSERT INTO estates (slug, name_zh, name_en, district_slug, developer, year_completed,
-          phases, total_units, area_min, area_max, description, hero_image, facilities,
-          seo_title, seo_description)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14,$15)
-         RETURNING id`,
-        [
-          input.slug,
-          input.name_zh,
-          input.name_en,
-          input.district_slug,
-          input.developer,
-          input.year_completed,
-          input.phases,
-          input.total_units,
-          input.area_min,
-          input.area_max,
-          input.description,
-          input.hero_image,
-          input.facilities,
-          input.seo_title,
-          input.seo_description,
-        ],
-      );
-  if (input.id && !rows[0]) return { id: "", error: "Not found" };
-  const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(actor.staffId, input.id ? "estate.update" : "estate.create", "estate", id);
-  return { id };
-}
-
-export async function saveAdminArticle(input: AdminArticleInput, actor: StaffAccess) {
-  requireNonEmpty(input.slug, "slug");
-  requireNonEmpty(input.title, "title");
-
-  const publishedAt = input.published_at ?? new Date().toISOString();
-  const params = [
-    input.slug,
-    input.title,
-    input.excerpt,
-    input.content,
-    input.cover_image,
-    input.category,
-    input.reading_minutes,
-    input.published,
-    publishedAt,
-    input.seo_title,
-    input.seo_description,
-    actor.staffId,
-  ];
-
-  const rows = input.id
-    ? await queryRows(
-        `UPDATE articles SET slug=$1, title=$2, excerpt=$3, content=$4, cover_image=$5,
-          category=$6, reading_minutes=$7, published=$8, published_at=$9,
-          seo_title=$10, seo_description=$11, author_id=$12, updated_at=now()
-         WHERE id=$13 RETURNING id`,
-        [...params, input.id],
-      )
-    : await queryRows(
-        `INSERT INTO articles (slug, title, excerpt, content, cover_image, category,
-          reading_minutes, published, published_at, seo_title, seo_description, author_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-         RETURNING id`,
-        params,
-      );
-
-  if (input.id && !rows[0]) return { id: "", error: "Not found" };
-  const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(actor.staffId, input.id ? "article.update" : "article.create", "article", id);
-  return { id };
 }
 
 export async function saveAdminFaq(input: AdminFaqInput, actor: StaffAccess) {

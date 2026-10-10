@@ -458,6 +458,45 @@ test("saveAdminProperty rejects invalid public listing values before SQL", async
   assert.match(calls[0].text, /INSERT INTO properties/);
 });
 
+test("saveAdminProperty with an id is refused before SQL", async () => {
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  const refused = await server
+    .saveAdminProperty(
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        listing_no: "A-1",
+        title_zh: "Test listing",
+        title_en: null,
+        deal_type: "sale",
+        estate_id: null,
+        district_slug: "central",
+        address: null,
+        price: 10_000_000,
+        rent: null,
+        saleable_area: 500,
+        bedrooms: 2,
+        bathrooms: 1,
+        floor: null,
+        description: null,
+        features: [],
+        status: "active",
+        featured: false,
+        images: [],
+        agent_id: null,
+      },
+      ADMIN_ACTOR,
+    )
+    .then(
+      () => null,
+      (error) => error,
+    );
+  assert.ok(refused instanceof Response, "an edit through saveAdminProperty was not refused");
+  assert.equal(refused.status, 400);
+  assert.equal(await refused.text(), "PROPERTY_EDIT_USE_WORKSPACE");
+  assert.equal(calls.length, 0, "an edit through saveAdminProperty reached SQL");
+});
+
 test("saveAdminCmsVideo rejects invalid title, order and publication flag before SQL", async () => {
   const base = {
     title: "Video tour",

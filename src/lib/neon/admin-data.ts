@@ -22,14 +22,12 @@ import type {
   AdminAgentEditorContext,
   AdminAgentProfileInput,
   AdminAgentProfileMutationInput,
-  AdminArticleInput,
   AdminAudienceInput,
   AdminCampaignInput,
   AdminConversationAiAssist,
   AdminConversationUpdateInput,
   AdminCrmSegmentPreview,
   AdminCmsVideoInput,
-  AdminEstateInput,
   AdminFaqInput,
   AdminLeadActivityInput,
   AdminLeadUpdateInput,
@@ -438,20 +436,6 @@ export async function saveAdminProperty(
       (prepared) => saveAdminPropertyServer(prepared),
       isWorkspaceCurrent,
     ),
-  );
-}
-
-const deleteAdminPropertyServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string }) => data)
-  .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin", "manager"]);
-    const adminData = await import("./admin-data.server");
-    return adminData.deleteAdminProperty(data.id, staff);
-  });
-
-export async function deleteAdminProperty(options: { data: { id: string } }) {
-  return callStaffServerFn(async () =>
-    deleteAdminPropertyServer(await withStaffAuthHeaders(options)),
   );
 }
 
@@ -936,30 +920,6 @@ export async function fetchAdminWoztellStatus() {
   return callStaffServerFn(async () =>
     fetchAdminWoztellStatusServer(await withStaffAuthHeaders({})),
   );
-}
-
-const saveAdminEstateServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminEstateInput) => data)
-  .handler(async ({ data }) => {
-    const staff = await requireStaffPermission(getRequest(), "cms.publish");
-    const adminData = await import("./admin-data.server");
-    return adminData.saveAdminEstate(data, staff);
-  });
-
-export async function saveAdminEstate(options: { data: AdminEstateInput }) {
-  return callStaffServerFn(async () => saveAdminEstateServer(await withStaffAuthHeaders(options)));
-}
-
-const saveAdminArticleServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminArticleInput) => data)
-  .handler(async ({ data }) => {
-    const staff = await requireStaffPermission(getRequest(), "cms.publish");
-    const adminData = await import("./admin-data.server");
-    return adminData.saveAdminArticle(data, staff);
-  });
-
-export async function saveAdminArticle(options: { data: AdminArticleInput }) {
-  return callStaffServerFn(async () => saveAdminArticleServer(await withStaffAuthHeaders(options)));
 }
 
 const saveAdminFaqServer = createServerFn({ method: "POST" })
