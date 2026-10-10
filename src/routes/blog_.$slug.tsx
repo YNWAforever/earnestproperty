@@ -244,7 +244,11 @@ function BlogArticlePage() {
     return (
       <div className="mx-auto max-w-3xl px-6 py-24 text-center">
         <h1 className="text-2xl font-bold">文章不存在</h1>
-        <Link to="/blog" className="mt-4 inline-block text-sm font-semibold text-primary">
+        <Link
+          to="/blog"
+          activeOptions={{ exact: true }}
+          className="mt-4 inline-block text-sm font-semibold text-primary"
+        >
           返回 Blog
         </Link>
       </div>
@@ -303,7 +307,7 @@ function BlogArticlePage() {
         eyebrow={
           <span className="inline-flex flex-wrap items-center gap-3">
             {article.category && (
-              <span className="rounded-full bg-primary/10 px-3 py-1 font-medium text-primary">
+              <span className="rounded-full bg-secondary px-3 py-1 font-medium text-secondary-foreground">
                 {article.category}
               </span>
             )}

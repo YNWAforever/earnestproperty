@@ -160,7 +160,8 @@ test("property detail pages expose real estate schema and legacy support", () =>
   const vercel = read("vercel.ts");
 
   assert.match(property, /RealEstateListing/);
-  assert.match(property, /Residence/);
+  // F-12: the Residence node is built by schema.ts residenceSchema().
+  assert.match(property, /residenceSchema\(\{/);
   assert.match(property, /BreadcrumbList/);
   assert.match(queries, /fetchPropertyByLegacyDetailId/);
   assert.match(vercel, /property-detail\/:oldId\.html/);

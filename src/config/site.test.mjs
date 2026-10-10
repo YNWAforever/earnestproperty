@@ -169,7 +169,7 @@ test("site config exposes all public branch contact details", () => {
 test("footer phone and email links meet the 44px tap-target guideline", () => {
   const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
 
-  const phoneLink = footer.match(/<a\s+href=\{`tel:\$\{branch\.phone\}`\}[^>]*>/)?.[0] ?? "";
+  const phoneLink = footer.match(/<PhoneLink\s+phone=\{branch\.phone\}[^>]*>/)?.[0] ?? "";
   assert.match(phoneLink, /className="inline-flex min-h-11 items-center/);
 
   const mailLink =
@@ -183,11 +183,6 @@ test("footer phone and email links meet the 44px tap-target guideline", () => {
 test("a sticky mobile WhatsApp bar is mounted site-wide, suppressed where a page has its own", () => {
   const bar = readFileSync("src/components/site/StickyWhatsAppBar.tsx", "utf8");
   assert.match(bar, /whatsappUrl\(/);
-  assert.match(
-    bar,
-    /bottom-16/,
-    "must sit above the 問樓助手 bubble (fixed at bottom-4/5), not on top of it",
-  );
   assert.match(
     bar,
     /lg:hidden/,
@@ -205,11 +200,67 @@ test("a sticky mobile WhatsApp bar is mounted site-wide, suppressed where a page
   // showing both would duplicate the CTA.
   assert.match(root, /pathname\.startsWith\("\/property\/"\)/);
   assert.match(root, /"\/admin", "\/auth", "\/account", "\/dashboard"/);
-  // The bar is `fixed`, so a page needs bottom padding reserved or its own
-  // last content (e.g. footer) sits underneath it with no way to scroll clear.
-  // pb-16 only matched the bar's bottom-16 offset and left the bar's own
-  // ~52px height covering the footer; the reservation must clear both.
-  assert.match(root, /showStickyWhatsAppBar \? "pb-32 lg:pb-0" : ""/);
+});
+
+// FX-16 F-07: the bar floated at bottom-16 above a separate 問樓助手 pill,
+// 121 px of chrome (15 % of a 375x812 screen) over hero and empty-search CTAs.
+test("the sticky bar sits at bottom-0 on the safe area and reserves the launcher slot", () => {
+  const bar = readFileSync("src/components/site/StickyWhatsAppBar.tsx", "utf8");
+  const aside = bar.match(/<aside[\s\S]*?className="([^"]*)"/)?.[1] ?? "";
+  assert.match(aside, /fixed inset-x-0 bottom-0/, "the bar must touch the viewport bottom");
+  assert.doesNotMatch(bar, /bottom-16/);
+  assert.match(
+    aside,
+    /pb-\[calc\(0\.5rem\+env\(safe-area-inset-bottom\)\)\]/,
+    "the home indicator must not sit on the link",
+  );
+  assert.match(aside, /pr-\[3\.75rem\]/, "44 px icon + 12 px edge + 4 px gap for the chat icon");
+  assert.match(aside, /lg:hidden/, "desktop already has the header WhatsApp button");
+  assert.match(bar, /min-h-11/, "the WhatsApp link must be a 44 px tap target");
+});
+
+test("the root reserves the bar height and docks the launcher only where a mobile bar renders", () => {
+  const root = readFileSync("src/routes/__root.tsx", "utf8");
+  const bar = readFileSync("src/components/site/StickyWhatsAppBar.tsx", "utf8");
+  const rule = readFileSync("src/components/site/mobile-action-bar.ts", "utf8");
+  // One rule, keyed on the bar being in the DOM: a /property/* page that renders no bar
+  // (sold, rented, not found, load error) keeps main's labelled pill and no padding.
+  assert.match(bar, /\{\.\.\.mobileActionBarAttribute\}/);
+  assert.match(
+    root,
+    /import \{ MOBILE_ACTION_BAR_RESERVE_CLASS \} from "@\/components\/site\/mobile-action-bar"/,
+  );
+  assert.match(
+    root,
+    /className=\{`flex min-h-screen flex-col \$\{MOBILE_ACTION_BAR_RESERVE_CLASS\}`\}/,
+  );
+  assert.match(root, /<LiveAgentLauncher \/>/);
+  assert.doesNotMatch(
+    root,
+    /dockLauncher|docked=/,
+    "no pathname guess about whether a bar renders",
+  );
+  assert.doesNotMatch(root, /pb-32/);
+  // The bar is `fixed`, so the page reserves exactly its height (61 px = 1 px border + 8 px +
+  // 44 px link + 8 px; the e2e spec measures it) or the footer's last links sit under it.
+  assert.match(
+    rule,
+    /"max-lg:\[html:has\(\[data-mobile-action-bar\]\)_&\]:pb-\[calc\(3\.8125rem\+env\(safe-area-inset-bottom\)\)\]"/,
+  );
+
+  const launcher = readFileSync("src/components/live-agent/LiveAgentLauncher.tsx", "utf8");
+  const trigger = readFileSync("src/components/live-agent/live-agent-trigger.ts", "utf8");
+  // Without a bar, and at lg+, the trigger is today's floating pill byte for byte.
+  assert.match(
+    trigger,
+    /"fixed bottom-4 right-4 z-50 h-11 rounded-full px-4 shadow-lg sm:bottom-5 sm:right-5"/,
+  );
+  // Loading and retry stay perceivable when the visible label is hidden (docked).
+  assert.match(
+    launcher,
+    /const label = loading \? "載入中…" : failed \? "重試問樓助手" : "問樓助手";/,
+  );
+  assert.match(launcher, /aria-label=\{label\}/);
 });
 
 test("homepage and navigation include Ting Kau content entry points", () => {
@@ -219,14 +270,12 @@ test("homepage and navigation include Ting Kau content entry points", () => {
     "汀九",
     "YouTube影片",
     "屋苑開箱",
-    "晉誠地產最新成交",
     "深井 青山公路 汀九買樓租樓",
     "準備搵深井 青山公路筍盤",
     "深井 青山公路 汀九我哋比你更熟",
     "/district/ting-kau",
     "/videos",
     "/estate-reviews",
-    "/transactions",
   ]) {
     assert.match(combined, new RegExp(text));
   }
@@ -362,7 +411,6 @@ test("header exposes approved mega menu structure and controls", () => {
     "代理團隊",
     "聯絡門市",
     "YouTube影片",
-    "晉誠地產最新成交",
     "屋苑開箱",
     "市場分析",
     "關於晉誠",
@@ -375,7 +423,6 @@ test("header exposes approved mega menu structure and controls", () => {
     "/listings?deal=rent",
     "/#owner-valuation",
     "/videos",
-    "/transactions",
   ]) {
     assert.equal(source.includes(text), true, `${text} should appear in the header source`);
   }
@@ -418,7 +465,7 @@ test("property experience navigation exposes the mortgage calculator everywhere"
 
   assert.match(header, /to: "\/mortgage", label: "按揭計算機"/);
   assert.match(header, /menuMobileItems\(menu\)/);
-  assert.match(footer, /<Link to="\/mortgage"[\s\S]*?按揭計算機/);
+  assert.match(footer, /<Link\s+to="\/mortgage"[\s\S]*?按揭計算機/);
 });
 
 test("sitemap includes property experience routes and only discovered public agent profiles", () => {
@@ -523,9 +570,9 @@ test("privacy, disclaimer and terms pages exist and are linked from the footer, 
 
   const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
   assert.match(footer, /法律 Legal/);
-  assert.match(footer, /<Link to="\/privacy"/);
-  assert.match(footer, /<Link to="\/disclaimer"/);
-  assert.match(footer, /<Link to="\/terms"/);
+  assert.match(footer, /<Link\s+to="\/privacy"/);
+  assert.match(footer, /<Link\s+to="\/disclaimer"/);
+  assert.match(footer, /<Link\s+to="\/terms"/);
 
   // The licence number appeared twice -- once from SITE_CONTACT.licenceNo, once
   // hardcoded as a literal "C-018613" -- so the two could silently drift apart.
@@ -745,4 +792,35 @@ test("source files avoid the older disallowed listing wording", () => {
     assert.equal(combined.includes(phrase), false, `${phrase} is no longer approved copy`);
   }
   assert.equal(combined.includes(required), true, `${required} should be the listing wording`);
+});
+
+test("the 最新成交 entry points are hidden while D7 holds", () => {
+  const header = readFileSync("src/components/site/SiteHeader.tsx", "utf8");
+  const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
+  const home = readFileSync("src/routes/index.tsx", "utf8");
+
+  for (const [name, source] of [
+    ["header", header],
+    ["footer", footer],
+    ["home", home],
+  ]) {
+    assert.equal(source.includes("晉誠地產最新成交"), false, `${name} must not link 最新成交`);
+    assert.equal(
+      source.includes("追蹤近期成交及區內價格走勢"),
+      false,
+      `${name} must not carry the 成交 blurb`,
+    );
+    assert.equal(source.includes('to: "/transactions"'), false, `${name} nav item`);
+    assert.doesNotMatch(source, /<Link\s+to="\/transactions"/, `${name} link`);
+    assert.equal(source.includes('href="/transactions"'), false, `${name} card`);
+  }
+
+  // The kept market entries, and the home grid sized for two cards.
+  for (const text of ["YouTube影片", "屋苑開箱", "市場分析", "觀看最新影片"]) {
+    assert.equal(header.includes(text), true, `${text} stays in the header`);
+  }
+  assert.match(home, /mt-10 grid gap-5 sm:grid-cols-2">/);
+
+  // Hidden, not removed: the page and its sitemap entry are untouched.
+  assert.equal(existsSync("src/routes/transactions.tsx"), true);
 });

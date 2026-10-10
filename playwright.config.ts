@@ -19,6 +19,7 @@ export default defineConfig({
     "**/admin-link-bulk-owned.spec.ts",
     "**/admin-attention.spec.ts",
     "**/public-form-feedback.spec.ts",
+    "**/public-mobile-chrome.spec.ts",
   ],
   fullyParallel: true,
   retries: 0,

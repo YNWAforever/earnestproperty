@@ -34,8 +34,8 @@ test("success renders role=status with the message text", () => {
   expect(status.length).toBe(1);
   expect(status.text()).toBe("已收到你的查詢。");
   expect($("[role='alert']").length).toBe(0);
-  expect(status.attr("class")).toContain("text-primary");
-  expect(status.attr("class")).toContain("bg-primary/10");
+  expect(status.attr("class")).toContain("text-secondary-foreground");
+  expect(status.attr("class")).toContain("bg-secondary");
 });
 
 test("passes id through", () => {

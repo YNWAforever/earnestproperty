@@ -771,6 +771,37 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         },
       );
 
+      await t.test("a suspected-bot lead is still alerted, tagged 疑似機械人", async () => {
+        const channel = scenario();
+        const dutyA = await staffWithEndpoint(channel, { duty: true, roles: ["manager"] });
+        const dutyB = await staffWithEndpoint(channel, { duty: true, roles: ["agent"] });
+        const sourceOf = (call) => call.response[0].components[0].parameters[1].text;
+        const send = async (leadId) => {
+          const provider = fakeProvider();
+          const result = await run(leadId, await leasedJob(query, leadId), provider);
+          return { result, provider };
+        };
+        const control = await send(await seedLead(query));
+        const flaggedLead = await seedLead(query);
+        await query(
+          "INSERT INTO crm_activities(lead_id,activity_type,body) VALUES($1,'suspected_bot','synthetic')",
+          [flaggedLead],
+        );
+        const flagged = await send(flaggedLead);
+        // Same destinations and outcome as an unflagged lead: the flag never suppresses an alert.
+        assert.deepEqual(flagged.result, control.result);
+        assert.deepEqual(flagged.result, { summary: { accepted: 2, unknown: 0, blocked: 0 } });
+        const destinations = (p) => p.calls.map((c) => c.memberId).sort();
+        assert.deepEqual(destinations(flagged.provider), destinations(control.provider));
+        assert.deepEqual(
+          destinations(flagged.provider),
+          [dutyA.destination, dutyB.destination].sort(),
+        );
+        for (const call of control.provider.calls) assert.equal(sourceOf(call), "網站查詢");
+        for (const call of flagged.provider.calls)
+          assert.equal(sourceOf(call), "網站查詢（疑似機械人）");
+      });
+
       await t.test("inside 24h still sends the template, never text", async () => {
         const channel = scenario();
         await staffWithEndpoint(channel, {
@@ -1359,6 +1390,95 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         await expectOneAlert((await leadFor(legacyB.id)).id);
 
         assert.equal(await alertJobCount(), jobsBefore + 5);
+      });
+
+      await t.test("a flagged submission is saved, noted, audited and still alerted", async () => {
+        const botAudits = (subjectId) =>
+          query(
+            "SELECT actor_id,subject_type,metadata FROM audit_logs WHERE action='public_form.suspected_bot' AND subject_id=$1",
+            [subjectId],
+          );
+        const botNotes = (leadId) =>
+          query(
+            "SELECT contact_id,staff_user_id,body FROM crm_activities WHERE lead_id=$1 AND activity_type='suspected_bot'",
+            [leadId],
+          );
+        for (const submissionId of [randomUUID(), undefined]) {
+          const flagged = await persistWebsiteInquiry(
+            query,
+            intake({ submissionId, suspectedBot: true }),
+          );
+          assert.ok(flagged.id, "the inquiry is saved");
+          assert.equal(flagged.leadAlertQueued, true, "the alert job is still queued");
+          const lead = await leadFor(flagged.id);
+          await expectOneAlert(lead.id);
+          const notes = await botNotes(lead.id);
+          assert.equal(notes.length, 1);
+          assert.equal(notes[0].staff_user_id, null);
+          assert.ok(notes[0].contact_id);
+          assert.equal(
+            notes[0].body,
+            "表格的隱藏欄位有內容，可能是自動程式提交。查詢已照常保存及通知，請照常跟進。",
+          );
+          assert.deepEqual(await botAudits(lead.id), [
+            { actor_id: null, subject_type: "crm_lead", metadata: { form: "website_inquiry" } },
+          ]);
+
+          const clean = await persistWebsiteInquiry(
+            query,
+            intake({ submissionId: submissionId && randomUUID() }),
+          );
+          const cleanLead = await leadFor(clean.id);
+          await expectOneAlert(cleanLead.id);
+          assert.equal((await botNotes(cleanLead.id)).length, 0);
+          assert.equal((await botAudits(cleanLead.id)).length, 0);
+        }
+
+        // A flagged replay of an unflagged submission is the same submission (hash ignores it).
+        const replayInput = intake({ submissionId: randomUUID() });
+        const original = await persistWebsiteInquiry(query, replayInput);
+        const replay = await persistWebsiteInquiry(query, { ...replayInput, suspectedBot: true });
+        assert.equal(replay.id, original.id);
+        assert.equal(replay.leadAlertQueued, false);
+
+        const consent = {
+          consentText: "synthetic",
+          consentVersion: "1",
+          consentedAt: new Date().toISOString(),
+          utm: {},
+        };
+        const valuationInput = {
+          name: "估價客戶",
+          phone: "91234567",
+          email: null,
+          propertyAddress: "測試大廈",
+          estateId: null,
+          notes: null,
+          ...consent,
+        };
+        const alertInput = {
+          name: "提醒客戶",
+          phone: "91234568",
+          email: null,
+          filters: {},
+          ...consent,
+        };
+        for (const [table, subjectType, form, persist, input] of [
+          ["valuation_leads", "valuation_lead", "valuation", persistValuationLead, valuationInput],
+          ["listing_alerts", "listing_alert", "listing_alert", persistListingAlert, alertInput],
+        ]) {
+          const flaggedRow = await persist(query, { ...input, suspectedBot: true });
+          const cleanRow = await persist(query, input);
+          for (const row of [flaggedRow, cleanRow]) {
+            assert.match(row.id, /^[0-9a-f-]{36}$/, `${table} returns the saved row id`);
+            const saved = await query(`SELECT id FROM ${table} WHERE id=$1`, [row.id]);
+            assert.equal(saved.length, 1, `${table} row is saved`);
+          }
+          assert.deepEqual(await botAudits(flaggedRow.id), [
+            { actor_id: null, subject_type: subjectType, metadata: { form } },
+          ]);
+          assert.equal((await botAudits(cleanRow.id)).length, 0);
+        }
       });
 
       await t.test(

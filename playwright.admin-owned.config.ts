@@ -18,6 +18,7 @@ export default defineConfig({
     "admin-safer-actions.spec.ts",
     "public-form-feedback.spec.ts",
     "live-agent-cards.spec.ts",
+    "public-mobile-chrome.spec.ts",
   ],
   workers: 1,
   fullyParallel: false,

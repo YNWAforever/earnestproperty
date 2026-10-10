@@ -6,12 +6,11 @@ import { createFileRoute } from "@tanstack/react-router";
 
 import { campaignDeliveryIdempotencyKey } from "@/lib/control-plane/jobs";
 import { enqueueJob, runClaimedJobs } from "@/lib/control-plane/jobs.server";
+import { hasBearerSecret } from "@/lib/http/bearer-secret";
 import { queryRows } from "@/lib/neon/db.server";
 
 async function drainSendQueue({ request }: { request: Request }) {
-  const expected = process.env.CRON_SECRET;
-  const actual = request.headers.get("authorization");
-  if (!expected || actual !== `Bearer ${expected}`) {
+  if (!hasBearerSecret(request, process.env.CRON_SECRET)) {
     return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 

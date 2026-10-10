@@ -155,6 +155,34 @@ export function commitMortgageDraft(
   return normalizeMortgageInputs({ ...inputs, [key]: parsed.value });
 }
 
+/**
+ * The inputs to preview while `key` is being typed: the draft applied when it parses and lies
+ * inside MORTGAGE_INPUT_LIMITS[key]; null when it is invalid, out of range or a required field is
+ * empty. An empty optional field previews without that field.
+ */
+export function liveMortgageInputs(
+  inputs: MortgageInputs,
+  key: keyof MortgageInputs,
+  draft: string,
+): MortgageInputs | null {
+  const parsed = parseMortgageDraft(draft);
+
+  if (parsed.status === "empty") {
+    if (key !== "monthlyIncome" && key !== "monthlyDebtExpenses") return null;
+    const { [key]: _omitted, ...remaining } = inputs;
+    return normalizeMortgageInputs(remaining);
+  }
+  if (parsed.status !== "valid") return null;
+
+  const limits = (
+    MORTGAGE_INPUT_LIMITS as Partial<Record<keyof MortgageInputs, { min: number; max: number }>>
+  )[key];
+  const min = limits?.min ?? 0;
+  if (parsed.value < min || (limits && parsed.value > limits.max)) return null;
+
+  return normalizeMortgageInputs({ ...inputs, [key]: parsed.value });
+}
+
 function finiteOrZero(value: number): number {
   return Number.isFinite(value) ? value : 0;
 }

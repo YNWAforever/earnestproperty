@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { hasBearerSecret } from "./bearer.js";
 import { LANE_ENDPOINTS, createJobAlarm, createLaneDrain, sweepLanes } from "./job-alarm.js";
 
 type Env = {
@@ -46,7 +47,7 @@ export default {
           ? "general"
           : null;
     if (request.method !== "POST" || !lane) return new Response(null, { status: 404 });
-    if (!env.CRON_SECRET || request.headers.get("authorization") !== `Bearer ${env.CRON_SECRET}`) {
+    if (!(await hasBearerSecret(request, env.CRON_SECRET))) {
       return Response.json({ error: "UNAUTHORIZED" }, { status: 401 });
     }
     await env.JOB_WAKE.getByName(lane).signal();
