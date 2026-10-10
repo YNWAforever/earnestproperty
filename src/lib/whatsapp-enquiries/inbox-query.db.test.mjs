@@ -28,6 +28,8 @@ async function fixture(fn) {
         public_listing_no text,placement_source text,requested_staff_id uuid,
         enquiry_owner_staff_id uuid,first_human_response_at timestamptz,
         association_review boolean,provider_thread_review boolean,updated_at timestamptz);
+      CREATE TABLE crm_contact_identity_reviews(id uuid PRIMARY KEY,conversation_id uuid,
+        reason text,status text);
       CREATE TABLE whatsapp_enquiry_reference_links(event_id uuid,ref_index int,conversation_id uuid,
         inquiry_id uuid,source text,external_listing_id text,created_at timestamptz);
       CREATE FUNCTION wa_can_read_conversation(uuid,uuid) RETURNS boolean LANGUAGE sql STABLE AS $$

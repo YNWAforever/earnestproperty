@@ -21,6 +21,10 @@ await build({
         replacement: resolve(shared, "synthetic-analytics.ts"),
       },
       {
+        find: /^@\/lib\/neon\/contact-identity-review$/,
+        replacement: resolve(root, "identity-review-api.ts"),
+      },
+      {
         find: /^@\/lib\/(neon\/(admin-data|admin-team|whatsapp-assignment|staff-notifications|enquiry-resolution|forwarded-enquiries)|admin\/operations\/operations-client)$/,
         replacement: resolve(root, "synthetic-api.ts"),
       },

@@ -173,6 +173,14 @@ test("scoped transcript IDs keep identical raw provider IDs from two channels", 
         payload jsonb,error text,updated_at timestamptz
       );
       ALTER TABLE crm_contacts ADD COLUMN whatsapp_profile_name text;
+      -- FX-12: ingest reads and writes the identity review table (columns ingest uses).
+      CREATE TABLE crm_contact_identity_reviews (
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid(),reason text NOT NULL,
+        contact_a uuid,contact_b uuid,conversation_id uuid,evidence jsonb NOT NULL DEFAULT '{}'::jsonb,
+        status text NOT NULL DEFAULT 'open',updated_at timestamptz DEFAULT now()
+      );
+      CREATE UNIQUE INDEX ux_identity_review_open_conversation ON crm_contact_identity_reviews (conversation_id)
+        WHERE reason = 'whatsapp_identity_conflict' AND status = 'open';
     `);
     const receiptId = "11111111-1111-4111-8111-111111111111";
     for (const channel of ["channel-a", "channel-b"]) {
