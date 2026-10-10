@@ -21,6 +21,7 @@ export function buildPropertyInquiryPayload(input: {
     [key: string]: unknown;
   };
   propertyId: string;
+  listingNo?: string | null;
   consentWhatsapp: boolean;
 }): {
   name: string;
@@ -28,5 +29,6 @@ export function buildPropertyInquiryPayload(input: {
   email: string;
   message: string;
   property_id: string;
+  listingNo?: string;
   consentWhatsapp: boolean;
 };

@@ -88,3 +88,24 @@ test("the lead timeline keeps the empty state next to a bot row", () => {
   expect(timeline.slice(flagged, rows)).toContain("未有跟進紀錄");
   expect(timeline.slice(flagged, rows)).toContain(") : null}");
 });
+
+test("a lead's listing shows the enquiry's number when no listing row matches (C-15)", async () => {
+  const { leadListingDisplay } = await import("./crm-presentation");
+  expect(leadListingDisplay({ listing_no: "FX18A-GONE", property_title: null })).toEqual({
+    primary: "#FX18A-GONE（未能配對現有樓盤）",
+    secondary: null,
+  });
+  expect(leadListingDisplay({ listing_no: "EP1", property_title: "海景兩房" })).toEqual({
+    primary: "海景兩房",
+    secondary: "#EP1",
+  });
+  expect(leadListingDisplay({ listing_no: null, property_title: null })).toEqual({
+    primary: "—",
+    secondary: null,
+  });
+  const route = readFileSync(new URL("../../routes/admin.leads.tsx", import.meta.url), "utf8");
+  // Both the list row and the detail panel use it.
+  expect((route.match(/leadListingDisplay\(lead\)/g) ?? []).length).toBeGreaterThanOrEqual(2);
+  expect(route).toMatch(/value=\{leadListingDisplay\(lead\)\.primary\}/);
+  expect(route).not.toMatch(/lead\.property_title \?\? lead\.listing_no/);
+});

@@ -104,3 +104,36 @@ test("a resolved value without an id (a rate-limited Response) keeps the pending
   assert.equal(ids[0], ids[1], "the retry must reuse the same submissionId");
   assert.equal(saved.size, 0, "a confirmed save clears the pending key");
 });
+
+test("the listing number does not change the pending identity (C-15)", async () => {
+  // A page loaded before the listing number was sent stored its pending identity
+  // without it; a reload on the new bundle must still reuse that identity.
+  const saved = new Map();
+  const storage = {
+    getItem: (key) => saved.get(key),
+    setItem: (key, value) => saved.set(key, value),
+    removeItem: (key) => saved.delete(key),
+  };
+  const payload = { name: "Synthetic", phone: "85260000000", property_id: "p-1" };
+  const ids = [];
+  await assert.rejects(
+    submitWithInquiryIdentity(
+      payload,
+      async (input) => {
+        ids.push(input.submissionId);
+        throw new Error("response lost");
+      },
+      storage,
+    ),
+  );
+  await submitWithInquiryIdentity(
+    { ...payload, listingNo: "EP12345-R" },
+    async (input) => {
+      ids.push(input.submissionId);
+      assert.equal(input.listingNo, "EP12345-R");
+      return { id: "inquiry" };
+    },
+    storage,
+  );
+  assert.equal(ids[0], ids[1]);
+});

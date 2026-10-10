@@ -15,7 +15,6 @@ import { requireStaffPermission } from "../control-plane/permissions";
 import { ServerFnResponseError, unwrapServerFnResponse } from "./server-fn-response.ts";
 import { deriveAgentProfileEditorContext } from "./staff-security-policy";
 import { isHoneypotFilled } from "../public-form-honeypot";
-import { WEBSITE_LISTING_NO_PATTERN } from "./website-inquiry.js";
 import type { TransactionPerformanceInput } from "./transaction-performance.types.ts";
 
 import type {
@@ -657,8 +656,10 @@ const websiteInquirySchema = z
       .regex(/^[\d+\-\s()]+$/),
     email: z.string().trim().max(254).email().optional().or(z.literal("")),
     message: z.string().trim().max(2000).optional().or(z.literal("")),
-    listingNo: z.string().regex(WEBSITE_LISTING_NO_PATTERN).optional(),
-    property_id: z.string().trim().uuid().optional(),
+    // C-15: a listing reference can never fail the enquiry. Any bad value becomes undefined
+    // here; createWebsiteInquiry keeps only a valid number and a UUID.
+    listingNo: z.string().max(80).optional().catch(undefined),
+    property_id: z.string().max(80).optional().catch(undefined),
     consentWhatsapp: z.boolean().default(false),
     // Invisible honeypot: any type or length is accepted, so it can never fail a submission.
     website: z.unknown().optional(),

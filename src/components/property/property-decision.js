@@ -1,3 +1,5 @@
+import { isValidWebsiteListingNo } from "../../lib/neon/website-inquiry.js";
+
 export function getPropertyDecision({ dealType, price }) {
   const isRent = dealType === "rent";
   const mortgagePrice = Number(price);
@@ -17,13 +19,15 @@ export function getPropertyDecision({ dealType, price }) {
   };
 }
 
-export function buildPropertyInquiryPayload({ form, propertyId, consentWhatsapp }) {
+export function buildPropertyInquiryPayload({ form, propertyId, listingNo, consentWhatsapp }) {
   return {
     name: form.name,
     phone: form.phone,
     email: form.email,
     message: form.message,
     property_id: propertyId,
+    // The public number the visitor saw (C-15); a malformed one is simply not sent.
+    ...(isValidWebsiteListingNo(listingNo) ? { listingNo } : {}),
     consentWhatsapp,
   };
 }

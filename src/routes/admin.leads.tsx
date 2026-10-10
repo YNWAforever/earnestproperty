@@ -101,6 +101,7 @@ import {
   labeledFilterOptions,
   quickLeadFilter,
   aiScoreLabel,
+  leadListingDisplay,
 } from "@/lib/admin/crm-presentation";
 import { ContactIdentityReviewList } from "@/components/admin/leads/ContactIdentityReviewList";
 import { adminAttentionIdentity, adminAttentionStore } from "@/components/admin/admin-attention";
@@ -1417,6 +1418,7 @@ function LeadRow({
   // screen reader announced only "開啟 X 詳情, button" and never the 意向/來源/
   // 預算/階段/opt-in cells. A real focusable control inside the Lead cell keeps
   // every column reachable by keyboard while still announcing per-column.
+  const listing = leadListingDisplay(lead);
   return (
     <TableRow className="hover:bg-muted/40" data-state={selected ? "selected" : undefined}>
       <TableCell>
@@ -1440,10 +1442,10 @@ function LeadRow({
       <TableCell>{formatSource(lead.source)}</TableCell>
       <TableCell>
         <p className="line-clamp-1" title={lead.property_title ?? undefined}>
-          {lead.property_title ?? lead.listing_no ?? "—"}
+          {listing.primary}
         </p>
-        {lead.listing_no ? (
-          <p className="text-xs text-muted-foreground">#{lead.listing_no}</p>
+        {listing.secondary ? (
+          <p className="text-xs text-muted-foreground">{listing.secondary}</p>
         ) : null}
       </TableCell>
       <TableCell className="whitespace-nowrap text-right tabular-nums">
@@ -1649,8 +1651,8 @@ function LeadDetailEditor({
 
           <ReadonlyField
             label="相關放盤"
-            value={lead.property_title ?? lead.listing_no ?? "—"}
-            description={lead.listing_no ? `#${lead.listing_no}` : undefined}
+            value={leadListingDisplay(lead).primary}
+            description={leadListingDisplay(lead).secondary ?? undefined}
           />
 
           <ReadonlyField label="建立時間" value={formatDate(lead.created_at)} />

@@ -20,7 +20,7 @@ const enabled = process.env.LOCAL_POSTGRES_URL === LOCAL_URL;
         "CREATE TABLE properties (id uuid PRIMARY KEY, agent_id uuid, deal_type text, status text, listing_no text)",
         "CREATE TABLE crm_contacts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text, phone text, normalized_phone text UNIQUE, email text, source text, opt_in_whatsapp boolean DEFAULT false, opted_out_whatsapp boolean DEFAULT false, updated_at timestamptz DEFAULT now())",
         "CREATE TABLE crm_leads (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), contact_id uuid, property_id uuid, assigned_agent_id uuid, stage text, intent text, source text, note text)",
-        "CREATE TABLE inquiries (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), crm_lead_id uuid, marketing_consent_requested boolean, consent_copy_version text, source text, property_id uuid, intent text, name text, phone text, email text, message text, assigned_agent_id uuid, crm_contact_id uuid)",
+        "CREATE TABLE inquiries (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), crm_lead_id uuid, marketing_consent_requested boolean, consent_copy_version text, source text, property_id uuid, intent text, name text, phone text, email text, message text, assigned_agent_id uuid, crm_contact_id uuid, public_listing_no text)",
         "CREATE TABLE website_inquiry_submissions (submission_id uuid PRIMARY KEY, payload_hash text, inquiry_id uuid DEFAULT gen_random_uuid(), created_at timestamptz DEFAULT now())",
       ])
         await pool.query(ddl);

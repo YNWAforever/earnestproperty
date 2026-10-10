@@ -1264,6 +1264,369 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
         for (const path of ["neon/migrations/" + FORWARD, REVERT_PATH])
           assert.ok(!fileText(path).includes(alertJobType), path);
       });
+
+      // FX-18a C-15: a website enquiry keeps the listing it was about, and its
+      // listing fields can never cost the enquiry, its lead or its alert job.
+      const c15 = (n) => `79180000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+      const C15_ACTIVE = c15(601);
+      const C15_WITHDRAWN = c15(602);
+      for (const [propertyId, listingNo, status] of [
+        [C15_ACTIVE, "FX18A-ACTIVE", "active"],
+        [C15_WITHDRAWN, "FX18A-WD", "inactive"],
+      ]) {
+        await query(
+          `INSERT INTO properties(id,listing_no,canonical_property_no,title_zh,deal_type,district_slug,status,price,agent_id)
+           VALUES($1,$2,$2,$3,'rent','sham-tseng',$4,20000,$5)`,
+          [propertyId, listingNo, "C15 測試盤 " + listingNo, status, AGENT_A],
+        );
+      }
+      const enquire = (n, fields) =>
+        server.createWebsiteInquiry({
+          submissionId: c15(700 + n),
+          name: "C15 客戶 " + n,
+          phone: "9180 " + String(7000 + n),
+          email: "",
+          message: "想睇樓",
+          consentWhatsapp: false,
+          ...fields,
+        });
+      const intake = async (inquiryId) => {
+        const [row] = await query(
+          `SELECT i.property_id::text AS inquiry_property, i.assigned_agent_id::text AS inquiry_agent,
+                  i.public_listing_no, i.intent AS inquiry_intent, i.crm_lead_id::text AS lead_id,
+                  l.property_id::text AS lead_property, l.assigned_agent_id::text AS lead_agent,
+                  l.intent AS lead_intent, l.source AS lead_source,
+                  (SELECT count(*)::int FROM ops_jobs j
+                    WHERE j.idempotency_key = 'lead-alert:' || l.id) AS alert_jobs
+             FROM inquiries i JOIN crm_leads l ON l.id = i.crm_lead_id WHERE i.id = $1`,
+          [inquiryId],
+        );
+        assert.ok(row, "the enquiry and its lead exist");
+        return row;
+      };
+
+      await t.test(
+        "an enquiry with an unparseable listing number or property id still saves the inquiry, lead and alert job",
+        async () => {
+          const warn = mock.method(console, "warn", () => {});
+          try {
+            const result = await enquire(1, { listingNo: "樓盤 A 12", property_id: "abc" });
+            assert.match(result.id, /^[0-9a-f-]{36}$/);
+            assert.equal(result.leadAlertQueued, true);
+            const row = await intake(result.id);
+            assert.equal(row.inquiry_property, null);
+            assert.equal(row.lead_property, null);
+            assert.equal(row.public_listing_no, null);
+            assert.equal(row.lead_agent, null);
+            assert.equal(row.lead_source, "website");
+            assert.equal(row.alert_jobs, 1);
+            const drops = warn.mock.calls.filter(
+              (call) => call.arguments[0] === "INQUIRY_LISTING_REF_DROPPED",
+            );
+            assert.deepEqual(
+              drops.map((call) => call.arguments[1]),
+              [{ field: "listingNo" }, { field: "property_id" }],
+            );
+            // The log names the field only, never the value or the customer.
+            const logged = JSON.stringify(warn.mock.calls.map((call) => call.arguments));
+            assert.ok(!logged.includes("樓盤"));
+            assert.ok(!logged.includes("abc"));
+            assert.ok(!logged.includes("C15 客戶"));
+          } finally {
+            warn.mock.restore();
+          }
+        },
+      );
+
+      await t.test(
+        "an enquiry about a withdrawn listing links that listing and keeps its public number, without assigning its agent",
+        async () => {
+          // By row id, as the listing page sends it, plus the number it shows.
+          const byId = await enquire(2, { property_id: C15_WITHDRAWN, listingNo: "FX18A-WD" });
+          assert.equal(byId.leadAlertQueued, true);
+          const a = await intake(byId.id);
+          assert.equal(a.inquiry_property, C15_WITHDRAWN);
+          assert.equal(a.lead_property, C15_WITHDRAWN);
+          assert.equal(a.public_listing_no, "FX18A-WD");
+          assert.equal(a.inquiry_agent, null, "a withdrawn listing never assigns its agent");
+          assert.equal(a.lead_agent, null);
+          assert.equal(
+            a.lead_intent,
+            "buyer",
+            "routing is unchanged: only an active listing sets it",
+          );
+          assert.equal(a.alert_jobs, 1);
+
+          // By number alone: the matched row is linked.
+          const byNo = await intake((await enquire(3, { listingNo: "FX18A-WD" })).id);
+          assert.equal(byNo.lead_property, C15_WITHDRAWN);
+          assert.equal(byNo.public_listing_no, "FX18A-WD");
+          assert.equal(byNo.lead_agent, null);
+
+          // By row id alone: the row's own number is filled in.
+          const idOnly = await intake((await enquire(4, { property_id: C15_WITHDRAWN })).id);
+          assert.equal(idOnly.lead_property, C15_WITHDRAWN);
+          assert.equal(idOnly.public_listing_no, "FX18A-WD");
+
+          // A replay of the same submission returns the same enquiry and queues nothing new.
+          const replay = await enquire(2, { property_id: C15_WITHDRAWN, listingNo: "FX18A-WD" });
+          assert.equal(replay.id, byId.id);
+          assert.equal(replay.leadAlertQueued, false);
+        },
+      );
+
+      await t.test(
+        "an enquiry about an unknown listing keeps its number, and staff see it on the lead",
+        async () => {
+          const result = await enquire(5, { listingNo: "FX18A-GONE" });
+          const row = await intake(result.id);
+          assert.equal(row.lead_property, null);
+          assert.equal(row.public_listing_no, "FX18A-GONE");
+          assert.equal(row.alert_jobs, 1);
+
+          const detail = await server.fetchAdminLead(row.lead_id, admin);
+          assert.equal(detail.listing_no, "FX18A-GONE");
+          assert.equal(detail.property_title, null);
+
+          const { buildAdminPageQuery } = await import("./admin-pagination-query.ts");
+          const page = buildAdminPageQuery({ resource: "leads", q: "FX18A-GONE" }, admin);
+          const [pageResult] = await query(page.statement, page.params);
+          const listed = (pageResult?.rows ?? []).filter((item) => item.id === row.lead_id);
+          assert.equal(listed.length, 1, "the list finds the lead by the enquiry's number");
+          assert.equal(listed[0].listing_no, "FX18A-GONE");
+          assert.equal(listed[0].property_title, null);
+
+          // A linked listing still shows its own number and title.
+          const linked = await intake((await enquire(6, { property_id: C15_WITHDRAWN })).id);
+          const linkedDetail = await server.fetchAdminLead(linked.lead_id, admin);
+          assert.equal(linkedDetail.listing_no, "FX18A-WD");
+          assert.equal(linkedDetail.property_title, "C15 測試盤 FX18A-WD");
+        },
+      );
+
+      await t.test("an enquiry about an active listing is unchanged", async () => {
+        const result = await enquire(7, { property_id: C15_ACTIVE, listingNo: "FX18A-ACTIVE" });
+        assert.equal(result.leadAlertQueued, true);
+        const row = await intake(result.id);
+        assert.equal(row.lead_property, C15_ACTIVE);
+        assert.equal(row.inquiry_property, C15_ACTIVE);
+        assert.equal(row.lead_agent, AGENT_A);
+        assert.equal(row.inquiry_agent, AGENT_A);
+        assert.equal(row.lead_intent, "renter");
+        assert.equal(row.inquiry_intent, "renter");
+        assert.equal(row.alert_jobs, 1);
+
+        // An inactive listing agent is still never assigned.
+        await query("UPDATE staff_users SET active=false WHERE id=$1", [AGENT_A]);
+        try {
+          const off = await intake((await enquire(8, { property_id: C15_ACTIVE })).id);
+          assert.equal(off.lead_property, C15_ACTIVE);
+          assert.equal(off.lead_agent, null);
+        } finally {
+          await query("UPDATE staff_users SET active=true WHERE id=$1", [AGENT_A]);
+        }
+      });
+
+      await t.test(
+        "a page's own withdrawn listing id decides routing, even when its number is an active sibling's",
+        async () => {
+          // The withdrawn page row shows a public number that is also the
+          // listing_no of an active sibling row with its own agent. The page's
+          // id decides: the enquiry links the withdrawn row and gets no agent.
+          const C15_PAGE = c15(603);
+          const C15_SIBLING = c15(604);
+          await query(
+            `INSERT INTO properties(id,listing_no,canonical_property_no,title_zh,deal_type,district_slug,status,price,agent_id)
+             VALUES($1,'FX18A-PAGE-RAW','FX18A-SIB','C15 下架頁','rent','sham-tseng','inactive',20000,$3),
+                   ($2,'FX18A-SIB','FX18A-SIB','C15 在架盤','rent','sham-tseng','active',20000,$3)`,
+            [C15_PAGE, C15_SIBLING, AGENT_A],
+          );
+          const result = await enquire(9, { property_id: C15_PAGE, listingNo: "FX18A-SIB" });
+          assert.equal(result.leadAlertQueued, true);
+          const row = await intake(result.id);
+          assert.equal(row.inquiry_property, C15_PAGE);
+          assert.equal(row.lead_property, C15_PAGE);
+          assert.equal(row.inquiry_agent, null, "the sibling's agent is never assigned");
+          assert.equal(row.lead_agent, null);
+          assert.equal(row.lead_intent, "buyer");
+          assert.equal(row.public_listing_no, "FX18A-SIB");
+          assert.equal(row.alert_jobs, 1);
+        },
+      );
+
+      // FX-18a C-16: a note, a completed follow-up and an enquiry status change
+      // insert their audit row in the same statement, so a failed audit insert
+      // leaves nothing behind and a retry cannot duplicate the write.
+      const c16 = (n) => `79180000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+      const C16_INQUIRY = c16(801);
+      await query(
+        "INSERT INTO inquiries(id,source,name,phone,status,assigned_agent_id) VALUES($1,'website','C16 客戶','91808001','new',$2)",
+        [C16_INQUIRY, AGENT_A],
+      );
+      const failAuditFor = async (actions) => {
+        await query(`CREATE OR REPLACE FUNCTION c16_fail_audit() RETURNS trigger
+          LANGUAGE plpgsql AS $$
+          BEGIN
+            IF NEW.action = ANY(TG_ARGV) THEN
+              RAISE EXCEPTION 'c16 synthetic audit failure for %', NEW.action;
+            END IF;
+            RETURN NEW;
+          END $$`);
+        await query(
+          `CREATE TRIGGER c16_fail_audit BEFORE INSERT ON audit_logs FOR EACH ROW
+           EXECUTE FUNCTION c16_fail_audit(${actions.map((a) => `'${a}'`).join(",")})`,
+        );
+      };
+      const restoreAudit = async () => {
+        await query("DROP TRIGGER IF EXISTS c16_fail_audit ON audit_logs");
+        await query("DROP FUNCTION IF EXISTS c16_fail_audit()");
+      };
+      const auditRows = async (action, subjectId) =>
+        query(
+          "SELECT actor_id::text, subject_type, metadata FROM audit_logs WHERE action=$1 AND subject_id=$2 ORDER BY created_at",
+          [action, subjectId],
+        );
+      const rejectsAudit = async (promise) => {
+        await assert.rejects(promise, /c16 synthetic audit failure/);
+      };
+
+      await t.test(
+        "when the audit insert fails, the note is not saved, so a retry cannot duplicate it",
+        async () => {
+          const note = {
+            lead_id: L1,
+            contact_id: CONTACT,
+            activity_type: "note",
+            body: "C16 合成筆記",
+            due_at: null,
+            completed_at: null,
+          };
+          const notes = async () =>
+            (
+              await query(
+                "SELECT count(*)::int AS n FROM crm_activities WHERE lead_id=$1 AND body=$2",
+                [L1, note.body],
+              )
+            )[0].n;
+          // Earlier subtests already audited notes on L1; count from here.
+          const before = (await auditRows("lead.activity", L1)).length;
+          await failAuditFor(["lead.activity"]);
+          try {
+            await rejectsAudit(server.createAdminLeadActivity(note, manager));
+          } finally {
+            await restoreAudit();
+          }
+          assert.equal(await notes(), 0, "the note rolled back with its audit row");
+          assert.equal((await auditRows("lead.activity", L1)).length, before);
+
+          const { id: activityId } = await server.createAdminLeadActivity(note, manager);
+          assert.match(activityId, /^[0-9a-f-]{36}$/);
+          assert.equal(await notes(), 1, "the retry saved exactly one note");
+          const audits = await auditRows("lead.activity", L1);
+          assert.equal(audits.length, before + 1);
+          const audit = audits.find((row) => row.metadata.activityId === activityId);
+          assert.ok(audit, "the saved note has its audit row");
+          assert.equal(audit.actor_id, MANAGER);
+          assert.equal(audit.subject_type, "lead");
+          assert.deepEqual(audit.metadata, { activityId, activity_type: "note" });
+
+          // Scope is unchanged: an agent cannot write on another agent's lead,
+          // and nothing is audited for it.
+          await rejectsWith(server.createAdminLeadActivity(note, agentB), 403);
+          assert.equal(await notes(), 1);
+          assert.equal((await auditRows("lead.activity", L1)).length, before + 1);
+        },
+      );
+
+      await t.test(
+        "when the audit insert fails, a follow-up stays open; completing it audits once",
+        async () => {
+          const [{ id: activityId }] = await query(
+            `INSERT INTO crm_activities(lead_id,contact_id,activity_type,body,due_at)
+             VALUES($1,$2,'follow_up','C16 跟進',now()) RETURNING id::text`,
+            [L1, CONTACT],
+          );
+          const completedAt = async () =>
+            (await query("SELECT completed_at FROM crm_activities WHERE id=$1", [activityId]))[0]
+              .completed_at;
+          const input = { activity_id: activityId, lead_id: L1 };
+          await failAuditFor(["lead.activity.complete"]);
+          try {
+            await rejectsAudit(server.completeAdminLeadActivity(input, manager));
+          } finally {
+            await restoreAudit();
+          }
+          assert.equal(await completedAt(), null, "the completion rolled back with its audit row");
+
+          assert.deepEqual(await server.completeAdminLeadActivity(input, manager), { ok: true });
+          assert.notEqual(await completedAt(), null);
+          const audits = (await auditRows("lead.activity.complete", L1)).filter(
+            (row) => row.metadata.activityId === activityId,
+          );
+          assert.equal(audits.length, 1);
+          assert.equal(audits[0].actor_id, MANAGER);
+          assert.deepEqual(audits[0].metadata, { activityId });
+
+          // A second completion or a mismatched lead changes and audits nothing.
+          assert.deepEqual(await server.completeAdminLeadActivity(input, manager), {
+            ok: false,
+            error: "Not found or already complete",
+          });
+          assert.deepEqual(
+            await server.completeAdminLeadActivity({ ...input, lead_id: L3 }, manager),
+            { ok: false, error: "Not found or already complete" },
+          );
+          assert.equal(
+            (await auditRows("lead.activity.complete", L1)).filter(
+              (row) => row.metadata.activityId === activityId,
+            ).length,
+            1,
+          );
+        },
+      );
+
+      await t.test("inquiry status change writes before and after", async () => {
+        const status = async () =>
+          (await query("SELECT status FROM inquiries WHERE id=$1", [C16_INQUIRY]))[0].status;
+        await failAuditFor(["inquiry.status"]);
+        try {
+          await rejectsAudit(server.updateInquiryStatus(C16_INQUIRY, "contacted", manager));
+        } finally {
+          await restoreAudit();
+        }
+        assert.equal(await status(), "new", "the status change rolled back with its audit row");
+        assert.equal((await auditRows("inquiry.status", C16_INQUIRY)).length, 0);
+
+        assert.deepEqual(await server.updateInquiryStatus(C16_INQUIRY, "contacted", manager), {
+          ok: true,
+        });
+        assert.equal(await status(), "contacted");
+        let audits = await auditRows("inquiry.status", C16_INQUIRY);
+        assert.equal(audits.length, 1);
+        assert.equal(audits[0].actor_id, MANAGER);
+        assert.equal(audits[0].subject_type, "inquiry");
+        assert.deepEqual(audits[0].metadata, {
+          status: "contacted",
+          before: "new",
+          after: "contacted",
+        });
+
+        // Agent scope and the allowlist are unchanged, and refusals audit nothing.
+        await rejectsWith(server.updateInquiryStatus(C16_INQUIRY, "closed", agentB), 403);
+        await rejectsWith(server.updateInquiryStatus(C16_INQUIRY, "bogus", manager), 400);
+        assert.equal(await status(), "contacted");
+        const agentA = actor(AGENT_A, "agent");
+        assert.deepEqual(await server.updateInquiryStatus(C16_INQUIRY, "qualified", agentA), {
+          ok: true,
+        });
+        audits = await auditRows("inquiry.status", C16_INQUIRY);
+        assert.equal(audits.length, 2);
+        assert.deepEqual(audits[1].metadata, {
+          status: "qualified",
+          before: "contacted",
+          after: "qualified",
+        });
+      });
     });
   } finally {
     network.mock.restore();
