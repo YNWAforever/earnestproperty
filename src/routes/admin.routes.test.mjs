@@ -1245,3 +1245,24 @@ test("the campaign form has no schedule field and shows 已排期 only for a sch
   // The label itself now lives in the one glossary (FX-17a G-12).
   assert.match(read("src/lib/admin/glossary.ts"), /scheduled: "已排期"/);
 });
+
+test("every KPI tile links to a queue the page accepts", () => {
+  const commandCenter = read("src/routes/admin.leads_.command-center.tsx");
+  // Tiles are links to ?queue=<key>, marked current when active, with the hidden hint.
+  assert.match(commandCenter, /search=\{\{ queue: item\.queue \}\}/);
+  assert.match(commandCenter, /aria-current=\{active \? "page" : undefined\}/);
+  assert.match(commandCenter, /（按此查看名單）/);
+  // The queue each tile points at is one the search validation accepts.
+  const tileQueues = [...commandCenter.matchAll(/queue: "([a-z_]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(
+    [...new Set(tileQueues)].sort(),
+    ["high_score", "live_agent", "overdue", "unassigned", "whatsapp_blocked"].sort(),
+  );
+  assert.match(
+    commandCenter,
+    /COMMAND_CENTER_QUEUES\.find\(\(item\) => item\.key === search\.queue\)/,
+  );
+  for (const label of ["逾期跟進", "WhatsApp 受阻"]) {
+    assert.match(read("src/lib/admin/command-center-queues.js"), new RegExp(label));
+  }
+});

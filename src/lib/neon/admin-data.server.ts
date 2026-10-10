@@ -13,6 +13,7 @@ import {
   transactionRows,
 } from "./db.server";
 import { leadBudgetError } from "../admin/lead-budget";
+import { commandCenterKpis } from "../admin/command-center-queues.js";
 import { reviewAudienceRows, resolveAudienceSelection } from "../admin/blast-review";
 import { getPublicInventoryCounts } from "./public-inventory-counts.server";
 import { isMissingCmsVideosTableError } from "./cms-videos-schema";
@@ -3149,15 +3150,7 @@ export async function listCommandCenter(actor: StaffAccess): Promise<CommandCent
 
   mapped.sort((a, b) => compareCommandCenterRows(a.sortKey, b.sortKey));
 
-  const kpis: CommandCenterKpis = {
-    hot: mapped.filter((m) => m.row.priority.bucket <= 2).length,
-    overdue: mapped.filter((m) => m.row.has_overdue_followup).length,
-    unassigned: mapped.filter((m) => m.row.assigned_agent_id == null).length,
-    handoffs: mapped.filter((m) => m.recentHandoff).length,
-    whatsapp_blocked: mapped.filter(
-      (m) => m.row.whatsapp.linked === false || m.row.whatsapp.canReply === false,
-    ).length,
-  };
+  const kpis: CommandCenterKpis = commandCenterKpis(mapped.map((m) => m.row));
 
   return {
     rows: mapped.map((m) => m.row),

@@ -23,6 +23,10 @@ import {
   rowForOpenPanel,
 } from "@/lib/admin/background-refresh";
 import { MIN_VISIBLE_INTERVAL_MS, useVisibleInterval } from "@/lib/admin/use-visible-interval";
+import {
+  COMMAND_CENTER_QUEUES,
+  matchesCommandCenterQueue,
+} from "@/lib/admin/command-center-queues.js";
 import { BACKGROUND_READ_TIMEOUT_MS, withTimeout } from "@/lib/admin/with-timeout";
 import {
   analyzeAdminLeadAiProfile,
@@ -35,15 +39,6 @@ import type {
   CommandCenterRow,
 } from "@/lib/neon/admin-data.types";
 
-const FILTERS: { key: CommandCenterFilterKey; label: string }[] = [
-  { key: "today", label: "今日要跟" },
-  { key: "high_score", label: "AI 高分查詢" },
-  { key: "unassigned", label: "未指派" },
-  { key: "live_agent", label: "問樓助手" },
-  { key: "whatsapp", label: "WhatsApp" },
-  { key: "all", label: "全部" },
-];
-
 const DEFAULT_QUEUE: CommandCenterFilterKey = "all";
 
 // The active queue lives in the URL, so a reload, a browser Back from a lead, or a
@@ -53,7 +48,7 @@ function parseCommandCenterSearch(search: Record<string, unknown>): {
   queue?: CommandCenterFilterKey;
 } {
   if (typeof search.queue !== "string") return {};
-  const match = FILTERS.find((item) => item.key === search.queue);
+  const match = COMMAND_CENTER_QUEUES.find((item) => item.key === search.queue);
   return match && match.key !== DEFAULT_QUEUE ? { queue: match.key } : {};
 }
 
@@ -124,24 +119,6 @@ const WHATSAPP_BLOCKED_LABELS: Record<string, string> = {
   OPTED_OUT: "客戶已退出推廣",
   NO_CONVERSATION: "未連接 WhatsApp",
 };
-
-function matchesFilter(row: CommandCenterRow, key: CommandCenterFilterKey): boolean {
-  switch (key) {
-    case "today":
-      return row.has_overdue_followup || row.priority.bucket <= 2;
-    case "high_score":
-      return (row.lead_score ?? 0) >= 60;
-    case "unassigned":
-      return row.assigned_agent_id == null;
-    case "live_agent":
-      return row.handoff_status != null;
-    case "whatsapp":
-      return row.whatsapp.linked === true;
-    case "all":
-    default:
-      return true;
-  }
-}
 
 function CommandCenter() {
   const { user } = useNeonAuth();
@@ -245,7 +222,7 @@ function CommandCenter() {
   }
 
   const visibleRows = useMemo(
-    () => (data ? data.rows.filter((row) => matchesFilter(row, filter)) : []),
+    () => (data ? data.rows.filter((row) => matchesCommandCenterQueue(row, filter)) : []),
     [data, filter],
   );
 
@@ -265,7 +242,7 @@ function CommandCenter() {
       description="每日跟進工作台：誰要跟、為何重要、下一步、WhatsApp 狀態。"
     >
       <WhatsappEnquiryQueue />
-      {data ? <KpiStrip data={data} /> : null}
+      {data ? <KpiStrip data={data} activeQueue={filter} /> : null}
       {data && data.rows.length >= COMMAND_CENTER_ROW_LIMIT ? (
         <p className="mb-3 text-xs text-muted-foreground">
           只涵蓋最近更新的 {COMMAND_CENTER_ROW_LIMIT} 筆客戶查詢，較舊的未有載入。
@@ -275,7 +252,7 @@ function CommandCenter() {
       <AdminToolbar
         filters={
           <>
-            {FILTERS.map((item) => (
+            {COMMAND_CENTER_QUEUES.map((item) => (
               <Button
                 key={item.key}
                 type="button"
@@ -472,24 +449,46 @@ function CommandCenter() {
   );
 }
 
-function KpiStrip({ data }: { data: CommandCenterData }) {
-  const items = [
-    { label: "AI 高分查詢", value: data.kpis.hot },
-    { label: "逾期跟進", value: data.kpis.overdue },
-    { label: "未指派", value: data.kpis.unassigned },
-    { label: "新問樓助手轉介", value: data.kpis.handoffs },
-    { label: "WhatsApp 受阻", value: data.kpis.whatsapp_blocked },
+function KpiStrip({
+  data,
+  activeQueue,
+}: {
+  data: CommandCenterData;
+  activeQueue: CommandCenterFilterKey;
+}) {
+  // Each tile counts exactly the rows its queue shows (command-center-queues.js).
+  const items: { label: string; value: number; queue: CommandCenterFilterKey }[] = [
+    { label: "AI 高分查詢", value: data.kpis.hot, queue: "high_score" },
+    { label: "逾期跟進", value: data.kpis.overdue, queue: "overdue" },
+    { label: "未指派", value: data.kpis.unassigned, queue: "unassigned" },
+    { label: "新問樓助手轉介", value: data.kpis.handoffs, queue: "live_agent" },
+    { label: "WhatsApp 受阻", value: data.kpis.whatsapp_blocked, queue: "whatsapp_blocked" },
   ];
   return (
     <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      {items.map((item) => (
-        <Card key={item.label}>
-          <CardContent className="p-3">
-            <p className="text-xs text-muted-foreground">{item.label}</p>
-            <p className="mt-1 text-2xl font-semibold tabular-nums">{item.value}</p>
-          </CardContent>
-        </Card>
-      ))}
+      {items.map((item) => {
+        const active = activeQueue === item.queue;
+        return (
+          <Link
+            key={item.label}
+            to="/admin/leads/command-center"
+            search={{ queue: item.queue }}
+            resetScroll={false}
+            aria-current={active ? "page" : undefined}
+            className="rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <Card className={active ? "border-primary" : "hover:bg-accent/40"}>
+              <CardContent className="p-3">
+                <p className="text-xs text-muted-foreground">
+                  {item.label}
+                  <span className="sr-only">（按此查看名單）</span>
+                </p>
+                <p className="mt-1 text-2xl font-semibold tabular-nums">{item.value}</p>
+              </CardContent>
+            </Card>
+          </Link>
+        );
+      })}
     </div>
   );
 }
