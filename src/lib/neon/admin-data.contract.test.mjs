@@ -549,3 +549,47 @@ test("no cron or job path sends a campaign because it is 已排期", () => {
   const server = read("src/lib/neon/admin-data.server.ts");
   assert.doesNotMatch(server, /scheduled_at\s*(?:<=|<|>=|>)\s*now\(\)/);
 });
+
+test("the public enquiry schema never rejects listing fields", async () => {
+  // C-15: a malformed listing number or property id must never cost the enquiry.
+  const source = read("src/lib/neon/admin-data.ts");
+  const file = ts.createSourceFile("admin-data.ts", source, ts.ScriptTarget.Latest, true);
+  const declaration = file.statements.find(
+    (statement) =>
+      ts.isVariableStatement(statement) &&
+      statement.declarationList.declarations.some(
+        (item) => ts.isIdentifier(item.name) && item.name.text === "websiteInquirySchema",
+      ),
+  );
+  assert.ok(declaration, "websiteInquirySchema must stay a top-level declaration");
+  const executable = ts.transpileModule(declaration.getText(file), {
+    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const { z } = await import("zod");
+  const schema = new Function("z", executable + "\nreturn websiteInquirySchema;")(z);
+
+  const base = {
+    submissionId: "79180000-0000-4000-8000-000000000001",
+    name: "陳先生",
+    phone: "9123 4567",
+  };
+  for (const listing of [
+    { listingNo: "樓盤 A 12", property_id: "abc" },
+    { listingNo: 12345, property_id: 42 },
+    { listingNo: "x".repeat(500), property_id: "y".repeat(500) },
+    { listingNo: null, property_id: null },
+  ]) {
+    const parsed = schema.safeParse({ ...base, ...listing });
+    assert.equal(parsed.success, true, JSON.stringify(listing));
+    assert.equal(parsed.data.name, "陳先生");
+  }
+  const valid = schema.parse({
+    ...base,
+    listingNo: "EP12345-R",
+    property_id: "79180000-0000-4000-8000-000000000002",
+  });
+  assert.equal(valid.listingNo, "EP12345-R");
+  assert.equal(valid.property_id, "79180000-0000-4000-8000-000000000002");
+  // Everything else is still validated.
+  assert.equal(schema.safeParse({ ...base, phone: "abc" }).success, false);
+});

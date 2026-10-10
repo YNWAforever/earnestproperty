@@ -232,3 +232,22 @@ test("property.$listingNo.tsx sanitizes title/description/address before renderi
   // paragraph or the literal word "null".
   assert.match(route, /safeDescription \?\? "暫無詳細描述"/);
 });
+
+test("the payload carries a valid listing number and drops an invalid one", async () => {
+  const { buildPropertyInquiryPayload } = await import(moduleUrl);
+  const base = {
+    form: { name: "陳先生", phone: "9123 4567", email: "", message: "" },
+    propertyId: "11111111-1111-4111-8111-111111111111",
+    consentWhatsapp: false,
+  };
+
+  assert.equal(
+    buildPropertyInquiryPayload({ ...base, listingNo: "EP12345-R" }).listingNo,
+    "EP12345-R",
+  );
+  for (const listingNo of ["樓盤 A 12", "", "-A", undefined, null, 12345]) {
+    const payload = buildPropertyInquiryPayload({ ...base, listingNo });
+    assert.equal("listingNo" in payload, false, String(listingNo));
+    assert.equal(payload.property_id, base.propertyId);
+  }
+});

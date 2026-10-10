@@ -1264,6 +1264,168 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
         for (const path of ["neon/migrations/" + FORWARD, REVERT_PATH])
           assert.ok(!fileText(path).includes(alertJobType), path);
       });
+
+      // FX-18a C-15: a website enquiry keeps the listing it was about, and its
+      // listing fields can never cost the enquiry, its lead or its alert job.
+      const c15 = (n) => `79180000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+      const C15_ACTIVE = c15(601);
+      const C15_WITHDRAWN = c15(602);
+      for (const [propertyId, listingNo, status] of [
+        [C15_ACTIVE, "FX18A-ACTIVE", "active"],
+        [C15_WITHDRAWN, "FX18A-WD", "inactive"],
+      ]) {
+        await query(
+          `INSERT INTO properties(id,listing_no,canonical_property_no,title_zh,deal_type,district_slug,status,price,agent_id)
+           VALUES($1,$2,$2,$3,'rent','sham-tseng',$4,20000,$5)`,
+          [propertyId, listingNo, "C15 測試盤 " + listingNo, status, AGENT_A],
+        );
+      }
+      const enquire = (n, fields) =>
+        server.createWebsiteInquiry({
+          submissionId: c15(700 + n),
+          name: "C15 客戶 " + n,
+          phone: "9180 " + String(7000 + n),
+          email: "",
+          message: "想睇樓",
+          consentWhatsapp: false,
+          ...fields,
+        });
+      const intake = async (inquiryId) => {
+        const [row] = await query(
+          `SELECT i.property_id::text AS inquiry_property, i.assigned_agent_id::text AS inquiry_agent,
+                  i.public_listing_no, i.intent AS inquiry_intent, i.crm_lead_id::text AS lead_id,
+                  l.property_id::text AS lead_property, l.assigned_agent_id::text AS lead_agent,
+                  l.intent AS lead_intent, l.source AS lead_source,
+                  (SELECT count(*)::int FROM ops_jobs j
+                    WHERE j.idempotency_key = 'lead-alert:' || l.id) AS alert_jobs
+             FROM inquiries i JOIN crm_leads l ON l.id = i.crm_lead_id WHERE i.id = $1`,
+          [inquiryId],
+        );
+        assert.ok(row, "the enquiry and its lead exist");
+        return row;
+      };
+
+      await t.test(
+        "an enquiry with an unparseable listing number or property id still saves the inquiry, lead and alert job",
+        async () => {
+          const warn = mock.method(console, "warn", () => {});
+          try {
+            const result = await enquire(1, { listingNo: "樓盤 A 12", property_id: "abc" });
+            assert.match(result.id, /^[0-9a-f-]{36}$/);
+            assert.equal(result.leadAlertQueued, true);
+            const row = await intake(result.id);
+            assert.equal(row.inquiry_property, null);
+            assert.equal(row.lead_property, null);
+            assert.equal(row.public_listing_no, null);
+            assert.equal(row.lead_agent, null);
+            assert.equal(row.lead_source, "website");
+            assert.equal(row.alert_jobs, 1);
+            const drops = warn.mock.calls.filter(
+              (call) => call.arguments[0] === "INQUIRY_LISTING_REF_DROPPED",
+            );
+            assert.deepEqual(
+              drops.map((call) => call.arguments[1]),
+              [{ field: "listingNo" }, { field: "property_id" }],
+            );
+            // The log names the field only, never the value or the customer.
+            const logged = JSON.stringify(warn.mock.calls.map((call) => call.arguments));
+            assert.ok(!logged.includes("樓盤"));
+            assert.ok(!logged.includes("abc"));
+            assert.ok(!logged.includes("C15 客戶"));
+          } finally {
+            warn.mock.restore();
+          }
+        },
+      );
+
+      await t.test(
+        "an enquiry about a withdrawn listing links that listing and keeps its public number, without assigning its agent",
+        async () => {
+          // By row id, as the listing page sends it, plus the number it shows.
+          const byId = await enquire(2, { property_id: C15_WITHDRAWN, listingNo: "FX18A-WD" });
+          assert.equal(byId.leadAlertQueued, true);
+          const a = await intake(byId.id);
+          assert.equal(a.inquiry_property, C15_WITHDRAWN);
+          assert.equal(a.lead_property, C15_WITHDRAWN);
+          assert.equal(a.public_listing_no, "FX18A-WD");
+          assert.equal(a.inquiry_agent, null, "a withdrawn listing never assigns its agent");
+          assert.equal(a.lead_agent, null);
+          assert.equal(
+            a.lead_intent,
+            "buyer",
+            "routing is unchanged: only an active listing sets it",
+          );
+          assert.equal(a.alert_jobs, 1);
+
+          // By number alone: the matched row is linked.
+          const byNo = await intake((await enquire(3, { listingNo: "FX18A-WD" })).id);
+          assert.equal(byNo.lead_property, C15_WITHDRAWN);
+          assert.equal(byNo.public_listing_no, "FX18A-WD");
+          assert.equal(byNo.lead_agent, null);
+
+          // By row id alone: the row's own number is filled in.
+          const idOnly = await intake((await enquire(4, { property_id: C15_WITHDRAWN })).id);
+          assert.equal(idOnly.lead_property, C15_WITHDRAWN);
+          assert.equal(idOnly.public_listing_no, "FX18A-WD");
+
+          // A replay of the same submission returns the same enquiry and queues nothing new.
+          const replay = await enquire(2, { property_id: C15_WITHDRAWN, listingNo: "FX18A-WD" });
+          assert.equal(replay.id, byId.id);
+          assert.equal(replay.leadAlertQueued, false);
+        },
+      );
+
+      await t.test(
+        "an enquiry about an unknown listing keeps its number, and staff see it on the lead",
+        async () => {
+          const result = await enquire(5, { listingNo: "FX18A-GONE" });
+          const row = await intake(result.id);
+          assert.equal(row.lead_property, null);
+          assert.equal(row.public_listing_no, "FX18A-GONE");
+          assert.equal(row.alert_jobs, 1);
+
+          const detail = await server.fetchAdminLead(row.lead_id, admin);
+          assert.equal(detail.listing_no, "FX18A-GONE");
+          assert.equal(detail.property_title, null);
+
+          const { buildAdminPageQuery } = await import("./admin-pagination-query.ts");
+          const page = buildAdminPageQuery({ resource: "leads", q: "FX18A-GONE" }, admin);
+          const [pageResult] = await query(page.statement, page.params);
+          const listed = (pageResult?.rows ?? []).filter((item) => item.id === row.lead_id);
+          assert.equal(listed.length, 1, "the list finds the lead by the enquiry's number");
+          assert.equal(listed[0].listing_no, "FX18A-GONE");
+          assert.equal(listed[0].property_title, null);
+
+          // A linked listing still shows its own number and title.
+          const linked = await intake((await enquire(6, { property_id: C15_WITHDRAWN })).id);
+          const linkedDetail = await server.fetchAdminLead(linked.lead_id, admin);
+          assert.equal(linkedDetail.listing_no, "FX18A-WD");
+          assert.equal(linkedDetail.property_title, "C15 測試盤 FX18A-WD");
+        },
+      );
+
+      await t.test("an enquiry about an active listing is unchanged", async () => {
+        const result = await enquire(7, { property_id: C15_ACTIVE, listingNo: "FX18A-ACTIVE" });
+        assert.equal(result.leadAlertQueued, true);
+        const row = await intake(result.id);
+        assert.equal(row.lead_property, C15_ACTIVE);
+        assert.equal(row.inquiry_property, C15_ACTIVE);
+        assert.equal(row.lead_agent, AGENT_A);
+        assert.equal(row.inquiry_agent, AGENT_A);
+        assert.equal(row.lead_intent, "renter");
+        assert.equal(row.inquiry_intent, "renter");
+        assert.equal(row.alert_jobs, 1);
+
+        // An inactive listing agent is still never assigned.
+        await query("UPDATE staff_users SET active=false WHERE id=$1", [AGENT_A]);
+        try {
+          const off = await intake((await enquire(8, { property_id: C15_ACTIVE })).id);
+          assert.equal(off.lead_property, C15_ACTIVE);
+          assert.equal(off.lead_agent, null);
+        } finally {
+          await query("UPDATE staff_users SET active=true WHERE id=$1", [AGENT_A]);
+        }
+      });
     });
   } finally {
     network.mock.restore();

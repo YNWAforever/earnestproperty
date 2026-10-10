@@ -54,7 +54,10 @@ export async function persistWebsiteInquiry(query, input) {
                 message,
                 consentWhatsapp === true,
                 propertyId || null,
-                listingNo || null,
+                // C-15: the listing page now sends its public number. It is a label, not
+                // part of the submission identity, so this slot stays null and the hash of
+                // a listing-page enquiry is byte-identical to what it was before.
+                null,
               ]),
             ),
           ),
@@ -129,10 +132,20 @@ export async function persistWebsiteInquiry(query, input) {
       ORDER BY CASE WHEN p.id = $7::uuid THEN 0 ELSE 1 END
       LIMIT 1
     ),
+    -- C-15: the listing the enquiry was about, in any status. It only links the
+    -- enquiry; agent and intent still come from an active listing above.
+    requested_listing AS (
+      SELECT p.id, p.listing_no
+      FROM properties p
+      WHERE ($7::uuid IS NOT NULL AND p.id = $7::uuid)
+        OR ($8::text IS NOT NULL AND p.listing_no = $8::text)
+      ORDER BY (p.status = 'active') DESC, (p.id = $7::uuid) DESC NULLS LAST, p.id
+      LIMIT 1
+    ),
     routing AS (
       SELECT property_id, assigned_agent_id, intent FROM resolved_listing
       UNION ALL
-      SELECT NULL::uuid, NULL::uuid, 'buyer'::text
+      SELECT (SELECT id FROM requested_listing), NULL::uuid, 'buyer'::text
       WHERE NOT EXISTS (SELECT 1 FROM resolved_listing)
     ),
     ${submissionCte}
@@ -160,11 +173,13 @@ export async function persistWebsiteInquiry(query, input) {
     ${leadAlertEnqueueCte("new_lead")}
     INSERT INTO inquiries (
 ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_version," : ""}
-      source, property_id, intent, name, phone, email, message, assigned_agent_id, crm_contact_id
+      source, property_id, intent, name, phone, email, message, assigned_agent_id, crm_contact_id,
+      public_listing_no
     )
     SELECT ${submissionId ? "(SELECT inquiry_id FROM submission), (SELECT id FROM new_lead), $6, 'website-whatsapp-v1'," : ""}
       'website', routing.property_id, routing.intent, $1, $2, $4, $5,
-      routing.assigned_agent_id, contact.id
+      routing.assigned_agent_id, contact.id,
+      COALESCE($8::text, (SELECT listing_no FROM requested_listing))
     FROM contact
     CROSS JOIN routing
     RETURNING id, (SELECT count(*) FROM lead_alert) > 0 AS lead_alert_queued

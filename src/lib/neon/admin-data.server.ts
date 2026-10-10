@@ -104,7 +104,7 @@ import {
   campaignRetryStatusSql,
   retryableFailedRecipientSql,
 } from "./campaign-retry.ts";
-import { persistWebsiteInquiry } from "./website-inquiry.js";
+import { isValidWebsiteListingNo, persistWebsiteInquiry } from "./website-inquiry.js";
 import {
   persistListingAlert,
   LISTING_ALERT_CONSENT_TEXT,
@@ -2561,7 +2561,13 @@ export async function fetchAdminLead(id: string, actor?: StaffAccess) {
       c.phone,
       c.email,
       c.opt_in_whatsapp,
-      p.listing_no,
+      -- C-15: an enquiry about an unknown listing still shows the number it was about.
+      COALESCE(
+        p.listing_no,
+        (SELECT i.public_listing_no FROM inquiries i
+          WHERE i.crm_lead_id = l.id AND i.public_listing_no IS NOT NULL
+          ORDER BY i.created_at DESC LIMIT 1)
+      ) AS listing_no,
       p.title_zh AS property_title
     FROM crm_leads l
     LEFT JOIN crm_contacts c ON c.id = l.contact_id
@@ -4612,6 +4618,9 @@ export async function cancelAdminCampaign(id: string, actor: StaffAccess) {
   if (!rows[0]) return { ok: false, error: "Not found" };
   return { ok: true };
 }
+// The same shape Zod's uuid() accepted before C-15, so an id that used to pass still does.
+const WEBSITE_INQUIRY_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function createWebsiteInquiry(input: {
   submissionId: string;
   name: string;
@@ -4628,8 +4637,16 @@ export async function createWebsiteInquiry(input: {
   const email = input.email ? input.email : null;
   const message = input.message ? input.message : null;
   const optInWhatsapp = input.consentWhatsapp === true;
-  const requestedPropertyId = input.property_id ?? null;
-  const requestedListingNo = input.listingNo?.trim() || null;
+  // C-15: a listing reference never fails the enquiry. A malformed one is dropped (and logged
+  // by field name only, never its value) and the enquiry is saved without it.
+  const rawListingNo = typeof input.listingNo === "string" ? input.listingNo.trim() : "";
+  const requestedListingNo = isValidWebsiteListingNo(rawListingNo) ? rawListingNo : null;
+  if (rawListingNo && !requestedListingNo)
+    console.warn("INQUIRY_LISTING_REF_DROPPED", { field: "listingNo" });
+  const rawPropertyId = typeof input.property_id === "string" ? input.property_id.trim() : "";
+  const requestedPropertyId = WEBSITE_INQUIRY_UUID.test(rawPropertyId) ? rawPropertyId : null;
+  if (rawPropertyId && !requestedPropertyId)
+    console.warn("INQUIRY_LISTING_REF_DROPPED", { field: "property_id" });
   const result = await persistWebsiteInquiry(queryRows, {
     submissionId: input.submissionId,
     name: input.name,
