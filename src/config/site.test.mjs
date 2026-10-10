@@ -693,7 +693,7 @@ test("videos page orders CMS videos above listing videos", () => {
 
 test("admin property save SQL includes SEO and video URL parameters", () => {
   const source = readFileSync("src/lib/neon/admin-data.server.ts", "utf8");
-  assert.match(source, /video_url = \$19/);
+  // saveAdminProperty is create-only (FX-18a C-17); there is no UPDATE branch to pin.
   assert.match(source, /INSERT INTO properties \(/);
   assert.match(source, /seo_title, seo_description, video_url, agent_id/);
 });
