@@ -143,7 +143,7 @@ export function AdminPropertyTable({
       </label>
       <div className="hidden overflow-x-auto rounded-xl border lg:block">
         <table className="w-full text-left text-sm">
-          <caption className="sr-only">物業管理；每個樓編一行，售租價格與狀態分開顯示</caption>
+          <caption className="sr-only">樓盤管理；每個樓編一行，售租價格與狀態分開顯示</caption>
           <thead className="bg-muted/50">
             <tr>
               {["選擇", "物業", "出售", "出租", "實用面積", "更新時間", "操作"].map((text) => (

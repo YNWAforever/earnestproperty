@@ -16,6 +16,13 @@ await build({
   envPrefix: "OWNED_PROPERTY_BROWSER_",
   resolve: {
     alias: [
+      {
+        find: /^@\/lib\/neon\/staff-checklist$/,
+        replacement: resolve(
+          workspace,
+          "scripts/browser-fixtures/no-link/synthetic-staff-checklist.ts",
+        ),
+      },
       { find: /^@\/lib\/ai\/content-copilot-admin$/, replacement: api },
       {
         find: /^@\/lib\/(neon\/(admin-data|whatsapp-assignment|inbox-directory|whatsapp-readiness|staff-endpoints|staff-reference-admin|whatsapp-service-policy|whatsapp-test-notification))$/,

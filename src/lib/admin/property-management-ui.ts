@@ -3,14 +3,8 @@ import type {
   ManagedPropertySummary,
   PropertyManagementInput,
 } from "@/lib/neon/admin-properties.types";
-export const propertyStatusLabels: Record<string, string> = {
-  active: "公開",
-  draft: "草稿",
-  offline: "已下架",
-  inactive: "來源已下架",
-  sold: "已售",
-  rented: "已租",
-};
+import { PROPERTY_STATUS_LABELS } from "@/lib/admin/glossary";
+export const propertyStatusLabels: Record<string, string> = PROPERTY_STATUS_LABELS;
 export function neutralPropertyTitle(title: string) {
   return title.replace(/\s*[租售]盤\s*#[A-Za-z0-9-]+\s*$/, "").trim();
 }

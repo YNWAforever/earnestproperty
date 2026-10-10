@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import type { StaffNotificationView } from "@/lib/neon/staff-notification-view.js";
 import { formatHkDateTime } from "@/lib/format";
+import { HANDED_TO_WHATSAPP, hkTime, placementSourceText } from "@/lib/admin/plain-copy";
 import { AdminTechnicalDetails } from "./AdminTechnicalDetails";
 const states: Record<string, string> = {
   pending: "待確認接手",
@@ -40,13 +41,13 @@ export function StaffNotificationCard({
       {item.mismatchReason ? (
         <p className="text-sm">處理人不同原因：{item.mismatchReason}</p>
       ) : null}
-      <p className="text-sm">來源：{item.source ?? "未核實"}</p>
+      <p className="text-sm">來源：{item.source ? placementSourceText(item.source) : "未核實"}</p>
       <p className="text-sm">
         客戶回覆：{item.firstHumanResponseAt ? "已有核實人手回覆" : "仍待人手回覆"} · 回覆限時：
-        {item.responseDueAt ?? "政策待核實"}
+        {hkTime(item.responseDueAt, "政策待核實")}
       </p>
       <p className="text-xs">
-        接手確認：{item.acknowledgedAt ?? "尚未確認"}。確認接手不代表已回覆客戶。
+        接手確認：{hkTime(item.acknowledgedAt, "尚未確認")}。確認接手不代表已回覆客戶。
       </p>
       <ul className="text-xs">
         {item.attempts.length ? (
@@ -59,7 +60,7 @@ export function StaffNotificationCard({
                   : a.transport}
               ：
               {a.state === "accepted"
-                ? "供應商已接納（未證實送達）"
+                ? HANDED_TO_WHATSAPP
                 : a.state === "delivered"
                   ? a.transport === "inbox_private_note"
                     ? "內部備註狀態已核實（不是手機送達）"

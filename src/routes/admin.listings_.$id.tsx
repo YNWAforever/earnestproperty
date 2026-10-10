@@ -88,7 +88,7 @@ function EditAdminListingWorkspace({ identity }: { identity: string }) {
       description="共用物業資料，獨立管理出售與出租。"
       breadcrumb={
         <nav aria-label="麵包屑">
-          <Link to="/admin/listings">物業管理</Link>
+          <Link to="/admin/listings">樓盤管理</Link>
           {" › 管理物業"}
         </nav>
       }

@@ -145,7 +145,7 @@ async function open(page: Page, path = "/admin/listings/A000001") {
   await page.goto(origin + path);
   await expect(
     page.getByRole("heading", {
-      name: /\/listings\/A\d/.test(path) ? "管理物業" : "物業管理",
+      name: /\/listings\/A\d/.test(path) ? "管理物業" : "樓盤管理",
       exact: true,
     }),
   ).toBeVisible();
@@ -156,6 +156,19 @@ const saveCalls = (page: Page) =>
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("an agent sees no WhatsApp link buttons on 樓盤管理", async ({ page }) => {
+      await page.addInitScript(() => sessionStorage.setItem("property-fixture-role", "agent"));
+      await open(page, "/admin/listings?pageSize=50&status=all");
+      await expect(page.getByRole("link", { name: "#A000001", exact: true })).toBeVisible();
+      await expect(page.getByText(/連結建立範圍/)).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /WhatsApp 連結/ })).toHaveCount(0);
+      await page.getByRole("checkbox", { name: "選擇本頁全部可管理物業", exact: true }).check();
+      await expect(page.getByRole("button", { name: /核對修改/ })).toBeVisible();
+      await expect(page.getByRole("button", { name: /WhatsApp 連結/ })).toHaveCount(0);
+      await page.evaluate(() => window.propertyFixture.changeContext("manager", "manager"));
+      await expect(page.getByText(/連結建立範圍/)).toBeVisible();
+      await expect(page.getByRole("button", { name: /WhatsApp 連結/ }).first()).toBeVisible();
+    });
     test("scope role change clears stale selected properties", async ({ page }) => {
       await open(page, "/admin/listings?pageSize=50&status=all");
       await page.getByRole("checkbox", { name: "選擇本頁全部可管理物業", exact: true }).check();
@@ -625,6 +638,26 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(page.getByLabel("售價（港元）", { exact: true })).toHaveValue("6200000");
       await page.getByRole("button", { name: "出租設定", exact: true }).click();
       await expect(page.getByLabel("月租（港元）", { exact: true })).toHaveValue("18000");
+    });
+    test("saving a new listing opens its management page with the draft visible, and no leave prompt appears", async ({
+      page,
+    }) => {
+      page.on("pageerror", (error) => console.log("PAGE ERROR", error.message));
+      await page.route("**/*", (route) =>
+        new URL(route.request().url()).origin === origin &&
+        ["GET", "HEAD"].includes(route.request().method())
+          ? route.continue()
+          : route.abort(),
+      );
+      await page.goto(origin + "/admin/listings/new");
+      await expect(page.getByRole("heading", { name: "新增放盤", exact: true })).toBeVisible();
+      await page.locator("#listing_no").fill("OWNED-NEW-OPEN");
+      await page.locator("#title_zh").fill("儲存後開啟的合成放盤");
+      await page.getByRole("button", { name: "建立放盤", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "管理物業", exact: true })).toBeVisible();
+      expect(new URL(page.url()).pathname).toMatch(/^\/admin\/listings\/[0-9a-f-]{36}$/);
+      await expect(page.getByText("儲存後開啟的合成放盤").first()).toBeVisible();
+      await expect(page.getByText("尚未儲存", { exact: true })).toHaveCount(0);
     });
     test("validation retains input and focuses the first invalid field", async ({ page }) => {
       await open(page);

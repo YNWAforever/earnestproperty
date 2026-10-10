@@ -610,7 +610,7 @@ export function AdminPropertyWorkspace({
                     value={offer.agentId}
                     onChange={(e) => setOffer((s) => ({ ...s, agentId: e.target.value }))}
                   >
-                    <option value="">未分配</option>
+                    <option value="">未指派</option>
                     {agents.map((a) => (
                       <option key={a.id} value={a.id}>
                         {a.name ?? a.email ?? "未命名代理"}

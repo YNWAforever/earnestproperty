@@ -117,6 +117,27 @@ async function preview(page: Page) {
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("an agent opening /admin/whatsapp-settings sees 沒有權限 within 2 s", async ({ page }) => {
+      await page.route("**/*", (route) =>
+        new URL(route.request().url()).origin === origin &&
+        ["GET", "HEAD"].includes(route.request().method())
+          ? route.continue()
+          : route.abort(),
+      );
+      await page.addInitScript(() => {
+        sessionStorage.setItem("property-fixture-actor", "manager");
+        sessionStorage.setItem("property-fixture-role", "agent");
+      });
+      await page.goto(origin + `/admin/whatsapp-settings?staffId=${staffId}&step=1`);
+      await expect(page.getByRole("heading", { name: "沒有權限", exact: true })).toBeVisible({
+        timeout: 2000,
+      });
+      await expect(
+        page.getByText("此頁只供經理或管理員使用。如需要，請聯絡管理員。"),
+      ).toBeVisible();
+      await expect(page.getByRole("heading", { name: "同事接收設定", exact: true })).toHaveCount(0);
+      expect(await calls(page, "mapping-read")).toHaveLength(0);
+    });
     test("duplicate names pagination denied and expired review cannot save", async ({ page }) => {
       await open(page);
       await chooseAccount(page);
@@ -221,7 +242,7 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(page.getByRole("alert")).toBeVisible();
       await page.evaluate(() => (window.staffFixture.read = "ok"));
       await page.getByRole("button", { name: "查閱原試送結果", exact: true }).click();
-      await expect(page.getByRole("status")).toContainText("供應商已接納，尚未核實送達");
+      await expect(page.getByRole("status")).toContainText("已交 WhatsApp 發送（未確認送達）");
       expect(await calls(page, "enqueue")).toHaveLength(1);
       expect(
         await page.evaluate(
@@ -238,7 +259,7 @@ for (const width of [1440, 1280, 768, 390]) {
       await page.evaluate(() => (window.staffFixture.submit = "unknown"));
       await page.getByRole("button", { name: "明確提交試送" }).click();
       await page.reload();
-      await expect(page.getByRole("status")).toContainText("供應商已接納，尚未核實送達");
+      await expect(page.getByRole("status")).toContainText("已交 WhatsApp 發送（未確認送達）");
       await expect(page.getByRole("status")).toContainText(
         "供應商送達：未核實；同事收件確認：未核實；接手確認：未核實",
       );
@@ -278,7 +299,7 @@ for (const width of [1440, 1280, 768, 390]) {
       await page.evaluate(() => (window.staffFixture.read = "ok"));
       await page.getByRole("button", { name: "查閱原試送結果", exact: true }).click();
       await expect(page.getByRole("dialog")).toContainText(id!);
-      await expect(page.getByRole("status")).toContainText("尚未核實送達");
+      await expect(page.getByRole("status")).toContainText("未確認送達");
       expect(await calls(page, "enqueue")).toHaveLength(0);
     });
     test("worker unknown result stays read-only after fresh lookup", async ({ page }) => {

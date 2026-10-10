@@ -83,7 +83,7 @@ test("NT-09/15 requested and actual identities, transport and customer obligatio
     "protected_assignment",
     "仍待人手回覆",
     "確認接手不代表已回覆客戶",
-    "2026-09-12T12:00:00Z",
+    formatHkDateTime("2026-09-12T12:00:00Z") ?? "",
   ])
     expect(html).toContain(text);
   expect(html).toContain(">確認接手</button>");
@@ -95,7 +95,7 @@ test("NT-13/14/21 rendering FYI or stale work creates no acceptance action", () 
 test("NT-15 accepted transport and explicit acknowledgement never fabricate customer response", () => {
   const html = render({ workState: "acknowledged", acknowledgedAt: "2026-09-12T11:05:00Z" });
   expect(html).toContain("仍待人手回覆");
-  expect(html).toContain("未證實送達");
+  expect(html).toContain("未確認送達");
   expect(html).not.toContain("已有核實人手回覆");
 });
 test("NT-24 response resolution does not invent acknowledgement", () => {

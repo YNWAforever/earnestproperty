@@ -40,6 +40,7 @@ import {
   jobTypeLabel,
 } from "@/lib/admin/job-labels";
 import type { OperationsCapabilities } from "@/lib/control-plane/capabilities";
+import { JOB_STATUS_LABELS } from "@/lib/admin/glossary";
 
 import {
   canCancelOperationsJob,
@@ -56,16 +57,15 @@ export const DEFAULT_JOB_STATUS: "all" | JobStatus = "failed";
 
 const statusOptions: Array<{ value: "all" | JobStatus; label: string }> = [
   { value: "all", label: "所有狀態" },
-  { value: "queued", label: "等候中" },
-  { value: "running", label: "執行中" },
-  { value: "succeeded", label: "成功" },
-  { value: "failed", label: "失敗" },
-  { value: "cancelled", label: "已取消" },
+  ...(Object.entries(JOB_STATUS_LABELS) as [JobStatus, string][]).map(([value, label]) => ({
+    value,
+    label,
+  })),
 ];
 
 function operationsErrorMessage(error: unknown) {
   if (error instanceof OperationsClientError) {
-    return error.requestId ? `${error.message}（支援參考編號：${error.requestId}）` : error.message;
+    return error.requestId ? `${error.message}（參考編號：${error.requestId}）` : error.message;
   }
   return adminErrorMessage(error, "未能載入背景工作。");
 }

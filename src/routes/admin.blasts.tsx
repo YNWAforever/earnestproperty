@@ -88,6 +88,7 @@ import type {
   AdminCampaignRow,
   AdminCampaignSendPreview,
 } from "@/lib/neon/admin-data.types";
+import { CAMPAIGN_STATUS_LABELS } from "@/lib/admin/glossary";
 
 type PreviewInput = { audience_id?: string; filters?: AdminAudienceInput["filters"] };
 type PreviewContext = { data: PreviewInput; label: string; debounce: boolean };
@@ -128,17 +129,6 @@ const retryableStatuses = new Set(["failed", "completed", "review"]);
 // has no relation to who actually receives the blast.
 const PREVIEW_FRESHNESS_MS = 60_000;
 
-const campaignStatusLabels: Record<string, string> = {
-  draft: "草稿",
-  review: "待審核",
-  scheduled: "已排期",
-  queued: "已排隊",
-  sending: "發送中",
-  completed: "已完成",
-  failed: "失敗",
-  cancelled: "已取消",
-};
-
 const RETRY_PREVIEW_ERROR = "未能讀取重新發送資料，請稍後再試。";
 const SEND_PREVIEW_ERROR = "未能讀取尚待發送人數，請稍後再試。";
 /** A lost or unreadable re-queue response: the outcome is unknown, never success. */
@@ -171,7 +161,7 @@ const intentOptions = [
 
 export const Route = createFileRoute("/admin/blasts")({
   head: () => ({
-    meta: [{ title: "WhatsApp 群發｜Earnest Admin" }, { name: "robots", content: "noindex" }],
+    meta: [{ title: "推廣活動｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
   component: AdminBlasts,
 });
@@ -180,7 +170,7 @@ function AdminBlasts() {
   const identity = useStaffWorkspaceIdentity(["admin", "manager"]);
   if (!identity)
     return (
-      <AdminShell title="WhatsApp 群發" description="核對收件範圍及推廣操作結果。">
+      <AdminShell title="推廣活動" description="核對收件範圍及推廣操作結果。">
         <AdminError message="尚未取得已核實的推廣管理權限。" />
       </AdminShell>
     );
@@ -1121,7 +1111,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       closeFinish();
       const done = result.alreadyFinished
         ? "此 Campaign 早前已結束，未有再作更改。"
-        : `已結束 Campaign，狀態為「${campaignStatusLabels[result.status] ?? result.status}」。未有發出任何訊息。`;
+        : `已結束 Campaign，狀態為「${CAMPAIGN_STATUS_LABELS[result.status] ?? result.status}」。未有發出任何訊息。`;
       if (fresh) toast.success(done);
       else toast.success(done, { description: LIST_MAY_BE_STALE });
     } finally {
@@ -1199,10 +1189,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
   }
 
   return (
-    <AdminShell
-      title="推廣活動"
-      description="WhatsApp 群發：只用已審批範本、只發給已同意接收的客戶。"
-    >
+    <AdminShell title="推廣活動" description="推廣活動：只用已審批範本、只發給已同意接收的客戶。">
       {error ? <AdminError message={error} /> : null}
       {queueJournalError ? <AdminError message={queueJournalError} /> : null}
       {cancelJournalError ? <AdminError message={cancelJournalError} /> : null}
@@ -2132,7 +2119,7 @@ function AudienceDialog({
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="負責同事">
+              <Field label="負責代理">
                 <Select
                   value={audience.filters.assigned_agent_id ?? "any"}
                   onValueChange={(value) =>
@@ -2550,7 +2537,7 @@ function CampaignStatusBadge({ status, paused }: { status: string; paused?: numb
 
   return (
     <Badge variant={variant} className="whitespace-nowrap">
-      {campaignStatusLabels[status] ?? status}
+      {CAMPAIGN_STATUS_LABELS[status] ?? status}
     </Badge>
   );
 }

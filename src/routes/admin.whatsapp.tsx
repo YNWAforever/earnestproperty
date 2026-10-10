@@ -90,18 +90,12 @@ import type {
   AdminConversationRow,
   AdminWhatsappTemplateRow,
 } from "@/lib/neon/admin-data.types";
+import { CONVERSATION_STATUS_LABELS } from "@/lib/admin/glossary";
+import { HANDED_TO_WHATSAPP, HANDED_TO_WHATSAPP_NOTICE } from "@/lib/admin/plain-copy";
 
-const conversationStatusOptions = [
-  { value: "open", label: "開啟" },
-  { value: "pending", label: "待跟進" },
-  { value: "closed", label: "已關閉" },
-];
-
-const statusLabels: Record<string, string> = {
-  open: "開啟",
-  pending: "待跟進",
-  closed: "已關閉",
-};
+const conversationStatusOptions = Object.entries(CONVERSATION_STATUS_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
 
 const inboxStatusFilterOptions = [
   { value: "all", label: "所有狀態" },
@@ -110,17 +104,15 @@ const inboxStatusFilterOptions = [
   { value: "awaiting", label: "待回覆" },
   { value: "attention", label: "需處理" },
   { value: "mine", label: "我的對話" },
-  { value: "unassigned", label: "未分派" },
-  { value: "open", label: "開啟" },
-  { value: "pending", label: "待跟進" },
-  { value: "closed", label: "已關閉" },
+  { value: "unassigned", label: "未指派" },
+  ...conversationStatusOptions,
 ];
 
 const messageStatusLabels: Record<string, string> = {
   received: "已接收",
   queued: "已排隊",
   dispatching: "傳送中",
-  accepted: "供應商已接納（未確認送達）",
+  accepted: HANDED_TO_WHATSAPP,
   delivered: "已送達",
   read: "已讀",
   unknown: "結果未確定",
@@ -1164,7 +1156,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   return (
     <AdminShell
       title="WhatsApp 收件匣"
-      description="查看客戶訊息、分配負責同事及回覆；對話列表每分鐘自動更新，亦可按「重新整理」即時讀取。"
+      description="查看客戶訊息、指派負責代理及回覆；對話列表每分鐘自動更新，亦可按「重新整理」即時讀取。"
     >
       {user ? (
         <StaffNotificationPanel
@@ -1789,7 +1781,7 @@ function ConversationWorkspace({
                   <SelectValue placeholder="選擇代理" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">未指定代理</SelectItem>
+                  <SelectItem value="none">未指派</SelectItem>
                   {agents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agentLabel(agent)}
@@ -2420,13 +2412,13 @@ function useDesktopBreakpoint() {
 }
 
 function statusLabel(status: string) {
-  return statusLabels[status] ?? status;
+  return CONVERSATION_STATUS_LABELS[status] ?? status;
 }
 
 function messageStatusLabel(status: string) {
   if (status === "queued") return "等待傳送";
   if (status === "dispatching") return "傳送中（未確認）";
-  if (status === "accepted") return "供應商已接納（未確認送達）";
+  if (status === "accepted") return HANDED_TO_WHATSAPP;
   if (status === "unknown") return "傳送結果未明，請核對，勿重發";
   if (status === "cancelled") return "已取消";
   if (status === "resolved_sent") return "經理已核對：已送達";
@@ -2591,7 +2583,7 @@ function assertKnownOutboundResult(result: unknown) {
 }
 function outboundResultNotice(result: unknown, label: string) {
   return (result as { intent?: { state?: string } })?.intent?.state === "accepted"
-    ? "供應商已接納傳送要求，尚未證實送達或已讀。"
+    ? HANDED_TO_WHATSAPP_NOTICE
     : `${label}已加入傳送佇列`;
 }
 

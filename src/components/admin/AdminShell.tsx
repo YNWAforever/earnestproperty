@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import {
   BarChart3,
@@ -8,7 +8,6 @@ import {
   ExternalLink,
   Home,
   Landmark,
-  Lock,
   LogOut,
   Menu,
   MessageCircle,
@@ -35,8 +34,17 @@ import {
   withAttentionTitle,
 } from "@/components/admin/admin-attention";
 import { adminErrorText } from "@/components/admin/admin-error-text";
-import { staffSessionDenialCopy, useStaffSession } from "@/components/admin/staff-session";
+import {
+  confirmFirstLoginChecklistFor,
+  navRolesForStaffSession,
+  staffSessionDenialCopy,
+  useStaffSession,
+} from "@/components/admin/staff-session";
 import { Button } from "@/components/ui/button";
+import {
+  confirmFirstLoginChecklist,
+  fetchFirstLoginChecklistDone,
+} from "@/lib/neon/staff-checklist";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
@@ -45,25 +53,19 @@ import type {
   StaffAccessRole,
   StaffSessionDenialReason,
 } from "@/lib/neon/admin-data.types";
+import { visibleNavEntries } from "@/components/admin/admin-nav-roles";
 
 // Prefix matching is reserved for sections that own child routes. Team and
 // Operations deliberately stay exact so neither can illuminate the other.
 //
-// `roles` is the minimum staff role the destination's first server fetch
-// accepts (admin-data.ts / admin-team.ts / permissions.ts). The sidebar used
-// to show all 12 entries to everyone, so a `viewer` saw 12 links and could
-// open one, and an `agent` hit 403 on 7 of them with no hint why. An entry the
-// signed-in role cannot use still renders -- disabled, naming the role it
-// needs -- the way /admin/operations already treats its capability tabs.
-const STAFF: StaffAccessRole[] = ["admin", "manager", "agent"];
-const EDITORS: StaffAccessRole[] = ["admin", "manager"];
-const EVERYONE: StaffAccessRole[] = ["admin", "manager", "agent", "viewer"];
-
+// Which roles may open each entry lives in admin-nav-roles.ts (the roles its first server read
+// accepts). An entry the signed-in role cannot use is not rendered at all; it used to show as a
+// locked row. The server still checks every read, so hiding is only a courtesy.
 const navGroups = [
   {
     heading: "日常跟進",
     items: [
-      { to: "/admin", label: "總覽", icon: BarChart3, activeExact: true, roles: STAFF },
+      { to: "/admin", label: "總覽", icon: BarChart3, activeExact: true },
       {
         to: "/admin/leads",
         label: "客戶查詢",
@@ -74,7 +76,6 @@ const navGroups = [
         activeExact: true,
         includeSearch: false,
         attention: "leads",
-        roles: STAFF,
       },
       {
         to: "/admin/whatsapp",
@@ -82,7 +83,6 @@ const navGroups = [
         icon: MessageCircle,
         activeExact: false,
         attention: "inbox",
-        roles: STAFF,
       },
       {
         // The daily lead-triage workspace had no sidebar entry at all: its only
@@ -92,28 +92,24 @@ const navGroups = [
         icon: Radar,
         activeExact: true,
         includeSearch: false,
-        roles: EDITORS,
       },
       {
         to: "/admin/listings",
         label: "樓盤管理",
         icon: Building2,
         activeExact: false,
-        roles: STAFF,
       },
       {
         to: "/admin/property-sync",
         label: "盤源同步",
         icon: Building2,
         activeExact: false,
-        roles: EDITORS,
       },
       {
         to: "/admin/transactions",
         label: "成交管理",
         icon: Receipt,
         activeExact: false,
-        roles: STAFF,
       },
     ],
   },
@@ -126,37 +122,32 @@ const navGroups = [
         icon: BookOpen,
         activeExact: false,
         includeSearch: false,
-        roles: EDITORS,
       },
       {
         to: "/admin/estates",
         label: "屋苑管理",
         icon: Landmark,
         activeExact: false,
-        roles: EDITORS,
       },
       {
         to: "/admin/segments",
         label: "客戶分群",
         icon: UsersRound,
         activeExact: false,
-        roles: EDITORS,
       },
       {
         to: "/admin/whatsapp-links",
         label: "WhatsApp 來源連結",
         icon: MessageCircle,
         activeExact: true,
-        roles: ["admin", "manager"],
       },
       {
         to: "/admin/whatsapp-settings",
         label: "WhatsApp 映射設定",
         icon: MessageCircle,
         activeExact: true,
-        roles: ["admin", "manager"],
       },
-      { to: "/admin/blasts", label: "推廣活動", icon: Send, activeExact: false, roles: EDITORS },
+      { to: "/admin/blasts", label: "推廣活動", icon: Send, activeExact: false },
     ],
   },
   {
@@ -168,14 +159,12 @@ const navGroups = [
         icon: Users,
         activeExact: true,
         includeSearch: false,
-        roles: EDITORS,
       },
       {
         to: "/admin/agents",
         label: "經紀檔案",
         icon: UserRoundCog,
         activeExact: false,
-        roles: EDITORS,
       },
       {
         to: "/admin/analytics",
@@ -183,7 +172,6 @@ const navGroups = [
         icon: ServerCog,
         activeExact: true,
         includeSearch: false,
-        roles: EDITORS,
       },
       {
         to: "/admin/operations",
@@ -191,36 +179,10 @@ const navGroups = [
         icon: ServerCog,
         activeExact: true,
         includeSearch: false,
-        roles: EVERYONE,
       },
     ],
   },
 ] as const;
-
-const ROLE_LABELS: Record<StaffAccessRole, string> = {
-  admin: "admin",
-  manager: "manager",
-  agent: "agent",
-  viewer: "viewer",
-};
-
-function roleCanOpen(
-  roles: readonly StaffAccessRole[] | null,
-  allowed: readonly StaffAccessRole[],
-) {
-  // null = the staff lookup hasn't answered (or failed): render everything as
-  // usable and let the data layer enforce, rather than greying out the whole
-  // sidebar on a transient error.
-  if (roles === null) return true;
-  return roles.some((role) => allowed.includes(role));
-}
-
-function requiredRoleLabel(allowed: readonly StaffAccessRole[]) {
-  // The least-privileged role that can open it is the one worth naming.
-  const order: StaffAccessRole[] = ["viewer", "agent", "manager", "admin"];
-  const lowest = order.find((role) => allowed.includes(role)) ?? "admin";
-  return ROLE_LABELS[lowest];
-}
 
 const navLinkClassName =
   "flex min-h-11 items-center gap-2 rounded-md border-l-2 border-transparent px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
@@ -232,9 +194,6 @@ const navLinkActiveProps = {
   className: "border-primary bg-primary/10 font-semibold text-primary",
   "aria-current": "page" as const,
 };
-
-const navDisabledClassName =
-  "flex min-h-11 cursor-not-allowed items-center gap-2 rounded-md border-l-2 border-transparent px-3 text-sm font-medium text-muted-foreground/60";
 
 const navBadgeClassName =
   "ml-auto min-w-5 rounded-full bg-amber-500 px-1.5 text-center text-xs font-semibold leading-5 text-amber-950";
@@ -250,33 +209,22 @@ function AdminNav({
 }) {
   // Per instance: the desktop sidebar and the mobile drawer can both be in the DOM.
   const navId = useId();
+  // Hidden, not greyed out: a destination this role cannot open is simply not listed.
+  const visible = new Set(visibleNavEntries(roles).map((entry) => entry.to));
+  const groups = navGroups
+    .map((group) => ({ group, items: group.items.filter((item) => visible.has(item.to)) }))
+    .filter(({ items }) => items.length > 0);
   return (
     <nav aria-label="後台選單" className="grid gap-4">
-      {navGroups.map((group) => (
+      {groups.map(({ group, items }) => (
         <div key={group.heading ?? "root"} className="grid gap-1">
           {group.heading ? (
             <p className="px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               {group.heading}
             </p>
           ) : null}
-          {group.items.map((item) => {
+          {items.map((item) => {
             const Icon = item.icon;
-            if (!roleCanOpen(roles, item.roles)) {
-              const needed = requiredRoleLabel(item.roles);
-              return (
-                <span
-                  key={`${item.to}-${item.label}`}
-                  aria-disabled="true"
-                  title={`需要 ${needed} 或以上權限，請聯絡系統管理員`}
-                  className={navDisabledClassName}
-                >
-                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                  <span className="flex-1">{item.label}</span>
-                  <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                  <span className="sr-only">（需要 {needed} 或以上權限）</span>
-                </span>
-              );
-            }
             // The badge is aria-hidden and its description sits in a hidden node, so the link's
             // accessible name stays exactly the label; aria-describedby still exposes the count.
             const kind = "attention" in item ? item.attention : null;
@@ -434,20 +382,79 @@ export function AdminShell({
   const {
     session: staffSession,
     loading: rechecking,
+    settled: staffLookupSettled,
     refresh: refreshStaffSession,
   } = useStaffSession(user?.id ?? null);
   const staffReady = staffSession?.status === "ok";
-  const staffRoles = staffReady ? staffSession.roles : [];
+  // A denial is a definite answer: no entry. While the lookup is still loading there are no
+  // links either; null (every entry) is only for a lookup that finished and failed, and the
+  // server still enforces.
+  const staffRoles = navRolesForStaffSession(staffSession, staffLookupSettled);
   const [showFirstLogin, setShowFirstLogin] = useState(false);
+  const [checklistSaving, setChecklistSaving] = useState(false);
+  const [checklistError, setChecklistError] = useState(false);
+  const checklistStaffId = staffSession?.status === "ok" ? staffSession.staffId : null;
   useEffect(() => {
-    if (staffSession?.status !== "ok") {
+    setChecklistError(false);
+    if (!checklistStaffId) {
       setShowFirstLogin(false);
       return;
     }
-    setShowFirstLogin(
-      sessionStorage.getItem(`earnest:first-login-checklist:${staffSession.staffId}`) !== "done",
-    );
-  }, [staffSession]);
+    // Only a positive answer is cached, per browser; the server read runs at most once per
+    // account per browser. Storage can be unavailable (private mode), so it never blocks.
+    const cacheKey = `earnest:first-login-checklist:${checklistStaffId}`;
+    try {
+      if (localStorage.getItem(cacheKey) === "done") {
+        setShowFirstLogin(false);
+        return;
+      }
+    } catch {
+      // fall through to the server read
+    }
+    setShowFirstLogin(false);
+    let current = true;
+    void fetchFirstLoginChecklistDone()
+      .then((done) => {
+        if (!current) return;
+        if (done) {
+          try {
+            localStorage.setItem(cacheKey, "done");
+          } catch {
+            // cache is optional
+          }
+        }
+        setShowFirstLogin(!done);
+      })
+      .catch(() => {
+        // Could not tell: show the checklist rather than hide it.
+        if (current) setShowFirstLogin(true);
+      });
+    return () => {
+      current = false;
+    };
+  }, [checklistStaffId]);
+  const checklistStaffIdRef = useRef<string | null>(checklistStaffId);
+  checklistStaffIdRef.current = checklistStaffId;
+  async function confirmChecklist() {
+    if (!checklistStaffId) return;
+    setChecklistSaving(true);
+    setChecklistError(false);
+    const saved = await confirmFirstLoginChecklistFor({
+      staffId: checklistStaffId,
+      currentStaffId: () => checklistStaffIdRef.current,
+      confirm: confirmFirstLoginChecklist,
+      cacheDone: (staffId) => {
+        try {
+          localStorage.setItem(`earnest:first-login-checklist:${staffId}`, "done");
+        } catch {
+          // cache is optional
+        }
+      },
+      hidePanel: () => setShowFirstLogin(false),
+    });
+    setChecklistSaving(false);
+    if (!saved) setChecklistError(true);
+  }
 
   // Waiting-work counts for the nav badges and the tab title. Only admin, manager and agent
   // read them; anyone else (or an unresolved staff lookup) gets a null identity and no request.
@@ -617,16 +624,16 @@ export function AdminShell({
                 className="mt-3"
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  sessionStorage.setItem(
-                    `earnest:first-login-checklist:${staffSession.staffId}`,
-                    "done",
-                  );
-                  setShowFirstLogin(false);
-                }}
+                disabled={checklistSaving}
+                onClick={() => void confirmChecklist()}
               >
                 我已核對
               </Button>
+              {checklistError ? (
+                <p role="alert" className="mt-2 text-sm text-destructive">
+                  未能記錄核對，請重試。
+                </p>
+              ) : null}
             </section>
           ) : null}
           {staffSession?.status === "denied" ? (

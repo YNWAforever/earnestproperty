@@ -54,7 +54,7 @@ function parseListingSearch(search: Record<string, unknown>): PropertyGroupFilte
 export const Route = createFileRoute("/admin/listings")({
   validateSearch: parseListingSearch,
   head: () => ({
-    meta: [{ title: "物業管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
+    meta: [{ title: "樓盤管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
   component: AdminListings,
 });
@@ -64,7 +64,7 @@ function AdminListings() {
   if (!user || session?.status !== "ok")
     return (
       <AdminShell
-        title="物業管理"
+        title="樓盤管理"
         description="一個樓編號，一個管理頁。出售與出租的價格和狀態獨立管理。"
       >
         {null}
@@ -75,6 +75,11 @@ function AdminListings() {
 }
 function AdminListingsWorkspace({ identity }: { identity: string }) {
   const { user } = useNeonAuth();
+  const { session } = useStaffSession(user?.id ?? null);
+  // Link pages and the snapshot behind 全部符合篩選 are admin/manager on the server; an agent
+  // would only be offered buttons that end in 403.
+  const canMakeLinks =
+    session?.status === "ok" && session.roles.some((r) => r === "admin" || r === "manager");
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const [data, setData] = useState<PropertyGroupPage | null>(null);
@@ -218,7 +223,7 @@ function AdminListingsWorkspace({ identity }: { identity: string }) {
   const selectClass = "h-11 min-w-0 rounded-md border bg-background px-3 text-sm";
   return (
     <AdminShell
-      title="物業管理"
+      title="樓盤管理"
       description="一個樓編號，一個管理頁。出售與出租的價格和狀態獨立管理。"
     >
       <p className="mb-4">
@@ -354,40 +359,42 @@ function AdminListingsWorkspace({ identity }: { identity: string }) {
           <p className="mb-3 text-sm text-muted-foreground">
             共 {data.total} 個物業 · 同一物業的租售只計一次
           </p>
-          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border p-3 text-sm">
-            <span>
-              連結建立範圍：本頁已選 {selected.size} 個；全部符合目前篩選 {data.total} 個物業。
-            </span>
-            <Button
-              variant="outline"
-              disabled={linkBusy || busy || bulkBusy || !data.total || data.total > 1000}
-              onClick={() => {
-                const epoch = lifetime.current;
-                if (!isWorkspaceCurrent(epoch)) return;
-                setLinkBusy(true);
-                setError(null);
-                void snapshotWhatsappLinkOffers({ ...search, page: 1, pageSize: 100 })
-                  .then((snapshot) => {
-                    if (isWorkspaceCurrent(epoch))
-                      openLinkWizard(
-                        snapshot.offers,
-                        `全部符合篩選 ${snapshot.totalProperties} 個物業；展開 ${snapshot.activeOffers} 筆租售`,
-                      );
-                  })
-                  .catch((cause) => {
-                    if (isWorkspaceCurrent(epoch))
-                      setError(staffActionErrorText(cause, "未能擷取符合篩選的樓盤"));
-                  })
-                  .finally(() => {
-                    if (isWorkspaceCurrent(epoch)) setLinkBusy(false);
-                  });
-              }}
-            >
-              下一步：預覽 WhatsApp 連結（全部符合篩選）
-            </Button>
-            {data.total > 1000 ? <span>超過 1000 個物業，請縮小篩選。</span> : null}
-            {linkBusy ? <span role="status">正在擷取實際放盤 ID…</span> : null}
-          </div>
+          {canMakeLinks ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border p-3 text-sm">
+              <span>
+                連結建立範圍：本頁已選 {selected.size} 個；全部符合目前篩選 {data.total} 個物業。
+              </span>
+              <Button
+                variant="outline"
+                disabled={linkBusy || busy || bulkBusy || !data.total || data.total > 1000}
+                onClick={() => {
+                  const epoch = lifetime.current;
+                  if (!isWorkspaceCurrent(epoch)) return;
+                  setLinkBusy(true);
+                  setError(null);
+                  void snapshotWhatsappLinkOffers({ ...search, page: 1, pageSize: 100 })
+                    .then((snapshot) => {
+                      if (isWorkspaceCurrent(epoch))
+                        openLinkWizard(
+                          snapshot.offers,
+                          `全部符合篩選 ${snapshot.totalProperties} 個物業；展開 ${snapshot.activeOffers} 筆租售`,
+                        );
+                    })
+                    .catch((cause) => {
+                      if (isWorkspaceCurrent(epoch))
+                        setError(staffActionErrorText(cause, "未能擷取符合篩選的樓盤"));
+                    })
+                    .finally(() => {
+                      if (isWorkspaceCurrent(epoch)) setLinkBusy(false);
+                    });
+                }}
+              >
+                下一步：預覽 WhatsApp 連結（全部符合篩選）
+              </Button>
+              {data.total > 1000 ? <span>超過 1000 個物業，請縮小篩選。</span> : null}
+              {linkBusy ? <span role="status">正在擷取實際放盤 ID…</span> : null}
+            </div>
+          ) : null}
           <AdminPropertyBulkActions
             key={JSON.stringify(search)}
             rows={data.rows.filter((row) => selected.has(row.propertyNo))}
@@ -397,8 +404,11 @@ function AdminListingsWorkspace({ identity }: { identity: string }) {
             onBusy={setBulkBusy}
             onClear={() => setSelected(new Set())}
             onReload={() => setRetry((v) => v + 1)}
-            onWhatsappLinks={(rows) =>
-              openLinkWizard(linkOffersFromGroups(rows), `本頁已選 ${rows.length} 個物業`)
+            onWhatsappLinks={
+              canMakeLinks
+                ? (rows) =>
+                    openLinkWizard(linkOffersFromGroups(rows), `本頁已選 ${rows.length} 個物業`)
+                : undefined
             }
             onSettled={(results) => {
               setSelected(

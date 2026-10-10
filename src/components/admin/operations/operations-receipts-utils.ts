@@ -73,7 +73,7 @@ export const receiptRetryToast = (
 export const RECEIPT_CONFLICT_MESSAGE = "此收件的狀態已改變，未有重試。已重新載入最新狀態。";
 
 export const receiptRetryErrorMessage = (requestId: string | null) =>
-  requestId ? `未能重試，請稍後再試。（支援參考編號：${requestId}）` : "未能重試，請稍後再試。";
+  requestId ? `未能重試，請稍後再試。（參考編號：${requestId}）` : "未能重試，請稍後再試。";
 
 export const shouldRefreshOperationsReceipts = ({
   active,

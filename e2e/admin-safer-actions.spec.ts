@@ -365,7 +365,9 @@ for (const width of [1440, 375]) {
     const panel = page.getByRole("region", { name: "我的接手工作" });
     await expect(panel).toContainText("A074714");
     // The attempt line keeps transport, state and an HK time.
-    await expect(panel).toContainText("Inbox 內部備註（不代表同事手機通知）：供應商已接納");
+    await expect(panel).toContainText(
+      "Inbox 內部備註（不代表同事手機通知）：已交 WhatsApp 發送（未確認送達）",
+    );
     await expect(panel).toContainText(" · 接納 ");
     await expect(panel.getByText("技術資料", { exact: true })).toHaveCount(0);
     await panel.screenshot({ path: `${SHOTS}/technical-card-agent-${width}.png` });

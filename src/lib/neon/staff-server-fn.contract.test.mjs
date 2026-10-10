@@ -30,6 +30,7 @@ const PENDING_TASK_3 = [];
 const MIGRATED = [
   "src/lib/neon/staff-endpoints.ts",
   "src/lib/neon/staff-notifications.ts",
+  "src/lib/neon/staff-checklist.ts",
   "src/lib/neon/staff-reference-admin.ts",
   "src/lib/neon/whatsapp-assignment.ts",
   "src/lib/neon/whatsapp-readiness.ts",

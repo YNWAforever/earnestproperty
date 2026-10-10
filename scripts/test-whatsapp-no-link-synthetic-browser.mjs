@@ -2100,7 +2100,7 @@ try {
     await page.getByRole("button", { name: "核對傳送狀態", exact: true }).click();
     await expect(input).toHaveValue("");
     await expect(
-      page.getByText("供應商已接納傳送要求，尚未證實送達或已讀。", { exact: true }),
+      page.getByText("已交 WhatsApp 發送，尚未確認送達或已讀。", { exact: true }),
     ).toBeVisible();
     expect(
       await page.evaluate(

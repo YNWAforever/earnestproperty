@@ -3,13 +3,7 @@ import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { cmsFieldDiff, type CmsDiffResource } from "@/lib/admin/cms-field-diff";
 import type { CmsRevisionSummary } from "@/lib/neon/admin-cms.types";
 import { formatHkDateTime } from "@/lib/format";
-
-const REVISION_STATE_LABELS: Record<CmsRevisionSummary["state"], string> = {
-  draft: "草稿",
-  published: "已發布",
-  superseded: "已被取代",
-  archived: "已封存",
-};
+import { CMS_REVISION_STATE_LABELS } from "@/lib/admin/glossary";
 
 function when(value: string) {
   return formatHkDateTime(value) ?? value;
@@ -70,7 +64,7 @@ export function CmsRestoreConfirm({
     <AdminConfirmDialog
       open={revision !== null}
       title="還原此版本？"
-      description={`還原會以 v${target.versionNumber}（${REVISION_STATE_LABELS[target.state]}，${when(target.createdAt)}）的內容建立新草稿。以下內容會被取代：`}
+      description={`還原會以 v${target.versionNumber}（${CMS_REVISION_STATE_LABELS[target.state]}，${when(target.createdAt)}）的內容建立新草稿。以下內容會被取代：`}
       confirmLabel="還原"
       isPending={isPending}
       onOpenChange={onOpenChange}
