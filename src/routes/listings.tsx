@@ -5,9 +5,16 @@ import {
   propertyDealLabel,
   publicPropertyTitle,
 } from "@/lib/property-public";
-import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  stripSearchParams,
+  useNavigate,
+  useRouter,
+} from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
+import { LISTINGS_SEARCH_DEFAULTS } from "@/lib/public-search-defaults";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import {
@@ -97,6 +104,7 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/listings")({
   validateSearch: zodValidator(searchSchema),
+  search: { middlewares: [stripSearchParams(LISTINGS_SEARCH_DEFAULTS)] },
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => {
     const [result, estates] = await Promise.all([

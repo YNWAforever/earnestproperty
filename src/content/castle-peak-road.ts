@@ -225,7 +225,7 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
     links: [
       { href: "/castle-peak-road/sham-tseng", label: "比較深井 / 青山公路" },
       {
-        href: "/listings?deal=all&district=ting-kau&page=1",
+        href: "/listings?district=ting-kau",
         label: "搜尋汀九放盤",
       },
     ],
@@ -316,7 +316,7 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       { href: "/estate/bellagio", label: "碧堤半島 Bellagio" },
       { href: "/estate/hong-kong-garden", label: "豪景花園 Hong Kong Garden" },
       {
-        href: "/listings?deal=all&district=sham-tseng&page=1",
+        href: "/listings?district=sham-tseng",
         label: "搜尋深井放盤",
       },
     ],

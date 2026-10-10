@@ -36,6 +36,7 @@ import { StickyWhatsAppBar } from "@/components/site/StickyWhatsAppBar";
 import { MOBILE_ACTION_BAR_RESERVE_CLASS } from "@/components/site/mobile-action-bar";
 import { Toaster } from "@/components/ui/sonner";
 import { pageSeo, SITE_NAME, SITE_OG_IMAGE, SITE_THEME_COLOR, SITE_URL } from "@/content/seo";
+import { isNotFound, notFoundHead } from "@/lib/not-found-head";
 import { jsonLdScript, organizationSchema } from "@/lib/schema";
 
 function NotFoundComponent() {
@@ -78,35 +79,39 @@ export const Route = createRootRoute({
       throw redirect({ href: location.href, reloadDocument: true });
     }
   },
-  head: () => ({
-    meta: [
-      { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { name: "theme-color", content: SITE_THEME_COLOR },
-      { title: pageSeo.home.title },
-      {
-        name: "description",
-        content: pageSeo.home.description,
-      },
-      { name: "author", content: SITE_NAME },
-      { property: "og:type", content: "website" },
-      { property: "og:locale", content: "zh_HK" },
-      // The site emitted neither of these anywhere, so every shared card was
-      // missing the two properties that say which brand it belongs to and
-      // which URL it resolves to. og:site_name is a constant; og:url is the
-      // production origin, and each route's own rel=canonical remains the
-      // per-page signal -- a root-level og:url must not claim to be the
-      // page's own address, so it names the site root only.
-      { property: "og:site_name", content: SITE_NAME },
-      { property: "og:url", content: SITE_URL },
-      { name: "twitter:card", content: "summary_large_image" },
-      { property: "og:title", content: pageSeo.home.title },
-      { name: "twitter:title", content: pageSeo.home.title },
-      { property: "og:description", content: pageSeo.home.description },
-      { name: "twitter:description", content: pageSeo.home.description },
-      { property: "og:image", content: SITE_OG_IMAGE },
-      { name: "twitter:image", content: SITE_OG_IMAGE },
-    ],
+  // FX-13 F-22: a 404 keeps the stylesheet, icon and font links but swaps
+  // the home page's meta for its own title and noindex.
+  head: ({ matches }) => ({
+    meta: isNotFound(matches)
+      ? notFoundHead().meta
+      : [
+          { charSet: "utf-8" },
+          { name: "viewport", content: "width=device-width, initial-scale=1" },
+          { name: "theme-color", content: SITE_THEME_COLOR },
+          { title: pageSeo.home.title },
+          {
+            name: "description",
+            content: pageSeo.home.description,
+          },
+          { name: "author", content: SITE_NAME },
+          { property: "og:type", content: "website" },
+          { property: "og:locale", content: "zh_HK" },
+          // The site emitted neither of these anywhere, so every shared card was
+          // missing the two properties that say which brand it belongs to and
+          // which URL it resolves to. og:site_name is a constant; og:url is the
+          // production origin, and each route's own rel=canonical remains the
+          // per-page signal -- a root-level og:url must not claim to be the
+          // page's own address, so it names the site root only.
+          { property: "og:site_name", content: SITE_NAME },
+          { property: "og:url", content: SITE_URL },
+          { name: "twitter:card", content: "summary_large_image" },
+          { property: "og:title", content: pageSeo.home.title },
+          { name: "twitter:title", content: pageSeo.home.title },
+          { property: "og:description", content: pageSeo.home.description },
+          { name: "twitter:description", content: pageSeo.home.description },
+          { property: "og:image", content: SITE_OG_IMAGE },
+          { name: "twitter:image", content: SITE_OG_IMAGE },
+        ],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },

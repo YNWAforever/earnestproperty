@@ -4,9 +4,10 @@ import {
   propertyDealLabel,
   publicPropertyTitle,
 } from "@/lib/property-public";
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, stripSearchParams, useNavigate } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
+import { VIDEOS_SEARCH_DEFAULTS } from "@/lib/public-search-defaults";
 import { ExternalLink, MessageCircle, PlayCircle, Search, Video } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 
@@ -55,6 +56,7 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/videos")({
   validateSearch: zodValidator(searchSchema),
+  search: { middlewares: [stripSearchParams(VIDEOS_SEARCH_DEFAULTS)] },
   loader: async () => fetchVideosPageData(),
   head: () => ({
     meta: [

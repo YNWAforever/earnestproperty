@@ -110,7 +110,7 @@ All permanent (301) unless noted:
 
 | Source | Destination | Why |
 |---|---|---|
-| `/?ln=sc\|tc` (query match) | `/` | Legacy language-switcher query param, dead functionality |
+| ~~`/?ln=sc\|tc` (query match) | `/`~~ | **Removed (2026-10-08 FX-13):** the rule matched its own destination and 308-looped in production. `/?ln=tc` now serves 200 on the homepage. Do not restore it. |
 | `/district/ting-kau`, `/district/ting-kau/` | `/castle-peak-road/ting-kau` | District page retired in favor of the corridor segment page |
 | `/castle-peak-road/tsuen-wan-yau-kom-tau`(`/`) | `/castle-peak-road/ting-kau` | 5 lifestyle zones collapsed to 3; 油柑頭 → 汀九 |
 | `/castle-peak-road/tsing-lung-tau`(`/`) | `/castle-peak-road/sham-tseng` | Same collapse; 青龍頭 → 深井/青山公路 |
@@ -122,11 +122,12 @@ All permanent (301) unless noted:
 | `/eng`, `/eng/` | `/` | Old site had a separate English locale; this app has none (zh-HK only, no i18n framework) |
 | `/profile.php` | `/about` | |
 | `/contactus.php` | `/contact` | |
-| `/property`, `/property/`, `/property/c1`(`/`), `/property/c2`(`/`) | `/listings?deal=all&page=1` | Old listing-index URLs |
-| `/property/c5`(`/`) | `/listings?deal=rent&page=1` | Old rent-only listing index |
+| `/property`, `/property/`, `/property/c1`(`/`), `/property/c2`(`/`) | `/listings` | Old listing-index URLs. Updated 2026-10-08 FX-13: the bare URL now serves 200 (defaults are stripped), so no `?deal=all&page=1` |
+| `/property/c5`(`/`) | `/listings?deal=rent` | Old rent-only listing index. Updated 2026-10-08 FX-13: `page=1` dropped, as above |
 | `/listprop.php` | `/contact` | Old "submit your property" form |
 | `/companynews.php`, `/news_content.php` | `/blog` | Old news section, replaced by the blog |
-| `/mortgage.php`, `/mortgage_rate.php` | `/contact` | Old mortgage content had no calculator; `/mortgage` (the new calculator) wasn't judged an equivalent enough destination for these, so they go to a human instead |
+| `/mortgage.php` | `/mortgage` | Updated 2026-10-08 FX-13: now goes to the new calculator. (Was `/contact`.) |
+| `/mortgage_rate.php` | `/contact` | Old mortgage content had no calculator; this one still goes to a human |
 | `/school.php` | `/blog` | |
 | `/bankval.php` | `/contact` | |
 | `/unlucky.php`, `/tran_trends.php` | `/blog` | |

@@ -98,7 +98,7 @@ Environment names:
 
 - `DATABASE_URL_UNPOOLED`: existing managed server/28hse bridge connection. Python does not write the database.
 - `PROPERTYHK_SYNC_SECRET`: independently generated machine bearer secret shared by approved worker and receiver.
-- `PROPERTYHK_SYNC_URL`: exact HTTPS receiver URL, normally `https://earnestproperty.vercel.app/api/admin/propertyhk-sync`.
+- `PROPERTYHK_SYNC_URL`: exact HTTPS receiver URL, normally `https://www.earnestproperty.com/api/admin/propertyhk-sync`; add the same origin to `sync_allowed_origins`.
 - `PROPERTYHK_SYNC_MAX_BYTES`: receiver byte ceiling, default 5242880; bridge also caps frozen files at 5242880 bytes.
 - Worker `sync_allowed_origins`: explicitly include the receiver origin. Redirects are refused, so credentials cannot follow them.
 

@@ -91,7 +91,7 @@ export const estatePageContent = {
       { href: "/district/sham-tseng", label: "深井地區攻略" },
       { href: "/castle-peak-road/sham-tseng", label: "青山公路深井段" },
       {
-        href: "/listings?deal=all&estate=bellagio&page=1",
+        href: "/listings?estate=bellagio",
         label: "碧堤半島放盤",
       },
     ],
@@ -131,7 +131,7 @@ export const estatePageContent = {
       { href: "/district/sham-tseng", label: "深井地區攻略" },
       { href: "/estate/bellagio", label: "比較碧堤半島" },
       {
-        href: "/listings?deal=all&estate=sea-crest-villa&page=1",
+        href: "/listings?estate=sea-crest-villa",
         label: "浪翠園放盤",
       },
     ],
@@ -171,7 +171,7 @@ export const estatePageContent = {
       { href: "/castle-peak-road/sham-tseng", label: "深井 / 青山公路生活圈" },
       { href: "/estate/sea-crest-villa", label: "比較浪翠園" },
       {
-        href: "/listings?deal=all&estate=hong-kong-garden&page=1",
+        href: "/listings?estate=hong-kong-garden",
         label: "豪景花園放盤",
       },
     ],
@@ -209,7 +209,7 @@ export const estatePageContent = {
       { href: "/district/sham-tseng", label: "深井地區攻略" },
       { href: "/estate/lido-garden", label: "比較麗都花園" },
       {
-        href: "/listings?deal=all&estate=rhine-garden&page=1",
+        href: "/listings?estate=rhine-garden",
         label: "海韻花園放盤",
       },
     ],
@@ -249,7 +249,7 @@ export const estatePageContent = {
       { href: "/district/sham-tseng", label: "深井地區攻略" },
       { href: "/estate/rhine-garden", label: "比較海韻花園" },
       {
-        href: "/listings?deal=all&estate=lido-garden&page=1",
+        href: "/listings?estate=lido-garden",
         label: "麗都花園放盤",
       },
     ],
@@ -292,7 +292,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/district/sham-tseng", label: "深井地區攻略" },
       { href: "/estate/chun-wong-kui", label: "比較縉皇居" },
-      { href: "/listings?deal=all&estate=hoi-wan-hin&page=1", label: "海雲軒放盤" },
+      { href: "/listings?estate=hoi-wan-hin", label: "海雲軒放盤" },
     ],
   },
   "tai-wah-hin": {
@@ -333,7 +333,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/estate/sea-crest-villa", label: "比較浪翠園其他期數" },
       { href: "/estate/lung-tang-kok", label: "比較龍騰閣" },
-      { href: "/listings?deal=all&estate=tai-wah-hin&page=1", label: "帝華軒放盤" },
+      { href: "/listings?estate=tai-wah-hin", label: "帝華軒放盤" },
     ],
   },
   "hoi-wan-toi": {
@@ -369,7 +369,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/district/sham-tseng", label: "深井地區攻略" },
       { href: "/estate/rhine-garden", label: "比較海韻花園" },
-      { href: "/listings?deal=all&estate=hoi-wan-toi&page=1", label: "海韻臺放盤" },
+      { href: "/listings?estate=hoi-wan-toi", label: "海韻臺放盤" },
     ],
   },
   "chun-wong-kui": {
@@ -410,7 +410,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/district/sham-tseng", label: "深井地區攻略" },
       { href: "/estate/bellagio", label: "比較碧堤半島" },
-      { href: "/listings?deal=all&estate=chun-wong-kui&page=1", label: "縉皇居放盤" },
+      { href: "/listings?estate=chun-wong-kui", label: "縉皇居放盤" },
     ],
   },
   "lung-tang-kok": {
@@ -450,7 +450,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road/sham-tseng", label: "深井／青龍頭生活圈" },
       { href: "/estate/tai-wah-hin", label: "比較帝華軒" },
-      { href: "/listings?deal=all&estate=lung-tang-kok&page=1", label: "龍騰閣放盤" },
+      { href: "/listings?estate=lung-tang-kok", label: "龍騰閣放盤" },
     ],
   },
   "mun-ming-shan": {
@@ -491,7 +491,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/seong-yuen", label: "比較上源" },
-      { href: "/listings?deal=all&estate=mun-ming-shan&page=1", label: "滿名山放盤" },
+      { href: "/listings?estate=mun-ming-shan", label: "滿名山放盤" },
     ],
   },
   "wong-gam-hoi-ngon": {
@@ -535,7 +535,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/oi-kam-hoi-ngon", label: "比較愛琴海岸" },
-      { href: "/listings?deal=all&estate=wong-gam-hoi-ngon&page=1", label: "香港黃金海岸放盤" },
+      { href: "/listings?estate=wong-gam-hoi-ngon", label: "香港黃金海岸放盤" },
     ],
   },
   "oi-kam-hoi-ngon": {
@@ -576,7 +576,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/wong-gam-hoi-ngon", label: "比較香港黃金海岸" },
-      { href: "/listings?deal=all&estate=oi-kam-hoi-ngon&page=1", label: "愛琴海岸放盤" },
+      { href: "/listings?estate=oi-kam-hoi-ngon", label: "愛琴海岸放盤" },
     ],
   },
   "tai-yu": {
@@ -613,7 +613,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/wong-gam-hoi-waan", label: "比較黃金海灣" },
-      { href: "/listings?deal=all&estate=tai-yu&page=1", label: "帝御放盤" },
+      { href: "/listings?estate=tai-yu", label: "帝御放盤" },
     ],
   },
   "wong-gam-hoi-waan": {
@@ -654,7 +654,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/tai-yu", label: "比較帝御" },
-      { href: "/listings?deal=all&estate=wong-gam-hoi-waan&page=1", label: "黃金海灣放盤" },
+      { href: "/listings?estate=wong-gam-hoi-waan", label: "黃金海灣放盤" },
     ],
   },
   "sing-tai": {
@@ -690,7 +690,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/mun-ming-shan", label: "比較滿名山" },
-      { href: "/listings?deal=all&estate=sing-tai&page=1", label: "星堤放盤" },
+      { href: "/listings?estate=sing-tai", label: "星堤放盤" },
     ],
   },
   "seong-yuen": {
@@ -727,7 +727,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/mun-ming-shan", label: "比較滿名山" },
-      { href: "/listings?deal=all&estate=seong-yuen&page=1", label: "上源放盤" },
+      { href: "/listings?estate=seong-yuen", label: "上源放盤" },
     ],
   },
   "the-carmel": {
@@ -764,7 +764,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/oma-oma", label: "比較 OMA OMA" },
-      { href: "/listings?deal=all&estate=the-carmel&page=1", label: "The Carmel 放盤" },
+      { href: "/listings?estate=the-carmel", label: "The Carmel 放盤" },
     ],
   },
   "oma-oma": {
@@ -805,7 +805,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/the-carmel", label: "比較 The Carmel" },
-      { href: "/listings?deal=all&estate=oma-oma&page=1", label: "OMA OMA 放盤" },
+      { href: "/listings?estate=oma-oma", label: "OMA OMA 放盤" },
     ],
   },
   "lin-shan": {
@@ -842,7 +842,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/long-tou-waan", label: "比較浪濤灣" },
-      { href: "/listings?deal=all&estate=lin-shan&page=1", label: "漣山放盤" },
+      { href: "/listings?estate=lin-shan", label: "漣山放盤" },
     ],
   },
   "long-tou-waan": {
@@ -879,7 +879,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/lin-shan", label: "比較漣山" },
-      { href: "/listings?deal=all&estate=long-tou-waan&page=1", label: "浪濤灣放盤" },
+      { href: "/listings?estate=long-tou-waan", label: "浪濤灣放盤" },
     ],
   },
   "tai-tou-waan": {
@@ -916,7 +916,7 @@ export const estatePageContent = {
     relatedLinks: [
       { href: "/castle-peak-road", label: "青山公路置業指南" },
       { href: "/estate/wong-gam-hoi-ngon", label: "比較香港黃金海岸" },
-      { href: "/listings?deal=all&estate=tai-tou-waan&page=1", label: "帝濤灣放盤" },
+      { href: "/listings?estate=tai-tou-waan", label: "帝濤灣放盤" },
     ],
   },
 } satisfies Record<string, EstatePageContent>;

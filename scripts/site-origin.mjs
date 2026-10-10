@@ -6,7 +6,8 @@
 //   3. null -- local dev / tests; src/content/seo.ts then falls back to the
 //      vercel.app host.
 // Shared by vite.config.ts (injects it as import.meta.env.VITE_SITE_URL),
-// vercel.ts (host-level 301 onto the canonical origin) and
+// vercel.ts (production-only 308 from earnestproperty.vercel.app onto the
+// canonical origin; /api, /_serverFn, /w, /assets and /.well-known excluded) and
 // scripts/check-required-env.mjs.
 export function normalizeOrigin(value) {
   if (!value) return null;

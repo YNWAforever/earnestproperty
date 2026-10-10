@@ -28,17 +28,21 @@ const detailRedirects = importedRedirects.map((redirect) =>
   redirectEntry(redirect.source, redirect.destination, redirect.permanent),
 );
 
-// SEO canonical URLs do not activate a domain cutover. Enable host redirects
-// only after the custom domain is verified to serve this deployment and assets.
 const FALLBACK_HOST = "earnestproperty.vercel.app";
-function canonicalHostRedirects(): VercelRedirect[] {
-  if (process.env.CANONICAL_HOST_REDIRECT_ENABLED !== "true") return [];
-  const resolved = resolveSiteOrigin();
+// Machine and browser-runtime paths are never host-redirected: a cross-origin
+// 308 drops Authorization, WozTell may not follow it, and the cron worker
+// refuses it (JOB_DRAIN_REDIRECTED). Vercel cannot match on method. /assets/*
+// is excluded too: a tab left open on vercel.app keeps lazy-loading chunks
+// from it after a deploy, and a cross-origin 308 would break those imports.
+const HOST_REDIRECT_SOURCE = "/((?!api(?:/|$)|_serverFn(?:/|$)|w/|assets/|\\.well-known(?:/|$)).*)";
+function canonicalHostRedirects(env = process.env): VercelRedirect[] {
+  if (env.VERCEL_ENV !== "production") return [];
+  const resolved = resolveSiteOrigin(env);
   if (!resolved) return [];
   const origin = new URL(resolved);
-  if (origin.host === FALLBACK_HOST || origin.host.endsWith(".vercel.app")) return [];
+  if (origin.protocol !== "https:" || origin.host.endsWith(".vercel.app")) return [];
   return [
-    redirectEntry("/:path*", `${origin.origin}/:path*`, true, {
+    redirectEntry(HOST_REDIRECT_SOURCE, `${origin.origin}/$1`, true, {
       has: [{ type: "host", value: FALLBACK_HOST }],
     }),
   ];
@@ -52,9 +56,6 @@ export const config: VercelConfig = {
   redirects: [
     ...canonicalHostRedirects(),
     ...detailRedirects,
-    redirectEntry("/", "/", true, {
-      has: [{ type: "query", key: "ln", value: "^(sc|tc)$" }],
-    }),
     redirectEntry("/district/ting-kau", "/castle-peak-road/ting-kau", true),
     redirectEntry("/district/ting-kau/", "/castle-peak-road/ting-kau", true),
     // Five lifestyle zones collapsed to three. Both retired URLs are already
@@ -89,23 +90,40 @@ export const config: VercelConfig = {
     redirectEntry("/eng/", "/", true),
     redirectEntry("/profile.php", "/about", true),
     redirectEntry("/contactus.php", "/contact", true),
-    redirectEntry("/property", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/c1", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/c1/", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/c2", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/c2/", "/listings?deal=all&page=1", true),
-    redirectEntry("/property/c5", "/listings?deal=rent&page=1", true),
-    redirectEntry("/property/c5/", "/listings?deal=rent&page=1", true),
+    redirectEntry("/property", "/listings", true),
+    redirectEntry("/property/", "/listings", true),
+    redirectEntry("/property/c1", "/listings", true),
+    redirectEntry("/property/c1/", "/listings", true),
+    redirectEntry("/property/c2", "/listings", true),
+    redirectEntry("/property/c2/", "/listings", true),
+    redirectEntry("/property/c5", "/listings?deal=rent", true),
+    redirectEntry("/property/c5/", "/listings?deal=rent", true),
     redirectEntry("/listprop.php", "/contact", true),
     redirectEntry("/companynews.php", "/blog", true),
     redirectEntry("/news_content.php", "/blog", true),
-    redirectEntry("/mortgage.php", "/contact", true),
+    redirectEntry("/mortgage.php", "/mortgage", true),
     redirectEntry("/mortgage_rate.php", "/contact", true),
     redirectEntry("/school.php", "/blog", true),
     redirectEntry("/bankval.php", "/contact", true),
     redirectEntry("/unlucky.php", "/blog", true),
     redirectEntry("/tran_trends.php", "/blog", true),
+    // L-04 (audit :150): old-site 404s, 24 h counts in brackets.
+    redirectEntry("/info_gallery.php", "/listings", true), // 707
+    redirectEntry("/vr.php", "/listings", true), // 52
+    redirectEntry("/qrcode_page.php", "/contact", true), // 590 -- Open question 1
+    redirectEntry("/eng/special_prop_st.php", "/listings", true), // 987 incl. variants
+    redirectEntry("/seccode_enquiry/seccode.php", "/contact", true), // 209 incl. /eng (the /eng path waits for the 404 export)
+    redirectEntry("/unlucky_detail.php", "/blog", true), // 64, same target as /unlucky.php
+    // Detail pages go through the legacy-id resolver (src/routes/property-detail.$file.ts),
+    // temporary because the final page depends on properties.legacy_detail_id.
+    redirectEntry("/special_prop_detail.php", "/property-detail/:legacyId.html", false, {
+      has: [{ type: "query", key: "id", value: "(?<legacyId>\\d+)" }],
+    }),
+    redirectEntry("/special_prop_detail.php", "/listings", true), // 189 incl. the above
+    redirectEntry("/m/property_detail.php", "/property-detail/:legacyId.html", false, {
+      has: [{ type: "query", key: "id", value: "(?<legacyId>\\d+)" }],
+    }),
+    redirectEntry("/m/property_detail.php", "/listings", true), // 14
   ],
 };
 
