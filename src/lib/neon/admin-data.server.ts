@@ -1572,7 +1572,8 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
         WITH old AS (
           SELECT t.id, t.verification_state, t.published, t.price, t.deal_date, t.deal_type
           FROM transactions t
-          WHERE t.id = $14
+          -- A scoped agent locks only its own row, never a colleague's.
+          WHERE t.id = $14${scope !== null ? " AND t.agent_id = $15" : ""}
           FOR UPDATE
         ), upd AS (
         UPDATE transactions SET

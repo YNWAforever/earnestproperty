@@ -1099,6 +1099,29 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
           assert.equal(Number((await txRow(ownId)).price), 8_200_000);
           await server.saveAdminTransaction(draft({ id: ownId, verified: false }), manager);
           assert.equal((await txRow(ownId)).verification_state, "unverified");
+
+          // An agent's save of a colleague's deal is refused without row-locking it:
+          // a held lock on the colleague's row does not make the agent wait.
+          const { id: colleagueId } = await server.saveAdminTransaction(draft(), manager);
+          const colleagueAudits = (await audits(colleagueId)).length;
+          const holder = await pool.connect();
+          try {
+            await holder.query("BEGIN");
+            await holder.query("SELECT id FROM transactions WHERE id=$1 FOR UPDATE", [colleagueId]);
+            const outcome = await Promise.race([
+              server.saveAdminTransaction(draft({ id: colleagueId, price: 3 }), agent).then(
+                () => "saved",
+                (error) => (error instanceof Response ? error.status : String(error)),
+              ),
+              new Promise((resolve) => setTimeout(() => resolve("blocked"), 3000)),
+            ]);
+            assert.equal(outcome, 403);
+          } finally {
+            await holder.query("ROLLBACK");
+            holder.release();
+          }
+          assert.equal(Number((await txRow(colleagueId)).price), 8_000_000);
+          assert.equal((await audits(colleagueId)).length, colleagueAudits);
         },
       );
 
