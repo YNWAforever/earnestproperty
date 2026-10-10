@@ -15,6 +15,14 @@ export function isCampaignDraftDirty(
     });
   return signature(current) !== signature(saved);
 }
+/**
+ * What the campaign form sends to saveAdminCampaign. FX-17a D-13: there is no
+ * schedule field, so scheduled_at is passed back exactly as it was loaded and a
+ * stored value (an old 已排期 row's) is never cleared or rewritten.
+ */
+export function campaignSavePayload(draft: AdminCampaignInput): AdminCampaignInput {
+  return { ...draft, name: draft.name.trim() };
+}
 export function reviewAudienceRows(
   rows: Record<string, unknown>[],
   normalizePhone: (phone: unknown) => string | null,

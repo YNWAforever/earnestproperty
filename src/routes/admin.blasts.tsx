@@ -1,3 +1,4 @@
+import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import {
   type FormEvent,
@@ -58,10 +59,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
+import { useDirtyCloseGuard, useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { describeTemplateParameters } from "@/lib/woztell/template-preview";
-import { isCampaignDraftDirty } from "@/lib/admin/blast-review";
+import { campaignSavePayload, isCampaignDraftDirty } from "@/lib/admin/blast-review";
 import {
   cancelAdminCampaign,
   fetchAdminBlastOptions,
@@ -138,32 +139,6 @@ const campaignStatusLabels: Record<string, string> = {
   cancelled: "已取消",
 };
 
-/** Server refusal codes on this screen, as staff copy. Existing page strings
- * are reused where one already says the same thing. */
-const campaignErrorLabels: Record<string, string> = {
-  NOTHING_TO_RETRY: "沒有可重新發送的失敗收件人，請重新整理。",
-  // A stale 發送中 row with no live job also keeps a campaign busy (FX-10b
-  // Task 3 review M2), so staff are told where to look if it never clears.
-  CAMPAIGN_STILL_SENDING:
-    "Campaign 仍在發送中，請待發送完成或暫停後再試。如長時間仍顯示此訊息，請到「系統營運」核對發送工作。",
-  CAMPAIGN_NOT_RETRYABLE: "此 Campaign 目前的狀態不可重新發送。",
-  CAMPAIGN_HAS_DELIVERY_HISTORY:
-    "此 Campaign 已開始發送，不可更改範本或收件群組；如需不同內容，請建立新 Campaign。",
-  "Campaign not found": "找不到此 campaign，請重新整理後再試",
-  "Not found": "找不到此 campaign，請重新整理後再試",
-  RETRY_COUNT_CHANGED: "可重新發送的人數已改變，未有重新排入任何人。請核對最新數字後再確認。",
-  TEMPLATE_NOT_ACTIVE: "範本未核准或無法讀取，請先核實",
-  NO_ELIGIBLE_RECIPIENTS: "收件人預覽已過期或沒有合資格收件人，請重新預覽",
-  INVALID_CAMPAIGN_STATUS: "目前 Campaign 狀態不能加入發送佇列",
-  CAMPAIGN_NOT_ELIGIBLE: "目前 Campaign 狀態不能加入發送佇列",
-  AUDIENCE_NOT_FOUND: "此 campaign 未設定收件群組",
-  CAMPAIGN_CANCEL_NOT_ELIGIBLE: "此 Campaign 目前的狀態不可取消，請重新整理。",
-  // FX-10b final fix wave: the 發送… approval count and the finish action.
-  SEND_COUNT_CHANGED: "尚待發送人數已改變，未有加入發送佇列。請核對最新數字後再確認。",
-  CAMPAIGN_NOT_FINISHABLE: "此 Campaign 目前的狀態不可結束，請重新整理。",
-  CAMPAIGN_HAS_SENDABLE: "仍有尚待發送的收件人，請按「發送…」發送，或重新整理。",
-  FINISH_STATE_CHANGED: "Campaign 資料剛有變更，未有結束。請核對最新數字後再試。",
-};
 const RETRY_PREVIEW_ERROR = "未能讀取重新發送資料，請稍後再試。";
 const SEND_PREVIEW_ERROR = "未能讀取尚待發送人數，請稍後再試。";
 /** A lost or unreadable re-queue response: the outcome is unknown, never success. */
@@ -508,11 +483,8 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
 
     setSaving(true);
     try {
-      const payload = {
-        ...campaignDraft,
-        name: campaignDraft.name.trim(),
-        scheduled_at: nullIfBlank(campaignDraft.scheduled_at ?? ""),
-      };
+      // scheduled_at goes back exactly as loaded (FX-17a D-13).
+      const payload = campaignSavePayload(campaignDraft);
       // Whether this was a create or an update is decided BEFORE the request:
       // `id` afterwards is the saved row's id, which is always truthy, so the
       // 已新增 branch was unreachable and creating a campaign said 已儲存.
@@ -532,7 +504,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       toast.success(isUpdate ? "Campaign 已儲存" : "Campaign 已新增");
     } catch (err) {
       if (!isWorkspaceCurrent()) return;
-      toast.error(staffErrorText(err, campaignErrorText(errorText(err))));
+      toast.error(staffErrorText(err, campaignErrorText(errorCode(err))));
     } finally {
       if (isWorkspaceCurrent()) {
         setSaving(false);
@@ -935,7 +907,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       setConfirmError(
         cancelReadbackRef.current
           ? `取消結果未能確認，請先查回原 Campaign 狀態。${knownCampaignErrorText(err)}`
-          : campaignErrorText(errorText(err)),
+          : campaignErrorText(errorCode(err)),
       );
     } finally {
       cancellingRef.current = false;
@@ -1188,6 +1160,12 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
       description: "你為此收件群組輸入的資料尚未儲存，關閉後會遺失。確定要關閉嗎？",
     });
 
+  // Leaving the page (nav link, back, tab close) drops the same drafts the two close
+  // guards above protect; the dialogs themselves never touch the router.
+  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(
+    hasUnsavedCampaignChanges || hasUnsavedAudienceChanges,
+  );
+
   const queueBlockReason = !cancelJournalReady
     ? (cancelJournalError ?? "正在讀取取消操作記錄")
     : cancelNeedsReadback
@@ -1346,7 +1324,6 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                       <TableHead>收件群組</TableHead>
                       <TableHead>收件人預覽</TableHead>
                       <TableHead>送達狀況</TableHead>
-                      <TableHead>預定時間</TableHead>
                       <TableHead>狀態</TableHead>
                       <TableHead className="text-right">操作</TableHead>
                     </TableRow>
@@ -1421,9 +1398,6 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                           </TableCell>
                           <TableCell className="min-w-40">
                             <CampaignDeliveryCell campaign={campaign} />
-                          </TableCell>
-                          <TableCell className="min-w-36">
-                            {formatDate(campaign.scheduled_at)}
                           </TableCell>
                           <TableCell>
                             <CampaignStatusBadge
@@ -1613,6 +1587,9 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
 
       <CampaignDialog
         campaign={campaignDraft}
+        allowScheduled={
+          campaignDraft?.status === "scheduled" || savedCampaignDraft?.status === "scheduled"
+        }
         options={options}
         preview={preview}
         previewLoading={previewLoading}
@@ -1649,6 +1626,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
 
       {campaignCloseGuard}
       {audienceCloseGuard}
+      {leaveGuardDialog}
 
       <AdminConfirmDialog
         open={!!pendingSend}
@@ -1840,6 +1818,7 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
 
 function CampaignDialog({
   campaign,
+  allowScheduled,
   options,
   preview,
   previewLoading,
@@ -1856,6 +1835,8 @@ function CampaignDialog({
   onCancel,
 }: {
   campaign: AdminCampaignInput | null;
+  /** Only a campaign that is (or was loaded as) 已排期 may keep that status. */
+  allowScheduled: boolean;
   options: AdminBlastOptions | null;
   preview: AdminAudiencePreview | null;
   previewLoading: boolean;
@@ -1878,7 +1859,7 @@ function CampaignDialog({
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>{campaign?.id ? "編輯 Campaign" : "新增 Campaign"}</DialogTitle>
-          <DialogDescription>範本、收件群組、預定時間及狀態。</DialogDescription>
+          <DialogDescription>範本、收件群組及狀態。</DialogDescription>
         </DialogHeader>
         {campaign ? (
           <form className="grid gap-4" onSubmit={onSubmit}>
@@ -1944,27 +1925,14 @@ function CampaignDialog({
                   <SelectContent>
                     <SelectItem value="draft">草稿（不可發送）</SelectItem>
                     <SelectItem value="review">待審核</SelectItem>
-                    <SelectItem value="scheduled">已排期</SelectItem>
+                    {/* FX-17a D-13: nothing ever delivered on a schedule, so a
+                        new campaign cannot pick 已排期. An existing 已排期 row
+                        keeps it so the Select is never blank; it is sent, like
+                        待審核, only through 發送…. */}
+                    {allowScheduled ? <SelectItem value="scheduled">已排期</SelectItem> : null}
                   </SelectContent>
                 </Select>
               </Field>
-              {/* Labelled 「僅作記錄」 because nothing delivers on it: the cron in
-                  api.admin.jobs.send-queue.ts only picks up campaigns already in
-                  queued/sending, so scheduled_at is never read by any delivery
-                  path. Staff previously set a date here and reasonably expected
-                  the blast to go out then. Implementing real scheduling means
-                  enabling unattended sending, which is the owner's call. */}
-              <div>
-                <TextField
-                  label="計劃發送時間（需人手確認）"
-                  type="datetime-local"
-                  value={campaign.scheduled_at ?? ""}
-                  onChange={(value) => onChange({ ...campaign, scheduled_at: nullIfBlank(value) })}
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  系統不會自動發送。到時仍需人手按「發送…」。
-                </p>
-              </div>
             </div>
 
             <TemplateDetails
@@ -2541,7 +2509,7 @@ function RetryConfirmationDetails({
         ) : null}
       </dl>
       {preview.retryable <= 0 ? (
-        <p className="text-sm text-muted-foreground">{campaignErrorLabels.NOTHING_TO_RETRY}</p>
+        <p className="text-sm text-muted-foreground">{ADMIN_ERROR_CODES.NOTHING_TO_RETRY}</p>
       ) : null}
       {preview.unknownTotal > 0 ? (
         <div className="rounded-md border border-destructive/30 p-3 text-sm">
@@ -2692,13 +2660,15 @@ function assertNoServerError(result: unknown) {
 
 /** Staff copy for a server code; never the raw code itself. */
 function campaignErrorText(code: string) {
-  return campaignErrorLabels[code] ?? "操作失敗，請重試。";
+  if (code === "Not found") return "找不到此 campaign，請重新整理後再試";
+  return ADMIN_ERROR_CODES[code] ?? "操作失敗，請重試。";
 }
 
 /** Staff copy for a known code inside an error, or "" so callers that add it
  * to an "outcome unknown" sentence never append a contradicting fallback. */
 function knownCampaignErrorText(error: unknown) {
-  return campaignErrorLabels[errorText(error)] ?? "";
+  const code = errorCode(error);
+  return campaignErrorText(code) === "操作失敗，請重試。" ? "" : campaignErrorText(code);
 }
 
 /** 401 and 403 are definite refusals with their own copy (the wording used
@@ -2710,8 +2680,13 @@ function staffErrorText(error: unknown, fallback: string) {
   return fallback;
 }
 
-function errorText(error: unknown) {
+/** The raw server code, for the lookups below that key on it. */
+function errorCode(error: unknown) {
   if (error instanceof Error) return error.message;
   if (typeof error === "string") return error;
   return String(error);
+}
+
+function errorText(error: unknown) {
+  return adminErrorMessage(error);
 }

@@ -2,25 +2,19 @@ import "@tanstack/react-start/server-only";
 
 import { createHash } from "node:crypto";
 
+import { formatArea, formatHkd, formatManDisplay } from "@/lib/format";
 import { getSql, queryRows, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
 
 import type { AiKnowledgeChunk, AiKnowledgeSourceType, AiVisibility } from "./ai-types";
-import { getAiServerConfig } from "./config.server.ts";
 import {
   chunkKnowledgeText,
   filterPublicKnowledgeChunks,
   normalizeKnowledgeSource,
 } from "./knowledge.ts";
-import { embedAiTexts } from "./provider.server.ts";
 import {
   publicKnowledgeCurrentSourcesCte,
   publicKnowledgeRevisionGate,
 } from "./knowledge-freshness.server";
-
-// Must match the embedding column dimension in the ai_knowledge_chunks migration
-// (vector(1536)). A returned embedding of any other length cannot be stored, so we
-// surface it loudly instead of silently degrading search to a null vector.
-const EMBEDDING_DIMENSIONS = 1536;
 
 type RawSource = {
   source_type: AiKnowledgeSourceType;
@@ -87,16 +81,13 @@ export async function rebuildAiKnowledgeIndex(
   options: {
     checkpoint?: () => Promise<void>;
     sourceKeys?: ObservedKnowledgeSource[];
-    allowEmbeddings?: boolean;
   } = {},
 ) {
   const checkpoint = options.checkpoint ?? (async () => {});
   await checkpoint();
   const sources = await fetchPublicKnowledgeSources();
-  const embeddingModel = getAiServerConfig().embeddingModel;
   let indexedSources = 0;
   let indexedChunks = 0;
-  let embeddingDimensionFailures = 0;
 
   const sourceKeys = options.sourceKeys ? new Set(options.sourceKeys.map(sourceKey)) : null;
   for (const source of sources) {
@@ -116,13 +107,10 @@ export async function rebuildAiKnowledgeIndex(
     }));
     if (chunks.length === 0) continue;
 
+    // FX-11a (E-10): no embeddings are generated. Nothing ever read the stored vectors
+    // (search is keyword-based), so each chunk is stored with a NULL embedding.
     await checkpoint();
-    const embeddings =
-      options.allowEmbeddings === false
-        ? { ok: false as const, embeddings: [] as number[][] }
-        : await embedAiTexts(chunks.map((chunk) => chunk.text));
-    await checkpoint();
-    const preparedChunks = chunks.map<PreparedKnowledgeChunk>((chunk, index) => ({
+    const preparedChunks = chunks.map<PreparedKnowledgeChunk>((chunk) => ({
       sort_order: chunk.sort_order,
       chunk_text: chunk.text,
       summary: null,
@@ -137,12 +125,7 @@ export async function rebuildAiKnowledgeIndex(
       listing_id: source.listing_id ?? null,
       visibility: normalized.visibility,
       freshness_score: freshnessScore(normalized.source_type),
-      embedding: embeddingVectorString(embeddings.ok ? embeddings.embeddings[index] : null, {
-        model: embeddingModel,
-        onDimensionMismatch: () => {
-          embeddingDimensionFailures += 1;
-        },
-      }),
+      embedding: null,
       content_hash: chunk.content_hash,
     }));
 
@@ -162,13 +145,7 @@ export async function rebuildAiKnowledgeIndex(
   await reconcileUnobservedKnowledgeSources(options.sourceKeys);
   await checkpoint();
 
-  if (embeddingDimensionFailures > 0) {
-    console.error(
-      `[ai-knowledge] rebuild stored ${embeddingDimensionFailures} chunk(s) without embeddings due to dimension mismatch (model=${embeddingModel ?? "unknown"}, expected=${EMBEDDING_DIMENSIONS}). Semantic search is degraded for those chunks.`,
-    );
-  }
-
-  return { indexedSources, indexedChunks, embeddingDimensionFailures };
+  return { indexedSources, indexedChunks, embeddingDimensionFailures: 0 };
 }
 
 export type AiKnowledgeRebuildJobPayload = { requestedByStaffId: string };
@@ -245,13 +222,14 @@ export async function searchPublicKnowledge(input: { query: string; limit?: numb
 async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
   const [faqs, estates, articles, listings] = await Promise.all([
     queryRows(
-      "SELECT id, scope, question, answer, md5(to_jsonb(f)::text) AS source_revision FROM faqs f ORDER BY scope, sort_order, created_at",
+      "SELECT id, scope, question, answer, md5(to_jsonb(f)::text) AS source_revision FROM faqs f WHERE f.published = true ORDER BY scope, sort_order, created_at",
     ),
     queryRows(
       `SELECT id, slug, name_zh, name_en, district_slug, developer, year_completed,
         phases, total_units, area_min, area_max, description, facilities, seo_title, seo_description,
         md5(to_jsonb(e)::text) AS source_revision
        FROM estates e
+       WHERE e.published = true
        ORDER BY name_zh`,
     ),
     queryRows(
@@ -470,6 +448,19 @@ function joinText(values: unknown[]) {
     .join("\n");
 }
 
+function formatSalePrice(value: unknown) {
+  const price = Number(value);
+  const hkd = formatHkd(price);
+  if (!hkd) return "待核實";
+  const man = formatManDisplay(price);
+  return man ? `${hkd}（${man}）` : hkd;
+}
+
+function formatRent(value: unknown) {
+  const hkd = formatHkd(Number(value));
+  return hkd ? `${hkd}／月` : "待核實";
+}
+
 function listingFacts(row: Record<string, unknown>) {
   const offerings = Array.isArray(row.offerings)
     ? (row.offerings as Array<Record<string, unknown>>)
@@ -477,10 +468,10 @@ function listingFacts(row: Record<string, unknown>) {
   const facts = [
     ...offerings.map((offer) =>
       offer.deal_type === "sale"
-        ? `出售：${offer.price ?? "待核實"}`
-        : `出租：${offer.rent ?? "待核實"}`,
+        ? `出售：${formatSalePrice(offer.price)}`
+        : `出租：${formatRent(offer.rent)}`,
     ),
-    row.saleable_area ? `實用面積：${row.saleable_area}` : null,
+    row.saleable_area ? `實用面積：${formatArea(Number(row.saleable_area)) ?? "待核實"}` : null,
     row.bedrooms ? `睡房：${row.bedrooms}` : null,
     row.bathrooms ? `浴室：${row.bathrooms}` : null,
     row.district_slug ? `地區：${row.district_slug}` : null,
@@ -503,7 +494,6 @@ export async function repairPublicKnowledgeIndex(
   const result = await rebuildAiKnowledgeIndex({
     ...options,
     sourceKeys: requests,
-    allowEmbeddings: false,
   });
   await (options.checkpoint ?? (async () => {}))();
   await queryRows(
@@ -512,8 +502,8 @@ export async function repairPublicKnowledgeIndex(
     WHERE r.source_type::text=completed.source_type AND r.source_id=completed.source_id AND r.revision=completed.revision::bigint`,
     [JSON.stringify(requests)],
   );
-  // A batch may exceed the bounded work limit, or change during provider/DB
-  // work. Keep a new durable job for whatever has not been acknowledged by CAS.
+  // A batch may exceed the bounded work limit, or a source may change during the
+  // rebuild's DB work. Keep a new durable job for whatever has not been acknowledged by CAS.
   await queryRows(`INSERT INTO ops_jobs(job_type,payload_version,payload,status,max_attempts,idempotency_key)
     SELECT 'ai.knowledge.repair',1,jsonb_build_object('batchId',txid_current()::text),'queued',5,'ai.knowledge.repair:'||txid_current()::text
     WHERE EXISTS(SELECT 1 FROM ai_knowledge_repair_requests WHERE revision>completed_revision)
@@ -526,25 +516,6 @@ function freshnessScore(sourceType: AiKnowledgeSourceType) {
   if (sourceType === "article") return 0.9;
   if (sourceType === "faq") return 0.85;
   return 0.8;
-}
-
-function embeddingVectorString(
-  value: number[] | null | undefined,
-  context: { model: string | null; onDimensionMismatch: () => void },
-) {
-  if (value === null || value === undefined) return null;
-  if (!Array.isArray(value)) return null;
-  if (value.length !== EMBEDDING_DIMENSIONS) {
-    // A non-empty embedding with the wrong dimension would otherwise be dropped to
-    // null and silently degrade search. Report the model + actual length and let the
-    // caller count the failure so rebuildAiKnowledgeIndex can flag it.
-    console.error(
-      `[ai-knowledge] embedding dimension mismatch: model=${context.model ?? "unknown"} expected=${EMBEDDING_DIMENSIONS} actual=${value.length}`,
-    );
-    context.onDimensionMismatch();
-    return null;
-  }
-  return `[${value.join(",")}]`;
 }
 
 function metadataRecord(value: unknown): Record<string, unknown> {

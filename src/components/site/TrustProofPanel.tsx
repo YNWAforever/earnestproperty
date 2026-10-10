@@ -44,7 +44,7 @@ export function TrustProofPanel() {
             </Link>
           </div>
         </div>
-        <p className="mt-5 border-t pt-4 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-5 border-t pt-4 text-sm leading-relaxed text-muted-foreground">
           {earnestPublicTrust.coverageNotes.join(" ")}
         </p>
       </div>

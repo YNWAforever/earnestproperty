@@ -231,7 +231,16 @@ try {
     await expect(evidence).not.toContainText(ids.staff);
     await expect(evidence).toContainText("分派：已確認");
     await expect(evidence).not.toContainText("尚未執行自動分派");
-    await page.getByText("支援診斷", { exact: true }).click();
+    // FX-17a G-11: 技術資料 is admin-only; the agent's payload carries no staff id at all.
+    await expect(page.getByText("技術資料", { exact: true })).toHaveCount(0);
+    expect(await page.locator("body").innerText()).not.toContain(ids.staff);
+    await page.evaluate(() => {
+      sessionStorage.setItem("no-link-fixture-actor", "manager");
+      sessionStorage.setItem("no-link-fixture-role", "admin");
+    });
+    await page.reload();
+    await expect(evidence).toContainText("已確認負責人：合成同事甲");
+    await page.getByRole("button", { name: "技術資料", exact: true }).click();
     await expect(
       page.getByText(ids.staff, { exact: false }).filter({ visible: true }).first(),
     ).toBeVisible();
@@ -1465,7 +1474,8 @@ try {
       await open(page, `${origin}/admin/blasts`);
       await page.getByRole("button", { name: "新增 Campaign", exact: true }).click();
       const edit = page.getByRole("dialog", { name: "新增 Campaign", exact: true });
-      await expect(edit.getByText("計劃發送時間（需人手確認）", { exact: true })).toBeVisible();
+      // FX-17a D-13: the schedule field is gone; campaigns go out only through 發送….
+      await expect(edit.getByText("計劃發送時間", { exact: false })).toHaveCount(0);
       await edit.getByLabel("Campaign audience", { exact: true }).click();
       await expect(page.getByRole("option").filter({ hasText: "深井租客" })).toBeVisible();
       await expect(page.getByRole("option").filter({ hasText: "荃灣買家" })).toBeVisible();
@@ -1802,8 +1812,18 @@ try {
       await expect(panel).toContainText("合成指定同事乙");
       await expect(panel).toContainText("合成同事甲");
       expect(await panel.innerText()).not.toContain("30000000-0000-4000-8000-000000000001");
-      await panel.getByText("接手支援診斷", { exact: true }).click();
+      // FX-17a G-11: an agent gets no 技術資料 and no provider evidence; an admin can open it.
+      await expect(panel.getByText("技術資料", { exact: true })).toHaveCount(0);
+      expect(await panel.innerText()).not.toContain("private_note_posted");
+      await page.evaluate(() => {
+        sessionStorage.setItem("no-link-fixture-actor", "manager");
+        sessionStorage.setItem("no-link-fixture-role", "admin");
+      });
+      await page.reload();
+      await expect(panel).toContainText("A074714");
+      await panel.getByRole("button", { name: "技術資料", exact: true }).click();
       expect(await panel.innerText()).toContain("30000000-0000-4000-8000-000000000001");
+      await expect(panel).toContainText("證據類型：private_note_posted");
     },
   );
   await check(

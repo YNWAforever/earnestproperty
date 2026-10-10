@@ -159,7 +159,7 @@ function SegmentCard({
           </span>
           <ArrowRight className="h-4 w-4 text-primary transition group-hover:translate-x-1" />
         </div>
-        <p className="mt-1 text-xs text-muted-foreground">{summary.scopeLabel}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{summary.scopeLabel}</p>
       </div>
     </Link>
   );
@@ -176,13 +176,15 @@ function CastlePeakRoadRouteError({ error }: { error: unknown }) {
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           晉誠地產的即時放盤資料暫時未能載入。你可以重新整理資料，或稍後再回來查看青山公路沿線真盤。
         </p>
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground">
           {error instanceof Error ? error.message : "暫時未能載入資料，請稍後再試。"}
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button onClick={() => router.invalidate()}>重新載入</Button>
           <Button asChild variant="outline">
-            <Link to="/castle-peak-road">返回青山公路總覽</Link>
+            <Link to="/castle-peak-road" activeOptions={{ exact: true }}>
+              返回青山公路總覽
+            </Link>
           </Button>
         </div>
       </div>
@@ -248,7 +250,7 @@ function CorridorSchematic() {
           西（近屯門）
         </span>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">
+      <p className="mt-2 text-sm text-muted-foreground">
         示意圖只反映沿線東西相對位置，並非實際地圖座標；如需準確路線及地圖，請以地圖應用程式為準。
       </p>
     </Container>
@@ -330,11 +332,20 @@ function AreaComparisonSection() {
 
   return (
     <Container className="py-12">
-      <h2 className="text-2xl font-bold text-primary">兩個生活圈比較</h2>
+      <h2 id="area-comparison-heading" className="text-2xl font-bold text-primary">
+        兩個生活圈比較
+      </h2>
       <p className="mt-1 text-sm text-muted-foreground">
         以下內容摘自各生活圈原有的地區介紹文字，方便同版面比較。
       </p>
-      <div className="mt-4 max-w-full overflow-x-auto rounded-md border">
+      {/* Scrolls sideways at 375px, so keyboard users need to reach it (axe
+          scrollable-region-focusable); the region is named by the heading. */}
+      <div
+        tabIndex={0}
+        role="region"
+        aria-labelledby="area-comparison-heading"
+        className="mt-4 max-w-full overflow-x-auto rounded-md border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+      >
         <table className="w-full min-w-[560px] text-left text-sm">
           <thead className="bg-muted text-xs text-muted-foreground">
             <tr>

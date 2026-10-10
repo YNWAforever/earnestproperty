@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  campaignSavePayload,
   isCampaignDraftDirty,
   reviewAudienceRows,
   resolveAudienceSelection,
@@ -15,6 +16,30 @@ const empty = {
 test("pristine new campaign is clean, edits remain guarded", () => {
   assert.equal(isCampaignDraftDirty(empty, empty), false);
   assert.equal(isCampaignDraftDirty({ ...empty, name: "新推廣" }, empty), true);
+});
+// FX-17a D-13: the schedule field is gone. A stored scheduled_at (including an
+// old 已排期 row's) is sent back exactly as loaded, never cleared or rewritten.
+test("saving a campaign keeps an existing scheduled_at untouched", () => {
+  const stored = "2026-11-01T10:00:00.000Z";
+  const scheduled = {
+    ...empty,
+    id: "7917a000-0000-4000-8000-000000000501",
+    name: "  已排期推廣 ",
+    template_id: "7917a000-0000-4000-8000-000000000502",
+    audience_id: "7917a000-0000-4000-8000-000000000503",
+    status: "scheduled",
+    scheduled_at: stored,
+  };
+  const payload = campaignSavePayload(scheduled);
+  assert.equal(payload.scheduled_at, stored);
+  assert.equal(payload.status, "scheduled");
+  assert.equal(payload.name, "已排期推廣");
+  assert.deepEqual(campaignSavePayload({ ...scheduled, status: "review" }).scheduled_at, stored);
+  // An empty string is passed through too: the client never decides a stored value.
+  assert.equal(campaignSavePayload({ ...scheduled, scheduled_at: "" }).scheduled_at, "");
+  assert.equal(campaignSavePayload({ ...empty, name: "新推廣" }).scheduled_at, null);
+  // The draft itself is not mutated.
+  assert.equal(scheduled.name, "  已排期推廣 ");
 });
 test("audience exclusions overlap but unique excluded uses recipient identity", () => {
   const rows = [

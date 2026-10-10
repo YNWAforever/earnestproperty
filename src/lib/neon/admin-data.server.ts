@@ -66,7 +66,6 @@ import type {
 import { getAiServerConfig } from "../ai/config.server.ts";
 import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-enrichment.server.ts";
 import { cancelCrmAnalysisRun } from "../ai/crm-analysis-runs.server";
-import { rebuildAiKnowledgeIndex } from "../ai/knowledge.server.ts";
 import type { CrmSegmentFilters } from "../ai/ai-types";
 import { isYouTubeVideoUrl } from "../youtube-video-url.js";
 import {
@@ -1928,9 +1927,21 @@ export async function fetchAdminAiKnowledgeStatus(
 export async function rebuildAdminAiKnowledge(
   actor: StaffAccess,
 ): Promise<AdminAiKnowledgeRebuildResult> {
-  const result = await rebuildAiKnowledgeIndex();
-  await writeAudit(actor.staffId, "ai.knowledge.rebuild", "ai_knowledge", undefined, result);
-  return result;
+  // FX-11a (E-10): the rebuild runs as the ai.knowledge.rebuild background job, the
+  // same job and 5-minute idempotency window as POST /api/admin/ai/rebuild-knowledge.
+  const { enqueueJob } = await import("../control-plane/jobs.server");
+  const activeWindow = Math.floor(Date.now() / (5 * 60 * 1_000));
+  const job = await enqueueJob({
+    jobType: "ai.knowledge.rebuild",
+    payloadVersion: 1,
+    payload: { requestedByStaffId: actor.staffId },
+    idempotencyKey: `ai.knowledge.rebuild:${activeWindow}`,
+    actorStaffId: actor.staffId,
+  });
+  await writeAudit(actor.staffId, "ai.knowledge.rebuild.queued", "ai_knowledge", undefined, {
+    jobId: job.id,
+  });
+  return { jobId: job.id, status: job.status };
 }
 
 export async function fetchAdminCrmSegments(actor: StaffAccess): Promise<AdminCrmSegmentRow[]> {
@@ -3667,14 +3678,18 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
     return { id: "", error: "INVALID_CAMPAIGN_STATUS" };
   }
 
+  // FX-17a D-13: 已排期 is never chosen. A new campaign cannot start in it and
+  // an existing one can keep it but not move into it (mirrors the form).
+  if (!input.id && input.status === "scheduled") {
+    return { id: "", error: "INVALID_CAMPAIGN_STATUS" };
+  }
+
   requireNonEmpty(input.name, "name");
-  const params = [
-    input.name,
-    input.template_id,
-    input.audience_id,
-    input.status,
-    input.scheduled_at,
-  ];
+  // There is no schedule field: a save that omits scheduled_at (or sends "")
+  // keeps the stored value instead of clearing it.
+  const scheduledAt =
+    typeof input.scheduled_at === "string" && input.scheduled_at.trim() ? input.scheduled_at : null;
+  const params = [input.name, input.template_id, input.audience_id, input.status, scheduledAt];
 
   // Once any recipient may have reached WhatsApp, the template and audience
   // are frozen (FX-10b): a paused or retried campaign must resume as the same
@@ -3682,8 +3697,10 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
   const rows = input.id
     ? await queryRows(
         `UPDATE whatsapp_campaigns SET name=$1, template_id=$2, audience_id=$3,
-          status=$4::whatsapp_campaign_status, scheduled_at=$5, updated_at=now()
+          status=$4::whatsapp_campaign_status,
+          scheduled_at=COALESCE($5::timestamptz, whatsapp_campaigns.scheduled_at), updated_at=now()
          WHERE id=$6 AND status IN ('draft', 'review', 'scheduled')
+           AND ($4::whatsapp_campaign_status <> 'scheduled' OR status = 'scheduled')
            AND (NOT ${campaignHasDeliveryHistorySql("whatsapp_campaigns")}
              OR (template_id IS NOT DISTINCT FROM $2 AND audience_id IS NOT DISTINCT FROM $3))
          RETURNING id`,
@@ -3698,11 +3715,14 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
 
   if (input.id && !rows[0]) {
     const editable = await queryRows(
-      `SELECT ${campaignHasDeliveryHistorySql("c")} AS has_history
+      `SELECT c.status, ${campaignHasDeliveryHistorySql("c")} AS has_history
        FROM whatsapp_campaigns c
        WHERE c.id=$1 AND c.status IN ('draft', 'review', 'scheduled')`,
       [input.id],
     );
+    if (input.status === "scheduled" && editable[0] && editable[0].status !== "scheduled") {
+      return { id: "", error: "INVALID_CAMPAIGN_STATUS" };
+    }
     if (editable[0]?.has_history === true) {
       return { id: "", error: "CAMPAIGN_HAS_DELIVERY_HISTORY" };
     }
@@ -4619,10 +4639,6 @@ export async function updateInquiryStatus(id: string, status: string, actor: Sta
 
   await writeAudit(actor.staffId, "inquiry.status", "inquiry", id, { status });
   return { ok: true };
-}
-
-export async function queueCampaign(id: string, actor: StaffAccess) {
-  return queueAdminCampaign(id, actor);
 }
 
 // Public, unauthenticated write path -- backs /listings' zero-results

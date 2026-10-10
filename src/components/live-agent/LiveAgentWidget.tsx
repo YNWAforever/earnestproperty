@@ -13,6 +13,11 @@ import {
 } from "@/lib/ai/live-agent";
 import { isInternalCardHref, type LiveAgentCard } from "@/lib/ai/live-agent-reply";
 
+import {
+  LIVE_AGENT_ICON_CLASS,
+  LIVE_AGENT_LABEL_CLASS,
+  liveAgentTriggerClass,
+} from "./live-agent-trigger";
 import { nextHandoffOffered, readLiveAgentMessageResponse } from "./live-agent-widget-state";
 
 const liveAgentEndpoints = {
@@ -279,12 +284,9 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
   return (
     <DialogPrimitive.Root open={open} onOpenChange={setOpen} modal={false}>
       <DialogPrimitive.Trigger asChild>
-        <Button
-          className="fixed bottom-4 right-4 z-50 h-11 rounded-full px-4 shadow-lg sm:bottom-5 sm:right-5"
-          type="button"
-        >
-          <MessageCircle className="mr-2 h-5 w-5" />
-          問樓助手
+        <Button aria-label="問樓助手" className={liveAgentTriggerClass()} type="button">
+          <MessageCircle className={LIVE_AGENT_ICON_CLASS} />
+          <span className={LIVE_AGENT_LABEL_CLASS}>問樓助手</span>
         </Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>

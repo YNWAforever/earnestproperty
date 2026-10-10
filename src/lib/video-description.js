@@ -30,12 +30,28 @@ const BOILERPLATE_MARKERS = Object.freeze([
 ]);
 
 /**
+ * Strips U+FFFC (the object-replacement character YouTube leaves where an
+ * embedded chip or link was), collapses the doubled spaces that leaves, trims.
+ *
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
+export function cleanVideoText(value) {
+  if (typeof value !== "string") return "";
+  return value
+    .replace(/\uFFFC/g, "")
+    .replace(/ {2,}/g, " ")
+    .trim();
+}
+
+/**
  * @param {string | null | undefined} value
  * @param {number} [maxLength]
  * @returns {string | null}
  */
 export function summarizeVideoDescription(value, maxLength = 120) {
   if (typeof value !== "string") return null;
+  value = cleanVideoText(value);
 
   let cutIndex = value.length;
   for (const marker of BOILERPLATE_MARKERS) {
@@ -50,4 +66,160 @@ export function summarizeVideoDescription(value, maxLength = 120) {
   if (summary.length <= maxLength) return summary;
 
   return `${summary.slice(0, maxLength).trimEnd()}…`;
+}
+
+// Characters allowed between digit groups of one phone number (1 to 3 of them):
+// any whitespace (NBSP, narrow NBSP, ideographic space, newline, tab), any
+// Unicode dash (hyphen, non-breaking hyphen, en/em dash, fullwidth hyphen),
+// the minus sign, and . , 、 _ / ・ · • . Text is NFKC-normalised first, so
+// fullwidth digits and punctuation are already ASCII by the time this applies.
+const SEPARATOR_CHARS = String.raw`\s\p{Pd}−.,、_/・·•`;
+// e.g. "91 23 45 67", "9123.4567", "(852) 2688-2988". The leading "(" / "+"
+// belong to the run so they are removed with it.
+const DIGIT_RUN = new RegExp(
+  String.raw`[(+]*\d+(?:(?:[${SEPARATOR_CHARS}]{1,3}|\)[${SEPARATOR_CHARS}]{0,3})\d+)*`,
+  "gu",
+);
+const DATE_DIGITS = /^(19|20)\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])$/;
+const UNIT_AFTER = /^\s*(?:萬|億|元|呎|尺|平方呎|sq\.?\s*ft)/i;
+// 售 and 租 are not here on purpose: "租 91234567" is a phone. "租 $28,000" is
+// kept by the "$" and "售 680萬" by the unit suffix.
+const PRICE_BEFORE = /(?:\$|HK\$|價|呎價|高度)\s*$/i;
+const LABEL_BEFORE =
+  /(?:(?:致電|電話|手機|聯絡|WhatsApp|Tel|Call|chat)\s*(?:號碼)?\s*[:：]?\s*)+$/i;
+
+/** @param {string} digits */
+function isHkPhoneDigits(digits) {
+  return /^[2-9]\d{7}$/.test(digits) || /^852[2-9]\d{7}$/.test(digits);
+}
+
+/**
+ * Finds [start, end) ranges of Hong Kong phone numbers in `text`, which must
+ * already be NFKC-normalised.
+ *
+ * @param {string} text
+ * @returns {Array<[number, number]>}
+ */
+function findPhoneRanges(text) {
+  /** @type {Array<[number, number]>} */
+  const ranges = [];
+  for (const run of text.matchAll(DIGIT_RUN)) {
+    const runStart = run.index ?? 0;
+    const groups = [...run[0].matchAll(/\d+/g)].map((g) => ({
+      start: runStart + (g.index ?? 0),
+      end: runStart + (g.index ?? 0) + g[0].length,
+      digits: g[0],
+    }));
+    let i = 0;
+    while (i < groups.length) {
+      let digits = "";
+      let matched = -1;
+      for (let j = i; j < groups.length; j += 1) {
+        digits += groups[j].digits;
+        if (digits.length > 11) break;
+        if (!isHkPhoneDigits(digits)) continue;
+        const start = i === 0 ? runStart : groups[i].start;
+        let end = groups[j].end;
+        // "(9123 4567)": the run owns the opening bracket, so take its pair too.
+        const body = text.slice(start, end);
+        if (text[end] === ")" && body.split("(").length > body.split(")").length) end += 1;
+        // A phone label right before the number always wins over every exemption.
+        const before = text.slice(0, start);
+        const exempt =
+          !LABEL_BEFORE.test(before) &&
+          (DATE_DIGITS.test(digits) ||
+            UNIT_AFTER.test(text.slice(end)) ||
+            PRICE_BEFORE.test(before));
+        if (exempt) continue;
+        ranges.push([start, end]);
+        matched = j;
+        break;
+      }
+      i = matched === -1 ? i + 1 : matched + 1;
+    }
+  }
+  return ranges;
+}
+
+/**
+ * Removes Hong Kong phone numbers (8 digits starting 2-9, optionally with an
+ * 852 prefix; any spacing, dots, hyphens or slashes; fullwidth digits) and a
+ * directly preceding label such as 電話：from text bound for structured data.
+ * Prices (價 6800 0000, 680萬), areas (512呎), compact dates and listing ids are
+ * kept. Residual risk: an 8-digit landline that looks exactly like a date is
+ * kept.
+ *
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
+export function redactPhoneNumbers(value) {
+  if (typeof value !== "string") return "";
+  // Scan an NFKC copy (fullwidth digits and punctuation become ASCII) but cut the
+  // original, so the remaining zh-HK text keeps its own punctuation. Each source
+  // character is normalised on its own, which keeps a map back to the original.
+  let normalised = "";
+  /** @type {number[]} */
+  const starts = [];
+  /** @type {number[]} */
+  const ends = [];
+  let offset = 0;
+  for (const char of value) {
+    const folded = char.normalize("NFKC");
+    for (let k = 0; k < folded.length; k += 1) {
+      starts.push(offset);
+      ends.push(offset + char.length);
+    }
+    normalised += folded;
+    offset += char.length;
+  }
+  const ranges = findPhoneRanges(normalised);
+  if (ranges.length === 0) return value;
+
+  let out = value;
+  for (const [start, end] of [...ranges].reverse()) {
+    const cutStart = starts[start];
+    const cutEnd = ends[end - 1];
+    const label = LABEL_BEFORE.exec(out.slice(0, cutStart));
+    const from = label ? cutStart - label[0].length : cutStart;
+    out = out.slice(0, from) + out.slice(cutEnd);
+  }
+
+  return out
+    .replace(/(?:https?:\/\/)?wa\.me\/?(?![\w])/gi, "")
+    .replace(/[（(]\s*[）)]/g, "")
+    .replace(/\bchat\s*(?=[.。,，!！]|$)/gi, "")
+    .replace(/(^|\s)\/+(?=\s|$)/g, "$1")
+    .replace(/[ \t]+([,.，。、；;!！])/g, "$1")
+    .replace(/([，,、；;。.！!])(?:\s*[，,、；;])+/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/^[\s，,、；;:：-]+|[\s，,、；;:：-]+$/g, "")
+    .trim();
+}
+
+/**
+ * Summary for JSON-LD: the card summary with any phone number removed. Null
+ * when nothing is left, so the schema falls back to the video name.
+ *
+ * @param {string | null | undefined} value
+ * @returns {string | null}
+ */
+export function summarizeVideoDescriptionForSchema(value) {
+  const summary = redactPhoneNumbers(summarizeVideoDescription(value, 10000));
+  if (!summary) return null;
+  return summary.length <= 120 ? summary : `${summary.slice(0, 120).trimEnd()}…`;
+}
+
+/**
+ * The name and description a VideoObject carries for a CMS video. Both are
+ * phone-free; the name falls back when redaction leaves nothing.
+ *
+ * @param {{ title?: string | null; description?: string | null }} video
+ * @param {string} fallbackName
+ * @returns {{ name: string; description: string | null }}
+ */
+export function videoSchemaText(video, fallbackName) {
+  return {
+    name: redactPhoneNumbers(cleanVideoText(video.title)) || fallbackName,
+    description: summarizeVideoDescriptionForSchema(video.description),
+  };
 }

@@ -23,7 +23,6 @@ import {
   Users,
   Newspaper,
   Store,
-  TrendingUp,
   Video,
   UserRound,
 } from "lucide-react";
@@ -280,7 +279,7 @@ function HomePage() {
               <MapPin className="h-3.5 w-3.5" />
               深井 · 青山公路 · 汀九
             </span>
-            <h1 className="mt-5 text-balance text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
+            <h1 className="mt-5 break-keep text-balance text-4xl font-bold leading-tight sm:text-5xl lg:text-6xl">
               深井 青山公路 汀九買樓租樓{" "}
               <span className="whitespace-nowrap text-brand-bright">晉誠地產</span> ‧ 全部真盤
             </h1>
@@ -518,7 +517,7 @@ function HomePage() {
                   </div>
                   <p className="mt-2 text-sm font-semibold">{name}</p>
                   {agent.job_title ? (
-                    <p className="text-xs text-muted-foreground">{agent.job_title}</p>
+                    <p className="text-sm text-muted-foreground">{agent.job_title}</p>
                   ) : null}
                 </>
               );
@@ -546,18 +545,12 @@ function HomePage() {
       {/* MARKET INFO */}
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
         <SectionHeader eyebrow="市場資訊" title="最新樓市動態" />
-        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-10 grid gap-5 sm:grid-cols-2">
           <Feature
             icon={<Newspaper className="h-5 w-5" />}
             title="市場分析"
             desc="深井、青山公路、汀九樓市觀察。"
             href="/blog"
-          />
-          <Feature
-            icon={<TrendingUp className="h-5 w-5" />}
-            title="晉誠地產最新成交"
-            desc="追蹤近期成交及區內價格走勢。"
-            href="/transactions"
           />
           <Feature
             icon={<Building2 className="h-5 w-5" />}
@@ -774,7 +767,7 @@ function SectionHeader({
       {eyebrow ? (
         <p className="text-sm font-semibold uppercase tracking-widest text-coral">{eyebrow}</p>
       ) : null}
-      <h2 className="mt-2 text-3xl font-bold tracking-tight text-primary sm:text-4xl">{title}</h2>
+      <h2 className="mt-2 text-3xl font-bold text-primary sm:text-4xl">{title}</h2>
       {desc && <p className="mt-3 text-base text-muted-foreground">{desc}</p>}
     </div>
   );

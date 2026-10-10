@@ -157,33 +157,98 @@ test("a hasPage:false registry estate (none exist today) would never get an esta
   }
 });
 
-// P7a: estate and article URLs get a real per-page lastmod (their tables'
-// own updated_at) instead of sharing the sitemap's one generation timestamp
-// with every other page -- most other pages have no tracked per-page change
-// signal at all, so they keep the shared timestamp (an honest "generated at"
-// value, not a fabricated per-page one).
-test("sitemap gives estate and article URLs a real lastmod, falling back to the generation timestamp only when no real date exists", () => {
-  const source = readSitemapSource();
+// F-13 (FX-16 Task 3): lastmod is a real per-page date or it is absent. The old
+// route fell back to the generation date for every page with no source, so 95
+// of 466 URLs claimed to change on every crawl. lastmodFor is pure JS so the
+// rule is exercised here directly; the route only gathers its sources.
+const { articlePublishedAt, blogArticles } = await import("../content/blog-articles.ts");
 
+async function lastmodModule() {
+  return import("../lib/sitemap-lastmod.js");
+}
+
+function sources(overrides = {}) {
+  return {
+    listings: new Map(),
+    estates: {},
+    articles: {},
+    staticArticles: Object.fromEntries(
+      blogArticles.map((article) => [article.slug, articlePublishedAt(article)]),
+    ),
+    ...overrides,
+  };
+}
+
+test("static article lastmod = authored date", async () => {
+  const { lastmodFor } = await lastmodModule();
+  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", sources()), "2026-06-22");
+});
+
+test("a CMS row's updated_at wins over the authored date", async () => {
+  const { lastmodFor } = await lastmodModule();
+  const withCms = sources({
+    articles: { "sham-tseng-buying-guide-2026": "2026-09-30T08:15:00.000Z" },
+  });
+  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", withCms), "2026-09-30");
+  // A CMS row with no updated_at does not erase the authored date.
+  const nullCms = sources({ articles: { "sham-tseng-buying-guide-2026": null } });
+  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", nullCms), "2026-06-22");
+  assert.equal(
+    lastmodFor("/estate/bellagio", sources({ estates: { bellagio: "2026-08-01T00:00:00.000Z" } })),
+    "2026-08-01",
+  );
+  assert.equal(
+    lastmodFor(
+      "/property/T027001",
+      sources({ listings: new Map([["/property/T027001", "2026-10-01T04:00:00.000Z"]]) }),
+    ),
+    "2026-10-01",
+  );
+});
+
+test("lastmod is the Hong Kong calendar date, not the UTC one", async () => {
+  const { lastmodFor } = await lastmodModule();
+  const at = (updatedAt) =>
+    lastmodFor(
+      "/property/T027001",
+      sources({ listings: new Map([["/property/T027001", updatedAt]]) }),
+    );
+  // An edit at 00:30 HKT on 9 October is 16:30 UTC on 8 October.
+  assert.equal(at("2026-10-08T16:30:00.000Z"), "2026-10-09");
+  assert.equal(at("2026-10-08 16:30:00.123+00"), "2026-10-09");
+  assert.equal(at("2026-10-09T00:30:00+08:00"), "2026-10-09");
+  // 23:59 HKT stays on its own day.
+  assert.equal(at("2026-10-09T15:59:00.000Z"), "2026-10-09");
+  assert.equal(
+    lastmodFor("/estate/bellagio", sources({ estates: { bellagio: "2026-10-08T16:30:00Z" } })),
+    "2026-10-09",
+  );
+  // The route hands lastmodFor the full timestamp, not a UTC date it sliced itself.
+  assert.doesNotMatch(readSitemapSource(), /updated_at\?\.slice\(0, 10\)/);
+  // An authored calendar date is used as written.
+  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", sources()), "2026-06-22");
+});
+
+test("a page with no tracked date has no lastmod element", async () => {
+  const { lastmodFor } = await lastmodModule();
+  const withNullListing = sources({ listings: new Map([["/property/R000001", null]]) });
+  for (const path of ["/", "/about", "/agents/x", "/property/R000001", "/estate/unknown"]) {
+    assert.equal(lastmodFor(path, withNullListing), null, path);
+  }
+  // Inherited object keys are not dates.
+  assert.equal(lastmodFor("/blog/constructor", sources()), null);
+  assert.equal(lastmodFor("/estate/toString", sources()), null);
+
+  const source = readSitemapSource();
+  assert.match(source, /function urlXml\(path: string, lastmod: string \| null\)/);
+  assert.match(source, /lastmod \? \[`    <lastmod>\$\{lastmod\}<\/lastmod>`\] : \[\]/);
+});
+
+test("the route no longer reads the clock for lastmod", () => {
+  const source = readSitemapSource();
+  assert.doesNotMatch(source, /generatedAt/);
+  assert.doesNotMatch(source, /new Date\(/);
+  assert.match(source, /from "@\/lib\/sitemap-lastmod\.js"/);
+  assert.match(source, /articlePublishedAt\(article\)/);
   assert.match(source, /fetchSitemapTimestamps/);
-  assert.match(
-    source,
-    /path\.startsWith\("\/estate\/"\)/,
-    "estate URLs should look up a real per-slug date",
-  );
-  assert.match(
-    source,
-    /path\.startsWith\("\/blog\/"\)/,
-    "article URLs should look up a real per-slug date",
-  );
-  assert.match(
-    source,
-    /timestamps\.estates\[slug\]\?\.slice\(0, 10\) \?\? generatedAt/,
-    "an estate with no real updated_at should fall back to the shared generation timestamp, not a fabricated date",
-  );
-  assert.match(
-    source,
-    /timestamps\.articles\[slug\]\?\.slice\(0, 10\) \?\? generatedAt/,
-    "an article with no real updated_at should fall back to the shared generation timestamp, not a fabricated date",
-  );
 });

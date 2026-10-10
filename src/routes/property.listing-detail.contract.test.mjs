@@ -470,7 +470,8 @@ test("the property page uses exact estate transport and a neutral fallback", () 
   assert.match(cardBody, /\{transportInfo\.text\}/);
   assert.match(cardBody, /params=\{\{ segment: transportInfo\.segmentSlug \}\}/);
   assert.match(routeSource, /data-property-transport-fallback/);
-  assert.match(routeSource, /此屋苑的交通資料仍待核對/);
+  assert.doesNotMatch(routeSource, /仍待核對/);
+  assert.match(routeSource, /查看地區指南 →/);
 });
 
 test("loader: optional similar listings and transactions fail independently without losing the primary listing", async () => {

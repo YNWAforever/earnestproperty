@@ -99,21 +99,14 @@ test("AT-26 unavailable offering produces honest general company fallback, no re
   }
 });
 
-test("AT-37 viewer and cross-conversation agent cannot inspect enquiry IDs", async () => {
-  const { listEnquiries } = await import("../neon/whatsapp-enquiries.server.ts");
-  let reads = 0;
-  const query = async () => {
-    reads++;
-    return [];
-  };
-  const actor = { staffId: "fixture", roles: ["viewer"] };
-  await assert.rejects(listEnquiries("foreign", actor, query), (e) => e.status === 403);
-  assert.equal(reads, 0);
-  await assert.rejects(
-    listEnquiries("foreign", { ...actor, roles: ["agent"] }, query),
-    (e) => e.status === 403,
-  );
-  assert.equal(reads, 1);
+test("AT-37 the per-conversation enquiry list (staff ids) has no browser-callable path", async () => {
+  // FX-17a fix round 1 (I-2): getWhatsappEnquiries admitted agents and returned the confirmed,
+  // requested, owner and assignee staff ids. Nothing called it, so it was removed with its query.
+  const server = await import("../neon/whatsapp-enquiries.server.ts");
+  assert.equal("listEnquiries" in server, false);
+  const { readFileSync } = await import("node:fs");
+  const client = readFileSync(new URL("../neon/whatsapp-enquiries.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(client, /getWhatsappEnquiries|listEnquiries/);
 });
 
 // FX-10a (C-08): a tracked /w/ link must never answer 500. Any failure falls

@@ -5,6 +5,7 @@ import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { estatesWithPage } from "@/content/estate-registry";
 import { clientAreaGroupsInNavOrder } from "@/content/client-area-presentation";
 import { SiteLink } from "@/components/site/SiteLink";
+import { PhoneLink } from "@/components/site/PhoneLink";
 // "2688 2988", matching how the same numbers are printed elsewhere on the
 // site (estate-pages.ts's contactPhones), instead of the raw "26882988".
 function displayPhone(phone: string) {
@@ -73,16 +74,20 @@ export function SiteFooter() {
             </p>
             <p className="mt-2 text-xs opacity-60">牌照號 Licence No.: {SITE_CONTACT.licenceNo}</p>
             <p className="mt-3 text-xs opacity-60">
-              <Link to="/agents" className="underline underline-offset-2">
+              <Link
+                to="/agents"
+                activeOptions={{ exact: true }}
+                className="underline underline-offset-2"
+              >
                 查看持牌代理團隊
               </Link>
             </p>
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-bright">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-brand-bright">
               地區 Districts
-            </h3>
+            </h2>
             {/*
               Client kept only 深井 / 青山公路 / 汀九 here. The estate links that
               used to share this column are not districts, so they moved to their
@@ -91,7 +96,11 @@ export function SiteFooter() {
             */}
             <ul className="mt-4 space-y-2 text-sm">
               <li>
-                <Link to="/listings" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/listings"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   搜尋全部放盤
                 </Link>
               </li>
@@ -108,9 +117,9 @@ export function SiteFooter() {
               ))}
             </ul>
 
-            <h3 className="mt-8 text-sm font-semibold uppercase tracking-wider text-brand-bright">
+            <h2 className="mt-8 text-sm font-semibold uppercase tracking-wider text-brand-bright">
               屋苑 Estates
-            </h3>
+            </h2>
             {/*
               Derived from estate-registry.ts's hasPage:true set (DR-10),
               not a second hand-maintained list -- this grew from 5 to 22
@@ -131,6 +140,7 @@ export function SiteFooter() {
                 <li key={estate.slug}>
                   <Link
                     to="/estate/$slug"
+                    activeOptions={{ exact: true }}
                     params={{ slug: estate.slug }}
                     className="opacity-80 hover:opacity-100"
                   >
@@ -142,73 +152,113 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-bright">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-brand-bright">
               公司 Company
-            </h3>
+            </h2>
             <ul className="mt-4 space-y-2 text-sm">
               <li>
-                <Link to="/about" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/about"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   關於晉誠
                 </Link>
               </li>
               <li>
-                <Link to="/agents" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/agents"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   代理團隊
                 </Link>
               </li>
               <li>
-                <Link to="/mortgage" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/mortgage"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   按揭計算機
                 </Link>
               </li>
               <li>
-                <Link to="/blog" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/blog"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   市場分析
                 </Link>
               </li>
               <li>
-                <Link to="/videos" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/videos"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   YouTube影片
                 </Link>
               </li>
               <li>
-                <Link to="/estate-reviews" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/estate-reviews"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   屋苑開箱
                 </Link>
               </li>
               <li>
-                <Link to="/transactions" className="opacity-80 hover:opacity-100">
-                  晉誠地產最新成交
-                </Link>
-              </li>
-              <li>
-                <Link to="/" hash="owner-valuation" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/"
+                  activeOptions={{ exact: true }}
+                  hash="owner-valuation"
+                  className="opacity-80 hover:opacity-100"
+                >
                   業主放盤 / 免費估價
                 </Link>
               </li>
               <li>
-                <Link to="/contact" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/contact"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   聯絡我們
                 </Link>
               </li>
             </ul>
 
-            <h3 className="mt-8 text-sm font-semibold uppercase tracking-wider text-brand-bright">
+            <h2 className="mt-8 text-sm font-semibold uppercase tracking-wider text-brand-bright">
               法律 Legal
-            </h3>
+            </h2>
             <ul className="mt-4 space-y-2 text-sm">
               <li>
-                <Link to="/privacy" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/privacy"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   私隱政策
                 </Link>
               </li>
               <li>
-                <Link to="/disclaimer" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/disclaimer"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   免責聲明
                 </Link>
               </li>
               <li>
-                <Link to="/terms" className="opacity-80 hover:opacity-100">
+                <Link
+                  to="/terms"
+                  activeOptions={{ exact: true }}
+                  className="opacity-80 hover:opacity-100"
+                >
                   使用條款
                 </Link>
               </li>
@@ -216,9 +266,9 @@ export function SiteFooter() {
           </div>
 
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-brand-bright">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-brand-bright">
               聯絡 Contact
-            </h3>
+            </h2>
             <ul className="mt-4 space-y-3 text-sm">
               {SITE_BRANCHES.map((branch) => (
                 <li key={branch.phone} className="space-y-1 opacity-80">
@@ -231,13 +281,13 @@ export function SiteFooter() {
                       well under the 44px guideline -- inline-flex + min-h-11
                       expands the tappable box without changing the visual size
                       of the text itself. */}
-                  <a
-                    href={`tel:${branch.phone}`}
+                  <PhoneLink
+                    phone={branch.phone}
                     className="inline-flex min-h-11 items-center gap-2"
                   >
                     <Phone className="h-4 w-4 text-brand-bright" />
                     {displayPhone(branch.phone)}
-                  </a>
+                  </PhoneLink>
                 </li>
               ))}
               <li className="opacity-80">

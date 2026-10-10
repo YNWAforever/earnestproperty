@@ -41,7 +41,7 @@ const invitation = {
   failed: {
     label: "邀請失敗",
     icon: XCircle,
-    className: "border-destructive/20 bg-destructive/10 text-destructive",
+    className: "border-destructive/20 bg-destructive/5 text-destructive",
   },
 } as const;
 

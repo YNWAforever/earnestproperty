@@ -2247,6 +2247,139 @@ test(
         },
       );
 
+      // FX-17a D-13 fix round 1: a save without a schedule time keeps the stored
+      // one, and 已排期 can be kept but never chosen, on the real SQL.
+      await t.test(
+        "a save without scheduled_at keeps the stored time; 已排期 is kept but never chosen",
+        async () => {
+          const stored = "2026-10-01T02:00:00.000Z";
+          const [row] = await query(
+            "INSERT INTO whatsapp_campaigns(name,template_id,audience_id,status,scheduled_at,created_by) VALUES('Owned FX-17a save campaign',$1,$2,'scheduled',$3,$4) RETURNING id",
+            [template.id, audience.id, stored, staff.id],
+          );
+          const stored_ = async () =>
+            (
+              await query("SELECT status, scheduled_at FROM whatsapp_campaigns WHERE id=$1", [
+                row.id,
+              ])
+            )[0];
+          const base = {
+            id: row.id,
+            name: "Owned FX-17a save campaign",
+            template_id: template.id,
+            audience_id: audience.id,
+          };
+          // Kept as 已排期, with the field omitted, then with "": time unchanged.
+          assert.deepEqual(
+            await adminData.saveAdminCampaign({ ...base, status: "scheduled" }, actor),
+            {
+              id: row.id,
+            },
+          );
+          assert.equal(new Date((await stored_()).scheduled_at).toISOString(), stored);
+          assert.equal(
+            (
+              await adminData.saveAdminCampaign(
+                { ...base, status: "review", scheduled_at: "" },
+                actor,
+              )
+            ).id,
+            row.id,
+          );
+          const afterReview = await stored_();
+          assert.equal(afterReview.status, "review");
+          assert.equal(new Date(afterReview.scheduled_at).toISOString(), stored);
+          // Once moved out, it cannot be moved back in; a new campaign cannot start in it.
+          assert.deepEqual(
+            await adminData.saveAdminCampaign({ ...base, status: "scheduled" }, actor),
+            { id: "", error: "INVALID_CAMPAIGN_STATUS" },
+          );
+          assert.equal((await stored_()).status, "review");
+          const { id: _id, ...fresh } = base;
+          assert.deepEqual(
+            await adminData.saveAdminCampaign({ ...fresh, status: "scheduled" }, actor),
+            { id: "", error: "INVALID_CAMPAIGN_STATUS" },
+          );
+          assert.equal(
+            (
+              await query("SELECT count(*)::int AS n FROM whatsapp_campaigns WHERE name=$1", [
+                base.name,
+              ])
+            )[0].n,
+            1,
+          );
+        },
+      );
+
+      // FX-17a D-13: 已排期 and its time never sent anything. A campaign in that
+      // status waits (no job, no recipients) until 發送…, which re-materialises
+      // the audience with the opt-out, consent and duplicate-phone checks.
+      await t.test(
+        "a 已排期 campaign is never sent by itself; 發送… re-checks opt-out, consent and duplicates",
+        async () => {
+          const source = "owned-fx17a-scheduled";
+          const [scoped] = await query(
+            "INSERT INTO whatsapp_audiences(name,filters,created_by) VALUES('Owned FX-17a scheduled audience',$1::jsonb,$2) RETURNING id",
+            [JSON.stringify({ source }), staff.id],
+          );
+          const stored = "2026-10-01T02:00:00.000Z";
+          const [campaign] = await query(
+            "INSERT INTO whatsapp_campaigns(name,template_id,audience_id,status,scheduled_at,created_by) VALUES('Owned FX-17a scheduled campaign',$1,$2,'scheduled',$3,$4) RETURNING id",
+            [template.id, scoped.id, stored, staff.id],
+          );
+          const ok = await addContact("S1", { source });
+          const optedOut = await addContact("S2", { source });
+          const noConsent = await addContact("S3", { source });
+          // The same number written without the 852 prefix: one person, one message.
+          const duplicate = await addContact("S4", { source, phone: ok.phone.slice(3) });
+          await query("UPDATE crm_contacts SET opted_out_whatsapp=true WHERE id=$1", [
+            optedOut.contact,
+          ]);
+          await query("UPDATE crm_contacts SET opt_in_whatsapp=false WHERE id=$1", [
+            noConsent.contact,
+          ]);
+
+          // The stored time is in the past; nothing has queued, materialised or sent it.
+          assert.equal(await campaignStatus(campaign.id), "scheduled");
+          assert.deepEqual(await jobsOf(campaign.id), []);
+          assert.deepEqual(await recipientsOf(campaign.id), []);
+
+          providerCalls.length = 0;
+          const result = await adminData.sendAdminCampaignQueue(campaign.id, actor);
+          assert.equal(result.ok, true);
+          assert.equal(result.materialization.eligible, 1);
+          assert.equal(result.materialization.optedOut, 1);
+          assert.equal(result.materialization.notOptedIn, 1);
+          assert.equal(result.materialization.duplicatePhone, 1);
+          assert.equal(result.queuedRecipients, 1);
+          const rows = await query(
+            "SELECT contact_id::text AS contact, status FROM whatsapp_campaign_recipients WHERE campaign_id=$1",
+            [campaign.id],
+          );
+          assert.equal(rows.length, 1);
+          assert.ok([ok.contact, duplicate.contact].includes(rows[0].contact));
+          assert.equal(rows[0].status, "queued");
+          assert.equal(await campaignStatus(campaign.id), "queued");
+          // The stored schedule value is left exactly as it was.
+          const [{ scheduled_at: after }] = await query(
+            "SELECT scheduled_at FROM whatsapp_campaigns WHERE id=$1",
+            [campaign.id],
+          );
+          assert.equal(new Date(after).toISOString(), stored);
+
+          provider = accepted;
+          await deliver(campaign.id, await leaseCampaignJob(campaign.id));
+          assert.equal(providerCalls.length, 1);
+          assert.ok([ok.member, duplicate.member].includes(providerCalls[0].memberId));
+          assert.equal(
+            providerCalls.some((call) =>
+              [optedOut.member, noConsent.member].includes(call.memberId),
+            ),
+            false,
+          );
+        },
+      );
+
       await t.test("no recipient gets two accepted sends: every provider call in this file", () => {
         assert.ok(allProviderCalls.length > 0);
         const acceptedPerMember = new Map();

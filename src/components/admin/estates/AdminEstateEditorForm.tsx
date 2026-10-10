@@ -1,3 +1,4 @@
+import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { History, Save, Upload } from "lucide-react";
@@ -5,6 +6,9 @@ import { toast } from "sonner";
 
 import { CmsPublicationCompare } from "@/components/admin/CmsPublicationCompare";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
+import { CmsRestoreConfirm } from "@/components/admin/CmsRestoreConfirm";
+import { useCmsCanRestore } from "@/components/admin/use-cms-can-restore";
+import { ESTATE_EDITOR_LABELS } from "./estate-editor-labels";
 import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -138,15 +142,8 @@ function buildPayload(
   };
 }
 
-const CMS_ERROR_MESSAGES: Record<string, string> = {
-  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新。本機修改已保留，請使用比較目前發布版本。",
-  CMS_REVISION_NOT_FOUND: "找不到此版本，可能已被更新，請重新載入頁面。",
-  CMS_REVISION_MISMATCH: "版本資料不符，請重新載入頁面後再試一次。",
-  CMS_RESOURCE_NOT_FOUND: "找不到此資源，可能已被其他人刪除或封存，請重新載入頁面。",
-};
-
 function cmsErrorMessage(code: string): string {
-  return CMS_ERROR_MESSAGES[code] ?? "操作失敗，請重試。";
+  return ADMIN_ERROR_CODES[code] ?? "操作失敗，請重試。";
 }
 
 async function callCms<T>(call: () => Promise<T>): Promise<T> {
@@ -203,7 +200,8 @@ export function AdminEstateEditorForm({
   const [publishing, setPublishing] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [confirmingPublish, setConfirmingPublish] = useState(false);
-  const [pendingRestoreId, setPendingRestoreId] = useState<string | null>(null);
+  const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
+  const canRestore = useCmsCanRestore();
   const [pendingFaqDeleteId, setPendingFaqDeleteId] = useState<string | null>(null);
   const [districts, setDistricts] = useState<DistrictOption[]>([]);
   const [revisions, setRevisions] = useState<CmsRevisionSummary[] | null>(null);
@@ -295,7 +293,7 @@ export function AdminEstateEditorForm({
       await refreshFaqs(form.slug);
       toast.success("草稿已儲存");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "未能儲存草稿");
+      toast.error(adminErrorMessage(err, "未能儲存草稿"));
     } finally {
       setSaving(false);
     }
@@ -331,7 +329,7 @@ export function AdminEstateEditorForm({
       await refreshRevisions(draft.resourceId);
       toast.success("屋苑已發布");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "未能發布");
+      toast.error(adminErrorMessage(err, "未能發布"));
     } finally {
       setPublishing(false);
     }
@@ -351,7 +349,7 @@ export function AdminEstateEditorForm({
       await refreshRevisions(result.resourceId);
       toast.success("已還原為新草稿，請檢查內容後發布");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "還原失敗");
+      toast.error(adminErrorMessage(err, "還原失敗"));
     } finally {
       setSaving(false);
     }
@@ -368,7 +366,7 @@ export function AdminEstateEditorForm({
       await refreshRevisions(form.id);
       toast.success("屋苑已封存");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "封存失敗");
+      toast.error(adminErrorMessage(err, "封存失敗"));
     } finally {
       setSaving(false);
     }
@@ -395,7 +393,7 @@ export function AdminEstateEditorForm({
       await refreshFaqs(form.slug);
       toast.success("FAQ 已儲存");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "未能儲存 FAQ");
+      toast.error(adminErrorMessage(err, "未能儲存 FAQ"));
     }
   }
 
@@ -405,7 +403,7 @@ export function AdminEstateEditorForm({
       await refreshFaqs(form.slug);
       toast.success("FAQ 已刪除");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "刪除失敗");
+      toast.error(adminErrorMessage(err, "刪除失敗"));
     }
   }
 
@@ -422,6 +420,7 @@ export function AdminEstateEditorForm({
           resourceType="estate"
           resourceId={form.id}
           localPayload={buildPayload(form, reviewed?.payload ?? payload)}
+          labels={ESTATE_EDITOR_LABELS}
         />
         <section>
           <h2 className="mb-3 text-sm font-semibold text-muted-foreground">基本資料</h2>
@@ -777,15 +776,17 @@ export function AdminEstateEditorForm({
                         {new Date(revision.createdAt).toLocaleDateString("zh-HK")}
                       </span>
                     </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setPendingRestoreId(revision.id)}
-                    >
-                      <History className="h-4 w-4" />
-                      還原
-                    </Button>
+                    {canRestore && revision.state !== "draft" ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPendingRestore(revision)}
+                      >
+                        <History className="h-4 w-4" />
+                        還原
+                      </Button>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -859,19 +860,20 @@ export function AdminEstateEditorForm({
           void handlePublish();
         }}
       />
-      <AdminConfirmDialog
-        open={pendingRestoreId !== null}
-        title="還原此版本？"
-        description="還原會以該版本內容建立新草稿，並覆蓋目前表單內未儲存的修改。"
-        confirmLabel="還原"
+      <CmsRestoreConfirm
+        resource="estate"
+        revision={pendingRestore}
+        savedPayload={pristine}
+        form={form}
+        labels={ESTATE_EDITOR_LABELS}
+        savedDraft={revisions?.find((revision) => revision.state === "draft")}
         isPending={saving}
         onOpenChange={(open) => {
-          if (!open) setPendingRestoreId(null);
+          if (!open) setPendingRestore(null);
         }}
-        onConfirm={() => {
-          const id = pendingRestoreId;
-          setPendingRestoreId(null);
-          if (id) void handleRestore(id);
+        onConfirm={(revisionId) => {
+          setPendingRestore(null);
+          void handleRestore(revisionId);
         }}
       />
       <AdminConfirmDialog

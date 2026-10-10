@@ -27,7 +27,12 @@ import { canonicalLink, pageSeo } from "@/content/seo";
 import { VIDEO_CATEGORIES } from "@/content/video-categories";
 import { fetchVideosPageData, type CmsVideo, type VideoListing } from "@/lib/queries";
 import { jsonLdScript, videoObjectSchema } from "@/lib/schema";
-import { summarizeVideoDescription } from "@/lib/video-description.js";
+import {
+  cleanVideoText,
+  summarizeVideoDescription,
+  videoSchemaText,
+} from "@/lib/video-description.js";
+import { visibleCategoryChips } from "@/lib/video-category-chips.js";
 import { buildTagCounts, deriveEstateTag } from "@/lib/video-tags.js";
 import { getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/youtube-video-url.js";
 import { buildContext, track } from "@/lib/analytics/events";
@@ -99,13 +104,10 @@ function VideosPage() {
   // Category is a real admin-assigned column (see video-categories.ts's own
   // doc comment for why it can't be derived like the estate tag above), so an
   // uncategorised video simply doesn't count toward any chip -- never guessed.
-  const categoryCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const video of cmsVideos) {
-      if (video.category) counts.set(video.category, (counts.get(video.category) ?? 0) + 1);
-    }
-    return VIDEO_CATEGORIES.map((cat) => ({ category: cat, count: counts.get(cat) ?? 0 }));
-  }, [cmsVideos]);
+  const categoryCounts = useMemo(
+    () => visibleCategoryChips(cmsVideos, VIDEO_CATEGORIES, category),
+    [cmsVideos, category],
+  );
 
   // The chip row collapses to the top 8, but the URL can name any estate. A link
   // to a long-tail estate filtered correctly while leaving every chip
@@ -230,38 +232,40 @@ function VideosPage() {
         {hasVideos ? (
           <div className="space-y-12">
             <div className="space-y-4">
-              <div>
-                <p className="text-sm font-semibold text-primary">分類</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => updateSearch({ category: undefined })}
-                    aria-pressed={!category}
-                    className={`rounded-full border px-3 py-1.5 text-sm transition ${
-                      !category
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-input bg-background hover:bg-muted"
-                    }`}
-                  >
-                    全部 {cmsVideos.length}
-                  </button>
-                  {categoryCounts.map((entry) => (
+              {categoryCounts.length > 0 ? (
+                <div>
+                  <p className="text-sm font-semibold text-primary">分類</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
                     <button
-                      key={entry.category}
                       type="button"
-                      onClick={() => updateSearch({ category: entry.category })}
-                      aria-pressed={category === entry.category}
+                      onClick={() => updateSearch({ category: undefined })}
+                      aria-pressed={!category}
                       className={`rounded-full border px-3 py-1.5 text-sm transition ${
-                        category === entry.category
+                        !category
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-input bg-background hover:bg-muted"
                       }`}
                     >
-                      {entry.category} {entry.count}
+                      全部 {cmsVideos.length}
                     </button>
-                  ))}
+                    {categoryCounts.map((entry) => (
+                      <button
+                        key={entry.category}
+                        type="button"
+                        onClick={() => updateSearch({ category: entry.category })}
+                        aria-pressed={category === entry.category}
+                        className={`rounded-full border px-3 py-1.5 text-sm transition ${
+                          category === entry.category
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-input bg-background hover:bg-muted"
+                        }`}
+                      >
+                        {entry.category} {entry.count}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               <div>
                 <p className="text-sm font-semibold text-primary">屋苑</p>
@@ -443,7 +447,7 @@ function CmsVideoCard({ video }: { video: CmsVideo }) {
     <VideoFrame
       videoId={video.id}
       category={video.category ?? undefined}
-      title={video.title || "晉誠地產 YouTube影片"}
+      title={cleanVideoText(video.title) || "晉誠地產 YouTube影片"}
       url={video.video_url}
       eyebrow="官方頻道"
       description={video.description}
@@ -483,8 +487,7 @@ function AllVideoSchemas({
   const schemas = [
     ...cmsVideos.map((video) => ({
       key: `cms-${video.id}`,
-      name: video.title || "晉誠地產 YouTube影片",
-      description: video.description,
+      ...videoSchemaText(video, "晉誠地產 YouTube影片"),
       url: video.video_url,
       uploadDate: video.created_at,
     })),

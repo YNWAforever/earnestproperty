@@ -41,11 +41,7 @@ export const CONFIGURATION = [
     "MLS_PUBLISH_ENABLED",
   ],
   ["youtube", "Google Cloud YouTube API credential", [["YOUTUBE_API_KEY"]]],
-  [
-    "ai.gateway",
-    "AI Gateway project settings",
-    [["AI_GATEWAY_API_KEY"], ["AI_GATEWAY_MODEL"], ["AI_GATEWAY_EMBEDDING_MODEL"]],
-  ],
+  ["ai.gateway", "AI Gateway project settings", [["AI_GATEWAY_API_KEY"], ["AI_GATEWAY_MODEL"]]],
   [
     "ai.copilot",
     "OpenCode Go provider settings",

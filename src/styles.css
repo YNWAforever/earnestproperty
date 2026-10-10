@@ -143,7 +143,9 @@
   --coral: var(--brand-primary);
   --coral-foreground: var(--surface);
 
-  --destructive: oklch(0.6 0.22 27);
+  /* #C90F1A (was #E62C2C, 4.22:1 under white and 3.6-3.8:1 as error text on its
+     own tint): 5.89:1 on white, 5.64:1 on surface, 5.64:1 white on it. */
+  --destructive: oklch(0.53 0.21 27);
   --destructive-foreground: oklch(0.985 0.003 157);
 
   --border: oklch(0.912 0.017 157);
@@ -155,6 +157,17 @@
   --chart-3: var(--brand-primary-deep);
   --chart-4: oklch(0.595 0.066 182.4);
   --chart-5: oklch(0.6 0.06 60);
+}
+
+/* WhatsApp CTA green, darkened from the brand #25D366 (1.98:1 with white
+   text) to 5.57:1. One token instead of three hard-coded hex pairs. */
+:root {
+  --whatsapp: #08783f;
+  --whatsapp-hover: #066333;
+}
+@theme inline {
+  --color-whatsapp: var(--whatsapp);
+  --color-whatsapp-hover: var(--whatsapp-hover);
 }
 
 .dark {
@@ -189,6 +202,14 @@
 @layer base {
   * {
     border-color: var(--color-border);
+  }
+
+  /* FX-16 F-07: a focused field or an in-page anchor scrolls clear of the
+     fixed mobile action bar instead of landing underneath it. */
+  @media (width < 64rem) {
+    html:has([data-sticky-whatsapp-bar], [data-property-mobile-actions]) {
+      scroll-padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+    }
   }
 
   body {

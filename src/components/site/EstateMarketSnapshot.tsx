@@ -87,7 +87,7 @@ export function EstateMarketSnapshot({
           <div className="flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-primary">成交及呎價快照</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-1 text-sm text-muted-foreground">
                 平均放盤實呎按現有售盤叫價計算，並非成交價或估值；實際供應以最新確認為準。
               </p>
             </div>
