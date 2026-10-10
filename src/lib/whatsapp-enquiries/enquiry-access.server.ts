@@ -235,3 +235,24 @@ export async function readEnquiryResolutionContext(
     requestedStaffCandidates,
   };
 }
+
+/**
+ * FX-17a fix round 1: what the enquiry detail may send. A reader who cannot correct the
+ * enquiry (an agent, or a manager outside its branch) learns whether an owner or a requested
+ * colleague is set, never which staff id it is, and gets no candidate lists. A corrector needs
+ * the ids to choose and compare, so keeps them.
+ */
+export const HIDDEN_STAFF_REFERENCE = "hidden";
+export function toEnquiryResolutionView(
+  context: EnquiryResolutionContext,
+  access: Pick<EnquiryAccess, "canCorrect">,
+): EnquiryResolutionContext {
+  if (access.canCorrect) return context;
+  return {
+    ...context,
+    ownerStaffId: context.ownerStaffId ? HIDDEN_STAFF_REFERENCE : null,
+    requestedStaffId: context.requestedStaffId ? HIDDEN_STAFF_REFERENCE : null,
+    ownerCandidates: [],
+    requestedStaffCandidates: [],
+  };
+}

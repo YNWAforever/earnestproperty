@@ -29,14 +29,19 @@ const detail = createServerFn({ method: "GET" })
   .handler(async ({ data }) => {
     const { requireStaffAccess } = await import("./auth.server.ts");
     const actor = await requireStaffAccess(getRequest(), ["admin", "manager", "agent"]);
-    const { readEnquiryMessages, loadEnquiryAccess, readEnquiryResolutionContext } =
-      await import("../whatsapp-enquiries/enquiry-access.server.ts");
+    const {
+      readEnquiryMessages,
+      loadEnquiryAccess,
+      readEnquiryResolutionContext,
+      toEnquiryResolutionView,
+    } = await import("../whatsapp-enquiries/enquiry-access.server.ts");
     const [access, messages, context] = await Promise.all([
       loadEnquiryAccess(actor, data.inquiryId),
       readEnquiryMessages(actor, data.inquiryId),
       readEnquiryResolutionContext(actor, data.inquiryId),
     ]);
-    return { access, messages, context };
+    // FX-17a: a reader who cannot correct gets no colleague staff ids.
+    return { access, messages, context: toEnquiryResolutionView(context, access) };
   });
 export const fetchWhatsappEnquiryDetail = async (inquiryId: string) =>
   callStaffServerFn(detail, { data: { inquiryId } });

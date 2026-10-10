@@ -17,6 +17,8 @@ const ADMIN_ERROR_MESSAGES: Record<string, string> = {
   "staff-email-unverified":
     "你的登入電郵尚未完成驗證，帳戶未連結職員記錄。請先完成電郵驗證，然後重新登入；如沒有驗證途徑，請聯絡管理員。",
   "Failed to fetch": "無法連線到伺服器，請檢查網絡後重試。",
+  "Load failed": "無法連線到伺服器，請檢查網絡後重試。",
+  "NetworkError when attempting to fetch resource.": "無法連線到伺服器，請檢查網絡後重試。",
 };
 
 export function adminErrorText(message: string) {
@@ -52,22 +54,142 @@ const STAFF_ACTION_CODE_MESSAGES: Record<string, string> = {
   WA_LINK_PUBLIC_OFFER_UNAVAILABLE: "目前租售盤已下架或版本改變",
 };
 
-/**
- * For a failed staff ACTION or load. A status-bearing error (ServerFnResponseError, a
- * thrown Response, or any `{ status: number }`) maps 401/403/404/409 to existing copy and
- * every other status to the screen's own `fallback` -- never a raw code such as
- * `Forbidden` or `BATCH_PREVIEW_EXPIRED`. A plain Error (local validation, network)
- * keeps its text through adminErrorText; anything else gets `fallback`.
- */
-export function staffActionErrorText(error: unknown, fallback: string): string {
-  const status =
-    typeof error === "object" && error !== null && "status" in error
-      ? (error as { status: unknown }).status
-      : undefined;
-  if (typeof status === "number") return STAFF_ACTION_STATUS_MESSAGES[status] ?? fallback;
-  if (error instanceof Error) {
-    const coded = STAFF_ACTION_CODE_MESSAGES[error.message.trim()];
-    return coded ?? (adminErrorText(error.message) || fallback);
+/** CMS revision-engine codes. Moved here from admin.cms.tsx and AdminEstateEditorForm.tsx. */
+const CMS_ERROR_MESSAGES: Record<string, string> = {
+  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新。本機修改已保留，請使用與已發布版本比較。",
+  CMS_REVISION_NOT_FOUND: "找不到此版本，可能已被更新，請重新載入頁面。",
+  CMS_REVISION_MISMATCH: "版本資料不符，請重新載入頁面後再試一次。",
+  CMS_RESOURCE_NOT_FOUND: "找不到此資源，可能已被其他人刪除或封存，請重新載入頁面。",
+  CMS_MEDIA_IN_USE: "此媒體仍被其他內容使用，未能封存。",
+};
+
+/** Campaign server refusal codes, moved here from admin.blasts.tsx. The generic
+ * "Not found" key stays out: here it would re-word every screen's 404 text as a
+ * campaign message. admin.blasts.tsx keeps that one alias locally. */
+const CAMPAIGN_ERROR_MESSAGES: Record<string, string> = {
+  NOTHING_TO_RETRY: "沒有可重新發送的失敗收件人，請重新整理。",
+  // A stale 發送中 row with no live job also keeps a campaign busy (FX-10b
+  // Task 3 review M2), so staff are told where to look if it never clears.
+  CAMPAIGN_STILL_SENDING:
+    "Campaign 仍在發送中，請待發送完成或暫停後再試。如長時間仍顯示此訊息，請到「系統營運」核對發送工作。",
+  CAMPAIGN_NOT_RETRYABLE: "此 Campaign 目前的狀態不可重新發送。",
+  CAMPAIGN_HAS_DELIVERY_HISTORY:
+    "此 Campaign 已開始發送，不可更改範本或收件群組；如需不同內容，請建立新 Campaign。",
+  "Campaign not found": "找不到此 campaign，請重新整理後再試",
+  RETRY_COUNT_CHANGED: "可重新發送的人數已改變，未有重新排入任何人。請核對最新數字後再確認。",
+  TEMPLATE_NOT_ACTIVE: "範本未核准或無法讀取，請先核實",
+  NO_ELIGIBLE_RECIPIENTS: "收件人預覽已過期或沒有合資格收件人，請重新預覽",
+  INVALID_CAMPAIGN_STATUS: "目前 Campaign 狀態不能加入發送佇列",
+  CAMPAIGN_NOT_ELIGIBLE: "目前 Campaign 狀態不能加入發送佇列",
+  AUDIENCE_NOT_FOUND: "此 campaign 未設定收件群組",
+  CAMPAIGN_CANCEL_NOT_ELIGIBLE: "此 Campaign 目前的狀態不可取消，請重新整理。",
+  // FX-10b final fix wave: the 發送… approval count and the finish action.
+  SEND_COUNT_CHANGED: "尚待發送人數已改變，未有加入發送佇列。請核對最新數字後再確認。",
+  CAMPAIGN_NOT_FINISHABLE: "此 Campaign 目前的狀態不可結束，請重新整理。",
+  CAMPAIGN_HAS_SENDABLE: "仍有尚待發送的收件人，請按「發送…」發送，或重新整理。",
+  FINISH_STATE_CHANGED: "Campaign 資料剛有變更，未有結束。請核對最新數字後再試。",
+};
+
+/** The single list of known server codes and their zh-HK text. */
+export const ADMIN_ERROR_CODES: Readonly<Record<string, string>> = {
+  ...STAFF_ACTION_CODE_MESSAGES,
+  ...CMS_ERROR_MESSAGES,
+  ...CAMPAIGN_ERROR_MESSAGES,
+};
+
+/** The one fallback: existing copy (WhatsappLinksTable.tsx). */
+export const ADMIN_GENERIC_ERROR = "操作未完成，請重試。";
+
+const CJK = /[㐀-鿿]/;
+// CJK text can still be raw database or stack output with a Chinese value inside it.
+const TECHNICAL =
+  /\b(?:SELECT|INSERT|UPDATE|DELETE)\s|ERROR:|\b(?:relation|column)\s+"|invalid input syntax|violates|\n\s+at\s|\bat\s+\S+\.(?:ts|tsx|js|mjs)\b/i;
+
+/** Our own zh-HK message, minus a leading English code ("CODE: 請..."), or undefined. */
+function ownZhMessage(message: string | undefined): string | undefined {
+  if (!message || !CJK.test(message) || TECHNICAL.test(message)) return undefined;
+  const stripped = message.replace(/^[A-Z][A-Z0-9_]+:\s*/, "");
+  return CJK.test(stripped) ? stripped : undefined;
+}
+
+function statusOf(error: unknown): number | undefined {
+  if (typeof error !== "object" || error === null || !("status" in error)) return undefined;
+  const status = (error as { status: unknown }).status;
+  return typeof status === "number" ? status : undefined;
+}
+
+function messageOf(error: unknown): string | undefined {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message: unknown }).message;
+    return typeof message === "string" ? message : undefined;
   }
+  return undefined;
+}
+
+function warnRaw(error: unknown) {
+  if (!import.meta.env?.DEV) return;
+  console.warn("[admin-error] unmapped error shown as fallback:", error);
+}
+
+/**
+ * The one rule for any failed staff action or load. Never returns English, SQL or a stack.
+ * 1. A status-bearing error (ServerFnResponseError, a thrown Response, any `{ status }`)
+ *    passes our own zh-HK body through, else maps its body code through ADMIN_ERROR_CODES,
+ *    else 401/403/404/409 to existing copy, else `fallback`.
+ * 2. A message (Error, string or `{ message }`) maps as a known code, then the legacy
+ *    ADMIN_ERROR_MESSAGES / duplicate-key rule (Error and `{ message }` only), then passes
+ *    through when it contains CJK (our own zh-HK), else `fallback`.
+ * 3. Anything else is `fallback`.
+ */
+export function adminErrorMessage(error: unknown, fallback: string = ADMIN_GENERIC_ERROR): string {
+  const message = messageOf(error)?.trim();
+  const status = statusOf(error);
+  if (status !== undefined) {
+    // Our zh-HK body first, then a specific code, then the status text.
+    const mapped =
+      ownZhMessage(message) ??
+      (message ? ADMIN_ERROR_CODES[message] : undefined) ??
+      STAFF_ACTION_STATUS_MESSAGES[status];
+    if (mapped) return mapped;
+    warnRaw(error);
+    return fallback;
+  }
+  if (message) {
+    const coded = ADMIN_ERROR_CODES[message];
+    if (coded) return coded;
+    if (typeof error !== "string") {
+      const legacy = adminErrorText(message);
+      if (legacy !== message) return legacy;
+    }
+    const own = ownZhMessage(message);
+    if (own) return own;
+  }
+  warnRaw(error);
   return fallback;
+}
+
+/**
+ * True when a failed send may already have reached the server: a network drop or a 401
+ * response. Pre-flight failures (no request sent) have their own zh-HK text and are not matched.
+ */
+export function sendMayHaveReachedServer(error: unknown): boolean {
+  if (statusOf(error) === 401) return true;
+  const message = messageOf(error)?.trim();
+  if (!message) return false;
+  const code =
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code: unknown }).code)
+      : "";
+  return (
+    code === "Unauthorized" ||
+    message === "Unauthorized" ||
+    ADMIN_ERROR_MESSAGES[message] === ADMIN_ERROR_MESSAGES["Failed to fetch"]
+  );
+}
+
+/** @deprecated alias kept for FX-10a callers */
+export function staffActionErrorText(error: unknown, fallback: string): string {
+  return adminErrorMessage(error, fallback);
 }

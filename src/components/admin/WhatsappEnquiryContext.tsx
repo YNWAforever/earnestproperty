@@ -3,17 +3,9 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/compone
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { useCallback, useEffect, useState } from "react";
 import { getWhatsappAssignment, getWhatsappEnquiryQueue } from "@/lib/neon/whatsapp-assignment";
-type Episode = {
-  id: string;
-  property: string | null;
-  source: string | null;
-  dealType: string | null;
-  requestedStaffId: string | null;
-  requestedStaffName: string | null;
-  firstResponseAt: string | null;
-  dueAt: string | null;
-  review: boolean;
-};
+import { AdminTechnicalDetails } from "@/components/admin/AdminTechnicalDetails";
+import type { AssignmentContextView } from "@/lib/whatsapp-enquiries/assignment-view.js";
+type Episode = AssignmentContextView["enquiries"][number];
 const assignmentStates: Record<string, string> = {
   pending: "等候處理",
   executing: "正在要求分派",
@@ -114,7 +106,8 @@ export function WhatsappEnquiryContext({
   }
   const context = result?.kind === "ok" ? result.context : null;
   if (!context) return resolutionDialog;
-  const episodes = (context.enquiries ?? []) as Episode[];
+  const episodes: Episode[] = context.enquiries ?? [];
+  const diagnostics = context.diagnostics;
   return (
     <>
       <section
@@ -124,21 +117,19 @@ export function WhatsappEnquiryContext({
         <h3 className="font-semibold">查詢跟進</h3>
         <p className="text-xs text-muted-foreground">
           配對建議：
-          {context.proposedStaffName ??
-            (context.proposedStaffId ? "同事名稱待核實" : "需要總台人工處理")}
+          {context.proposedStaffName ?? (context.proposed ? "同事名稱待核實" : "需要總台人工處理")}
         </p>
         <p className="text-sm">
           已確認負責人：
-          {context.confirmed_staff_name ??
-            (context.confirmed_staff_id ? "負責同事名稱待核實" : "未經供應商確認")}
+          {context.confirmedStaffName ?? (context.confirmed ? "負責同事名稱待核實" : "尚未確認")}
           {" · 分派："}
-          {context.assignment_state
-            ? (assignmentStates[context.assignment_state] ?? "狀態待核實")
+          {context.assignmentState
+            ? (assignmentStates[context.assignmentState] ?? "狀態待核實")
             : "未要求"}
         </p>
-        {context.desired_staff_id ? (
+        {context.desired ? (
           <p className="text-sm">
-            要求分派至：{context.desired_staff_name ?? "未命名同事"}（待確認）
+            要求分派至：{context.desiredStaffName ?? "未命名同事"}（待確認）
           </p>
         ) : null}
         <label className="block text-sm">
@@ -167,7 +158,7 @@ export function WhatsappEnquiryContext({
             · 來源 {e.source}
             <p>
               指定同事：
-              {e.requestedStaffName ?? (e.requestedStaffId ? "指定同事名稱待核實" : "沒有指定")}
+              {e.requestedStaffName ?? (e.requested ? "指定同事名稱待核實" : "沒有指定")}
               {" · "}
               {e.review ? "需要核實關聯" : "已有關聯"}
             </p>
@@ -186,18 +177,31 @@ export function WhatsappEnquiryContext({
           服務期限與 WhatsApp 24 小時回覆窗口分開計算。接納發送不代表送達。
         </p>
       </section>
-      <details className="max-h-24 shrink-0 overflow-y-auto border-b px-4 py-2 text-xs text-muted-foreground">
-        <summary className="cursor-pointer">支援診斷</summary>
-        <p>配對原因：{context.proposalReason}</p>
-        <p>建議同事 ID：{context.proposedStaffId ?? "—"}</p>
-        <p>已確認同事 ID：{context.confirmed_staff_id ?? "—"}</p>
-        <p>分派狀態代碼：{context.assignment_state ?? "—"}</p>
-        {episodes.map((e) => (
-          <p key={e.id}>
-            查詢 ID：{e.id} · 指定同事 ID：{e.requestedStaffId ?? "—"}
-          </p>
-        ))}
-      </details>
+      <AdminTechnicalDetails
+        className="max-h-24 shrink-0 overflow-y-auto border-b px-4 py-2 text-xs text-muted-foreground"
+        rows={
+          diagnostics
+            ? [
+                { label: "配對原因", value: diagnostics.proposalReason },
+                { label: "建議同事 ID", value: diagnostics.proposedStaffId ?? "—" },
+                { label: "已確認同事 ID", value: diagnostics.confirmedStaffId ?? "—" },
+                { label: "分派狀態代碼", value: context.assignmentState ?? "—" },
+                { label: "要求分派同事 ID", value: diagnostics.desiredStaffId ?? "—" },
+                { label: "目前負責同事 ID", value: diagnostics.assignedAgentId ?? "—" },
+                { label: "分派要求編號", value: diagnostics.requestId ?? "—" },
+                { label: "保護分派", value: diagnostics.assignmentLock ? "是" : "否" },
+                {
+                  label: "供應商證據",
+                  value: diagnostics.evidence ? JSON.stringify(diagnostics.evidence) : "—",
+                },
+                ...diagnostics.enquiries.map((e) => ({
+                  label: "查詢 ID",
+                  value: `${e.id} · 指定同事 ID：${e.requestedStaffId ?? "—"}`,
+                })),
+              ]
+            : null
+        }
+      />
       {resolutionDialog}
     </>
   );
@@ -237,7 +241,7 @@ export function WhatsappEnquiryQueue() {
               href={`/admin/whatsapp?conversation=${encodeURIComponent(String(r.conversation_id))}`}
             >
               {String(r.public_listing_no ?? "一般查詢")} ·{" "}
-              {r.confirmed_staff_id ? "已確認分派" : "未確認分派"} ·{" "}
+              {r.confirmed ? "已確認分派" : "未確認分派"} ·{" "}
               {r.association_review ? "需要核實" : String(r.assignment_state ?? "待人手回覆")} ·{" "}
               {r.response_due_at ? `期限 ${String(r.response_due_at)}` : "期限未設定"}
             </a>

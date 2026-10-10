@@ -1,3 +1,4 @@
+import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
 import { cmsEditorHasChanges } from "@/components/admin/cms-editor-state";
 import { CmsDistrictField, CmsImageField } from "@/components/admin/CmsEditorFields";
 import { uploadAdminMedia } from "@/lib/admin/media-upload";
@@ -21,6 +22,9 @@ import {
 import { toast } from "sonner";
 
 import { CmsPublicationCompare } from "@/components/admin/CmsPublicationCompare";
+import { CmsRestoreConfirm } from "@/components/admin/CmsRestoreConfirm";
+import { useCmsCanRestore } from "@/components/admin/use-cms-can-restore";
+import { useOpeningSnapshot } from "@/components/admin/use-opening-snapshot";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminContentCopilot } from "@/components/admin/AdminContentCopilot";
@@ -58,7 +62,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { VIDEO_CATEGORIES } from "@/content/video-categories";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
+import { useDirtyCloseGuard, useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { parseAdminFaqImport } from "@/lib/admin/faq-import";
 import { isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
 import {
@@ -709,7 +713,11 @@ function AdminCms() {
       await refreshAfterWrite("已刪除");
     } catch (err) {
       const message = errorText(err);
-      setFaqDeleteError(message === "Not found" ? "此 FAQ 已被刪除，請重新載入頁面。" : message);
+      setFaqDeleteError(
+        err instanceof Error && err.message === "Not found"
+          ? "此 FAQ 已被刪除，請重新載入頁面。"
+          : message,
+      );
     } finally {
       setFaqDeleting(false);
     }
@@ -1923,11 +1931,13 @@ function CmsVideoDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const videoDirty = useEditingDirty(video);
   const { requestClose, dialog } = useDirtyCloseGuard({
-    isDirty: useEditingDirty(video),
+    isDirty: videoDirty,
     onClose,
     description: "你未儲存的影片修改會遺失。",
   });
+  const { dialog: leaveGuard } = useRouteLeaveGuard(videoDirty);
   return (
     <>
       <Dialog open={!!video} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
@@ -2008,6 +2018,7 @@ function CmsVideoDialog({
         </DialogContent>
       </Dialog>
       {dialog}
+      {leaveGuard}
     </>
   );
 }
@@ -2045,11 +2056,15 @@ function EstateDialog({
     : false;
   const [imageUploading, setImageUploading] = useState(false);
   const [confirmingPublish, setConfirmingPublish] = useState(false);
+  const canRestore = useCmsCanRestore();
+  const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
+  const openingEstate = useOpeningSnapshot(estate);
   const { requestClose: requestDirtyClose, dialog } = useDirtyCloseGuard({
     isDirty: isDirty || imageUploading,
     onClose,
     description: "你未儲存的屋苑 SEO 修改會遺失。",
   });
+  const { dialog: leaveGuard } = useRouteLeaveGuard(isDirty || imageUploading);
   function requestClose() {
     if (imageUploading) {
       toast.info("圖片上載中，請等待完成後再關閉。其他欄位仍可編輯。");
@@ -2203,11 +2218,28 @@ function EstateDialog({
               <CmsRevisionHistory
                 resourceId={estate.id}
                 revisions={revisions}
-                onRestoreRevision={(revisionId) => {
+                canRestore={canRestore}
+                onRequestRestore={(revision) => {
                   if (imageUploading) {
                     toast.info("圖片上載中，請等待完成後再還原版本。");
                     return;
                   }
+                  setPendingRestore(revision);
+                }}
+              />
+              <CmsRestoreConfirm
+                resource="estate"
+                revision={pendingRestore}
+                savedPayload={savedPayload}
+                openingForm={openingEstate}
+                form={{ ...estate }}
+                savedDraft={revisions?.find((revision) => revision.state === "draft")}
+                isPending={saving}
+                onOpenChange={(open) => {
+                  if (!open) setPendingRestore(null);
+                }}
+                onConfirm={(revisionId) => {
+                  setPendingRestore(null);
                   onRestoreRevision(revisionId);
                 }}
               />
@@ -2229,7 +2261,7 @@ function EstateDialog({
             open={confirmingPublish}
             onOpenChange={setConfirmingPublish}
             title="確認發佈內容"
-            description="此操作會將已儲存草稿公開。請先比較目前發布版本並核對內容。"
+            description="此操作會將已儲存草稿公開。請先與已發布版本比較並核對內容。"
             confirmLabel="確認發佈"
             disabled={imageUploading || isDirty || !savedPayload}
             isPending={publishing}
@@ -2241,6 +2273,7 @@ function EstateDialog({
         </DialogContent>
       </Dialog>
       {dialog}
+      {leaveGuard}
     </>
   );
 }
@@ -2278,11 +2311,15 @@ function ArticleDialog({
     : false;
   const [imageUploading, setImageUploading] = useState(false);
   const [confirmingPublish, setConfirmingPublish] = useState(false);
+  const canRestore = useCmsCanRestore();
+  const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
+  const openingArticle = useOpeningSnapshot(article);
   const { requestClose: requestDirtyClose, dialog } = useDirtyCloseGuard({
     isDirty: isDirty || imageUploading,
     onClose,
     description: "你未儲存的文章修改會遺失。",
   });
+  const { dialog: leaveGuard } = useRouteLeaveGuard(isDirty || imageUploading);
   function requestClose() {
     if (imageUploading) {
       toast.info("圖片上載中，請等待完成後再關閉。其他欄位仍可編輯。");
@@ -2408,11 +2445,28 @@ function ArticleDialog({
               <CmsRevisionHistory
                 resourceId={article.id}
                 revisions={revisions}
-                onRestoreRevision={(revisionId) => {
+                canRestore={canRestore}
+                onRequestRestore={(revision) => {
                   if (imageUploading) {
                     toast.info("圖片上載中，請等待完成後再還原版本。");
                     return;
                   }
+                  setPendingRestore(revision);
+                }}
+              />
+              <CmsRestoreConfirm
+                resource="article"
+                revision={pendingRestore}
+                savedPayload={savedPayload}
+                openingForm={openingArticle}
+                form={{ ...article }}
+                savedDraft={revisions?.find((revision) => revision.state === "draft")}
+                isPending={saving}
+                onOpenChange={(open) => {
+                  if (!open) setPendingRestore(null);
+                }}
+                onConfirm={(revisionId) => {
+                  setPendingRestore(null);
                   onRestoreRevision(revisionId);
                 }}
               />
@@ -2434,7 +2488,7 @@ function ArticleDialog({
             open={confirmingPublish}
             onOpenChange={setConfirmingPublish}
             title="確認發佈內容"
-            description="此操作會將已儲存草稿公開。請先比較目前發布版本並核對內容。"
+            description="此操作會將已儲存草稿公開。請先與已發布版本比較並核對內容。"
             confirmLabel="確認發佈"
             disabled={imageUploading || isDirty || !savedPayload}
             isPending={publishing}
@@ -2446,6 +2500,7 @@ function ArticleDialog({
         </DialogContent>
       </Dialog>
       {dialog}
+      {leaveGuard}
     </>
   );
 }
@@ -2465,11 +2520,13 @@ function FaqDialog({
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
+  const faqDirty = useEditingDirty(faq);
   const { requestClose, dialog } = useDirtyCloseGuard({
-    isDirty: useEditingDirty(faq),
+    isDirty: faqDirty,
     onClose,
     description: "你未儲存的 FAQ 修改會遺失。",
   });
+  const { dialog: leaveGuard } = useRouteLeaveGuard(faqDirty);
   return (
     <>
       <Dialog open={!!faq} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
@@ -2521,6 +2578,7 @@ function FaqDialog({
         </DialogContent>
       </Dialog>
       {dialog}
+      {leaveGuard}
     </>
   );
 }
@@ -2721,15 +2779,21 @@ const CMS_REVISION_STATE_LABELS: Record<CmsRevisionSummary["state"], string> = {
   archived: "已封存",
 };
 
-/** Read-only version history for the two revision-engine-backed dialogs. */
+/** Version history for the two revision-engine-backed dialogs.
+ *
+ * 還原 never fires on one click: it asks the dialog to open CmsRestoreConfirm. It is not
+ * offered on draft rows (the restore operation refuses drafts) or to roles the server
+ * refuses (agents). */
 function CmsRevisionHistory({
   resourceId,
   revisions,
-  onRestoreRevision,
+  canRestore,
+  onRequestRestore,
 }: {
   resourceId: string | undefined;
   revisions: CmsRevisionSummary[] | null;
-  onRestoreRevision: (revisionId: string) => void;
+  canRestore: boolean;
+  onRequestRestore: (revision: CmsRevisionSummary) => void;
 }) {
   if (!resourceId || !revisions) return null;
   return (
@@ -2747,15 +2811,17 @@ function CmsRevisionHistory({
                   v{revision.versionNumber} · {formatDateTime(revision.createdAt)}
                 </span>
               </span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => onRestoreRevision(revision.id)}
-              >
-                <History className="h-4 w-4" />
-                還原
-              </Button>
+              {canRestore && revision.state !== "draft" ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onRequestRestore(revision)}
+                >
+                  <History className="h-4 w-4" />
+                  還原
+                </Button>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -3147,21 +3213,11 @@ function assertNoServerError(result: unknown) {
 }
 
 function errorText(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return "操作失敗，請稍後再試";
+  return adminErrorMessage(error, "操作失敗，請稍後再試");
 }
 
-const CMS_ERROR_MESSAGES: Record<string, string> = {
-  CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新。本機修改已保留，請使用比較目前發布版本。",
-  CMS_REVISION_NOT_FOUND: "找不到此版本，可能已被更新，請重新載入頁面。",
-  CMS_REVISION_MISMATCH: "版本資料不符，請重新載入頁面後再試一次。",
-  CMS_RESOURCE_NOT_FOUND: "找不到此資源，可能已被其他人刪除或封存，請重新載入頁面。",
-  CMS_MEDIA_IN_USE: "此媒體仍被其他內容使用，未能封存。",
-};
-
 function cmsErrorMessage(code: string): string {
-  return CMS_ERROR_MESSAGES[code] ?? "操作失敗，請重試。";
+  return ADMIN_ERROR_CODES[code] ?? "操作失敗，請重試。";
 }
 
 /**
@@ -3186,7 +3242,7 @@ async function callCms<T>(call: () => Promise<T>): Promise<T> {
         : 0;
     if (status === 401) throw new Error("登入已過期，請重新登入後再試。");
     if (status === 403) throw new Error("你的角色沒有此操作的權限，請聯絡管理員或主管。");
-    throw new Error(cmsErrorMessage(errorText(err)));
+    throw new Error(cmsErrorMessage(err instanceof Error ? err.message : String(err)));
   }
   if (
     result &&

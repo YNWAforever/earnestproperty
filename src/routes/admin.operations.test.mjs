@@ -13,7 +13,7 @@ test("Operations package script runs the focused route, library, and component s
 
   assert.equal(
     packageJson.scripts["test:operations"],
-    "node --test src/lib/admin/operations/operations.test.mjs src/lib/admin/workspace-review.test.mjs src/routes/admin.operations.test.mjs && bun test src/components/admin/operations/operations-components.test.tsx",
+    "node --test src/lib/admin/operations/operations.test.mjs src/lib/admin/workspace-review.test.mjs src/routes/admin.operations.test.mjs && bun test src/lib/admin/job-labels.test.ts src/components/admin/operations/operations-components.test.tsx",
   );
 });
 
