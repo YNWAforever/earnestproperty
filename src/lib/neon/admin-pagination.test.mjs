@@ -99,6 +99,29 @@ test("messages require parent ownership and cursors cannot cross staff", () => {
   );
   assert.throws(() => buildAdminPageQuery(input, { ...actor, roles: ["viewer"] }));
 });
+test("hub FAQ and video rows carry the save's row version; other CMS rows do not", async () => {
+  const { cmsRowVersionSql } = await import("./cms-row-version.ts");
+  const faqs = buildAdminPageQuery({ resource: "faqs" }, actor).statement;
+  assert.ok(
+    faqs.includes(
+      `SELECT to_jsonb(c)||jsonb_build_object('version',${cmsRowVersionSql("faq", "c")}) AS row,c.created_at AS page_at,c.id FROM faqs c`,
+    ),
+  );
+  const videos = buildAdminPageQuery({ resource: "videos" }, actor).statement;
+  assert.ok(
+    videos.includes(
+      `SELECT to_jsonb(c)||jsonb_build_object('version',${cmsRowVersionSql("video", "c")}) AS row,c.created_at AS page_at,c.id FROM cms_videos c`,
+    ),
+  );
+  assert.match(faqs, /md5\(jsonb_build_object\('scope',c\.scope,'question',c\.question,/);
+  const media = buildAdminPageQuery({ resource: "media" }, actor).statement;
+  assert.ok(
+    media.includes(
+      "SELECT to_jsonb(c) AS row,c.created_at AS page_at,c.id FROM media_assets c WHERE c.archived_at IS NULL",
+    ),
+  );
+  assert.doesNotMatch(media, /'version'/);
+});
 test("all resources use deterministic timestamp and id ties with lookahead", () => {
   for (const resource of [
     "leads",

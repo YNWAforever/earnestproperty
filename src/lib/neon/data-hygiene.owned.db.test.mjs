@@ -239,6 +239,72 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
       );
 
       await t.test(
+        "the 內容中心 hub page read carries a version the FAQ and video saves accept, and a reused one gets 409",
+        async () => {
+          const { readAdminPage } = await import("./admin-pagination.server.ts");
+          const hubFaq = async (question) => {
+            const page = await readAdminPage(
+              { resource: "faqs", scope: FAQ_SCOPE, q: question },
+              admin,
+            );
+            const row = page.rows.find((faq) => faq.question === question);
+            assert.ok(row, "FAQ must be on the hub page");
+            return row;
+          };
+          const hubVideo = async (title) => {
+            const page = await readAdminPage({ resource: "videos", q: title }, admin);
+            const row = page.rows.find((video) => video.title === title);
+            assert.ok(row, "video must be on the hub page");
+            return row;
+          };
+
+          const faqId = await insertFaq(130, "內容中心可否改答案？", "可以");
+          const faqPageRow = await hubFaq("內容中心可否改答案？");
+          assert.equal(faqPageRow.id, faqId);
+          assert.match(String(faqPageRow.version), /^[0-9a-f]{32}$/);
+          // Same token as the single-row reader the save compares against.
+          assert.equal(faqPageRow.version, (await readFaq(faqId)).version);
+          const saved = await server.saveAdminFaq(
+            faqDraft(faqPageRow, { answer: "可以，即時生效" }),
+            admin,
+          );
+          assert.equal(saved.id, faqId);
+          assert.notEqual(saved.version, faqPageRow.version);
+          assert.equal((await faqRow(faqId)).answer, "可以，即時生效");
+          const faqAudits = (await audits(faqId)).length;
+          await rejectsWith(
+            server.saveAdminFaq(faqDraft(faqPageRow, { answer: "舊分頁" }), manager),
+            409,
+            "CMS_ROW_CHANGED",
+          );
+          assert.equal((await faqRow(faqId)).answer, "可以，即時生效");
+          assert.equal((await audits(faqId)).length, faqAudits);
+          assert.equal((await hubFaq("內容中心可否改答案？")).version, saved.version);
+
+          const videoId = await insertVideo(230, "內容中心影片");
+          const videoPageRow = await hubVideo("內容中心影片");
+          assert.equal(videoPageRow.id, videoId);
+          assert.match(String(videoPageRow.version), /^[0-9a-f]{32}$/);
+          assert.equal(videoPageRow.version, (await readVideo(videoId)).version);
+          const savedVideo = await server.saveAdminCmsVideo(
+            videoDraft(videoPageRow, { title: "內容中心影片 2026" }),
+            admin,
+          );
+          assert.equal(savedVideo.id, videoId);
+          assert.notEqual(savedVideo.version, videoPageRow.version);
+          const videoAudits = (await audits(videoId)).length;
+          await rejectsWith(
+            server.saveAdminCmsVideo(videoDraft(videoPageRow, { title: "舊分頁標題" }), manager),
+            409,
+            "CMS_ROW_CHANGED",
+          );
+          assert.equal((await videoRow(videoId)).title, "內容中心影片 2026");
+          assert.equal((await audits(videoId)).length, videoAudits);
+          assert.equal((await hubVideo("內容中心影片 2026")).version, savedVideo.version);
+        },
+      );
+
+      await t.test(
         "a FAQ save without a version is refused with 400 and writes nothing",
         async () => {
           const faqId = await insertFaq(102, "管理費？", "每月");
