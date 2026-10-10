@@ -29,7 +29,11 @@ export type WebsiteInquiryPersistenceInput = {
   listingNo: string | null;
   propertyId: string | null;
   consentWhatsapp: boolean;
+  /** Honeypot flag: adds a timeline note and an audit row; never drops the enquiry. */
+  suspectedBot?: boolean;
 };
+
+export const SUSPECTED_BOT_NOTE: string;
 
 export type WebsiteInquiryQuery = (
   sql: string,

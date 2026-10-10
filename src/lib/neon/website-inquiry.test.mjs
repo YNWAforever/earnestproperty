@@ -175,6 +175,8 @@ test("website inquiry persistence awaits and propagates an injected query failur
           false,
           null,
           "B059390",
+          "表格的隱藏欄位有內容，可能是自動程式提交。查詢已照常保存及通知，請照常跟進。",
+          false,
         ]);
         throw databaseFailure;
       },
@@ -334,4 +336,136 @@ test("website inquiry SQL resolves active listings and active staff before inser
   assert.notEqual(inquiryEnd, -1);
   assert.match(inquirySource, /persistWebsiteInquiry/);
   assert.equal((inquirySource.match(/queryRows/g) ?? []).length, 1);
+});
+
+const flaggedIntake = (overrides = {}) => ({
+  submissionId: "11111111-1111-4111-8111-111111111111",
+  name: "陳先生",
+  phone: "9123 4567",
+  normalizedPhone: "85291234567",
+  email: null,
+  message: "想睇樓",
+  listingNo: null,
+  propertyId: null,
+  consentWhatsapp: false,
+  ...overrides,
+});
+
+test("a flagged website inquiry still writes contact, lead, inquiry and alert job in one statement", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  for (const submissionId of ["11111111-1111-4111-8111-111111111111", undefined]) {
+    const calls = [];
+    const query = async (sql, params) => {
+      calls.push({ sql, params });
+      return [{ id: "inquiry-1", lead_alert_queued: true }];
+    };
+    const result = await persistWebsiteInquiry(
+      query,
+      flaggedIntake({ submissionId, suspectedBot: true }),
+    );
+    assert.deepEqual(result, { id: "inquiry-1", leadAlertQueued: true });
+    assert.equal(calls.length, 1, "the flag must not need a second statement");
+    const { sql, params } = calls[0];
+    for (const fragment of [
+      "INSERT INTO crm_contacts",
+      "INSERT INTO crm_leads",
+      "lead_alert AS (",
+      "INSERT INTO inquiries",
+      "INSERT INTO crm_activities",
+      "'suspected_bot'",
+      "INSERT INTO audit_logs",
+      "'public_form.suspected_bot'",
+    ]) {
+      assert.ok(sql.includes(fragment), `${fragment} (submissionId=${submissionId})`);
+    }
+    assert.equal(params.at(-1), true, "the flag is the last parameter");
+    const flag = `$${params.length}::boolean`;
+    assert.ok(sql.includes(`WHERE ${flag}`), `the flag gates the bot rows via ${flag}`);
+    // The note body is a server constant, also parameterized; never caller text.
+    const body = "表格的隱藏欄位有內容，可能是自動程式提交。查詢已照常保存及通知，請照常跟進。";
+    assert.equal(params.at(-2), body);
+    assert.equal(sql.includes(body), false, "the note body is a parameter, not SQL text");
+    // The bot rows hang off the lead and never gate the lead, inquiry or alert job.
+    assert.ok(sql.indexOf("bot_note AS (") > sql.indexOf("new_lead AS ("));
+    assert.ok(sql.indexOf("bot_audit AS (") > sql.indexOf("new_lead AS ("));
+    assert.doesNotMatch(sql, /FROM\s+bot_(note|audit)/);
+    // The note's contact comes from its own lead row, never a scalar subquery over `contact`
+    // that could raise "more than one row" and fail the whole intake.
+    const botNote = sql.slice(sql.indexOf("bot_note AS ("), sql.indexOf("bot_audit AS ("));
+    assert.match(botNote, /SELECT new_lead\.id, new_lead\.contact_id, 'suspected_bot'/);
+    assert.doesNotMatch(botNote, /\(SELECT/i);
+    assert.match(sql, /new_lead AS \([\s\S]*?RETURNING id, contact_id\n/);
+    assert.match(sql, /\(SELECT count\(\*\) FROM lead_alert\) > 0 AS lead_alert_queued/);
+  }
+});
+
+test("an unflagged inquiry passes false and the hash ignores the flag", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const run = async (input) => {
+    const calls = [];
+    await persistWebsiteInquiry(async (sql, params) => {
+      calls.push({ sql, params });
+      return [{ id: "inquiry-1" }];
+    }, input);
+    return calls[0];
+  };
+  const unflagged = await run(flaggedIntake());
+  assert.equal(unflagged.params.at(-1), false);
+  const explicitFalse = await run(flaggedIntake({ suspectedBot: false }));
+  const flagged = await run(flaggedIntake({ suspectedBot: true }));
+  // $10 is the payload hash: identical whatever the flag, so a replay during deploy never conflicts.
+  assert.equal(unflagged.params[9], flagged.params[9]);
+  assert.equal(explicitFalse.params[9], flagged.params[9]);
+  assert.match(unflagged.params[9], /^[0-9a-f]{64}$/);
+  // Only the flag differs; every other parameter is identical.
+  assert.deepEqual(unflagged.params.slice(0, -1), flagged.params.slice(0, -1));
+  assert.equal(unflagged.sql, flagged.sql, "the statement shape does not depend on the flag");
+  // A truthy non-boolean is not a flag: only the server's own boolean counts.
+  const truthy = await run(flaggedIntake({ suspectedBot: "yes" }));
+  assert.equal(truthy.params.at(-1), false);
+});
+
+const adminDataSource = () =>
+  readFileSync(new URL("./admin-data.ts", import.meta.url), "utf8").replace(/\r\n/g, "\n");
+
+const PUBLIC_FORMS = [
+  ["websiteInquirySchema", "const createWebsiteInquiryServer", "createWebsiteInquiry"],
+  ["listingAlertSchema", "export const createListingAlert", "createListingAlert"],
+  ["valuationLeadSchema", "export const createValuationLead", "createValuationLead"],
+];
+
+test("an oversized or non-string honeypot never fails validation", async () => {
+  const source = adminDataSource();
+  for (const [schema] of PUBLIC_FORMS) {
+    const start = source.indexOf(`const ${schema} = z`);
+    assert.notEqual(start, -1, schema);
+    const body = source.slice(start, source.indexOf(".strip();", start));
+    assert.match(body, /\n\s+website: z\.unknown\(\)\.optional\(\),\n\s+\}\)/, schema);
+  }
+  // The same shape, exercised: any type and any length parses.
+  const { z } = await import("zod");
+  const shape = z.object({ name: z.string(), website: z.unknown().optional() }).strip();
+  for (const website of [undefined, null, "", 123, { a: 1 }, ["x"], "a".repeat(10_000)]) {
+    assert.equal(shape.safeParse({ name: "陳先生", website }).success, true);
+  }
+});
+
+test("each handler derives suspectedBot after the rate limits and never returns early", () => {
+  const source = adminDataSource();
+  for (const [, start, server] of PUBLIC_FORMS) {
+    const begin = source.indexOf(start);
+    assert.notEqual(begin, -1, start);
+    const end = source.indexOf("\n  });\n", begin);
+    const handler = source.slice(begin, end);
+    const detect = handler.indexOf("isHoneypotFilled(");
+    assert.ok(detect > handler.lastIndexOf("enforceRateLimit("), `${server}: after the limits`);
+    assert.match(
+      handler,
+      /const \{ website, \.\.\.fields \} = data;\n\s+const suspectedBot = isHoneypotFilled\(website\);/,
+    );
+    const call = handler.indexOf(`return adminData.${server}({ ...fields, suspectedBot });`);
+    assert.ok(call > detect, `${server}: the flag is passed to the persist call`);
+    const between = handler.slice(detect, call);
+    assert.doesNotMatch(between, /\breturn\b|\bthrow\b/, `${server}: no early exit`);
+  }
 });

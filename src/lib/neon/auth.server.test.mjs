@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, sign } from "node:crypto";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { createNeonSessionReader, createStaffAccessResolver } from "./auth.server.ts";
@@ -354,6 +355,66 @@ test("a live bearer session is accepted and a revoked token is denied", async ()
     if (previousAuthUrl === undefined) delete process.env.NEON_AUTH_BASE_URL;
     else process.env.NEON_AUTH_BASE_URL = previousAuthUrl;
   }
+});
+
+async function withCountedFetch(run) {
+  const previousFetch = globalThis.fetch;
+  const previousAuthUrl = process.env.NEON_AUTH_BASE_URL;
+  let fetchCalls = 0;
+  globalThis.fetch = async () => {
+    fetchCalls += 1;
+    return new Response(JSON.stringify({ user: { id: "auth-cookie" } }), { status: 200 });
+  };
+  process.env.NEON_AUTH_BASE_URL = "https://auth.invalid";
+  try {
+    await run(() => fetchCalls);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousAuthUrl === undefined) delete process.env.NEON_AUTH_BASE_URL;
+    else process.env.NEON_AUTH_BASE_URL = previousAuthUrl;
+  }
+}
+
+const visitorCookie = "_ga=GA1.1.x; neon-auth.session_token=abc";
+
+test("cookie-only request is unauthenticated", async () => {
+  let queryCalls = 0;
+  const queryRows = async () => {
+    queryCalls += 1;
+    return [];
+  };
+  await withCountedFetch(async (fetchCalls) => {
+    const read = createNeonSessionReader(queryRows);
+    const result = await read(
+      new Request("https://earnest.test/admin", { headers: { cookie: visitorCookie } }),
+    );
+    assert.equal(result, null);
+    assert.equal(fetchCalls(), 0);
+    assert.equal(queryCalls, 0);
+  });
+});
+
+test("a bearer request with cookies still authenticates and forwards no cookie", async () => {
+  const queryRows = async (statement, params = []) =>
+    statement.includes("FROM neon_auth.session s") && params[0] === "live-token"
+      ? [{ id: "auth-kevin", email: "kevin@example.test", name: "Kevin" }]
+      : [];
+  await withCountedFetch(async (fetchCalls) => {
+    const read = createNeonSessionReader(queryRows);
+    const result = await read(
+      new Request("https://earnest.test/admin", {
+        headers: { cookie: visitorCookie, authorization: "Bearer live-token" },
+      }),
+    );
+    assert.equal(result?.user.id, "auth-kevin");
+    assert.equal(fetchCalls(), 0);
+  });
+});
+
+test("the session reader never calls Neon Auth over HTTP", () => {
+  const source = readFileSync(new URL("./auth.server.ts", import.meta.url), "utf8");
+  assert.equal(source.includes("get-session"), false);
+  assert.equal(source.includes('headers.get("cookie")'), false);
 });
 
 test("a signed JWT cannot bypass a revoked Neon Auth session", async () => {

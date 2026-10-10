@@ -20,6 +20,7 @@ import {
   submitContactInquiry,
 } from "@/lib/contact-inquiry-form";
 import { FormStatus, type FormStatusState } from "@/components/site/FormStatus";
+import { HoneypotField } from "@/components/site/HoneypotField";
 
 const CONTACT_FORM_STATUS_ID = "contact-form-status";
 
@@ -75,6 +76,7 @@ export function ContactInquiryForm() {
         raw,
         consentWhatsapp,
         submitFn: (payload) => createWebsiteInquiry({ data: payload }),
+        website: fd.get("website") ?? undefined,
       });
 
       switch (outcome.status) {
@@ -102,7 +104,7 @@ export function ContactInquiryForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-4 max-w-md space-y-3">
+    <form onSubmit={handleSubmit} className="relative mt-4 max-w-md space-y-3">
       <div>
         <Label htmlFor="contact-name">姓名 *</Label>
         <Input id="contact-name" name="name" required maxLength={120} placeholder="陳先生" />
@@ -189,6 +191,8 @@ export function ContactInquiryForm() {
           我同意透過 WhatsApp 接收樓盤資訊及推廣訊息。
         </Label>
       </div>
+      {/* After the last visible field: a keyboard "next" between real fields never lands in it. */}
+      <HoneypotField />
       <Button
         type="submit"
         className="w-full sm:w-auto"

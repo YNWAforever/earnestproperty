@@ -48,18 +48,4 @@ export async function enforceRateLimit({
   await maybePruneExpiredRateLimitBuckets((statement) => sql.query(statement));
 }
 
-/**
- * Derive the client IP from the standard proxy headers. We trust the first hop
- * in x-forwarded-for (Vercel rewrites this), falling back to x-real-ip, and a
- * stable sentinel when neither is present so the limiter still applies.
- */
-export function clientIpFromRequest(request: Request): string {
-  const forwarded = request.headers.get("x-forwarded-for");
-  if (forwarded) {
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  const realIp = request.headers.get("x-real-ip")?.trim();
-  if (realIp) return realIp;
-  return "unknown";
-}
+export { clientIpFromRequest } from "./client-ip";

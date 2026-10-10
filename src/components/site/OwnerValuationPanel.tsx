@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { ClipboardCheck, MessageCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { VALUATION_CONSENT_TEXT } from "@/lib/neon/valuation-leads.js";
 import { buildContext, track } from "@/lib/analytics/events";
 import { submitPublicForm } from "@/lib/public-form-submit";
 import { FormStatus, type FormStatusState } from "@/components/site/FormStatus";
+import { HoneypotField } from "@/components/site/HoneypotField";
 
 const VALUATION_FORM_STATUS_ID = "valuation-form-status";
 
@@ -59,6 +60,7 @@ export function ValuationLeadForm({ estateId }: { estateId?: string }) {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [status, setStatus] = useState<FormStatusState>({ kind: "idle" });
+  const honeypotRef = useRef<HTMLInputElement>(null);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -80,6 +82,7 @@ export function ValuationLeadForm({ estateId }: { estateId?: string }) {
           estateId,
           consent,
           utm: collectUtmParams(),
+          website: honeypotRef.current?.value,
         },
       }),
     );
@@ -104,7 +107,10 @@ export function ValuationLeadForm({ estateId }: { estateId?: string }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-5 space-y-3 rounded-lg border bg-background p-5">
+    <form
+      onSubmit={handleSubmit}
+      className="relative mt-5 space-y-3 rounded-lg border bg-background p-5"
+    >
       <p className="text-sm font-semibold text-primary">留低資料，等我們幫你估價</p>
       <div>
         <Label htmlFor="valuation-name">姓名 *</Label>
@@ -165,6 +171,8 @@ export function ValuationLeadForm({ estateId }: { estateId?: string }) {
           {VALUATION_CONSENT_TEXT}
         </Label>
       </div>
+      {/* After the last visible field: a keyboard "next" between real fields never lands in it. */}
+      <HoneypotField inputRef={honeypotRef} />
       <Button
         type="submit"
         className="w-full"
