@@ -264,8 +264,12 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(page.getByRole("combobox", { name: "按狀態篩選背景工作" })).toContainText(
         "失敗",
       );
-      await expect(page.getByRole("columnheader", { name: "原因", exact: true })).toBeVisible();
       const timeout = page.getByRole("row").filter({ hasText: "推廣活動發送" });
+      // The WhatsApp 來訊收件 table also has a 原因 column, so scope to the jobs table.
+      const jobsTable = page.getByRole("table").filter({ has: timeout });
+      await expect(
+        jobsTable.getByRole("columnheader", { name: "原因", exact: true }),
+      ).toBeVisible();
       await expect(timeout).toContainText("WhatsApp 服務沒有及時回應。");
       // A code the table does not know, and a failed job with no stored code.
       await expect(repairRow(page)).toContainText("處理失敗（未分類原因）。");
