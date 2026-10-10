@@ -772,6 +772,13 @@ test("an agent's update SQL cannot match a verified or published row", async () 
   assert.match(calls[0].text, /UPDATE transactions/);
   assert.match(calls[0].text, /AND transactions\.verification_state <> 'verified'/);
   assert.match(calls[0].text, /transactions\.published = false/);
+  // Ownership: the agent locks and updates only its own row, bound to its staff id.
+  assert.match(calls[0].text, /WHERE t\.id = \$14 AND t\.agent_id = \$15\s+FOR UPDATE/);
+  assert.match(calls[0].text, /WHERE transactions\.id = o\.id AND transactions\.agent_id = \$15/);
+  assert.equal(calls[0].params[13], "txn-1");
+  assert.equal(calls[0].params[14], AGENT_ACTOR.staffId);
+  assert.equal(calls[0].params[15], AGENT_ACTOR.staffId);
+  assert.match(calls[0].text, /SELECT \$16::uuid, 'transaction\.update'/);
 });
 
 test("manager and admin may verify and publish, with no row-state guard on their update", async () => {
@@ -786,6 +793,9 @@ test("manager and admin may verify and publish, with no row-state guard on their
     assert.ok(calls[0].params.includes(true));
     assert.match(calls[0].text, /UPDATE transactions/);
     // The row-state guard is for agents only; staff with the role skip it.
-    assert.doesNotMatch(calls[0].text, /AND transactions\.verification_state <> 'verified'/);
+    assert.doesNotMatch(calls[0].text, /AND\s+(transactions\.)?verification_state <> 'verified'/);
+    // Nor any agent ownership scoping on the lock or the update.
+    assert.doesNotMatch(calls[0].text, /agent_id = \$15/);
+    assert.match(calls[0].text, /SELECT \$15::uuid, 'transaction\.update'/);
   }
 });
