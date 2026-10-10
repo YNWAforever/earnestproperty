@@ -201,3 +201,25 @@ test("the pending list only names files that still need migrating", () => {
 });
 
 test("no module is still pending migration", () => assert.deepEqual(PENDING_TASK_3, []));
+
+// FX-19a-1 Task 3: the legacy saveWhatsappStaffChannel wrapper called
+// saveStaffChannel, which writes review_basis='legacy_manual' and skips the
+// provider-evidence review. No UI called it. The only browser-callable way to
+// save a staff WhatsApp channel is the reviewed path, still admin/manager only.
+test("no browser-callable legacy staff channel save remains", () => {
+  const text = readFileSync(join(root, "src/lib/neon/whatsapp-assignment.ts"), "utf8");
+  assert.doesNotMatch(text, /\bsaveWhatsappStaffChannel\b/);
+  assert.doesNotMatch(text, /\bsaveStaffChannel\b/);
+  assert.match(text, /export async function saveReviewedWhatsappStaffChannel\(/);
+
+  const channelSaves = [...text.matchAll(/export async function (\w*Save\w*|save\w*)\(/g)].map(
+    (match) => match[1],
+  );
+  assert.deepEqual(channelSaves, ["saveReviewedWhatsappStaffChannel"]);
+
+  const reviewed = text.slice(text.indexOf("const reviewedSaveServer = createServerFn"));
+  assert.match(
+    reviewed.slice(0, 900),
+    /requireStaffAccess\(getRequest\(\), \["admin", "manager"\]\)[\s\S]*saveReviewedStaffChannel\(data, actor\)/,
+  );
+});

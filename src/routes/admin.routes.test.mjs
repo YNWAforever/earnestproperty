@@ -887,20 +887,43 @@ test("agentScope is exported once and not redefined per call site", () => {
 
 // Roles and deactivation are privilege operations. Managers may edit an agent's
 // public profile, but must never be able to escalate anyone -- including
-// themselves -- so all three are admin-only at the server boundary.
-test("staff access management server functions are admin-only", () => {
+// themselves. The only browser-callable path is Team (admin-team.ts), whose
+// mutation boundary requires admin before the lifecycle service is loaded.
+test("staff roles and deactivation have no browser-callable path outside admin-team", () => {
   const client = read("src/lib/neon/admin-data.ts");
-
   for (const name of [
     "fetchStaffAccessSummaryServer",
     "updateStaffRolesServer",
     "setStaffActiveServer",
   ]) {
-    const start = client.indexOf(`const ${name} = createServerFn`);
-    assert.notEqual(start, -1, `${name} must exist`);
-    const body = client.slice(start, start + 900);
-    assert.match(body, /requireStaff\(\["admin"\]\)/, `${name} must require admin`);
+    assert.equal(client.includes(name), false, `admin-data.ts must not define ${name}`);
   }
+
+  const team = read("src/lib/neon/admin-team.ts");
+  assert.match(team, /export const changeStaffRoles = async/);
+  assert.match(team, /export const changeStaffActive = async/);
+  assert.match(
+    team,
+    /\.handler\(\(\{ data \}\) => boundary\.changeStaffRoles\(data, getRequest\(\)\)\)/,
+  );
+  assert.match(
+    team,
+    /\.handler\(\(\{ data \}\) => boundary\.changeStaffActive\(data, getRequest\(\)\)\)/,
+  );
+  const withRequest = team.slice(team.indexOf("async function withRequest"));
+  assert.match(
+    withRequest.slice(0, 600),
+    /requireAccess\(request, \["admin"\]\)/,
+    "Team mutations must require admin",
+  );
+  assert.match(
+    team,
+    /changeStaffRoles\(input: ChangeStaffRolesInput, request: Request\) \{\s*return withRequest\(/,
+  );
+  assert.match(
+    team,
+    /changeStaffActive\(input: ChangeStaffActiveInput, request: Request\) \{\s*return withRequest\(/,
+  );
 });
 
 test("deactivation reassigns and flips active in one transaction", () => {

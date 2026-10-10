@@ -1,6 +1,6 @@
 // Opt-in live eval for the public live-agent. Default is mock mode and makes no network call.
 // `--live --base-url <url>` drives a deployed PREVIEW over HTTP and refuses production hosts.
-// Modelled on scripts/jev/evaluate.mjs. This file never reads the environment: no AI keys, no phone
+// Modelled on the retired JEV pilot evaluator. This file never reads the environment: no AI keys, no phone
 // numbers and no other value can reach a request or the report. Live mode sends only the eval case
 // texts, never calls the handoff route (cases 13-15 are skipped), and never follows a redirect.
 // Live mode creates chat sessions and messages on the target deployment, so that preview must use a

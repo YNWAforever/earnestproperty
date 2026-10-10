@@ -64,6 +64,7 @@ jobs:
       # didn't exist at P1 baseline -- it guards DR-5 (no unsourced school
       # list on the 深井 district page).
       - run: npm run test:district
+      - run: npm run test:ui-inventory
 
       - run: npm run test:blog
       - run: npm run test:videos
