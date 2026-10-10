@@ -16,6 +16,13 @@ await build({
   resolve: {
     alias: [
       {
+        find: /^@\/lib\/neon\/staff-checklist$/,
+        replacement: resolve(
+          workspace,
+          "scripts/browser-fixtures/no-link/synthetic-staff-checklist.ts",
+        ),
+      },
+      {
         find: /^@\/(auth|hooks\/use-neon-auth|lib\/neon\/(admin-data|admin-property-sync))$/,
         replacement: resolve(root, "synthetic-api.ts"),
       },

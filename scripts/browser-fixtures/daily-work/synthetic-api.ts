@@ -222,3 +222,20 @@ export async function fetchAdminAttentionCounts() {
       : 0,
   };
 }
+
+// FX-17a-2 G-18: the confirmation is kept per staff id in a store separate from the browser
+// cache the shell writes (the shell's key is earnest:first-login-checklist:<id>), like a database
+// row shared by every tab and device. Caller identity is the session binding, never an argument.
+const checklistKey = (staffId: string) => `fx17a2-checklist-server:${staffId}`;
+export async function fetchFirstLoginChecklistDone() {
+  call("checklist-read");
+  if (state.denied) throw new Response("Owned forbidden", { status: 403 });
+  return localStorage.getItem(checklistKey(state.binding)) === "done";
+}
+export async function confirmFirstLoginChecklist() {
+  call("checklist-confirm");
+  if (state.denied) throw new Response("Owned forbidden", { status: 403 });
+  if (state.checklistMode === "failure") throw Error("owned checklist save unavailable");
+  localStorage.setItem(checklistKey(state.binding), "done");
+  return { ok: true as const };
+}

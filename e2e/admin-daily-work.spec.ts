@@ -16,6 +16,7 @@ declare global {
       acceptedNotes: { actor: string; input: Record<string, unknown> }[];
       leadUpdates: { actor: string; input: Record<string, unknown> }[];
       teamMode: string;
+      checklistMode: string;
       empty: boolean;
       pending: { release: () => void; actor: string; role: string }[];
       changeContext: (
@@ -708,6 +709,53 @@ for (const width of [1440, 1280, 768, 390]) {
       await page.reload();
       await expect(page).toHaveURL(/\/admin\/leads\?stage=open$/);
       await expect(page.getByText("每日工作合成查詢1", { exact: true })).toBeVisible();
+    });
+    test("after 我已核對, a new tab and a reload show no checklist; another account sees it", async ({
+      page,
+    }) => {
+      const checklist = (p: Page) => p.getByRole("region", { name: "首次登入核對" });
+      await open(page);
+      await expect(checklist(page)).toBeVisible();
+      await page.getByRole("button", { name: "我已核對", exact: true }).click();
+      await expect(checklist(page)).toHaveCount(0);
+      expect(await calls(page, "checklist-confirm")).toHaveLength(1);
+      // A new tab of the same browser: the positive answer is cached, no server read needed.
+      const other = await page.context().newPage();
+      await other.goto(origin + "/admin");
+      await expect(other.getByRole("heading", { name: "總覽", exact: true })).toBeVisible();
+      await expect(checklist(other)).toHaveCount(0);
+      expect(await calls(other, "checklist-read")).toHaveLength(0);
+      await other.close();
+      // With the cache gone (another browser or device), the server answer still hides it.
+      await page.evaluate(() => {
+        for (const key of Object.keys(localStorage))
+          if (key.startsWith("earnest:first-login-checklist:")) localStorage.removeItem(key);
+      });
+      await page.reload();
+      await expect(page.getByRole("heading", { name: "總覽", exact: true })).toBeVisible();
+      await expect.poll(async () => (await calls(page, "checklist-read")).length).toBe(1);
+      await expect(checklist(page)).toHaveCount(0);
+      // Another account has not confirmed.
+      await page.evaluate(() =>
+        window.dailyWorkFixture.changeContext("actor-b", "manager", "staff-b"),
+      );
+      await expect(checklist(page)).toBeVisible();
+    });
+    test("a failed save shows 未能記錄核對，請重試。 and keeps the checklist", async ({ page }) => {
+      await open(page);
+      const checklist = page.getByRole("region", { name: "首次登入核對" });
+      await page.evaluate(() => (window.dailyWorkFixture.checklistMode = "failure"));
+      await page.getByRole("button", { name: "我已核對", exact: true }).click();
+      await expect(checklist.getByRole("alert")).toHaveText("未能記錄核對，請重試。");
+      await expect(checklist).toBeVisible();
+      expect(
+        await page.evaluate(() =>
+          Object.keys(localStorage).filter((k) => k.startsWith("earnest:first-login-checklist:")),
+        ),
+      ).toEqual([]);
+      await page.evaluate(() => (window.dailyWorkFixture.checklistMode = "ok"));
+      await page.getByRole("button", { name: "我已核對", exact: true }).click();
+      await expect(checklist).toHaveCount(0);
     });
   });
 }

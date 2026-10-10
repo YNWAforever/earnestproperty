@@ -17,6 +17,13 @@ await build({
   resolve: {
     alias: [
       {
+        find: /^@\/lib\/neon\/staff-checklist$/,
+        replacement: resolve(
+          workspace,
+          "scripts/browser-fixtures/no-link/synthetic-staff-checklist.ts",
+        ),
+      },
+      {
         find: /^@\/lib\/analytics\/(sales-performance-client|reporting-client)$/,
         replacement: resolve(root, "synthetic-analytics.ts"),
       },

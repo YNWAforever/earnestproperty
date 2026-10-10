@@ -36,6 +36,10 @@ import {
 import { adminErrorText } from "@/components/admin/admin-error-text";
 import { staffSessionDenialCopy, useStaffSession } from "@/components/admin/staff-session";
 import { Button } from "@/components/ui/button";
+import {
+  confirmFirstLoginChecklist,
+  fetchFirstLoginChecklistDone,
+} from "@/lib/neon/staff-checklist";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
@@ -384,15 +388,67 @@ export function AdminShell({
       ? []
       : null;
   const [showFirstLogin, setShowFirstLogin] = useState(false);
+  const [checklistSaving, setChecklistSaving] = useState(false);
+  const [checklistError, setChecklistError] = useState(false);
+  const checklistStaffId = staffSession?.status === "ok" ? staffSession.staffId : null;
   useEffect(() => {
-    if (staffSession?.status !== "ok") {
+    setChecklistError(false);
+    if (!checklistStaffId) {
       setShowFirstLogin(false);
       return;
     }
-    setShowFirstLogin(
-      sessionStorage.getItem(`earnest:first-login-checklist:${staffSession.staffId}`) !== "done",
-    );
-  }, [staffSession]);
+    // Only a positive answer is cached, per browser; the server read runs at most once per
+    // account per browser. Storage can be unavailable (private mode), so it never blocks.
+    const cacheKey = `earnest:first-login-checklist:${checklistStaffId}`;
+    try {
+      if (localStorage.getItem(cacheKey) === "done") {
+        setShowFirstLogin(false);
+        return;
+      }
+    } catch {
+      // fall through to the server read
+    }
+    setShowFirstLogin(false);
+    let current = true;
+    void fetchFirstLoginChecklistDone()
+      .then((done) => {
+        if (!current) return;
+        if (done) {
+          try {
+            localStorage.setItem(cacheKey, "done");
+          } catch {
+            // cache is optional
+          }
+        }
+        setShowFirstLogin(!done);
+      })
+      .catch(() => {
+        // Could not tell: show the checklist rather than hide it.
+        if (current) setShowFirstLogin(true);
+      });
+    return () => {
+      current = false;
+    };
+  }, [checklistStaffId]);
+  async function confirmChecklist() {
+    if (!checklistStaffId) return;
+    setChecklistSaving(true);
+    setChecklistError(false);
+    try {
+      await confirmFirstLoginChecklist();
+    } catch {
+      setChecklistSaving(false);
+      setChecklistError(true);
+      return;
+    }
+    try {
+      localStorage.setItem(`earnest:first-login-checklist:${checklistStaffId}`, "done");
+    } catch {
+      // cache is optional
+    }
+    setChecklistSaving(false);
+    setShowFirstLogin(false);
+  }
 
   // Waiting-work counts for the nav badges and the tab title. Only admin, manager and agent
   // read them; anyone else (or an unresolved staff lookup) gets a null identity and no request.
@@ -562,16 +618,16 @@ export function AdminShell({
                 className="mt-3"
                 size="sm"
                 variant="outline"
-                onClick={() => {
-                  sessionStorage.setItem(
-                    `earnest:first-login-checklist:${staffSession.staffId}`,
-                    "done",
-                  );
-                  setShowFirstLogin(false);
-                }}
+                disabled={checklistSaving}
+                onClick={() => void confirmChecklist()}
               >
                 我已核對
               </Button>
+              {checklistError ? (
+                <p role="alert" className="mt-2 text-sm text-destructive">
+                  未能記錄核對，請重試。
+                </p>
+              ) : null}
             </section>
           ) : null}
           {staffSession?.status === "denied" ? (
