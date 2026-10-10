@@ -28,7 +28,8 @@ const PROPERTY_FORM_STATUS_ID = "property-form-status";
 
 /**
  * The listing-detail enquiry form. `propertyId` is the row id the enquiry is attached to;
- * `listingNo` (the public listing number) is only used for the message placeholder, so it is
+ * `listingNo` (the public listing number) fills the message placeholder and is sent with the
+ * enquiry so staff keep the number the visitor saw, even after the listing is withdrawn. It is
  * optional. The `id="name"` input is load-bearing: the route's `focusInquiry()` scrolls to and
  * focuses it from the mobile contact bar.
  */
@@ -74,6 +75,7 @@ export function PropertyInquiryForm({
               message: parsed.data.message || "",
             },
             propertyId,
+            listingNo,
             consentWhatsapp,
           }),
           website,

@@ -39,7 +39,7 @@ export function buildAdminPageQuery(
     (!input.status || input.status === "all");
   let source = "";
   if (input.resource === "leads")
-    source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT l.id,l.stage,l.intent,l.budget_min,l.budget_max,l.source,l.note,l.created_at,l.assigned_agent_id,c.name,c.phone,c.email,c.opt_in_whatsapp,p.listing_no,p.title_zh AS property_title,l.created_at AS page_at FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE ${scope ? `l.assigned_agent_id=${own}::uuid` : "true"}) item`;
+    source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT l.id,l.stage,l.intent,l.budget_min,l.budget_max,l.source,l.note,l.created_at,l.assigned_agent_id,c.name,c.phone,c.email,c.opt_in_whatsapp,COALESCE(p.listing_no,(SELECT i.public_listing_no FROM inquiries i WHERE i.crm_lead_id=l.id AND i.public_listing_no IS NOT NULL ORDER BY i.created_at DESC LIMIT 1)) AS listing_no,p.title_zh AS property_title,l.created_at AS page_at FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE ${scope ? `l.assigned_agent_id=${own}::uuid` : "true"}) item`;
   else if (input.resource === "contacts")
     source = `SELECT to_jsonb(item)-'page_at' AS row,item.page_at,item.id FROM (SELECT c.id,c.name,c.phone,c.email,c.opt_in_whatsapp,c.opted_out_whatsapp,c.created_at AS page_at FROM crm_contacts c WHERE ${scope ? `(EXISTS(SELECT 1 FROM crm_leads l WHERE l.contact_id=c.id AND l.assigned_agent_id=${own}::uuid) OR EXISTS(SELECT 1 FROM whatsapp_conversations w WHERE w.contact_id=c.id AND w.assigned_agent_id=${own}::uuid))` : "true"}) item`;
   else if (input.resource === "conversations")

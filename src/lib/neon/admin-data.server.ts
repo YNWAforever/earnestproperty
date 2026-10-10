@@ -104,7 +104,7 @@ import {
   campaignRetryStatusSql,
   retryableFailedRecipientSql,
 } from "./campaign-retry.ts";
-import { persistWebsiteInquiry } from "./website-inquiry.js";
+import { isValidWebsiteListingNo, persistWebsiteInquiry } from "./website-inquiry.js";
 import {
   persistListingAlert,
   LISTING_ALERT_CONSENT_TEXT,
@@ -2561,7 +2561,13 @@ export async function fetchAdminLead(id: string, actor?: StaffAccess) {
       c.phone,
       c.email,
       c.opt_in_whatsapp,
-      p.listing_no,
+      -- C-15: an enquiry about an unknown listing still shows the number it was about.
+      COALESCE(
+        p.listing_no,
+        (SELECT i.public_listing_no FROM inquiries i
+          WHERE i.crm_lead_id = l.id AND i.public_listing_no IS NOT NULL
+          ORDER BY i.created_at DESC LIMIT 1)
+      ) AS listing_no,
       p.title_zh AS property_title
     FROM crm_leads l
     LEFT JOIN crm_contacts c ON c.id = l.contact_id
@@ -2925,13 +2931,25 @@ export async function createAdminLeadActivity(input: AdminLeadActivityInput, act
   await assertLeadInScope(input.lead_id, actor);
   // The contact is the lead's own customer (FX-12, B-10), never the client's
   // contact_id, which goes stale when a phone correction relinks the lead. An
-  // activity does not bump the lead version.
+  // activity does not bump the lead version. The audit row is part of the same
+  // statement (C-16): if it fails, the note is not saved, so a retry cannot
+  // duplicate it.
   const rows = await queryRows(
-    `INSERT INTO crm_activities (
-      lead_id, contact_id, staff_user_id, activity_type, body, due_at, completed_at
-    )
-     SELECT l.id, l.contact_id, $2, $3, $4, $5, $6 FROM crm_leads l WHERE l.id = $1::uuid
-     RETURNING id`,
+    `WITH ins AS (
+       INSERT INTO crm_activities (
+         lead_id, contact_id, staff_user_id, activity_type, body, due_at, completed_at
+       )
+       SELECT l.id, l.contact_id, $2::uuid, $3, $4, $5, $6 FROM crm_leads l WHERE l.id = $1::uuid
+       RETURNING id, lead_id
+     ),
+     audit AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT $2::uuid, 'lead.activity', 'lead', ins.lead_id,
+         jsonb_build_object('activityId', ins.id::text, 'activity_type', $3::text)
+       FROM ins
+       RETURNING id
+     )
+     SELECT id FROM ins`,
     [
       input.lead_id,
       actor.staffId,
@@ -2943,10 +2961,6 @@ export async function createAdminLeadActivity(input: AdminLeadActivityInput, act
   );
   if (!rows[0]) throw new Response("Not found", { status: 404 });
   const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(actor.staffId, "lead.activity", "lead", input.lead_id, {
-    activityId: id,
-    activity_type: input.activity_type,
-  });
   return { id };
 }
 
@@ -2954,16 +2968,25 @@ export async function completeAdminLeadActivity(
   input: { activity_id: string; lead_id: string },
   actor: StaffAccess,
 ) {
+  // The audit row names the stored lead and is part of the same statement
+  // (C-16): a failed audit insert leaves the follow-up open.
   const rows = await queryRows<{ id: string; lead_id: string }>(
-    `UPDATE crm_activities SET completed_at = now()
-     WHERE id = $1::uuid AND lead_id = $2::uuid AND completed_at IS NULL
-     RETURNING id, lead_id`,
-    [input.activity_id, input.lead_id],
+    `WITH done AS (
+       UPDATE crm_activities SET completed_at = now()
+       WHERE id = $1::uuid AND lead_id = $2::uuid AND completed_at IS NULL
+       RETURNING id, lead_id
+     ),
+     audit AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT $3::uuid, 'lead.activity.complete', 'lead', done.lead_id,
+         jsonb_build_object('activityId', $1::text)
+       FROM done
+       RETURNING id
+     )
+     SELECT id, lead_id FROM done`,
+    [input.activity_id, input.lead_id, actor.staffId],
   );
   if (!rows[0]) return { ok: false as const, error: "Not found or already complete" };
-  await writeAudit(actor.staffId, "lead.activity.complete", "lead", rows[0].lead_id, {
-    activityId: input.activity_id,
-  });
   return { ok: true as const };
 }
 
@@ -4612,6 +4635,9 @@ export async function cancelAdminCampaign(id: string, actor: StaffAccess) {
   if (!rows[0]) return { ok: false, error: "Not found" };
   return { ok: true };
 }
+// The same shape Zod's uuid() accepted before C-15, so an id that used to pass still does.
+const WEBSITE_INQUIRY_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function createWebsiteInquiry(input: {
   submissionId: string;
   name: string;
@@ -4628,8 +4654,16 @@ export async function createWebsiteInquiry(input: {
   const email = input.email ? input.email : null;
   const message = input.message ? input.message : null;
   const optInWhatsapp = input.consentWhatsapp === true;
-  const requestedPropertyId = input.property_id ?? null;
-  const requestedListingNo = input.listingNo?.trim() || null;
+  // C-15: a listing reference never fails the enquiry. A malformed one is dropped (and logged
+  // by field name only, never its value) and the enquiry is saved without it.
+  const rawListingNo = typeof input.listingNo === "string" ? input.listingNo.trim() : "";
+  const requestedListingNo = isValidWebsiteListingNo(rawListingNo) ? rawListingNo : null;
+  if (rawListingNo && !requestedListingNo)
+    console.warn("INQUIRY_LISTING_REF_DROPPED", { field: "listingNo" });
+  const rawPropertyId = typeof input.property_id === "string" ? input.property_id.trim() : "";
+  const requestedPropertyId = WEBSITE_INQUIRY_UUID.test(rawPropertyId) ? rawPropertyId : null;
+  if (rawPropertyId && !requestedPropertyId)
+    console.warn("INQUIRY_LISTING_REF_DROPPED", { field: "property_id" });
   const result = await persistWebsiteInquiry(queryRows, {
     submissionId: input.submissionId,
     name: input.name,
@@ -4665,17 +4699,34 @@ export async function updateInquiryStatus(id: string, status: string, actor: Sta
   // Same agent scoping every other lead/inquiry mutation applies. Without it an
   // agent could close or mark spam any inquiry in the agency, including ones
   // routed to a colleague.
+  // The audit row (before and after) is part of the same statement (C-16): a
+  // failed audit insert leaves the status unchanged.
   const scope = agentScope(actor);
   const rows = await queryRows(
-    `UPDATE inquiries
-        SET status = $1, updated_at = now()
-      WHERE id = $2${scope !== null ? " AND assigned_agent_id = $3" : ""}
-      RETURNING id`,
-    scope !== null ? [status, id, scope] : [status, id],
+    `WITH old AS (
+       SELECT id, status FROM inquiries
+        WHERE id = $2${scope !== null ? " AND assigned_agent_id = $4" : ""}
+        FOR UPDATE
+     ),
+     updated AS (
+       UPDATE inquiries i
+          SET status = $1, updated_at = now()
+         FROM old
+        WHERE i.id = old.id
+       RETURNING i.id, old.status AS before
+     ),
+     audit AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT $3::uuid, 'inquiry.status', 'inquiry', updated.id,
+         jsonb_build_object('status', $1::text, 'before', updated.before, 'after', $1::text)
+       FROM updated
+       RETURNING id
+     )
+     SELECT id FROM updated`,
+    scope !== null ? [status, id, actor.staffId, scope] : [status, id, actor.staffId],
   );
   if (!rows[0]) throw new Response("Forbidden", { status: 403 });
 
-  await writeAudit(actor.staffId, "inquiry.status", "inquiry", id, { status });
   return { ok: true };
 }
 

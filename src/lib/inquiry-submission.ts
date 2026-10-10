@@ -17,7 +17,9 @@ export async function submitWithInquiryIdentity<T extends object, R extends { id
 ): Promise<R> {
   const normalized = Object.fromEntries(
     Object.entries(payload)
-      .filter(([key]) => key !== "submissionId")
+      // The listing number is a label (C-15): a pending identity saved before it was sent
+      // must still be found, as the server leaves it out of its replay hash too.
+      .filter(([key]) => key !== "submissionId" && key !== "listingNo")
       .sort(([a], [b]) => a.localeCompare(b)),
   );
   const digest = Array.from(

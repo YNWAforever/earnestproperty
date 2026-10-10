@@ -75,3 +75,21 @@ const NON_FOLLOW_UP_ACTIVITY_TYPES = new Set(["suspected_bot"]);
 export function leadTimelineHasNoFollowUp(activities: ReadonlyArray<{ activity_type: string }>) {
   return activities.every((activity) => NON_FOLLOW_UP_ACTIVITY_TYPES.has(activity.activity_type));
 }
+
+/**
+ * The listing line on a lead. A number with no listing row is an enquiry about a listing that
+ * no longer matches (C-15); staff still see the number the customer asked about.
+ */
+export function leadListingDisplay(lead: {
+  listing_no: string | null;
+  property_title: string | null;
+}): { primary: string; secondary: string | null } {
+  if (lead.property_title)
+    return {
+      primary: lead.property_title,
+      secondary: lead.listing_no ? `#${lead.listing_no}` : null,
+    };
+  if (lead.listing_no)
+    return { primary: `#${lead.listing_no}（未能配對現有樓盤）`, secondary: null };
+  return { primary: "—", secondary: null };
+}
