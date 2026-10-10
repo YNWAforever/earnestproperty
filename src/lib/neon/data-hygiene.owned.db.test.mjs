@@ -69,7 +69,7 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
     throw new Error("FX-18a owned test: network is disabled");
   });
   try {
-    await withOwnedPostgres(async ({ query, transaction }) => {
+    await withOwnedPostgres(async ({ pool, query, transaction }) => {
       await mockOwnedServerDb(mock, query, transaction);
       const server = await import("./admin-data.server.ts");
       const { createYouTubeSyncRepository } =
@@ -568,12 +568,13 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
           assert.equal(revisions[2].payload.answer, "早上六時半至晚上十時開放");
           assert.equal(revisions[3].created_by, MANAGER);
           assert.ok(revisions[3].restored_from_revision_id);
-          const actions = (await audits(faqId)).map((row) => row.action);
+          // One transaction's rows share created_at, so compare as a set.
+          const actions = (await audits(faqId)).map((row) => row.action).sort();
           assert.deepEqual(actions, [
-            "faq.update",
             "cms_archived",
-            "cms_restored",
             "cms_published",
+            "cms_restored",
+            "faq.update",
           ]);
 
           // The restored FAQ saves again with the version restore returned.
@@ -705,6 +706,83 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
             ok: false,
             error: "Not found",
           });
+        },
+      );
+
+      await t.test(
+        "a save racing an archive waits for it and gets FAQ_ARCHIVED; the archived payload equals the row",
+        async () => {
+          const faqId = await insertFaq(120, "有升降機？", "有兩部");
+          await seedJulyRevision(faqId);
+          await server.saveAdminFaq(faqDraft(await readFaq(faqId), { answer: "有三部" }), admin);
+          const tab = await readFaq(faqId);
+
+          // Connection X holds the July revision, so the archive stops at its
+          // supersede step, after everything it locked before that step.
+          const holder = await pool.connect();
+          let archive;
+          let save;
+          try {
+            await holder.query("BEGIN");
+            await holder.query(
+              "SELECT id FROM cms_content_revisions WHERE resource_type='faq' AND resource_id=$1 AND state='published' FOR UPDATE",
+              [faqId],
+            );
+            const waiting = async (pattern) => {
+              for (let i = 0; i < 200; i++) {
+                const rows = await query(
+                  `SELECT 1 FROM pg_stat_activity
+                   WHERE wait_event_type = 'Lock' AND query LIKE $1`,
+                  [pattern],
+                );
+                if (rows.length) return true;
+                await new Promise((resolve) => setTimeout(resolve, 25));
+              }
+              return false;
+            };
+            archive = server.deleteAdminFaq(faqId, admin).then(
+              (value) => ({ value }),
+              (error) => ({ error }),
+            );
+            assert.ok(await waiting("%UPDATE cms_content_revisions SET state = 'superseded'%"));
+
+            let saveDone = false;
+            save = server
+              .saveAdminFaq(faqDraft(tab, { answer: "有四部" }), admin)
+              .then(
+                (value) => ({ value }),
+                (error) => ({ error }),
+              )
+              .finally(() => {
+                saveDone = true;
+              });
+            // The save must queue behind the archive's row lock, not slip in.
+            for (let i = 0; i < 40 && !saveDone; i++) {
+              const rows = await query(
+                `SELECT 1 FROM pg_stat_activity
+                 WHERE wait_event_type = 'Lock' AND query LIKE '%FOR UPDATE%' AND query LIKE '%FROM faqs f%'`,
+              );
+              if (rows.length) break;
+              await new Promise((resolve) => setTimeout(resolve, 25));
+            }
+            assert.equal(saveDone, false, "the save committed while the archive was in flight");
+          } finally {
+            await holder.query("COMMIT");
+            holder.release();
+          }
+
+          assert.deepEqual((await archive).value, { ok: true });
+          const saved = await save;
+          assert.ok(saved.error instanceof Response, "the save must be refused");
+          assert.equal(saved.error.status, 409);
+          assert.equal(await saved.error.text(), "FAQ_ARCHIVED");
+
+          const row = await faqRow(faqId);
+          assert.equal(row.published, false);
+          assert.equal(row.answer, "有三部");
+          const archived = (await faqRevisions(faqId)).filter((r) => r.state === "archived");
+          assert.equal(archived.length, 1);
+          assert.equal(archived[0].payload.answer, row.answer);
         },
       );
 

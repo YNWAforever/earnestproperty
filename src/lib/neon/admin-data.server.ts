@@ -2585,6 +2585,13 @@ export async function deleteAdminFaq(
     results = (await transactionRows([
       { statement: FAQ_CMS_LOCK_SQL, params: [id] },
       {
+        // saveAdminFaq and reorderAdminFaqs take this row lock, not the advisory
+        // one: hold it before the snapshot so no save can land between the
+        // snapshot and the archive. A racing save waits, then gets FAQ_ARCHIVED.
+        statement: `SELECT id FROM faqs WHERE id = $1::uuid FOR UPDATE`,
+        params: [id],
+      },
+      {
         // A stale publication (the July snapshot, or an older one) gives way to
         // the live row. Only while the FAQ is live: an archived FAQ is untouched.
         statement: `UPDATE cms_content_revisions SET state = 'superseded'
@@ -2617,7 +2624,7 @@ export async function deleteAdminFaq(
   } catch (error) {
     faqCmsMutateError(error);
   }
-  if (!results[3]?.[0]) return { ok: false, error: "Not found" };
+  if (!results[4]?.[0]) return { ok: false, error: "Not found" };
   return { ok: true };
 }
 
@@ -2641,13 +2648,21 @@ export async function restoreAdminFaq(
         params: [id, actor.staffId],
       },
       {
-        // Only the draft this transaction just made (created_at = now()).
+        // Publish only the draft this transaction just made (created_at = now()).
+        // Whenever the restore above ran (the FAQ is still unpublished), publish
+        // is called; with no such draft it gets a NULL revision and raises, so a
+        // restore draft and its audit row never commit unpublished.
         statement: `SELECT cms_mutate('publish', 'faq', $1::uuid, $2::uuid, NULL,
             d.base_published_version, 1, d.id) AS revision
-          FROM cms_content_revisions d
-          WHERE d.resource_type = 'faq' AND d.resource_id = $1::uuid AND d.state = 'draft'
-            AND d.draft_retired_at IS NULL AND d.created_by = $2::uuid
-            AND d.restored_from_revision_id IS NOT NULL AND d.created_at = now()`,
+          FROM faqs f
+          LEFT JOIN LATERAL (
+            SELECT r.id, r.base_published_version FROM cms_content_revisions r
+            WHERE r.resource_type = 'faq' AND r.resource_id = $1::uuid AND r.state = 'draft'
+              AND r.draft_retired_at IS NULL AND r.created_by = $2::uuid
+              AND r.restored_from_revision_id IS NOT NULL AND r.created_at = now()
+            ORDER BY r.version_number DESC LIMIT 1
+          ) d ON true
+          WHERE f.id = $1::uuid AND NOT f.published`,
         params: [id, actor.staffId],
       },
       {
