@@ -127,7 +127,10 @@ export async function persistWebsiteInquiry(query, input) {
       WHERE p.status = 'active'
         AND (
           ($7::uuid IS NOT NULL AND p.id = $7::uuid)
-          OR ($8::text IS NOT NULL AND p.listing_no = $8::text)
+          -- A page's own id decides routing: its number routes only when no id
+          -- was sent, as before C-15 (a withdrawn page never borrows the agent
+          -- of an active row that shares its public number).
+          OR ($7::uuid IS NULL AND $8::text IS NOT NULL AND p.listing_no = $8::text)
         )
       ORDER BY CASE WHEN p.id = $7::uuid THEN 0 ELSE 1 END
       LIMIT 1
@@ -139,7 +142,7 @@ export async function persistWebsiteInquiry(query, input) {
       FROM properties p
       WHERE ($7::uuid IS NOT NULL AND p.id = $7::uuid)
         OR ($8::text IS NOT NULL AND p.listing_no = $8::text)
-      ORDER BY (p.status = 'active') DESC, (p.id = $7::uuid) DESC NULLS LAST, p.id
+      ORDER BY (p.id = $7::uuid) DESC NULLS LAST, (p.status = 'active') DESC, p.id
       LIMIT 1
     ),
     routing AS (

@@ -1427,6 +1427,33 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
         }
       });
 
+      await t.test(
+        "a page's own withdrawn listing id decides routing, even when its number is an active sibling's",
+        async () => {
+          // The withdrawn page row shows a public number that is also the
+          // listing_no of an active sibling row with its own agent. The page's
+          // id decides: the enquiry links the withdrawn row and gets no agent.
+          const C15_PAGE = c15(603);
+          const C15_SIBLING = c15(604);
+          await query(
+            `INSERT INTO properties(id,listing_no,canonical_property_no,title_zh,deal_type,district_slug,status,price,agent_id)
+             VALUES($1,'FX18A-PAGE-RAW','FX18A-SIB','C15 下架頁','rent','sham-tseng','inactive',20000,$3),
+                   ($2,'FX18A-SIB','FX18A-SIB','C15 在架盤','rent','sham-tseng','active',20000,$3)`,
+            [C15_PAGE, C15_SIBLING, AGENT_A],
+          );
+          const result = await enquire(9, { property_id: C15_PAGE, listingNo: "FX18A-SIB" });
+          assert.equal(result.leadAlertQueued, true);
+          const row = await intake(result.id);
+          assert.equal(row.inquiry_property, C15_PAGE);
+          assert.equal(row.lead_property, C15_PAGE);
+          assert.equal(row.inquiry_agent, null, "the sibling's agent is never assigned");
+          assert.equal(row.lead_agent, null);
+          assert.equal(row.lead_intent, "buyer");
+          assert.equal(row.public_listing_no, "FX18A-SIB");
+          assert.equal(row.alert_jobs, 1);
+        },
+      );
+
       // FX-18a C-16: a note, a completed follow-up and an enquiry status change
       // insert their audit row in the same statement, so a failed audit insert
       // leaves nothing behind and a retry cannot duplicate the write.
