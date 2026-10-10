@@ -101,6 +101,7 @@ import type {
   AdminFaqInput,
   AdminMediaAssetRow,
 } from "@/lib/neon/admin-data.types";
+import { CMS_REVISION_STATE_LABELS } from "@/lib/admin/glossary";
 
 const adminCmsTabs = ["estates", "articles", "videos", "faqs", "media"] as const;
 type AdminCmsTab = (typeof adminCmsTabs)[number];
@@ -1349,7 +1350,7 @@ function AdminCms() {
                       FAQ / AI Agent 配置
                     </CardTitle>
                     <CardDescription>
-                      上載或貼上 FAQ 檔案。已發佈的 FAQ 會即時用於網站問樓助手。
+                      上載或貼上 FAQ 檔案。已發布的 FAQ 會即時用於網站問樓助手。
                     </CardDescription>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -2257,9 +2258,9 @@ function EstateDialog({
           <AdminConfirmDialog
             open={confirmingPublish}
             onOpenChange={setConfirmingPublish}
-            title="確認發佈內容"
+            title="確認發布內容"
             description="此操作會將已儲存草稿公開。請先與已發布版本比較並核對內容。"
-            confirmLabel="確認發佈"
+            confirmLabel="確認發布"
             disabled={imageUploading || isDirty || !savedPayload}
             isPending={publishing}
             onConfirm={() => {
@@ -2484,9 +2485,9 @@ function ArticleDialog({
           <AdminConfirmDialog
             open={confirmingPublish}
             onOpenChange={setConfirmingPublish}
-            title="確認發佈內容"
+            title="確認發布內容"
             description="此操作會將已儲存草稿公開。請先與已發布版本比較並核對內容。"
-            confirmLabel="確認發佈"
+            confirmLabel="確認發布"
             disabled={imageUploading || isDirty || !savedPayload}
             isPending={publishing}
             onConfirm={() => {
@@ -2607,7 +2608,7 @@ function FaqImportDialog({
         <DialogHeader>
           <DialogTitle>FAQ 檔案匯入 / AI Agent 訓練</DialogTitle>
           <DialogDescription>
-            支援 Q:/A:、問題:/答案:、Markdown heading、CSV 或 TSV。匯入後，已發佈的 FAQ
+            支援 Q:/A:、問題:/答案:、Markdown heading、CSV 或 TSV。匯入後，已發布的 FAQ
             會即時用於網站問樓助手。
           </DialogDescription>
         </DialogHeader>
@@ -2622,7 +2623,7 @@ function FaqImportDialog({
           />
           <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
             已解析 <span className="font-medium text-foreground">{parsedCount}</span> 條 FAQ。
-            每條會儲存到 Neon，已發佈的會即時用於網站問樓助手。
+            每條會儲存到 Neon，已發布的會即時用於網站問樓助手。
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>
@@ -2713,7 +2714,7 @@ function EditorFooter({ saving, onClose }: { saving: boolean; onClose: () => voi
 
 /**
  * Footer for the two CMS-revision-engine-backed dialogs (estate, article).
- * "儲存草稿" never touches the live table; "發佈" opens confirmation for
+ * "儲存草稿" never touches the live table; "發布" opens confirmation for
  * publishing the saved revision. Both buttons stay visible regardless of the
  * acting staff member's role -- the server enforces the real publish/restore
  * permission boundary (admin/manager only) and callCms() surfaces a clear
@@ -2744,11 +2745,11 @@ function CmsPublishFooter({
     <DialogFooter className="shrink-0 border-t pt-3 sm:flex-wrap">
       <p role="status" className="mr-auto self-center text-sm">
         {uploading
-          ? "圖片上載中，完成後才可儲存、發佈或關閉"
+          ? "圖片上載中，完成後才可儲存、發布或關閉"
           : saving
             ? "儲存中…"
             : publishing
-              ? "發佈中…"
+              ? "發布中…"
               : dirty
                 ? "有未儲存修改"
                 : hasSaved
@@ -2764,18 +2765,11 @@ function CmsPublishFooter({
       </Button>
       <Button type="button" onClick={onPublish} disabled={disabled || dirty || !hasSaved}>
         <Upload className="h-4 w-4" />
-        {publishing ? "發佈中…" : "發佈"}
+        {publishing ? "發布中…" : "發布"}
       </Button>
     </DialogFooter>
   );
 }
-
-const CMS_REVISION_STATE_LABELS: Record<CmsRevisionSummary["state"], string> = {
-  draft: "草稿",
-  published: "已發布",
-  superseded: "已被取代",
-  archived: "已封存",
-};
 
 /** Version history for the two revision-engine-backed dialogs.
  *

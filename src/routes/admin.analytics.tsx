@@ -390,16 +390,16 @@ function AdminAnalyticsWorkspace() {
               </h2>
               <p className="text-sm text-muted-foreground">
                 {report.range.start} 至 {report.range.end}
-                。分配及關閉狀態為目前狀態；查詢、銷售線索和對話是不同記錄，不能相加當作客戶人數。
+                。分配及關閉狀態為目前狀態；客戶查詢和對話是不同記錄，不能相加當作客戶人數。
               </p>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <Metric label="客戶查詢" value={report.summary.inquiries} />
-                <Metric label="已連結銷售線索的查詢" value={report.summary.linkedLeads} />
-                <Metric label="銷售線索" value={report.summary.leads} />
+                <Metric label="查詢紀錄" value={report.summary.inquiries} />
+                <Metric label="已連結客戶查詢的查詢紀錄" value={report.summary.linkedLeads} />
+                <Metric label="客戶查詢" value={report.summary.leads} />
                 <Metric label="WhatsApp 對話" value={report.summary.conversations} />
-                <Metric label="未分配查詢" value={report.summary.unassignedInquiries} />
-                <Metric label="未分配銷售線索" value={report.summary.unassignedLeads} />
-                <Metric label="未分配對話" value={report.summary.unassignedConversations} />
+                <Metric label="未指派查詢紀錄" value={report.summary.unassignedInquiries} />
+                <Metric label="未指派客戶查詢" value={report.summary.unassignedLeads} />
+                <Metric label="未指派對話" value={report.summary.unassignedConversations} />
                 <Metric label="未關閉對話" value={report.summary.openConversations} />
               </div>
             </section>
@@ -418,9 +418,7 @@ function AdminAnalyticsWorkspace() {
               </h2>
               <div className="overflow-x-auto rounded border">
                 <table className="w-full text-sm">
-                  <caption className="sr-only">
-                    香港時間每日客戶查詢、線索連結、銷售線索及 WhatsApp 對話數量
-                  </caption>
+                  <caption className="sr-only">香港時間每日客戶查詢及 WhatsApp 對話數量</caption>
                   <thead>
                     <tr className="border-b bg-muted text-left">
                       <th scope="col" className="p-3">

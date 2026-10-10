@@ -45,6 +45,7 @@ import type {
   StaffAccessRole,
   StaffSessionDenialReason,
 } from "@/lib/neon/admin-data.types";
+import { ROLE_LABELS } from "@/lib/admin/glossary";
 
 // Prefix matching is reserved for sections that own child routes. Team and
 // Operations deliberately stay exact so neither can illuminate the other.
@@ -196,13 +197,6 @@ const navGroups = [
     ],
   },
 ] as const;
-
-const ROLE_LABELS: Record<StaffAccessRole, string> = {
-  admin: "admin",
-  manager: "manager",
-  agent: "agent",
-  viewer: "viewer",
-};
 
 function roleCanOpen(
   roles: readonly StaffAccessRole[] | null,

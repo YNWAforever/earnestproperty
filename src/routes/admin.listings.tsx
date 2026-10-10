@@ -54,7 +54,7 @@ function parseListingSearch(search: Record<string, unknown>): PropertyGroupFilte
 export const Route = createFileRoute("/admin/listings")({
   validateSearch: parseListingSearch,
   head: () => ({
-    meta: [{ title: "物業管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
+    meta: [{ title: "樓盤管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
   component: AdminListings,
 });
@@ -64,7 +64,7 @@ function AdminListings() {
   if (!user || session?.status !== "ok")
     return (
       <AdminShell
-        title="物業管理"
+        title="樓盤管理"
         description="一個樓編號，一個管理頁。出售與出租的價格和狀態獨立管理。"
       >
         {null}
@@ -218,7 +218,7 @@ function AdminListingsWorkspace({ identity }: { identity: string }) {
   const selectClass = "h-11 min-w-0 rounded-md border bg-background px-3 text-sm";
   return (
     <AdminShell
-      title="物業管理"
+      title="樓盤管理"
       description="一個樓編號，一個管理頁。出售與出租的價格和狀態獨立管理。"
     >
       <p className="mb-4">

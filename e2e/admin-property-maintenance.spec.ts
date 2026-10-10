@@ -145,7 +145,7 @@ async function open(page: Page, path = "/admin/listings/A000001") {
   await page.goto(origin + path);
   await expect(
     page.getByRole("heading", {
-      name: /\/listings\/A\d/.test(path) ? "管理物業" : "物業管理",
+      name: /\/listings\/A\d/.test(path) ? "管理物業" : "樓盤管理",
       exact: true,
     }),
   ).toBeVisible();

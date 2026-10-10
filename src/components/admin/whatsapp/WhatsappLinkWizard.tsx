@@ -534,7 +534,7 @@ export function WhatsappLinkWizard({
       ) : null}
       {incomingPending && seed.length > 0 ? (
         <div className="space-y-2 rounded-lg border bg-muted/30 p-3" role="status">
-          <p className="font-medium">已從物業管理帶入 {seed.length} 筆租售</p>
+          <p className="font-medium">已從樓盤管理帶入 {seed.length} 筆租售</p>
           {seedScope ? <p className="text-sm">{seedScope}</p> : null}
           <p className="text-sm">
             請核對樓盤 → 選擇來源及跟進路線 → 預覽 → 確認建立。此時尚未建立連結。
@@ -669,7 +669,7 @@ export function WhatsappLinkWizard({
                 ))}
               </ul>
               <p className="text-sm">
-                已選 {selected.length} 筆租售。搜尋結果每次最多 50 筆；從物業管理可選更多。
+                已選 {selected.length} 筆租售。搜尋結果每次最多 50 筆；從樓盤管理可選更多。
               </p>
               <ul className="max-h-36 overflow-auto text-sm">
                 {selected.map((offer) => (

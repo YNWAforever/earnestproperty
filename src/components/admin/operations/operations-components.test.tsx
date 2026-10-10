@@ -287,7 +287,7 @@ test("jobs.queue row shows 背景工作排程 with overdue count and heartbeat a
   expect(html).toContain("過期租約：0");
   expect(html).toContain("工作程序最後回報：31 分鐘前");
   expect(html).toContain("未設定即時喚醒");
-  expect(html).toContain("降級");
+  expect(html).toContain("需要留意");
   // Facts replace the configured-count summary, and raw keys never reach the DOM.
   expect(html).not.toContain("項設定中已完成");
   expect(html).not.toMatch(/overdueQueued|oldestHeartbeatMinutes|wakeConfigured/);

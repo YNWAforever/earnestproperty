@@ -29,6 +29,7 @@ import {
   saveAdminProperty,
 } from "@/lib/neon/admin-data";
 import type { AdminAgentRow, AdminPropertyInput } from "@/lib/neon/admin-data.types";
+import { PROPERTY_STATUS_LABELS } from "@/lib/admin/glossary";
 
 type Property = Partial<AdminPropertyInput> & { id?: string };
 type Estate = { id: string; name_zh: string; district_slug: string };
@@ -344,11 +345,11 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="draft">草稿</SelectItem>
-              <SelectItem value="active">在售/在租</SelectItem>
-              <SelectItem value="sold">已售出</SelectItem>
-              <SelectItem value="rented">已租出</SelectItem>
-              <SelectItem value="offline">下架</SelectItem>
+              {(["draft", "active", "sold", "rented", "offline"] as const).map((status) => (
+                <SelectItem key={status} value={status}>
+                  {PROPERTY_STATUS_LABELS[status]}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>

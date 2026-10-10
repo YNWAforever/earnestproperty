@@ -1237,5 +1237,6 @@ test("the campaign form has no schedule field and shows 已排期 only for a sch
   );
   // An existing 已排期 row can still be sent through 發送… (which re-materialises).
   assert.match(source, /const queueableStatuses = new Set\(\["review", "scheduled"\]\)/);
-  assert.match(source, /scheduled: "已排期"/);
+  // The label itself now lives in the one glossary (FX-17a G-12).
+  assert.match(read("src/lib/admin/glossary.ts"), /scheduled: "已排期"/);
 });

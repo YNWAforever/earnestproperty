@@ -12,6 +12,7 @@ import {
 } from "@/lib/admin/whatsapp-link-export-api";
 import type { LinkPageFilter } from "@/lib/neon/whatsapp-link-management.types";
 import type { TrackingLink } from "@/lib/neon/whatsapp-enquiries.types";
+import { PLACEMENT_SOURCE_LABELS } from "@/lib/admin/glossary";
 import { ADMIN_GENERIC_ERROR, staffActionErrorText } from "@/components/admin/admin-error-text";
 
 type Page = Awaited<ReturnType<typeof getWhatsappTrackingLinksPage>>;
@@ -20,12 +21,10 @@ const control = "min-h-11 rounded-md border bg-background px-3 text-sm";
 const codeUrl = (code: string) => `${window.location.origin}/w/${code}`;
 // One map for the 來源 filter options and the 停用 confirmation, typed by the placement enum so
 // a new source cannot get a filter option without a label (or show its raw value).
-const placementLabels: Record<TrackingLink["placementSource"], string> = {
-  website: "網站",
-  "28hse": "28hse",
-  youtube: "YouTube",
-  other: "其他",
-};
+// "unknown" is a report bucket for links with no recorded source, never a source a link is saved with.
+const placementLabels = Object.fromEntries(
+  Object.entries(PLACEMENT_SOURCE_LABELS).filter(([value]) => value !== "unknown"),
+) as Record<TrackingLink["placementSource"], string>;
 
 export function WhatsappLinksTable({
   revision,
@@ -483,7 +482,7 @@ export function WhatsappLinksTable({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="編輯追蹤連結"
+          aria-label="編輯來源連結"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
         >
           <div className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-auto rounded-lg bg-background p-5">

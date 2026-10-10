@@ -32,6 +32,7 @@ import type {
   MigrationState,
   OperationTab,
 } from "@/lib/admin/operations/operations-types";
+import { HEALTH_STATUS_LABELS } from "@/lib/admin/glossary";
 import { formatHkDateTime } from "@/lib/format";
 
 const operationsMetadata = { robots: "noindex, nofollow" } as const;
@@ -73,12 +74,6 @@ const TAB_PERMISSIONS: Record<OperationTab, ControlPlanePermission | null> = {
 };
 
 const ALL_OPERATION_TABS: OperationTab[] = ["overview", "jobs", "audit", "migrations"];
-
-const HEALTH_STATUS_LABELS: Record<string, string> = {
-  healthy: "正常",
-  degraded: "降級",
-  failed: "故障",
-};
 
 function AdminOperations() {
   const identity = useStaffWorkspaceIdentity();

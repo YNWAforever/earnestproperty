@@ -27,6 +27,7 @@ import type { AuditPage, HealthData } from "@/lib/admin/operations/operations-ty
 import { formatHkDateTime } from "@/lib/format";
 import { fetchAdminOverview, fetchAdminTodayTasks } from "@/lib/neon/admin-data";
 import type { AdminTodayTask } from "@/lib/neon/admin-data.types";
+import { HEALTH_STATUS_LABELS } from "@/lib/admin/glossary";
 import { listAdminTeam } from "@/lib/neon/admin-team";
 import type { AdminTeamList } from "@/lib/neon/admin-team.types";
 
@@ -350,7 +351,7 @@ function TodayTaskLink({ task }: { task: AdminTodayTask }) {
 }
 
 function healthLabel(status: HealthData["status"]) {
-  return status === "healthy" ? "正常" : status === "degraded" ? "降級" : "故障";
+  return HEALTH_STATUS_LABELS[status] ?? HEALTH_STATUS_LABELS.failed;
 }
 
 function staffActivityLabel(action: string) {

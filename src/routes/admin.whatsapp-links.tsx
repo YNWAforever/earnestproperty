@@ -12,7 +12,7 @@ export const Route = createFileRoute("/admin/whatsapp-links")({
   component: WhatsappLinks,
   head: () => ({
     meta: [
-      { title: "WhatsApp 追蹤連結 | Earnest Admin" },
+      { title: "WhatsApp 來源連結 | Earnest Admin" },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),
@@ -22,7 +22,7 @@ function WhatsappLinks() {
   const identity = useStaffWorkspaceIdentity(["admin", "manager"]);
   if (!identity)
     return (
-      <AdminShell title="WhatsApp 追蹤連結" description="核對投放位置及批次結果。">
+      <AdminShell title="WhatsApp 來源連結" description="核對投放位置及批次結果。">
         <p role="status">正在核實管理員權限…</p>
       </AdminShell>
     );
@@ -65,7 +65,7 @@ function WhatsappLinksWorkspace({ identity }: { identity: string }) {
   }, [loading, user]);
   return (
     <AdminShell
-      title="WhatsApp 追蹤連結"
+      title="WhatsApp 來源連結"
       description="為網站、28hse、YouTube 或其他投放建立公司 WhatsApp 短連結，先預覽核對，再分批提交。"
     >
       <div className="space-y-5">

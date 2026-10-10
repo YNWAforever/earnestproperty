@@ -138,7 +138,7 @@ function copilotWarningText(warning: string) {
 const fallbackErrorMessage = "AI 內容助手未能完成，請稍後再試；如持續失敗請通知技術同事。";
 
 /** Tooltips never open on touch, so this also sits permanently in the intro. */
-const blastRadiusNote = "只會處理可編輯的內容欄位，不會修改售價、狀態或已發佈資料。";
+const blastRadiusNote = "只會處理可編輯的內容欄位，不會修改售價、狀態或已發布資料。";
 
 const fieldLabels: Record<string, string> = {
   name_zh: "中文名稱",
@@ -393,7 +393,7 @@ export function AdminContentCopilot({
             <h3 className="text-sm font-semibold">AI 內容助手</h3>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            建議只會套用到目前表單，仍需由你儲存或發佈。
+            建議只會套用到目前表單，仍需由你儲存或發布。
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{blastRadiusNote}</p>
         </div>
@@ -649,7 +649,7 @@ function Review({
       <p className="text-xs text-muted-foreground">
         可套用欄位：
         {acceptableFields.map((field) => fieldLabels[field] ?? field).join("、") || "無"}
-        。只修改目前草稿，仍需手動儲存；放棄不會發佈或傳送。
+        。只修改目前草稿，仍需手動儲存；放棄不會發布或傳送。
       </p>
 
       {/* proposal.warnings was fetched and never rendered. A staff member who

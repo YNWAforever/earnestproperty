@@ -38,8 +38,8 @@ import type {
 const FILTERS: { key: CommandCenterFilterKey; label: string }[] = [
   { key: "today", label: "今日要跟" },
   { key: "high_score", label: "AI 高分查詢" },
-  { key: "unassigned", label: "未分配" },
-  { key: "live_agent", label: "線上客服" },
+  { key: "unassigned", label: "未指派" },
+  { key: "live_agent", label: "問樓助手" },
   { key: "whatsapp", label: "WhatsApp" },
   { key: "all", label: "全部" },
 ];
@@ -67,9 +67,9 @@ export const Route = createFileRoute("/admin/leads_/command-center")({
 
 const REASON_LABELS: Record<string, string> = {
   OVERDUE_FOLLOWUP: "逾期跟進",
-  RECENT_HANDOFF: "新線上客服轉介 轉介",
-  HIGH_SCORE_UNASSIGNED: "AI 高分・未分配",
-  NEW_UNASSIGNED_NEEDS_ANALYSIS: "新客・未分配・需 AI 分析",
+  RECENT_HANDOFF: "問樓助手新轉介",
+  HIGH_SCORE_UNASSIGNED: "AI 高分・未指派",
+  NEW_UNASSIGNED_NEEDS_ANALYSIS: "新客・未指派・需 AI 分析",
   ACTIVE_WHATSAPP: "WhatsApp 進行中",
   BY_SCORE: "依 AI 分數排序",
   NEEDS_ANALYSIS: "需 AI 分析",
@@ -370,7 +370,7 @@ function CommandCenter() {
                         </p>
                       </td>
                       <td className="p-3">{STAGE_LABELS[row.stage] ?? row.stage}</td>
-                      <td className="p-3">{row.assigned_agent_name ?? "未分配"}</td>
+                      <td className="p-3">{row.assigned_agent_name ?? "未指派"}</td>
                       <td className="p-3">
                         <span className="font-semibold tabular-nums">
                           {aiScoreLabel(row.lead_score)}
@@ -476,8 +476,8 @@ function KpiStrip({ data }: { data: CommandCenterData }) {
   const items = [
     { label: "AI 高分查詢", value: data.kpis.hot },
     { label: "逾期跟進", value: data.kpis.overdue },
-    { label: "未分配", value: data.kpis.unassigned },
-    { label: "新線上客服轉介", value: data.kpis.handoffs },
+    { label: "未指派", value: data.kpis.unassigned },
+    { label: "新問樓助手轉介", value: data.kpis.handoffs },
     { label: "WhatsApp 受阻", value: data.kpis.whatsapp_blocked },
   ];
   return (

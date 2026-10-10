@@ -5,16 +5,8 @@ import { useCallback, useEffect, useState } from "react";
 import { getWhatsappAssignment, getWhatsappEnquiryQueue } from "@/lib/neon/whatsapp-assignment";
 import { AdminTechnicalDetails } from "@/components/admin/AdminTechnicalDetails";
 import type { AssignmentContextView } from "@/lib/whatsapp-enquiries/assignment-view.js";
+import { ASSIGNMENT_STATE_LABELS } from "@/lib/admin/glossary";
 type Episode = AssignmentContextView["enquiries"][number];
-const assignmentStates: Record<string, string> = {
-  pending: "等候處理",
-  executing: "正在要求分派",
-  unknown: "結果待核實",
-  confirmed: "已確認",
-  failed: "分派失敗",
-  blocked: "已阻擋",
-  superseded: "已由較新要求取代",
-};
 export function WhatsappEnquiryContext({
   conversationId,
   refreshKey,
@@ -124,7 +116,7 @@ export function WhatsappEnquiryContext({
           {context.confirmedStaffName ?? (context.confirmed ? "負責同事名稱待核實" : "尚未確認")}
           {" · 分派："}
           {context.assignmentState
-            ? (assignmentStates[context.assignmentState] ?? "狀態待核實")
+            ? (ASSIGNMENT_STATE_LABELS[context.assignmentState] ?? "狀態待核實")
             : "未要求"}
         </p>
         {context.desired ? (

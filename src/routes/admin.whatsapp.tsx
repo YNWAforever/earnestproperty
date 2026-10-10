@@ -90,18 +90,11 @@ import type {
   AdminConversationRow,
   AdminWhatsappTemplateRow,
 } from "@/lib/neon/admin-data.types";
+import { CONVERSATION_STATUS_LABELS } from "@/lib/admin/glossary";
 
-const conversationStatusOptions = [
-  { value: "open", label: "開啟" },
-  { value: "pending", label: "待跟進" },
-  { value: "closed", label: "已關閉" },
-];
-
-const statusLabels: Record<string, string> = {
-  open: "開啟",
-  pending: "待跟進",
-  closed: "已關閉",
-};
+const conversationStatusOptions = Object.entries(CONVERSATION_STATUS_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
 
 const inboxStatusFilterOptions = [
   { value: "all", label: "所有狀態" },
@@ -110,10 +103,8 @@ const inboxStatusFilterOptions = [
   { value: "awaiting", label: "待回覆" },
   { value: "attention", label: "需處理" },
   { value: "mine", label: "我的對話" },
-  { value: "unassigned", label: "未分派" },
-  { value: "open", label: "開啟" },
-  { value: "pending", label: "待跟進" },
-  { value: "closed", label: "已關閉" },
+  { value: "unassigned", label: "未指派" },
+  ...conversationStatusOptions,
 ];
 
 const messageStatusLabels: Record<string, string> = {
@@ -1164,7 +1155,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
   return (
     <AdminShell
       title="WhatsApp 收件匣"
-      description="查看客戶訊息、分配負責同事及回覆；對話列表每分鐘自動更新，亦可按「重新整理」即時讀取。"
+      description="查看客戶訊息、指派負責代理及回覆；對話列表每分鐘自動更新，亦可按「重新整理」即時讀取。"
     >
       {user ? (
         <StaffNotificationPanel
@@ -1789,7 +1780,7 @@ function ConversationWorkspace({
                   <SelectValue placeholder="選擇代理" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">未指定代理</SelectItem>
+                  <SelectItem value="none">未指派</SelectItem>
                   {agents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agentLabel(agent)}
@@ -2420,7 +2411,7 @@ function useDesktopBreakpoint() {
 }
 
 function statusLabel(status: string) {
-  return statusLabels[status] ?? status;
+  return CONVERSATION_STATUS_LABELS[status] ?? status;
 }
 
 function messageStatusLabel(status: string) {
