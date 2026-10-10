@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -13,6 +14,12 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { fetchAdminEstateOptions, saveAdminTransaction } from "@/lib/neon/admin-data";
+import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
+import {
+  createInitialTransactionForm,
+  isTransactionFormDirty,
+  type TransactionFormState,
+} from "./transaction-form-state";
 import type { AdminTransactionInput, AdminTransactionRow } from "@/lib/neon/admin-data.types";
 
 // The create route has nothing to pass (undefined); the edit route passes
@@ -63,24 +70,7 @@ const schema = z
     message: "公開發布前請先核實成交來源",
   });
 
-function createInitialForm(transaction?: Transaction, staffName?: string) {
-  return {
-    estate_id: transaction?.estate_id ?? "",
-    deal_type: (transaction?.deal_type === "rent" ? "rent" : "sale") as "sale" | "rent",
-    price: transaction?.price?.toString() ?? "",
-    saleable_area: transaction?.saleable_area?.toString() ?? "",
-    deal_date: transaction?.deal_date ?? "",
-    unit: transaction?.unit ?? "",
-    block: transaction?.block ?? "",
-    floor_band: transaction?.floor_band ?? "",
-    source: transaction?.source ?? staffName ?? "",
-    source_url: transaction?.source_url ?? "",
-    verified: transaction?.verification_state === "verified",
-    published: transaction?.published ?? false,
-  };
-}
-
-type FormState = ReturnType<typeof createInitialForm>;
+type FormState = TransactionFormState;
 
 function mapTransactionSaveError(error: string): string {
   if (/^not found$/i.test(error.trim())) {
@@ -99,7 +89,13 @@ export function TransactionForm({ transaction, staffName, onSaved }: Props) {
   const formRef = useRef<HTMLFormElement>(null);
   const [estates, setEstates] = useState<Estate[]>([]);
   const [submitting, setSubmitting] = useState(false);
-  const [form, setForm] = useState(() => createInitialForm(transaction, staffName));
+  // The dirty baseline: the loaded values, replaced by the saved values after each save.
+  const [baseline, setBaseline] = useState(() =>
+    createInitialTransactionForm(transaction, staffName),
+  );
+  const [form, setForm] = useState(baseline);
+  const isDirty = isTransactionFormDirty(form, baseline);
+  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
   useEffect(() => {
@@ -180,11 +176,17 @@ export function TransactionForm({ transaction, staffName, onSaved }: Props) {
       return;
     }
     toast.success(transaction ? "已更新" : "已新增");
+    // Re-baseline to what was just saved, and render it NOW: onSaved() navigates, the
+    // router reads the blocker registered by the last committed render, and an
+    // ordinary state update after an await would still show the form as dirty.
+    // Edits made after this point differ from the baseline and are guarded again.
+    flushSync(() => setBaseline(form));
     if (result.id) onSaved(result.id);
   }
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6" noValidate>
+      {leaveGuardDialog}
       <Section title="成交資料">
         <Field label="屋苑 *" htmlFor="estate_id" error={fieldErrors.estate_id}>
           <Select value={form.estate_id} onValueChange={(v) => set("estate_id", v)}>

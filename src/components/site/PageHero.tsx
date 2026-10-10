@@ -70,7 +70,7 @@ export function PageHero({
         ) : null}
         <h1
           className={cn(
-            "text-3xl font-bold tracking-tight",
+            "text-3xl font-bold",
             brand ? "" : "text-primary",
             size === "compact" ? "sm:text-4xl" : "sm:text-5xl",
             eyebrow ? "mt-3" : breadcrumb ? "mt-5" : "",

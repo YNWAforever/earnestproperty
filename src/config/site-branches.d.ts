@@ -2,6 +2,9 @@ export type SiteBranch = {
   id: "lido" | "rhine" | "hong-kong-garden";
   name: string;
   address: string;
+  /** The locality the address names (深井, 青龍頭); used as the JSON-LD
+   * `addressLocality`. Read from the address, never inferred. */
+  addressLocality: string;
   phone: string;
   /** WhatsApp-capable mobile for this branch, distinct from `phone` -- the
    * three branch numbers on file today are landlines and cannot receive

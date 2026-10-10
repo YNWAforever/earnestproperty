@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 
 import {
@@ -40,6 +40,9 @@ export function AdminConfirmDialog({
   onConfirm: () => void;
 }) {
   const isDisabled = disabled || isPending;
+  // These dialogs open from state, not from an AlertDialogTrigger, so Radix has no trigger
+  // to hand focus back to and drops it on <body>. Remember what opened the dialog instead.
+  const openerRef = useRef<HTMLElement | null>(null);
 
   return (
     <AlertDialog
@@ -54,7 +57,22 @@ export function AdminConfirmDialog({
     >
       {/* Capped to the viewport so a long body (lists, template details) scrolls
           instead of pushing the confirm button off a short phone screen. */}
-      <AlertDialogContent className="max-h-[calc(100dvh-2rem)] overflow-y-auto">
+      <AlertDialogContent
+        className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+        onOpenAutoFocus={() => {
+          const active = document.activeElement;
+          openerRef.current =
+            active instanceof HTMLElement && active !== document.body ? active : null;
+        }}
+        onCloseAutoFocus={(event) => {
+          // Kept, not cleared: Radix can re-run its focus scope while the dialog is open,
+          // and that pass must not forget who opened it.
+          const opener = openerRef.current;
+          if (!opener?.isConnected) return;
+          event.preventDefault();
+          opener.focus();
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
           <AlertDialogDescription>{description}</AlertDialogDescription>

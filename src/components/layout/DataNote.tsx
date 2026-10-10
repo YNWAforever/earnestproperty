@@ -16,7 +16,7 @@ const DataNote = React.forwardRef<HTMLDivElement, DataNoteProps>(
     <div
       ref={ref}
       className={cn(
-        "rounded-md border border-border bg-muted/40 p-3 text-xs leading-6 text-muted-foreground",
+        "rounded-md border border-border bg-muted/40 p-3 text-sm leading-6 text-muted-foreground",
         className,
       )}
       {...props}

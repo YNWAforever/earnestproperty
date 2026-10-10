@@ -60,7 +60,7 @@ test("AI modules expose the expected public and server-only contracts", () => {
       ["AiKnowledgeChunk", "CrmAiProfile", "CrmSegment", "LiveAgentSession"],
     ],
     ["src/lib/ai/config.server.ts", ["getAiServerConfig", "isAiEnabled"]],
-    ["src/lib/ai/provider.server.ts", ["generateAiText", "generateAiJson", "embedAiTexts"]],
+    ["src/lib/ai/provider.server.ts", ["generateAiText", "generateAiJson"]],
     [
       "src/lib/ai/knowledge.ts",
       ["chunkKnowledgeText", "normalizeKnowledgeSource", "filterPublicKnowledgeChunks"],
@@ -117,8 +117,10 @@ test("AI knowledge rebuild checks job ownership around provider and database wor
   const operation = functionSource(source, "runAiKnowledgeRebuildOperation");
   const checkpoints = rebuild.match(/await checkpoint\(\)/g) ?? [];
 
-  assert.ok(checkpoints.length >= 8, "rebuild should checkpoint throughout each source");
-  assert.match(rebuild, /await checkpoint\(\);\s*const embeddings =[\s\S]*?await embedAiTexts/);
+  // FX-11a (E-10): 7, not 8 -- the pair of checkpoints around the removed embedding
+  // call became one.
+  assert.ok(checkpoints.length >= 7, "rebuild should checkpoint throughout each source");
+  assert.doesNotMatch(rebuild, /embedAiTexts|embedding model/i);
   assert.match(
     rebuild,
     /await checkpoint\(\);\s*const publishedChunks = await replaceKnowledgeChunks/,
@@ -128,6 +130,28 @@ test("AI knowledge rebuild checks job ownership around provider and database wor
   assert.match(publication, /pg_advisory_xact_lock/);
   assert.match(publication, /current_source\.source_revision=\$3/);
   assert.match(operation, /rebuild\(\{ checkpoint: deps\.checkpoint \}\)/);
+});
+
+// FX-11a (E-10): nothing ever read the stored vectors, so the rebuild stopped paying
+// for them. The provider, the index and the config no longer know about embeddings.
+test("knowledge rebuild never calls an embedding provider", () => {
+  const provider = read("src/lib/ai/provider.server.ts");
+  const knowledge = read("src/lib/ai/knowledge.server.ts");
+  const config = read("src/lib/ai/config.server.ts");
+  assert.doesNotMatch(provider, /embedAiTexts|\/embeddings/);
+  assert.doesNotMatch(knowledge, /embedAiTexts/);
+  assert.doesNotMatch(knowledge, /EMBEDDING_DIMENSIONS/);
+  assert.doesNotMatch(config, /EMBEDDING_MODEL|embeddingModel/);
+});
+
+test("the rebuild server function enqueues the job and never rebuilds in-request", () => {
+  const rebuild = functionSource(
+    read("src/lib/neon/admin-data.server.ts"),
+    "rebuildAdminAiKnowledge",
+  );
+  assert.match(rebuild, /jobType: "ai\.knowledge\.rebuild"/);
+  assert.match(rebuild, /`ai\.knowledge\.rebuild:\$\{activeWindow\}`/);
+  assert.doesNotMatch(rebuild, /rebuildAiKnowledgeIndex/);
 });
 
 test("server-only AI secrets stay out of browser-safe modules", () => {

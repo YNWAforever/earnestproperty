@@ -66,7 +66,6 @@ import type {
 import { getAiServerConfig } from "../ai/config.server.ts";
 import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-enrichment.server.ts";
 import { cancelCrmAnalysisRun } from "../ai/crm-analysis-runs.server";
-import { rebuildAiKnowledgeIndex } from "../ai/knowledge.server.ts";
 import type { CrmSegmentFilters } from "../ai/ai-types";
 import { isYouTubeVideoUrl } from "../youtube-video-url.js";
 import {
@@ -811,8 +810,8 @@ type AudienceSummary = {
 // without silently dropping the ones an audience previously had no field for.
 // See createAdminAudienceFromSegment.
 const RECIPIENT_ELIGIBILITY_SQL = `
-SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.opt_in_whatsapp, c.opted_out_whatsapp,
-  ${marketingIdentitySafeSql("c")} AS identity_safe
+SELECT DISTINCT ON (c.id) c.id, c.normalized_phone, c.whatsapp_member_id, c.opt_in_whatsapp,
+  c.opted_out_whatsapp, ${marketingIdentitySafeSql("c")} AS identity_safe
 FROM crm_contacts c
 LEFT JOIN crm_leads l ON l.contact_id = c.id
 LEFT JOIN properties p ON p.id = l.property_id
@@ -923,9 +922,30 @@ function isEligibleAudienceRow(row: Record<string, unknown>) {
   );
 }
 
+/**
+ * FX-12 fix round 1 (I-3): within one phone, keep the contact WhatsApp knows (it has
+ * a member id), then the canonical stored spelling, then the lowest id. Without this
+ * a member-less 00852 or 8-digit duplicate could win and the real customer would
+ * get nothing.
+ */
+function audienceKeepOrder(row: Record<string, unknown>) {
+  const member = typeof row.whatsapp_member_id === "string" && row.whatsapp_member_id !== "";
+  const stored = typeof row.normalized_phone === "string" ? row.normalized_phone : null;
+  const canonical = stored !== null && normalizeAdminPhone(stored) === stored;
+  return [member ? 0 : 1, canonical ? 0 : 1, String(row.id ?? "")] as const;
+}
+
+function compareAudienceKeepOrder(a: Record<string, unknown>, b: Record<string, unknown>) {
+  const left = audienceKeepOrder(a);
+  const right = audienceKeepOrder(b);
+  if (left[0] !== right[0]) return left[0] - right[0];
+  if (left[1] !== right[1]) return left[1] - right[1];
+  return left[2] < right[2] ? -1 : left[2] > right[2] ? 1 : 0;
+}
+
 function uniqueEligibleAudienceRows(rows: Record<string, unknown>[]) {
   const seenPhones = new Set<string>();
-  return rows.filter((row) => {
+  return [...rows].sort(compareAudienceKeepOrder).filter((row) => {
     if (!isEligibleAudienceRow(row)) return false;
     const phone = normalizeAdminPhone(row.normalized_phone);
     if (!phone || seenPhones.has(phone)) return false;
@@ -1030,7 +1050,9 @@ export async function getAdminAttentionCounts(actor: StaffAccess) {
            AND wa_can_read_conversation($1::uuid, w.id)) AS unanswered_conversations,
        count(*) FILTER (WHERE open_leads.unassigned)::int AS unassigned_leads,
        count(*) FILTER (WHERE open_leads.stale_new)::int AS stale_new_leads,
-       count(*) FILTER (WHERE open_leads.unassigned OR open_leads.stale_new)::int AS leads_needing_attention
+       count(*) FILTER (WHERE open_leads.unassigned OR open_leads.stale_new)::int AS leads_needing_attention,
+       CASE WHEN $3::boolean THEN (SELECT count(*)::int FROM crm_contact_identity_reviews
+         WHERE status = 'open') ELSE 0 END AS identity_reviews_open
      FROM (
        SELECT l.assigned_agent_id IS NULL AS unassigned,
          l.stage = 'new' AND COALESCE(
@@ -1041,7 +1063,11 @@ export async function getAdminAttentionCounts(actor: StaffAccess) {
        WHERE l.stage NOT IN ('closed_won', 'closed_lost')
          AND ($2::uuid IS NULL OR l.assigned_agent_id = $2::uuid)
      ) open_leads`,
-    [actor.staffId, agentScope(actor)],
+    [
+      actor.staffId,
+      agentScope(actor),
+      actor.roles.some((role) => role === "admin" || role === "manager"),
+    ],
   );
   const row = rows[0] ?? {};
   return {
@@ -1049,6 +1075,8 @@ export async function getAdminAttentionCounts(actor: StaffAccess) {
     unassignedLeads: numberOrNull(row.unassigned_leads) ?? 0,
     staleNewLeads: numberOrNull(row.stale_new_leads) ?? 0,
     leadsNeedingAttention: numberOrNull(row.leads_needing_attention) ?? 0,
+    // FX-12: the 可能重複客戶 count. Admin and manager only; always 0 for anyone else.
+    identityReviewsOpen: numberOrNull(row.identity_reviews_open) ?? 0,
   };
 }
 
@@ -1928,9 +1956,21 @@ export async function fetchAdminAiKnowledgeStatus(
 export async function rebuildAdminAiKnowledge(
   actor: StaffAccess,
 ): Promise<AdminAiKnowledgeRebuildResult> {
-  const result = await rebuildAiKnowledgeIndex();
-  await writeAudit(actor.staffId, "ai.knowledge.rebuild", "ai_knowledge", undefined, result);
-  return result;
+  // FX-11a (E-10): the rebuild runs as the ai.knowledge.rebuild background job, the
+  // same job and 5-minute idempotency window as POST /api/admin/ai/rebuild-knowledge.
+  const { enqueueJob } = await import("../control-plane/jobs.server");
+  const activeWindow = Math.floor(Date.now() / (5 * 60 * 1_000));
+  const job = await enqueueJob({
+    jobType: "ai.knowledge.rebuild",
+    payloadVersion: 1,
+    payload: { requestedByStaffId: actor.staffId },
+    idempotencyKey: `ai.knowledge.rebuild:${activeWindow}`,
+    actorStaffId: actor.staffId,
+  });
+  await writeAudit(actor.staffId, "ai.knowledge.rebuild.queued", "ai_knowledge", undefined, {
+    jobId: job.id,
+  });
+  return { jobId: job.id, status: job.status };
 }
 
 export async function fetchAdminCrmSegments(actor: StaffAccess): Promise<AdminCrmSegmentRow[]> {
@@ -2883,15 +2923,17 @@ export async function createAdminLeadActivity(input: AdminLeadActivityInput, act
   // The rows then surfaced in the real owner's timeline and in the Command
   // Center's overdue KPI.
   await assertLeadInScope(input.lead_id, actor);
+  // The contact is the lead's own customer (FX-12, B-10), never the client's
+  // contact_id, which goes stale when a phone correction relinks the lead. An
+  // activity does not bump the lead version.
   const rows = await queryRows(
     `INSERT INTO crm_activities (
       lead_id, contact_id, staff_user_id, activity_type, body, due_at, completed_at
     )
-     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     SELECT l.id, l.contact_id, $2, $3, $4, $5, $6 FROM crm_leads l WHERE l.id = $1::uuid
      RETURNING id`,
     [
       input.lead_id,
-      input.contact_id,
       actor.staffId,
       input.activity_type,
       input.body,
@@ -2899,6 +2941,7 @@ export async function createAdminLeadActivity(input: AdminLeadActivityInput, act
       input.completed_at,
     ],
   );
+  if (!rows[0]) throw new Response("Not found", { status: 404 });
   const id = stringOrEmpty(rows[0]?.id);
   await writeAudit(actor.staffId, "lead.activity", "lead", input.lead_id, {
     activityId: id,
@@ -3196,7 +3239,10 @@ export async function fetchAdminConversation(
       u.actor_type AS unknown_actor_type,
       u.dispatch_started_at AS unknown_dispatch_started_at,
       u.error AS unknown_error,
-      u.resolvable AS unknown_resolvable
+      u.resolvable AS unknown_resolvable,
+      -- FX-12: the open 「身分待核對」 review on this conversation, for every reader of it.
+      (SELECT idr.id FROM crm_contact_identity_reviews idr WHERE idr.conversation_id = wc.id
+        AND idr.reason = 'whatsapp_identity_conflict' AND idr.status = 'open' LIMIT 1) AS identity_review_id
     FROM whatsapp_conversations wc
     LEFT JOIN crm_contacts c ON c.id = wc.contact_id
     LEFT JOIN LATERAL (
@@ -3278,6 +3324,9 @@ export async function fetchAdminConversation(
     // unscoped call with no UI behind it, so deny rather than assume.
     can_clear_opt_out: isManager,
     can_resolve_unknown_outbound: isManager,
+    identity_review_id: stringOrNull(conversation.identity_review_id),
+    // Only managers and admins resolve; the assigned agent sees the badge and alert only.
+    can_resolve_identity_review: isManager,
     unknown_outbound:
       isManager && conversation.unknown_id
         ? {
@@ -3667,14 +3716,18 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
     return { id: "", error: "INVALID_CAMPAIGN_STATUS" };
   }
 
+  // FX-17a D-13: 已排期 is never chosen. A new campaign cannot start in it and
+  // an existing one can keep it but not move into it (mirrors the form).
+  if (!input.id && input.status === "scheduled") {
+    return { id: "", error: "INVALID_CAMPAIGN_STATUS" };
+  }
+
   requireNonEmpty(input.name, "name");
-  const params = [
-    input.name,
-    input.template_id,
-    input.audience_id,
-    input.status,
-    input.scheduled_at,
-  ];
+  // There is no schedule field: a save that omits scheduled_at (or sends "")
+  // keeps the stored value instead of clearing it.
+  const scheduledAt =
+    typeof input.scheduled_at === "string" && input.scheduled_at.trim() ? input.scheduled_at : null;
+  const params = [input.name, input.template_id, input.audience_id, input.status, scheduledAt];
 
   // Once any recipient may have reached WhatsApp, the template and audience
   // are frozen (FX-10b): a paused or retried campaign must resume as the same
@@ -3682,8 +3735,10 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
   const rows = input.id
     ? await queryRows(
         `UPDATE whatsapp_campaigns SET name=$1, template_id=$2, audience_id=$3,
-          status=$4::whatsapp_campaign_status, scheduled_at=$5, updated_at=now()
+          status=$4::whatsapp_campaign_status,
+          scheduled_at=COALESCE($5::timestamptz, whatsapp_campaigns.scheduled_at), updated_at=now()
          WHERE id=$6 AND status IN ('draft', 'review', 'scheduled')
+           AND ($4::whatsapp_campaign_status <> 'scheduled' OR status = 'scheduled')
            AND (NOT ${campaignHasDeliveryHistorySql("whatsapp_campaigns")}
              OR (template_id IS NOT DISTINCT FROM $2 AND audience_id IS NOT DISTINCT FROM $3))
          RETURNING id`,
@@ -3698,11 +3753,14 @@ export async function saveAdminCampaign(input: AdminCampaignInput, actor: StaffA
 
   if (input.id && !rows[0]) {
     const editable = await queryRows(
-      `SELECT ${campaignHasDeliveryHistorySql("c")} AS has_history
+      `SELECT c.status, ${campaignHasDeliveryHistorySql("c")} AS has_history
        FROM whatsapp_campaigns c
        WHERE c.id=$1 AND c.status IN ('draft', 'review', 'scheduled')`,
       [input.id],
     );
+    if (input.status === "scheduled" && editable[0] && editable[0].status !== "scheduled") {
+      return { id: "", error: "INVALID_CAMPAIGN_STATUS" };
+    }
     if (editable[0]?.has_history === true) {
       return { id: "", error: "CAMPAIGN_HAS_DELIVERY_HISTORY" };
     }
@@ -4619,10 +4677,6 @@ export async function updateInquiryStatus(id: string, status: string, actor: Sta
 
   await writeAudit(actor.staffId, "inquiry.status", "inquiry", id, { status });
   return { ok: true };
-}
-
-export async function queueCampaign(id: string, actor: StaffAccess) {
-  return queueAdminCampaign(id, actor);
 }
 
 // Public, unauthenticated write path -- backs /listings' zero-results

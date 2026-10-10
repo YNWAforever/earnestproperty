@@ -39,6 +39,7 @@ const MIGRATED = [
   "src/lib/neon/inbox-directory.ts",
   "src/lib/neon/forwarded-enquiries.ts",
   "src/lib/neon/enquiry-resolution.ts",
+  "src/lib/neon/contact-identity-review.ts",
   "src/lib/neon/whatsapp-link-management.ts",
   "src/lib/neon/whatsapp-link-selection.ts",
   "src/lib/neon/whatsapp-link-import.ts",
@@ -170,7 +171,6 @@ test("staff server functions from whatsapp-enquiries are only called through the
     "getWhatsappTrackingLinks",
     "saveWhatsappTrackingLink",
     "provisionWhatsappLinks",
-    "getWhatsappEnquiries",
     "searchWhatsappLinkOffers",
   ];
   const offenders = [];

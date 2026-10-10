@@ -1,3 +1,10 @@
+import { adminErrorMessage, sendMayHaveReachedServer } from "@/components/admin/admin-error-text";
+import { CustomerConfirmDetails } from "@/components/admin/CustomerConfirmLine";
+import {
+  customerConfirmLabel,
+  templateRecipientLabel,
+  type CustomerConfirmLabel,
+} from "@/lib/admin/customer-label";
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { StaffNotificationPanel } from "@/components/admin/StaffNotificationPanel";
 import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContext";
@@ -18,7 +25,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { AlertTriangle, Clock3, History, MessageCircle, RefreshCw, Send } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,6 +42,7 @@ import {
   outboundReadbackOutcome,
   shouldClearDraftAfterReadback,
 } from "@/components/admin/whatsapp/safety-copy";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -137,6 +145,8 @@ const replyErrorLabels: Record<string, string> = {
   OUTBOUND_NOT_FOUND_OR_FORBIDDEN: "找不到可讀取的傳送要求，或目前沒有權限，請聯絡支援核對。",
   OUTBOUND_PERSISTENCE_UNAVAILABLE: "未能確認傳送要求是否已保存，請先核對狀態；不要直接重送。",
   OUTBOUND_CONFLICT_OR_NOT_FOUND: "目前未能按此權限保存傳送要求，請重新載入對話並核對狀態。",
+  // FX-12 [owner copy]
+  IDENTITY_REVIEW_REQUIRED: "此對話身分待核對，請先確認客戶身分再回覆。",
 };
 
 // The open conversation and the inbox filters live in the URL, so a chat is
@@ -916,7 +926,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         ...current,
         [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
       }));
-      const message = formatReplyError(errorText(err));
+      const message = formatReplyError(errorText(err, SEND_UNCERTAIN_ERROR));
       // The send is persisted as a failed message server-side, but the timeline
       // was never refetched on this path -- so the pane still showed the
       // pre-send state and a toast that vanished in ~4s was the only trace. The
@@ -992,7 +1002,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         ...current,
         [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
       }));
-      const message = formatReplyError(errorText(err));
+      const message = formatReplyError(errorText(err, SEND_UNCERTAIN_ERROR));
       setReplyError(message);
       toast.error(message);
       await refreshConversations();
@@ -1047,7 +1057,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
       await loadConversationDetail(targetId, { background: true });
     } catch (error) {
       if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
-        setReplyError(`未能確認傳送結果。${formatReplyError(errorText(error))}`);
+        setReplyError(formatReplyError(errorText(error, SEND_UNCERTAIN_ERROR)));
     } finally {
       outboundBusy.current = false;
       if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId) {
@@ -1608,6 +1618,9 @@ function ConversationList({
               ) : null}
 
               {conversation.opted_out_whatsapp ? <Badge variant="destructive">已拒收</Badge> : null}
+              {conversation.identity_review ? (
+                <Badge variant="destructive">{IDENTITY_REVIEW_BADGE}</Badge>
+              ) : null}
               <span className="ml-auto text-xs text-muted-foreground">
                 {formatDate(conversation.last_message_at)}
               </span>
@@ -1718,6 +1731,8 @@ function ConversationWorkspace({
   // template send for the exact same underlying reason, so offering the
   // picker there would just be a second dead end instead of one.
   const showTemplateSend = availability.code === "OUTSIDE_24_HOUR_WINDOW";
+  // FX-12: a 「身分待核對」 conversation shows why replies are blocked and hides the composer.
+  const identityReview = Boolean(detail.identity_review_id);
 
   return (
     <div className="flex h-[calc(100dvh-9rem)] min-h-0 max-h-[44rem] flex-col overflow-hidden">
@@ -1737,6 +1752,10 @@ function ConversationWorkspace({
                   key={detail.contact_id}
                   contactId={detail.contact_id}
                   onSaved={onConsentSaved}
+                  customer={customerConfirmLabel({
+                    name: detail.customer_display_name ?? detail.name,
+                    phone: detail.phone,
+                  })}
                 />
               ) : null}
               <ResolveUnknownOutboundDialog detail={detail} onChanged={onConsentSaved} />
@@ -1787,8 +1806,12 @@ function ConversationWorkspace({
         ) : null}
       </div>
 
+      {identityReview ? <IdentityReviewNotice detail={detail} /> : null}
+      {/* Sibling keys must differ. With the conditional notice slot above, a shared
+          key={detail.id} sent React's keyed reconcile path to drop one fiber: every
+          refresh leaked another 查詢跟進 block and remounted the timeline. */}
       <WhatsappEnquiryContext
-        key={detail.id}
+        key={`enquiry:${detail.id}`}
         conversationId={detail.id}
         refreshKey={
           detail.last_message_at +
@@ -1801,7 +1824,7 @@ function ConversationWorkspace({
         onSelect={onEnquirySelect}
       />
       <MessageTimeline
-        key={detail.id}
+        key={`timeline:${detail.id}`}
         messages={detail.messages}
         olderCursor={olderCursor}
         loadingOlder={loadingOlder}
@@ -1819,6 +1842,10 @@ function ConversationWorkspace({
         {showTemplateSend ? (
           <TemplateSendPanel
             key={detail.id}
+            customer={templateRecipientLabel({
+              name: detail.customer_display_name ?? detail.name,
+              memberId: detail.woztell_member_id,
+            })}
             templates={templates}
             loading={templatesLoading}
             error={templatesError}
@@ -1853,59 +1880,101 @@ function ConversationWorkspace({
             {replyError}
           </p>
         ) : null}
-        <div className="grid gap-3">
-          <label htmlFor={replyInputId} className="text-sm font-semibold">
-            回覆客戶
-            <span className="ml-2 text-xs font-normal text-muted-foreground">
-              按「傳送回覆」才會發送
-            </span>
-          </label>
-          <Textarea
-            id={replyInputId}
-            aria-label="WhatsApp 回覆"
-            rows={4}
-            value={replyBody}
-            // Only the send itself disables the composer. Disabling on any
-            // in-flight mutation meant changing 負責代理 froze the textarea the
-            // agent was typing in.
-            disabled={sendingReply || needsOutboundReadback || Boolean(availability.reason)}
-            maxLength={REPLY_MAX_LENGTH}
-            aria-describedby={replyCountId}
-            placeholder="輸入回覆內容"
-            onChange={(event) => onReplyBodyChange(event.target.value)}
-          />
-          <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t bg-background py-2">
-            <span
-              id={replyCountId}
-              className={[
-                "text-xs tabular-nums",
-                replyBody.length >= REPLY_MAX_LENGTH ? "text-destructive" : "text-muted-foreground",
-              ].join(" ")}
-            >
-              {replyBody.length} / {REPLY_MAX_LENGTH}
-            </span>
-            <Button type="button" disabled={!canSendReply || sendingReply} onClick={onSendReply}>
-              <Send className="h-4 w-4" />
-              {sendingReply ? "傳送中…" : "傳送回覆"}
-            </Button>
-          </div>
-        </div>
-        <details className="mt-3 text-sm">
-          <summary className="cursor-pointer">規則回覆建議（只作草稿）</summary>
-          <AiAssistPanel
-            aiAssist={aiAssist}
-            loading={aiAssistLoading}
-            error={aiAssistError}
-            onRetry={onRetryAiAssist}
-            onUseSuggestedReply={(value) => {
-              if (replyBody.trim() && !window.confirm("將會覆蓋你已輸入的回覆內容，確定繼續？")) {
-                return;
-              }
-              onReplyBodyChange(value);
-            }}
-          />
-        </details>
+        {identityReview ? null : (
+          <>
+            <div className="grid gap-3">
+              <label htmlFor={replyInputId} className="text-sm font-semibold">
+                回覆客戶
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  按「傳送回覆」才會發送
+                </span>
+              </label>
+              <Textarea
+                id={replyInputId}
+                aria-label="WhatsApp 回覆"
+                rows={4}
+                value={replyBody}
+                // Only the send itself disables the composer. Disabling on any
+                // in-flight mutation meant changing 負責代理 froze the textarea the
+                // agent was typing in.
+                disabled={sendingReply || needsOutboundReadback || Boolean(availability.reason)}
+                maxLength={REPLY_MAX_LENGTH}
+                aria-describedby={replyCountId}
+                placeholder="輸入回覆內容"
+                onChange={(event) => onReplyBodyChange(event.target.value)}
+              />
+              <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t bg-background py-2">
+                <span
+                  id={replyCountId}
+                  className={[
+                    "text-xs tabular-nums",
+                    replyBody.length >= REPLY_MAX_LENGTH
+                      ? "text-destructive"
+                      : "text-muted-foreground",
+                  ].join(" ")}
+                >
+                  {replyBody.length} / {REPLY_MAX_LENGTH}
+                </span>
+                <Button
+                  type="button"
+                  disabled={!canSendReply || sendingReply}
+                  onClick={onSendReply}
+                >
+                  <Send className="h-4 w-4" />
+                  {sendingReply ? "傳送中…" : "傳送回覆"}
+                </Button>
+              </div>
+            </div>
+            <details className="mt-3 text-sm">
+              <summary className="cursor-pointer">規則回覆建議（只作草稿）</summary>
+              <AiAssistPanel
+                aiAssist={aiAssist}
+                loading={aiAssistLoading}
+                error={aiAssistError}
+                onRetry={onRetryAiAssist}
+                onUseSuggestedReply={(value) => {
+                  if (
+                    replyBody.trim() &&
+                    !window.confirm("將會覆蓋你已輸入的回覆內容，確定繼續？")
+                  ) {
+                    return;
+                  }
+                  onReplyBodyChange(value);
+                }}
+              />
+            </details>
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+// FX-12 [owner copy]
+const IDENTITY_REVIEW_BADGE = "身分待核對";
+const IDENTITY_REVIEW_ALERT = "此對話身分待核對：訊息已保存，但未連結客戶，暫時不能回覆。";
+const IDENTITY_REVIEW_LINK = "前往核對";
+
+/** Shown to every reader of the conversation; only managers and admins get the link. */
+function IdentityReviewNotice({ detail }: { detail: AdminConversationDetail }) {
+  return (
+    <div className="shrink-0 border-b px-4 py-2">
+      <Alert variant="destructive" className="py-2 [&>svg]:top-3">
+        <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+        <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+          <span>{IDENTITY_REVIEW_ALERT}</span>
+          {detail.can_resolve_identity_review && detail.identity_review_id ? (
+            <Button asChild size="sm" variant="outline" className="h-11 lg:h-9">
+              <Link
+                to="/admin/leads"
+                search={{ review: "identity", item: detail.identity_review_id }}
+              >
+                {IDENTITY_REVIEW_LINK}
+              </Link>
+            </Button>
+          ) : null}
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }
@@ -1948,6 +2017,7 @@ function AiAssistPanel({
  * a template name that does not exist anywhere in the system.
  */
 function TemplateSendPanel({
+  customer,
   templates,
   loading,
   error,
@@ -1956,6 +2026,8 @@ function TemplateSendPanel({
   sending,
   onSend,
 }: {
+  /** The open conversation's customer and send target (its member id), from the detail sent to. */
+  customer: CustomerConfirmLabel;
   templates: AdminWhatsappTemplateRow[];
   loading: boolean;
   error: string | null;
@@ -2042,11 +2114,11 @@ function TemplateSendPanel({
         title="確認傳送範本？"
         description={
           selected
-            ? `將向客戶傳送已審批範本「${selected.element_name}」。範本一經傳送即無法收回。`
-            : "將向客戶傳送已審批範本。範本一經傳送即無法收回。"
+            ? `將向 ${customer.name}（${customer.phone}）傳送已審批範本「${selected.element_name}」。範本一經傳送即無法收回。`
+            : `將向 ${customer.name}（${customer.phone}）傳送已審批範本。範本一經傳送即無法收回。`
         }
         confirmLabel="傳送"
-        disabled={disabled}
+        disabled={disabled || !selected}
         isPending={sending}
         onOpenChange={setConfirmOpen}
         onConfirm={() => {
@@ -2056,7 +2128,9 @@ function TemplateSendPanel({
             setConfirmOpen(false);
           })();
         }}
-      />
+      >
+        <CustomerConfirmDetails customer={customer} />
+      </AdminConfirmDialog>
     </div>
   );
 }
@@ -2212,6 +2286,7 @@ const PROVIDER_ERROR_LABELS: Record<string, string> = {
   WOZTELL_DELIVERY_UNKNOWN: "傳送結果未確認，請先核對狀態或聯絡支援，勿直接重送。",
   OUTBOUND_RECONCILIATION_REQUIRED: "本次要求未送出：同一對話有未確認的傳送要求，請先核對狀態。",
   OUTBOUND_CONFLICT_OR_NOT_FOUND: "本次要求未送出：對話負責人或權限已變更，請重新載入並核對。",
+  IDENTITY_REVIEW_REQUIRED: "此對話身分待核對，請先確認客戶身分再回覆。",
   WOZTELL_CONFIGURATION_UNAVAILABLE: "WhatsApp 尚未設定完成，請聯絡技術支援。",
   WOZTELL_RECIPIENT_MISSING: "此客戶沒有可用的 WhatsApp 號碼。",
   CONTACT_OPTED_OUT: "客戶已退訂推廣，訊息未送出。",
@@ -2304,6 +2379,13 @@ function replyAvailability(
   detail: AdminConversationDetail,
   woztellEnabled: boolean | null,
 ): { reason: string | null; code: string | null } {
+  // FX-12: the server refuses every reply until a manager links the conversation.
+  if (detail.identity_review_id) {
+    return {
+      reason: replyErrorLabels.IDENTITY_REVIEW_REQUIRED,
+      code: "IDENTITY_REVIEW_REQUIRED",
+    };
+  }
   if (woztellEnabled === null) {
     return { reason: "正在確認 WhatsApp 發送狀態…", code: "LOADING" };
   }
@@ -2408,10 +2490,22 @@ function assertNoMutationError(result: unknown) {
   if ((result as { ok?: unknown }).ok === false) throw new Error("操作失敗");
 }
 
-function errorText(error: unknown) {
+function rawMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return String(error);
+  return typeof error === "string" ? error : "";
+}
+
+/** A send that fails with an unknown reason may still have been delivered. */
+const SEND_UNCERTAIN_ERROR = "未能確認傳送結果，請先核對狀態，不要直接重送。";
+
+function errorText(error: unknown, fallback?: string) {
+  // This screen's own codes map first; the rest (and any status) goes through the shared rule.
+  // On a send path (a fallback is given), a network or 401 failure may come after the request
+  // reached the server, so it must not invite a retry.
+  if (fallback && sendMayHaveReachedServer(error)) return fallback;
+  const raw = rawMessage(error);
+  const mapped = formatReplyError(raw);
+  return adminErrorMessage(mapped !== raw ? mapped : error, fallback);
 }
 
 const REPLY_DRAFT_STORAGE_PREFIX = "earnest:whatsapp:reply-drafts";

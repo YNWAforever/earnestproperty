@@ -7,7 +7,10 @@ const read = (path) => readFileSync(path, "utf8");
 test("schema.ts exports the builders the audit's structured-data gaps need", () => {
   const source = read("src/lib/schema.ts");
   assert.match(source, /export function agentPersonSchema/);
-  assert.match(source, /"@type": \["Person", "RealEstateAgent"\]/);
+  // F-12: an individual agent is a Person. The old ["Person", "RealEstateAgent"]
+  // multi-type made each agent a LocalBusiness with no address of its own.
+  assert.match(source, /"@type": "Person"/);
+  assert.doesNotMatch(source, /\["Person", "RealEstateAgent"\]/);
   assert.match(source, /export function itemListSchema/);
   assert.match(source, /"@type": "ItemList"/);
   assert.match(source, /export function branchLocalBusinessSchema/);
@@ -98,4 +101,23 @@ test("no route embeds dangerouslySetInnerHTML content via raw JSON.stringify", (
     `Use jsonLdScript() from @/lib/schema instead of JSON.stringify inside ` +
       `dangerouslySetInnerHTML. Offending route(s): ${offenders.join(", ")}`,
   );
+});
+
+// F-12 (FX-16 Task 3): the listing page's Offer and Residence nodes are built by
+// tested functions in schema.ts, not inline in the route, so the monthly rent
+// unit and the district-as-locality rule cannot drift back.
+test("property route builds its offers and residence through schema.ts", () => {
+  const route = read("src/routes/property.$listingNo.tsx");
+  assert.match(route, /listingOffersSchema\(\{/);
+  assert.match(route, /residenceSchema\(\{/);
+  assert.doesNotMatch(route, /"@type": "Offer"/, "no inline Offer node left in the route");
+  assert.doesNotMatch(route, /"@type": "Residence"/, "no inline Residence node left in the route");
+  assert.doesNotMatch(route, /addressLocality: estate/, "the estate is never the locality");
+
+  const agentDetail = read("src/routes/agents_.$slug.tsx");
+  assert.match(agentDetail, /licenceNo: profile\.licence_no/);
+
+  const contact = read("src/routes/contact.tsx");
+  assert.match(contact, /addressLocality: branch\.addressLocality/);
+  assert.match(contact, /districtLabelForSlug/);
 });

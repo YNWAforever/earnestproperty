@@ -57,14 +57,6 @@ export const resolveWhatsappLinks = createServerFn({ method: "GET" })
   .handler(async ({ data }) =>
     (await import("./whatsapp-enquiries.server")).resolveTrackingLinks(data.offers),
   );
-export const getWhatsappEnquiries = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ conversationId: z.string().uuid() }).strict())
-  .handler(async ({ data }) => {
-    const { requireStaffAccess } = await import("./auth.server");
-    const actor = await requireStaffAccess(getRequest(), ["admin", "manager", "agent"]);
-    return (await import("./whatsapp-enquiries.server")).listEnquiries(data.conversationId, actor);
-  });
-
 export const searchWhatsappLinkOffers = createServerFn({ method: "GET" })
   .inputValidator(z.object({ q: z.string().trim().max(100) }).strict())
   .handler(async ({ data }) => {

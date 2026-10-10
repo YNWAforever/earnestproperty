@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { publishedBlogArticles } from "@/content/blog-articles";
+import { articlePublishedAt, publishedBlogArticles } from "@/content/blog-articles";
 import { castlePeakRoadSitemapPaths } from "@/content/castle-peak-road";
 import { SITE_URL, estateSeo, pageSeo } from "@/content/seo";
 import {
@@ -9,6 +9,7 @@ import {
   listPublicAgentProfiles,
 } from "@/lib/neon/public-data.server";
 import { fetchPublishedArticlesByCategory, fetchRecentTransactions } from "@/lib/queries";
+import { lastmodFor } from "@/lib/sitemap-lastmod.js";
 
 const staticPaths = [
   pageSeo.home.path,
@@ -55,12 +56,13 @@ function escapeXml(value: string) {
 }
 
 // No changefreq/priority: Google ignores both, and a uniform weekly/0.7 on
-// every URL carried no information anyway. lastmod is the signal that matters.
-function urlXml(path: string, lastmod: string) {
+// every URL carried no information anyway. lastmod is the signal that matters,
+// so it is omitted when the page has no real date (see sitemap-lastmod.js).
+function urlXml(path: string, lastmod: string | null) {
   return [
     "  <url>",
     `    <loc>${escapeXml(`${SITE_URL}${path}`)}</loc>`,
-    `    <lastmod>${lastmod}</lastmod>`,
+    ...(lastmod ? [`    <lastmod>${lastmod}</lastmod>`] : []),
     "  </url>",
   ].join("\n");
 }
@@ -152,48 +154,39 @@ export const Route = createFileRoute("/sitemap.xml")({
           (slug) => `/blog/${slug}`,
         );
 
-        // Most pages here (home, about, district hubs, corridor pages, ...)
-        // have no tracked per-page revision history, so they share one
-        // generation timestamp rather than a fabricated per-page value -- an
-        // honest "this sitemap was generated at" signal. Estate and article
-        // pages DO have a real updated_at (fetchSitemapTimestamps, both
-        // columns already written by the admin CMS's archive/publish paths),
-        // so those get their actual last-modified date instead.
+        // Listing, estate and article pages have a real updated_at, and static
+        // articles an authored date. Every other page (home, about, district
+        // hubs, corridor pages, agents ...) has no tracked revision date, so its
+        // <url> carries no <lastmod> at all rather than the generation date.
         const listingLastmod = new Map(
           listings.map((listing) => [
             `/property/${listing.public_listing_no}`,
-            listing.updated_at?.slice(0, 10) ?? null,
+            // The full timestamp: lastmodFor takes the HKT calendar date from it.
+            listing.updated_at ?? null,
           ]),
         );
         const listingPaths = Array.from(listingLastmod.keys());
-
-        const generatedAt = new Date().toISOString().slice(0, 10);
-        function lastmodFor(path: string): string {
-          if (listingLastmod.has(path)) {
-            return listingLastmod.get(path) ?? generatedAt;
-          }
-          if (path.startsWith("/estate/")) {
-            const slug = path.slice("/estate/".length);
-            return timestamps.estates[slug]?.slice(0, 10) ?? generatedAt;
-          }
-          if (path.startsWith("/blog/")) {
-            const slug = path.slice("/blog/".length);
-            return timestamps.articles[slug]?.slice(0, 10) ?? generatedAt;
-          }
-          return generatedAt;
-        }
+        const staticArticles = publishedBlogArticles();
+        const lastmodSources = {
+          listings: listingLastmod,
+          estates: timestamps.estates,
+          articles: timestamps.articles,
+          staticArticles: Object.fromEntries(
+            staticArticles.map((article) => [article.slug, articlePublishedAt(article)]),
+          ),
+        };
         const body = [
           '<?xml version="1.0" encoding="UTF-8"?>',
           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
           ...uniquePaths([
             ...staticPaths,
-            ...publishedBlogArticles().map((article) => `/blog/${article.slug}`),
+            ...staticArticles.map((article) => `/blog/${article.slug}`),
             ...publishedEstatePaths,
             ...publishedArticlePaths,
             ...conditionalPaths,
             ...agentPaths,
             ...listingPaths,
-          ]).map((path) => urlXml(path, lastmodFor(path))),
+          ]).map((path) => urlXml(path, lastmodFor(path, lastmodSources))),
           "</urlset>",
         ].join("\n");
 

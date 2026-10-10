@@ -4,39 +4,22 @@
  * copy-pasted between `agents.tsx` and `agents_.$slug.tsx`.
  */
 
-const HK_COUNTRY_CODE = "852";
+import { normalizePhone } from "./phone.js";
 
 export const DEFAULT_AGENT_WHATSAPP_MESSAGE = "你好，我從晉誠地產網站找到你，想查詢物業資料。";
 
 /**
  * Normalize a phone number to digits-only international form
  * (e.g. "2688 2988" -> "85226882988", "+852 2688 2988" -> "85226882988").
- * Returns null when the input doesn't have enough digits to be a real number,
- * so callers can safely hide contact buttons rather than link to "tel:".
+ * Returns null when the input is not clearly a phone number, so callers can
+ * safely hide contact buttons rather than link to "tel:".
+ *
+ * FX-12 (D-12): this is the shared customer normaliser, which fixes two wrong
+ * links the old copy built: "+9123 4567" used to link wa.me/91234567 (now
+ * 85291234567), and "00852 ..." used to keep the 00 and link a 13-digit number.
  */
 export function normalizePhoneDigits(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-
-  const hasPlus = phone.trim().startsWith("+");
-  const digits = phone.replace(/\D/g, "");
-  if (!digits) return null;
-
-  if (hasPlus) {
-    return digits.length >= 8 ? digits : null;
-  }
-  // Plain 8-digit HK local number (e.g. landline/mobile without area code).
-  if (digits.length === 8) {
-    return `${HK_COUNTRY_CODE}${digits}`;
-  }
-  // Already includes the HK country code (e.g. "85226882988").
-  if (digits.length > 8 && digits.startsWith(HK_COUNTRY_CODE)) {
-    return digits;
-  }
-  // Looks like some other already-international number.
-  if (digits.length >= 10) {
-    return digits;
-  }
-  return null;
+  return normalizePhone(phone);
 }
 
 export function toTelHref(phone: string | null | undefined): string | null {

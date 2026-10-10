@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import test from "node:test";
 import ts from "typescript";
 
@@ -10,7 +11,13 @@ const transpile = (source) =>
   ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-const contact = dataUrl(transpile(readFileSync(join(root, "src/lib/contact-links.ts"), "utf8")));
+const phone = pathToFileURL(join(root, "src/lib/phone.js")).href;
+const contact = dataUrl(
+  transpile(readFileSync(join(root, "src/lib/contact-links.ts"), "utf8")).replace(
+    'from "./phone.js"',
+    'from "' + phone + '"',
+  ),
+);
 const source = transpile(
   readFileSync(join(root, "src/lib/whatsapp-enquiries/public-context.ts"), "utf8"),
 ).replace('from "../contact-links.ts"', 'from "' + contact + '"');

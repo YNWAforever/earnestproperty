@@ -23,7 +23,13 @@ function counts(
   staleNewLeads: number,
   leadsNeedingAttention = unassignedLeads + staleNewLeads,
 ): AdminAttentionCounts {
-  return { unansweredConversations, unassignedLeads, staleNewLeads, leadsNeedingAttention };
+  return {
+    unansweredConversations,
+    unassignedLeads,
+    staleNewLeads,
+    leadsNeedingAttention,
+    identityReviewsOpen: 0,
+  };
 }
 
 function deferred<T>() {

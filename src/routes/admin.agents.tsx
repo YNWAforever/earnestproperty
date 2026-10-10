@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { fetchAdminAgentProfiles } from "@/lib/neon/admin-data";
 import type { AdminAgentProfileRow } from "@/lib/neon/admin-data.types";
+import { adminErrorMessage } from "@/components/admin/admin-error-text";
 
 export const Route = createFileRoute("/admin/agents")({
   head: () => ({
@@ -155,5 +156,5 @@ function AgentRow({ profile }: { profile: AdminAgentProfileRow }) {
 }
 
 function errorText(error: unknown) {
-  return error instanceof Error ? error.message : String(error);
+  return adminErrorMessage(error);
 }
