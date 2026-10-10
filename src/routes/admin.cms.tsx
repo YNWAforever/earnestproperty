@@ -816,7 +816,7 @@ function AdminCms() {
         } catch (err) {
           // Stop at the first failure and report how far it got: the loop is not
           // transactional, so silently continuing left staff with no idea which
-          // rows landed in the live agent's knowledge base.
+          // rows were saved.
           failure = { position: index + 1, message: errorText(err) };
           break;
         }
@@ -825,29 +825,27 @@ function AdminCms() {
       await refreshCmsData();
       if (failure) {
         setFaqImportConfirmOpen(false);
-        // The table now shows the imported rows, but the live agent still
-        // answers from the pre-import index. Refresh the status so the AI card
-        // shows the outstanding rebuild, and say so explicitly.
+        // The table now shows the imported rows. Published FAQs are read live, so
+        // refresh the AI card's status and ask staff to fix and re-import the rest.
         await refreshKnowledgeStatus();
         toast.error(
           `已匯入 ${imported}／${total}，第 ${failure.position} 條失敗：${failure.message}。` +
-            `AI 知識庫尚未重建，請修正後重新匯入，或按「重建索引」。`,
+            `請修正後重新匯入。`,
         );
         return;
       }
 
-      const result = await rebuildAdminAiKnowledge();
+      // FX-11a (E-10): no in-request rebuild. Published FAQs are used live, and the
+      // knowledge index catches up through the ai.knowledge.rebuild/repair jobs.
       await refreshKnowledgeStatus();
-      toast.success(`已匯入 ${total} 條 FAQ，AI 知識庫已重建 ${result.indexedChunks} 段內容`);
+      toast.success(`已匯入 ${total} 條 FAQ。`);
       setFaqImportConfirmOpen(false);
       setFaqImportOpen(false);
       setFaqImportText("");
     } catch (err) {
       setFaqImportConfirmOpen(false);
       await refreshKnowledgeStatus().catch(() => undefined);
-      toast.error(
-        `已匯入 ${imported}／${total}，其後失敗：${errorText(err)}。AI 知識庫可能尚未重建。`,
-      );
+      toast.error(`已匯入 ${imported}／${total}，其後失敗：${errorText(err)}。`);
     } finally {
       setFaqImportSaving(false);
     }
@@ -915,10 +913,9 @@ function AdminCms() {
   async function handleRebuildKnowledge() {
     setKnowledgeLoading(true);
     try {
-      const result = await rebuildAdminAiKnowledge();
-      toast.success(
-        `AI 知識庫已重建：${result.indexedSources} 個來源，${result.indexedChunks} 段內容`,
-      );
+      // Queues the ai.knowledge.rebuild background job; it does not rebuild in-request.
+      await rebuildAdminAiKnowledge();
+      toast.success("已排程重建 AI 知識庫，完成後「待重建段數」會歸零。");
       await refreshKnowledgeStatus();
     } catch (err) {
       toast.error(errorText(err));
@@ -1352,7 +1349,7 @@ function AdminCms() {
                       FAQ / AI Agent 配置
                     </CardTitle>
                     <CardDescription>
-                      上載或貼上 FAQ 檔案，儲存後會自動重建 AI live agent 知識庫。
+                      上載或貼上 FAQ 檔案。已發佈的 FAQ 會即時用於網站問樓助手。
                     </CardDescription>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
@@ -1642,7 +1639,7 @@ function AdminCms() {
                       AI 知識庫
                     </CardTitle>
                     <CardDescription>
-                      常見問題、屋苑、文章及放盤會用作前台 AI 的回答來源。
+                      常見問題、屋苑、文章及放盤會用作內容副駕的參考資料。
                     </CardDescription>
                   </div>
                 </div>
@@ -1652,7 +1649,7 @@ function AdminCms() {
                   disabled={knowledgeLoading}
                 >
                   <RefreshCw className={`h-4 w-4 ${knowledgeLoading ? "animate-spin" : ""}`} />
-                  {knowledgeLoading ? (knowledgeStatus ? "重建中…" : "載入中…") : "重建索引"}
+                  {knowledgeLoading ? (knowledgeStatus ? "排程中…" : "載入中…") : "重建索引"}
                 </Button>
               </CardHeader>
               <CardContent className="grid gap-3 border-t pt-4 sm:grid-cols-2 lg:grid-cols-6">
@@ -1719,8 +1716,8 @@ function AdminCms() {
               {knowledgeStatus && knowledgeStatus.staleChunks > 0 ? (
                 <div className="flex flex-wrap items-center gap-3 sm:col-span-2 lg:col-span-6">
                   <p className="text-sm text-muted-foreground">
-                    有 {knowledgeStatus.staleChunks} 段內容已過時，前台 AI
-                    仍會引用舊資料，請重建索引。
+                    有 {knowledgeStatus.staleChunks}{" "}
+                    段內容已過時，內容副駕暫時會參考舊資料。系統會自動更新，亦可按「重建索引」。
                   </p>
                   <Button
                     variant="outline"
@@ -2610,7 +2607,8 @@ function FaqImportDialog({
         <DialogHeader>
           <DialogTitle>FAQ 檔案匯入 / AI Agent 訓練</DialogTitle>
           <DialogDescription>
-            支援 Q:/A:、問題:/答案:、Markdown heading、CSV 或 TSV。匯入後會自動重建 AI 知識庫。
+            支援 Q:/A:、問題:/答案:、Markdown heading、CSV 或 TSV。匯入後，已發佈的 FAQ
+            會即時用於網站問樓助手。
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4" onSubmit={onSubmit}>
@@ -2624,7 +2622,7 @@ function FaqImportDialog({
           />
           <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">
             已解析 <span className="font-medium text-foreground">{parsedCount}</span> 條 FAQ。
-            每條會儲存到 Neon，然後即時重建 live agent 知識庫。
+            每條會儲存到 Neon，已發佈的會即時用於網站問樓助手。
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose} disabled={saving}>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildContentFingerprint } from "./content-copilot.ts";
+import { applySelectedContentPatches, buildContentFingerprint } from "./content-copilot.ts";
 import { createContentCopilotContextLoader } from "./content-copilot-context.server.ts";
 import { createContentCopilotService } from "./content-copilot.server.ts";
 
@@ -428,3 +428,239 @@ for (const unavailable of [false, true]) {
     assert.equal((await service.generateContentProposal(articleRequest, managerActor)).ok, true);
   });
 }
+
+const estateRequest = {
+  resourceType: "estate",
+  resourceId: "33333333-3333-4333-8333-333333333333",
+  action: "improve",
+  selectedFields: ["description"],
+  tone: "professional_property",
+  targetLanguage: "zh-HK",
+  researchMode: "internal",
+};
+
+const listingFeaturesRequest = {
+  ...listingRequest,
+  selectedFields: ["features"],
+};
+
+async function generateEstatePatch({
+  request = estateRequest,
+  field = "description",
+  before,
+  after,
+  claimType,
+  evidence = [],
+  evidenceIds = [],
+  unsupportedClaims = [],
+}) {
+  const resource = { id: request.resourceId, name_zh: "海景花園", [field]: before };
+  let completedProposal = null;
+  const service = createContentCopilotService(
+    makeServiceDeps({
+      loadContext: async () => ({
+        resource,
+        internalEvidence: evidence,
+        query: resource.name_zh,
+        sourceDbRevision: "ab".repeat(16),
+        knowledgeDependencies: [],
+      }),
+      completeProposal: async (input) => {
+        completedProposal = input.proposal;
+        return input.proposal;
+      },
+      generate: async () => ({
+        ok: true,
+        value: {
+          patches: [
+            {
+              field,
+              before,
+              after,
+              reason: "Improve the description",
+              confidence: "medium",
+              evidenceIds,
+              unsupportedClaims,
+              claimType,
+            },
+          ],
+          warnings: [],
+        },
+        model: "go-content",
+        latencyMs: 10,
+        usageMetadata: {},
+        error: null,
+      }),
+    }),
+  );
+  const result = await service.generateContentProposal(request, managerActor);
+  assert.equal(result.ok, true);
+  return { proposal: completedProposal, resource };
+}
+
+test("a subjective patch that adds a price not in before or evidence is flagged and cannot be applied", async () => {
+  const { proposal, resource } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: "海景兩房單位，售價 $7.2M",
+    claimType: "subjective",
+  });
+
+  assert.ok(proposal.patches[0].unsupportedClaims.includes("數字未有來源：$7.2M"));
+  const fingerprint = await buildContentFingerprint(resource);
+  const applied = applySelectedContentPatches(resource, proposal.patches, ["description"], {
+    resourceType: "estate",
+    sourceFingerprint: fingerprint,
+    currentFingerprint: fingerprint,
+  });
+  assert.equal(applied.ok, true);
+  assert.equal(applied.value.description, "海景兩房單位");
+});
+
+test("a patch that keeps the same numbers in another format is not flagged", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "售價 6,800,000",
+    after: "售價 680萬",
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, []);
+});
+
+test("a factual patch whose number is in its cited evidence is not flagged", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: "海景兩房單位，實用 512 呎",
+    claimType: "factual_internal",
+    evidence: [
+      {
+        id: "internal-estate-1",
+        type: "internal",
+        title: "海景花園",
+        url: null,
+        excerpt: "兩房單位實用面積 512 呎，向海。",
+      },
+    ],
+    evidenceIds: ["internal-estate-1"],
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, []);
+});
+
+test("an array patch whose item adds an unsourced number is flagged with the raw text", async () => {
+  const { proposal } = await generateEstatePatch({
+    request: listingFeaturesRequest,
+    field: "features",
+    before: ["海景", "會所"],
+    after: ["海景", "會所", "實用 512 呎"],
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, ["數字未有來源：512"]);
+});
+
+test("a number found only in evidence the patch does not cite is still flagged", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: "海景兩房單位，實用 512 呎",
+    claimType: "subjective",
+    evidence: [
+      {
+        id: "internal-estate-1",
+        type: "internal",
+        title: "海景花園",
+        url: null,
+        excerpt: "兩房單位實用面積 512 呎，向海。",
+      },
+    ],
+    evidenceIds: [],
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, ["數字未有來源：512"]);
+});
+
+test("the same unsourced number twice in a patch produces one flag", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: "海景兩房單位，售價 $7.2M。再講一次：售價 $7.2M",
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, ["數字未有來源：$7.2M"]);
+});
+
+test("the number flag survives the 20-claim cap when the model already returned 20 claims", async () => {
+  const modelClaims = Array.from({ length: 20 }, (_, index) => `模型聲稱 ${index + 1}`);
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: "海景兩房單位，售價 $7.2M",
+    claimType: "subjective",
+    unsupportedClaims: modelClaims,
+  });
+
+  const claims = proposal.patches[0].unsupportedClaims;
+  assert.ok(claims.includes("數字未有來源：$7.2M"));
+  assert.ok(claims.length <= 20);
+});
+
+test("the copilot treats Chinese and Arabic numerals as the same number", async () => {
+  const same = [
+    ["海景兩房", "海景 2 房"],
+    ["三房兩廁", "3房2廁"],
+    ["第一期", "第1期"],
+    ["海景 2 房", "海景兩房"],
+    ["售價七百萬", "售價 $7,000,000"],
+    ["售價 $7,000,000", "售價七百萬"],
+    ["售價七百萬", "售價 700萬"],
+    ["十二層高", "12 層高"],
+    ["步行二十分鐘", "步行 20 分鐘"],
+    ["實用一百二十呎", "實用 120 呎"],
+  ];
+  for (const [before, after] of same) {
+    const { proposal } = await generateEstatePatch({ before, after, claimType: "subjective" });
+    assert.deepEqual(proposal.patches[0].unsupportedClaims, [], `${before} → ${after}`);
+  }
+});
+
+test("the copilot flags a changed Chinese numeral with its raw text", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房",
+    after: "海景三房",
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, ["數字未有來源：三房"]);
+});
+
+test("the copilot does not read ordinary words with a numeral as numbers", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景單位",
+    after: "海景單位：一個家庭一齊住，一定統一管理，一手、二手都有，萬一有事千祈聯絡，十分方便",
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, []);
+});
+
+test("a very long numeral run still gives a valid proposal with a short flag", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景兩房單位",
+    after: `海景兩房單位 ${"9".repeat(600)}`,
+    claimType: "subjective",
+  });
+
+  const claims = proposal.patches[0].unsupportedClaims;
+  assert.equal(claims.length, 1);
+  assert.ok(claims[0].startsWith("數字未有來源："));
+  assert.ok(claims[0].length <= "數字未有來源：".length + 40);
+});
+
+test("the copilot does not read common marketing idioms as numbers", async () => {
+  const { proposal } = await generateEstatePatch({
+    before: "海景單位",
+    after:
+      "海景單位，千萬唔好錯過！第一時間聯絡我們，一年四季景觀一流，交通四通八達，會所設施一應俱全",
+    claimType: "subjective",
+  });
+
+  assert.deepEqual(proposal.patches[0].unsupportedClaims, []);
+});

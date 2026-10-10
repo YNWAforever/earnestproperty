@@ -157,6 +157,23 @@ test("image upload reports pending until success or failure and applies only suc
   }
 });
 
+// FX-11a (E-10): the rebuild runs as the ai.knowledge.rebuild background job, and the
+// admin copy no longer promises an in-request rebuild or a "front-end AI" that cites
+// stale chunks.
+test("FAQ import no longer rebuilds in-request and the rebuild button reports a queued job", () => {
+  const body = (name) => {
+    const start = source.indexOf(`async function ${name}(`);
+    assert.notEqual(start, -1, `Expected to find ${name}`);
+    const end = source.slice(start).search(/\r?\n {2}\}\r?\n/);
+    assert.notEqual(end, -1, `Expected ${name} to close`);
+    return source.slice(start, start + end);
+  };
+  assert.doesNotMatch(body("handleImportFaqs"), /rebuildAdminAiKnowledge/);
+  assert.match(body("handleRebuildKnowledge"), /已排程重建 AI 知識庫/);
+  assert.doesNotMatch(source, /前台 AI\s*仍會引用舊資料/);
+  assert.doesNotMatch(source, /重建 live agent 知識庫/);
+});
+
 test("restore asks first and is hidden on draft rows and for agents", () => {
   assert.doesNotMatch(source, /onClick=\{\(\) => onRestoreRevision\(/);
   const history = source.slice(

@@ -15,9 +15,9 @@ const healthLabels: Record<string, string> = {
   "database.columns": "資料庫欄位",
   "database.migrations": "資料庫遷移",
   database: "資料庫",
-  // Split from a single "ai" key: the gateway backs generateAiText/embedAiTexts
-  // while the copilot is CMS-only, and they are configured independently.
-  "ai.gateway": "AI Gateway（生成／向量）",
+  // Split from a single "ai" key: the gateway backs CRM lead analysis only while
+  // the copilot is CMS-only, and they are configured independently.
+  "ai.gateway": "AI Gateway（CRM 分析）",
   "ai.copilot": "CMS 內容副駕",
   woztell: "WozTell",
   cron: "排程工作",

@@ -2061,12 +2061,18 @@ test(
             );
             await knowledge.repairPublicKnowledgeIndex();
             const fresh = await knowledge.searchPublicKnowledge({ query: "碧堤半島", limit: 12 });
+            // FX-11a writes listing prices into knowledge chunks as HK$ with a 萬 gloss
+            // ("出售：$12,300,000（1230萬）"), so match the formatted figure.
             assert.ok(
-              fresh.some((c) => c.listing_id === ids.property && c.chunk_text.includes("12300000")),
+              fresh.some(
+                (c) => c.listing_id === ids.property && c.chunk_text.includes("$12,300,000"),
+              ),
             );
             assert.ok(
               !fresh.some(
-                (c) => c.listing_id === ids.property && c.chunk_text.includes("12680000"),
+                (c) =>
+                  c.listing_id === ids.property &&
+                  (c.chunk_text.includes("$12,680,000") || c.chunk_text.includes("12680000")),
               ),
             );
           },
