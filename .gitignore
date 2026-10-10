@@ -25,6 +25,7 @@ test-results/
 .vercel/
 supabase/.temp/
 .worktrees/
+.cache/
 
 # Editor directories and files
 .vscode/*

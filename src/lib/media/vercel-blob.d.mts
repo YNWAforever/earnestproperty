@@ -11,6 +11,8 @@ export interface VercelBlobPutInput {
   body: Blob | ArrayBuffer | ArrayBufferView;
   contentType: string;
   signal?: AbortSignal;
+  /** Replace an existing file. Only allowed for `mls-variants/` paths. */
+  allowOverwrite?: boolean;
 }
 
 export interface VercelBlobStore {

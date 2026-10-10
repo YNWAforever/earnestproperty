@@ -18,7 +18,8 @@ const siteOrigin = resolveSiteOrigin();
 
 export default defineConfig({
   cloudflare: false,
-  plugins: [nitro()],
+  // F-01: pin the Nitro Vercel function itself (.vc-config.json) next to Neon.
+  plugins: [nitro({ vercel: { functions: { regions: ["sin1"] } } })],
   vite: {
     define: siteOrigin ? { "import.meta.env.VITE_SITE_URL": JSON.stringify(siteOrigin) } : {},
   },

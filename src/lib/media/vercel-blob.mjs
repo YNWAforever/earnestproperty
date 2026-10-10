@@ -1,4 +1,5 @@
 const BLOB_API_URL = "https://vercel.com/api/blob/";
+const VARIANT_PREFIX = "mls-variants/";
 
 function requiredTrimmedString(value, name) {
   if (typeof value !== "string" || value.length === 0 || value.trim() !== value) {
@@ -72,9 +73,16 @@ export function createVercelBlobStore({ token, fetchImpl = globalThis.fetch } = 
   if (typeof fetchImpl !== "function") throw new TypeError("fetchImpl must be a function");
 
   return Object.freeze({
-    async put({ pathname, body, contentType, signal } = {}) {
+    async put({ pathname, body, contentType, signal, allowOverwrite = false } = {}) {
       const requestedPathname = requiredTrimmedString(pathname, "pathname");
       if (requestedPathname.includes("\0")) throw new TypeError("pathname is invalid");
+      if (typeof allowOverwrite !== "boolean") {
+        throw new TypeError("allowOverwrite must be a boolean");
+      }
+      // Only content-addressed variant files may be replaced; originals never are.
+      if (allowOverwrite && !requestedPathname.startsWith(VARIANT_PREFIX)) {
+        throw new TypeError(`allowOverwrite is only allowed under ${VARIANT_PREFIX}`);
+      }
       const requestedContentType = requiredTrimmedString(contentType, "contentType");
       if (signal != null && !(signal instanceof AbortSignal)) {
         throw new TypeError("signal must be an AbortSignal");
@@ -90,6 +98,7 @@ export function createVercelBlobStore({ token, fetchImpl = globalThis.fetch } = 
           "x-vercel-blob-store-id": storeId,
           "x-vercel-blob-access": "public",
           "x-content-type": requestedContentType,
+          ...(allowOverwrite ? { "x-allow-overwrite": "1" } : {}),
         },
         body,
         signal,

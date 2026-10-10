@@ -80,21 +80,25 @@ import {
   fetchFeaturedProperties,
   fetchFaqs,
   fetchListingCountsByEstate,
-  type CmsVideo,
   type EstateSummary,
   type FeaturedProperty,
   type FaqItem,
 } from "@/lib/queries";
 import { renderableFaqs } from "@/lib/faq";
 import { getYouTubeVideoId, isYouTubeVideoUrl } from "@/lib/youtube-video-url.js";
+import { toHomeVideos, type HomeVideo } from "@/lib/home-videos.js";
 import { castlePeakRoadHomeFaqs } from "@/content/home-faq";
 import { jsonLdScript } from "@/lib/schema";
+import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
 
 // Vite resolves the import to a hashed, site-root-relative path. Facebook and X
 // reject a relative og:image outright, so it is absolutised here rather than in
 // the meta block — `new URL` keeps working if the asset ever moves to a CDN and
 // the import starts returning a full URL.
 const HERO_OG_IMAGE = new URL(heroImage, SITE_URL).href;
+
+// One row of three on desktop; more than that belongs on /videos.
+const HOME_VIDEO_COUNT = 3;
 
 export const Route = createFileRoute("/")({
   loader: async () => {
@@ -155,7 +159,21 @@ export const Route = createFileRoute("/")({
       corridorFaqs,
       counts: Object.fromEntries(counts),
       agents: agentProfiles.slice(0, 6),
-      cmsVideos,
+      // Three trimmed cards, not every channel video: YouTube descriptions were
+      // ~80 KB of the dehydrated loader data for a section that shows titles.
+      homeVideos: toHomeVideos(
+        featured
+          .filter((p: FeaturedProperty) => isYouTubeVideoUrl(p.video_url))
+          .map((p: FeaturedProperty) => ({
+            key: `listing-${p.id}`,
+            title: publicPropertyTitle(p),
+            url: p.video_url as string,
+            eyebrow: `${p.estates?.name_zh ?? "深井 / 青山公路"} · ${propertyDealLabel(p)}`,
+            listingNo: publicPropertyNo(p),
+          })),
+        cmsVideos,
+        HOME_VIDEO_COUNT,
+      ),
     };
   },
   errorComponent: ({ error }) => (
@@ -166,6 +184,7 @@ export const Route = createFileRoute("/")({
       </p>
     </div>
   ),
+  headers: publicPageCacheHeaders,
   // Title and description come from the registry. They used to be duplicated
   // here with a divergent licence tail, so the rendered page and the sitemap
   // advertised two different descriptions for the same URL.
@@ -195,32 +214,6 @@ export const Route = createFileRoute("/")({
   component: HomePage,
 });
 
-// One row of three on desktop; more than that belongs on /videos.
-const HOME_VIDEO_COUNT = 3;
-
-type HomeVideo = {
-  key: string;
-  title: string;
-  url: string;
-  eyebrow: string;
-  /** Set for listing walkthroughs, so the card can deep-link to the property. */
-  listingNo: string | null;
-};
-
-// Staff sometimes promote a listing's own walkthrough to the official channel,
-// so the same YouTube video can appear once via `featured` and once via
-// `cmsVideos` -- dedupe by video id (falling back to the raw URL for anything
-// that isn't a recognised YouTube link) before the section is capped to three.
-function dedupeVideosByUrl(videos: HomeVideo[]): HomeVideo[] {
-  const seen = new Set<string>();
-  return videos.filter((video) => {
-    const id = getYouTubeVideoId(video.url) ?? video.url;
-    if (seen.has(id)) return false;
-    seen.add(id);
-    return true;
-  });
-}
-
 function HomePage() {
   const {
     estates,
@@ -231,7 +224,7 @@ function HomePage() {
     corridorFaqs: corridorFaqRows,
     counts,
     agents,
-    cmsVideos,
+    homeVideos,
   } = Route.useLoaderData();
   const faqs = renderableFaqs(faqRows as FaqItem[]);
   // The CMS wins when a 青山公路 scope exists; otherwise the derived set in
@@ -246,28 +239,6 @@ function HomePage() {
   const navigate = useNavigate({ from: "/" });
   const [searchType, setSearchType] = useState("sale");
   const [searchKeyword, setSearchKeyword] = useState("");
-
-  // 精選樓盤影片 prefers real listing walkthroughs (derived free from `featured`,
-  // which already selects video_url) and tops up from the curated channel videos,
-  // so the section stays populated whichever of the two the client has filled in.
-  const homeVideos: HomeVideo[] = dedupeVideosByUrl([
-    ...featured
-      .filter((p: FeaturedProperty) => isYouTubeVideoUrl(p.video_url))
-      .map((p: FeaturedProperty) => ({
-        key: `listing-${p.id}`,
-        title: publicPropertyTitle(p),
-        url: p.video_url as string,
-        eyebrow: `${p.estates?.name_zh ?? "深井 / 青山公路"} · ${propertyDealLabel(p)}`,
-        listingNo: publicPropertyNo(p),
-      })),
-    ...cmsVideos.map((video: CmsVideo) => ({
-      key: `cms-${video.id}`,
-      title: video.title || "晉誠地產 YouTube影片",
-      url: video.video_url,
-      eyebrow: "官方頻道",
-      listingNo: null,
-    })),
-  ]).slice(0, HOME_VIDEO_COUNT);
 
   function submitHeroSearch() {
     navigate({
@@ -751,7 +722,7 @@ function HomePage() {
       />
 
       {/* CTA BAND */}
-      <section className="border-y border-border bg-card">
+      <section className="border-y border-border bg-card defer-render">
         <div className="mx-auto flex max-w-7xl flex-col items-center gap-5 px-4 py-14 text-center sm:px-6 lg:flex-row lg:justify-between lg:text-left lg:px-8">
           <div>
             <h2 className="text-2xl font-bold text-foreground sm:text-3xl">

@@ -179,3 +179,47 @@ test("blob adapter rejects failed or malformed responses without exposing the to
     );
   }
 });
+
+test("blob adapter sends x-allow-overwrite only for an opted-in variant path", async () => {
+  const calls = [];
+  const store = createVercelBlobStore({
+    token: TOKEN,
+    fetchImpl: successfulFetch(calls, { pathname: "mls-variants/ab/abcdef-160.webp" }),
+  });
+  const body = new Uint8Array([0x52, 0x49, 0x46, 0x46]);
+  await store.put({
+    pathname: "mls-variants/ab/abcdef-160.webp",
+    body,
+    contentType: "image/webp",
+    allowOverwrite: true,
+  });
+  assert.equal(calls[0].headers["x-allow-overwrite"], "1");
+
+  // Originals (and any put without the option) never send the header.
+  const plain = [];
+  const original = createVercelBlobStore({ token: TOKEN, fetchImpl: successfulFetch(plain) });
+  await original.put({ pathname: "mls/ab/abcdef.webp", body, contentType: "image/webp" });
+  assert.equal("x-allow-overwrite" in plain[0].headers, false);
+});
+
+test("blob adapter refuses overwrite outside mls-variants/ before any request", async () => {
+  const calls = [];
+  const store = createVercelBlobStore({ token: TOKEN, fetchImpl: successfulFetch(calls) });
+  const body = new Uint8Array([1]);
+  for (const pathname of ["mls/ab/abcdef.webp", "cms/logo.png", "x/mls-variants/a.webp"]) {
+    await assert.rejects(
+      store.put({ pathname, body, contentType: "image/webp", allowOverwrite: true }),
+      /allowOverwrite is only allowed under mls-variants\//,
+    );
+  }
+  await assert.rejects(
+    store.put({
+      pathname: "mls-variants/a.webp",
+      body,
+      contentType: "image/webp",
+      allowOverwrite: "yes",
+    }),
+    /allowOverwrite must be a boolean/,
+  );
+  assert.equal(calls.length, 0);
+});

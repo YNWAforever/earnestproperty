@@ -644,3 +644,30 @@ test("tracking resolver failure retains public listing and uses company contact 
   assert.equal(result.property, property);
   assert.equal(result.enquiryLinks.actions[0].href, "/contact");
 });
+
+test("property headers are set only when loaderData.property exists", async () => {
+  const { publicPageCacheHeaders, PUBLIC_CDN_CACHE } = await import("../lib/http/public-cache.js");
+  const normalized = routeSource.replace(/\r\n/g, "\n");
+  assert.match(
+    normalized,
+    /^import \{ publicPageCacheHeaders \} from "@\/lib\/http\/public-cache\.js";$/m,
+  );
+  const line = normalized.match(
+    /^ {2}headers: (\(ctx\) =>[^\n]+),\n {2}component: PropertyPage,$/m,
+  );
+  assert.ok(line, "headers: sits directly above component: PropertyPage");
+  const headers = new Function("publicPageCacheHeaders", `return ${line[1]};`)(
+    publicPageCacheHeaders,
+  );
+  const ctx = (status, loaderData) => ({
+    match: { status, pathname: "/property/T027001" },
+    loaderData,
+  });
+  assert.deepEqual(headers(ctx("success", { property: { id: "p1" } })), {
+    "Vercel-CDN-Cache-Control": PUBLIC_CDN_CACHE,
+  });
+  assert.equal(headers(ctx("success", { property: null })), undefined);
+  assert.equal(headers(ctx("success", undefined)), undefined);
+  assert.equal(headers(ctx("notFound", undefined)), undefined);
+  assert.equal(headers(ctx("error", { property: { id: "p1" } })), undefined);
+});

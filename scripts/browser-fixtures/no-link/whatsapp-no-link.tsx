@@ -13,7 +13,6 @@ import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
-import "@fontsource-variable/noto-sans-tc/wght.css";
 
 // Real route, shell, dialogs and CSS. Only the Auth/API imports are test adapters.
 const root = createRootRoute({

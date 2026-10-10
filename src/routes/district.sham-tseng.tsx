@@ -168,7 +168,7 @@ function ShamTsengPage() {
         lead={
           <>
             毗鄰青馬大橋、坐擁無敵海景的傳統西半山豪宅區。共 {estates.length} 個主要屋苑、約{" "}
-            {totalUnits.toLocaleString()} 個單位，校網 62。
+            {totalUnits.toLocaleString("zh-HK")} 個單位，校網 62。
           </>
         }
         actions={
@@ -179,8 +179,11 @@ function ShamTsengPage() {
       >
         <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <Stat label="主要屋苑" value={`${estates.length} 個`} />
-          <Stat label="總單位" value={totalUnits.toLocaleString()} />
-          <Stat label="最新平均實呎" value={latestPsf ? `$${latestPsf.toLocaleString()}` : "—"} />
+          <Stat label="總單位" value={totalUnits.toLocaleString("zh-HK")} />
+          <Stat
+            label="最新平均實呎"
+            value={latestPsf ? `$${latestPsf.toLocaleString("zh-HK")}` : "—"}
+          />
           <Stat
             label="12 個月走勢"
             value={chartData.length >= 2 ? `${yoyDelta > 0 ? "+" : ""}${yoyDelta}%` : "—"}
@@ -256,7 +259,10 @@ function ShamTsengPage() {
                           border: "1px solid var(--border)",
                           borderRadius: 8,
                         }}
-                        formatter={(v: number) => [`$${v.toLocaleString()} / 呎`, "平均實呎"]}
+                        formatter={(v: number) => [
+                          `$${v.toLocaleString("zh-HK")} / 呎`,
+                          "平均實呎",
+                        ]}
                       />
                       <Line
                         type="monotone"
@@ -356,8 +362,8 @@ function ShamTsengPage() {
                 >
                   <h3 className="font-semibold group-hover:text-primary">{e.name_zh}</h3>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {e.total_units?.toLocaleString() ?? "—"} 個單位 · 平均實呎 $
-                    {e.avg_saleable_psf?.toLocaleString() ?? "—"}
+                    {e.total_units?.toLocaleString("zh-HK") ?? "—"} 個單位 · 平均實呎 $
+                    {e.avg_saleable_psf?.toLocaleString("zh-HK") ?? "—"}
                   </p>
                 </Link>
               ))}

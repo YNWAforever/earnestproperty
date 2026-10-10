@@ -15,18 +15,13 @@ const PrivateAuthProvider = lazy(() => import("@/components/auth/PrivateAuthProv
 const documentEntryPath = typeof window === "undefined" ? null : window.location.pathname;
 
 import appCss from "../styles.css?url";
-// Self-hosted fonts: one Noto Sans TC variable slice supports weights 100–900.
-// Keep Inter static weights and the existing local Latin preload.
+// Chinese uses the system CJK font (D6). Inter stays self-hosted for Latin.
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
 import "@fontsource/inter/700.css";
-import "@fontsource-variable/noto-sans-tc/wght.css";
 // The one file worth a real preload hint: Inter's Latin subset at the
 // default body weight, used by nearly every ASCII character on the page.
-// Noto Sans TC's CJK glyphs are split across many unicode-range chunks
-// (fontsource's own subsetting) with no single "primary" file to preload
-// correctly, so this doesn't guess one.
 import interLatin400 from "@fontsource/inter/files/inter-latin-400-normal.woff2?url";
 
 import { LiveAgentLauncher } from "@/components/live-agent/LiveAgentLauncher";

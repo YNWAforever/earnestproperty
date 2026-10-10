@@ -52,6 +52,7 @@ import { deriveEstateTag } from "@/lib/video-tags.js";
 import { renderableFaqs } from "@/lib/faq";
 import { jsonLdScript } from "@/lib/schema";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
+import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
 
 type EstateDetail = NonNullable<Awaited<ReturnType<typeof fetchEstateBySlug>>>;
 
@@ -211,6 +212,7 @@ export const Route = createFileRoute("/estate/$slug")({
       </Link>
     </div>
   ),
+  headers: publicPageCacheHeaders,
   component: EstatePage,
 });
 
@@ -287,7 +289,7 @@ function EstatePage() {
     seo?.nameEn ?? estate.name_en ?? "",
     estate.developer ?? "",
     estate.year_completed ? `${estate.year_completed} 年落成` : "",
-    estate.total_units ? `共 ${estate.total_units.toLocaleString()} 個單位` : "",
+    estate.total_units ? `共 ${estate.total_units.toLocaleString("zh-HK")} 個單位` : "",
   ].filter(Boolean);
   // Task 4 (P4 plan) / Task 5 (P4 plan): transport + school-net sections
   // reuse already-curated content instead of inventing new facts.

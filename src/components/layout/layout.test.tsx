@@ -1,7 +1,18 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
 import { load } from "cheerio";
+import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRouter,
+  RouterProvider,
+} from "@tanstack/react-router";
+
+import { SiteFooter } from "@/components/site/SiteFooter";
+
+import { formatHkDate, freshnessLabel } from "@/lib/format";
 
 import { Container } from "./Container";
 import { DataNote } from "./DataNote";
@@ -212,10 +223,32 @@ describe("DataNote", () => {
 });
 
 describe("FreshnessStamp", () => {
-  test("renders a relative freshness label for a recent timestamp", () => {
-    const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000).toISOString();
-    const $ = render(createElement(FreshnessStamp, { updatedAt: fiveMinutesAgo }));
-    expect($("span").text()).toBe("5 分鐘前更新");
+  // FX-15 Task 3: public pages are CDN-cached for up to 6 minutes, so the
+  // server HTML must not depend on the clock, or hydration mismatches (#418).
+  test("server render does not depend on the clock", () => {
+    const updatedAt = "2026-10-08T03:00:00.000Z";
+    try {
+      setSystemTime(new Date("2026-10-08T03:05:00.000Z"));
+      const first = renderToStaticMarkup(createElement(FreshnessStamp, { updatedAt }));
+      setSystemTime(new Date("2026-10-09T09:41:00.000Z"));
+      const second = renderToStaticMarkup(createElement(FreshnessStamp, { updatedAt }));
+      expect(second).toBe(first);
+      expect(load(first)("span").text()).toBe(`${formatHkDate(updatedAt)} 更新`);
+    } finally {
+      setSystemTime();
+    }
+  });
+
+  test("after mount the client shows the live relative label", () => {
+    const now = new Date();
+    const fiveMinutesAgo = new Date(now.getTime() - 5 * 60_000).toISOString();
+    expect(freshnessLabel(fiveMinutesAgo, now)).toBe("5 分鐘前更新");
+    expect(freshnessLabel(fiveMinutesAgo, null)).toBe(`${formatHkDate(fiveMinutesAgo)} 更新`);
+    // The component swaps to `now` only in an effect, i.e. after hydration.
+    const source = readFileSync(new URL("./FreshnessStamp.tsx", import.meta.url), "utf8");
+    expect(source).toMatch(/useState<Date \| null>\(null\)/);
+    expect(source).toMatch(/useEffect\(\(\) => \{\s*setNow\(new Date\(\)\);\s*\}, \[\]\)/);
+    expect(source).toMatch(/freshnessLabel\(updatedAt, now\)/);
   });
 
   test("renders nothing for a null updatedAt, per format.ts's null-hides-the-field rule", () => {
@@ -237,5 +270,33 @@ describe("VerificationBadge", () => {
     const el = $("span").first();
     expect(el.text()).toBe("待核實");
     expect(el.hasClass("bg-muted")).toBe(true);
+  });
+});
+
+describe("SiteFooter", () => {
+  test("footer logo is lazy and is not preloaded", async () => {
+    const router = createRouter({
+      routeTree: createRootRoute({ component: SiteFooter }),
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+      isServer: true,
+    });
+    await router.load();
+    // A full document, so React 19 has a <head> to hoist an image preload into.
+    const html = renderToStaticMarkup(
+      createElement(
+        "html",
+        null,
+        createElement("head"),
+        createElement("body", null, createElement(RouterProvider, { router })),
+      ),
+    );
+    const $ = load(html);
+    const logo = $('footer img[alt="晉誠地產 Earnest Property Agency Ltd."]');
+    expect(logo).toHaveLength(1);
+    expect(logo.attr("loading")).toBe("lazy");
+    expect(logo.attr("decoding")).toBe("async");
+    expect(logo.attr("width")).toBe("800");
+    expect(logo.attr("height")).toBe("800");
+    expect(html).not.toContain('rel="preload"');
   });
 });

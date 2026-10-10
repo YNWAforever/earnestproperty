@@ -864,10 +864,10 @@ test("castle-peak-road.index.tsx wires all six Task 6 sections, each using real 
   // 4. Scoped, labelled sale/rent inventory breakdown replaces the old
   // single combined count.
   assert.match(hub, /summarizeSegmentInventory\(segment, inventory\)/);
-  assert.match(hub, /售 \{summary\.saleTotal\.toLocaleString\(\)\}/);
+  assert.match(hub, /售 \{summary\.saleTotal\.toLocaleString\("zh-HK"\)\}/);
   // Prettier wraps the JSX text node onto its own line with a `{" "}`
   // space-escape here, unlike the 售 figure just above -- tolerate either.
-  assert.match(hub, /租(?: |\{" "\}\s*)\{summary\.rentTotal\.toLocaleString\(\)\}/);
+  assert.match(hub, /租(?: |\{" "\}\s*)\{summary\.rentTotal\.toLocaleString\("zh-HK"\)\}/);
   assert.doesNotMatch(hub, /function segmentTotal/);
 
   // 5. Price snapshot: built (not skipped), sourced from real transaction

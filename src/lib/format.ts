@@ -92,6 +92,21 @@ export function formatFreshness(
   return `${formatHkDate(date)} 更新`;
 }
 
+/**
+ * The freshness label for a rendered page. With `now === null` (the server
+ * render and the hydration pass) it is the clock-independent HK date, so a
+ * CDN-cached page hydrates with identical text; once mounted, the caller
+ * passes the client's clock and gets the live relative label.
+ */
+export function freshnessLabel(
+  input: string | number | Date | null | undefined,
+  now: Date | null,
+): string | null {
+  if (now) return formatFreshness(input, now);
+  const date = formatHkDate(input);
+  return date ? `${date} 更新` : null;
+}
+
 // C0 controls except tab/LF/CR (handled by the whitespace-collapse step
 // below), plus DEL and the C1 control range. Matching control characters is
 // this regex's entire purpose, so disable the no-control-regex lint rule.

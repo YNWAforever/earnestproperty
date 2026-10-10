@@ -65,7 +65,7 @@ export function EstateMarketSnapshot({
   // "—" when both halves are unknown) rather than a placeholder word that
   // read like copy -- the estate page's DataNote already carries the
   // "facts await verification" caveat.
-  const totalUnitsLabel = totalUnits === null ? "—" : totalUnits.toLocaleString();
+  const totalUnitsLabel = totalUnits === null ? "—" : totalUnits.toLocaleString("zh-HK");
   const phasesLabel = phases === null ? "—" : String(phases);
   const unitsAndPhasesLabel =
     totalUnits === null && phases === null ? "—" : `${totalUnitsLabel} / ${phasesLabel} 期`;
@@ -77,7 +77,7 @@ export function EstateMarketSnapshot({
         <div className="grid min-w-0 gap-4 sm:grid-cols-2">
           <Stat
             label="平均放盤實呎"
-            value={avgPsf ? `$${avgPsf.toLocaleString()}` : "暫無售盤呎價"}
+            value={avgPsf ? `$${avgPsf.toLocaleString("zh-HK")}` : "暫無售盤呎價"}
           />
           <Stat label="最新顯示售盤" value={`${saleCount} 個`} />
           <Stat label="最新顯示租盤" value={`${rentCount} 個`} />
@@ -122,7 +122,10 @@ export function EstateMarketSnapshot({
                         border: "1px solid var(--border)",
                         borderRadius: 8,
                       }}
-                      formatter={(value: number) => [`$${value.toLocaleString()} / 呎`, "實呎"]}
+                      formatter={(value: number) => [
+                        `$${value.toLocaleString("zh-HK")} / 呎`,
+                        "實呎",
+                      ]}
                     />
                     <Line
                       type="monotone"
@@ -158,7 +161,7 @@ export function EstateMarketSnapshot({
                       <td className="px-3 py-2">{tx.deal_date ?? "-"}</td>
                       <td className="px-3 py-2">{tx.unit ?? "-"}</td>
                       <td className="px-3 py-2">
-                        {tx.saleable_psf ? `$${tx.saleable_psf.toLocaleString()}` : "-"}
+                        {tx.saleable_psf ? `$${tx.saleable_psf.toLocaleString("zh-HK")}` : "-"}
                       </td>
                       <td className="px-3 py-2">
                         {tx.price ? `$${(tx.price / 1_000_000).toFixed(2)}M` : "-"}
