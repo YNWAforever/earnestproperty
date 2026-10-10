@@ -19,14 +19,14 @@ Gateway's own convention. `fetchWithRetry` adds a 20s hard timeout and up to
 2 retries with backoff on 429/5xx.
 
 **What it powers:**
-- `src/lib/ai/knowledge.server.ts` — the live agent's knowledge base:
+- `src/lib/ai/knowledge.server.ts` — the staff knowledge base:
   `embedAiTexts()` embeds content chunks (from `chunkKnowledgeText()`,
-  `knowledge.ts`) into `ai_knowledge_chunks`, `answerFromPublicKnowledge()`
-  does the retrieval + `generateAiText()` completion at query time. This is
-  the RAG layer behind `src/lib/ai/live-agent.server.ts` (the public
-  live-agent widget's actual answers) and `admin.cms-copilot` — not a stub;
-  real embeddings, real completions, gated only by whether the env vars are
-  set (`enabled: Boolean(apiKey && textModel)`).
+  `knowledge.ts`) into `ai_knowledge_chunks` for staff tools such as
+  `admin.cms-copilot` — real embeddings, gated only by whether the env vars
+  are set (`enabled: Boolean(apiKey && textModel)`). The public live-agent
+  widget no longer uses it: since FX-11b its replies are deterministic
+  (`src/lib/ai/live-agent-reply.server.ts`), built only from published FAQs,
+  published estates and the public listing search, with no model call.
 - `src/lib/ai/crm-enrichment.server.ts` — AI tagging/classification of CRM
   leads (`CrmAiProfile`/`CrmAiTag`), with a safety gate
   (`classifyAiTagSafety`/`canAutoApplyAiTag`) before anything auto-applies.
@@ -70,8 +70,8 @@ format constraints).
 
 | Feature | Status |
 |---|---|
-| Live agent (public widget) knowledge answers | **Real** — AI Gateway chat completion over embedded knowledge chunks |
-| Live agent → human handoff | **Real** — `shouldOfferHumanHandoff()` (`live-agent.ts`), routes to a real staff inbox conversation |
+| Live agent (public widget) answers | **Real, deterministic** (FX-11b) — fixed copy plus cards from published FAQs, published estates and the public listing search (`live-agent-reply.server.ts`); no model call |
+| Live agent → human handoff | **Real** — `replyOffersHandoff()` (`live-agent-reply.ts`), routes to a real staff inbox conversation |
 | Admin CMS content copilot (estate/article copy drafting) | **Real** — opencode-go provider, optional Tavily grounding |
 | CRM AI lead tagging/scoring | **Real**, with an explicit auto-apply safety gate — not everything the model suggests gets applied automatically |
 | Analytics event `track()` (`src/lib/analytics/events.ts`, P7d) | **Deliberately a stub** — real taxonomy, real wiring at 18 call sites, but `track()` itself is a DEV-only `console.debug`, a true no-op in production. No analytics provider has been chosen yet (master plan open input #11); this is not an oversight, it's the documented scope of P7d. |

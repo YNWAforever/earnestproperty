@@ -679,11 +679,8 @@ async function fetchCorridorRows(
   return { sale, rent };
 }
 
-export async function searchListings(
-  input: NeonListingFiltersInput,
-): Promise<NeonListingSearchResult> {
+function listingSearchQueries(input: NeonListingFiltersInput) {
   assertListingFilters(input);
-  const db = sql();
   // This server function is directly callable, so route search validation alone
   // cannot keep an extreme page from becoming Infinity in the SQL OFFSET.
   const page =
@@ -704,26 +701,46 @@ export async function searchListings(
     : "";
   const limitParam = addParam(rowParams, pageSize);
   const offsetParam = addParam(rowParams, offset);
-  // Both reads are independent; list totals may reflect a concurrent import until the next refresh.
-  const [countRows, rows] = await Promise.all([
-    db.query(
-      `${canonicalListingCte(where, false, candidateOrder)}
+  return {
+    count: {
+      text: `${canonicalListingCte(where, false, candidateOrder)}
       SELECT count(*)::int AS total FROM eligible_groups`,
       params,
-    ),
-    db.query(
-      `${canonicalListingCte(where, false, candidateOrder)}
+    },
+    rows: {
+      text: `${canonicalListingCte(where, false, candidateOrder)}
       SELECT ${listingCardColumns} FROM properties p JOIN canonical c ON c.id=p.id
       LEFT JOIN estates e ON e.id=p.estate_id WHERE ${where}
       ORDER BY ${exactPublicRank}${listingOrderBy(input.sort)} LIMIT ${limitParam} OFFSET ${offsetParam}`,
-      rowParams,
-    ),
+      params: rowParams,
+    },
+  };
+}
+
+export async function searchListings(
+  input: NeonListingFiltersInput,
+): Promise<NeonListingSearchResult> {
+  const queries = listingSearchQueries(input);
+  const db = sql();
+  // Both reads are independent; list totals may reflect a concurrent import until the next refresh.
+  const [countRows, rows] = await Promise.all([
+    db.query(queries.count.text, queries.count.params),
+    db.query(queries.rows.text, queries.rows.params),
   ]);
 
   return {
     rows: rows.map(mapListingCardRow),
     total: Number(countRows[0]?.total ?? 0),
   };
+}
+
+/** The same rows as searchListings, without the total count query (for callers that ignore it). */
+export async function searchListingRows(
+  input: NeonListingFiltersInput,
+): Promise<NeonListingSearchResult["rows"]> {
+  const queries = listingSearchQueries(input);
+  const rows = await sql().query(queries.rows.text, queries.rows.params);
+  return rows.map(mapListingCardRow);
 }
 
 export async function fetchCorridorInventory(

@@ -11,6 +11,9 @@ import {
   liveAgentPhoneErrorMessage,
   validateHandoffPhone,
 } from "@/lib/ai/live-agent";
+import { isInternalCardHref, type LiveAgentCard } from "@/lib/ai/live-agent-reply";
+
+import { nextHandoffOffered, readLiveAgentMessageResponse } from "./live-agent-widget-state";
 
 const liveAgentEndpoints = {
   session: "/api/live-agent/session",
@@ -21,7 +24,7 @@ const liveAgentEndpoints = {
 
 const anonymousStorageKey = "earnest-live-agent-anonymous-id";
 
-type Message = { role: "assistant" | "visitor"; text: string };
+type Message = { role: "assistant" | "visitor"; text: string; cards?: LiveAgentCard[] };
 
 const initialMessages: Message[] = [
   {
@@ -107,6 +110,39 @@ export function LiveAgentHandoffPanel({
   );
 }
 
+// Card links are plain <a> to internal pages only (property, estate, listings search): the
+// widget also renders with no router, and a full page load to a property page is fine. Any
+// other href renders the title as text.
+export function LiveAgentReplyCards({ cards }: { cards: LiveAgentCard[] }) {
+  if (cards.length === 0) return null;
+  return (
+    <ul className="mt-2 space-y-2">
+      {cards.map((card, index) => (
+        <li
+          className="rounded-md border bg-background p-2 text-xs break-words"
+          key={`${card.type}-${index}`}
+        >
+          {isInternalCardHref(card.href) ? (
+            <a
+              href={card.href ?? undefined}
+              className="inline-block rounded-sm py-1 font-medium text-primary underline-offset-2 outline-none hover:underline focus-visible:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1"
+            >
+              {card.title}
+            </a>
+          ) : (
+            <p className="font-medium">{card.title}</p>
+          )}
+          {card.lines.map((line, lineIndex) => (
+            <p className="text-muted-foreground" key={lineIndex}>
+              {line}
+            </p>
+          ))}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boolean } = {}) {
   const [open, setOpen] = useState(initiallyOpen);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -119,12 +155,11 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
   const [handoffConsent, setHandoffConsent] = useState(false);
   const [handoffLoading, setHandoffLoading] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [handoffOffered, setHandoffOffered] = useState(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const showHandoffPanel = messages.some(
-    (message) => message.role === "assistant" && /WhatsApp|代理/.test(message.text),
-  );
+  const showHandoffPanel = handoffOffered;
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ block: "end" });
@@ -171,18 +206,24 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
       });
 
       if (!response.ok) throw new Error("Unable to answer live-agent message.");
-      const data = (await response.json()) as { message?: { message_text?: unknown } };
-      const reply =
-        typeof data.message?.message_text === "string" && data.message.message_text.trim()
-          ? data.message.message_text
-          : "暫時未能回答，請稍後再試。";
+      const data = (await response.json()) as { handoffSuggested?: unknown } | null;
+      const reply = readLiveAgentMessageResponse(data);
 
-      setMessages((current) => [...current, { role: "assistant", text: reply }]);
+      setMessages((current) => [
+        ...current,
+        { role: "assistant", text: reply.text, cards: reply.cards },
+      ]);
+      // The server decides, but a reply with nothing usable (no text, or a listings reply with
+      // no safe listing card) always offers the handoff so the enquiry is never lost.
+      setHandoffOffered((current) => nextHandoffOffered(current, data ?? {}) || !reply.usable);
     } catch {
       setMessages((current) => [
         ...current,
         { role: "assistant", text: "暫時未能連線，請稍後再試。" },
       ]);
+      // Never lose an enquiry: a failed send (5xx, network error) still lets the visitor leave a
+      // WhatsApp number.
+      setHandoffOffered(true);
     } finally {
       setLoading(false);
     }
@@ -300,7 +341,14 @@ export function LiveAgentWidget({ initiallyOpen = false }: { initiallyOpen?: boo
                 }
                 key={`${message.role}-${index}`}
               >
-                {message.text}
+                {message.cards?.length ? (
+                  <>
+                    <p>{message.text}</p>
+                    <LiveAgentReplyCards cards={message.cards} />
+                  </>
+                ) : (
+                  message.text
+                )}
               </div>
             ))}
 

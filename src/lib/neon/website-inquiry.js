@@ -23,6 +23,10 @@ export function isValidWebsiteListingNo(value) {
   return typeof value === "string" && WEBSITE_LISTING_NO_PATTERN.test(value);
 }
 
+/** Staff timeline note for a filled honeypot (owner copy); a server constant, never user text. */
+export const SUSPECTED_BOT_NOTE =
+  "表格的隱藏欄位有內容，可能是自動程式提交。查詢已照常保存及通知，請照常跟進。";
+
 /** Atomic intake; existing customer consent is never changed by phone-only requests. */
 export async function persistWebsiteInquiry(query, input) {
   const { name, phone, normalizedPhone, email, message, listingNo, propertyId, consentWhatsapp } =
@@ -102,6 +106,12 @@ export async function persistWebsiteInquiry(query, input) {
         SELECT $1, $2, $3, $4, 'website', $6 WHERE ${sourceGuard}
         RETURNING id
       )`;
+  // The honeypot flag and its note body are always the LAST two params ($9/$10 exist only with a
+  // submissionId). The flag only adds rows; it never gates the lead, inquiry or alert job, and
+  // it is not part of the replay hash above.
+  const baseParamCount = submissionId ? 10 : 8;
+  const botBody = `$${baseParamCount + 1}`;
+  const botFlag = `$${baseParamCount + 2}::boolean`;
   const rows = await query(
     `
     WITH resolved_listing AS (
@@ -133,6 +143,18 @@ export async function persistWebsiteInquiry(query, input) {
         'new', routing.intent, 'website', $5
       FROM contact
       CROSS JOIN routing
+      RETURNING id, contact_id
+    ),
+    bot_note AS (
+      INSERT INTO crm_activities (lead_id, contact_id, activity_type, body)
+      SELECT new_lead.id, new_lead.contact_id, 'suspected_bot', ${botBody}
+      FROM new_lead WHERE ${botFlag}
+      RETURNING id
+    ),
+    bot_audit AS (
+      INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+      SELECT NULL, 'public_form.suspected_bot', 'crm_lead', new_lead.id, '{"form":"website_inquiry"}'::jsonb
+      FROM new_lead WHERE ${botFlag}
       RETURNING id
     ),
     ${leadAlertEnqueueCte("new_lead")}
@@ -157,6 +179,8 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
       propertyId || null,
       listingNo || null,
       ...(submissionId ? [submissionId, payloadHash] : []),
+      SUSPECTED_BOT_NOTE,
+      input.suspectedBot === true,
     ],
   );
 

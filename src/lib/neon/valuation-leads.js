@@ -42,14 +42,25 @@ export async function persistValuationLead(query, input) {
     utm,
   } = input;
 
+  // A filled honeypot ($11) only adds an audit row; the lead is saved and returned exactly as
+  // before.
   const rows = await query(
     `
+    WITH inserted AS (
     INSERT INTO valuation_leads (
       name, phone, email, property_address, estate_id, notes,
       consent_text, consent_version, consented_at, utm
     )
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
     RETURNING id
+    ),
+    bot_audit AS (
+      INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+      SELECT NULL, 'public_form.suspected_bot', 'valuation_lead', id, '{"form":"valuation"}'::jsonb
+      FROM inserted WHERE $11::boolean
+      RETURNING id
+    )
+    SELECT id FROM inserted
     `,
     [
       name,
@@ -62,6 +73,7 @@ export async function persistValuationLead(query, input) {
       consentVersion,
       consentedAt,
       JSON.stringify(utm ?? {}),
+      input.suspectedBot === true,
     ],
   );
 

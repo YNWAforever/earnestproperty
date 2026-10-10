@@ -5,11 +5,11 @@ import { leadBudgetError } from "@/lib/admin/lead-budget";
 import { phoneMatchSql, phoneSpellingTiebreakSql } from "../phone.js";
 
 import type { LiveAgentMessage, LiveAgentSession } from "./ai-types";
-import { answerFromPublicKnowledge } from "./knowledge.server";
+import { buildLiveAgentReply } from "./live-agent-reply.server";
+import { replyTranscriptText } from "./live-agent-reply";
 import {
   buildLiveAgentLeadInput,
   liveAgentPhoneErrorMessage,
-  shouldOfferHumanHandoff,
   validateHandoffPhone,
   type LiveAgentPhoneErrorCode,
 } from "./live-agent.ts";
@@ -142,33 +142,33 @@ export async function answerLiveAgentMessage(input: {
     };
   }
 
-  const answer = await answerFromPublicKnowledge({ question: visitorMessage });
-  const handoffSuggested = shouldOfferHumanHandoff({
-    confidence: answer.confidence,
-    answerAvailable: answer.citations.length > 0,
-    userAskedForHuman: /真人|人工|代理|whatsapp|聯絡|联系|call|電話|电话|agent|human/i.test(
-      visitorMessage,
-    ),
-  });
-  const safetyFlags = handoffSuggested ? ["handoff_suggested"] : [];
-  const assistantText = handoffSuggested
-    ? `${answer.answer}\n\n需要我幫你轉介持牌代理 WhatsApp 跟進嗎？`
-    : answer.answer;
-
+  const reply = await buildLiveAgentReply(visitorMessage);
   const rows = await queryRows<LiveAgentMessageRow>(
     `INSERT INTO live_agent_messages (
        session_id, direction, message_text, citations, safety_flags, shown_publicly
      )
      VALUES ($1,'assistant',$2,$3::jsonb,$4::text[],true)
      RETURNING *`,
-    [session.id, assistantText, JSON.stringify(answer.citations), safetyFlags],
+    [
+      session.id,
+      replyTranscriptText(reply),
+      JSON.stringify(
+        reply.cards.map((card) => ({
+          title: card.title,
+          url_path: card.href,
+          source_type: card.type,
+        })),
+      ),
+      [`reply:${reply.kind}`, ...(reply.handoffSuggested ? ["handoff_suggested"] : [])],
+    ],
   );
 
   await queryRows("UPDATE live_agent_sessions SET updated_at = now() WHERE id = $1", [session.id]);
 
   return {
     message: mapMessage(requireRow(rows[0], "Unable to create live-agent reply.")),
-    handoffSuggested,
+    handoffSuggested: reply.handoffSuggested,
+    reply: { kind: reply.kind, text: reply.text, cards: reply.cards },
   };
 }
 

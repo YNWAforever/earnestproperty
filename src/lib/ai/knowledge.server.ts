@@ -11,7 +11,7 @@ import {
   filterPublicKnowledgeChunks,
   normalizeKnowledgeSource,
 } from "./knowledge.ts";
-import { embedAiTexts, generateAiText } from "./provider.server.ts";
+import { embedAiTexts } from "./provider.server.ts";
 import {
   publicKnowledgeCurrentSourcesCte,
   publicKnowledgeRevisionGate,
@@ -240,51 +240,6 @@ export async function searchPublicKnowledge(input: { query: string; limit?: numb
   if (rows.length) return mapKnowledgeChunkRows(rows);
 
   return fallbackSearchPublicKnowledge({ query, limit });
-}
-
-export async function answerFromPublicKnowledge(input: { question: string }) {
-  try {
-    const chunks = await searchPublicKnowledge({ query: input.question, limit: 6 });
-    if (!chunks.length) return publicFallbackAnswer();
-
-    const fallbackAnswer = chunks[0]?.chunk_text.slice(0, 350) || publicFallbackAnswer().answer;
-    const prompt = [
-      "Question:",
-      input.question,
-      "",
-      "Sources:",
-      ...chunks.map(
-        (chunk, index) =>
-          `[${index + 1}] ${chunk.title ?? "Earnest Property"} ${chunk.url_path ?? ""}\n${chunk.chunk_text}`,
-      ),
-    ].join("\n");
-
-    const result = await generateAiText({
-      system:
-        "You are Earnest Property's public website assistant. Answer in Traditional Chinese. Use only the provided sources. If uncertain, say a licensed agent can follow up.",
-      prompt,
-      maxOutputTokens: 450,
-    });
-
-    // Discard the entire answer, including the fallback excerpt, if any source
-    // changed while the provider was in flight. Removing citations alone leaves
-    // stale facts in the generated text.
-    if (!(await revalidatePublicKnowledgeChunks(chunks))) return publicFallbackAnswer();
-
-    return {
-      answer: result.ok ? result.text : fallbackAnswer,
-      // Compatibility only: no calibrated probability is available.
-      confidence: 0,
-      confidenceKind: "legacy_uncalibrated" as const,
-      citations: chunks.map((chunk) => ({
-        title: chunk.title ?? "Earnest Property",
-        url_path: chunk.url_path ?? null,
-        source_type: chunk.source_type ?? "unknown",
-      })),
-    };
-  } catch {
-    return publicFallbackAnswer();
-  }
 }
 
 async function fetchPublicKnowledgeSources(): Promise<RawSource[]> {
@@ -676,22 +631,6 @@ async function fallbackSearchPublicKnowledge(input: { query: string; limit: numb
   return scored;
 }
 
-export async function revalidatePublicKnowledgeChunks(chunks: AiKnowledgeChunk[]) {
-  if (!chunks.length) return true;
-  const rows = await queryRows<{ id: string; source_revision: string }>(
-    `${publicKnowledgeCurrentSourcesCte()} SELECT c.id,current_source.source_revision
-     FROM ai_knowledge_chunks c JOIN ai_knowledge_sources s ON s.id=c.source_id
-     LEFT JOIN current_public_sources current_source ON current_source.source_type=s.source_type::text AND current_source.source_id=s.source_id
-     WHERE c.id=ANY($1::uuid[]) AND c.visibility='public' AND s.public_visibility='public'
-       AND s.published=true AND c.stale=false ${publicKnowledgeRevisionGate}`,
-    [chunks.map((chunk) => chunk.id)],
-  );
-  const revisions = new Map(rows.map((row) => [row.id, row.source_revision]));
-  return chunks.every(
-    (chunk) => Boolean(chunk.source_revision) && revisions.get(chunk.id) === chunk.source_revision,
-  );
-}
-
 function knowledgeSearchTokens(query: string) {
   const text = query.toLowerCase();
   const tokens = new Set<string>();
@@ -733,15 +672,6 @@ function scoreKnowledgeChunk(chunk: AiKnowledgeChunk, tokens: string[]) {
     return total;
   }, 0);
   return score > 0 ? score + sourceBoost : 0;
-}
-
-function publicFallbackAnswer() {
-  return {
-    answer: "我暫時未能從已核實資料找到準確答案，可以留下 WhatsApp 讓持牌代理跟進。",
-    confidence: 0,
-    confidenceKind: "legacy_uncalibrated" as const,
-    citations: [] as Array<{ title: string; url_path: string | null; source_type: string }>,
-  };
 }
 
 function hashText(text: string) {

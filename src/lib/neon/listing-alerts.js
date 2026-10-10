@@ -31,13 +31,24 @@ export const LISTING_ALERT_CONSENT_VERSION = "1";
 export async function persistListingAlert(query, input) {
   const { name, phone, email, filters, consentText, consentVersion, consentedAt, utm } = input;
 
+  // A filled honeypot ($9) only adds an audit row; the alert is saved and returned exactly as
+  // before.
   const rows = await query(
     `
+    WITH inserted AS (
     INSERT INTO listing_alerts (
       filters, name, phone, email, consent_text, consent_version, consented_at, utm
     )
     VALUES ($1::jsonb, $2, $3, $4, $5, $6, $7, $8::jsonb)
     RETURNING id
+    ),
+    bot_audit AS (
+      INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+      SELECT NULL, 'public_form.suspected_bot', 'listing_alert', id, '{"form":"listing_alert"}'::jsonb
+      FROM inserted WHERE $9::boolean
+      RETURNING id
+    )
+    SELECT id FROM inserted
     `,
     [
       JSON.stringify(filters ?? {}),
@@ -48,6 +59,7 @@ export async function persistListingAlert(query, input) {
       consentVersion,
       consentedAt,
       JSON.stringify(utm ?? {}),
+      input.suspectedBot === true,
     ],
   );
 

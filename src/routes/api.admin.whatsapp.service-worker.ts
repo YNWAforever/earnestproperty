@@ -1,13 +1,13 @@
 import { runServiceJobs } from "../lib/control-plane/service-worker.server.ts";
 import { getNextJobDueAt } from "../lib/control-plane/jobs-next-due.ts";
 import { SERVICE_CAPABILITIES } from "../lib/control-plane/job-handlers.server.ts";
+import { hasBearerSecret } from "../lib/http/bearer-secret.ts";
 import { queryRows } from "../lib/neon/db.server.ts";
 import { recordWorkerHeartbeat } from "../lib/control-plane/worker-heartbeat.server.ts";
 import { createFileRoute } from "@tanstack/react-router";
 
 export async function drainServiceJobs({ request }: { request: Request }) {
-  const expected = process.env.CRON_SECRET;
-  if (!expected || request.headers.get("authorization") !== `Bearer ${expected}`)
+  if (!hasBearerSecret(request, process.env.CRON_SECRET))
     return Response.json({ error: "UNAUTHORIZED" }, { status: 401 });
   try {
     await recordWorkerHeartbeat("service-v2", SERVICE_CAPABILITIES);

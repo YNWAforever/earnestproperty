@@ -57,12 +57,6 @@ export type StaffAccessResolverDependencies = {
   getSession?: (request: Request) => Promise<NeonSession | null>;
 };
 
-type AnyRecord = Record<string, unknown>;
-
-function asRecord(value: unknown): AnyRecord {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as AnyRecord) : {};
-}
-
 function getAuthBaseUrl() {
   return process.env.NEON_AUTH_BASE_URL || process.env.VITE_NEON_AUTH_URL || null;
 }
@@ -94,10 +88,12 @@ function staffRolesFromValue(value: unknown): StaffRole[] {
 }
 
 /**
- * Resolve the signed-in Neon Auth user for a request: the provider's session
- * cookie when one is present, else the bearer token the admin client attaches
- * (withStaffAuthHeaders), looked up as an active server-side session token
- * in the neon_auth tables this database already holds.
+ * Resolve the signed-in Neon Auth user for a request from the bearer token the
+ * admin client attaches (withStaffAuthHeaders), looked up as an active
+ * server-side session token in the neon_auth tables this database already
+ * holds. Cookies are never read: the Neon Auth session cookie lives on
+ * neon.tech, so it never reaches this site, and forwarding first-party
+ * cookies (GA and others) to Neon Auth could not authenticate anyone.
  */
 export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows) {
   async function findNeonAuthSession(token: string) {
@@ -132,35 +128,8 @@ export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows)
   return async function getNeonSessionFromRequest(request: Request): Promise<NeonSession | null> {
     const authUrl = getAuthBaseUrl();
     if (!authUrl) return null;
-    const cookie = request.headers.get("cookie");
-    const bearerToken = getBearerToken(request);
-
-    if (cookie) {
-      const res = await fetch(`${authUrl.replace(/\/$/, "")}/get-session`, {
-        headers: {
-          cookie,
-          accept: "application/json",
-        },
-      }).catch(() => null);
-
-      if (res?.ok) {
-        const body = asRecord(await res.json().catch(() => null));
-        const data = asRecord(body.data ?? body);
-        const user = asRecord(data.user);
-        if (user.id) {
-          return {
-            user: {
-              id: stringOrEmpty(user.id),
-              email: stringOrNull(user.email),
-              name: stringOrNull(user.name),
-            },
-            session: data.session ?? null,
-          };
-        }
-      }
-    }
-
-    return bearerToken ? getNeonSessionFromBearerToken(bearerToken) : null;
+    const token = getBearerToken(request);
+    return token ? getNeonSessionFromBearerToken(token) : null;
   };
 }
 

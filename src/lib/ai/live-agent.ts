@@ -9,17 +9,6 @@ export function canUseChunkForPublicAnswer(input: {
   return input.visibility === "public" && input.stale !== true && input.published !== false;
 }
 
-export function shouldOfferHumanHandoff(input: {
-  confidence: number;
-  userAskedForHuman: boolean;
-  answerAvailable?: boolean;
-}) {
-  return (
-    input.userAskedForHuman ||
-    (input.answerAvailable === undefined ? input.confidence <= 0.45 : !input.answerAvailable)
-  );
-}
-
 export function buildLiveAgentLeadInput(input: {
   name?: string | null;
   phone?: string | null;

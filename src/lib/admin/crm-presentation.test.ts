@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { readFileSync } from "node:fs";
+import { leadTimelineHasNoFollowUp } from "./crm-presentation";
 import {
   stageOptions,
   stageFilterOptions,
@@ -59,4 +61,30 @@ test("missing AI scores are unknown while zero remains a measured score", () => 
   expect(aiScoreLabel(null)).toBe("未知（未分析）");
   expect(aiScoreLabel(undefined)).toBe("未知（未分析）");
   expect(aiScoreLabel(0)).toBe("0");
+});
+
+test("a lead whose only timeline rows are suspected-bot flags still reads as not followed up", () => {
+  const bot = { activity_type: "suspected_bot" };
+  expect(leadTimelineHasNoFollowUp([])).toBe(true);
+  expect(leadTimelineHasNoFollowUp([bot])).toBe(true);
+  expect(leadTimelineHasNoFollowUp([bot, bot])).toBe(true);
+  for (const type of ["note", "call", "viewing", "follow_up"]) {
+    expect(leadTimelineHasNoFollowUp([bot, { activity_type: type }]), type).toBe(false);
+    expect(leadTimelineHasNoFollowUp([{ activity_type: type }]), type).toBe(false);
+  }
+});
+
+test("the lead timeline keeps the empty state next to a bot row", () => {
+  const source = readFileSync(new URL("../../routes/admin.leads.tsx", import.meta.url), "utf8");
+  const start = source.indexOf('<div className="mt-5 space-y-3">');
+  const timeline = source.slice(start, source.indexOf("</section>", start));
+  // Bot-only timeline: the empty state shows, and the rows branch below still renders the bot row.
+  const flagged = timeline.indexOf(
+    "lead.activities.length > 0 && leadTimelineHasNoFollowUp(lead.activities) ? (",
+  );
+  const rows = timeline.indexOf("lead.activities.map((activity) => (");
+  expect(flagged).toBeGreaterThan(-1);
+  expect(rows).toBeGreaterThan(flagged);
+  expect(timeline.slice(flagged, rows)).toContain("未有跟進紀錄");
+  expect(timeline.slice(flagged, rows)).toContain(") : null}");
 });
