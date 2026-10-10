@@ -171,7 +171,6 @@ test("staff server functions from whatsapp-enquiries are only called through the
     "getWhatsappTrackingLinks",
     "saveWhatsappTrackingLink",
     "provisionWhatsappLinks",
-    "getWhatsappEnquiries",
     "searchWhatsappLinkOffers",
   ];
   const offenders = [];

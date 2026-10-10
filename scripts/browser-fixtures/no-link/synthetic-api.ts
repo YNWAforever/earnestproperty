@@ -12,7 +12,10 @@ import {
   type ForwardedEnquiryInput,
   type LeadContactUpdateInput,
 } from "../../../src/lib/whatsapp-enquiries/forwarded-enquiries";
+import { toAssignmentContextView } from "../../../src/lib/whatsapp-enquiries/assignment-view.js";
 export const actor = sessionStorage.getItem("no-link-fixture-actor") ?? "agent-a";
+// FX-17a: "admin" signs the synthetic actor in as an admin (diagnostics are admin-only).
+const roleOverride = sessionStorage.getItem("no-link-fixture-role");
 export const ids = {
   a: "10000000-0000-4000-8000-000000000001",
   b: "10000000-0000-4000-8000-000000000002",
@@ -36,12 +39,12 @@ const message = (n: number, id: string) => ({
   error: null,
   created_at: new Date(Date.now() - (31 - n) * 1000).toISOString(),
 });
-const row = (id: string, name: string, external: string) => ({
+const row = (id: string, name: string, external: string, phone: string) => ({
   id,
   name,
   customer_display_name: name,
   status: "open",
-  phone: null,
+  phone,
   contact_id: null,
   assigned_agent_id: ids.staff,
   woztell_member_id: "synthetic-member",
@@ -70,16 +73,20 @@ const row = (id: string, name: string, external: string) => ({
       }
     : {}),
 });
-const rows = [row(ids.a, "合成客戶甲", "4033349"), row(ids.b, "合成客戶乙", "4033350")];
+// Distinct synthetic numbers (FX-17a): confirmations show only the last four digits.
+const rows = [
+  row(ids.a, "合成客戶甲", "4033349", "+852 5550 1234"),
+  row(ids.b, "合成客戶乙", "4033350", "+852 5550 5678"),
+];
 const state = {
   calls: [] as { name: string; input: unknown }[],
   membershipMode: "ok",
-  membershipRole: actor === "manager" ? "manager" : "agent",
+  membershipRole: roleOverride ?? (actor === "manager" ? "manager" : "agent"),
   membershipBinding: actor === "agent-b" ? ids.staffB : ids.staff,
   pendingMembership: [] as { release: () => void }[],
   refreshMembership: async (
     _mode = "ok",
-    _role = actor === "manager" ? "manager" : "agent",
+    _role = roleOverride ?? (actor === "manager" ? "manager" : "agent"),
     _binding = ids.staff,
   ) => {},
   pushInbound: (_id: string, _text: string) => {},
@@ -144,7 +151,7 @@ Object.assign(window, {
 const fixture = () => (window as unknown as { noLinkFixture: typeof state }).noLinkFixture;
 fixture().refreshMembership = async (
   mode = "ok",
-  role = actor === "manager" ? "manager" : "agent",
+  role = roleOverride ?? (actor === "manager" ? "manager" : "agent"),
   binding = ids.staff,
 ) => {
   Object.assign(fixture(), {
@@ -288,7 +295,34 @@ export async function fetchAdminConversation({ data }: { data: { id: string } })
       fixture().releaseLateDetail = done;
     });
   }
-  return readable(data.id) ? { ...rows.find((r) => r.id === data.id)!, messages: [] } : null;
+  if (!readable(data.id)) return null;
+  // The production detail read has no customer_display_name (only the list read does).
+  const { customer_display_name: _listOnly, ...row } = rows.find((r) => r.id === data.id)!;
+  // With sessionStorage no-link-fixture-distinct-detail=true the detail differs from its list
+  // row in name and phone, and carries a phone-like member id (the send target), so a test can
+  // tell which record a confirmation was built from.
+  const distinct =
+    sessionStorage.getItem("no-link-fixture-distinct-detail") === "true"
+      ? data.id === ids.a
+        ? { name: "合成客戶甲（詳情）", phone: "+852 6111 2222", woztell_member_id: "85263334444" }
+        : { name: "合成客戶乙（詳情）", phone: "+852 6555 6666", woztell_member_id: "85267778888" }
+      : {};
+  const found = { ...row, ...distinct, messages: [] };
+  // With sessionStorage no-link-fixture-near-miss=true, a manager sees the 「可能要求退訂」 flag
+  // (確認退訂 / 不是退訂) and the consent dialog; every save stays a forbidden mutation.
+  return sessionStorage.getItem("no-link-fixture-near-miss") === "true"
+    ? {
+        ...found,
+        contact_id: data.id.replace(/^1/, "5"),
+        can_clear_opt_out: actor === "manager",
+        opt_out_near_miss: {
+          messageId: found.id.slice(0, 24) + "000000000099",
+          text: "可唔可以停一停先",
+          at: now,
+          exact: false,
+        },
+      }
+    : found;
 }
 export async function fetchAdminConversationAiAssist({
   data,
@@ -326,31 +360,36 @@ export async function getWhatsappAssignment({ conversationId }: { conversationId
     return { kind: "error", code: "forbidden", requestId: "synthetic-denied" };
   const staffName =
     sessionStorage.getItem("no-link-fixture-names") === "missing" ? null : "合成同事甲";
+  // The server's own view function, keyed on the synthetic session's role.
   return {
     kind: "ok",
-    context: {
-      proposedStaffId: ids.staff,
-      proposedStaffName: staffName,
-      proposalReason: "requested_staff",
-      confirmed_staff_id: ids.staff,
-      confirmed_staff_name: staffName,
-      assignment_state: sessionStorage.getItem("no-link-fixture-assignment") ?? "confirmed",
-      desired_staff_id: null,
-      desired_staff_name: null,
-      enquiries: [
-        {
-          id: conversationId === ids.a ? ids.enquiry : ids.enquiryB,
-          property: conversationId === ids.a ? "A074714" : "A074715",
-          source: "28Hse",
-          dealType: "sale",
-          requestedStaffId: ids.staff,
-          requestedStaffName: staffName,
-          firstResponseAt: null,
-          dueAt: null,
-          review: sessionStorage.getItem("no-link-fixture-enquiry-review") === "true",
-        },
-      ],
-    },
+    context: toAssignmentContextView(
+      {
+        proposedStaffId: ids.staff,
+        proposedStaffName: staffName,
+        proposalReason: "requested_staff",
+        confirmed_staff_id: ids.staff,
+        confirmed_staff_name: staffName,
+        assignment_state: sessionStorage.getItem("no-link-fixture-assignment") ?? "confirmed",
+        assignment_version: 1,
+        desired_staff_id: null,
+        desired_staff_name: null,
+        enquiries: [
+          {
+            id: conversationId === ids.a ? ids.enquiry : ids.enquiryB,
+            property: conversationId === ids.a ? "A074714" : "A074715",
+            source: "28Hse",
+            dealType: "sale",
+            requestedStaffId: ids.staff,
+            requestedStaffName: staffName,
+            firstResponseAt: null,
+            dueAt: null,
+            review: sessionStorage.getItem("no-link-fixture-enquiry-review") === "true",
+          },
+        ],
+      },
+      { diagnostics: fixture().membershipRole === "admin" },
+    ),
   };
 }
 export async function getWhatsappEnquiryQueue() {

@@ -60,7 +60,6 @@ export function scoreLeadProfile(input: {
   budget_min?: number | null;
   budget_max?: number | null;
   preferred_estates?: string[] | null;
-  timeline?: string | null;
   opt_in_whatsapp?: boolean | null;
   last_activity_days?: number | null;
 }) {
@@ -69,7 +68,6 @@ export function scoreLeadProfile(input: {
   if (input.budget_min || input.budget_max) score += 20;
   if ((input.preferred_estates ?? []).length > 0) score += 15;
   if (input.opt_in_whatsapp) score += 15;
-  if (input.timeline === "30_days") score += 20;
   if (typeof input.last_activity_days === "number" && input.last_activity_days <= 7) score += 10;
   if (typeof input.last_activity_days === "number" && input.last_activity_days > 60) score -= 10;
   return Math.max(0, Math.min(100, score));

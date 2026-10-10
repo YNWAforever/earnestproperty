@@ -100,6 +100,7 @@ function AgentProfilePage() {
     telephone: contact.phone,
     image: profile.avatar_url,
     url: profile.public_slug ? `${SITE_URL}/agents/${profile.public_slug}` : SITE_URL,
+    licenceNo: profile.licence_no,
   });
   const agentSlug = profile.public_slug ?? profile.id;
   useTrackPageView(
@@ -317,7 +318,9 @@ function AgentProfileError() {
             <Link to="/contact">聯絡晉誠地產</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link to="/agents">返回代理團隊</Link>
+            <Link to="/agents" activeOptions={{ exact: true }}>
+              返回代理團隊
+            </Link>
           </Button>
         </div>
       </div>
@@ -331,7 +334,9 @@ function AgentNotFound() {
       <h1 className="text-2xl font-semibold">找不到代理資料</h1>
       <p className="mt-3 text-sm text-muted-foreground">此代理資料可能尚未公開，或連結已更新。</p>
       <Button asChild className="mt-6">
-        <Link to="/agents">返回代理團隊</Link>
+        <Link to="/agents" activeOptions={{ exact: true }}>
+          返回代理團隊
+        </Link>
       </Button>
     </div>
   );

@@ -69,13 +69,12 @@ function present(value: string | undefined) {
 export function environmentChecks(): HealthCheck[] {
   // Split into two checks. A single "ai" key that only inspected OPENCODE_GO_*
   // reported healthy while AI_GATEWAY_API_KEY was unset -- and the gateway is
-  // what backs generateAiText/embedAiTexts (src/lib/ai/config.server.ts), so
+  // what backs generateAiText (src/lib/ai/config.server.ts), so
   // every AI call was returning AI_DISABLED behind a green dashboard. The two
   // providers are configured independently and fail independently.
   const aiGateway = {
     apiKey: present(process.env.AI_GATEWAY_API_KEY),
     model: present(process.env.AI_GATEWAY_MODEL),
-    embeddingModel: present(process.env.AI_GATEWAY_EMBEDDING_MODEL),
   };
   const aiCopilot = {
     baseUrl: present(process.env.OPENCODE_GO_BASE_URL),
@@ -96,11 +95,10 @@ export function environmentChecks(): HealthCheck[] {
     woztell.accessToken && woztell.appId && woztell.channelId && woztell.channelSecret;
   return [
     {
-      // Backs generateAiText/embedAiTexts. Unset => every AI call is AI_DISABLED.
+      // Backs CRM analysis only.
       key: "ai.gateway",
       required: false,
-      status:
-        aiGateway.apiKey && aiGateway.model && aiGateway.embeddingModel ? "healthy" : "degraded",
+      status: aiGateway.apiKey && aiGateway.model ? "healthy" : "degraded",
       details: aiGateway,
     },
     {

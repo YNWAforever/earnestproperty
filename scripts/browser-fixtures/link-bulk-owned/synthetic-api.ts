@@ -41,8 +41,38 @@ export async function searchWhatsappLinkOffers() {
   // TanStack Start RESOLVES a thrown Response (server-fn-response.ts); mimic that exactly.
   return state.searchDenied ? new Response("Forbidden", { status: 403 }) : offers;
 }
+// With sessionStorage owned-link-bulk-links=one, the table shows one synthetic link and its
+// 停用 / 重新啟用 saves are recorded as "saveLink" (no other edit is allowed).
+const linkMode = () => sessionStorage.getItem("owned-link-bulk-links");
+const link = {
+  id: id(500),
+  code: "Syn17aA",
+  version: 3,
+  channelId: "synthetic-channel",
+  createdAt: "2026-10-01T02:00:00.000Z",
+  placementVerifiedAt: "2026-10-02T02:00:00.000Z",
+  referenceMappingId: null,
+  placementSource: "28hse" as const,
+  entryPointType: "sales" as const,
+  publicListingNo: "A000001",
+  propertyId: id(1),
+  dealType: "sale" as const,
+  requestedStaffId: staff,
+  branchId: null,
+  externalListingId: "4033349",
+  videoId: null,
+  enabled: true,
+  placementVerified: true,
+  requestedStaffName: "合成同事甲",
+  sourcePlacementId: "4033349",
+  opens: 0,
+  enquiries: 0,
+  readiness: "ready",
+  recentTest: null,
+};
 export async function getWhatsappTrackingLinksPage() {
-  return { items: [], total: 0, nextCursor: null };
+  if (linkMode() !== "one") return { items: [], total: 0, nextCursor: null };
+  return { items: [{ ...link }], total: 1, nextCursor: null };
 }
 export async function getWebsiteTrackingCoverage() {
   return {
@@ -60,8 +90,15 @@ export async function getWebsiteTrackingCoverage() {
 export async function previewCoverageBackfill() {
   throw Error("Unoperated coverage mutation");
 }
-export async function saveWhatsappTrackingLink() {
-  throw Error("Unexpected tracking link edit");
+export async function saveWhatsappTrackingLink(input: {
+  data: { id: string; expectedVersion: number; enabled: boolean };
+}) {
+  if (linkMode() !== "one") throw Error("Unexpected tracking link edit");
+  record("saveLink", input.data);
+  if (input.data.id !== link.id || input.data.expectedVersion !== link.version)
+    throw Error("WA_LINK_VERSION_CONFLICT");
+  Object.assign(link, { enabled: input.data.enabled, version: link.version + 1 });
+  return { ...link };
 }
 export async function prepareWhatsappLinkExport() {
   throw Error("Unoperated full-table export");

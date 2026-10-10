@@ -6,7 +6,6 @@ Set these server-side environment variables before deploy:
 
 - `AI_GATEWAY_API_KEY`
 - `AI_GATEWAY_MODEL`
-- `AI_GATEWAY_EMBEDDING_MODEL`
 - `DATABASE_URL`
 - `DATABASE_URL_UNPOOLED` optional, preferred for migration or sync jobs when available
 - `BLOB_READ_WRITE_TOKEN`
@@ -14,6 +13,8 @@ Set these server-side environment variables before deploy:
 - `WOZTELL_BOT_ACCESS_TOKEN`
 - `WOZTELL_CHANNEL_ID`
 - `WOZTELL_CHANNEL_SECRET`
+
+> 2026-10-08 FX-11a: `AI_GATEWAY_EMBEDDING_MODEL` is removed. Nothing reads it, and nothing generates embeddings any more, so do not set it.
 
 Keep all secrets in Vercel/server environment settings. Do not expose these names through browser-safe modules or `NEXT_PUBLIC_*` variables.
 

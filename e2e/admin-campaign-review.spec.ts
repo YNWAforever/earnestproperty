@@ -1025,3 +1025,64 @@ test.describe("375", () => {
   test.use({ viewport: { width: 375, height: 812 } });
   retryTests();
 });
+// FX-17a G-20: typing into a new campaign then leaving the page must ask 尚未儲存.
+test.describe("leave guard", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  test("typing in a new campaign then clicking a nav link asks 尚未儲存; cancelling keeps the draft", async ({
+    page,
+  }) => {
+    await open(page);
+    await page.getByRole("button", { name: "新增 Campaign", exact: true }).first().click();
+    const name = page.getByLabel("Campaign 名稱");
+    await name.fill("未儲存的推廣");
+    // The open dialog makes the sidebar inert for the pointer; fire the link's own click.
+    await page
+      .locator('nav[aria-label="後台選單"] a[href="/admin/leads"]')
+      .evaluate((link) => (link as HTMLElement).click());
+    const prompt = page.getByRole("alertdialog", { name: "尚未儲存" });
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole("button", { name: "取消" }).click();
+    await expect(prompt).not.toBeVisible();
+    await expect(page).toHaveURL(/\/admin\/blasts/);
+    await expect(page.getByLabel("Campaign 名稱")).toHaveValue("未儲存的推廣");
+  });
+});
+// FX-17a D-13: the schedule field and 預定時間 column are gone. An existing 已排期
+// row still renders, is never sent on its own, and goes out only through 發送….
+test.describe("scheduled campaign", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  const stored = "2026-10-01T02:00:00.000Z";
+  test("an existing 已排期 row renders, is not sent by itself, and sends only through 發送…", async ({
+    page,
+  }) => {
+    await seedCampaign(page, { status: "scheduled", scheduled_at: stored });
+    await open(page);
+    await expect(row(page)).toContainText("已排期");
+    await expect(page.getByRole("columnheader", { name: "預定時間" })).toHaveCount(0);
+    // The stored time has passed; nothing is queued while the page sits open.
+    await page.waitForTimeout(1500);
+    expect(await queueCalls(page)).toHaveLength(0);
+    expect((await savedCampaign(page)).status).toBe("scheduled");
+    const dialog = await confirm(page);
+    await dialog.getByRole("button", { name: "確認發送給 2 人", exact: true }).click();
+    await expect(row(page)).toContainText("已排隊");
+    const calls = await queueCalls(page);
+    expect(calls).toHaveLength(1);
+    expect((calls[0].input as { id: string }).id).toBe("60000000-0000-4000-8000-000000000001");
+    const saved = await savedCampaign(page);
+    expect(saved.status).toBe("queued");
+    expect(saved.scheduled_at).toBe(stored);
+  });
+  test("a new campaign has no schedule field and no 已排期 option", async ({ page }) => {
+    await open(page);
+    await page.getByRole("button", { name: "新增 Campaign", exact: true }).first().click();
+    const edit = page.getByRole("dialog", { name: "新增 Campaign", exact: true });
+    await expect(edit.getByText("計劃發送時間", { exact: false })).toHaveCount(0);
+    await expect(edit.locator('input[type="datetime-local"]')).toHaveCount(0);
+    await edit.getByLabel("Campaign status", { exact: true }).click();
+    await expect(page.getByRole("option", { name: "草稿（不可發送）", exact: true })).toBeVisible();
+    await expect(page.getByRole("option", { name: "待審核", exact: true })).toBeVisible();
+    await expect(page.getByRole("option", { name: "已排期", exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+  });
+});

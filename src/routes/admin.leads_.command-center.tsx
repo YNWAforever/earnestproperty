@@ -1,3 +1,4 @@
+import { adminErrorMessage } from "@/components/admin/admin-error-text";
 import { WhatsappEnquiryQueue } from "@/components/admin/WhatsappEnquiryContext";
 import { stageLabels as STAGE_LABELS, aiScoreLabel } from "@/lib/admin/crm-presentation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -527,7 +528,5 @@ function formatClock(value: string) {
 }
 
 function errorText(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return String(error);
+  return adminErrorMessage(error);
 }

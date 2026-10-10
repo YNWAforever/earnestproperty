@@ -11,6 +11,8 @@ import {
   selectAssignment,
   selectNoLinkAssignment,
 } from "./assignment-policy.ts";
+import { toAssignmentContextView, type AssignmentContextView } from "./assignment-view.js";
+import { canReadDiagnostics } from "../control-plane/permissions.ts";
 type Ports = { query: typeof queryRows; transaction: typeof transactionRows };
 const defaultPorts: Ports = { query: queryRows, transaction: transactionRows };
 type Actor = Pick<StaffAccess, "staffId" | "roles">;
@@ -129,13 +131,16 @@ export async function readAssignmentContext(
         [proposal.staffId],
       )
     : [];
-  return {
-    ...row,
-    proposedStaffName: proposedStaff?.name ?? null,
-    assignment_version: Number(row.assignment_version),
-    proposedStaffId: proposal.staffId,
-    proposalReason: proposal.reason,
-  } as AssignmentContextDto;
+  // FX-17a G-11: diagnostics are stripped here, on the server, for every role but admin.
+  return toAssignmentContextView(
+    {
+      ...row,
+      proposedStaffName: proposedStaff?.name ?? null,
+      proposedStaffId: proposal.staffId,
+      proposalReason: proposal.reason,
+    },
+    { diagnostics: canReadDiagnostics(actor.roles) },
+  );
 }
 const mappingSchema = z
   .object({
@@ -423,39 +428,13 @@ export async function readEnquiryQueue(actor: Actor, ports: Ports = defaultPorts
   const { query: queryRows, transaction: transactionRows } = ports;
   await requireActiveManager(actor, queryRows);
   return queryRows<EnquiryQueueDto>(
-    `SELECT i.id,i.conversation_id,i.public_listing_no,i.service_state,i.response_due_at,i.association_review,w.confirmed_staff_id,r.state AS assignment_state FROM inquiries i JOIN whatsapp_conversations w ON w.id=i.conversation_id LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE i.source='whatsapp' AND wa_can_read_enquiry($1::uuid,i.id) AND i.status NOT IN ('closed','resolved','spam') AND (i.first_human_response_at IS NULL OR i.association_review OR r.state IN ('failed','unknown')) ORDER BY i.response_due_at ASC NULLS LAST,i.created_at ASC LIMIT 100`,
+    `SELECT i.id,i.conversation_id,i.public_listing_no,i.service_state,i.response_due_at,i.association_review,(w.confirmed_staff_id IS NOT NULL) AS confirmed,r.state AS assignment_state FROM inquiries i JOIN whatsapp_conversations w ON w.id=i.conversation_id LEFT JOIN whatsapp_assignment_requests r ON r.id=w.pending_assignment_id WHERE i.source='whatsapp' AND wa_can_read_enquiry($1::uuid,i.id) AND i.status NOT IN ('closed','resolved','spam') AND (i.first_human_response_at IS NULL OR i.association_review OR r.state IN ('failed','unknown')) ORDER BY i.response_due_at ASC NULLS LAST,i.created_at ASC LIMIT 100`,
     [actor.staffId],
   );
 }
 
-export type AssignmentContextDto = {
-  proposedStaffId: string | null;
-  proposedStaffName: string | null;
-  proposalReason: string;
-  assignment_version: number;
-  assignment_lock: boolean;
-  confirmed_staff_id: string | null;
-  confirmed_staff_name: string | null;
-  assigned_agent_id: string | null;
-  request_id: string | null;
-  desired_staff_id: string | null;
-  desired_staff_name: string | null;
-  assignment_state: string | null;
-  evidence: Record<string, string | boolean> | null;
-  enquiries:
-    | {
-        id: string;
-        property: string | null;
-        source: string | null;
-        requestedStaffId: string | null;
-        requestedStaffName: string | null;
-        dealType: string | null;
-        firstResponseAt: string | null;
-        dueAt: string | null;
-        review: boolean;
-      }[]
-    | null;
-};
+/** What `readAssignmentContext` returns: the role-scoped view (FX-17a G-11). */
+export type AssignmentContextDto = AssignmentContextView;
 export type StaffChannelDto = {
   id: string;
   staff_id: string;
@@ -479,7 +458,8 @@ export type EnquiryQueueDto = {
   service_state: string;
   response_due_at: string | null;
   association_review: boolean;
-  confirmed_staff_id: string | null;
+  /** FX-17a: whether a provider-confirmed owner exists; the staff id is never sent. */
+  confirmed: boolean;
   assignment_state: string | null;
 };
 

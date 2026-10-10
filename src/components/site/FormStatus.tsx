@@ -28,7 +28,7 @@ export function FormStatus({ state, id }: { state: FormStatusState; id?: string 
     <p
       id={id}
       role="status"
-      className="w-full rounded-md bg-primary/10 px-3 py-2 text-sm leading-relaxed text-primary"
+      className="w-full rounded-md bg-secondary px-3 py-2 text-sm leading-relaxed text-secondary-foreground"
     >
       {state.message}
     </p>

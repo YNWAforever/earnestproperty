@@ -1,3 +1,10 @@
+import { adminErrorMessage, sendMayHaveReachedServer } from "@/components/admin/admin-error-text";
+import { CustomerConfirmDetails } from "@/components/admin/CustomerConfirmLine";
+import {
+  customerConfirmLabel,
+  templateRecipientLabel,
+  type CustomerConfirmLabel,
+} from "@/lib/admin/customer-label";
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { StaffNotificationPanel } from "@/components/admin/StaffNotificationPanel";
 import { WhatsappEnquiryContext } from "@/components/admin/WhatsappEnquiryContext";
@@ -919,7 +926,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         ...current,
         [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
       }));
-      const message = formatReplyError(errorText(err));
+      const message = formatReplyError(errorText(err, SEND_UNCERTAIN_ERROR));
       // The send is persisted as a failed message server-side, but the timeline
       // was never refetched on this path -- so the pane still showed the
       // pre-send state and a toast that vanished in ~4s was the only trace. The
@@ -995,7 +1002,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         ...current,
         [actorId + ":" + targetId]: hasStoredOutboundRequest(actorId, targetId),
       }));
-      const message = formatReplyError(errorText(err));
+      const message = formatReplyError(errorText(err, SEND_UNCERTAIN_ERROR));
       setReplyError(message);
       toast.error(message);
       await refreshConversations();
@@ -1050,7 +1057,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
       await loadConversationDetail(targetId, { background: true });
     } catch (error) {
       if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId)
-        setReplyError(`未能確認傳送結果。${formatReplyError(errorText(error))}`);
+        setReplyError(formatReplyError(errorText(error, SEND_UNCERTAIN_ERROR)));
     } finally {
       outboundBusy.current = false;
       if (canApplyConversationDetail(targetId) && actorIdRef.current === actorId) {
@@ -1745,6 +1752,10 @@ function ConversationWorkspace({
                   key={detail.contact_id}
                   contactId={detail.contact_id}
                   onSaved={onConsentSaved}
+                  customer={customerConfirmLabel({
+                    name: detail.customer_display_name ?? detail.name,
+                    phone: detail.phone,
+                  })}
                 />
               ) : null}
               <ResolveUnknownOutboundDialog detail={detail} onChanged={onConsentSaved} />
@@ -1831,6 +1842,10 @@ function ConversationWorkspace({
         {showTemplateSend ? (
           <TemplateSendPanel
             key={detail.id}
+            customer={templateRecipientLabel({
+              name: detail.customer_display_name ?? detail.name,
+              memberId: detail.woztell_member_id,
+            })}
             templates={templates}
             loading={templatesLoading}
             error={templatesError}
@@ -2002,6 +2017,7 @@ function AiAssistPanel({
  * a template name that does not exist anywhere in the system.
  */
 function TemplateSendPanel({
+  customer,
   templates,
   loading,
   error,
@@ -2010,6 +2026,8 @@ function TemplateSendPanel({
   sending,
   onSend,
 }: {
+  /** The open conversation's customer and send target (its member id), from the detail sent to. */
+  customer: CustomerConfirmLabel;
   templates: AdminWhatsappTemplateRow[];
   loading: boolean;
   error: string | null;
@@ -2096,11 +2114,11 @@ function TemplateSendPanel({
         title="確認傳送範本？"
         description={
           selected
-            ? `將向客戶傳送已審批範本「${selected.element_name}」。範本一經傳送即無法收回。`
-            : "將向客戶傳送已審批範本。範本一經傳送即無法收回。"
+            ? `將向 ${customer.name}（${customer.phone}）傳送已審批範本「${selected.element_name}」。範本一經傳送即無法收回。`
+            : `將向 ${customer.name}（${customer.phone}）傳送已審批範本。範本一經傳送即無法收回。`
         }
         confirmLabel="傳送"
-        disabled={disabled}
+        disabled={disabled || !selected}
         isPending={sending}
         onOpenChange={setConfirmOpen}
         onConfirm={() => {
@@ -2110,7 +2128,9 @@ function TemplateSendPanel({
             setConfirmOpen(false);
           })();
         }}
-      />
+      >
+        <CustomerConfirmDetails customer={customer} />
+      </AdminConfirmDialog>
     </div>
   );
 }
@@ -2470,10 +2490,22 @@ function assertNoMutationError(result: unknown) {
   if ((result as { ok?: unknown }).ok === false) throw new Error("操作失敗");
 }
 
-function errorText(error: unknown) {
+function rawMessage(error: unknown) {
   if (error instanceof Error) return error.message;
-  if (typeof error === "string") return error;
-  return String(error);
+  return typeof error === "string" ? error : "";
+}
+
+/** A send that fails with an unknown reason may still have been delivered. */
+const SEND_UNCERTAIN_ERROR = "未能確認傳送結果，請先核對狀態，不要直接重送。";
+
+function errorText(error: unknown, fallback?: string) {
+  // This screen's own codes map first; the rest (and any status) goes through the shared rule.
+  // On a send path (a fallback is given), a network or 401 failure may come after the request
+  // reached the server, so it must not invite a retry.
+  if (fallback && sendMayHaveReachedServer(error)) return fallback;
+  const raw = rawMessage(error);
+  const mapped = formatReplyError(raw);
+  return adminErrorMessage(mapped !== raw ? mapped : error, fallback);
 }
 
 const REPLY_DRAFT_STORAGE_PREFIX = "earnest:whatsapp:reply-drafts";

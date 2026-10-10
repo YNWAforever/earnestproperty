@@ -154,7 +154,6 @@ export async function analyzeCrmLead(
     budget_min: lead.budget_min,
     budget_max: lead.budget_max,
     preferred_estates: lead.preferred_estates,
-    timeline: value.timeline,
     opt_in_whatsapp: lead.opt_in_whatsapp,
     last_activity_days: lead.last_activity_days,
   });

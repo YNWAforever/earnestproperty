@@ -21,10 +21,7 @@ const SectionHeading = React.forwardRef<HTMLDivElement, SectionHeadingProps>(
     >
       <div>
         {eyebrow ? <p className="text-sm font-semibold text-primary">{eyebrow}</p> : null}
-        <Heading
-          id={id}
-          className="mt-1 text-2xl font-bold tracking-tight text-primary sm:text-3xl"
-        >
+        <Heading id={id} className="mt-1 text-2xl font-bold text-primary sm:text-3xl">
           {title}
         </Heading>
       </div>

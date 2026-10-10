@@ -29,7 +29,7 @@ function PrivacyPage() {
   return (
     <div className="bg-background">
       <PageHero eyebrow="法律 Legal" title="私隱政策">
-        <p className="mt-2 text-xs text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground">
           {"生效日期及最後更新日期：待法律顧問審閱後公布"}
         </p>
         <p className="mt-4 max-w-3xl text-sm text-muted-foreground">
