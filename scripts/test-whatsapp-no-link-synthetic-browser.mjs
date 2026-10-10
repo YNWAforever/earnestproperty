@@ -184,21 +184,44 @@ async function check(name, width, run, actor = "agent-a", height = 844) {
 }
 try {
   browser = await chromium.launch();
-  await check("site Inter and Chinese variable fonts load locally", 390, async (page) => {
+  await check("site Inter loads locally and Chinese uses system fonts", 390, async (page) => {
+    const requested = [];
+    page.on("request", (request) => requested.push(request.url()));
     await open(page, url(ids.a));
     await expect(page.getByLabel("WhatsApp 回覆").filter({ visible: true })).toBeVisible();
     await page.evaluate(() => document.fonts.ready);
-    expect(
-      await page.evaluate(() => document.fonts.check('16px "Noto Sans TC Variable"', "碧堤半島")),
-    ).toBe(true);
-    expect(
-      await page.evaluate(() =>
-        [...document.fonts].some((face) => face.family.includes("Noto Sans TC")),
-      ),
-    ).toBe(true);
+    // Inter must still be loaded locally for Latin text.
     expect(
       await page.evaluate(() => [...document.fonts].some((face) => face.family.includes("Inter"))),
     ).toBe(true);
+    expect(
+      await page.evaluate(() => document.fonts.check('16px "Inter"', "Earnest Property")),
+    ).toBe(true);
+    // The downloaded Noto Chinese web font must be gone: no face, no file request.
+    expect(
+      await page.evaluate(() => [...document.fonts].some((face) => /noto/i.test(face.family))),
+    ).toBe(false);
+    expect(requested.filter((u) => /noto-sans-tc|noto.*\.woff2?/i.test(u))).toEqual([]);
+    // Chinese text resolves to the system font stack from styles.css.
+    const stacks = await page.evaluate(() => {
+      const probe = (tag) => {
+        const el = document.createElement(tag);
+        el.textContent = "碧堤半島";
+        document.body.appendChild(el);
+        const family = getComputedStyle(el).fontFamily;
+        el.remove();
+        return family;
+      };
+      return { display: probe("h2"), body: getComputedStyle(document.body).fontFamily };
+    });
+    expect(stacks.display.startsWith('"PingFang HK", "PingFang TC", "Microsoft JhengHei"')).toBe(
+      true,
+    );
+    expect(stacks.display).toContain('"Noto Sans CJK HK"');
+    expect(
+      stacks.body.startsWith('Inter, "PingFang HK", "PingFang TC", "Microsoft JhengHei"'),
+    ).toBe(true);
+    expect(stacks.body).not.toContain("Variable");
   });
   await check("verified staff names replace ordinary UUIDs", 1280, async (page) => {
     await open(page, url(ids.a));
