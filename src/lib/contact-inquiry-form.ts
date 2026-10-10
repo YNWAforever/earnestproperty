@@ -96,6 +96,7 @@ export function composeInquiryMessage(data: ContactInquiryFormValues): string {
 export function buildWebsiteInquiryPayload(
   data: ContactInquiryFormValues,
   consentWhatsapp: boolean,
+  website?: unknown,
 ): WebsiteInquiryInput {
   return {
     name: data.name,
@@ -103,6 +104,8 @@ export function buildWebsiteInquiryPayload(
     email: data.email || "",
     message: composeInquiryMessage(data),
     consentWhatsapp,
+    // The honeypot travels as-is and only flags server-side; it is never validated here.
+    ...(website === undefined ? {} : { website }),
   };
 }
 
@@ -160,10 +163,12 @@ export async function submitContactInquiry({
   raw,
   consentWhatsapp,
   submitFn,
+  website,
 }: {
   raw: RawContactInquiryInput;
   consentWhatsapp: boolean;
   submitFn: ContactSubmitFn;
+  website?: unknown;
 }): Promise<ContactSubmitOutcome> {
   const parsed = contactInquirySchema.safeParse(raw);
   if (!parsed.success) {
@@ -172,7 +177,7 @@ export async function submitContactInquiry({
       message: parsed.error.issues[0]?.message ?? "請檢查輸入",
     };
   }
-  const payload = buildWebsiteInquiryPayload(parsed.data, consentWhatsapp);
+  const payload = buildWebsiteInquiryPayload(parsed.data, consentWhatsapp, website);
   const result = await submitPublicForm(() => submitFn(payload));
   if (result.status === "error") {
     return { status: "server-error", code: result.code, message: result.message };

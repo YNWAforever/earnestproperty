@@ -28,6 +28,11 @@ const COPY = {
   SERVER: "未能提交，請再試一次，或直接 WhatsApp 我們。",
   contactSuccess: "已收到查詢，我們會盡快聯絡你。",
 };
+const HONEYPOT_LABEL = "請勿填寫此欄";
+const SUCCESS_LINE = {
+  contact: COPY.contactSuccess,
+  property: "已收到查詢，經紀會盡快與你聯絡。",
+};
 const RAW_SERVER_TEXT = ["Too Many Requests", "Failed to fetch"];
 const CALL_NAME: Record<FormKey, string> = {
   contact: "createWebsiteInquiry",
@@ -352,6 +357,59 @@ for (const viewport of [
       await expect(s.getByRole("status")).toHaveCount(1);
       await expect(s.getByRole("alert")).toHaveCount(0);
       expect(await calls(page)).toHaveLength(2);
+    });
+
+    test("a keyboard user never reaches the honeypot and a real submission sends it empty", async ({
+      page,
+    }) => {
+      await open(page);
+      await expect(page.getByRole("textbox", { name: HONEYPOT_LABEL })).toHaveCount(0);
+      for (const form of FORMS) {
+        const s = section(page, form);
+        await expect(s.locator("input[name='website']")).toHaveCount(1);
+        await fill(page, form);
+        await s.getByLabel("姓名 *", { exact: true }).focus();
+        const visited: string[] = [];
+        for (let step = 0; step < 20; step += 1) {
+          await page.keyboard.press("Tab");
+          const focused = await page.evaluate(() => {
+            const el = document.activeElement as HTMLInputElement | null;
+            return { name: el?.getAttribute("name") ?? "", text: el?.textContent ?? "" };
+          });
+          visited.push(focused.name || focused.text);
+          expect(focused.name, `${form}: Tab never focuses the honeypot`).not.toBe("website");
+          if (focused.text === SUBMIT_LABEL[form]) break;
+        }
+        expect(visited.at(-1), `${form}: Tab reaches the submit button`).toBe(SUBMIT_LABEL[form]);
+        await submitButton(page, form).click();
+        await expect(s.getByRole("alert")).toHaveCount(0);
+        const recorded = (await calls(page)).at(-1)!;
+        expect(recorded.name).toBe(CALL_NAME[form]);
+        const website = (recorded.input as { data: Record<string, unknown> }).data.website;
+        expect(website === undefined || website === "", `${form}: website is empty`).toBe(true);
+      }
+    });
+
+    test("a filled honeypot still shows the normal success message", async ({ page }) => {
+      await open(page);
+      for (const form of FORMS) {
+        const s = section(page, form);
+        await fill(page, form);
+        await s.locator("input[name='website']").fill("https://spam.example", { force: true });
+        await submitButton(page, form).click();
+        if (form === "contact" || form === "property") {
+          await expect(s.getByRole("status")).toHaveText(SUCCESS_LINE[form]);
+        } else {
+          await expect(s.getByText(SUCCESS_PANEL[form]!, { exact: true })).toBeVisible();
+        }
+        await expect(s.getByRole("alert")).toHaveCount(0);
+        const recorded = (await calls(page)).at(-1)!;
+        expect(recorded).toEqual({
+          name: CALL_NAME[form],
+          input: { data: expect.objectContaining({ website: "https://spam.example" }) },
+        });
+      }
+      expect(await calls(page)).toHaveLength(FORMS.length);
     });
 
     test("no raw server text visible", async ({ page }) => {
