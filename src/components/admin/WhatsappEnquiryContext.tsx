@@ -6,6 +6,8 @@ import { getWhatsappAssignment, getWhatsappEnquiryQueue } from "@/lib/neon/whats
 import { AdminTechnicalDetails } from "@/components/admin/AdminTechnicalDetails";
 import type { AssignmentContextView } from "@/lib/whatsapp-enquiries/assignment-view.js";
 import { ASSIGNMENT_STATE_LABELS } from "@/lib/admin/glossary";
+import { enquiryQueueRowText, placementSourceText } from "@/lib/admin/plain-copy";
+import { EnquiryEpisodeSummary } from "@/components/admin/plain-copy-parts";
 type Episode = AssignmentContextView["enquiries"][number];
 export function WhatsappEnquiryContext({
   conversationId,
@@ -136,33 +138,26 @@ export function WhatsappEnquiryContext({
               <option key={e.id} value={e.id}>
                 {e.property ?? "一般查詢"} ·{" "}
                 {e.dealType === "sale" ? "售" : e.dealType === "rent" ? "租" : "未指定交易"} ·{" "}
-                {e.source}
+                {placementSourceText(e.source)}
               </option>
             ))}
           </select>
         </label>
         {episodes.map((e) => (
           <article key={e.id} className="rounded border p-2 text-sm">
-            <strong>
-              {e.property ?? "一般查詢"} ·{" "}
-              {e.dealType === "sale" ? "售" : e.dealType === "rent" ? "租" : "未指定交易"}
-            </strong>{" "}
-            · 來源 {e.source}
-            <p>
-              指定同事：
-              {e.requestedStaffName ?? (e.requested ? "指定同事名稱待核實" : "沒有指定")}
-              {" · "}
-              {e.review ? "需要核實關聯" : "已有關聯"}
-            </p>
-            {e.review ? (
-              <button type="button" className="underline" onClick={() => setResolutionId(e.id)}>
-                查看及修正本次查詢
-              </button>
-            ) : null}
-            <p>
-              首個人手回覆：{e.firstResponseAt ?? "尚無合資格證據"} · 服務期限：
-              {e.dueAt ?? "尚未啟用服務政策"}
-            </p>
+            <EnquiryEpisodeSummary e={e}>
+              <p>
+                指定同事：
+                {e.requestedStaffName ?? (e.requested ? "指定同事名稱待核實" : "沒有指定")}
+                {" · "}
+                {e.review ? "需要核實關聯" : "已有關聯"}
+              </p>
+              {e.review ? (
+                <button type="button" className="underline" onClick={() => setResolutionId(e.id)}>
+                  查看及修正本次查詢
+                </button>
+              ) : null}
+            </EnquiryEpisodeSummary>
           </article>
         ))}
         <p className="text-xs text-muted-foreground">
@@ -232,10 +227,7 @@ export function WhatsappEnquiryQueue() {
               key={String(r.id)}
               href={`/admin/whatsapp?conversation=${encodeURIComponent(String(r.conversation_id))}`}
             >
-              {String(r.public_listing_no ?? "一般查詢")} ·{" "}
-              {r.confirmed ? "已確認分派" : "未確認分派"} ·{" "}
-              {r.association_review ? "需要核實" : String(r.assignment_state ?? "待人手回覆")} ·{" "}
-              {r.response_due_at ? `期限 ${String(r.response_due_at)}` : "期限未設定"}
+              {enquiryQueueRowText(r)}
             </a>
           ))}
         </>

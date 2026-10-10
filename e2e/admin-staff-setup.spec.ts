@@ -221,7 +221,7 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(page.getByRole("alert")).toBeVisible();
       await page.evaluate(() => (window.staffFixture.read = "ok"));
       await page.getByRole("button", { name: "查閱原試送結果", exact: true }).click();
-      await expect(page.getByRole("status")).toContainText("供應商已接納，尚未核實送達");
+      await expect(page.getByRole("status")).toContainText("已交 WhatsApp 發送（未確認送達）");
       expect(await calls(page, "enqueue")).toHaveLength(1);
       expect(
         await page.evaluate(
@@ -238,7 +238,7 @@ for (const width of [1440, 1280, 768, 390]) {
       await page.evaluate(() => (window.staffFixture.submit = "unknown"));
       await page.getByRole("button", { name: "明確提交試送" }).click();
       await page.reload();
-      await expect(page.getByRole("status")).toContainText("供應商已接納，尚未核實送達");
+      await expect(page.getByRole("status")).toContainText("已交 WhatsApp 發送（未確認送達）");
       await expect(page.getByRole("status")).toContainText(
         "供應商送達：未核實；同事收件確認：未核實；接手確認：未核實",
       );
@@ -278,7 +278,7 @@ for (const width of [1440, 1280, 768, 390]) {
       await page.evaluate(() => (window.staffFixture.read = "ok"));
       await page.getByRole("button", { name: "查閱原試送結果", exact: true }).click();
       await expect(page.getByRole("dialog")).toContainText(id!);
-      await expect(page.getByRole("status")).toContainText("尚未核實送達");
+      await expect(page.getByRole("status")).toContainText("未確認送達");
       expect(await calls(page, "enqueue")).toHaveLength(0);
     });
     test("worker unknown result stays read-only after fresh lookup", async ({ page }) => {

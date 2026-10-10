@@ -20,7 +20,6 @@ import {
   fetchOperationsMigrations,
 } from "@/lib/admin/operations/operations-client";
 import { useOperationsPulse } from "@/lib/admin/operations/operations-polling";
-import type { ControlPlanePermission } from "@/lib/control-plane/permissions";
 import {
   createOperationsHealthLoader,
   resolveOperationsRouteState,
@@ -59,18 +58,12 @@ const TAB_LABELS: Record<OperationTab, string> = {
   migrations: "資料庫遷移",
 };
 
-// Named so a blocked tab can say which permission unlocks it instead of just
-// disappearing, which left staff with no way to know the feature exists.
-//
-// Typed as ControlPlanePermission rather than string: the audit tab used to
-// name "system.audit.read", which does not exist in the permission list at all
-// (the real name is "audit.read"), so the tooltip told staff to request a
-// permission no admin could grant. The narrower type makes that a compile error.
-const TAB_PERMISSIONS: Record<OperationTab, ControlPlanePermission | null> = {
-  overview: null,
-  jobs: "system.jobs.read",
-  audit: "audit.read",
-  migrations: "system.migrations.plan",
+// The tooltip on a blocked tab names who may open it, not the permission behind it.
+const TAB_ROLE_HINTS: Record<OperationTab, string> = {
+  overview: "",
+  jobs: "只供經理或管理員使用",
+  audit: "只供經理或管理員使用",
+  migrations: "只供管理員使用",
 };
 
 const ALL_OPERATION_TABS: OperationTab[] = ["overview", "jobs", "audit", "migrations"];
@@ -257,9 +250,7 @@ function AdminOperationsWorkspace({ identity }: { identity: string }) {
                   key={tab}
                   value={tab}
                   disabled={!permitted}
-                  title={
-                    permitted ? undefined : `需要 ${TAB_PERMISSIONS[tab]} 權限，請聯絡系統管理員`
-                  }
+                  title={permitted ? undefined : TAB_ROLE_HINTS[tab]}
                   className="min-h-11 border-b-2 border-transparent px-3 py-2 text-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=active]:border-primary data-[state=active]:font-semibold lg:min-h-9"
                 >
                   {TAB_LABELS[tab]}
@@ -314,9 +305,7 @@ function AdminOperationsWorkspace({ identity }: { identity: string }) {
                 />
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  你未有存取「{TAB_LABELS[tab]}」的權限
-                  {TAB_PERMISSIONS[tab] ? `（需要 ${TAB_PERMISSIONS[tab]}）` : ""}
-                  。請聯絡系統管理員開通。
+                  你未有存取「{TAB_LABELS[tab]}」的權限。如需要，請聯絡管理員。
                 </p>
               )}
             </Tabs.Content>

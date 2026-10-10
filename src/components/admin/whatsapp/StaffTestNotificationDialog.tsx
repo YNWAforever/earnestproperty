@@ -2,6 +2,7 @@ import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { hkTime, testAttemptStateText } from "@/lib/admin/plain-copy";
 import {
   enqueueStaffTestNotification,
   confirmStaffTestReceipt,
@@ -206,24 +207,20 @@ export function StaffTestNotificationDialog({
             <div role="status" className="text-sm">
               <p>
                 狀態：
-                {status.state === "accepted"
-                  ? "供應商已接納，尚未核實送達"
-                  : status.state === "unknown"
-                    ? "結果不明，請核對；不會自動重發"
-                    : status.state}
+                {testAttemptStateText(status.state)}
               </p>
               <p>
-                供應商送達：{status.providerDeliveredAt ?? "未核實"}；同事收件確認：
-                {status.recipientConfirmedAt ?? "未核實"}；接手確認：
-                {status.acknowledgementAt ?? "未核實"}
+                供應商送達：{hkTime(status.providerDeliveredAt, "未核實")}；同事收件確認：
+                {hkTime(status.recipientConfirmedAt, "未核實")}；接手確認：
+                {hkTime(status.acknowledgementAt, "未核實")}
               </p>
               <p>
-                供應商接納：{status.providerAcceptedAt ?? "未核實"}；證據來源：
+                供應商接納：{hkTime(status.providerAcceptedAt, "未核實")}；證據來源：
                 {status.evidenceSource ?? "未有"}
               </p>
               <p>試送編號：{status.attemptId}</p>
               {status.recipientConfirmedAt ? (
-                <p>同事已確認收件（人工紀錄）：{status.recipientConfirmedAt}</p>
+                <p>同事已確認收件（人工紀錄）：{hkTime(status.recipientConfirmedAt, "未核實")}</p>
               ) : status.state === "accepted" || status.state === "unknown" ? (
                 <div className="space-y-2">
                   <label>

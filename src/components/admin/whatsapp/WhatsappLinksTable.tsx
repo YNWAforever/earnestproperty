@@ -13,6 +13,8 @@ import {
 import type { LinkPageFilter } from "@/lib/neon/whatsapp-link-management.types";
 import type { TrackingLink } from "@/lib/neon/whatsapp-enquiries.types";
 import { PLACEMENT_SOURCE_LABELS } from "@/lib/admin/glossary";
+import { placementSourceText } from "@/lib/admin/plain-copy";
+import { LinkCardFacts } from "@/components/admin/plain-copy-parts";
 import { ADMIN_GENERIC_ERROR, staffActionErrorText } from "@/components/admin/admin-error-text";
 
 type Page = Awaited<ReturnType<typeof getWhatsappTrackingLinksPage>>;
@@ -347,7 +349,7 @@ export function WhatsappLinksTable({
               <span>
                 {link.publicListingNo ?? "一般查詢"} ·{" "}
                 {link.dealType === "sale" ? "售" : link.dealType === "rent" ? "租" : "—"} ·{" "}
-                {link.placementSource}
+                {placementSourceText(link.placementSource)}
               </span>
             </label>
             <p className="mt-2 break-all font-mono text-xs">/w/{link.code}</p>
@@ -355,21 +357,7 @@ export function WhatsappLinksTable({
               {link.enabled ? "可用" : "停用"} · v{link.version} ·{" "}
               {link.requestedStaffName ?? "總台"}
             </p>
-            <p>
-              開啟 {link.opens ?? "unknown"} · 歸因查詢 {link.enquiries ?? "unknown"}
-            </p>
-            <details className="mt-2">
-              <summary className="cursor-pointer">投放與就緒詳情</summary>
-              <p className="break-all">投放 ID：{link.sourcePlacementId ?? "未記錄"}</p>
-              <p>核實：{link.placementVerifiedAt ?? "未核實"}</p>
-              <p>指派就緒：{link.readiness}</p>
-              <p>
-                最近試送：
-                {link.recentTest
-                  ? `${link.recentTest.state} · ${link.recentTest.createdAt}`
-                  : "unknown"}
-              </p>
-            </details>
+            <LinkCardFacts link={link} />
             <div className="mt-2 flex flex-wrap gap-2">
               <Button size="sm" variant="outline" disabled={busy} onClick={() => void copy(link)}>
                 複製

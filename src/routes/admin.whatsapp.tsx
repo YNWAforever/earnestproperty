@@ -91,6 +91,7 @@ import type {
   AdminWhatsappTemplateRow,
 } from "@/lib/neon/admin-data.types";
 import { CONVERSATION_STATUS_LABELS } from "@/lib/admin/glossary";
+import { HANDED_TO_WHATSAPP, HANDED_TO_WHATSAPP_NOTICE } from "@/lib/admin/plain-copy";
 
 const conversationStatusOptions = Object.entries(CONVERSATION_STATUS_LABELS).map(
   ([value, label]) => ({ value, label }),
@@ -111,7 +112,7 @@ const messageStatusLabels: Record<string, string> = {
   received: "已接收",
   queued: "已排隊",
   dispatching: "傳送中",
-  accepted: "供應商已接納（未確認送達）",
+  accepted: HANDED_TO_WHATSAPP,
   delivered: "已送達",
   read: "已讀",
   unknown: "結果未確定",
@@ -2417,7 +2418,7 @@ function statusLabel(status: string) {
 function messageStatusLabel(status: string) {
   if (status === "queued") return "等待傳送";
   if (status === "dispatching") return "傳送中（未確認）";
-  if (status === "accepted") return "供應商已接納（未確認送達）";
+  if (status === "accepted") return HANDED_TO_WHATSAPP;
   if (status === "unknown") return "傳送結果未明，請核對，勿重發";
   if (status === "cancelled") return "已取消";
   if (status === "resolved_sent") return "經理已核對：已送達";
@@ -2582,7 +2583,7 @@ function assertKnownOutboundResult(result: unknown) {
 }
 function outboundResultNotice(result: unknown, label: string) {
   return (result as { intent?: { state?: string } })?.intent?.state === "accepted"
-    ? "供應商已接納傳送要求，尚未證實送達或已讀。"
+    ? HANDED_TO_WHATSAPP_NOTICE
     : `${label}已加入傳送佇列`;
 }
 
