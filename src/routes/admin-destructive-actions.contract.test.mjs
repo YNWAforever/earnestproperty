@@ -78,7 +78,8 @@ function assertWiredConfirm(action, file, title) {
 
 const confirms = [
   ["CMS 封存 屋苑／文章", "src/routes/admin.cms.tsx", 'title="封存"'],
-  ["CMS FAQ 刪除", "src/routes/admin.cms.tsx", 'title="刪除 FAQ"'],
+  ["CMS FAQ 封存", "src/routes/admin.cms.tsx", 'title="封存 FAQ？"'],
+  ["CMS FAQ 還原", "src/routes/admin.cms.tsx", 'title="還原此 FAQ？"'],
   ["CMS 發布", "src/routes/admin.cms.tsx", 'title="確認發布內容"'],
   ["Estate editor 封存", "src/components/admin/estates/AdminEstateEditorForm.tsx", "封存屋苑"],
   [
@@ -87,9 +88,9 @@ const confirms = [
     "發布屋苑資料？",
   ],
   [
-    "Estate editor FAQ 刪除",
+    "Estate editor FAQ 封存",
     "src/components/admin/estates/AdminEstateEditorForm.tsx",
-    "刪除 FAQ？",
+    "封存 FAQ？",
   ],
   [
     "Listing 全部下架 / 下架所選",

@@ -54,6 +54,11 @@ const STAFF_ACTION_CODE_MESSAGES: Record<string, string> = {
   WA_LINK_PUBLIC_OFFER_UNAVAILABLE: "目前租售盤已下架或版本改變",
 };
 
+/** FX-18a B-04: transaction verify and publish. */
+const TRANSACTION_ERROR_MESSAGES: Record<string, string> = {
+  TRANSACTION_VERIFY_FORBIDDEN: "只有經理或管理員可以核實及公開發布成交。",
+};
+
 /** CMS revision-engine codes. Moved here from admin.cms.tsx and AdminEstateEditorForm.tsx. */
 const CMS_ERROR_MESSAGES: Record<string, string> = {
   CMS_REVISION_CONFLICT: "此草稿的發布版本已被其他人更新。本機修改已保留，請使用與已發布版本比較。",
@@ -61,6 +66,12 @@ const CMS_ERROR_MESSAGES: Record<string, string> = {
   CMS_REVISION_MISMATCH: "版本資料不符，請重新載入頁面後再試一次。",
   CMS_RESOURCE_NOT_FOUND: "找不到此資源，可能已被其他人刪除或封存，請重新載入頁面。",
   CMS_MEDIA_IN_USE: "此媒體仍被其他內容使用，未能封存。",
+  // FX-18a: FAQ and video row versions. The 409 reuses the existing conflict text.
+  CMS_ROW_CHANGED: STAFF_ACTION_STATUS_MESSAGES[409],
+  CMS_ROW_VERSION_REQUIRED: "此頁面版本較舊，請重新載入後再儲存。",
+  FAQ_ARCHIVED: "此 FAQ 已封存，請先還原。",
+  FAQ_ARCHIVED_DUPLICATE: "此範圍已有已封存的相同問題，請到「顯示已封存」還原。",
+  FAQ_RESTORE_CONFLICT: "此範圍已有相同問題，未能還原。請先修改或封存現有的問題。",
 };
 
 /** Campaign server refusal codes, moved here from admin.blasts.tsx. The generic
@@ -94,6 +105,7 @@ const CAMPAIGN_ERROR_MESSAGES: Record<string, string> = {
 export const ADMIN_ERROR_CODES: Readonly<Record<string, string>> = {
   ...STAFF_ACTION_CODE_MESSAGES,
   ...CMS_ERROR_MESSAGES,
+  ...TRANSACTION_ERROR_MESSAGES,
   ...CAMPAIGN_ERROR_MESSAGES,
 };
 

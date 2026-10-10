@@ -60,7 +60,9 @@ test("Hong Kong confirmed date round trips across UTC midnight", () => {
 });
 
 test("base form separates source verification from public publication", () => {
-  const html = renderToStaticMarkup(createElement(TransactionForm, { onSaved: () => {} }));
+  const html = renderToStaticMarkup(
+    createElement(TransactionForm, { canVerify: true, onSaved: () => {} }),
+  );
   expect(html).toContain("成交來源已核實");
   expect(html).toContain("公開發布");
   expect(html).toContain("內部績效核實在下方成交歸因區處理");

@@ -159,6 +159,7 @@ jobs:
       - run: npm run test:no-link:local-postgres
       - run: npm run test:admin-golden:db
       - run: npm run test:lead-integrity:db
+      - run: npm run test:data-hygiene:db
       - run: npm run test:ai-knowledge:db
       - run: npm run test:live-agent:eval:db
       - run: npm run test:crm-analysis:db

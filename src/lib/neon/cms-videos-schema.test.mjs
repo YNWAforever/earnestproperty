@@ -39,7 +39,7 @@ test("admin video reads and writes degrade only when cms_videos is unavailable",
     /export async function fetchAdminCmsVideos\(\)[\s\S]*?\r?\n}\r?\n\r?\nexport async function saveAdminCmsVideo/,
   )?.[0];
   const saveFunction = source.match(
-    /export async function saveAdminCmsVideo[\s\S]*?\r?\n}\r?\n\r?\nexport async function saveAdminEstate/,
+    /export async function saveAdminCmsVideo[\s\S]*?\r?\n}\r?\n\r?\nexport async function saveAdminFaq/,
   )?.[0];
 
   assert.match(readFunction ?? "", /isMissingCmsVideosTableError/);
@@ -53,7 +53,7 @@ test("admin video reads and writes degrade only when cms_videos is unavailable",
 test("saveAdminCmsVideo persists the category column", () => {
   const source = readFileSync(join(process.cwd(), "src/lib/neon/admin-data.server.ts"), "utf8");
   const saveFunction = source.match(
-    /export async function saveAdminCmsVideo[\s\S]*?\r?\n}\r?\n\r?\nexport async function saveAdminEstate/,
+    /export async function saveAdminCmsVideo[\s\S]*?\r?\n}\r?\n\r?\nexport async function saveAdminFaq/,
   )?.[0];
 
   assert.match(saveFunction ?? "", /category = \$6/);

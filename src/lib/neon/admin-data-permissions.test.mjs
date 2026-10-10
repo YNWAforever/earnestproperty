@@ -8,11 +8,10 @@ const source = readFileSync(join(process.cwd(), "src/lib/neon/admin-data.ts"), "
 // Every CMS-write server fn must gate on the declared cms.publish permission,
 // not a hardcoded ["admin", "manager"] array -- see the P6a plan's §0 for why.
 const CMS_WRITE_FUNCTIONS = [
-  "saveAdminEstateServer",
-  "saveAdminArticleServer",
   "saveAdminFaqServer",
   "saveAdminCmsVideoServer",
   "deleteAdminFaqServer",
+  "restoreAdminFaqServer",
   "updateAdminMediaAssetServer",
   "checkAdminFaqConflictsServer",
 ];

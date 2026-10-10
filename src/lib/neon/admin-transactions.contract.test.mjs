@@ -333,10 +333,10 @@ test("saveAdminTransaction never reassigns agent_id on UPDATE, even when a manag
     /agent_id\s*=\s*\$/,
     "agent_id must never appear in the UPDATE SET clause",
   );
-  assert.ok(
-    !calls[0].params.includes("manager-1"),
-    "the editing manager's own id must never be written as agent_id",
-  );
+  // The manager's id is bound once, as the audit actor (the last parameter), never as agent_id.
+  assert.equal(calls[0].params.filter((value) => value === "manager-1").length, 1);
+  assert.equal(calls[0].params.at(-1), "manager-1");
+  assert.match(calls[0].text, /SELECT \$15::uuid, 'transaction\.update'/);
 });
 
 test("the verified checkbox sets BOTH verification_state='verified' and published=true, never independently", async () => {
@@ -456,6 +456,45 @@ test("saveAdminProperty rejects invalid public listing values before SQL", async
     ADMIN_ACTOR,
   );
   assert.match(calls[0].text, /INSERT INTO properties/);
+});
+
+test("saveAdminProperty with an id is refused before SQL", async () => {
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  const refused = await server
+    .saveAdminProperty(
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        listing_no: "A-1",
+        title_zh: "Test listing",
+        title_en: null,
+        deal_type: "sale",
+        estate_id: null,
+        district_slug: "central",
+        address: null,
+        price: 10_000_000,
+        rent: null,
+        saleable_area: 500,
+        bedrooms: 2,
+        bathrooms: 1,
+        floor: null,
+        description: null,
+        features: [],
+        status: "active",
+        featured: false,
+        images: [],
+        agent_id: null,
+      },
+      ADMIN_ACTOR,
+    )
+    .then(
+      () => null,
+      (error) => error,
+    );
+  assert.ok(refused instanceof Response, "an edit through saveAdminProperty was not refused");
+  assert.equal(refused.status, 400);
+  assert.equal(await refused.text(), "PROPERTY_EDIT_USE_WORKSPACE");
+  assert.equal(calls.length, 0, "an edit through saveAdminProperty reached SQL");
 });
 
 test("saveAdminCmsVideo rejects invalid title, order and publication flag before SQL", async () => {
@@ -686,5 +725,77 @@ test("embedded DB hides cross-branch finance status and filters only visible tra
     assert.equal(agentRows[0].attribution_status, null);
   } finally {
     await db.close();
+  }
+});
+
+const VERIFY_BASE = {
+  estate_id: "estate-1",
+  deal_type: "sale",
+  price: 10_000_000,
+  saleable_area: 500,
+  deal_date: "2026-08-01",
+  unit: null,
+  block: null,
+  floor_band: null,
+  source: null,
+  source_url: null,
+};
+
+test("an agent's verified:true or published:true never reaches SQL", async () => {
+  for (const change of [
+    { verified: true },
+    { verified: true, published: true },
+    { id: "txn-1", verified: true },
+    { id: "txn-1", verified: true, published: true },
+  ]) {
+    const { calls, query } = recorder();
+    const server = await loadAdminDataServerWithInjectedQuery(query);
+    let refusal;
+    try {
+      await server.saveAdminTransaction({ ...VERIFY_BASE, ...change }, AGENT_ACTOR);
+    } catch (error) {
+      refusal = error;
+    }
+    assert.ok(refusal instanceof Response && refusal.status === 403);
+    assert.equal(await refusal.text(), "TRANSACTION_VERIFY_FORBIDDEN");
+    assert.equal(calls.length, 0, "a refused agent verify reached SQL");
+  }
+});
+
+test("an agent's update SQL cannot match a verified or published row", async () => {
+  const { calls, query } = recorder();
+  const server = await loadAdminDataServerWithInjectedQuery(query);
+  await assert.rejects(
+    server.saveAdminTransaction({ ...VERIFY_BASE, id: "txn-1", verified: false }, AGENT_ACTOR),
+    (error) => error instanceof Response && error.status === 403,
+  );
+  assert.match(calls[0].text, /UPDATE transactions/);
+  assert.match(calls[0].text, /AND transactions\.verification_state <> 'verified'/);
+  assert.match(calls[0].text, /transactions\.published = false/);
+  // Ownership: the agent locks and updates only its own row, bound to its staff id.
+  assert.match(calls[0].text, /WHERE t\.id = \$14 AND t\.agent_id = \$15\s+FOR UPDATE/);
+  assert.match(calls[0].text, /WHERE transactions\.id = o\.id AND transactions\.agent_id = \$15/);
+  assert.equal(calls[0].params[13], "txn-1");
+  assert.equal(calls[0].params[14], AGENT_ACTOR.staffId);
+  assert.equal(calls[0].params[15], AGENT_ACTOR.staffId);
+  assert.match(calls[0].text, /SELECT \$16::uuid, 'transaction\.update'/);
+});
+
+test("manager and admin may verify and publish, with no row-state guard on their update", async () => {
+  for (const actor of [ADMIN_ACTOR, { staffId: "manager-1", roles: ["manager"] }]) {
+    const { calls, query } = recorder();
+    const server = await loadAdminDataServerWithInjectedQuery(query);
+    await server.saveAdminTransaction(
+      { ...VERIFY_BASE, id: "txn-1", verified: true, published: true },
+      actor,
+    );
+    assert.ok(calls[0].params.includes("verified"));
+    assert.ok(calls[0].params.includes(true));
+    assert.match(calls[0].text, /UPDATE transactions/);
+    // The row-state guard is for agents only; staff with the role skip it.
+    assert.doesNotMatch(calls[0].text, /AND\s+(transactions\.)?verification_state <> 'verified'/);
+    // Nor any agent ownership scoping on the lock or the update.
+    assert.doesNotMatch(calls[0].text, /agent_id = \$15/);
+    assert.match(calls[0].text, /SELECT \$15::uuid, 'transaction\.update'/);
   }
 });

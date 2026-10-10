@@ -31,7 +31,6 @@ import type {
   AdminAgentProfileRow,
   AdminBranchOption,
   AdminLeadAiProfile,
-  AdminArticleInput,
   AdminCmsVideoInput,
   AdminAudienceInput,
   AdminCampaignInput,
@@ -43,7 +42,6 @@ import type {
   AdminConversationAiAssist,
   AdminConversationRow,
   AdminConversationUpdateInput,
-  AdminEstateInput,
   AdminFaqInput,
   AdminLeadActivityInput,
   AdminLeadRow,
@@ -69,6 +67,16 @@ import { analyzeCrmLead, approveCrmAiTag, fetchCrmAiProfile } from "../ai/crm-en
 import { cancelCrmAnalysisRun } from "../ai/crm-analysis-runs.server";
 import type { CrmSegmentFilters } from "../ai/ai-types";
 import { isYouTubeVideoUrl } from "../youtube-video-url.js";
+import {
+  CMS_ROW_CHANGED,
+  CMS_ROW_VERSION_REQUIRED,
+  FAQ_ARCHIVED,
+  FAQ_ARCHIVED_DUPLICATE,
+  FAQ_RESTORE_CONFLICT,
+  cmsRowFieldsJsonSql,
+  cmsRowVersionSql,
+  isCmsRowVersion,
+} from "./cms-row-version";
 import {
   listCrmSegments,
   materializeCrmSegment,
@@ -121,6 +129,7 @@ import { UNKNOWN_RESOLUTION_MIN_AGE_MINUTES } from "../woztell/outbound-resoluti
 import { readOptOutNearMiss } from "./whatsapp-opt-out-near-miss.server";
 import { optOutVersionSql } from "./whatsapp-opt-out.server";
 import { wakeAfterCommit } from "../control-plane/job-wake.server";
+import { canVerifyTransactions } from "./transaction-verify-policy";
 
 /**
  * Row-ownership scope for the acting staff member.
@@ -1219,11 +1228,11 @@ export async function getAdminProperty(
   id: string,
   actor?: StaffAccess,
 ): Promise<AdminPropertyRecord | null> {
-  // listAdminListings, saveAdminProperty and updateAdminPropertyStatus all
-  // restrict agents to p.agent_id = actor.staffId, and saveAdminProperty throws
-  // 403 for an out-of-scope edit. This single-row read took no actor at all, so
-  // an agent could SELECT * any listing -- including drafts and internal columns
-  // the scoped list view withholds -- by supplying its UUID.
+  // listAdminListings and updateAdminPropertyStatus restrict agents to
+  // p.agent_id = actor.staffId, and saveAdminProperty is create-only (edits go
+  // through saveAdminPropertyManagement). This single-row read took no actor at
+  // all, so an agent could SELECT * any listing -- including drafts and internal
+  // columns the scoped list view withholds -- by supplying its UUID.
   const scope = actor ? agentScope(actor) : null;
   const rows = await queryRows<AdminPropertyRecord>(
     `SELECT * FROM properties WHERE id = $1${scope !== null ? " AND agent_id = $2" : ""} LIMIT 1`,
@@ -1253,6 +1262,10 @@ export async function listAdminDistrictOptions() {
 }
 
 export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffAccess) {
+  // Create-only. Edits go through the versioned workspace
+  // (saveAdminPropertyManagement); this path has no version check.
+  if (input.id) throw new Response("PROPERTY_EDIT_USE_WORKSPACE", { status: 400 });
+
   const validRequiredText = (value: unknown, max: number) =>
     typeof value === "string" && value.trim().length > 0 && value.trim().length <= max;
   const validOptionalAmount = (value: number | null) =>
@@ -1311,57 +1324,31 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
     input.features ?? [],
   ];
 
-  const rows = input.id
-    ? await queryRows(
-        `
-        UPDATE properties SET
-          listing_no = $1,
-          title_zh = $2,
-          deal_type = $3::deal_type,
-          estate_id = $4,
-          district_slug = $5,
-          address = $6,
-          price = $7,
-          rent = $8,
-          saleable_area = $9,
-          bedrooms = $10,
-          bathrooms = $11,
-          floor = $12,
-          description = $13,
-          status = $14::property_status,
-          featured = $15,
-          images = $16::text[],
-          seo_title = $17,
-          seo_description = $18,
-          video_url = $19,
-          agent_id = $20,
-          title_en = $21,
-          features = $22::text[],
-          updated_at = now()
-        WHERE id = $23${scope !== null ? " AND agent_id = $24" : ""}
-        RETURNING id
-        `,
-        scope !== null ? [...params, input.id, scope] : [...params, input.id],
-      )
-    : await queryRows(
-        `
-        INSERT INTO properties (
-          listing_no, title_zh, deal_type, estate_id, district_slug, address, price, rent,
-          saleable_area, bedrooms, bathrooms, floor, description, status, featured, images,
-          seo_title, seo_description, video_url, agent_id, title_en, features
+  // The audit row is part of the same statement: a failed audit insert rolls the
+  // listing back with it (FX-18a C-16).
+  const rows = await queryRows(
+    `
+        WITH ins AS (
+          INSERT INTO properties (
+            listing_no, title_zh, deal_type, estate_id, district_slug, address, price, rent,
+            saleable_area, bedrooms, bathrooms, floor, description, status, featured, images,
+            seo_title, seo_description, video_url, agent_id, title_en, features
+          )
+          VALUES ($1, $2, $3::deal_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::property_status, $15, $16::text[], $17, $18, $19, $20, $21, $22::text[])
+          RETURNING id, listing_no, status
+        ), audit AS (
+          INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+          SELECT $23::uuid, 'property.create', 'property', i.id,
+            jsonb_build_object('after', jsonb_build_object('listing_no', i.listing_no, 'status', i.status))
+          FROM ins i
+          RETURNING id
         )
-        VALUES ($1, $2, $3::deal_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::property_status, $15, $16::text[], $17, $18, $19, $20, $21, $22::text[])
-        RETURNING id
+        SELECT id FROM ins
         `,
-        params,
-      );
+    [...params, actor.staffId],
+  );
 
-  if (input.id && !rows[0]) {
-    if (scope !== null) throw new Response("Forbidden", { status: 403 });
-    return { id: "", error: "Not found" };
-  }
   const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(actor.staffId, input.id ? "property.update" : "property.create", "property", id);
   return { id };
 }
 
@@ -1371,24 +1358,33 @@ export async function updateAdminPropertyStatus(
   actor: StaffAccess,
 ) {
   const scope = agentScope(actor);
+  // old/upd/audit in one statement: no status change commits without its audit row (C-16).
+  const actorParam = scope !== null ? "$4" : "$3";
   const rows = await queryRows(
-    `UPDATE properties SET status = $1::property_status, updated_at = now() WHERE id = $2${
-      scope !== null ? " AND agent_id = $3" : ""
-    } RETURNING id`,
-    scope !== null ? [status, id, scope] : [status, id],
+    `WITH old AS (
+       SELECT p.id, p.status FROM properties p
+       WHERE p.id = $2${scope !== null ? " AND p.agent_id = $3" : ""}
+       FOR UPDATE
+     ), upd AS (
+       UPDATE properties p SET status = $1::property_status, updated_at = now()
+       FROM old o WHERE p.id = o.id
+       RETURNING p.id, p.status
+     ), audit AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT ${actorParam}::uuid, 'property.status', 'property', u.id,
+         jsonb_build_object(
+           'before', jsonb_build_object('status', o.status),
+           'after', jsonb_build_object('status', u.status))
+       FROM upd u JOIN old o ON o.id = u.id
+       RETURNING id
+     )
+     SELECT id FROM upd`,
+    scope !== null ? [status, id, scope, actor.staffId] : [status, id, actor.staffId],
   );
   if (!rows[0]) {
     if (scope !== null) throw new Response("Forbidden", { status: 403 });
     return { ok: false, error: "Not found" };
   }
-  await writeAudit(actor.staffId, "property.status", "property", id, { status });
-  return { ok: true };
-}
-
-export async function deleteAdminProperty(id: string, actor: StaffAccess) {
-  const rows = await queryRows("DELETE FROM properties WHERE id = $1 RETURNING id", [id]);
-  if (!rows[0]) return { ok: false, error: "Not found" };
-  await writeAudit(actor.staffId, "property.delete", "property", id);
   return { ok: true };
 }
 
@@ -1538,6 +1534,11 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
   ) {
     throw new Response("Invalid transaction", { status: 400 });
   }
+  // B-04: checked before any SQL, so an agent's verified/published never reaches the database.
+  const canVerify = canVerifyTransactions(actor.roles);
+  if (!canVerify && (input.verified === true || input.published === true)) {
+    throw new Response("TRANSACTION_VERIFY_FORBIDDEN", { status: 403 });
+  }
   const scope = agentScope(actor);
   const saleablePsf =
     input.saleable_area > 0 ? Math.round(input.price / input.saleable_area) : null;
@@ -1569,6 +1570,13 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
   const rows = input.id
     ? await queryRows(
         `
+        WITH old AS (
+          SELECT t.id, t.verification_state, t.published, t.price, t.deal_date, t.deal_type
+          FROM transactions t
+          -- A scoped agent locks only its own row, never a colleague's.
+          WHERE t.id = $14${scope !== null ? " AND t.agent_id = $15" : ""}
+          FOR UPDATE
+        ), upd AS (
         UPDATE transactions SET
           estate_id = $1,
           deal_type = $2::deal_type,
@@ -1584,7 +1592,15 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
           verification_state = $12::transaction_verification_state,
           published = $13,
           verified_at = CASE WHEN $12::transaction_verification_state = 'verified' THEN COALESCE(verified_at, now()) ELSE NULL END
-        WHERE id = $14${scope !== null ? " AND agent_id = $15" : ""}
+        FROM old o
+        WHERE transactions.id = o.id${scope !== null ? " AND transactions.agent_id = $15" : ""}
+          ${
+            // B-04 row-state guard: a non-manager UPDATE can never match a verified or
+            // published row, so a race or a bypass of the TS check still cannot write it.
+            canVerify
+              ? ""
+              : "AND transactions.verification_state <> 'verified' AND transactions.published = false"
+          }
           AND NOT EXISTS (
             SELECT 1 FROM transaction_performance performance
             WHERE performance.transaction_id = transactions.id
@@ -1596,19 +1612,47 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
                 $12::transaction_verification_state <> 'verified'
               )
           )
-        RETURNING id
+        RETURNING transactions.id, transactions.verification_state, transactions.published,
+          transactions.price, transactions.deal_date, transactions.deal_type
+        ), audit AS (
+          INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+          SELECT ${scope !== null ? "$16" : "$15"}::uuid, 'transaction.update', 'transaction', u.id,
+            jsonb_build_object(
+              'before', jsonb_build_object(
+                'verification_state', o.verification_state, 'published', o.published,
+                'price', o.price, 'deal_date', o.deal_date, 'deal_type', o.deal_type),
+              'after', jsonb_build_object(
+                'verification_state', u.verification_state, 'published', u.published,
+                'price', u.price, 'deal_date', u.deal_date, 'deal_type', u.deal_type))
+          FROM upd u JOIN old o ON o.id = u.id
+          RETURNING id
+        )
+        SELECT id FROM upd
         `,
-        scope !== null ? [...params, input.id, scope] : [...params, input.id],
+        scope !== null
+          ? [...params, input.id, scope, actor.staffId]
+          : [...params, input.id, actor.staffId],
       )
     : await queryRows(
         `
-        INSERT INTO transactions (
-          estate_id, deal_type, price, saleable_area, saleable_psf, deal_date,
-          unit, block, floor_band, source, source_url, verification_state,
-          published, verified_at, agent_id
+        WITH ins AS (
+          INSERT INTO transactions (
+            estate_id, deal_type, price, saleable_area, saleable_psf, deal_date,
+            unit, block, floor_band, source, source_url, verification_state,
+            published, verified_at, agent_id
+          )
+          VALUES ($1, $2::deal_type, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::transaction_verification_state, $13, CASE WHEN $12::transaction_verification_state = 'verified' THEN now() ELSE NULL END, $14)
+          RETURNING id, verification_state, published, price, deal_date, deal_type
+        ), audit AS (
+          INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+          SELECT $14::uuid, 'transaction.create', 'transaction', i.id,
+            jsonb_build_object('after', jsonb_build_object(
+              'verification_state', i.verification_state, 'published', i.published,
+              'price', i.price, 'deal_date', i.deal_date, 'deal_type', i.deal_type))
+          FROM ins i
+          RETURNING id
         )
-        VALUES ($1, $2::deal_type, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::transaction_verification_state, $13, CASE WHEN $12::transaction_verification_state = 'verified' THEN now() ELSE NULL END, $14)
-        RETURNING id
+        SELECT id FROM ins
         `,
         [...params, actor.staffId],
       );
@@ -1622,12 +1666,6 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
     return { id: "", error: "Not found" };
   }
   const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(
-    actor.staffId,
-    input.id ? "transaction.update" : "transaction.create",
-    "transaction",
-    id,
-  );
   return { id };
 }
 
@@ -2102,10 +2140,13 @@ export async function listAdminCms() {
        LIMIT 40`,
     ),
     queryRows(
-      "SELECT scope, count(*)::int AS total FROM faqs GROUP BY scope ORDER BY scope ASC LIMIT 80",
+      `SELECT scope, (count(*) FILTER (WHERE published))::int AS total,
+        (count(*) FILTER (WHERE NOT published))::int AS archived
+       FROM faqs GROUP BY scope ORDER BY scope ASC LIMIT 80`,
     ),
     queryRows(
-      `SELECT id, scope, question, answer, sort_order, created_at
+      `SELECT id, scope, question, answer, sort_order, created_at, published,
+        ${cmsRowVersionSql("faq", "faqs")} AS version
        FROM faqs
        ORDER BY scope ASC, sort_order ASC, created_at ASC
        LIMIT 120`,
@@ -2149,6 +2190,7 @@ export async function listAdminCms() {
     faqGroups: faqGroups.map((row) => ({
       scope: stringOrEmpty(row.scope),
       total: numberOrNull(row.total) ?? 0,
+      archived: numberOrNull(row.archived) ?? 0,
     })),
     faqs: faqs.map((row) => ({
       id: stringOrEmpty(row.id),
@@ -2157,6 +2199,8 @@ export async function listAdminCms() {
       answer: stringOrEmpty(row.answer),
       sort_order: numberOrNull(row.sort_order) ?? 0,
       created_at: dateOrNull(row.created_at),
+      published: row.published === true,
+      version: stringOrEmpty(row.version),
     })),
   };
 }
@@ -2166,7 +2210,8 @@ export async function fetchAdminCmsVideos() {
   try {
     rows = await queryRows(
       `
-    SELECT id, title, video_url, description, sort_order, published, created_at, updated_at, category
+    SELECT id, title, video_url, description, sort_order, published, created_at, updated_at, category,
+      ${cmsRowVersionSql("video", "cms_videos")} AS version
     FROM cms_videos
     ORDER BY sort_order ASC, created_at DESC, id DESC LIMIT 50
     `,
@@ -2186,6 +2231,7 @@ export async function fetchAdminCmsVideos() {
     created_at: dateOrNull(row.created_at),
     updated_at: dateOrNull(row.updated_at),
     category: stringOrNull(row.category),
+    version: stringOrEmpty(row.version),
   }));
 }
 
@@ -2201,8 +2247,13 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
   if (!isYouTubeVideoUrl(input.video_url)) {
     return { id: "", error: "請輸入有效 YouTube 連結" };
   }
+  // An edit without a version (a pre-deploy bundle, a fixture) must not be a
+  // blind overwrite of a colleague's save.
+  if (input.id && !isCmsRowVersion(input.expected_version)) {
+    throw new Response(CMS_ROW_VERSION_REQUIRED, { status: 400 });
+  }
 
-  const params = [
+  const params: unknown[] = [
     input.title,
     input.video_url,
     input.description,
@@ -2211,31 +2262,78 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
     input.category,
   ];
 
-  let rows;
+  // Version check, write and audit row are one statement (C-12, C-16): a stale
+  // tab writes nothing, and a failed audit insert rolls the write back. The
+  // version hashes staff fields only, so a YouTube sync run that rewrites the
+  // same title and URL (and updated_at) does not 409 the next staff save.
+  let rows: Array<{
+    id?: string;
+    version?: string;
+    current_version?: string;
+    new_version?: string | null;
+  }>;
   try {
     rows = input.id
       ? await queryRows(
           `
-        UPDATE cms_videos SET
-          title = $1,
-          video_url = $2,
-          description = $3,
-          sort_order = $4,
-          published = $5,
-          category = $6,
-          updated_at = now()
-        WHERE id = $7
-        RETURNING id
+        WITH old AS (
+          SELECT v.*, ${cmsRowVersionSql("video", "v")} AS version
+          FROM cms_videos v
+          WHERE v.id = $7::uuid
+          FOR UPDATE
+        ), upd AS (
+          UPDATE cms_videos v SET
+            title = $1,
+            video_url = $2,
+            description = $3,
+            sort_order = $4,
+            published = $5,
+            category = $6,
+            updated_at = now()
+          FROM old o
+          WHERE v.id = o.id AND o.version = $8
+            AND (o.title, o.video_url, o.description, o.sort_order, o.published, o.category)
+              IS DISTINCT FROM ($1::text, $2::text, $3::text, $4::integer, $5::boolean, $6::text)
+          RETURNING v.*, ${cmsRowVersionSql("video", "v")} AS version
+        ), diff AS (
+          SELECT b.k, b.v AS before, a.v AS after
+          FROM upd u, old o,
+            LATERAL jsonb_each(${cmsRowFieldsJsonSql("video", "o")}) b(k, v)
+            JOIN LATERAL jsonb_each(${cmsRowFieldsJsonSql("video", "u")}) a(k, v) ON a.k = b.k
+          WHERE a.v IS DISTINCT FROM b.v
+        ), audit AS (
+          INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+          SELECT $9::uuid, 'cms_video.update', 'cms_video', u.id, jsonb_build_object(
+            'changed', (SELECT COALESCE(jsonb_agg(k ORDER BY k), '[]'::jsonb) FROM diff),
+            'before', (SELECT COALESCE(jsonb_object_agg(k, before), '{}'::jsonb) FROM diff),
+            'after', (SELECT COALESCE(jsonb_object_agg(k, after), '{}'::jsonb) FROM diff),
+            'expectedVersion', $8::text,
+            'version', u.version)
+          FROM upd u
+          RETURNING id
+        )
+        SELECT o.id, o.version AS current_version, (SELECT version FROM upd) AS new_version
+        FROM old o
         `,
-          [...params, input.id],
+          [...params, input.id, input.expected_version, actor.staffId],
         )
       : await queryRows(
           `
-        INSERT INTO cms_videos (title, video_url, description, sort_order, published, category)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id
+        WITH ins AS (
+          INSERT INTO cms_videos AS v (title, video_url, description, sort_order, published, category)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING v.*, ${cmsRowVersionSql("video", "v")} AS version
+        ), audit AS (
+          INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+          SELECT $7::uuid, 'cms_video.create', 'cms_video', i.id, jsonb_build_object(
+            'after', ${cmsRowFieldsJsonSql("video", "i")},
+            'version', i.version)
+          FROM ins i
+          RETURNING id
+        )
+        SELECT i.id, i.version FROM ins i
         `,
-          params,
+          [...params, actor.staffId],
         );
   } catch (error) {
     if (isMissingCmsVideosTableError(error)) {
@@ -2244,162 +2342,287 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
     throw error;
   }
 
-  if (input.id && !rows[0]) return { id: "", error: "Not found" };
-  const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(
-    actor.staffId,
-    input.id ? "cms_video.update" : "cms_video.create",
-    "cms_video",
-    id,
-  );
-  return { id };
-}
-
-export async function saveAdminEstate(input: AdminEstateInput, actor: StaffAccess) {
-  const rows = input.id
-    ? await queryRows(
-        `UPDATE estates SET slug=$1, name_zh=$2, name_en=$3, district_slug=$4, developer=$5,
-          year_completed=$6, phases=$7, total_units=$8, area_min=$9, area_max=$10,
-          description=$11, hero_image=$12, facilities=$13::text[], seo_title=$14,
-          seo_description=$15, updated_at=now()
-         WHERE id=$16 RETURNING id`,
-        [
-          input.slug,
-          input.name_zh,
-          input.name_en,
-          input.district_slug,
-          input.developer,
-          input.year_completed,
-          input.phases,
-          input.total_units,
-          input.area_min,
-          input.area_max,
-          input.description,
-          input.hero_image,
-          input.facilities,
-          input.seo_title,
-          input.seo_description,
-          input.id,
-        ],
-      )
-    : await queryRows(
-        `INSERT INTO estates (slug, name_zh, name_en, district_slug, developer, year_completed,
-          phases, total_units, area_min, area_max, description, hero_image, facilities,
-          seo_title, seo_description)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::text[],$14,$15)
-         RETURNING id`,
-        [
-          input.slug,
-          input.name_zh,
-          input.name_en,
-          input.district_slug,
-          input.developer,
-          input.year_completed,
-          input.phases,
-          input.total_units,
-          input.area_min,
-          input.area_max,
-          input.description,
-          input.hero_image,
-          input.facilities,
-          input.seo_title,
-          input.seo_description,
-        ],
-      );
-  if (input.id && !rows[0]) return { id: "", error: "Not found" };
-  const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(actor.staffId, input.id ? "estate.update" : "estate.create", "estate", id);
-  return { id };
-}
-
-export async function saveAdminArticle(input: AdminArticleInput, actor: StaffAccess) {
-  requireNonEmpty(input.slug, "slug");
-  requireNonEmpty(input.title, "title");
-
-  const publishedAt = input.published_at ?? new Date().toISOString();
-  const params = [
-    input.slug,
-    input.title,
-    input.excerpt,
-    input.content,
-    input.cover_image,
-    input.category,
-    input.reading_minutes,
-    input.published,
-    publishedAt,
-    input.seo_title,
-    input.seo_description,
-    actor.staffId,
-  ];
-
-  const rows = input.id
-    ? await queryRows(
-        `UPDATE articles SET slug=$1, title=$2, excerpt=$3, content=$4, cover_image=$5,
-          category=$6, reading_minutes=$7, published=$8, published_at=$9,
-          seo_title=$10, seo_description=$11, author_id=$12, updated_at=now()
-         WHERE id=$13 RETURNING id`,
-        [...params, input.id],
-      )
-    : await queryRows(
-        `INSERT INTO articles (slug, title, excerpt, content, cover_image, category,
-          reading_minutes, published, published_at, seo_title, seo_description, author_id)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-         RETURNING id`,
-        params,
-      );
-
-  if (input.id && !rows[0]) return { id: "", error: "Not found" };
-  const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(actor.staffId, input.id ? "article.update" : "article.create", "article", id);
-  return { id };
+  const row = rows[0];
+  if (!input.id) return { id: stringOrEmpty(row?.id), version: stringOrEmpty(row?.version) };
+  if (!row) return { id: "", error: "Not found" };
+  if (row.current_version !== input.expected_version) {
+    throw new Response(CMS_ROW_CHANGED, { status: 409 });
+  }
+  return { id: input.id, version: row.new_version ?? row.current_version };
 }
 
 export async function saveAdminFaq(input: AdminFaqInput, actor: StaffAccess) {
   requireNonEmpty(input.scope, "scope");
   requireNonEmpty(input.question, "question");
   requireNonEmpty(input.answer, "answer");
+  // An edit without a version (a pre-deploy bundle, a fixture) must not be a
+  // blind overwrite of a colleague's save.
+  if (input.id && !isCmsRowVersion(input.expected_version)) {
+    throw new Response(CMS_ROW_VERSION_REQUIRED, { status: 400 });
+  }
+  const values = [input.scope, input.question, input.answer, input.sort_order];
 
-  const rows = input.id
-    ? await queryRows(
-        `UPDATE faqs SET scope=$1, question=$2, answer=$3, sort_order=$4
-         WHERE id=$5 RETURNING id`,
-        [input.scope, input.question, input.answer, input.sort_order, input.id],
-      )
-    : input.upsert
-      ? await queryRows(
-          `INSERT INTO faqs (scope, question, answer, sort_order)
-         VALUES ($1,$2,$3,$4)
+  // Each branch is one statement: version check, write and audit row commit
+  // together (C-12, C-16).
+  if (input.id) {
+    const rows = await queryRows<{
+      current_version: string;
+      published: boolean;
+      new_version: string | null;
+    }>(
+      `WITH old AS (
+         SELECT f.*, ${cmsRowVersionSql("faq", "f")} AS version
+         FROM faqs f
+         WHERE f.id = $5::uuid
+         FOR UPDATE
+       ), upd AS (
+         UPDATE faqs f SET scope = $1, question = $2, answer = $3, sort_order = $4
+         FROM old o
+         WHERE f.id = o.id AND o.version = $6 AND o.published
+           AND (o.scope, o.question, o.answer, o.sort_order)
+             IS DISTINCT FROM ($1::text, $2::text, $3::text, $4::integer)
+         RETURNING f.*, ${cmsRowVersionSql("faq", "f")} AS version
+       ), diff AS (
+         SELECT b.k, b.v AS before, a.v AS after
+         FROM upd u, old o,
+           LATERAL jsonb_each(${cmsRowFieldsJsonSql("faq", "o")}) b(k, v)
+           JOIN LATERAL jsonb_each(${cmsRowFieldsJsonSql("faq", "u")}) a(k, v) ON a.k = b.k
+         WHERE a.v IS DISTINCT FROM b.v
+       ), audit AS (
+         INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+         SELECT $7::uuid, 'faq.update', 'faq', u.id, jsonb_build_object(
+           'changed', (SELECT COALESCE(jsonb_agg(k ORDER BY k), '[]'::jsonb) FROM diff),
+           'before', (SELECT COALESCE(jsonb_object_agg(k, before), '{}'::jsonb) FROM diff),
+           'after', (SELECT COALESCE(jsonb_object_agg(k, after), '{}'::jsonb) FROM diff),
+           'expectedVersion', $6::text,
+           'version', u.version)
+         FROM upd u
+         RETURNING id
+       )
+       SELECT o.version AS current_version, o.published, (SELECT version FROM upd) AS new_version
+       FROM old o`,
+      [...values, input.id, input.expected_version, actor.staffId],
+    );
+    const row = rows[0];
+    if (!row) return { id: "", error: "Not found" };
+    if (row.published !== true) throw new Response(FAQ_ARCHIVED, { status: 409 });
+    if (row.current_version !== input.expected_version) {
+      throw new Response(CMS_ROW_CHANGED, { status: 409 });
+    }
+    // An unchanged save (a double click) keeps the version and writes no audit row.
+    return { id: input.id, inserted: false, version: row.new_version ?? row.current_version };
+  }
+
+  if (input.upsert) {
+    // Bulk import updates a live match in place. An archived match is left
+    // alone (DO UPDATE ... WHERE f.published returns no row) and reported, so
+    // an import never rewrites a hidden answer while claiming success. A
+    // re-import of the same answer writes no audit row.
+    // prior locks the live match before ins writes it, so the audit `before`
+    // is the committed answer a racing import left, not this snapshot's. ins
+    // reads prior through an InitPlan to force that order: read only by audit,
+    // prior would run after ins and FOR UPDATE would skip the row ins changed.
+    const rows = await queryRows<{ id: string; inserted: boolean; version: string }>(
+      `WITH prior AS (
+         SELECT f.* FROM faqs f WHERE f.scope = $1 AND f.question = $2 FOR UPDATE
+       ), ins AS (
+         INSERT INTO faqs AS f (scope, question, answer, sort_order)
+         SELECT $1::text, $2::text, $3::text, $4::integer
+         WHERE (SELECT count(*) FROM prior) >= 0
          ON CONFLICT (scope, question) DO UPDATE
            SET answer = EXCLUDED.answer
-         RETURNING id, (xmax = 0) AS inserted`,
-          [input.scope, input.question, input.answer, input.sort_order],
-        )
-      : // The single-FAQ form must not silently replace a different row's answer
-        // and report it as a create. DO NOTHING returns no row on conflict, which
-        // becomes a refusal below.
-        await queryRows(
-          `INSERT INTO faqs (scope, question, answer, sort_order)
-         VALUES ($1,$2,$3,$4)
-         ON CONFLICT (scope, question) DO NOTHING
-         RETURNING id, true AS inserted`,
-          [input.scope, input.question, input.answer, input.sort_order],
-        );
+           WHERE f.published
+         RETURNING f.*, (f.xmax = 0) AS inserted, ${cmsRowVersionSql("faq", "f")} AS version
+       ), audit AS (
+         INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+         SELECT $5::uuid,
+           CASE WHEN i.inserted THEN 'faq.create' ELSE 'faq.update' END,
+           'faq', i.id,
+           CASE WHEN i.inserted
+             THEN jsonb_build_object('after', ${cmsRowFieldsJsonSql("faq", "i")}, 'version', i.version)
+             ELSE jsonb_build_object(
+               'changed', '["answer"]'::jsonb,
+               'before', jsonb_build_object('answer', p.answer),
+               'after', jsonb_build_object('answer', i.answer),
+               'version', i.version)
+           END
+         FROM ins i LEFT JOIN prior p ON p.id = i.id
+         WHERE i.inserted OR p.answer IS DISTINCT FROM i.answer
+         RETURNING id
+       )
+       SELECT i.id, i.inserted, i.version FROM ins i`,
+      [...values, actor.staffId],
+    );
+    const row = rows[0];
+    if (!row) return { id: "", error: FAQ_ARCHIVED };
+    return { id: stringOrEmpty(row.id), inserted: row.inserted !== false, version: row.version };
+  }
 
-  if (input.id && !rows[0]) return { id: "", error: "Not found" };
-  if (!input.id && !rows[0]) return { id: "", error: "此範圍已有相同問題，請改用編輯。" };
-  const id = stringOrEmpty(rows[0]?.id);
-  // An upsert that resolved to an update is a faq.update, not a faq.create --
-  // the audit trail should say what actually happened to the row.
-  const inserted = input.id ? false : rows[0]?.inserted !== false;
-  await writeAudit(actor.staffId, inserted ? "faq.create" : "faq.update", "faq", id);
-  return { id, inserted };
+  // The single-FAQ form must not silently replace a different row's answer and
+  // report it as a create. DO NOTHING returns no row on conflict, which becomes
+  // a refusal below; an archived match is named so staff can restore it.
+  const rows = await queryRows<{
+    id: string | null;
+    version: string | null;
+    existing_published: boolean | null;
+  }>(
+    `WITH ins AS (
+       INSERT INTO faqs AS f (scope, question, answer, sort_order)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (scope, question) DO NOTHING
+       RETURNING f.*, ${cmsRowVersionSql("faq", "f")} AS version
+     ), audit AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT $5::uuid, 'faq.create', 'faq', i.id, jsonb_build_object(
+         'after', ${cmsRowFieldsJsonSql("faq", "i")},
+         'version', i.version)
+       FROM ins i
+       RETURNING id
+     )
+     SELECT (SELECT id FROM ins) AS id, (SELECT version FROM ins) AS version,
+       (SELECT f.published FROM faqs f WHERE f.scope = $1 AND f.question = $2) AS existing_published`,
+    [...values, actor.staffId],
+  );
+  const row = rows[0];
+  if (!row?.id) {
+    return {
+      id: "",
+      error:
+        row?.existing_published === false
+          ? FAQ_ARCHIVED_DUPLICATE
+          : "此範圍已有相同問題，請改用編輯。",
+    };
+  }
+  return { id: stringOrEmpty(row.id), inserted: true, version: stringOrEmpty(row.version) };
 }
 
-export async function deleteAdminFaq(id: string, actor: StaffAccess) {
-  const rows = await queryRows("DELETE FROM faqs WHERE id = $1 RETURNING id", [id]);
-  if (!rows[0]) return { ok: false, error: "Not found" };
-  await writeAudit(actor.staffId, "faq.delete", "faq", id);
+// FX-18a Task 2 (C-12). Same advisory identity cms_mutate takes (re-entrant).
+const FAQ_CMS_LOCK_SQL = `SELECT pg_advisory_xact_lock(hashtextextended('cms:faq:' || $1::uuid::text, 0))`;
+
+/** cms_mutate raises FORBIDDEN for a non-admin/manager actor. */
+function faqCmsMutateError(error: unknown): never {
+  if (error instanceof Error && /\bFORBIDDEN\b/.test(error.message)) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+  throw error;
+}
+
+/** Delete is a soft delete: cms_mutate('archive') sets published=false, writes the
+ *  archived revision and the cms_archived audit row. FAQ edits bypass the revision
+ *  engine, so the live row is snapshotted as the published revision first, in the
+ *  same transaction; restore then brings back the answer it had when archived. */
+export async function deleteAdminFaq(
+  id: string,
+  actor: StaffAccess,
+): Promise<{ ok: true } | { ok: false; error: "Not found" }> {
+  let results: unknown[][];
+  try {
+    results = (await transactionRows([
+      { statement: FAQ_CMS_LOCK_SQL, params: [id] },
+      {
+        // saveAdminFaq and reorderAdminFaqs take this row lock, not the advisory
+        // one: hold it before the snapshot so no save can land between the
+        // snapshot and the archive. A racing save waits, then gets FAQ_ARCHIVED.
+        statement: `SELECT id FROM faqs WHERE id = $1::uuid FOR UPDATE`,
+        params: [id],
+      },
+      {
+        // A stale publication (the July snapshot, or an older one) gives way to
+        // the live row. Only while the FAQ is live: an archived FAQ is untouched.
+        statement: `UPDATE cms_content_revisions SET state = 'superseded'
+          WHERE resource_type = 'faq' AND resource_id = $1::uuid AND state = 'published'
+            AND EXISTS (SELECT 1 FROM faqs f WHERE f.id = $1::uuid AND f.published)
+            AND payload IS DISTINCT FROM (
+              SELECT to_jsonb(f) - 'created_at' - 'updated_at' FROM faqs f
+              WHERE f.id = $1::uuid AND f.published)`,
+        params: [id],
+      },
+      {
+        statement: `INSERT INTO cms_content_revisions
+            (resource_type, resource_id, version_number, state, payload, created_by, published_at)
+          SELECT 'faq', f.id,
+            (SELECT COALESCE(MAX(version_number), 0) + 1 FROM cms_content_revisions
+             WHERE resource_type = 'faq' AND resource_id = $1::uuid),
+            'published', to_jsonb(f) - 'created_at' - 'updated_at', $2::uuid, now()
+          FROM faqs f
+          WHERE f.id = $1::uuid AND f.published
+            AND NOT EXISTS (SELECT 1 FROM cms_content_revisions
+              WHERE resource_type = 'faq' AND resource_id = $1::uuid AND state = 'published')`,
+        params: [id, actor.staffId],
+      },
+      {
+        statement: `SELECT cms_mutate('archive', 'faq', f.id, $2::uuid) AS revision
+          FROM faqs f WHERE f.id = $1::uuid AND f.published`,
+        params: [id, actor.staffId],
+      },
+    ])) as unknown[][];
+  } catch (error) {
+    faqCmsMutateError(error);
+  }
+  if (!results[4]?.[0]) return { ok: false, error: "Not found" };
   return { ok: true };
+}
+
+/** Restore an archived FAQ to the answer it had when archived: cms_mutate('restore')
+ *  makes a draft from the newest archived revision, then cms_mutate('publish')
+ *  publishes only that draft. One transaction; admin/manager only (cms_mutate). */
+export async function restoreAdminFaq(
+  id: string,
+  actor: StaffAccess,
+): Promise<{ ok: true; version: string } | { ok: false; error: "Not found" }> {
+  let results: unknown[][];
+  try {
+    results = (await transactionRows([
+      { statement: FAQ_CMS_LOCK_SQL, params: [id] },
+      {
+        statement: `SELECT cms_mutate('restore', 'faq', f.id, $2::uuid, NULL, NULL, NULL,
+            (SELECT r.id FROM cms_content_revisions r
+             WHERE r.resource_type = 'faq' AND r.resource_id = $1::uuid AND r.state = 'archived'
+             ORDER BY r.version_number DESC LIMIT 1)) AS revision
+          FROM faqs f WHERE f.id = $1::uuid AND NOT f.published`,
+        params: [id, actor.staffId],
+      },
+      {
+        // Publish only the draft this transaction just made (created_at = now()).
+        // Whenever the restore above ran (the FAQ is still unpublished), publish
+        // is called; with no such draft it gets a NULL revision and raises, so a
+        // restore draft and its audit row never commit unpublished.
+        statement: `SELECT cms_mutate('publish', 'faq', $1::uuid, $2::uuid, NULL,
+            d.base_published_version, 1, d.id) AS revision
+          FROM faqs f
+          LEFT JOIN LATERAL (
+            SELECT r.id, r.base_published_version FROM cms_content_revisions r
+            WHERE r.resource_type = 'faq' AND r.resource_id = $1::uuid AND r.state = 'draft'
+              AND r.draft_retired_at IS NULL AND r.created_by = $2::uuid
+              AND r.restored_from_revision_id IS NOT NULL AND r.created_at = now()
+            ORDER BY r.version_number DESC LIMIT 1
+          ) d ON true
+          WHERE f.id = $1::uuid AND NOT f.published`,
+        params: [id, actor.staffId],
+      },
+      {
+        statement: `SELECT ${cmsRowVersionSql("faq", "f")} AS version
+          FROM faqs f WHERE f.id = $1::uuid AND f.published`,
+        params: [id],
+      },
+    ])) as unknown[][];
+  } catch (error) {
+    const dbError = error as { code?: unknown; constraint?: unknown; message?: unknown };
+    if (
+      String(dbError?.code ?? "") === "23505" &&
+      String(dbError?.constraint ?? "") === "faqs_scope_question_key"
+    ) {
+      throw new Response(FAQ_RESTORE_CONFLICT, { status: 409 });
+    }
+    // Unpublished but never archived through the revision engine: nothing to restore.
+    if (error instanceof Error && /\bCMS_REVISION_NOT_FOUND\b/.test(error.message)) {
+      return { ok: false, error: "Not found" };
+    }
+    faqCmsMutateError(error);
+  }
+  const row = results[3]?.[0] as { version?: unknown } | undefined;
+  if (!results[1]?.[0] || !row) return { ok: false, error: "Not found" };
+  return { ok: true, version: stringOrEmpty(row.version) };
 }
 
 /** Which of the supplied (scope, question) pairs already exist.
@@ -2413,13 +2636,13 @@ export async function deleteAdminFaq(id: string, actor: StaffAccess) {
 export async function checkAdminFaqConflicts(
   keys: Array<{ scope: string; question: string }>,
   _actor: StaffAccess,
-) {
-  if (!keys.length) return { existing: [] as Array<{ scope: string; question: string }> };
+): Promise<{ existing: FaqKey[]; archived: FaqKey[] }> {
+  if (!keys.length) return { existing: [], archived: [] };
 
   const scopes = keys.map((key) => key.scope);
   const questions = keys.map((key) => key.question);
   const rows = await queryRows(
-    `SELECT scope, question
+    `SELECT scope, question, published
      FROM faqs
      WHERE (scope, question) IN (
        SELECT UNNEST($1::text[]), UNNEST($2::text[])
@@ -2427,13 +2650,18 @@ export async function checkAdminFaqConflicts(
     [scopes, questions],
   );
 
+  // An archived match is not overwritten: the import skips it (FX-18a Task 2).
+  const key = (row: Record<string, unknown>) => ({
+    scope: stringOrEmpty(row.scope),
+    question: stringOrEmpty(row.question),
+  });
   return {
-    existing: rows.map((row) => ({
-      scope: stringOrEmpty(row.scope),
-      question: stringOrEmpty(row.question),
-    })),
+    existing: rows.filter((row) => row.published === true).map(key),
+    archived: rows.filter((row) => row.published !== true).map(key),
   };
 }
+
+type FaqKey = { scope: string; question: string };
 
 export async function reorderAdminFaqs(orderedIds: string[], actor: StaffAccess) {
   // The CMS read model exposes at most 120 FAQs for reordering.

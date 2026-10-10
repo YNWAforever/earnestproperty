@@ -45,7 +45,8 @@ transactions.set("70000000-0000-4000-8000-0000000000aa", {
   floor_band: "中層",
   source: "合成來源",
   source_url: null,
-  verification_state: "verified",
+  // B-04: the fixture session is an agent, who cannot edit a verified deal.
+  verification_state: "unverified",
   published: false,
   agent_id: null,
   agent_name: null,
@@ -95,8 +96,9 @@ export async function saveAdminFaq({ data }: { data: Row }) {
   saves.push({ faq: data });
   return { id: `faq-${faqs.length}` };
 }
-export const checkAdminFaqConflicts = async () => [];
-export const deleteAdminFaq = async () => ({});
+export const checkAdminFaqConflicts = async () => ({ existing: [], archived: [] });
+export const deleteAdminFaq = async () => ({ ok: true });
+export const restoreAdminFaq = async () => ({ ok: true, version: "" });
 export const rebuildAdminAiKnowledge = async () => ({});
 export const saveAdminCmsVideo = async () => ({});
 export const updateAdminMediaAsset = async () => ({});

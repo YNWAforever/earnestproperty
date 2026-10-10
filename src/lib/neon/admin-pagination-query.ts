@@ -7,6 +7,7 @@ import {
   type AdminPageResource,
 } from "./admin-pagination.ts";
 import { identityReviewOpenSql } from "../woztell/identity-review-sql.ts";
+import { cmsRowVersionSql } from "./cms-row-version.ts";
 const CMS_TABLES = {
   estates: "estates",
   articles: "articles",
@@ -98,8 +99,16 @@ export function buildAdminPageQuery(
       source = `WITH actor_drafts AS (SELECT DISTINCT ON(resource_id) * FROM cms_content_revisions WHERE resource_type='${kind}' AND state='draft' AND draft_retired_at IS NULL AND created_by=${own}::uuid ORDER BY resource_id,version_number DESC)
     SELECT to_jsonb(c) AS row,c.${time} AS page_at,c.id FROM ${table} c WHERE NOT EXISTS(SELECT 1 FROM actor_drafts d WHERE d.resource_id=c.id)
     UNION ALL SELECT d.payload||jsonb_build_object('id',d.resource_id,'is_draft',true,'draft_revision_id',d.id,'draft_version',d.version_number) AS row,COALESCE((SELECT live.created_at FROM ${table} live WHERE live.id=d.resource_id),d.browse_created_at) AS page_at,d.resource_id AS id FROM actor_drafts d`;
-    } else
-      source = `SELECT to_jsonb(c) AS row,c.${time} AS page_at,c.id FROM ${table} c${input.resource === "media" ? " WHERE c.archived_at IS NULL" : ""}`;
+    } else {
+      // FAQ and video rows carry the same opaque version saveAdminFaq /
+      // saveAdminCmsVideo compare under FOR UPDATE, so a hub edit is not a 400.
+      const versioned =
+        input.resource === "faqs" ? "faq" : input.resource === "videos" ? "video" : null;
+      const row = versioned
+        ? `to_jsonb(c)||jsonb_build_object('version',${cmsRowVersionSql(versioned, "c")})`
+        : "to_jsonb(c)";
+      source = `SELECT ${row} AS row,c.${time} AS page_at,c.id FROM ${table} c${input.resource === "media" ? " WHERE c.archived_at IS NULL" : ""}`;
+    }
   }
   const filters: string[] = [`${own}::uuid IS NOT NULL`];
   const equal = (key: string, value: unknown) => {

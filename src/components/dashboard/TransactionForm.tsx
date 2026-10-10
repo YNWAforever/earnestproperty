@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
 import { fetchAdminEstateOptions, saveAdminTransaction } from "@/lib/neon/admin-data";
 import { useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import {
@@ -73,6 +74,7 @@ const schema = z
 type FormState = TransactionFormState;
 
 function mapTransactionSaveError(error: string): string {
+  if (error === ADMIN_ERROR_CODES.TRANSACTION_VERIFY_FORBIDDEN) return error;
   if (/^not found$/i.test(error.trim())) {
     return "找不到此成交記錄，可能已被刪除或你沒有權限編輯。";
   }
@@ -82,10 +84,17 @@ function mapTransactionSaveError(error: string): string {
 type Props = {
   transaction?: Transaction;
   staffName?: string;
+  /** Admin or manager. Others cannot verify or publish, or edit a verified deal. */
+  canVerify: boolean;
   onSaved: (id: string) => void;
 };
 
-export function TransactionForm({ transaction, staffName, onSaved }: Props) {
+export function TransactionForm({ transaction, staffName, canVerify, onSaved }: Props) {
+  // B-04: an agent cannot edit a deal a manager verified or published.
+  const lockedForAgent =
+    !canVerify &&
+    transaction !== undefined &&
+    (transaction.verification_state === "verified" || transaction.published);
   const formRef = useRef<HTMLFormElement>(null);
   const [estates, setEstates] = useState<Estate[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -166,7 +175,7 @@ export function TransactionForm({ transaction, staffName, onSaved }: Props) {
 
     setSubmitting(true);
     const result = await saveAdminTransaction({ data: payload }).catch((err) => ({
-      error: err instanceof Error ? err.message : String(err),
+      error: adminErrorMessage(err, err instanceof Error ? err.message : String(err)),
       id: null,
     }));
     setSubmitting(false);
@@ -304,6 +313,7 @@ export function TransactionForm({ transaction, staffName, onSaved }: Props) {
               id="verified"
               {...fieldProps("verified")}
               checked={form.verified}
+              disabled={!canVerify}
               onCheckedChange={(v) => {
                 set("verified", v);
                 if (!v) set("published", false);
@@ -317,18 +327,26 @@ export function TransactionForm({ transaction, staffName, onSaved }: Props) {
               id="published"
               {...fieldProps("published")}
               checked={form.published}
-              disabled={!form.verified}
+              disabled={!canVerify || !form.verified}
               onCheckedChange={(v) => set("published", v)}
             />
           </div>
         </Field>
+        {!canVerify ? (
+          <p className="text-sm text-muted-foreground">只有經理或管理員可以核實及公開發布成交。</p>
+        ) : null}
         <p className="text-sm text-muted-foreground">
           公開發布只控制網站成交展示；內部績效核實在下方成交歸因區處理。
         </p>
       </Section>
 
-      <div className="flex justify-end gap-2 border-t pt-4">
-        <Button type="submit" disabled={submitting}>
+      <div className="flex items-center justify-end gap-2 border-t pt-4">
+        {lockedForAgent ? (
+          <p className="text-sm text-muted-foreground" role="status">
+            此成交已由經理核實或公開，如需修改請聯絡經理。
+          </p>
+        ) : null}
+        <Button type="submit" disabled={submitting || lockedForAgent}>
           {submitting ? "儲存中…" : transaction ? "更新成交" : "建立成交"}
         </Button>
       </div>
