@@ -157,6 +157,7 @@ export const fetchAdminAttentionCounts = async () => ({
   unassignedLeads: 0,
   staleNewLeads: 0,
   leadsNeedingAttention: 0,
+  identityReviewsOpen: 0,
 });
 // No route in this fixture polls; exported so every owned fixture serves the same API.
 const noPolledRead = async (): Promise<never> => {

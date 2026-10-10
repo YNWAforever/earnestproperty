@@ -38,6 +38,7 @@ export const Route = createFileRoute("/api/admin/woztell/send-template")({
               : "OUTBOUND_PERSISTENCE_UNAVAILABLE");
           const status =
             code === "OUTBOUND_CONFLICT_OR_NOT_FOUND" ||
+            code === "IDENTITY_REVIEW_REQUIRED" ||
             code === "ENQUIRY_SELECTION_REQUIRED" ||
             code === "ENQUIRY_ASSOCIATION_INVALID" ||
             code === "OUTBOUND_RECONCILIATION_REQUIRED"

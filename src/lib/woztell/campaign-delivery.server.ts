@@ -1,5 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { campaignRecipientPrimarySql, marketingIdentitySafeSql } from "../neon/phone-identity.ts";
+import { normalizePhone } from "../phone.js";
 
 import {
   CAMPAIGN_PAUSED_ERROR,
@@ -350,9 +351,24 @@ async function deliverCampaignRecipient(
     return { result: "blocked", streak: null };
   }
 
-  const memberId = recipient.whatsapp_member_id ?? recipient.normalized_phone;
-  if (!memberId) {
+  // FX-12 fix round 1 (I-3, D-09 for this path): without a member id, send only the
+  // canonical phone. A stored legacy spelling (91234567, 0085291234567) is sent as
+  // 852XXXXXXXX; a phone that does not parse is never sent raw.
+  const storedMemberId =
+    typeof recipient.whatsapp_member_id === "string" && recipient.whatsapp_member_id !== ""
+      ? recipient.whatsapp_member_id
+      : null;
+  const storedPhone =
+    typeof recipient.normalized_phone === "string" && recipient.normalized_phone !== ""
+      ? recipient.normalized_phone
+      : null;
+  if (!storedMemberId && !storedPhone) {
     await dependencies.updateRecipient(recipient.id, "failed", "WOZTELL_RECIPIENT_MISSING");
+    return { result: "failed", streak: null };
+  }
+  const memberId = storedMemberId ?? normalizePhone(storedPhone);
+  if (!memberId) {
+    await dependencies.updateRecipient(recipient.id, "failed", "WOZTELL_RECIPIENT_PHONE_INVALID");
     return { result: "failed", streak: null };
   }
 

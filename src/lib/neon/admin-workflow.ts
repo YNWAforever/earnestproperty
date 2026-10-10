@@ -1,9 +1,8 @@
+import { normalizePhone } from "../phone.js";
+
+/** FX-12 (D-12): the customer phone identity. The name is kept for its importers. */
 export function normalizeAdminPhone(value: unknown) {
-  if (value === null || value === undefined) return null;
-  const text = String(value).trim();
-  const normalized = text.replace(/\D/g, "");
-  if (!normalized) return null;
-  return !text.startsWith("+") && normalized.length === 8 ? `852${normalized}` : normalized;
+  return normalizePhone(value);
 }
 
 function timeOf(value: Date | string | null | undefined) {

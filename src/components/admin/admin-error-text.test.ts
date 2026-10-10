@@ -258,3 +258,22 @@ test("code-keyed screens still read the raw code", () => {
   const wa = read("src/routes/admin.whatsapp.tsx");
   expect(wa).toContain("const mapped = formatReplyError(raw);");
 });
+
+test("an identity-review refusal reaches staff word for word, not as the uncertain-send line", () => {
+  // FX-12: the send routes answer 409 { error: "IDENTITY_REVIEW_REQUIRED" }; the inbox maps it
+  // through formatReplyError (replyErrorLabels) and then adminErrorMessage.
+  const IDENTITY_REVIEW = "此對話身分待核對，請先確認客戶身分再回覆。";
+  const wa = read("src/routes/admin.whatsapp.tsx");
+  expect(wa).toContain(`IDENTITY_REVIEW_REQUIRED: "${IDENTITY_REVIEW}"`);
+  expect(wa).toContain("return replyErrorLabels[value] ?? value;");
+  // assertNoMutationError throws the mapped zh-HK line with the code attached.
+  const thrown = Object.assign(new Error(IDENTITY_REVIEW), { code: "IDENTITY_REVIEW_REQUIRED" });
+  expect(sendMayHaveReachedServer(thrown)).toBe(false);
+  expect(adminErrorMessage(thrown, SEND_UNCERTAIN)).toBe(IDENTITY_REVIEW);
+  // errorText hands the already-mapped string on when the raw message is the bare code.
+  expect(adminErrorMessage(IDENTITY_REVIEW, SEND_UNCERTAIN)).toBe(IDENTITY_REVIEW);
+  // A 409 carrying the mapped line keeps it rather than the generic version-conflict text.
+  expect(
+    adminErrorMessage(Object.assign(new Error(IDENTITY_REVIEW), { status: 409 }), SEND_UNCERTAIN),
+  ).toBe(IDENTITY_REVIEW);
+});

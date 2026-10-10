@@ -9,6 +9,10 @@ import {
 import { serviceRulesSchema } from "./policy-admin.server.ts";
 import { renderServiceCopy, type ServicePurpose } from "./service-copy.ts";
 import { deliverOutboundIntent, finishOutboundIntent } from "../woztell/outbound-intent.server.ts";
+import {
+  IDENTITY_REVIEW_BLOCK_CODE,
+  identityReviewOpenSql,
+} from "../woztell/identity-review-sql.ts";
 export type ServicePorts = { query: typeof queryRows; transaction: typeof transactionRows };
 const ports: ServicePorts = { query: queryRows, transaction: transactionRows };
 export type ServiceRuntime = {
@@ -170,6 +174,7 @@ async function actionContext(id: string, p: ServicePorts) {
     `SELECT a.*,s.state AS survey_state,s.expires_at,s.answer,s.token_hash,s.manager_task_id,s.manager_assignment_id,
  i.conversation_id,i.first_human_response_at,i.status AS inquiry_status,i.effects_eligible,i.intake_message_id,i.crm_contact_id,
  w.woztell_member_id,w.channel_id,w.last_inbound_at,c.opted_out_whatsapp,
+ ${identityReviewOpenSql("w.id")} AS identity_review_open,
  p.version,p.status AS policy_status,p.rules,p.copy_version,p.approved_by,p.effective_at,g.ended_at,
  e.occurred_at,e.received_at,e.timing,e.identity_quality,
  r.state AS assignment_state,r.desired_staff_id,w.confirmed_staff_id,
@@ -188,6 +193,8 @@ function blockedReason(r: DbRow, runtime: ServiceRuntime, now: Date): string | n
     return "feature_disabled_or_generation_ended";
   if (r.channel_id !== runtime.channelId || !r.woztell_member_id)
     return "channel_or_member_unverified";
+  // FX-12 owner decision 1: nothing is sent while the conversation awaits identity review.
+  if (r.identity_review_open === true) return IDENTITY_REVIEW_BLOCK_CODE;
   const policy = policyFromRow({ ...r, id: r.policy_id, status: r.policy_status });
   if (unresolvedServicePolicy(policy).length) return "policy_unapproved";
   if (
@@ -247,7 +254,9 @@ export async function prepareServiceAction(
       "UPDATE whatsapp_service_actions SET state=$2,block_reason=$3,updated_at=$4::timestamptz WHERE id=$1::uuid AND state IN ('queued','blocked')",
       [
         id,
-        reason.startsWith("feature_") || reason === "approved_human_response_suppression"
+        reason.startsWith("feature_") ||
+        reason === "approved_human_response_suppression" ||
+        reason === IDENTITY_REVIEW_BLOCK_CODE
           ? "suppressed"
           : "blocked",
         reason,
@@ -278,7 +287,7 @@ export async function prepareServiceAction(
       params: [id],
     },
     {
-      statement: `WITH eligible AS (SELECT a.*,i.conversation_id,w.contact_id,w.woztell_member_id,w.channel_id FROM whatsapp_service_actions a JOIN inquiries i ON i.id=a.inquiry_id JOIN whatsapp_conversations w ON w.id=i.conversation_id JOIN crm_contacts c ON c.id=w.contact_id JOIN whatsapp_enquiry_activations g ON g.id=a.activation_id JOIN whatsapp_service_policies p ON p.id=a.policy_id WHERE a.id=$1::uuid AND a.outbound_intent_id IS NULL AND a.state IN ('queued','blocked') AND g.ended_at IS NULL AND p.status='approved' AND NOT c.opted_out_whatsapp),
+      statement: `WITH eligible AS (SELECT a.*,i.conversation_id,w.contact_id,w.woztell_member_id,w.channel_id FROM whatsapp_service_actions a JOIN inquiries i ON i.id=a.inquiry_id JOIN whatsapp_conversations w ON w.id=i.conversation_id JOIN crm_contacts c ON c.id=w.contact_id JOIN whatsapp_enquiry_activations g ON g.id=a.activation_id JOIN whatsapp_service_policies p ON p.id=a.policy_id WHERE a.id=$1::uuid AND a.outbound_intent_id IS NULL AND a.state IN ('queued','blocked') AND g.ended_at IS NULL AND p.status='approved' AND NOT c.opted_out_whatsapp AND NOT ${identityReviewOpenSql("w.id")}),
  intent AS (INSERT INTO whatsapp_outbound_intents(id,conversation_id,actor_type,service_action_id,kind,payload,payload_hash,message_id)
  SELECT $2::uuid,conversation_id,'service',id,'text',$3::jsonb,$4,$5::uuid FROM eligible RETURNING *),
  message AS (INSERT INTO whatsapp_messages(id,conversation_id,contact_id,direction,message_type,text,status,woztell_member_id,channel_id,payload)
@@ -338,13 +347,13 @@ export async function deliverServiceAction(
           params: [id],
         },
         {
-          statement: `WITH eligible AS (SELECT o.id,o.payload,w.channel_id,w.woztell_member_id,(NOT c.opted_out_whatsapp AND p.status='approved' AND g.ended_at IS NULL AND g.id=$7::uuid AND w.channel_id=$8 AND w.last_inbound_at >= $6::timestamptz-interval '24 hours' AND $5::text IS NULL AND a.state IN ('queued','dispatching') AND q.effects_eligible AND q.activation_id=g.id AND q.status NOT IN ('closed','resolved','spam')
+          statement: `WITH eligible AS (SELECT o.id,o.payload,w.channel_id,w.woztell_member_id,${identityReviewOpenSql("w.id")} AS identity_review_open,(NOT c.opted_out_whatsapp AND NOT ${identityReviewOpenSql("w.id")} AND p.status='approved' AND g.ended_at IS NULL AND g.id=$7::uuid AND w.channel_id=$8 AND w.last_inbound_at >= $6::timestamptz-interval '24 hours' AND $5::text IS NULL AND a.state IN ('queued','dispatching') AND q.effects_eligible AND q.activation_id=g.id AND q.status NOT IN ('closed','resolved','spam')
      AND (a.purpose<>'survey' OR (s.state='queued' AND s.expires_at>=$6::timestamptz AND (NOT (p.rules->>'suppressSurveyAfterHuman')::boolean OR q.first_human_response_at IS NULL)))
      AND (a.purpose<>'survey_thanks' OR s.answer='satisfied')
      AND (a.purpose<>'manager_ack' OR (s.answer='assistance' AND s.manager_task_id IS NOT NULL AND EXISTS(SELECT 1 FROM whatsapp_assignment_requests ar JOIN staff_users u ON u.id=ar.desired_staff_id JOIN staff_roles role ON role.staff_user_id=u.id JOIN whatsapp_staff_channels sc ON sc.staff_id=u.id AND sc.channel_id=w.channel_id WHERE ar.id=s.manager_assignment_id AND ar.state='confirmed' AND w.confirmed_staff_id=u.id AND u.active AND role.role IN ('manager','admin') AND sc.eligible AND sc.retired_at IS NULL)))) AS allowed
     FROM whatsapp_outbound_intents o JOIN whatsapp_service_actions a ON a.id=o.service_action_id JOIN inquiries q ON q.id=a.inquiry_id JOIN whatsapp_service_surveys s ON s.id=a.survey_id JOIN whatsapp_conversations w ON w.id=o.conversation_id JOIN crm_contacts c ON c.id=w.contact_id JOIN whatsapp_service_policies p ON p.id=a.policy_id JOIN whatsapp_enquiry_activations g ON g.id=a.activation_id
     JOIN ops_jobs j ON j.id=$2::uuid WHERE o.id=$1::uuid AND o.actor_type='service' AND j.job_type='woztell.reply.deliver' AND j.payload_version=2 AND j.payload->>'actionId'=a.id::text AND j.status='running' AND j.lease_owner=$3 AND a.id=$4::uuid AND j.lease_expires_at>clock_timestamp()),
-    reserved AS (UPDATE whatsapp_outbound_intents o SET state=CASE WHEN o.state='dispatching' THEN 'unknown' WHEN e.allowed THEN 'dispatching' ELSE 'cancelled' END,error=CASE WHEN o.state='dispatching' THEN 'WOZTELL_DELIVERY_UNKNOWN' WHEN NOT e.allowed THEN COALESCE($5,'runtime_dispatch_gate') ELSE NULL END,dispatch_started_at=COALESCE(dispatch_started_at,$6::timestamptz),updated_at=now() FROM eligible e WHERE o.id=e.id AND o.state IN ('queued','dispatching') RETURNING o.*),
+    reserved AS (UPDATE whatsapp_outbound_intents o SET state=CASE WHEN o.state='dispatching' THEN 'unknown' WHEN e.allowed THEN 'dispatching' ELSE 'cancelled' END,error=CASE WHEN o.state='dispatching' THEN 'WOZTELL_DELIVERY_UNKNOWN' WHEN NOT e.allowed THEN COALESCE($5,CASE WHEN e.identity_review_open THEN '${IDENTITY_REVIEW_BLOCK_CODE}' ELSE 'runtime_dispatch_gate' END) ELSE NULL END,dispatch_started_at=COALESCE(dispatch_started_at,$6::timestamptz),updated_at=now() FROM eligible e WHERE o.id=e.id AND o.state IN ('queued','dispatching') RETURNING o.*),
     transcript AS (UPDATE whatsapp_messages m SET status=r.state,error=r.error FROM reserved r WHERE m.id=r.message_id RETURNING m.id),
     action AS (UPDATE whatsapp_service_actions a SET state=CASE WHEN r.state='cancelled' THEN 'suppressed' ELSE r.state END,block_reason=COALESCE(r.error,$5),updated_at=now() FROM reserved r WHERE a.id=r.service_action_id RETURNING a.id)
     SELECT r.*,e.channel_id,e.woztell_member_id FROM reserved r JOIN eligible e ON e.id=r.id WHERE r.state='dispatching'`,

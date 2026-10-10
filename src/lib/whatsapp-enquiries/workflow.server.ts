@@ -52,7 +52,7 @@ export function buildLiveEventStatements(
  SELECT $1::uuid,$2,'live_webhook',$3,$4,$5,$6,m.id,$7,$8::timestamptz,$9::timestamptz,$10,$11,$12::jsonb,'observe',false
  FROM whatsapp_messages m
  WHERE (m.external_message_id=$6 OR ($13::text IS NOT NULL AND m.external_message_id=$13 AND m.text IS NOT DISTINCT FROM $14::text))
- AND m.channel_id=$4 AND m.woztell_member_id=$5 AND m.direction::text=$15
+ AND m.channel_id=$4 AND m.woztell_member_id=$5 AND m.direction::text=$15 AND m.contact_id IS NOT NULL
  ORDER BY (m.external_message_id=$6) DESC LIMIT 1
  ON CONFLICT(dedupe_key) DO NOTHING`,
       params: [

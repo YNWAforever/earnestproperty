@@ -5,6 +5,7 @@ import {
   parseWoztellProviderResult,
   type ParsedWoztellProviderResult,
 } from "./provider-result.ts";
+import { identityReviewOpenSql } from "./identity-review-sql.ts";
 
 export type OutboundState =
   | "queued"
@@ -138,6 +139,8 @@ export async function enqueueOutboundIntent(
     SELECT wc.* FROM whatsapp_conversations wc WHERE wc.id=$2::uuid
     AND ($7::uuid IS NULL OR wc.assigned_agent_id=$7::uuid)
     AND wa_can_read_conversation($3::uuid,wc.id)
+    -- FX-12 owner decision 1: no staff reply in a 「身分待核對」 conversation until it is linked.
+    AND NOT ${identityReviewOpenSql("wc.id")}
     AND ($9::uuid IS NOT NULL OR NOT EXISTS(
       SELECT 1 FROM inquiries q WHERE q.conversation_id=wc.id AND q.source='whatsapp'
         AND q.status NOT IN ('closed','resolved','spam')
@@ -180,7 +183,19 @@ export async function enqueueOutboundIntent(
     ],
   );
   const row = rows[0];
-  if (!row) throw invalid("OUTBOUND_CONFLICT_OR_NOT_FOUND");
+  if (!row) {
+    // FX-12 Task 4: say why, read-only and only for a conversation the actor may read. The
+    // authorized CTE above stays the race-safe guard; this only names the refusal.
+    const [review] = await queryRows<{ open: boolean }>(
+      `SELECT ${identityReviewOpenSql("wc.id")} AS open FROM whatsapp_conversations wc
+       WHERE wc.id=$1::uuid AND ($3::uuid IS NULL OR wc.assigned_agent_id=$3::uuid)
+         AND wa_can_read_conversation($2::uuid,wc.id)`,
+      [input.conversationId, staffId, scope],
+    );
+    throw invalid(
+      review?.open === true ? "IDENTITY_REVIEW_REQUIRED" : "OUTBOUND_CONFLICT_OR_NOT_FOUND",
+    );
+  }
   if (row.job_queued) wakeAfterCommit("service");
   return { id: row.id, state: row.state };
 }
@@ -273,6 +288,7 @@ async function beginOutboundDispatch(
                  OR (c.opted_out_at IS NOT NULL AND wc.last_inbound_at > c.opted_out_at)))
          OR (i.kind='template' AND c.opted_out_whatsapp=false AND t.status LIKE 'active%'))
        AND wa_can_read_conversation(i.actor_staff_id,wc.id)
+       AND NOT ${identityReviewOpenSql("wc.id")}
        AND (i.enquiry_id IS NULL OR NOT EXISTS(
          SELECT 1 FROM inquiries q WHERE q.id=i.enquiry_id
            AND q.attribution_method='explicit_customer_statement' AND q.link_open_id IS NULL
