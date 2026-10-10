@@ -1227,11 +1227,11 @@ export async function getAdminProperty(
   id: string,
   actor?: StaffAccess,
 ): Promise<AdminPropertyRecord | null> {
-  // listAdminListings, saveAdminProperty and updateAdminPropertyStatus all
-  // restrict agents to p.agent_id = actor.staffId, and saveAdminProperty throws
-  // 403 for an out-of-scope edit. This single-row read took no actor at all, so
-  // an agent could SELECT * any listing -- including drafts and internal columns
-  // the scoped list view withholds -- by supplying its UUID.
+  // listAdminListings and updateAdminPropertyStatus restrict agents to
+  // p.agent_id = actor.staffId, and saveAdminProperty is create-only (edits go
+  // through saveAdminPropertyManagement). This single-row read took no actor at
+  // all, so an agent could SELECT * any listing -- including drafts and internal
+  // columns the scoped list view withholds -- by supplying its UUID.
   const scope = actor ? agentScope(actor) : null;
   const rows = await queryRows<AdminPropertyRecord>(
     `SELECT * FROM properties WHERE id = $1${scope !== null ? " AND agent_id = $2" : ""} LIMIT 1`,
@@ -1323,21 +1323,31 @@ export async function saveAdminProperty(input: AdminPropertyInput, actor: StaffA
     input.features ?? [],
   ];
 
+  // The audit row is part of the same statement: a failed audit insert rolls the
+  // listing back with it (FX-18a C-16).
   const rows = await queryRows(
     `
-        INSERT INTO properties (
-          listing_no, title_zh, deal_type, estate_id, district_slug, address, price, rent,
-          saleable_area, bedrooms, bathrooms, floor, description, status, featured, images,
-          seo_title, seo_description, video_url, agent_id, title_en, features
+        WITH ins AS (
+          INSERT INTO properties (
+            listing_no, title_zh, deal_type, estate_id, district_slug, address, price, rent,
+            saleable_area, bedrooms, bathrooms, floor, description, status, featured, images,
+            seo_title, seo_description, video_url, agent_id, title_en, features
+          )
+          VALUES ($1, $2, $3::deal_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::property_status, $15, $16::text[], $17, $18, $19, $20, $21, $22::text[])
+          RETURNING id, listing_no, status
+        ), audit AS (
+          INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+          SELECT $23::uuid, 'property.create', 'property', i.id,
+            jsonb_build_object('after', jsonb_build_object('listing_no', i.listing_no, 'status', i.status))
+          FROM ins i
+          RETURNING id
         )
-        VALUES ($1, $2, $3::deal_type, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::property_status, $15, $16::text[], $17, $18, $19, $20, $21, $22::text[])
-        RETURNING id
+        SELECT id FROM ins
         `,
-    params,
+    [...params, actor.staffId],
   );
 
   const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(actor.staffId, "property.create", "property", id);
   return { id };
 }
 
@@ -1347,17 +1357,33 @@ export async function updateAdminPropertyStatus(
   actor: StaffAccess,
 ) {
   const scope = agentScope(actor);
+  // old/upd/audit in one statement: no status change commits without its audit row (C-16).
+  const actorParam = scope !== null ? "$4" : "$3";
   const rows = await queryRows(
-    `UPDATE properties SET status = $1::property_status, updated_at = now() WHERE id = $2${
-      scope !== null ? " AND agent_id = $3" : ""
-    } RETURNING id`,
-    scope !== null ? [status, id, scope] : [status, id],
+    `WITH old AS (
+       SELECT p.id, p.status FROM properties p
+       WHERE p.id = $2${scope !== null ? " AND p.agent_id = $3" : ""}
+       FOR UPDATE
+     ), upd AS (
+       UPDATE properties p SET status = $1::property_status, updated_at = now()
+       FROM old o WHERE p.id = o.id
+       RETURNING p.id, p.status
+     ), audit AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT ${actorParam}::uuid, 'property.status', 'property', u.id,
+         jsonb_build_object(
+           'before', jsonb_build_object('status', o.status),
+           'after', jsonb_build_object('status', u.status))
+       FROM upd u JOIN old o ON o.id = u.id
+       RETURNING id
+     )
+     SELECT id FROM upd`,
+    scope !== null ? [status, id, scope, actor.staffId] : [status, id, actor.staffId],
   );
   if (!rows[0]) {
     if (scope !== null) throw new Response("Forbidden", { status: 403 });
     return { ok: false, error: "Not found" };
   }
-  await writeAudit(actor.staffId, "property.status", "property", id, { status });
   return { ok: true };
 }
 
@@ -1543,6 +1569,12 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
   const rows = input.id
     ? await queryRows(
         `
+        WITH old AS (
+          SELECT t.id, t.verification_state, t.published, t.price, t.deal_date, t.deal_type
+          FROM transactions t
+          WHERE t.id = $14
+          FOR UPDATE
+        ), upd AS (
         UPDATE transactions SET
           estate_id = $1,
           deal_type = $2::deal_type,
@@ -1558,11 +1590,14 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
           verification_state = $12::transaction_verification_state,
           published = $13,
           verified_at = CASE WHEN $12::transaction_verification_state = 'verified' THEN COALESCE(verified_at, now()) ELSE NULL END
-        WHERE id = $14${scope !== null ? " AND agent_id = $15" : ""}
+        FROM old o
+        WHERE transactions.id = o.id${scope !== null ? " AND transactions.agent_id = $15" : ""}
           ${
             // B-04 row-state guard: a non-manager UPDATE can never match a verified or
             // published row, so a race or a bypass of the TS check still cannot write it.
-            canVerify ? "" : "AND verification_state <> 'verified' AND published = false"
+            canVerify
+              ? ""
+              : "AND transactions.verification_state <> 'verified' AND transactions.published = false"
           }
           AND NOT EXISTS (
             SELECT 1 FROM transaction_performance performance
@@ -1575,19 +1610,47 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
                 $12::transaction_verification_state <> 'verified'
               )
           )
-        RETURNING id
+        RETURNING transactions.id, transactions.verification_state, transactions.published,
+          transactions.price, transactions.deal_date, transactions.deal_type
+        ), audit AS (
+          INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+          SELECT ${scope !== null ? "$16" : "$15"}::uuid, 'transaction.update', 'transaction', u.id,
+            jsonb_build_object(
+              'before', jsonb_build_object(
+                'verification_state', o.verification_state, 'published', o.published,
+                'price', o.price, 'deal_date', o.deal_date, 'deal_type', o.deal_type),
+              'after', jsonb_build_object(
+                'verification_state', u.verification_state, 'published', u.published,
+                'price', u.price, 'deal_date', u.deal_date, 'deal_type', u.deal_type))
+          FROM upd u JOIN old o ON o.id = u.id
+          RETURNING id
+        )
+        SELECT id FROM upd
         `,
-        scope !== null ? [...params, input.id, scope] : [...params, input.id],
+        scope !== null
+          ? [...params, input.id, scope, actor.staffId]
+          : [...params, input.id, actor.staffId],
       )
     : await queryRows(
         `
-        INSERT INTO transactions (
-          estate_id, deal_type, price, saleable_area, saleable_psf, deal_date,
-          unit, block, floor_band, source, source_url, verification_state,
-          published, verified_at, agent_id
+        WITH ins AS (
+          INSERT INTO transactions (
+            estate_id, deal_type, price, saleable_area, saleable_psf, deal_date,
+            unit, block, floor_band, source, source_url, verification_state,
+            published, verified_at, agent_id
+          )
+          VALUES ($1, $2::deal_type, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::transaction_verification_state, $13, CASE WHEN $12::transaction_verification_state = 'verified' THEN now() ELSE NULL END, $14)
+          RETURNING id, verification_state, published, price, deal_date, deal_type
+        ), audit AS (
+          INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+          SELECT $14::uuid, 'transaction.create', 'transaction', i.id,
+            jsonb_build_object('after', jsonb_build_object(
+              'verification_state', i.verification_state, 'published', i.published,
+              'price', i.price, 'deal_date', i.deal_date, 'deal_type', i.deal_type))
+          FROM ins i
+          RETURNING id
         )
-        VALUES ($1, $2::deal_type, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::transaction_verification_state, $13, CASE WHEN $12::transaction_verification_state = 'verified' THEN now() ELSE NULL END, $14)
-        RETURNING id
+        SELECT id FROM ins
         `,
         [...params, actor.staffId],
       );
@@ -1601,12 +1664,6 @@ export async function saveAdminTransaction(input: AdminTransactionInput, actor: 
     return { id: "", error: "Not found" };
   }
   const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(
-    actor.staffId,
-    input.id ? "transaction.update" : "transaction.create",
-    "transaction",
-    id,
-  );
   return { id };
 }
 

@@ -62,6 +62,31 @@ function videoDraft(row, overrides = {}) {
   };
 }
 
+function propertyDraft(listingNo, overrides = {}) {
+  return {
+    listing_no: listingNo,
+    title_zh: "測試單位 " + listingNo,
+    title_en: null,
+    deal_type: "sale",
+    estate_id: null,
+    district_slug: "synthetic-fx18a",
+    address: null,
+    price: 5_000_000,
+    rent: null,
+    saleable_area: 300,
+    bedrooms: 2,
+    bathrooms: 1,
+    floor: null,
+    description: null,
+    features: [],
+    status: "draft",
+    featured: false,
+    images: [],
+    agent_id: null,
+    ...overrides,
+  };
+}
+
 test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => {
   const previousWake = process.env.OPS_WAKE_URL;
   process.env.OPS_WAKE_URL = "";
@@ -930,21 +955,23 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
           assert.equal(untouched.verification_state, "verified");
           assert.equal(untouched.published, true);
 
-          // A verified-but-unpublished row (set by an admin) is also closed to the agent.
-          const { id: heldId } = await server.saveAdminTransaction(
-            draft({ verified: true, published: false }),
-            admin,
+          // A verified-but-unpublished AGENT-owned row is closed to the agent: the agent
+          // owns it, so only the B-04 row-state guard can refuse the edit.
+          const { id: heldId } = await server.saveAdminTransaction(draft(), agent);
+          await server.saveAdminTransaction(
+            draft({ id: heldId, verified: true, published: false }),
+            manager,
           );
           assert.equal((await txRow(heldId)).verification_state, "verified");
           assert.equal((await txRow(heldId)).published, false);
+          assert.equal((await txRow(heldId)).agent_id, AGENT);
+          const heldAudits = (await audits(heldId)).length;
           await assert.rejects(
-            server.saveAdminTransaction(draft({ id: heldId, price: 2 }), {
-              ...agent,
-              staffId: AGENT,
-            }),
+            server.saveAdminTransaction(draft({ id: heldId, price: 2 }), agent),
             (error) => error instanceof Response && error.status === 403,
           );
           assert.equal(Number((await txRow(heldId)).price), 8_000_000);
+          assert.equal((await audits(heldId)).length, heldAudits);
 
           // Manager and admin may still edit and un-verify a verified deal.
           await server.saveAdminTransaction(
@@ -954,6 +981,157 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
           assert.equal(Number((await txRow(ownId)).price), 8_200_000);
           await server.saveAdminTransaction(draft({ id: ownId, verified: false }), manager);
           assert.equal((await txRow(ownId)).verification_state, "unverified");
+        },
+      );
+
+      await t.test(
+        "transaction audit has before and after verification_state and published",
+        async () => {
+          const estateId = id(902);
+          await query(
+            "INSERT INTO estates(id,slug,name_zh) VALUES($1,'synthetic-fx18a-audit','測試屋苑二')",
+            [estateId],
+          );
+          const draft = (overrides = {}) => ({
+            estate_id: estateId,
+            deal_type: "sale",
+            price: 6_000_000,
+            saleable_area: 300,
+            deal_date: "2026-07-01",
+            unit: null,
+            block: null,
+            floor_band: null,
+            source: "synthetic",
+            source_url: null,
+            verified: false,
+            ...overrides,
+          });
+          const { id: txId } = await server.saveAdminTransaction(draft(), agent);
+          await server.saveAdminTransaction(
+            draft({ id: txId, price: 6_500_000, verified: true, published: true }),
+            manager,
+          );
+          const rows = await audits(txId);
+          assert.deepEqual(
+            rows.map((row) => row.action),
+            ["transaction.create", "transaction.update"],
+          );
+          assert.equal(rows[0].actor_id, AGENT);
+          assert.deepEqual(rows[0].metadata.after, {
+            verification_state: "unverified",
+            published: false,
+            price: 6_000_000,
+            deal_date: "2026-07-01",
+            deal_type: "sale",
+          });
+          assert.equal(rows[1].actor_id, MANAGER);
+          assert.deepEqual(rows[1].metadata.before, rows[0].metadata.after);
+          assert.deepEqual(rows[1].metadata.after, {
+            verification_state: "verified",
+            published: true,
+            price: 6_500_000,
+            deal_date: "2026-07-01",
+            deal_type: "sale",
+          });
+
+          // Property create and status carry their own before and after.
+          const created = await server.saveAdminProperty(
+            propertyDraft("FX18A-AUDIT-1", { status: "draft" }),
+            admin,
+          );
+          await server.updateAdminPropertyStatus(created.id, "active", admin);
+          const propertyAudits = await audits(created.id);
+          assert.deepEqual(
+            propertyAudits.map((row) => row.action),
+            ["property.create", "property.status"],
+          );
+          assert.deepEqual(propertyAudits[0].metadata.after, {
+            listing_no: "FX18A-AUDIT-1",
+            status: "draft",
+          });
+          assert.deepEqual(propertyAudits[1].metadata.before, { status: "draft" });
+          assert.deepEqual(propertyAudits[1].metadata.after, { status: "active" });
+          // A scoped agent's status change on someone else's listing is refused and writes nothing.
+          const before = (await audits(created.id)).length;
+          await rejectsWith(server.updateAdminPropertyStatus(created.id, "offline", agent), 403);
+          assert.equal((await audits(created.id)).length, before);
+        },
+      );
+
+      await t.test(
+        "when the audit insert fails, the transaction save, property create and property status writes roll back",
+        async () => {
+          const estateId = id(903);
+          await query(
+            "INSERT INTO estates(id,slug,name_zh) VALUES($1,'synthetic-fx18a-roll','測試屋苑三')",
+            [estateId],
+          );
+          const draft = (overrides = {}) => ({
+            estate_id: estateId,
+            deal_type: "sale",
+            price: 5_000_000,
+            saleable_area: 250,
+            deal_date: "2026-06-01",
+            unit: null,
+            block: null,
+            floor_band: null,
+            source: "synthetic",
+            source_url: null,
+            verified: false,
+            ...overrides,
+          });
+          const { id: txId } = await server.saveAdminTransaction(draft(), admin);
+          const listing = await server.saveAdminProperty(
+            propertyDraft("FX18A-ROLL-1", { status: "draft" }),
+            admin,
+          );
+          const count = async (table) =>
+            (await query(`SELECT count(*)::int AS n FROM ${table}`))[0].n;
+          const txCount = await count("transactions");
+          const propertyCount = await count("properties");
+          const auditCount = await count("audit_logs");
+          await query(`CREATE FUNCTION fx18a_fail_audit5() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+              IF NEW.action IN ('transaction.create', 'transaction.update', 'property.create', 'property.status') THEN
+                RAISE EXCEPTION 'fx18a synthetic audit failure';
+              END IF;
+              RETURN NEW;
+            END $$`);
+          await query(
+            "CREATE TRIGGER fx18a_fail_audit5 BEFORE INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION fx18a_fail_audit5()",
+          );
+          try {
+            await assert.rejects(
+              server.saveAdminTransaction(draft(), admin),
+              /fx18a synthetic audit failure/,
+            );
+            await assert.rejects(
+              server.saveAdminTransaction(draft({ id: txId, price: 5_500_000 }), admin),
+              /fx18a synthetic audit failure/,
+            );
+            await assert.rejects(
+              server.saveAdminProperty(propertyDraft("FX18A-ROLL-2"), admin),
+              /fx18a synthetic audit failure/,
+            );
+            await assert.rejects(
+              server.updateAdminPropertyStatus(listing.id, "active", admin),
+              /fx18a synthetic audit failure/,
+            );
+          } finally {
+            await query("DROP TRIGGER fx18a_fail_audit5 ON audit_logs");
+            await query("DROP FUNCTION fx18a_fail_audit5()");
+          }
+          assert.equal(await count("transactions"), txCount);
+          assert.equal(
+            Number((await query("SELECT price FROM transactions WHERE id=$1", [txId]))[0].price),
+            5_000_000,
+          );
+          assert.equal(await count("properties"), propertyCount);
+          assert.equal(
+            (await query("SELECT status FROM properties WHERE id=$1", [listing.id]))[0].status,
+            "draft",
+          );
+          assert.equal(await count("audit_logs"), auditCount);
         },
       );
     });

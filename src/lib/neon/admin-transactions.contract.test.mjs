@@ -333,10 +333,10 @@ test("saveAdminTransaction never reassigns agent_id on UPDATE, even when a manag
     /agent_id\s*=\s*\$/,
     "agent_id must never appear in the UPDATE SET clause",
   );
-  assert.ok(
-    !calls[0].params.includes("manager-1"),
-    "the editing manager's own id must never be written as agent_id",
-  );
+  // The manager's id is bound once, as the audit actor (the last parameter), never as agent_id.
+  assert.equal(calls[0].params.filter((value) => value === "manager-1").length, 1);
+  assert.equal(calls[0].params.at(-1), "manager-1");
+  assert.match(calls[0].text, /SELECT \$15::uuid, 'transaction\.update'/);
 });
 
 test("the verified checkbox sets BOTH verification_state='verified' and published=true, never independently", async () => {
@@ -770,8 +770,8 @@ test("an agent's update SQL cannot match a verified or published row", async () 
     (error) => error instanceof Response && error.status === 403,
   );
   assert.match(calls[0].text, /UPDATE transactions/);
-  assert.match(calls[0].text, /AND verification_state <> 'verified'/);
-  assert.match(calls[0].text, /published = false/);
+  assert.match(calls[0].text, /AND transactions\.verification_state <> 'verified'/);
+  assert.match(calls[0].text, /transactions\.published = false/);
 });
 
 test("manager and admin may verify and publish, with no row-state guard on their update", async () => {
@@ -786,6 +786,6 @@ test("manager and admin may verify and publish, with no row-state guard on their
     assert.ok(calls[0].params.includes(true));
     assert.match(calls[0].text, /UPDATE transactions/);
     // The row-state guard is for agents only; staff with the role skip it.
-    assert.doesNotMatch(calls[0].text, /AND verification_state <> 'verified'/);
+    assert.doesNotMatch(calls[0].text, /AND transactions\.verification_state <> 'verified'/);
   }
 });

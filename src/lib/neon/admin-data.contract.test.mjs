@@ -562,6 +562,20 @@ test("FAQ and video saves write their audit row in the same statement", () => {
   }
 });
 
+// FX-18a C-16: transaction and property writes insert their audit row in the
+// same statement, so a failed audit insert cannot leave the write committed.
+test("transaction and property writes insert their audit row in the same statement", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  for (const name of ["saveAdminTransaction", "saveAdminProperty", "updateAdminPropertyStatus"]) {
+    const start = server.indexOf(`export async function ${name}(`);
+    assert.ok(start >= 0, name);
+    const end = server.slice(start).search(/\r?\n}\r?\n/) + start;
+    const body = server.slice(start, end);
+    assert.doesNotMatch(body, /await writeAudit\(/, name);
+    assert.match(body, /INSERT INTO audit_logs/, name);
+  }
+});
+
 test("no browser-callable hard delete or unversioned CMS writer remains", () => {
   const client = read("src/lib/neon/admin-data.ts");
   const server = read("src/lib/neon/admin-data.server.ts");
