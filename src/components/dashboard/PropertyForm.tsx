@@ -1,5 +1,6 @@
 import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { z } from "zod";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -65,7 +66,7 @@ const schema = z.object({
   title_en: z.string().trim().max(200, "英文標題最多 200 個字").optional().or(z.literal("")),
   deal_type: z.enum(["sale", "rent"], { message: "請選擇售盤或租盤" }),
   estate_id: z.string().uuid("請重新選擇屋苑").optional().or(z.literal("")),
-  district_slug: z.string().trim().min(1, "請輸入地區 slug").max(60, "地區 slug 最多 60 個字"),
+  district_slug: z.string().trim().min(1, "請輸入地區代碼").max(60, "地區代碼最多 60 個字"),
   address: z.string().trim().max(300, "地址最多 300 個字").optional().or(z.literal("")),
   price: optionalNumber,
   rent: optionalNumber,
@@ -294,9 +295,10 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
       toast.error(mapped.message);
       return;
     }
-    // Must precede onSaved(): that navigates, and the leave guard would
-    // otherwise fire on a clean save.
-    setSaved(true);
+    // Render the saved state NOW: onSaved() navigates, the router reads the
+    // blocker registered by the last committed render, and an ordinary state
+    // update after an await would still show the form as dirty (尚未儲存).
+    flushSync(() => setSaved(true));
     toast.success(property ? "已更新" : "已新增");
     if (result.id) onSaved(result.id);
   }
@@ -398,7 +400,11 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
             </SelectContent>
           </Select>
         </Field>
-        <Field label="地區 slug *" htmlFor="district_slug" error={fieldErrors.district_slug}>
+        <Field
+          label="地區代碼 *（選擇屋苑後自動填寫）"
+          htmlFor="district_slug"
+          error={fieldErrors.district_slug}
+        >
           <Input
             id="district_slug"
             {...fieldProps("district_slug")}
@@ -505,7 +511,7 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
             placeholder="https://www.youtube.com/watch?v=..."
           />
         </Field>
-        <Field label="English title" htmlFor="title_en" error={fieldErrors.title_en} full>
+        <Field label="英文標題" htmlFor="title_en" error={fieldErrors.title_en} full>
           <Input
             id="title_en"
             {...fieldProps("title_en")}
@@ -514,7 +520,7 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
             maxLength={200}
           />
         </Field>
-        <Field label="Features (one per line)" htmlFor="features" error={fieldErrors.features} full>
+        <Field label="特色（每行一項）" htmlFor="features" error={fieldErrors.features} full>
           <Textarea
             id="features"
             {...fieldProps("features")}

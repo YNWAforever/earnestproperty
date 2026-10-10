@@ -54,8 +54,8 @@ function NewAdminListingWorkspace({ identity }: { identity: string }) {
         </Button>
         <PropertyForm
           isWorkspaceCurrent={isWorkspaceCurrent}
-          onSaved={() => {
-            if (isWorkspaceCurrent()) void navigate({ to: "/admin/listings" });
+          onSaved={(id) => {
+            if (isWorkspaceCurrent()) void navigate({ to: "/admin/listings/$id", params: { id } });
           }}
         />
       </div>

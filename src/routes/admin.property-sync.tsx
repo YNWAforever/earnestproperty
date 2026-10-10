@@ -33,7 +33,7 @@ function SyncContent() {
   return (
     <>
       <PropertySyncWorkspace
-        key={user?.id}
+        key={`sync:${user?.id}`}
         actorKey={user?.id}
         roles={session.status === "ok" ? session.roles : []}
         load={(cursor) => fetchAdminSyncWorkspace({ data: { limit: 25, cursor } })}
@@ -41,7 +41,7 @@ function SyncContent() {
         reconcile={(idempotencyKey) => fetchAdminSyncOperationResult({ data: { idempotencyKey } })}
       />
       <WithdrawalReviewWorkspace
-        key={user?.id}
+        key={`withdrawal:${user?.id}`}
         actorKey={user?.id}
         roles={session.status === "ok" ? session.roles : []}
         load={(data) => fetchWithdrawalCandidates({ data })}

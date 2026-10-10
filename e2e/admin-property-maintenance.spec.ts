@@ -639,6 +639,26 @@ for (const width of [1440, 1280, 768, 390]) {
       await page.getByRole("button", { name: "出租設定", exact: true }).click();
       await expect(page.getByLabel("月租（港元）", { exact: true })).toHaveValue("18000");
     });
+    test("saving a new listing opens its management page with the draft visible, and no leave prompt appears", async ({
+      page,
+    }) => {
+      page.on("pageerror", (error) => console.log("PAGE ERROR", error.message));
+      await page.route("**/*", (route) =>
+        new URL(route.request().url()).origin === origin &&
+        ["GET", "HEAD"].includes(route.request().method())
+          ? route.continue()
+          : route.abort(),
+      );
+      await page.goto(origin + "/admin/listings/new");
+      await expect(page.getByRole("heading", { name: "新增放盤", exact: true })).toBeVisible();
+      await page.locator("#listing_no").fill("OWNED-NEW-OPEN");
+      await page.locator("#title_zh").fill("儲存後開啟的合成放盤");
+      await page.getByRole("button", { name: "建立放盤", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "管理物業", exact: true })).toBeVisible();
+      expect(new URL(page.url()).pathname).toMatch(/^\/admin\/listings\/[0-9a-f-]{36}$/);
+      await expect(page.getByText("儲存後開啟的合成放盤").first()).toBeVisible();
+      await expect(page.getByText("尚未儲存", { exact: true })).toHaveCount(0);
+    });
     test("validation retains input and focuses the first invalid field", async ({ page }) => {
       await open(page);
       await page.getByLabel("實用面積（平方呎）", { exact: true }).fill("800.5");

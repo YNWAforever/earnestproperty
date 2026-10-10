@@ -313,6 +313,18 @@ export async function saveAdminProperty({ data }: { data: unknown }) {
   const saved = { id: crypto.randomUUID(), data, actor: captured.actor, binding: captured.binding };
   rows.push(saved);
   localStorage.setItem("property-fixture-created", JSON.stringify(rows));
+  // The owned model reads a created listing back by its id, as the real page does.
+  const base = initial(1);
+  const draft = data as { title_zh?: string };
+  writeStore([
+    ...readStore(),
+    {
+      ...base,
+      propertyNo: saved.id,
+      title: draft.title_zh ?? base.title,
+      shared: { ...base.shared, title_zh: draft.title_zh ?? base.title },
+    },
+  ]);
   if (state.saveMode === "delayed")
     await new Promise<void>((release) => state.pending.push({ kind: "create", release }));
   call("create-return", data, captured);

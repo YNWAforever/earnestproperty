@@ -1266,3 +1266,26 @@ test("every KPI tile links to a queue the page accepts", () => {
     assert.match(read("src/lib/admin/command-center-queues.js"), new RegExp(label));
   }
 });
+
+test("property-sync siblings have distinct keys", () => {
+  const source = read("src/routes/admin.property-sync.tsx");
+  const keys = [...source.matchAll(/\bkey=\{([^}]*)\}/g)].map((match) => match[1]);
+  assert.ok(keys.length >= 2, "property-sync renders keyed sibling workspaces");
+  assert.equal(
+    new Set(keys).size,
+    keys.length,
+    `sibling keys must be distinct: ${keys.join(", ")}`,
+  );
+});
+
+test("PropertyForm has no English field labels", () => {
+  const source = read("src/components/dashboard/PropertyForm.tsx");
+  assert.doesNotMatch(source, /地區 slug/);
+  assert.doesNotMatch(source, /label="English title"/);
+  assert.doesNotMatch(source, /label="Features \(one per line\)"/);
+  assert.match(source, /label="地區代碼 \*（選擇屋苑後自動填寫）"/);
+  assert.match(source, /請輸入地區代碼/);
+  assert.match(source, /地區代碼最多 60 個字/);
+  assert.match(source, /label="英文標題"/);
+  assert.match(source, /label="特色（每行一項）"/);
+});
