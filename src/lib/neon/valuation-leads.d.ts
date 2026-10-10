@@ -15,6 +15,8 @@ export type ValuationLeadPersistenceInput = {
   consentVersion: string;
   consentedAt: string;
   utm: ValuationLeadUtm;
+  /** Honeypot flag: adds an audit row; never drops the lead. */
+  suspectedBot?: boolean;
 };
 
 export type ValuationLeadQuery = (

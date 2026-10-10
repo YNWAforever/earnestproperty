@@ -1,6 +1,7 @@
 import importedRedirects from "./src/generated/old-site-redirects.json" with { type: "json" };
 
 import { resolveSiteOrigin } from "./scripts/site-origin.mjs";
+import { SECURITY_HEADERS } from "./scripts/vercel-headers.mjs";
 
 type VercelRedirect = {
   source: string;
@@ -18,6 +19,7 @@ type VercelRedirect = {
 
 type VercelConfig = {
   buildCommand: string;
+  headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }>;
   crons: Array<{ path: string; schedule: string }>;
   redirects: VercelRedirect[];
 };
@@ -44,6 +46,7 @@ function canonicalHostRedirects(): VercelRedirect[] {
 
 export const config: VercelConfig = {
   buildCommand: "npm run build",
+  headers: SECURITY_HEADERS,
   // No recurring Vercel requests: manual sync remains available to staff.
   crons: [],
   redirects: [

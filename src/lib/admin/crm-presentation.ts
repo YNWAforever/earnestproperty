@@ -65,3 +65,13 @@ export function labeledFilterOptions(
 export function aiScoreLabel(value: number | null | undefined) {
   return value == null ? "未知（未分析）" : String(value);
 }
+
+/**
+ * System rows that are not staff follow-up. A lead whose timeline holds only these still shows
+ * 「未有跟進紀錄」, so a flagged lead is never read as already handled (FX-14 B-05).
+ */
+const NON_FOLLOW_UP_ACTIVITY_TYPES = new Set(["suspected_bot"]);
+
+export function leadTimelineHasNoFollowUp(activities: ReadonlyArray<{ activity_type: string }>) {
+  return activities.every((activity) => NON_FOLLOW_UP_ACTIVITY_TYPES.has(activity.activity_type));
+}
