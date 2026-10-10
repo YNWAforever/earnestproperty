@@ -403,42 +403,34 @@ test("activity completion verifies its lead and audits the stored lead", async (
   }).outputText;
 
   const queries = [];
-  const audits = [];
   let matched = true;
-  const complete = new Function(
-    "queryRows",
-    "writeAudit",
-    executable + "\nreturn completeAdminLeadActivity;",
-  )(
+  const complete = new Function("queryRows", executable + "\nreturn completeAdminLeadActivity;")(
     async (sql, params) => {
       queries.push({ sql, params });
       return matched ? [{ id: "activity-1", lead_id: "lead-actual" }] : [];
-    },
-    async (...args) => {
-      audits.push(args);
     },
   );
   const input = { activity_id: "activity-1", lead_id: "lead-actual" };
   const actor = { staffId: "manager-1" };
   assert.deepEqual(await complete(input, actor), { ok: true });
-  assert.deepEqual(queries[0].params, ["activity-1", "lead-actual"]);
+  assert.equal(queries.length, 1, "the completion and its audit row are one statement");
+  assert.deepEqual(queries[0].params, ["activity-1", "lead-actual", "manager-1"]);
   assert.match(
     queries[0].sql,
     /WHERE id = \$1::uuid\s+AND lead_id = \$2::uuid\s+AND completed_at IS NULL\s+RETURNING id, lead_id/,
   );
-  assert.deepEqual(audits[0].slice(0, 4), [
-    "manager-1",
-    "lead.activity.complete",
-    "lead",
-    "lead-actual",
-  ]);
+  // The audit row names the stored lead and exists only when a row completed.
+  assert.match(
+    queries[0].sql,
+    /INSERT INTO audit_logs \(actor_id, action, subject_type, subject_id, metadata\)\s+SELECT \$3::uuid, 'lead\.activity\.complete', 'lead', done\.lead_id,[\s\S]*FROM done/,
+  );
 
   matched = false;
   assert.deepEqual(await complete({ ...input, lead_id: "lead-mismatch" }, actor), {
     ok: false,
     error: "Not found or already complete",
   });
-  assert.equal(audits.length, 1, "a rejected completion must not write an audit entry");
+  assert.equal(queries.length, 2, "a rejected completion sends no second statement");
 });
 
 test("FAQ reorder rejects invalid batches and skips empty database work", async () => {
@@ -592,4 +584,73 @@ test("the public enquiry schema never rejects listing fields", async () => {
   assert.equal(valid.property_id, "79180000-0000-4000-8000-000000000002");
   // Everything else is still validated.
   assert.equal(schema.safeParse({ ...base, phone: "abc" }).success, false);
+});
+
+// FX-18a C-16: an audited create inserts its audit row in the same statement
+// as the write, so a failed audit insert rolls the write back and a retry
+// cannot duplicate it. The functions still on a trailing writeAudit are listed
+// here by name (the FX-18 follow-ups); a new writer cannot quietly join them.
+test("audited creates in admin-data.server.ts insert their audit row in the same statement", () => {
+  const source = read("src/lib/neon/admin-data.server.ts");
+  const file = ts.createSourceFile("admin-data.server.ts", source, ts.ScriptTarget.Latest, true);
+  const stillOnWriteAudit = new Set([
+    "updateStaffRoles",
+    "setStaffActive",
+    "saveAdminProperty",
+    "updateAdminPropertyStatus",
+    "deleteAdminProperty",
+    "saveAdminTransaction",
+    "saveAdminAgentProfile",
+    "rebuildAdminAiKnowledge",
+    "saveAdminCrmSegment",
+    "materializeAdminCrmSegment",
+    "createAdminAudienceFromSegment",
+    "saveAdminCmsVideo",
+    "saveAdminEstate",
+    "saveAdminArticle",
+    "saveAdminFaq",
+    "deleteAdminFaq",
+    "reorderAdminFaqs",
+    "updateAdminMediaAsset",
+    "analyzeAdminLeadAiProfile",
+    "approveAdminAiTag",
+    "rejectAdminAiTag",
+    "bulkUpdateAdminLeads",
+    "updateAdminConversation",
+    "saveAdminAudience",
+    "deleteAdminAudience",
+    "saveAdminCampaign",
+    "materializeCampaignRecipients",
+  ]);
+  const sameStatement = [
+    "createAdminLeadActivity",
+    "completeAdminLeadActivity",
+    "updateInquiryStatus",
+  ];
+  const bodies = new Map();
+  for (const statement of file.statements) {
+    if (!ts.isFunctionDeclaration(statement) || !statement.name) continue;
+    if (statement.name.text === "writeAudit") continue;
+    bodies.set(statement.name.text, statement.getText(file));
+  }
+  for (const [name, body] of bodies) {
+    if (/\bwriteAudit\(/.test(body)) {
+      assert.ok(
+        stillOnWriteAudit.has(name),
+        `${name} calls writeAudit after its write; insert the audit row in the same statement`,
+      );
+    }
+  }
+  for (const name of sameStatement) {
+    const body = bodies.get(name);
+    assert.ok(body, name);
+    assert.ok(!stillOnWriteAudit.has(name), name);
+    assert.doesNotMatch(body, /\bwriteAudit\(/, name);
+    assert.equal((body.match(/\bqueryRows\b/g) ?? []).length, 1, `${name}: one statement`);
+    assert.match(
+      body,
+      /INSERT INTO audit_logs \(actor_id, action, subject_type, subject_id, metadata\)\s+SELECT[\s\S]*FROM (ins|done|updated)\b/,
+      name,
+    );
+  }
 });

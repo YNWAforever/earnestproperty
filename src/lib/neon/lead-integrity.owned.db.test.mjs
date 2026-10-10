@@ -1426,6 +1426,180 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
           await query("UPDATE staff_users SET active=true WHERE id=$1", [AGENT_A]);
         }
       });
+
+      // FX-18a C-16: a note, a completed follow-up and an enquiry status change
+      // insert their audit row in the same statement, so a failed audit insert
+      // leaves nothing behind and a retry cannot duplicate the write.
+      const c16 = (n) => `79180000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+      const C16_INQUIRY = c16(801);
+      await query(
+        "INSERT INTO inquiries(id,source,name,phone,status,assigned_agent_id) VALUES($1,'website','C16 客戶','91808001','new',$2)",
+        [C16_INQUIRY, AGENT_A],
+      );
+      const failAuditFor = async (actions) => {
+        await query(`CREATE OR REPLACE FUNCTION c16_fail_audit() RETURNS trigger
+          LANGUAGE plpgsql AS $$
+          BEGIN
+            IF NEW.action = ANY(TG_ARGV) THEN
+              RAISE EXCEPTION 'c16 synthetic audit failure for %', NEW.action;
+            END IF;
+            RETURN NEW;
+          END $$`);
+        await query(
+          `CREATE TRIGGER c16_fail_audit BEFORE INSERT ON audit_logs FOR EACH ROW
+           EXECUTE FUNCTION c16_fail_audit(${actions.map((a) => `'${a}'`).join(",")})`,
+        );
+      };
+      const restoreAudit = async () => {
+        await query("DROP TRIGGER IF EXISTS c16_fail_audit ON audit_logs");
+        await query("DROP FUNCTION IF EXISTS c16_fail_audit()");
+      };
+      const auditRows = async (action, subjectId) =>
+        query(
+          "SELECT actor_id::text, subject_type, metadata FROM audit_logs WHERE action=$1 AND subject_id=$2 ORDER BY created_at",
+          [action, subjectId],
+        );
+      const rejectsAudit = async (promise) => {
+        await assert.rejects(promise, /c16 synthetic audit failure/);
+      };
+
+      await t.test(
+        "when the audit insert fails, the note is not saved, so a retry cannot duplicate it",
+        async () => {
+          const note = {
+            lead_id: L1,
+            contact_id: CONTACT,
+            activity_type: "note",
+            body: "C16 合成筆記",
+            due_at: null,
+            completed_at: null,
+          };
+          const notes = async () =>
+            (
+              await query(
+                "SELECT count(*)::int AS n FROM crm_activities WHERE lead_id=$1 AND body=$2",
+                [L1, note.body],
+              )
+            )[0].n;
+          // Earlier subtests already audited notes on L1; count from here.
+          const before = (await auditRows("lead.activity", L1)).length;
+          await failAuditFor(["lead.activity"]);
+          try {
+            await rejectsAudit(server.createAdminLeadActivity(note, manager));
+          } finally {
+            await restoreAudit();
+          }
+          assert.equal(await notes(), 0, "the note rolled back with its audit row");
+          assert.equal((await auditRows("lead.activity", L1)).length, before);
+
+          const { id: activityId } = await server.createAdminLeadActivity(note, manager);
+          assert.match(activityId, /^[0-9a-f-]{36}$/);
+          assert.equal(await notes(), 1, "the retry saved exactly one note");
+          const audits = await auditRows("lead.activity", L1);
+          assert.equal(audits.length, before + 1);
+          const audit = audits.find((row) => row.metadata.activityId === activityId);
+          assert.ok(audit, "the saved note has its audit row");
+          assert.equal(audit.actor_id, MANAGER);
+          assert.equal(audit.subject_type, "lead");
+          assert.deepEqual(audit.metadata, { activityId, activity_type: "note" });
+
+          // Scope is unchanged: an agent cannot write on another agent's lead,
+          // and nothing is audited for it.
+          await rejectsWith(server.createAdminLeadActivity(note, agentB), 403);
+          assert.equal(await notes(), 1);
+          assert.equal((await auditRows("lead.activity", L1)).length, before + 1);
+        },
+      );
+
+      await t.test(
+        "when the audit insert fails, a follow-up stays open; completing it audits once",
+        async () => {
+          const [{ id: activityId }] = await query(
+            `INSERT INTO crm_activities(lead_id,contact_id,activity_type,body,due_at)
+             VALUES($1,$2,'follow_up','C16 跟進',now()) RETURNING id::text`,
+            [L1, CONTACT],
+          );
+          const completedAt = async () =>
+            (await query("SELECT completed_at FROM crm_activities WHERE id=$1", [activityId]))[0]
+              .completed_at;
+          const input = { activity_id: activityId, lead_id: L1 };
+          await failAuditFor(["lead.activity.complete"]);
+          try {
+            await rejectsAudit(server.completeAdminLeadActivity(input, manager));
+          } finally {
+            await restoreAudit();
+          }
+          assert.equal(await completedAt(), null, "the completion rolled back with its audit row");
+
+          assert.deepEqual(await server.completeAdminLeadActivity(input, manager), { ok: true });
+          assert.notEqual(await completedAt(), null);
+          const audits = (await auditRows("lead.activity.complete", L1)).filter(
+            (row) => row.metadata.activityId === activityId,
+          );
+          assert.equal(audits.length, 1);
+          assert.equal(audits[0].actor_id, MANAGER);
+          assert.deepEqual(audits[0].metadata, { activityId });
+
+          // A second completion or a mismatched lead changes and audits nothing.
+          assert.deepEqual(await server.completeAdminLeadActivity(input, manager), {
+            ok: false,
+            error: "Not found or already complete",
+          });
+          assert.deepEqual(
+            await server.completeAdminLeadActivity({ ...input, lead_id: L3 }, manager),
+            { ok: false, error: "Not found or already complete" },
+          );
+          assert.equal(
+            (await auditRows("lead.activity.complete", L1)).filter(
+              (row) => row.metadata.activityId === activityId,
+            ).length,
+            1,
+          );
+        },
+      );
+
+      await t.test("inquiry status change writes before and after", async () => {
+        const status = async () =>
+          (await query("SELECT status FROM inquiries WHERE id=$1", [C16_INQUIRY]))[0].status;
+        await failAuditFor(["inquiry.status"]);
+        try {
+          await rejectsAudit(server.updateInquiryStatus(C16_INQUIRY, "contacted", manager));
+        } finally {
+          await restoreAudit();
+        }
+        assert.equal(await status(), "new", "the status change rolled back with its audit row");
+        assert.equal((await auditRows("inquiry.status", C16_INQUIRY)).length, 0);
+
+        assert.deepEqual(await server.updateInquiryStatus(C16_INQUIRY, "contacted", manager), {
+          ok: true,
+        });
+        assert.equal(await status(), "contacted");
+        let audits = await auditRows("inquiry.status", C16_INQUIRY);
+        assert.equal(audits.length, 1);
+        assert.equal(audits[0].actor_id, MANAGER);
+        assert.equal(audits[0].subject_type, "inquiry");
+        assert.deepEqual(audits[0].metadata, {
+          status: "contacted",
+          before: "new",
+          after: "contacted",
+        });
+
+        // Agent scope and the allowlist are unchanged, and refusals audit nothing.
+        await rejectsWith(server.updateInquiryStatus(C16_INQUIRY, "closed", agentB), 403);
+        await rejectsWith(server.updateInquiryStatus(C16_INQUIRY, "bogus", manager), 400);
+        assert.equal(await status(), "contacted");
+        const agentA = actor(AGENT_A, "agent");
+        assert.deepEqual(await server.updateInquiryStatus(C16_INQUIRY, "qualified", agentA), {
+          ok: true,
+        });
+        audits = await auditRows("inquiry.status", C16_INQUIRY);
+        assert.equal(audits.length, 2);
+        assert.deepEqual(audits[1].metadata, {
+          status: "qualified",
+          before: "contacted",
+          after: "qualified",
+        });
+      });
     });
   } finally {
     network.mock.restore();
