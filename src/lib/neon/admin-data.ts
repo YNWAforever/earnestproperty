@@ -190,30 +190,23 @@ const STAFF_ACCESS_ERROR_MESSAGES: Record<string, string> = {
  * the `x-tss-raw-response` header and returns it. @tanstack/start-client-core's
  * serverFnFetcher.js's getResponse() then returns that response the moment it
  * sees that header, before it ever reaches the `.ok` / status check a few
- * lines later. So `await updateStaffRolesServer(...)` RESOLVES with the
+ * lines later. So awaiting a staff-access server function RESOLVES with the
  * Response object whenever the handler rejected the mutation -- a last-admin
  * guard, the 409 Serializable conflict, a protected-account block -- and a
  * caller's `try { await x(); toast.success(...) } catch {...}` reports success
- * on a change the database never applied. For setStaffActive specifically,
+ * on a change the database never applied. For a deactivation specifically,
  * that means the admin believes a departing colleague is locked out and their
  * work reassigned, while both are still live.
  *
- * This is why fetchStaffAccessSummary / updateStaffRoles / setStaffActive each
- * pipe their result through this before returning: it is the one place a
- * resolved raw Response gets converted into a genuinely thrown Error, so the
- * try/catch every caller already writes does the right thing with no caller
- * changes needed. Exported so it can be unit-tested directly with a stubbed
- * Response, rather than requiring a live server round-trip: createServerFn's
- * client/server split (and therefore this exact resolve-not-reject behaviour)
- * only exists once Vite's build-time macro transform has run, so calling the
- * *Server stubs directly in a plain test process does not reproduce it.
- *
- * fetchStaffAccessSummary / updateStaffRoles / setStaffActive each call this
- * WRAPPED AROUND callStaffServerFn, which -- since it now also unwraps a
- * resolved Response via unwrapServerFnResponse -- may hand this a promise
- * that REJECTS with a ServerFnResponseError rather than one that resolves
- * with a raw Response. Both shapes carry the same body text and status, so
- * both are translated through the same table below.
+ * The browser-callable fetchStaffAccessSummary / updateStaffRoles /
+ * setStaffActive wrappers that used to pipe their results through this were
+ * removed in FX-19a-1: no UI called them, and Team changes roles and active
+ * state through admin-team.ts (changeStaffRoles / changeStaffActive). This
+ * helper and its message table are kept only for their unit test
+ * (admin-data.staff-access-response.test.ts) and go in FX-19a-2, which owns
+ * the package.json line that runs that test. It converts a resolved raw
+ * Response -- or a rejection with a ServerFnResponseError, which carries the
+ * same body text and status -- into a genuinely thrown Error.
  */
 function translateStaffAccessMessage(text: string, status: number): string {
   const trimmed = text.trim();
@@ -236,71 +229,6 @@ export async function unwrapStaffAccessResponse<T>(promise: Promise<T>): Promise
     }
     throw error;
   }
-}
-
-const fetchStaffAccessSummaryServer = createServerFn({ method: "GET" })
-  .inputValidator((data: { staffId: string }) =>
-    z.object({ staffId: z.string().trim().uuid() }).parse(data),
-  )
-  .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin"]);
-    const adminData = await import("./admin-data.server");
-    return adminData.fetchStaffAccessSummary(data, staff);
-  });
-
-export async function fetchStaffAccessSummary(options: { data: { staffId: string } }) {
-  return unwrapStaffAccessResponse(
-    callStaffServerFn(async () =>
-      fetchStaffAccessSummaryServer(await withStaffAuthHeaders(options)),
-    ),
-  );
-}
-
-const updateStaffRolesServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { staffId: string; roles: string[] }) =>
-    z
-      .object({
-        staffId: z.string().trim().uuid(),
-        roles: z.array(z.enum(["admin", "manager", "agent"])).max(3),
-      })
-      .parse(data),
-  )
-  .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin"]);
-    const adminData = await import("./admin-data.server");
-    return adminData.updateStaffRoles(data, staff);
-  });
-
-export async function updateStaffRoles(options: {
-  data: { staffId: string; roles: ("admin" | "manager" | "agent")[] };
-}) {
-  return unwrapStaffAccessResponse(
-    callStaffServerFn(async () => updateStaffRolesServer(await withStaffAuthHeaders(options))),
-  );
-}
-
-const setStaffActiveServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { staffId: string; active: boolean; reassignToStaffId?: string | null }) =>
-    z
-      .object({
-        staffId: z.string().trim().uuid(),
-        active: z.boolean(),
-        reassignToStaffId: z.string().trim().uuid().nullable().optional(),
-      })
-      .parse(data),
-  )
-  .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin"]);
-    const adminData = await import("./admin-data.server");
-    return adminData.setStaffActive(data, staff);
-  });
-
-export async function setStaffActive(options: {
-  data: { staffId: string; active: boolean; reassignToStaffId?: string | null };
-}) {
-  return unwrapStaffAccessResponse(
-    callStaffServerFn(async () => setStaffActiveServer(await withStaffAuthHeaders(options))),
-  );
 }
 
 const STALE_SERVER_FN_RELOAD_KEY = "earnest-admin-stale-server-fn-reloaded";
