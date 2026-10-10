@@ -9,6 +9,16 @@ describe("normalisePhone", () => {
     expect(normalisePhone("(852) 6123-4567")).toBe("61234567");
   });
 
+  test("accepts labelled and punctuated namecard spellings (FX-12 fix round 1)", () => {
+    expect(normalisePhone("Tel: 9123 4567")).toBe("91234567");
+    expect(normalisePhone("T: +852 9123 4567")).toBe("91234567");
+    expect(normalisePhone("(+852) 9123 4567")).toBe("91234567");
+    expect(normalisePhone("9123/4567")).toBe("91234567");
+    expect(normalisePhone("電話：2688 2988")).toBe("26882988");
+    expect(normaliseWhatsapp("WhatsApp: 6123 4567")).toBe("61234567");
+    expect(normaliseWhatsapp("Tel: 2688 2988")).toBeNull();
+  });
+
   test("rejects anything that is not a plausible HK number", () => {
     // Wrong length, or a leading digit Hong Kong does not allocate. Returning null
     // leaves the field blank; writing a guess would misroute a real enquiry.

@@ -87,6 +87,7 @@ jobs:
       - run: npm run test:admin-campaign-review:ui
       - run: npm run test:admin-leave-guards:ui
       - run: npm run test:admin-performance:ui
+      - run: npm run test:admin-identity-review:ui
       - run: npm run test:admin-link-bulk:ui
       - run: npm run test:public-forms:ui
       - run: npm run test:live-agent:ui
@@ -107,6 +108,7 @@ jobs:
       - run: npm run test:neon-auth
       - run: npm run test:command-center
       - run: npm run test:lead-integrity
+      - run: npm run test:phone-identity
       - run: npm run test:staff-notifications
       - run: npm run test:whatsapp-enquiries
       - run: npm run test:staff-server-fn
@@ -162,6 +164,7 @@ jobs:
       - run: npm run test:conversation-assist:db
       - run: npm run test:whatsapp-setup:db
       - run: npm run test:woztell:owned:db
+      - run: npm run test:contact-identity:db
       - run: npm run test:propertyhk-reconciliation:owned:db
       - run: npm run test:property-withdrawal:owned:db
       - run: npm run test:property-maintenance:owned:db

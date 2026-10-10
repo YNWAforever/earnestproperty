@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { queryRows, numberOrNull, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
 import { leadBudgetError } from "@/lib/admin/lead-budget";
+import { phoneMatchSql, phoneSpellingTiebreakSql } from "../phone.js";
 
 import type { LiveAgentMessage, LiveAgentSession } from "./ai-types";
 import { buildLiveAgentReply } from "./live-agent-reply.server";
@@ -267,10 +268,9 @@ export async function requestLiveAgentHandoff(input: {
        SELECT c.id FROM claimed s
        JOIN crm_contacts c ON c.id=s.contact_id
          OR (s.contact_id IS NULL AND $5::text IS NOT NULL AND
-           (c.normalized_phone=$5 OR
-             (length($5::text)=11 AND left($5::text,3)='852'
-               AND c.normalized_phone=right($5::text,8))))
-       ORDER BY (c.id=s.contact_id) DESC, (c.normalized_phone=$5) DESC, c.id
+           ${phoneMatchSql("c.normalized_phone", "$5")})
+       ORDER BY (c.id=s.contact_id) DESC, (c.normalized_phone=$5) DESC,
+         ${phoneSpellingTiebreakSql("c.normalized_phone", "$5")}, c.id
        LIMIT 1 FOR UPDATE OF c
      ),
      matched_contact AS (SELECT id FROM candidate_contact),
@@ -442,12 +442,7 @@ async function correctHandoffPhone(input: {
            WHERE (g.subject_id=l.id OR g.metadata->>'leadId'=l.id::text)
              AND g.actor_id IS NOT NULL
          )
-         AND NOT COALESCE(
-           c.normalized_phone=$5::text OR
-             (length($5::text)=11 AND left($5::text,3)='852'
-               AND c.normalized_phone=right($5::text,8)),
-           false
-         )
+         AND NOT COALESCE(${phoneMatchSql("c.normalized_phone", "$5")}, false)
        FOR UPDATE OF s, l
      ),
      owned AS (
@@ -475,10 +470,9 @@ async function correctHandoffPhone(input: {
        SELECT c.id
        FROM target t
        JOIN crm_contacts c ON c.id IS DISTINCT FROM t.contact_id
-         AND (c.normalized_phone=$5::text OR
-           (length($5::text)=11 AND left($5::text,3)='852'
-             AND c.normalized_phone=right($5::text,8)))
-       ORDER BY (c.normalized_phone=$5::text) DESC, c.id
+         AND ${phoneMatchSql("c.normalized_phone", "$5")}
+       ORDER BY (c.normalized_phone=$5::text) DESC,
+         ${phoneSpellingTiebreakSql("c.normalized_phone", "$5")}, c.id
        LIMIT 1 FOR UPDATE OF c
      ),
      updated_owned AS (
