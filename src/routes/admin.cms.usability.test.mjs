@@ -173,3 +173,83 @@ test("FAQ import no longer rebuilds in-request and the rebuild button reports a 
   assert.doesNotMatch(source, /前台 AI\s*仍會引用舊資料/);
   assert.doesNotMatch(source, /重建 live agent 知識庫/);
 });
+
+test("restore asks first and is hidden on draft rows and for agents", () => {
+  assert.doesNotMatch(source, /onClick=\{\(\) => onRestoreRevision\(/);
+  const history = source.slice(
+    source.indexOf("function CmsRevisionHistory("),
+    source.indexOf("function KnowledgeMetric("),
+  );
+  assert.match(history, /canRestore: boolean/);
+  assert.match(history, /onRequestRestore: \(revision: CmsRevisionSummary\) => void/);
+  const guard = history.indexOf('canRestore && revision.state !== "draft"');
+  assert.ok(guard > 0, "還原 must render only for restorers on non-draft rows");
+  const button = history.indexOf("還原", guard);
+  assert.ok(button > guard, "the 還原 button sits inside the guard");
+  assert.match(history.slice(guard, button), /onClick=\{\(\) => onRequestRestore\(revision\)\}/);
+  for (const kind of ["Estate", "Article"]) {
+    const body = source.slice(source.indexOf(`function ${kind}Dialog(`)).split("\nfunction ")[0];
+    assert.match(body, /useCmsCanRestore\(\)/, `${kind} reads the staff session role`);
+    assert.match(body, /<CmsRestoreConfirm/, `${kind} confirms before restoring`);
+    assert.match(
+      body,
+      /savedDraft=\{revisions\?\.find\(\(revision\) => revision\.state === "draft"\)/,
+    );
+  }
+  const estateEditor = readFileSync(
+    new URL("../components/admin/estates/AdminEstateEditorForm.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(estateEditor, /<CmsRestoreConfirm/);
+  assert.doesNotMatch(estateEditor, /還原會以該版本內容建立新草稿，並覆蓋目前表單內未儲存的修改。/);
+  assert.match(estateEditor, /canRestore && revision\.state !== "draft"/);
+});
+
+test("compare no longer prints raw JSON", () => {
+  const compare = readFileSync(
+    new URL("../components/admin/CmsPublicationCompare.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(compare, /JSON\.stringify\(comparison\.published/);
+  assert.match(compare, /cmsFieldDiff\(/);
+  assert.match(compare, /與已發布版本比較/);
+  assert.match(compare, /複製本機修改（備份）/);
+  assert.match(compare, /本機修改備份（可複製）/);
+  assert.doesNotMatch(compare, /比較目前發布版本（保留本機修改）/);
+});
+
+test("restore baseline is never null while a record is open, and the dialog closes rather than unmounting", () => {
+  for (const kind of ["Estate", "Article"]) {
+    const body = source.slice(source.indexOf(`function ${kind}Dialog(`)).split("\nfunction ")[0];
+    assert.match(body, /useOpeningSnapshot\(/, `${kind} keeps the form as it was opened`);
+    assert.match(body, /openingForm=\{opening/);
+  }
+  const confirm = readFileSync(
+    new URL("../components/admin/CmsRestoreConfirm.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(confirm, /open=\{revision !== null\}/);
+  assert.doesNotMatch(confirm, /\n\s+open\n/);
+  for (const [file, phrase] of [
+    ["../components/admin/admin-error-text.ts", "請使用與已發布版本比較。"],
+    ["./admin.cms.tsx", "請先與已發布版本比較並核對內容。"],
+  ]) {
+    const text = readFileSync(new URL(file, import.meta.url), "utf8");
+    assert.ok(text.includes(phrase), `${file} names the compare button as 與已發布版本比較`);
+    assert.ok(!text.includes("比較目前發布版本"), `${file} still names the old button`);
+  }
+});
+
+test("confirm dialogs hand focus back to the button that opened them", () => {
+  // Checked in Chromium (FX-17a fix round 1): these dialogs open from state, with no
+  // AlertDialogTrigger, so without this Radix drops focus on <body> instead of on 還原.
+  const dialog = readFileSync(
+    new URL("../components/admin/AdminConfirmDialog.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(dialog, /onOpenAutoFocus=\{\(\) => \{[\s\S]*?openerRef\.current =/);
+  assert.match(
+    dialog,
+    /onCloseAutoFocus=\{\(event\) => \{[\s\S]*?event\.preventDefault\(\);\s*opener\.focus\(\);/,
+  );
+});

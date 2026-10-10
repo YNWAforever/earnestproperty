@@ -12,6 +12,7 @@ import {
   calculateMortgage,
   calculateResidentialStampDuty,
   commitMortgageDraft,
+  liveMortgageInputs,
   mortgageInputsFromSearch,
   normalizeMortgageInputs,
   parseMortgageDraft,
@@ -472,5 +473,39 @@ describe("mortgage scenario comparison", () => {
     const result = removeMortgageScenario(scenarios, "does-not-exist");
 
     expect(result).toEqual(scenarios);
+  });
+});
+
+describe("liveMortgageInputs", () => {
+  test("results update while typing", () => {
+    const live = liveMortgageInputs(DEFAULT_MORTGAGE_INPUTS, "price", "6500000");
+    expect(live?.price).toBe(6_500_000);
+    expect(live?.ltv).toBe(DEFAULT_MORTGAGE_INPUTS.ltv);
+  });
+
+  test("an invalid or out-of-range draft previews nothing", () => {
+    for (const draft of ["", "abc", "6.5.0", "-5", "999999", "600000000", "Infinity", "1e999"]) {
+      expect(liveMortgageInputs(DEFAULT_MORTGAGE_INPUTS, "price", draft)).toBeNull();
+    }
+    expect(liveMortgageInputs(DEFAULT_MORTGAGE_INPUTS, "ltv", "101")).toBeNull();
+    expect(liveMortgageInputs(DEFAULT_MORTGAGE_INPUTS, "years", "0")).toBeNull();
+    expect(liveMortgageInputs(DEFAULT_MORTGAGE_INPUTS, "annualInterestRate", "11")).toBeNull();
+    expect(liveMortgageInputs(DEFAULT_MORTGAGE_INPUTS, "monthlyIncome", "-1")).toBeNull();
+  });
+
+  test("an empty optional income previews without income", () => {
+    const withIncome = { ...DEFAULT_MORTGAGE_INPUTS, monthlyIncome: 50_000 };
+    const live = liveMortgageInputs(withIncome, "monthlyIncome", "");
+    expect(live).not.toBeNull();
+    expect(live?.monthlyIncome).toBeUndefined();
+    expect(liveMortgageInputs(withIncome, "monthlyDebtExpenses", "  ")?.monthlyDebtExpenses).toBe(
+      undefined,
+    );
+  });
+
+  test("a valid optional income is applied", () => {
+    expect(
+      liveMortgageInputs(DEFAULT_MORTGAGE_INPUTS, "monthlyIncome", "45000")?.monthlyIncome,
+    ).toBe(45_000);
   });
 });

@@ -124,11 +124,18 @@ export function fetchOperationsHealth(isWorkspaceCurrent?: () => boolean) {
 }
 
 export function fetchOperationsJobs(
-  query: { status?: JobStatus; jobType?: string; cursor?: string; limit?: number } = {},
+  query: {
+    status?: JobStatus;
+    jobType?: string;
+    cursor?: string;
+    limit?: number;
+    ids?: string[];
+  } = {},
   isWorkspaceCurrent?: () => boolean,
 ) {
+  const { ids, ...rest } = query;
   return requestControlPlane<JobsPage>(
-    queryPath("/jobs", query),
+    queryPath("/jobs", { ...rest, ids: ids?.length ? ids.join(",") : undefined }),
     undefined,
     undefined,
     undefined,

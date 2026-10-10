@@ -20,27 +20,3 @@ export type TrackingLink = TrackingLinkInput & {
   createdAt: string;
   placementVerifiedAt: string | null;
 };
-export type WhatsappEnquiry = {
-  id: string;
-  conversationId: string;
-  name: string | null;
-  propertyId: string | null;
-  publicListingNo: string | null;
-  placementSource: string;
-  attributionMethod: string;
-  requestedStaffId: string | null;
-  entryPointType: string;
-  serviceState: string;
-  associationReview: boolean;
-  customerMessageAt: string | null;
-  webhookReceivedAt: string;
-  responseDueAt: string | null;
-  firstHumanResponseAt: string | null;
-  effectsEligible: boolean;
-  crmLeadId: string | null;
-  enquiryOwnerStaffId: string | null;
-  conversationAssigneeId: string | null;
-  providerConfirmedStaffId: string | null;
-  enquiryVersion: number;
-  providerThreadReview: boolean;
-};

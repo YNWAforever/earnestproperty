@@ -10,6 +10,7 @@ import { resolvePublicWaAction } from "@/lib/whatsapp-enquiries/public-context";
 import { calculateMortgage } from "@/lib/mortgage";
 import type { NeonBranchRecord } from "@/lib/neon/public-data.types";
 import { buildContext, track } from "@/lib/analytics/events";
+import { mobileActionBarAttribute } from "@/components/site/mobile-action-bar";
 
 import { getPropertyDecision } from "./property-decision.js";
 
@@ -325,34 +326,38 @@ export function PropertyDecisionActions({
         ) : null}
       </div>
 
+      {/* FX-16 F-07: bottom-0 on the safe area; the right padding is the slot the
+          docked 問樓助手 icon fills. Below 420 px the leading icons drop so every
+          label fits a 89 px column at 360 px. */}
       <div
-        className="fixed inset-x-0 bottom-16 z-40 border-t bg-background/95 px-3 py-2 shadow-lg backdrop-blur lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pr-[3.75rem] shadow-lg backdrop-blur lg:hidden"
         data-property-mobile-actions
+        {...mobileActionBarAttribute}
       >
         <div
           className={`mx-auto grid max-w-6xl gap-2 ${decision.showMortgage ? "grid-cols-3" : "grid-cols-2"}`}
         >
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline" size="sm" className="px-2">
             <a href={phoneHref}>
-              <Phone className="mr-1 h-4 w-4" />
+              <Phone className="mr-1 hidden h-4 w-4 min-[420px]:inline" />
               {callLabel}
             </a>
           </Button>
-          <Button asChild size="sm" className="bg-[#25D366] text-white hover:bg-[#1ebe57]">
+          <Button asChild size="sm" className="bg-whatsapp px-2 text-white hover:bg-whatsapp-hover">
             <a
               href={whatsappHref ?? "/contact"}
               target={hasWhatsapp ? "_blank" : undefined}
               rel="noopener noreferrer"
               onClick={handleWhatsAppClick}
             >
-              <MessageCircle className="mr-1 h-4 w-4" />
+              <MessageCircle className="mr-1 hidden h-4 w-4 min-[420px]:inline" />
               {whatsappLabel}
             </a>
           </Button>
           {decision.showMortgage && decision.mortgageHref ? (
-            <Button asChild size="sm" variant="secondary">
+            <Button asChild size="sm" variant="secondary" className="px-2">
               <a href={decision.mortgageHref}>
-                <Calculator className="mr-1 h-4 w-4" />
+                <Calculator className="mr-1 hidden h-4 w-4 min-[420px]:inline" />
                 {mortgageLabel}
               </a>
             </Button>

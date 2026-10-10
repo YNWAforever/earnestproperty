@@ -34,7 +34,6 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     "saveAdminCampaign",
     "materializeCampaignRecipients",
     "sendAdminCampaignQueue",
-    "queueAdminCampaign",
     "cancelAdminCampaign",
     "finishCampaignWithoutSending",
     "fetchLeadLiveAgentTranscript",
@@ -256,6 +255,81 @@ test("campaign save rejects delivery statuses before any database write", async 
   );
 });
 
+// FX-17a D-13 fix round 1: the server mirrors the form. A save without a schedule
+// time keeps the stored one, and 已排期 can be kept but never chosen.
+test("campaign save keeps a stored scheduled_at and never moves a campaign into 已排期", async () => {
+  const source = read("src/lib/neon/admin-data.server.ts");
+  const file = ts.createSourceFile("admin-data.server.ts", source, ts.ScriptTarget.Latest, true);
+  const declaration = file.statements.find(
+    (statement) =>
+      ts.isFunctionDeclaration(statement) && statement.name?.text === "saveAdminCampaign",
+  );
+  assert.ok(declaration);
+  const executable = ts.transpileModule(declaration.getText(file).replace(/^export\s+/, ""), {
+    compilerOptions: { module: ts.ModuleKind.None, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  const queries = [];
+  let answer = (sql) => (/^\s*SELECT/.test(sql) ? [] : [{ id: "campaign-1" }]);
+  const save = new Function(
+    "requireNonEmpty",
+    "queryRows",
+    "writeAudit",
+    "stringOrEmpty",
+    "campaignHasDeliveryHistorySql",
+    executable + "\nreturn saveAdminCampaign;",
+  )(
+    () => {},
+    async (sql, params) => {
+      queries.push({ sql, params });
+      return answer(sql);
+    },
+    async () => {},
+    String,
+    campaignHasDeliveryHistorySql,
+  );
+  const actor = { staffId: "manager-1" };
+  const input = { name: "Campaign", template_id: null, audience_id: null, status: "review" };
+
+  // Create: 已排期 is refused before any write.
+  assert.deepEqual(await save({ ...input, status: "scheduled", scheduled_at: null }, actor), {
+    id: "",
+    error: "INVALID_CAMPAIGN_STATUS",
+  });
+  assert.equal(queries.length, 0);
+
+  // Update without the field, or with "", sends null and the SQL keeps the stored value.
+  for (const scheduled of [{}, { scheduled_at: "" }, { scheduled_at: null }]) {
+    queries.length = 0;
+    assert.deepEqual(await save({ ...input, ...scheduled, id: "campaign-1" }, actor), {
+      id: "campaign-1",
+    });
+    assert.equal(queries[0].params[4], null);
+  }
+  const update = queries[0].sql;
+  assert.match(
+    update,
+    /scheduled_at=COALESCE\(\$5::timestamptz, whatsapp_campaigns\.scheduled_at\)/,
+  );
+  assert.doesNotMatch(update, /scheduled_at=\$5\b/);
+  assert.match(
+    update,
+    /AND \(\$4::whatsapp_campaign_status <> 'scheduled' OR status = 'scheduled'\)/,
+  );
+
+  // Update into 已排期 from another status matches no row and says why.
+  queries.length = 0;
+  answer = (sql) => (/^\s*SELECT/.test(sql) ? [{ status: "review", has_history: false }] : []);
+  assert.deepEqual(await save({ ...input, status: "scheduled", id: "campaign-1" }, actor), {
+    id: "",
+    error: "INVALID_CAMPAIGN_STATUS",
+  });
+  // A row that is already 已排期 keeps it.
+  answer = (sql) => (/^\s*SELECT/.test(sql) ? [] : [{ id: "campaign-1" }]);
+  assert.deepEqual(await save({ ...input, status: "scheduled", id: "campaign-1" }, actor), {
+    id: "campaign-1",
+  });
+});
+
 test("campaign cancellation only changes active campaigns and their pending recipients", async () => {
   const source = read("src/lib/neon/admin-data.server.ts");
   const file = ts.createSourceFile("admin-data.server.ts", source, ts.ScriptTarget.Latest, true);
@@ -426,4 +500,52 @@ test("FAQ reorder rejects invalid batches and skips empty database work", async 
   changedRows = [];
   assert.deepEqual(await reorder([first, second], actor), { ok: true });
   assert.equal(audits.length, 1, "unchanged order must not write an audit entry");
+});
+
+// FX-17a D-13 / G-25: the browser-callable queueAdminCampaign flipped a campaign
+// to queued WITHOUT re-materialising its recipients, so opt-outs, lapsed
+// consent and duplicate phones were not re-checked. 發送… is the only way in.
+test("the only browser-callable campaign send path re-materialises recipients", () => {
+  const client = read("src/lib/neon/admin-data.ts");
+  const server = read("src/lib/neon/admin-data.server.ts");
+  const queueRoute = read("src/routes/api.admin.campaigns.$id.queue.ts");
+
+  // No client export, no server-fn wrapper, no handler that reaches the bare queue.
+  assert.doesNotMatch(client, /export\s+(?:async\s+function|const)\s+queueAdminCampaign\b/);
+  assert.doesNotMatch(client, /queueAdminCampaignServer/);
+  assert.doesNotMatch(client, /adminData\.queueAdminCampaign\(/);
+  assert.doesNotMatch(client, /\bqueueAdminCampaign\b/);
+  // The uncalled server alias is gone too; the server function itself stays
+  // (sendAdminCampaignQueue and the owned DB suites call it).
+  assert.doesNotMatch(server, /export\s+async\s+function\s+queueCampaign\b/);
+  assert.match(server, /export\s+async\s+function\s+queueAdminCampaign\(/);
+
+  // The real path: the queue route calls sendAdminCampaignQueue, which
+  // validates, then materialises, and only then queues.
+  assert.match(queueRoute, /adminData\.sendAdminCampaignQueue\(params\.id, staff/);
+  assert.doesNotMatch(queueRoute, /adminData\.queueAdminCampaign\(/);
+  const start = server.indexOf("export async function sendAdminCampaignQueue(");
+  const end = server.slice(start).search(/\r?\n}\r?\n/) + start;
+  assert.ok(start >= 0 && end > start);
+  const send = server.slice(start, end);
+  const validate = send.indexOf("validateAdminCampaignQueueability(id)");
+  const materialise = send.indexOf("materializeCampaignRecipients(id, actor)");
+  const queue = send.indexOf("queueAdminCampaign(id, actor, options)");
+  assert.ok(validate >= 0 && materialise > validate && queue > materialise);
+  assert.match(send, /if \(!materialization\.ok\)\s*return/);
+
+  // No other screen or admin helper can reach the bare queue.
+  for (const file of ["src/routes/admin.blasts.tsx", "src/lib/admin/blast-review.ts"]) {
+    assert.doesNotMatch(read(file), /\bqueueAdminCampaign\b/, file);
+  }
+});
+
+// FX-17a D-13: 已排期 never sent anything by itself. The send-queue cron only
+// picks up campaigns already in queued/sending, so a scheduled row waits for 發送….
+test("no cron or job path sends a campaign because it is 已排期", () => {
+  const cron = read("src/routes/api.admin.jobs.send-queue.ts");
+  assert.match(cron, /WHERE campaign\.status IN \('queued', 'sending'\)/);
+  assert.doesNotMatch(cron, /'scheduled'/);
+  const server = read("src/lib/neon/admin-data.server.ts");
+  assert.doesNotMatch(server, /scheduled_at\s*(?:<=|<|>=|>)\s*now\(\)/);
 });

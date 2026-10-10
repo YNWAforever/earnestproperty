@@ -10,6 +10,7 @@ import {
   activePropertyOfferings,
   publicPropertyNo,
   stripUnsupportedVrClaim,
+  stripLeadingAgencyTag,
 } from "./property-public";
 
 /**
@@ -149,7 +150,7 @@ function districtLabel(input: ListingSeoInput): string | null {
 function cleanSourceTitle(value: unknown, videoUrl?: string | null): string | null {
   const raw = text(value);
   if (!raw) return null;
-  const cleaned = raw
+  const cleaned = stripLeadingAgencyTag(raw)
     .replace(/\s*-\s*晉誠地產\s*$/, "")
     .replace(/\s*[#＃]\S+\s*$/, "")
     .replace(/\s+(售盤|租盤|放盤)$/, "")
@@ -267,6 +268,18 @@ function restates(existing: string, segment: string): boolean {
     .filter(Boolean)
     .map(flat);
   return parts.length > 1 && parts.every((part) => haystack.includes(part));
+}
+
+/** Drops only the generated 「{estate}，{floor}，實用面積」 run (and the
+ * delimiters left around it); every other character is preserved. */
+function removeGeneratedFactsFiller(body: string | null, estate: string | null): string | null {
+  if (!body || !estate) return body;
+  const escaped = estate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const run = new RegExp(`${escaped}，[^，。！!\\s]{1,6}，實用面積[。]?`, "g");
+  const stripped = body.replace(run, "");
+  if (stripped === body) return body;
+  const rest = stripped.replace(/^[\s，。]+/, "").replace(/[\s，]+$/, "");
+  return rest || null;
 }
 
 /**
@@ -436,7 +449,9 @@ export function listingSeoDescription(input: ListingSeoInput): string {
   // 5. Body copy, but only as filler when the structured facts left the
   //    snippet thin -- and clause-trimmed, never mid-word sliced. This is what
   //    replaces the old `description.slice(0, 150)`.
-  const body = text(input.description);
+  //    The generated 「{estate}，{floor}，實用面積」 run only repeats the facts
+  //    above, so it is removed before the body is considered.
+  const body = removeGeneratedFactsFiller(text(input.description), estate);
   if (body && displayWidth(description) < DESCRIPTION_MIN_UNITS) {
     const filler = truncateToWidth(body, bodyBudget - displayWidth(description) - 2);
     if (filler) description += `${filler}。`;
@@ -450,9 +465,9 @@ export function listingSeoDescription(input: ListingSeoInput): string {
   //    true statement rather than filler, and it varies by estate.
   if (displayWidth(description) < DESCRIPTION_MIN_UNITS) {
     const context = estate
-      ? `一頁睇齊${estate}成交紀錄、同屋苑其他放盤同交通配套。`
+      ? `一頁睇齊${estate}同屋苑其他放盤同交通配套。`
       : district
-        ? `一頁睇齊${district}放盤比較、成交紀錄同交通配套。`
+        ? `一頁睇齊${district}放盤比較同交通配套。`
         : null;
     if (context && displayWidth(description + context) <= bodyBudget) description += context;
   }

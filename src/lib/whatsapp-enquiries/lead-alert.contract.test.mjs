@@ -50,6 +50,9 @@ test("no source, script, worker or migration spells the alert job type outside t
     "src/lib/neon/lead-alert-enqueue.d.ts",
     "src/lib/whatsapp-enquiries/lead-alert.server.ts",
     "src/lib/control-plane/job-handlers.server.ts",
+    // Display-only: staff-facing job labels. It holds the type strings as lookup keys and
+    // enqueues nothing.
+    "src/lib/admin/job-labels.ts",
   ]);
   const offenders = sourceFiles(
     ["src", "scripts", "workers", "neon/migrations"],

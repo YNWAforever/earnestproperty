@@ -561,6 +561,8 @@ export async function listJobs(
   input: {
     status?: JobRow["status"];
     jobType?: string;
+    /** Read specific jobs by id (already validated, at most 25). */
+    ids?: string[];
     cursor?: string;
     limit?: number;
   } = {},
@@ -580,6 +582,7 @@ export async function listJobs(
      FROM ops_jobs
      WHERE ($1::text IS NULL OR status = $1)
        AND ($2::text IS NULL OR job_type = $2)
+       AND ($6::uuid[] IS NULL OR id = ANY($6::uuid[]))
        AND (
          $3::timestamptz IS NULL
          OR (created_at, id) < ($3::timestamptz, $4::uuid)
@@ -592,6 +595,7 @@ export async function listJobs(
       cursor?.createdAt ?? null,
       cursor?.id ?? null,
       limit + 1,
+      input.ids?.length ? input.ids.slice(0, 25) : null,
     ],
   );
   const page = rows.slice(0, limit);

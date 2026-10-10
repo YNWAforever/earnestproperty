@@ -1,3 +1,4 @@
+import { adminErrorMessage } from "../../../components/admin/admin-error-text.ts";
 import { allowedOperationTabs, resolveOperationTab } from "./operations-permissions.ts";
 import type { HealthData, OperationTab } from "./operations-types.ts";
 
@@ -78,5 +79,5 @@ export function createOperationsHealthLoader({
 }
 
 function errorText(error: unknown): string {
-  return error instanceof Error ? error.message : "Unable to load operations health.";
+  return adminErrorMessage(error);
 }

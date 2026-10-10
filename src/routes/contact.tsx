@@ -2,13 +2,15 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { MapPin, Phone, MessageCircle, Mail, Clock } from "lucide-react";
 import { SITE_BRANCHES, SITE_CONTACT, whatsappUrl, type SiteBranch } from "@/config/site";
-import { toWhatsAppHref } from "@/lib/contact-links";
+import { toTelHref, toWhatsAppHref } from "@/lib/contact-links";
 import { canonicalLink, pageSeo } from "@/content/seo";
+import { districtLabelForSlug } from "@/lib/listing-seo";
 import { branchLocalBusinessSchema, jsonLdScript } from "@/lib/schema";
 import { AppImage } from "@/components/media/AppImage";
 import { Container } from "@/components/layout/Container";
 import { ContactInquiryForm } from "@/components/site/ContactInquiryForm";
 import { PageHero } from "@/components/site/PageHero";
+import { PhoneLink } from "@/components/site/PhoneLink";
 
 const branchesSchema = {
   "@context": "https://schema.org",
@@ -18,6 +20,8 @@ const branchesSchema = {
       name: branch.name,
       address: branch.address,
       telephone: branch.phone,
+      addressLocality: branch.addressLocality,
+      areaServed: branch.districtSlugs.flatMap((slug) => districtLabelForSlug(slug) ?? []),
       image: branch.photo,
     }),
   ),
@@ -109,13 +113,13 @@ function ContactPage() {
                     <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                     {branch.address}
                   </p>
-                  <a
-                    href={`tel:${branch.phone}`}
+                  <PhoneLink
+                    phone={branch.phone}
                     className="mt-3 flex items-center gap-2 text-base font-semibold text-primary hover:underline"
                   >
                     <Phone className="h-4 w-4 text-primary" />
                     {branch.phone}
-                  </a>
+                  </PhoneLink>
                   {branch.hours ? (
                     <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
                       <Clock className="h-4 w-4 shrink-0 text-primary" />
@@ -127,7 +131,7 @@ function ContactPage() {
                       href={branchWhatsappHref}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-2 flex items-center gap-2 text-sm font-medium text-[#25D366] hover:underline"
+                      className="mt-2 flex items-center gap-2 text-sm font-medium text-whatsapp hover:underline"
                     >
                       <MessageCircle className="h-4 w-4 shrink-0" />
                       WhatsApp 查詢
@@ -151,7 +155,7 @@ function ContactPage() {
             icon={<Phone className="h-5 w-5" />}
             label="總機"
             value={SITE_CONTACT.phoneDisplay || "聯絡我們"}
-            href={SITE_CONTACT.phoneTel ? `tel:${SITE_CONTACT.phoneTel}` : "/contact"}
+            href={toTelHref(SITE_CONTACT.phoneTel) ?? "/contact"}
           />
           <Row
             icon={<Mail className="h-5 w-5" />}
@@ -176,7 +180,7 @@ function ContactPage() {
           both consent-related elements per this task's structural
           requirement.
         */}
-          <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
             我們只會使用你於下方提供的資料回覆你的查詢及提供相關服務，詳情請參閱
             <a href="/privacy" className="text-primary underline underline-offset-2">
               《私隱政策》

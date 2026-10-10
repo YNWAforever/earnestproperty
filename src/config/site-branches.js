@@ -3,6 +3,8 @@ export const SITE_BRANCHES = [
     id: "lido",
     name: "麗都分行",
     address: "深井麗都花園地下5A舖",
+    // The locality is the place name the address itself starts with.
+    addressLocality: "深井",
     phone: "26882988",
     // TODO(client): confirm this branch's WhatsApp-capable mobile. The phone
     // above is a landline and cannot receive WhatsApp messages.
@@ -23,6 +25,7 @@ export const SITE_BRANCHES = [
     id: "rhine",
     name: "海韻分行",
     address: "深井海韻花園地下G3舖",
+    addressLocality: "深井",
     phone: "26886996",
     // TODO(client): confirm this branch's WhatsApp-capable mobile. The phone
     // above is a landline and cannot receive WhatsApp messages.
@@ -39,6 +42,7 @@ export const SITE_BRANCHES = [
     id: "hong-kong-garden",
     name: "青山公路豪景分行",
     address: "青龍頭村11號地下",
+    addressLocality: "青龍頭",
     phone: "26882883",
     // TODO(client): confirm this branch's WhatsApp-capable mobile. The phone
     // above is a landline and cannot receive WhatsApp messages.
