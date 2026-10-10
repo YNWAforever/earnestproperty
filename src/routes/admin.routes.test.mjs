@@ -237,6 +237,8 @@ test("admin server functions recover from stale deployed hashes", () => {
     "saveAdminProperty",
     "deleteAdminProperty",
     "fetchAdminCms",
+    "deleteAdminFaq",
+    "restoreAdminFaq",
     "fetchAdminLeads",
     "fetchAdminConversations",
     "fetchAdminCampaigns",

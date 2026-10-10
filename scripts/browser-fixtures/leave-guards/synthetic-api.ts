@@ -95,8 +95,9 @@ export async function saveAdminFaq({ data }: { data: Row }) {
   saves.push({ faq: data });
   return { id: `faq-${faqs.length}` };
 }
-export const checkAdminFaqConflicts = async () => [];
-export const deleteAdminFaq = async () => ({});
+export const checkAdminFaqConflicts = async () => ({ existing: [], archived: [] });
+export const deleteAdminFaq = async () => ({ ok: true });
+export const restoreAdminFaq = async () => ({ ok: true, version: "" });
 export const rebuildAdminAiKnowledge = async () => ({});
 export const saveAdminCmsVideo = async () => ({});
 export const updateAdminMediaAsset = async () => ({});

@@ -57,3 +57,5 @@ export const CMS_ROW_VERSION_REQUIRED = "CMS_ROW_VERSION_REQUIRED";
 export const FAQ_ARCHIVED = "FAQ_ARCHIVED";
 /** Returned error: a new FAQ matches an archived question in the same scope. */
 export const FAQ_ARCHIVED_DUPLICATE = "FAQ_ARCHIVED_DUPLICATE";
+/** 409 body: a restore would duplicate a live question in the same scope. */
+export const FAQ_RESTORE_CONFLICT = "FAQ_RESTORE_CONFLICT";

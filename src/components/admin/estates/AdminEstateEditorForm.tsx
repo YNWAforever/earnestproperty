@@ -407,13 +407,21 @@ export function AdminEstateEditorForm({
 
   async function handleDeleteFaq(id: string) {
     try {
-      await deleteAdminFaq({ data: { id } });
+      const result = await deleteAdminFaq({ data: { id } });
       await refreshFaqs(form.slug);
-      toast.success("FAQ 已刪除");
+      if (!result.ok) {
+        toast.error("此 FAQ 已被封存或刪除，請重新載入頁面。");
+        return;
+      }
+      toast.success("已封存");
     } catch (err) {
-      toast.error(adminErrorMessage(err, "刪除失敗"));
+      toast.error(adminErrorMessage(err, "未能封存，請重試。"));
     }
   }
+
+  // Archived FAQs are restored from 內容中心 › FAQ; here they are only counted.
+  const publishedFaqs = faqs?.filter((faq) => faq.published) ?? [];
+  const archivedFaqCount = (faqs?.length ?? 0) - publishedFaqs.length;
 
   const disabled = saving || publishing;
   const isDirty = (Object.keys(form) as Array<keyof FormState>).some(
@@ -690,9 +698,9 @@ export function AdminEstateEditorForm({
                 新增 FAQ
               </Button>
             </div>
-            {faqs?.length ? (
+            {publishedFaqs.length ? (
               <ul className="space-y-2">
-                {faqs.map((faq) => (
+                {publishedFaqs.map((faq) => (
                   <li key={faq.id} className="rounded-md border p-3 text-sm">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -722,7 +730,7 @@ export function AdminEstateEditorForm({
                           size="sm"
                           onClick={() => setPendingFaqDeleteId(faq.id)}
                         >
-                          刪除
+                          封存
                         </Button>
                       </div>
                     </div>
@@ -732,6 +740,11 @@ export function AdminEstateEditorForm({
             ) : (
               <p className="text-sm text-muted-foreground">此屋苑暫無 FAQ。</p>
             )}
+            {archivedFaqCount > 0 ? (
+              <p className="mt-2 text-sm text-muted-foreground">
+                另有 {archivedFaqCount} 條已封存，可在內容中心 › FAQ 還原。
+              </p>
+            ) : null}
           </section>
         ) : null}
 
@@ -888,9 +901,9 @@ export function AdminEstateEditorForm({
       />
       <AdminConfirmDialog
         open={pendingFaqDeleteId !== null}
-        title="刪除 FAQ？"
-        description="刪除後無法還原，公開屋苑頁面會即時移除此問答。"
-        confirmLabel="刪除"
+        title="封存 FAQ？"
+        description="公開屋苑頁面會即時移除此問答。之後可在內容中心 › FAQ 還原。"
+        confirmLabel="封存"
         confirmVariant="destructive"
         onOpenChange={(open) => {
           if (!open) setPendingFaqDeleteId(null);

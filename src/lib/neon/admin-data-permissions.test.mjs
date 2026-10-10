@@ -13,6 +13,7 @@ const CMS_WRITE_FUNCTIONS = [
   "saveAdminFaqServer",
   "saveAdminCmsVideoServer",
   "deleteAdminFaqServer",
+  "restoreAdminFaqServer",
   "updateAdminMediaAssetServer",
   "checkAdminFaqConflictsServer",
 ];

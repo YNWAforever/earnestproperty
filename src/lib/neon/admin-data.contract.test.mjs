@@ -19,6 +19,7 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     "saveAdminArticle",
     "saveAdminFaq",
     "deleteAdminFaq",
+    "restoreAdminFaq",
     "reorderAdminFaqs",
     "fetchAdminMediaAssets",
     "updateAdminMediaAsset",

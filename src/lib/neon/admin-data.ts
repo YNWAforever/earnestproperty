@@ -986,6 +986,18 @@ export async function deleteAdminFaq(options: { data: { id: string } }) {
   return callStaffServerFn(async () => deleteAdminFaqServer(await withStaffAuthHeaders(options)));
 }
 
+const restoreAdminFaqServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { id: string }) => data)
+  .handler(async ({ data }) => {
+    const staff = await requireStaffPermission(getRequest(), "cms.publish");
+    const adminData = await import("./admin-data.server");
+    return adminData.restoreAdminFaq(data.id, staff);
+  });
+
+export async function restoreAdminFaq(options: { data: { id: string } }) {
+  return callStaffServerFn(async () => restoreAdminFaqServer(await withStaffAuthHeaders(options)));
+}
+
 const checkAdminFaqConflictsServer = createServerFn({ method: "POST" })
   .inputValidator((data: { keys: Array<{ scope: string; question: string }> }) => data)
   .handler(async ({ data }) => {

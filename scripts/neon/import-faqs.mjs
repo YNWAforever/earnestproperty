@@ -33,8 +33,11 @@ if (!rows.length) {
 
 const [before] = await sql`SELECT count(*)::int AS n FROM faqs`;
 
+// An archived question (faqs.published = false) is skipped, not overwritten:
+// restore it in 內容中心 › FAQ first (FX-18a, C-12).
+const skippedArchived = [];
 for (const row of rows) {
-  await sql`
+  const written = await sql`
     INSERT INTO faqs (scope, question, answer, sort_order)
     VALUES (${row.scope}, ${row.question}, ${row.answer},
             (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM faqs WHERE scope = ${row.scope}))
@@ -43,11 +46,20 @@ for (const row of rows) {
       -- position in the whole parsed file, which silently reverted any ordering
       -- an admin had set through the CMS reorder.
       SET answer = EXCLUDED.answer
+      WHERE faqs.published
+    RETURNING id
   `;
+  if (!written.length) skippedArchived.push(row);
 }
 
 const [after] = await sql`SELECT count(*)::int AS n FROM faqs`;
 console.log(`parsed ${rows.length} | faqs ${before.n} -> ${after.n}`);
+if (skippedArchived.length) {
+  console.log(
+    `archived, not imported (restore first):\n  ` +
+      skippedArchived.map((row) => `${row.scope}: ${row.question}`).join("\n  "),
+  );
+}
 
 // Add-only: a question retracted from the seed file stays published, and the
 // row count only grows, so nothing surfaces it. Report rather than delete --
@@ -56,7 +68,7 @@ const scopes = [...new Set(rows.map((row) => row.scope))];
 const seeded = new Set(rows.map((row) => `${row.scope} ${row.question}`));
 const existing = await sql`
   SELECT scope, question FROM faqs
-  WHERE scope = ANY(${scopes})
+  WHERE scope = ANY(${scopes}) AND published
   ORDER BY scope, question
 `;
 const orphans = existing.filter((row) => !seeded.has(`${row.scope} ${row.question}`));

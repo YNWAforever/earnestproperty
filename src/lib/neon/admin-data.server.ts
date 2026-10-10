@@ -73,6 +73,7 @@ import {
   CMS_ROW_VERSION_REQUIRED,
   FAQ_ARCHIVED,
   FAQ_ARCHIVED_DUPLICATE,
+  FAQ_RESTORE_CONFLICT,
   cmsRowFieldsJsonSql,
   cmsRowVersionSql,
   isCmsRowVersion,
@@ -2560,11 +2561,118 @@ export async function saveAdminFaq(input: AdminFaqInput, actor: StaffAccess) {
   return { id: stringOrEmpty(row.id), inserted: true, version: stringOrEmpty(row.version) };
 }
 
-export async function deleteAdminFaq(id: string, actor: StaffAccess) {
-  const rows = await queryRows("DELETE FROM faqs WHERE id = $1 RETURNING id", [id]);
-  if (!rows[0]) return { ok: false, error: "Not found" };
-  await writeAudit(actor.staffId, "faq.delete", "faq", id);
+// FX-18a Task 2 (C-12). Same advisory identity cms_mutate takes (re-entrant).
+const FAQ_CMS_LOCK_SQL = `SELECT pg_advisory_xact_lock(hashtextextended('cms:faq:' || $1::uuid::text, 0))`;
+
+/** cms_mutate raises FORBIDDEN for a non-admin/manager actor. */
+function faqCmsMutateError(error: unknown): never {
+  if (error instanceof Error && /\bFORBIDDEN\b/.test(error.message)) {
+    throw new Response("Forbidden", { status: 403 });
+  }
+  throw error;
+}
+
+/** Delete is a soft delete: cms_mutate('archive') sets published=false, writes the
+ *  archived revision and the cms_archived audit row. FAQ edits bypass the revision
+ *  engine, so the live row is snapshotted as the published revision first, in the
+ *  same transaction; restore then brings back the answer it had when archived. */
+export async function deleteAdminFaq(
+  id: string,
+  actor: StaffAccess,
+): Promise<{ ok: true } | { ok: false; error: "Not found" }> {
+  let results: unknown[][];
+  try {
+    results = (await transactionRows([
+      { statement: FAQ_CMS_LOCK_SQL, params: [id] },
+      {
+        // A stale publication (the July snapshot, or an older one) gives way to
+        // the live row. Only while the FAQ is live: an archived FAQ is untouched.
+        statement: `UPDATE cms_content_revisions SET state = 'superseded'
+          WHERE resource_type = 'faq' AND resource_id = $1::uuid AND state = 'published'
+            AND EXISTS (SELECT 1 FROM faqs f WHERE f.id = $1::uuid AND f.published)
+            AND payload IS DISTINCT FROM (
+              SELECT to_jsonb(f) - 'created_at' - 'updated_at' FROM faqs f
+              WHERE f.id = $1::uuid AND f.published)`,
+        params: [id],
+      },
+      {
+        statement: `INSERT INTO cms_content_revisions
+            (resource_type, resource_id, version_number, state, payload, created_by, published_at)
+          SELECT 'faq', f.id,
+            (SELECT COALESCE(MAX(version_number), 0) + 1 FROM cms_content_revisions
+             WHERE resource_type = 'faq' AND resource_id = $1::uuid),
+            'published', to_jsonb(f) - 'created_at' - 'updated_at', $2::uuid, now()
+          FROM faqs f
+          WHERE f.id = $1::uuid AND f.published
+            AND NOT EXISTS (SELECT 1 FROM cms_content_revisions
+              WHERE resource_type = 'faq' AND resource_id = $1::uuid AND state = 'published')`,
+        params: [id, actor.staffId],
+      },
+      {
+        statement: `SELECT cms_mutate('archive', 'faq', f.id, $2::uuid) AS revision
+          FROM faqs f WHERE f.id = $1::uuid AND f.published`,
+        params: [id, actor.staffId],
+      },
+    ])) as unknown[][];
+  } catch (error) {
+    faqCmsMutateError(error);
+  }
+  if (!results[3]?.[0]) return { ok: false, error: "Not found" };
   return { ok: true };
+}
+
+/** Restore an archived FAQ to the answer it had when archived: cms_mutate('restore')
+ *  makes a draft from the newest archived revision, then cms_mutate('publish')
+ *  publishes only that draft. One transaction; admin/manager only (cms_mutate). */
+export async function restoreAdminFaq(
+  id: string,
+  actor: StaffAccess,
+): Promise<{ ok: true; version: string } | { ok: false; error: "Not found" }> {
+  let results: unknown[][];
+  try {
+    results = (await transactionRows([
+      { statement: FAQ_CMS_LOCK_SQL, params: [id] },
+      {
+        statement: `SELECT cms_mutate('restore', 'faq', f.id, $2::uuid, NULL, NULL, NULL,
+            (SELECT r.id FROM cms_content_revisions r
+             WHERE r.resource_type = 'faq' AND r.resource_id = $1::uuid AND r.state = 'archived'
+             ORDER BY r.version_number DESC LIMIT 1)) AS revision
+          FROM faqs f WHERE f.id = $1::uuid AND NOT f.published`,
+        params: [id, actor.staffId],
+      },
+      {
+        // Only the draft this transaction just made (created_at = now()).
+        statement: `SELECT cms_mutate('publish', 'faq', $1::uuid, $2::uuid, NULL,
+            d.base_published_version, 1, d.id) AS revision
+          FROM cms_content_revisions d
+          WHERE d.resource_type = 'faq' AND d.resource_id = $1::uuid AND d.state = 'draft'
+            AND d.draft_retired_at IS NULL AND d.created_by = $2::uuid
+            AND d.restored_from_revision_id IS NOT NULL AND d.created_at = now()`,
+        params: [id, actor.staffId],
+      },
+      {
+        statement: `SELECT ${cmsRowVersionSql("faq", "f")} AS version
+          FROM faqs f WHERE f.id = $1::uuid AND f.published`,
+        params: [id],
+      },
+    ])) as unknown[][];
+  } catch (error) {
+    const dbError = error as { code?: unknown; constraint?: unknown; message?: unknown };
+    if (
+      String(dbError?.code ?? "") === "23505" &&
+      String(dbError?.constraint ?? "") === "faqs_scope_question_key"
+    ) {
+      throw new Response(FAQ_RESTORE_CONFLICT, { status: 409 });
+    }
+    // Unpublished but never archived through the revision engine: nothing to restore.
+    if (error instanceof Error && /\bCMS_REVISION_NOT_FOUND\b/.test(error.message)) {
+      return { ok: false, error: "Not found" };
+    }
+    faqCmsMutateError(error);
+  }
+  const row = results[3]?.[0] as { version?: unknown } | undefined;
+  if (!results[1]?.[0] || !row) return { ok: false, error: "Not found" };
+  return { ok: true, version: stringOrEmpty(row.version) };
 }
 
 /** Which of the supplied (scope, question) pairs already exist.
@@ -2578,13 +2686,13 @@ export async function deleteAdminFaq(id: string, actor: StaffAccess) {
 export async function checkAdminFaqConflicts(
   keys: Array<{ scope: string; question: string }>,
   _actor: StaffAccess,
-) {
-  if (!keys.length) return { existing: [] as Array<{ scope: string; question: string }> };
+): Promise<{ existing: FaqKey[]; archived: FaqKey[] }> {
+  if (!keys.length) return { existing: [], archived: [] };
 
   const scopes = keys.map((key) => key.scope);
   const questions = keys.map((key) => key.question);
   const rows = await queryRows(
-    `SELECT scope, question
+    `SELECT scope, question, published
      FROM faqs
      WHERE (scope, question) IN (
        SELECT UNNEST($1::text[]), UNNEST($2::text[])
@@ -2592,13 +2700,18 @@ export async function checkAdminFaqConflicts(
     [scopes, questions],
   );
 
+  // An archived match is not overwritten: the import skips it (FX-18a Task 2).
+  const key = (row: Record<string, unknown>) => ({
+    scope: stringOrEmpty(row.scope),
+    question: stringOrEmpty(row.question),
+  });
   return {
-    existing: rows.map((row) => ({
-      scope: stringOrEmpty(row.scope),
-      question: stringOrEmpty(row.question),
-    })),
+    existing: rows.filter((row) => row.published === true).map(key),
+    archived: rows.filter((row) => row.published !== true).map(key),
   };
 }
+
+type FaqKey = { scope: string; question: string };
 
 export async function reorderAdminFaqs(orderedIds: string[], actor: StaffAccess) {
   // The CMS read model exposes at most 120 FAQs for reordering.

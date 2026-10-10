@@ -253,3 +253,48 @@ test("confirm dialogs hand focus back to the button that opened them", () => {
     /onCloseAutoFocus=\{\(event\) => \{[\s\S]*?event\.preventDefault\(\);\s*opener\.focus\(\);/,
   );
 });
+
+test("FAQ delete says it can be restored and archived rows offer 還原", () => {
+  // FX-18a Task 2 (C-12): approved copy, verbatim.
+  for (const phrase of [
+    'title="封存 FAQ？"',
+    "確定要封存「${deletingFaq.question}」？公開頁面會即時移除此問答。經理或管理員之後可在「顯示已封存」還原。",
+    'refreshAfterWrite("已封存")',
+    "此 FAQ 已被封存或刪除，請重新載入頁面。",
+    "顯示已封存（${archivedFaqCount}）",
+    'title="還原此 FAQ？"',
+    "還原後「${restoringFaq.question}」會以封存時的答案重新在公開頁面顯示。",
+    'refreshAfterWrite("已還原")',
+    "已封存（不會匯入）",
+    "其中 ${faqImportArchived.length} 條已封存，不會匯入；如需更新，請先還原。",
+  ]) {
+    assert.ok(source.includes(phrase), `admin.cms.tsx is missing ${phrase}`);
+  }
+  assert.doesNotMatch(source, /此操作無法復原，公開頁面及 AI Agent 知識庫會即時移除此問答/);
+  assert.doesNotMatch(source, /title="刪除 FAQ"/);
+  // Archived rows: a badge and 還原 that opens the dialog, no 編輯.
+  const table = source.slice(source.indexOf("{rows.map((faq) => ("), source.indexOf("未有 FAQ"));
+  assert.match(table, /faq\.published \? \(/);
+  assert.match(table, /<Badge variant="outline"[^>]*>\s*已封存\s*<\/Badge>/);
+  assert.match(table, /onClick=\{\(\) => setRestoringFaq\(faq\)\}/);
+  assert.doesNotMatch(table, /onClick=\{[^}]*handleRestoreFaq\(/);
+  // The import loop never sends an archived question.
+  const preview = source.slice(source.indexOf("const faqImportPreview = useMemo("));
+  assert.match(preview.slice(0, 1500), /filter\(\(row\) => !faqImportArchivedKeys\.has\(/);
+
+  const estateEditor = readFileSync(
+    new URL("../components/admin/estates/AdminEstateEditorForm.tsx", import.meta.url),
+    "utf8",
+  );
+  for (const phrase of [
+    'title="封存 FAQ？"',
+    'description="公開屋苑頁面會即時移除此問答。之後可在內容中心 › FAQ 還原。"',
+    'toast.success("已封存")',
+    '"未能封存，請重試。"',
+    "此 FAQ 已被封存或刪除，請重新載入頁面。",
+    "另有 {archivedFaqCount} 條已封存，可在內容中心 › FAQ 還原。",
+  ]) {
+    assert.ok(estateEditor.includes(phrase), `estate editor is missing ${phrase}`);
+  }
+  assert.doesNotMatch(estateEditor, /刪除後無法還原/);
+});

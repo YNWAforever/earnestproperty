@@ -66,6 +66,7 @@ const CMS_ERROR_MESSAGES: Record<string, string> = {
   CMS_ROW_VERSION_REQUIRED: "此頁面版本較舊，請重新載入後再儲存。",
   FAQ_ARCHIVED: "此 FAQ 已封存，請先還原。",
   FAQ_ARCHIVED_DUPLICATE: "此範圍已有已封存的相同問題，請到「顯示已封存」還原。",
+  FAQ_RESTORE_CONFLICT: "此範圍已有相同問題，未能還原。請先修改或封存現有的問題。",
 };
 
 /** Campaign server refusal codes, moved here from admin.blasts.tsx. The generic

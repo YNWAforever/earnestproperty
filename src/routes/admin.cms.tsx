@@ -15,7 +15,6 @@ import {
   RefreshCw,
   Save,
   Search,
-  Trash2,
   Upload,
   X,
 } from "lucide-react";
@@ -84,6 +83,7 @@ import {
   fetchAdminPage,
   fetchAdminAiKnowledgeStatus,
   rebuildAdminAiKnowledge,
+  restoreAdminFaq,
   saveAdminCmsVideo,
   saveAdminFaq,
   updateAdminMediaAsset,
@@ -225,6 +225,8 @@ function AdminCms() {
   // checked yet"; the confirm must not claim anything about overwrites until
   // this is populated, because the loaded FAQ page is capped at 120 rows.
   const [faqImportConflicts, setFaqImportConflicts] = useState<Set<string> | null>(null);
+  // Archived matches: skipped by the import and listed in the confirm (FX-18a).
+  const [faqImportArchivedKeys, setFaqImportArchivedKeys] = useState<Set<string>>(new Set());
   const [faqImportChecking, setFaqImportChecking] = useState(false);
   const [editingMedia, setEditingMedia] = useState<EditingMediaAsset | null>(null);
   const [estateRevisions, setEstateRevisions] = useState<CmsRevisionSummary[] | null>(null);
@@ -255,6 +257,10 @@ function AdminCms() {
   const [deletingFaq, setDeletingFaq] = useState<AdminFaqCmsRow | null>(null);
   const [faqDeleting, setFaqDeleting] = useState(false);
   const [faqDeleteError, setFaqDeleteError] = useState<string | null>(null);
+  const [showArchivedFaqs, setShowArchivedFaqs] = useState(false);
+  const [restoringFaq, setRestoringFaq] = useState<AdminFaqCmsRow | null>(null);
+  const [faqRestoring, setFaqRestoring] = useState(false);
+  const [faqRestoreError, setFaqRestoreError] = useState<string | null>(null);
   // One box per tab, not one shared box: staff move between tabs mid-task and a
   // shared query would silently filter the tab they just landed on.
   const [searchByTab, setSearchByTab] = useState<Record<AdminCmsTab, string>>({
@@ -370,13 +376,16 @@ function AdminCms() {
     const groups = new Map<string, AdminFaqCmsRow[]>();
     for (const faq of data?.faqs ?? []) {
       if (faqScopeFilter !== "all" && faq.scope !== faqScopeFilter) continue;
+      if (!faq.published && !showArchivedFaqs) continue;
 
       const existing = groups.get(faq.scope) ?? [];
       existing.push(faq);
       groups.set(faq.scope, existing);
     }
     return Array.from(groups.entries());
-  }, [data?.faqs, faqScopeFilter]);
+  }, [data?.faqs, faqScopeFilter, showArchivedFaqs]);
+
+  const archivedFaqCount = (data?.faqs ?? []).filter((faq) => !faq.published).length;
 
   const parsedFaqImportRows = useMemo(
     () => parseAdminFaqImport(faqImportText, faqImportScope),
@@ -396,18 +405,30 @@ function AdminCms() {
     const loaded = new Map(
       (data?.faqs ?? []).map((faq) => [faqImportKey(faq.scope, faq.question), faq]),
     );
-    return parsedFaqImportRows.map((row) => {
-      const scope = row.scope ?? faqImportScope;
-      const key = faqImportKey(scope, row.question);
-      return {
-        scope,
-        question: row.question,
-        answer: row.answer,
-        previousAnswer: loaded.get(key)?.answer ?? null,
-        overwrite: faqImportConflicts ? faqImportConflicts.has(key) : false,
-      };
-    });
-  }, [data?.faqs, faqImportConflicts, faqImportScope, parsedFaqImportRows]);
+    return parsedFaqImportRows
+      .map((row) => {
+        const scope = row.scope ?? faqImportScope;
+        const key = faqImportKey(scope, row.question);
+        return {
+          key,
+          scope,
+          question: row.question,
+          answer: row.answer,
+          previousAnswer: loaded.get(key)?.answer ?? null,
+          overwrite: faqImportConflicts ? faqImportConflicts.has(key) : false,
+        };
+      })
+      .filter((row) => !faqImportArchivedKeys.has(row.key));
+  }, [data?.faqs, faqImportArchivedKeys, faqImportConflicts, faqImportScope, parsedFaqImportRows]);
+
+  // Listed in the confirm as 已封存（不會匯入）; never sent by the import loop.
+  const faqImportArchived = useMemo(
+    () =>
+      parsedFaqImportRows
+        .map((row) => ({ scope: row.scope ?? faqImportScope, question: row.question }))
+        .filter((row) => faqImportArchivedKeys.has(faqImportKey(row.scope, row.question))),
+    [faqImportArchivedKeys, faqImportScope, parsedFaqImportRows],
+  );
 
   const faqImportOverwriteCount = faqImportPreview.filter((row) => row.overwrite).length;
 
@@ -710,16 +731,35 @@ function AdminCms() {
     try {
       assertNoServerError(await deleteAdminFaq({ data: { id: deletingFaq.id } }));
       setDeletingFaq(null);
-      await refreshAfterWrite("已刪除");
+      await refreshAfterWrite("已封存");
     } catch (err) {
       const message = errorText(err);
       setFaqDeleteError(
         err instanceof Error && err.message === "Not found"
-          ? "此 FAQ 已被刪除，請重新載入頁面。"
+          ? "此 FAQ 已被封存或刪除，請重新載入頁面。"
           : message,
       );
     } finally {
       setFaqDeleting(false);
+    }
+  }
+
+  async function handleRestoreFaq() {
+    if (!restoringFaq) return;
+    setFaqRestoring(true);
+    setFaqRestoreError(null);
+    try {
+      assertNoServerError(await restoreAdminFaq({ data: { id: restoringFaq.id } }));
+      setRestoringFaq(null);
+      await refreshAfterWrite("已還原");
+    } catch (err) {
+      setFaqRestoreError(
+        err instanceof Error && err.message === "Not found"
+          ? "此 FAQ 已被封存或刪除，請重新載入頁面。"
+          : errorText(err),
+      );
+    } finally {
+      setFaqRestoring(false);
     }
   }
 
@@ -778,11 +818,15 @@ function AdminCms() {
       setFaqImportConflicts(
         new Set(result.existing.map((row) => faqImportKey(row.scope, row.question))),
       );
+      setFaqImportArchivedKeys(
+        new Set(result.archived.map((row) => faqImportKey(row.scope, row.question))),
+      );
       setFaqImportConfirmOpen(true);
     } catch (err) {
       // Never fall through to the confirm on failure: without the conflict set
       // it would assert 「全部為新增」 with no basis.
       setFaqImportConflicts(null);
+      setFaqImportArchivedKeys(new Set());
       toast.error(`未能檢查是否會覆寫現有 FAQ：${errorText(err)}`);
     } finally {
       setFaqImportChecking(false);
@@ -1373,6 +1417,10 @@ function AdminCms() {
                         setSearchByTab((current) => ({ ...current, faqs: value }))
                       }
                     />
+                    <label className="flex min-h-11 items-center gap-2 text-sm text-muted-foreground">
+                      <Switch checked={showArchivedFaqs} onCheckedChange={setShowArchivedFaqs} />
+                      {`顯示已封存（${archivedFaqCount}）`}
+                    </label>
                     {/* Was a <Button asChild><label> wrapping an sr-only input:
                         Tab landed on the clipped input, so the focus ring never
                         rendered and the control was effectively invisible to
@@ -1443,31 +1491,51 @@ function AdminCms() {
                               <TableRow key={faq.id}>
                                 <TableCell>{faq.scope}</TableCell>
                                 <TableCell>
-                                  <p className="font-medium">{faq.question}</p>
+                                  <p className="font-medium">
+                                    {faq.question}
+                                    {faq.published ? null : (
+                                      <Badge variant="outline" className="ml-2">
+                                        已封存
+                                      </Badge>
+                                    )}
+                                  </p>
                                   <p className="line-clamp-2 text-xs text-muted-foreground">
                                     {faq.answer}
                                   </p>
                                 </TableCell>
                                 <TableCell className="text-right">{faq.sort_order}</TableCell>
                                 <TableCell className="text-right">
-                                  <div className="flex justify-end gap-1.5">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setEditingFaq(faqToInput(faq))}
-                                    >
-                                      <Pencil className="h-4 w-4" />
-                                      編輯
-                                    </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => setDeletingFaq(faq)}
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                      刪除
-                                    </Button>
-                                  </div>
+                                  {faq.published ? (
+                                    <div className="flex justify-end gap-1.5">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setEditingFaq(faqToInput(faq))}
+                                      >
+                                        <Pencil className="h-4 w-4" />
+                                        編輯
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setDeletingFaq(faq)}
+                                      >
+                                        <Archive className="h-4 w-4" />
+                                        封存
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <div className="flex justify-end gap-1.5">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setRestoringFaq(faq)}
+                                      >
+                                        <History className="h-4 w-4" />
+                                        還原
+                                      </Button>
+                                    </div>
+                                  )}
                                 </TableCell>
                               </TableRow>
                             ))}
@@ -1823,13 +1891,13 @@ function AdminCms() {
           />
           <AdminConfirmDialog
             open={deletingFaq !== null}
-            title="刪除 FAQ"
+            title="封存 FAQ？"
             description={
               deletingFaq
-                ? `確定要刪除「${deletingFaq.question}」？此操作無法復原，公開頁面及 AI Agent 知識庫會即時移除此問答。`
+                ? `確定要封存「${deletingFaq.question}」？公開頁面會即時移除此問答。經理或管理員之後可在「顯示已封存」還原。`
                 : ""
             }
-            confirmLabel="刪除"
+            confirmLabel="封存"
             confirmVariant="destructive"
             isPending={faqDeleting}
             error={faqDeleteError}
@@ -1840,6 +1908,25 @@ function AdminCms() {
               }
             }}
             onConfirm={handleDeleteFaq}
+          />
+          <AdminConfirmDialog
+            open={restoringFaq !== null}
+            title="還原此 FAQ？"
+            description={
+              restoringFaq
+                ? `還原後「${restoringFaq.question}」會以封存時的答案重新在公開頁面顯示。`
+                : ""
+            }
+            confirmLabel="還原"
+            isPending={faqRestoring}
+            error={faqRestoreError}
+            onOpenChange={(open) => {
+              if (!open) {
+                setRestoringFaq(null);
+                setFaqRestoreError(null);
+              }
+            }}
+            onConfirm={handleRestoreFaq}
           />
           <FaqImportDialog
             open={faqImportOpen}
@@ -1856,22 +1943,29 @@ function AdminCms() {
             open={faqImportConfirmOpen}
             title="確認匯入 FAQ"
             description={
-              faqImportOverwriteCount > 0
+              (faqImportOverwriteCount > 0
                 ? `共 ${faqImportPreview.length} 條，其中 ${faqImportOverwriteCount} 條會覆寫現有答案（相同分組及問題視為同一條）。此操作無法復原。`
-                : `共 ${faqImportPreview.length} 條，全部為新增，不會覆寫現有 FAQ。`
+                : `共 ${faqImportPreview.length} 條，全部為新增，不會覆寫現有 FAQ。`) +
+              (faqImportArchived.length > 0
+                ? `其中 ${faqImportArchived.length} 條已封存，不會匯入；如需更新，請先還原。`
+                : "")
             }
             confirmLabel="確認匯入"
             confirmVariant={faqImportOverwriteCount > 0 ? "destructive" : "default"}
+            disabled={faqImportPreview.length === 0}
             isPending={faqImportSaving}
             onOpenChange={(open) => {
               setFaqImportConfirmOpen(open);
               // Force a fresh conflict check next time: the table can change
               // between attempts.
-              if (!open) setFaqImportConflicts(null);
+              if (!open) {
+                setFaqImportConflicts(null);
+                setFaqImportArchivedKeys(new Set());
+              }
             }}
             onConfirm={handleImportFaqs}
           >
-            {faqImportOverwriteCount > 0 ? (
+            {faqImportOverwriteCount > 0 || faqImportArchived.length > 0 ? (
               <div className="max-h-48 overflow-y-auto rounded-md border">
                 <Table>
                   <TableHeader>
@@ -1892,6 +1986,16 @@ function AdminCms() {
                           ) : (
                             <Badge variant="outline">新增</Badge>
                           )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {faqImportArchived.map((row) => (
+                      <TableRow key={`archived::${row.scope}::${row.question}`}>
+                        <TableCell className="max-w-xs truncate" title={row.question}>
+                          {row.question}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="secondary">已封存（不會匯入）</Badge>
                         </TableCell>
                       </TableRow>
                     ))}

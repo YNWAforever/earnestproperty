@@ -12,6 +12,7 @@ import {
 const id = (n) => `79180000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const ADMIN = id(1);
 const MANAGER = id(2);
+const AGENT = id(3);
 const FAQ_SCOPE = "synthetic-fx18a";
 
 const actor = (staffId, role) => ({
@@ -21,6 +22,7 @@ const actor = (staffId, role) => ({
 });
 const admin = actor(ADMIN, "admin");
 const manager = actor(MANAGER, "manager");
+const agent = actor(AGENT, "agent");
 
 async function rejectsWith(promise, status, body) {
   let error;
@@ -72,10 +74,15 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
       const server = await import("./admin-data.server.ts");
       const { createYouTubeSyncRepository } =
         await import("../youtube-sync/youtube-repository.server.ts");
+      const { fetchFaqs } = await import("./public-data.server.ts");
+      const { buildLiveAgentReply } = await import("../ai/live-agent-reply.server.ts");
+      const { publicKnowledgeCurrentSourcesCte } =
+        await import("../ai/knowledge-freshness.server.ts");
 
       for (const [staffId, role] of [
         [ADMIN, "admin"],
         [MANAGER, "manager"],
+        [AGENT, "agent"],
       ]) {
         await query(
           "INSERT INTO staff_users(id,auth_user_id,email,name_zh,active) VALUES($1,$2,$3,$4,true)",
@@ -477,6 +484,255 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
         },
       );
 
+      // ---- Task 2 (C-12): FAQ delete archives with a fresh snapshot; managers restore it.
+      const faqRevisions = async (faqId) =>
+        query(
+          `SELECT version_number, state, payload, created_by::text, restored_from_revision_id::text
+           FROM cms_content_revisions WHERE resource_type='faq' AND resource_id=$1
+           ORDER BY version_number`,
+          [faqId],
+        );
+      // The July 2026 migration gave every FAQ a v1 published revision once.
+      const seedJulyRevision = async (faqId) =>
+        query(
+          `INSERT INTO cms_content_revisions(resource_type,resource_id,version_number,state,payload,published_at)
+           SELECT 'faq', f.id, 1, 'published', to_jsonb(f) - 'created_at' - 'updated_at', now()
+           FROM faqs f WHERE f.id=$1`,
+          [faqId],
+        );
+      const publicFaq = async (question) =>
+        (await fetchFaqs({ scope: FAQ_SCOPE })).find((faq) => faq.question === question) ?? null;
+      const chatbotFaqCard = async (question) => {
+        const reply = await buildLiveAgentReply(question);
+        return reply.cards.find((card) => card.type === "faq" && card.title === question) ?? null;
+      };
+      const inKnowledgeSources = async (faqId) =>
+        (
+          await query(
+            `${publicKnowledgeCurrentSourcesCte()}
+             SELECT source_id FROM current_public_sources
+             WHERE source_type='faq' AND source_id=$1`,
+            [faqId],
+          )
+        ).length === 1;
+
+      await t.test(
+        "an archived FAQ is hidden from fetchFaqs, the chatbot reader and the knowledge sources, and restore brings back the answer it had when archived",
+        async () => {
+          const question = "會所泳池幾點開放？";
+          const faqId = await insertFaq(110, question, "早上七時開放");
+          await seedJulyRevision(faqId);
+          const edited = await server.saveAdminFaq(
+            faqDraft(await readFaq(faqId), { answer: "早上六時半至晚上十時開放" }),
+            manager,
+          );
+          assert.equal(edited.id, faqId);
+
+          assert.equal((await publicFaq(question))?.answer, "早上六時半至晚上十時開放");
+          assert.deepEqual((await chatbotFaqCard(question))?.lines, ["早上六時半至晚上十時開放"]);
+          assert.equal(await inKnowledgeSources(faqId), true);
+
+          assert.deepEqual(await server.deleteAdminFaq(faqId, manager), { ok: true });
+
+          assert.equal(await publicFaq(question), null);
+          assert.equal(await chatbotFaqCard(question), null);
+          assert.equal(await inKnowledgeSources(faqId), false);
+          const archivedRow = await faqRow(faqId);
+          assert.equal(archivedRow.published, false);
+          assert.equal(archivedRow.answer, "早上六時半至晚上十時開放");
+
+          const restored = await server.restoreAdminFaq(faqId, manager);
+          assert.equal(restored.ok, true);
+          const view = await readFaq(faqId);
+          assert.equal(restored.version, view.version);
+          assert.equal(view.published, true);
+          assert.equal(view.answer, "早上六時半至晚上十時開放");
+          assert.equal(view.sort_order, 110);
+
+          assert.equal((await publicFaq(question))?.answer, "早上六時半至晚上十時開放");
+          assert.deepEqual((await chatbotFaqCard(question))?.lines, ["早上六時半至晚上十時開放"]);
+          assert.equal(await inKnowledgeSources(faqId), true);
+
+          // v1 July (superseded), v2 fresh snapshot (superseded), v3 archived,
+          // v4 restored draft now published.
+          const revisions = await faqRevisions(faqId);
+          assert.deepEqual(
+            revisions.map((r) => [r.version_number, r.state]),
+            [
+              [1, "superseded"],
+              [2, "superseded"],
+              [3, "archived"],
+              [4, "published"],
+            ],
+          );
+          assert.equal(revisions[2].payload.answer, "早上六時半至晚上十時開放");
+          assert.equal(revisions[3].created_by, MANAGER);
+          assert.ok(revisions[3].restored_from_revision_id);
+          const actions = (await audits(faqId)).map((row) => row.action);
+          assert.deepEqual(actions, [
+            "faq.update",
+            "cms_archived",
+            "cms_restored",
+            "cms_published",
+          ]);
+
+          // The restored FAQ saves again with the version restore returned.
+          const again = await server.saveAdminFaq(
+            faqDraft(view, { answer: "早上六時開放" }),
+            manager,
+          );
+          assert.equal(again.id, faqId);
+        },
+      );
+
+      await t.test("archive of a FAQ that has no revision row works", async () => {
+        const created = await server.saveAdminFaq(
+          { scope: FAQ_SCOPE, question: "有洗衣房？", answer: "地庫有", sort_order: 111 },
+          admin,
+        );
+        assert.equal(created.inserted, true);
+        assert.equal((await faqRevisions(created.id)).length, 0);
+
+        assert.deepEqual(await server.deleteAdminFaq(created.id, admin), { ok: true });
+        const revisions = await faqRevisions(created.id);
+        assert.deepEqual(
+          revisions.map((r) => [r.version_number, r.state]),
+          [
+            [1, "superseded"],
+            [2, "archived"],
+          ],
+        );
+        assert.equal(revisions[1].payload.answer, "地庫有");
+        assert.equal((await faqRow(created.id)).published, false);
+
+        const restored = await server.restoreAdminFaq(created.id, admin);
+        assert.equal(restored.ok, true);
+        const row = await faqRow(created.id);
+        assert.equal(row.published, true);
+        assert.equal(row.answer, "地庫有");
+        assert.equal(row.sort_order, 111);
+      });
+
+      await t.test(
+        "delete writes one archived revision and one cms_archived audit row, and deletes no row",
+        async () => {
+          const faqId = await insertFaq(112, "有健身室？", "有");
+          await seedJulyRevision(faqId);
+          const result = await server.deleteAdminFaq(faqId, admin);
+          assert.deepEqual(result, { ok: true });
+          assert.ok(await faqRow(faqId), "the row is kept");
+          const revisions = await faqRevisions(faqId);
+          // The July revision already matches the live row, so no new snapshot.
+          assert.deepEqual(
+            revisions.map((r) => [r.version_number, r.state]),
+            [
+              [1, "superseded"],
+              [2, "archived"],
+            ],
+          );
+          const rows = await audits(faqId);
+          assert.deepEqual(
+            rows.map((row) => [row.actor_id, row.action]),
+            [[ADMIN, "cms_archived"]],
+          );
+        },
+      );
+
+      await t.test(
+        "restore by an agent is refused; by a manager it succeeds; a restore that collides with a live same question returns FAQ_RESTORE_CONFLICT and changes nothing",
+        async () => {
+          const faqId = await insertFaq(113, "有兒童遊樂場？", "有");
+          await server.deleteAdminFaq(faqId, admin);
+          const before = await faqRevisions(faqId);
+
+          await rejectsWith(server.restoreAdminFaq(faqId, agent), 403);
+          assert.equal((await faqRow(faqId)).published, false);
+          assert.equal((await faqRevisions(faqId)).length, before.length);
+          // An agent cannot archive either.
+          const liveId = await insertFaq(114, "有網球場？", "有");
+          await rejectsWith(server.deleteAdminFaq(liveId, agent), 403);
+          assert.equal((await faqRow(liveId)).published, true);
+          assert.equal((await faqRevisions(liveId)).length, 0);
+
+          const restored = await server.restoreAdminFaq(faqId, manager);
+          assert.equal(restored.ok, true);
+          assert.equal((await faqRow(faqId)).published, true);
+          // Restoring a live FAQ is Not found and writes nothing.
+          const count = (await faqRevisions(faqId)).length;
+          assert.deepEqual(await server.restoreAdminFaq(faqId, manager), {
+            ok: false,
+            error: "Not found",
+          });
+          assert.equal((await faqRevisions(faqId)).length, count);
+
+          // A FAQ archived through the revision engine before this change keeps
+          // the July question; a live FAQ has since taken that question.
+          const legacyId = await insertFaq(115, "有保安？", "二十四小時");
+          await seedJulyRevision(legacyId);
+          await server.saveAdminFaq(
+            faqDraft(await readFaq(legacyId), { question: "有保安員？" }),
+            admin,
+          );
+          await query("SELECT cms_mutate('archive','faq',$1::uuid,$2::uuid)", [legacyId, ADMIN]);
+          const takenId = await insertFaq(116, "有保安？", "有");
+          const legacyRevisions = await faqRevisions(legacyId);
+          const legacyAudits = await audits(legacyId);
+
+          await rejectsWith(server.restoreAdminFaq(legacyId, manager), 409, "FAQ_RESTORE_CONFLICT");
+          const legacy = await faqRow(legacyId);
+          assert.equal(legacy.published, false);
+          assert.equal(legacy.question, "有保安員？");
+          assert.equal((await faqRow(takenId)).answer, "有");
+          assert.deepEqual(await faqRevisions(legacyId), legacyRevisions);
+          assert.deepEqual(await audits(legacyId), legacyAudits);
+        },
+      );
+
+      await t.test(
+        "deleting an already archived FAQ returns Not found and adds no revision",
+        async () => {
+          const faqId = await insertFaq(117, "有穿梭巴士？", "有");
+          await server.deleteAdminFaq(faqId, admin);
+          const revisions = await faqRevisions(faqId);
+          const rows = await audits(faqId);
+          assert.deepEqual(await server.deleteAdminFaq(faqId, admin), {
+            ok: false,
+            error: "Not found",
+          });
+          assert.deepEqual(await faqRevisions(faqId), revisions);
+          assert.deepEqual(await audits(faqId), rows);
+          assert.deepEqual(await server.deleteAdminFaq(id(999), admin), {
+            ok: false,
+            error: "Not found",
+          });
+        },
+      );
+
+      await t.test(
+        "the import conflict check lists archived matches apart from live ones",
+        async () => {
+          await insertFaq(118, "有寵物公園？", "有");
+          const archivedId = await insertFaq(119, "有燒烤場？", "有");
+          await server.deleteAdminFaq(archivedId, admin);
+          const result = await server.checkAdminFaqConflicts(
+            [
+              { scope: FAQ_SCOPE, question: "有寵物公園？" },
+              { scope: FAQ_SCOPE, question: "有燒烤場？" },
+              { scope: FAQ_SCOPE, question: "全新問題？" },
+            ],
+            admin,
+          );
+          assert.deepEqual(result, {
+            existing: [{ scope: FAQ_SCOPE, question: "有寵物公園？" }],
+            archived: [{ scope: FAQ_SCOPE, question: "有燒烤場？" }],
+          });
+          assert.deepEqual(await server.checkAdminFaqConflicts([], admin), {
+            existing: [],
+            archived: [],
+          });
+        },
+      );
+
       await t.test("when the audit insert fails, the FAQ and video writes roll back", async () => {
         const faqId = await insertFaq(106, "樓齡？", "二十年");
         const videoId = await insertVideo(206, "大堂");
@@ -484,7 +740,7 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
         const video = await readVideo(videoId);
         await query(`CREATE FUNCTION fx18a_fail_audit() RETURNS trigger LANGUAGE plpgsql AS $$
           BEGIN
-            IF NEW.action IN ('faq.update', 'cms_video.update') THEN
+            IF NEW.action IN ('faq.update', 'cms_video.update', 'cms_archived') THEN
               RAISE EXCEPTION 'fx18a synthetic audit failure';
             END IF;
             RETURN NEW;
@@ -501,11 +757,18 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
             server.saveAdminCmsVideo(videoDraft(video, { title: "大堂 2026" }), admin),
             /fx18a synthetic audit failure/,
           );
+          // FAQ archive: the snapshot, archived revision and published=false roll back too.
+          await assert.rejects(
+            server.deleteAdminFaq(faqId, admin),
+            /fx18a synthetic audit failure/,
+          );
         } finally {
           await query("DROP TRIGGER fx18a_fail_audit ON audit_logs");
           await query("DROP FUNCTION fx18a_fail_audit()");
         }
         assert.equal((await faqRow(faqId)).answer, "二十年");
+        assert.equal((await faqRow(faqId)).published, true);
+        assert.equal((await faqRevisions(faqId)).length, 0);
         assert.equal((await videoRow(videoId)).title, "大堂");
         assert.equal((await readFaq(faqId)).version, faq.version);
         assert.equal((await readVideo(videoId)).version, video.version);
