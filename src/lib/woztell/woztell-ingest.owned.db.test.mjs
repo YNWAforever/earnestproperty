@@ -41,9 +41,7 @@ const LEGACY_MATCH = `SELECT id FROM (
 
 test("FX-12 WhatsApp ingest identity review (owned Postgres)", { timeout: 300000 }, async (t) => {
   const previousWake = process.env.OPS_WAKE_URL;
-  const previousEventWake = process.env.OPS_EVENT_WAKE_ENABLED;
   process.env.OPS_WAKE_URL = "";
-  delete process.env.OPS_EVENT_WAKE_ENABLED;
   const network = mock.method(globalThis, "fetch", () => {
     throw new Error("FX-12 owned ingest test: network is disabled");
   });
@@ -1109,7 +1107,5 @@ test("FX-12 WhatsApp ingest identity review (owned Postgres)", { timeout: 300000
     network.mock.restore();
     if (previousWake === undefined) delete process.env.OPS_WAKE_URL;
     else process.env.OPS_WAKE_URL = previousWake;
-    if (previousEventWake === undefined) delete process.env.OPS_EVENT_WAKE_ENABLED;
-    else process.env.OPS_EVENT_WAKE_ENABLED = previousEventWake;
   }
 });

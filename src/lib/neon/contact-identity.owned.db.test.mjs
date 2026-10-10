@@ -22,9 +22,7 @@ const oldMatchSql = (column, param) =>
 
 test("FX-12 contact identity on owned Postgres", { timeout: 300000 }, async (t) => {
   const previousWake = process.env.OPS_WAKE_URL;
-  const previousEventWake = process.env.OPS_EVENT_WAKE_ENABLED;
   process.env.OPS_WAKE_URL = "";
-  delete process.env.OPS_EVENT_WAKE_ENABLED;
   const network = mock.method(globalThis, "fetch", () => {
     throw new Error("FX-12 owned test: network is disabled");
   });
@@ -1814,6 +1812,5 @@ test("FX-12 contact identity on owned Postgres", { timeout: 300000 }, async (t) 
     network.mock.restore();
     if (previousWake === undefined) delete process.env.OPS_WAKE_URL;
     else process.env.OPS_WAKE_URL = previousWake;
-    if (previousEventWake !== undefined) process.env.OPS_EVENT_WAKE_ENABLED = previousEventWake;
   }
 });
