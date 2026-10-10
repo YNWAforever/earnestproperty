@@ -210,6 +210,8 @@ export function AdminEstateEditorForm({
     id?: string;
     question: string;
     answer: string;
+    sort_order?: number;
+    expected_version?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -380,15 +382,21 @@ export function AdminEstateEditorForm({
       return;
     }
     try {
-      await saveAdminFaq({
+      const result = await saveAdminFaq({
         data: {
           id: editingFaq.id,
           scope: `estate:${form.slug}`,
           question: editingFaq.question,
           answer: editingFaq.answer,
-          sort_order: 0,
+          // Keep the FAQ's order; a new FAQ starts at 0 as before.
+          sort_order: editingFaq.sort_order ?? 0,
+          expected_version: editingFaq.expected_version,
         },
       });
+      // A returned { error } is a refusal, not a save.
+      if ("error" in result && typeof result.error === "string" && result.error) {
+        throw new Error(result.error);
+      }
       setEditingFaq(null);
       await refreshFaqs(form.slug);
       toast.success("FAQ 已儲存");
@@ -701,6 +709,8 @@ export function AdminEstateEditorForm({
                               id: faq.id,
                               question: faq.question,
                               answer: faq.answer,
+                              sort_order: faq.sort_order,
+                              expected_version: faq.version,
                             })
                           }
                         >

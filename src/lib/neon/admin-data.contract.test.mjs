@@ -549,3 +549,18 @@ test("no cron or job path sends a campaign because it is 已排期", () => {
   const server = read("src/lib/neon/admin-data.server.ts");
   assert.doesNotMatch(server, /scheduled_at\s*(?:<=|<|>=|>)\s*now\(\)/);
 });
+
+// FX-18a C-16: a retry or a failed audit insert must not leave a FAQ or video
+// write without its audit row, so the audit is part of the same statement.
+test("FAQ and video saves write their audit row in the same statement", () => {
+  const server = read("src/lib/neon/admin-data.server.ts");
+  for (const name of ["saveAdminFaq", "saveAdminCmsVideo"]) {
+    const start = server.indexOf(`export async function ${name}(`);
+    assert.ok(start >= 0, name);
+    const end = server.slice(start).search(/\r?\n}\r?\n/) + start;
+    const body = server.slice(start, end);
+    assert.doesNotMatch(body, /await writeAudit\(/, name);
+    assert.match(body, /INSERT INTO audit_logs/, name);
+    assert.match(body, /cmsRowVersionSql\(/, name);
+  }
+});

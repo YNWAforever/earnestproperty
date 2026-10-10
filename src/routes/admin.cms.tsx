@@ -3136,6 +3136,7 @@ function cmsVideoToInput(video: AdminCmsVideoRow): AdminCmsVideoInput {
     sort_order: video.sort_order,
     published: video.published,
     category: video.category,
+    expected_version: video.version,
   };
 }
 
@@ -3146,6 +3147,7 @@ function faqToInput(faq: AdminFaqCmsRow): AdminFaqInput {
     question: faq.question,
     answer: faq.answer,
     sort_order: faq.sort_order,
+    expected_version: faq.version,
   };
 }
 

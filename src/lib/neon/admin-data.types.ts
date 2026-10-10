@@ -115,12 +115,18 @@ export type AdminArticleCmsRow = AdminArticleInput & {
 
 export type AdminFaqGroupRow = {
   scope: string;
+  /** Published FAQs in the scope. */
   total: number;
+  /** Archived (unpublished) FAQs in the scope. */
+  archived: number;
 };
 
 export type AdminFaqCmsRow = AdminFaqInput & {
   id: string;
   created_at: string | null;
+  published: boolean;
+  /** Opaque row-hash token (cms-row-version.ts). */
+  version: string;
 };
 
 export type AdminCmsVideoInput = {
@@ -131,12 +137,16 @@ export type AdminCmsVideoInput = {
   sort_order: number;
   published: boolean;
   category: string | null;
+  /** Required with `id`: the row version the edit started from. */
+  expected_version?: string;
 };
 
 export type AdminCmsVideoRow = AdminCmsVideoInput & {
   id: string;
   created_at: string | null;
   updated_at: string | null;
+  /** Opaque row-hash token (cms-row-version.ts). */
+  version: string;
 };
 
 export type AdminCmsData = {
@@ -427,6 +437,8 @@ export type AdminFaqInput = {
    * scope is refused rather than silently overwriting the existing row's answer.
    */
   upsert?: boolean;
+  /** Required with `id`: the row version the edit started from. */
+  expected_version?: string;
 };
 
 export type AdminMediaAssetRow = {

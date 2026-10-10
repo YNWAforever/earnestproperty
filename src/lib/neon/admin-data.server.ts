@@ -69,6 +69,15 @@ import { cancelCrmAnalysisRun } from "../ai/crm-analysis-runs.server";
 import type { CrmSegmentFilters } from "../ai/ai-types";
 import { isYouTubeVideoUrl } from "../youtube-video-url.js";
 import {
+  CMS_ROW_CHANGED,
+  CMS_ROW_VERSION_REQUIRED,
+  FAQ_ARCHIVED,
+  FAQ_ARCHIVED_DUPLICATE,
+  cmsRowFieldsJsonSql,
+  cmsRowVersionSql,
+  isCmsRowVersion,
+} from "./cms-row-version";
+import {
   listCrmSegments,
   materializeCrmSegment,
   previewCrmSegment,
@@ -2101,10 +2110,13 @@ export async function listAdminCms() {
        LIMIT 40`,
     ),
     queryRows(
-      "SELECT scope, count(*)::int AS total FROM faqs GROUP BY scope ORDER BY scope ASC LIMIT 80",
+      `SELECT scope, (count(*) FILTER (WHERE published))::int AS total,
+        (count(*) FILTER (WHERE NOT published))::int AS archived
+       FROM faqs GROUP BY scope ORDER BY scope ASC LIMIT 80`,
     ),
     queryRows(
-      `SELECT id, scope, question, answer, sort_order, created_at
+      `SELECT id, scope, question, answer, sort_order, created_at, published,
+        ${cmsRowVersionSql("faq", "faqs")} AS version
        FROM faqs
        ORDER BY scope ASC, sort_order ASC, created_at ASC
        LIMIT 120`,
@@ -2148,6 +2160,7 @@ export async function listAdminCms() {
     faqGroups: faqGroups.map((row) => ({
       scope: stringOrEmpty(row.scope),
       total: numberOrNull(row.total) ?? 0,
+      archived: numberOrNull(row.archived) ?? 0,
     })),
     faqs: faqs.map((row) => ({
       id: stringOrEmpty(row.id),
@@ -2156,6 +2169,8 @@ export async function listAdminCms() {
       answer: stringOrEmpty(row.answer),
       sort_order: numberOrNull(row.sort_order) ?? 0,
       created_at: dateOrNull(row.created_at),
+      published: row.published === true,
+      version: stringOrEmpty(row.version),
     })),
   };
 }
@@ -2165,7 +2180,8 @@ export async function fetchAdminCmsVideos() {
   try {
     rows = await queryRows(
       `
-    SELECT id, title, video_url, description, sort_order, published, created_at, updated_at, category
+    SELECT id, title, video_url, description, sort_order, published, created_at, updated_at, category,
+      ${cmsRowVersionSql("video", "cms_videos")} AS version
     FROM cms_videos
     ORDER BY sort_order ASC, created_at DESC, id DESC LIMIT 50
     `,
@@ -2185,6 +2201,7 @@ export async function fetchAdminCmsVideos() {
     created_at: dateOrNull(row.created_at),
     updated_at: dateOrNull(row.updated_at),
     category: stringOrNull(row.category),
+    version: stringOrEmpty(row.version),
   }));
 }
 
@@ -2200,8 +2217,13 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
   if (!isYouTubeVideoUrl(input.video_url)) {
     return { id: "", error: "請輸入有效 YouTube 連結" };
   }
+  // An edit without a version (a pre-deploy bundle, a fixture) must not be a
+  // blind overwrite of a colleague's save.
+  if (input.id && !isCmsRowVersion(input.expected_version)) {
+    throw new Response(CMS_ROW_VERSION_REQUIRED, { status: 400 });
+  }
 
-  const params = [
+  const params: unknown[] = [
     input.title,
     input.video_url,
     input.description,
@@ -2210,31 +2232,78 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
     input.category,
   ];
 
-  let rows;
+  // Version check, write and audit row are one statement (C-12, C-16): a stale
+  // tab writes nothing, and a failed audit insert rolls the write back. The
+  // version hashes staff fields only, so a YouTube sync run that rewrites the
+  // same title and URL (and updated_at) does not 409 the next staff save.
+  let rows: Array<{
+    id?: string;
+    version?: string;
+    current_version?: string;
+    new_version?: string | null;
+  }>;
   try {
     rows = input.id
       ? await queryRows(
           `
-        UPDATE cms_videos SET
-          title = $1,
-          video_url = $2,
-          description = $3,
-          sort_order = $4,
-          published = $5,
-          category = $6,
-          updated_at = now()
-        WHERE id = $7
-        RETURNING id
+        WITH old AS (
+          SELECT v.*, ${cmsRowVersionSql("video", "v")} AS version
+          FROM cms_videos v
+          WHERE v.id = $7::uuid
+          FOR UPDATE
+        ), upd AS (
+          UPDATE cms_videos v SET
+            title = $1,
+            video_url = $2,
+            description = $3,
+            sort_order = $4,
+            published = $5,
+            category = $6,
+            updated_at = now()
+          FROM old o
+          WHERE v.id = o.id AND o.version = $8
+            AND (o.title, o.video_url, o.description, o.sort_order, o.published, o.category)
+              IS DISTINCT FROM ($1::text, $2::text, $3::text, $4::integer, $5::boolean, $6::text)
+          RETURNING v.*, ${cmsRowVersionSql("video", "v")} AS version
+        ), diff AS (
+          SELECT b.k, b.v AS before, a.v AS after
+          FROM upd u, old o,
+            LATERAL jsonb_each(${cmsRowFieldsJsonSql("video", "o")}) b(k, v)
+            JOIN LATERAL jsonb_each(${cmsRowFieldsJsonSql("video", "u")}) a(k, v) ON a.k = b.k
+          WHERE a.v IS DISTINCT FROM b.v
+        ), audit AS (
+          INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+          SELECT $9::uuid, 'cms_video.update', 'cms_video', u.id, jsonb_build_object(
+            'changed', (SELECT COALESCE(jsonb_agg(k ORDER BY k), '[]'::jsonb) FROM diff),
+            'before', (SELECT COALESCE(jsonb_object_agg(k, before), '{}'::jsonb) FROM diff),
+            'after', (SELECT COALESCE(jsonb_object_agg(k, after), '{}'::jsonb) FROM diff),
+            'expectedVersion', $8::text,
+            'version', u.version)
+          FROM upd u
+          RETURNING id
+        )
+        SELECT o.id, o.version AS current_version, (SELECT version FROM upd) AS new_version
+        FROM old o
         `,
-          [...params, input.id],
+          [...params, input.id, input.expected_version, actor.staffId],
         )
       : await queryRows(
           `
-        INSERT INTO cms_videos (title, video_url, description, sort_order, published, category)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id
+        WITH ins AS (
+          INSERT INTO cms_videos AS v (title, video_url, description, sort_order, published, category)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          RETURNING v.*, ${cmsRowVersionSql("video", "v")} AS version
+        ), audit AS (
+          INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+          SELECT $7::uuid, 'cms_video.create', 'cms_video', i.id, jsonb_build_object(
+            'after', ${cmsRowFieldsJsonSql("video", "i")},
+            'version', i.version)
+          FROM ins i
+          RETURNING id
+        )
+        SELECT i.id, i.version FROM ins i
         `,
-          params,
+          [...params, actor.staffId],
         );
   } catch (error) {
     if (isMissingCmsVideosTableError(error)) {
@@ -2243,15 +2312,13 @@ export async function saveAdminCmsVideo(input: AdminCmsVideoInput, actor: StaffA
     throw error;
   }
 
-  if (input.id && !rows[0]) return { id: "", error: "Not found" };
-  const id = stringOrEmpty(rows[0]?.id);
-  await writeAudit(
-    actor.staffId,
-    input.id ? "cms_video.update" : "cms_video.create",
-    "cms_video",
-    id,
-  );
-  return { id };
+  const row = rows[0];
+  if (!input.id) return { id: stringOrEmpty(row?.id), version: stringOrEmpty(row?.version) };
+  if (!row) return { id: "", error: "Not found" };
+  if (row.current_version !== input.expected_version) {
+    throw new Response(CMS_ROW_CHANGED, { status: 409 });
+  }
+  return { id: input.id, version: row.new_version ?? row.current_version };
 }
 
 export async function saveAdminEstate(input: AdminEstateInput, actor: StaffAccess) {
@@ -2357,41 +2424,140 @@ export async function saveAdminFaq(input: AdminFaqInput, actor: StaffAccess) {
   requireNonEmpty(input.scope, "scope");
   requireNonEmpty(input.question, "question");
   requireNonEmpty(input.answer, "answer");
+  // An edit without a version (a pre-deploy bundle, a fixture) must not be a
+  // blind overwrite of a colleague's save.
+  if (input.id && !isCmsRowVersion(input.expected_version)) {
+    throw new Response(CMS_ROW_VERSION_REQUIRED, { status: 400 });
+  }
+  const values = [input.scope, input.question, input.answer, input.sort_order];
 
-  const rows = input.id
-    ? await queryRows(
-        `UPDATE faqs SET scope=$1, question=$2, answer=$3, sort_order=$4
-         WHERE id=$5 RETURNING id`,
-        [input.scope, input.question, input.answer, input.sort_order, input.id],
-      )
-    : input.upsert
-      ? await queryRows(
-          `INSERT INTO faqs (scope, question, answer, sort_order)
-         VALUES ($1,$2,$3,$4)
+  // Each branch is one statement: version check, write and audit row commit
+  // together (C-12, C-16).
+  if (input.id) {
+    const rows = await queryRows<{
+      current_version: string;
+      published: boolean;
+      new_version: string | null;
+    }>(
+      `WITH old AS (
+         SELECT f.*, ${cmsRowVersionSql("faq", "f")} AS version
+         FROM faqs f
+         WHERE f.id = $5::uuid
+         FOR UPDATE
+       ), upd AS (
+         UPDATE faqs f SET scope = $1, question = $2, answer = $3, sort_order = $4
+         FROM old o
+         WHERE f.id = o.id AND o.version = $6 AND o.published
+           AND (o.scope, o.question, o.answer, o.sort_order)
+             IS DISTINCT FROM ($1::text, $2::text, $3::text, $4::integer)
+         RETURNING f.*, ${cmsRowVersionSql("faq", "f")} AS version
+       ), diff AS (
+         SELECT b.k, b.v AS before, a.v AS after
+         FROM upd u, old o,
+           LATERAL jsonb_each(${cmsRowFieldsJsonSql("faq", "o")}) b(k, v)
+           JOIN LATERAL jsonb_each(${cmsRowFieldsJsonSql("faq", "u")}) a(k, v) ON a.k = b.k
+         WHERE a.v IS DISTINCT FROM b.v
+       ), audit AS (
+         INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+         SELECT $7::uuid, 'faq.update', 'faq', u.id, jsonb_build_object(
+           'changed', (SELECT COALESCE(jsonb_agg(k ORDER BY k), '[]'::jsonb) FROM diff),
+           'before', (SELECT COALESCE(jsonb_object_agg(k, before), '{}'::jsonb) FROM diff),
+           'after', (SELECT COALESCE(jsonb_object_agg(k, after), '{}'::jsonb) FROM diff),
+           'expectedVersion', $6::text,
+           'version', u.version)
+         FROM upd u
+         RETURNING id
+       )
+       SELECT o.version AS current_version, o.published, (SELECT version FROM upd) AS new_version
+       FROM old o`,
+      [...values, input.id, input.expected_version, actor.staffId],
+    );
+    const row = rows[0];
+    if (!row) return { id: "", error: "Not found" };
+    if (row.published !== true) throw new Response(FAQ_ARCHIVED, { status: 409 });
+    if (row.current_version !== input.expected_version) {
+      throw new Response(CMS_ROW_CHANGED, { status: 409 });
+    }
+    // An unchanged save (a double click) keeps the version and writes no audit row.
+    return { id: input.id, inserted: false, version: row.new_version ?? row.current_version };
+  }
+
+  if (input.upsert) {
+    // Bulk import updates a live match in place. An archived match is left
+    // alone (DO UPDATE ... WHERE f.published returns no row) and reported, so
+    // an import never rewrites a hidden answer while claiming success. A
+    // re-import of the same answer writes no audit row.
+    const rows = await queryRows<{ id: string; inserted: boolean; version: string }>(
+      `WITH prior AS (
+         SELECT f.* FROM faqs f WHERE f.scope = $1 AND f.question = $2
+       ), ins AS (
+         INSERT INTO faqs AS f (scope, question, answer, sort_order)
+         VALUES ($1, $2, $3, $4)
          ON CONFLICT (scope, question) DO UPDATE
            SET answer = EXCLUDED.answer
-         RETURNING id, (xmax = 0) AS inserted`,
-          [input.scope, input.question, input.answer, input.sort_order],
-        )
-      : // The single-FAQ form must not silently replace a different row's answer
-        // and report it as a create. DO NOTHING returns no row on conflict, which
-        // becomes a refusal below.
-        await queryRows(
-          `INSERT INTO faqs (scope, question, answer, sort_order)
-         VALUES ($1,$2,$3,$4)
-         ON CONFLICT (scope, question) DO NOTHING
-         RETURNING id, true AS inserted`,
-          [input.scope, input.question, input.answer, input.sort_order],
-        );
+           WHERE f.published
+         RETURNING f.*, (f.xmax = 0) AS inserted, ${cmsRowVersionSql("faq", "f")} AS version
+       ), audit AS (
+         INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+         SELECT $5::uuid,
+           CASE WHEN i.inserted THEN 'faq.create' ELSE 'faq.update' END,
+           'faq', i.id,
+           CASE WHEN i.inserted
+             THEN jsonb_build_object('after', ${cmsRowFieldsJsonSql("faq", "i")}, 'version', i.version)
+             ELSE jsonb_build_object(
+               'changed', '["answer"]'::jsonb,
+               'before', jsonb_build_object('answer', p.answer),
+               'after', jsonb_build_object('answer', i.answer),
+               'version', i.version)
+           END
+         FROM ins i LEFT JOIN prior p ON p.id = i.id
+         WHERE i.inserted OR p.answer IS DISTINCT FROM i.answer
+         RETURNING id
+       )
+       SELECT i.id, i.inserted, i.version FROM ins i`,
+      [...values, actor.staffId],
+    );
+    const row = rows[0];
+    if (!row) return { id: "", error: FAQ_ARCHIVED };
+    return { id: stringOrEmpty(row.id), inserted: row.inserted !== false, version: row.version };
+  }
 
-  if (input.id && !rows[0]) return { id: "", error: "Not found" };
-  if (!input.id && !rows[0]) return { id: "", error: "此範圍已有相同問題，請改用編輯。" };
-  const id = stringOrEmpty(rows[0]?.id);
-  // An upsert that resolved to an update is a faq.update, not a faq.create --
-  // the audit trail should say what actually happened to the row.
-  const inserted = input.id ? false : rows[0]?.inserted !== false;
-  await writeAudit(actor.staffId, inserted ? "faq.create" : "faq.update", "faq", id);
-  return { id, inserted };
+  // The single-FAQ form must not silently replace a different row's answer and
+  // report it as a create. DO NOTHING returns no row on conflict, which becomes
+  // a refusal below; an archived match is named so staff can restore it.
+  const rows = await queryRows<{
+    id: string | null;
+    version: string | null;
+    existing_published: boolean | null;
+  }>(
+    `WITH ins AS (
+       INSERT INTO faqs AS f (scope, question, answer, sort_order)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (scope, question) DO NOTHING
+       RETURNING f.*, ${cmsRowVersionSql("faq", "f")} AS version
+     ), audit AS (
+       INSERT INTO audit_logs (actor_id, action, subject_type, subject_id, metadata)
+       SELECT $5::uuid, 'faq.create', 'faq', i.id, jsonb_build_object(
+         'after', ${cmsRowFieldsJsonSql("faq", "i")},
+         'version', i.version)
+       FROM ins i
+       RETURNING id
+     )
+     SELECT (SELECT id FROM ins) AS id, (SELECT version FROM ins) AS version,
+       (SELECT f.published FROM faqs f WHERE f.scope = $1 AND f.question = $2) AS existing_published`,
+    [...values, actor.staffId],
+  );
+  const row = rows[0];
+  if (!row?.id) {
+    return {
+      id: "",
+      error:
+        row?.existing_published === false
+          ? FAQ_ARCHIVED_DUPLICATE
+          : "此範圍已有相同問題，請改用編輯。",
+    };
+  }
+  return { id: stringOrEmpty(row.id), inserted: true, version: stringOrEmpty(row.version) };
 }
 
 export async function deleteAdminFaq(id: string, actor: StaffAccess) {

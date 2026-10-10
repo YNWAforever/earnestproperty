@@ -61,6 +61,11 @@ const CMS_ERROR_MESSAGES: Record<string, string> = {
   CMS_REVISION_MISMATCH: "版本資料不符，請重新載入頁面後再試一次。",
   CMS_RESOURCE_NOT_FOUND: "找不到此資源，可能已被其他人刪除或封存，請重新載入頁面。",
   CMS_MEDIA_IN_USE: "此媒體仍被其他內容使用，未能封存。",
+  // FX-18a: FAQ and video row versions. The 409 reuses the existing conflict text.
+  CMS_ROW_CHANGED: STAFF_ACTION_STATUS_MESSAGES[409],
+  CMS_ROW_VERSION_REQUIRED: "此頁面版本較舊，請重新載入後再儲存。",
+  FAQ_ARCHIVED: "此 FAQ 已封存，請先還原。",
+  FAQ_ARCHIVED_DUPLICATE: "此範圍已有已封存的相同問題，請到「顯示已封存」還原。",
 };
 
 /** Campaign server refusal codes, moved here from admin.blasts.tsx. The generic
