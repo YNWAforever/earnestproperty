@@ -633,6 +633,26 @@ for (const width of [1440, 1280, 768, 390]) {
       await expect(card(page, "開放查詢")).toContainText("2");
       await expect(page.getByText("受限合成團隊成員", { exact: true })).toHaveCount(0);
     });
+    test("an agent's overview makes no team or audit read and shows no 請稍後再試", async ({
+      page,
+    }) => {
+      await open(page, "agent");
+      await expect(card(page, "系統健康")).not.toContainText("—");
+      await expect(card(page, "待處理對話")).toContainText("2");
+      await expect(card(page, "啟用團隊")).toHaveCount(0);
+      await expect(card(page, "待處理邀請")).toHaveCount(0);
+      await expect(page.locator('[aria-labelledby="overview-attention"]')).toHaveCount(0);
+      await expect(page.locator('[aria-labelledby="overview-activity"]')).toHaveCount(0);
+      await expect(page.getByText("暫時無法載入此營運資料，請稍後再試。")).toHaveCount(0);
+      expect(await calls(page, "team")).toHaveLength(0);
+      expect(await calls(page, "audit")).toHaveLength(0);
+      // The sidebar lists only what an agent can open: no locked rows.
+      const nav = page.getByRole("navigation", { name: "後台選單" }).filter({ visible: true });
+      if (width >= 1024) {
+        await expect(nav.getByRole("link", { name: "團隊成員", exact: true })).toHaveCount(0);
+        await expect(nav.locator('[aria-disabled="true"]')).toHaveCount(0);
+      }
+    });
     test("overview tiles have accessible names", async ({ page }) => {
       await open(page);
       await expect(page.getByRole("link", { name: "開放查詢：7", exact: true })).toBeVisible();

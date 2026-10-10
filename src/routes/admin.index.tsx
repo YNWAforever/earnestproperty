@@ -28,6 +28,7 @@ import { formatHkDateTime } from "@/lib/format";
 import { fetchAdminOverview, fetchAdminTodayTasks } from "@/lib/neon/admin-data";
 import type { AdminTodayTask } from "@/lib/neon/admin-data.types";
 import { HEALTH_STATUS_LABELS } from "@/lib/admin/glossary";
+import { hasPermission } from "@/lib/control-plane/role-permissions";
 import { listAdminTeam } from "@/lib/neon/admin-team";
 import type { AdminTeamList } from "@/lib/neon/admin-team.types";
 
@@ -120,10 +121,21 @@ function AdminHome() {
   const readActivity = useCallback(async () => (await fetchOperationsAudit({ limit: 5 })).data, []);
   const [overview, refreshOverview] = useOverviewRead<Overview>(identity, readOverview);
   const [today, refreshToday] = useOverviewRead<AdminTodayTask[]>(identity, readToday);
-  const [team, refreshTeam] = useOverviewRead<AdminTeamList>(identity, readTeam);
+  // The team directory is read by admin and manager, the activity log by whoever holds
+  // audit.read. Everyone else never asks, so no card of theirs can fail with a 403.
+  const roles = session?.status === "ok" ? session.roles : [];
+  const canSeeTeam = roles.some((role) => role === "admin" || role === "manager");
+  const canSeeActivity = hasPermission(roles, "audit.read");
+  const [team, refreshTeam] = useOverviewRead<AdminTeamList>(
+    canSeeTeam ? identity : undefined,
+    readTeam,
+  );
   const [health, refreshHealth] = useOverviewRead<HealthData>(identity, readHealth);
-  const [activity, refreshActivity] = useOverviewRead<AuditPage>(identity, readActivity);
-  const isAdmin = session?.status === "ok" && session.roles.includes("admin");
+  const [activity, refreshActivity] = useOverviewRead<AuditPage>(
+    canSeeActivity ? identity : undefined,
+    readActivity,
+  );
+  const isAdmin = roles.includes("admin");
   const attention = team.data?.members.filter((member) => member.needsAttention) ?? [];
   const staffActivity =
     activity.data?.rows.filter((entry) => entry.action.startsWith("staff.")) ?? [];
@@ -165,24 +177,28 @@ function AdminHome() {
           </Button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <OverviewMetricCard
-            icon={Users}
-            label="啟用團隊"
-            loading={team.loading}
-            error={team.error}
-            checkedAt={team.checkedAt}
-            to="/admin/team"
-            value={team.data?.counts.active}
-          />
-          <OverviewMetricCard
-            icon={AlertTriangle}
-            label="待處理邀請"
-            loading={team.loading}
-            error={team.error}
-            checkedAt={team.checkedAt}
-            to="/admin/team"
-            value={team.data?.counts.invited}
-          />
+          {canSeeTeam ? (
+            <>
+              <OverviewMetricCard
+                icon={Users}
+                label="啟用團隊"
+                loading={team.loading}
+                error={team.error}
+                checkedAt={team.checkedAt}
+                to="/admin/team"
+                value={team.data?.counts.active}
+              />
+              <OverviewMetricCard
+                icon={AlertTriangle}
+                label="待處理邀請"
+                loading={team.loading}
+                error={team.error}
+                checkedAt={team.checkedAt}
+                to="/admin/team"
+                value={team.data?.counts.invited}
+              />
+            </>
+          ) : null}
           <OverviewMetricCard
             icon={ContactRound}
             label="開放查詢"
@@ -286,36 +302,38 @@ function AdminHome() {
             )}
           </OperationalCard>
         ) : null}
-        <OperationalCard
-          id="overview-activity"
-          title="最近職員活動"
-          description="只顯示已淨化的操作名稱與結果；不顯示身分資料、要求內容或中繼資料。"
-          icon={ShieldCheck}
-          loading={activity.loading}
-          error={activity.error}
-          checkedAt={activity.checkedAt}
-        >
-          {staffActivity.length ? (
-            <ul className="space-y-2 text-sm">
-              {staffActivity.map((entry) => (
-                <li className="flex items-center justify-between gap-3" key={entry.id}>
-                  <span className="font-medium text-slate-900">
-                    {staffActivityLabel(entry.action)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    {entry.outcome === "success"
-                      ? "已完成"
-                      : entry.outcome === "failure"
-                        ? "需要檢查"
-                        : "已拒絕"}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">目前沒有可安全顯示的最近活動。</p>
-          )}
-        </OperationalCard>
+        {canSeeActivity ? (
+          <OperationalCard
+            id="overview-activity"
+            title="最近職員活動"
+            description="只顯示已淨化的操作名稱與結果；不顯示身分資料、要求內容或中繼資料。"
+            icon={ShieldCheck}
+            loading={activity.loading}
+            error={activity.error}
+            checkedAt={activity.checkedAt}
+          >
+            {staffActivity.length ? (
+              <ul className="space-y-2 text-sm">
+                {staffActivity.map((entry) => (
+                  <li className="flex items-center justify-between gap-3" key={entry.id}>
+                    <span className="font-medium text-slate-900">
+                      {staffActivityLabel(entry.action)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {entry.outcome === "success"
+                        ? "已完成"
+                        : entry.outcome === "failure"
+                          ? "需要檢查"
+                          : "已拒絕"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">目前沒有可安全顯示的最近活動。</p>
+            )}
+          </OperationalCard>
+        ) : null}
       </section>
     </AdminShell>
   );

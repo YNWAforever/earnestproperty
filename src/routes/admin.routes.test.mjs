@@ -1067,7 +1067,12 @@ test("sidebar has no duplicate destinations and is fully grouped", () => {
   const syncEntry = block.match(/to: "\/admin\/property-sync",([\s\S]*?)\}/)?.[1];
   assert.ok(syncEntry, "source-sync has one explicit entry");
   assert.match(syncEntry, /label: "盤源同步"/);
-  assert.match(syncEntry, /roles: EDITORS/);
+  // Which roles may open it lives in admin-nav-roles.ts (see admin-nav-roles.test.mjs).
+  assert.ok(
+    read("src/components/admin/admin-nav-roles.ts").includes(
+      '{ to: "/admin/property-sync", roles: EDITORS }',
+    ),
+  );
   assert.ok(destinations.includes("/admin/whatsapp-links"));
   assert.ok(destinations.includes("/admin/whatsapp-settings"));
   assert.ok(destinations.includes("/admin/analytics"));

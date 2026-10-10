@@ -221,7 +221,6 @@ test("each former owner imports the glossary instead of redefining a map", () =>
     "src/routes/admin.index.tsx",
     "src/components/admin/WhatsappEnquiryContext.tsx",
     "src/components/admin/whatsapp/WhatsappLinksTable.tsx",
-    "src/components/admin/AdminShell.tsx",
     "src/components/dashboard/PropertyForm.tsx",
   ];
   const without = importers.filter(

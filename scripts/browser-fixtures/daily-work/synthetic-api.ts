@@ -95,14 +95,17 @@ export async function listAdminTeam() {
     nextCursor: null,
   };
 }
+// Mirrors the server: system.health.read is held by every staff role; audit.read by
+// admin, manager and viewer (not agent). Only the team directory is admin/manager.
 export async function fetchOperationsHealth() {
   call("health");
-  requireManager();
+  if (state.denied) throw new Response("Owned forbidden", { status: 403 });
   return { data: { status: "healthy", checks: [], checkedAt: now }, requestId: "owned-health" };
 }
 export async function fetchOperationsAudit() {
   call("audit");
-  requireManager();
+  if (state.denied || state.role === "agent")
+    throw new Response("Owned forbidden", { status: 403 });
   return {
     data: {
       rows: [{ id: "audit-owned", action: "staff.roles_changed", outcome: "success" }],

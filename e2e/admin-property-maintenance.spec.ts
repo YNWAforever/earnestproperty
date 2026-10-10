@@ -156,6 +156,19 @@ const saveCalls = (page: Page) =>
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("an agent sees no WhatsApp link buttons on 樓盤管理", async ({ page }) => {
+      await page.addInitScript(() => sessionStorage.setItem("property-fixture-role", "agent"));
+      await open(page, "/admin/listings?pageSize=50&status=all");
+      await expect(page.getByRole("link", { name: "#A000001", exact: true })).toBeVisible();
+      await expect(page.getByText(/連結建立範圍/)).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /WhatsApp 連結/ })).toHaveCount(0);
+      await page.getByRole("checkbox", { name: "選擇本頁全部可管理物業", exact: true }).check();
+      await expect(page.getByRole("button", { name: /核對修改/ })).toBeVisible();
+      await expect(page.getByRole("button", { name: /WhatsApp 連結/ })).toHaveCount(0);
+      await page.evaluate(() => window.propertyFixture.changeContext("manager", "manager"));
+      await expect(page.getByText(/連結建立範圍/)).toBeVisible();
+      await expect(page.getByRole("button", { name: /WhatsApp 連結/ }).first()).toBeVisible();
+    });
     test("scope role change clears stale selected properties", async ({ page }) => {
       await open(page, "/admin/listings?pageSize=50&status=all");
       await page.getByRole("checkbox", { name: "選擇本頁全部可管理物業", exact: true }).check();

@@ -28,7 +28,8 @@ export function AdminPropertyBulkActions({
   onSettled: (results: BulkClientResult[]) => void;
   onClear: () => void;
   onReload: () => void;
-  onWhatsappLinks: (rows: ManagedPropertySummary[]) => void;
+  /** Omitted for roles that cannot create links (agents), so no button is offered. */
+  onWhatsappLinks?: (rows: ManagedPropertySummary[]) => void;
 }) {
   const active = useRef(false);
   const lifetime = useRef(0);
@@ -199,9 +200,11 @@ export function AdminPropertyBulkActions({
           >
             核對修改（{ready.length}）
           </Button>
-          <Button variant="outline" disabled={!rows.length} onClick={() => onWhatsappLinks(rows)}>
-            建立 WhatsApp 連結（本頁已選 {rows.length} 個）
-          </Button>
+          {onWhatsappLinks ? (
+            <Button variant="outline" disabled={!rows.length} onClick={() => onWhatsappLinks(rows)}>
+              建立 WhatsApp 連結（本頁已選 {rows.length} 個）
+            </Button>
+          ) : null}
           <Button variant="ghost" disabled={!rows.length} onClick={onClear}>
             取消勾選
           </Button>

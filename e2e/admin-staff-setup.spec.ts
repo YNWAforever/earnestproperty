@@ -117,6 +117,27 @@ async function preview(page: Page) {
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("an agent opening /admin/whatsapp-settings sees 沒有權限 within 2 s", async ({ page }) => {
+      await page.route("**/*", (route) =>
+        new URL(route.request().url()).origin === origin &&
+        ["GET", "HEAD"].includes(route.request().method())
+          ? route.continue()
+          : route.abort(),
+      );
+      await page.addInitScript(() => {
+        sessionStorage.setItem("property-fixture-actor", "manager");
+        sessionStorage.setItem("property-fixture-role", "agent");
+      });
+      await page.goto(origin + `/admin/whatsapp-settings?staffId=${staffId}&step=1`);
+      await expect(page.getByRole("heading", { name: "沒有權限", exact: true })).toBeVisible({
+        timeout: 2000,
+      });
+      await expect(
+        page.getByText("此頁只供經理或管理員使用。如需要，請聯絡管理員。"),
+      ).toBeVisible();
+      await expect(page.getByRole("heading", { name: "同事接收設定", exact: true })).toHaveCount(0);
+      expect(await calls(page, "mapping-read")).toHaveLength(0);
+    });
     test("duplicate names pagination denied and expired review cannot save", async ({ page }) => {
       await open(page);
       await chooseAccount(page);
