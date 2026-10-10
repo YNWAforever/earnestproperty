@@ -171,11 +171,41 @@ test("property route keeps the full decision and discovery feature set", () => {
   assert.match(actions, /decision\.hasMortgagePrice && price !== null/);
   assert.match(actions, /輸入樓價、按揭成數及年期，快速估算置業預算。/);
   assert.match(actions, /開啟按揭計算機/);
-  assert.match(actions, /bottom-16/);
-  assert.doesNotMatch(actions, /bottom-0/);
-  assert.match(liveAgent, /fixed bottom-4 right-4/);
+  // Bar position and the chat slot are pinned by the dedicated test below.
+  assert.match(liveAgent, /DialogPrimitive\.Trigger/);
   assert.match(route, /暫時未能載入樓盤資料，請稍後再試。/);
   assert.doesNotMatch(route, /\{error\.message\}/);
+});
+
+// FX-16 F-07: the bar used to float at bottom-16 so it sat above the 問樓助手
+// pill, stacking 121 px of chrome over the gallery. It now sits on the safe
+// area at bottom-0 and keeps a right slot that the docked chat icon fills.
+test("the property bar sits at bottom-0 with the same launcher slot", () => {
+  const actions = readFileSync(new URL("./PropertyDecisionActions.tsx", import.meta.url), "utf8");
+  const route = readFileSync(
+    new URL("../../routes/property.$listingNo.tsx", import.meta.url),
+    "utf8",
+  );
+  const bar = actions.match(/<div\s+className="([^"]*)"\s+data-property-mobile-actions/)?.[1] ?? "";
+  assert.match(bar, /fixed inset-x-0 bottom-0/, "the bar must touch the viewport bottom");
+  assert.doesNotMatch(bar, /bottom-16/, "the old 64 px float covered the gallery CTAs");
+  assert.match(
+    bar,
+    /pb-\[calc\(0\.5rem\+env\(safe-area-inset-bottom\)\)\]/,
+    "the home indicator must not sit on the buttons",
+  );
+  assert.match(bar, /pr-\[3\.75rem\]/, "44 px icon + 12 px edge + 4 px gap for the chat icon");
+  assert.match(bar, /lg:hidden/);
+  // Below 420 px the three leading icons drop so 「WhatsApp」 fits a 89 px column at 360 px.
+  assert.equal(actions.match(/className="[^"]*\bhidden\b[^"]*\bmin-\[420px\]:inline"/g)?.length, 3);
+  // The route no longer reserves 128 px of its own; the root reserves the bar's height.
+  assert.doesNotMatch(route, /pb-32/);
+  // The launcher docks only beside a bar that is really in the DOM. The property bar
+  // carries the marker; the sold/rented branch renders PropertyUnavailableNotice and no
+  // bar, so the launcher stays main's labelled pill there (as do not-found and error).
+  assert.match(actions, /data-property-mobile-actions\s+\{\.\.\.mobileActionBarAttribute\}/);
+  assert.match(route, /isUnavailable \? \(\s*<PropertyUnavailableNotice/);
+  assert.doesNotMatch(route, /mobileActionBarAttribute|StickyWhatsAppBar/);
 });
 
 test("property.$listingNo.tsx sanitizes title/description/address before rendering (DR-4)", () => {

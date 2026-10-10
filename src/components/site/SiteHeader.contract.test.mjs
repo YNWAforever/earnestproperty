@@ -60,3 +60,5 @@ test("WhatsApp header CTAs render one interactive anchor each", () => {
   assert.doesNotMatch(headerSource, /<a[^>]*href=\{WHATSAPP_URL\}[^>]*>\s*<Button/s);
   assert.match(headerSource, /<Button[^>]*asChild[^>]*>\s*<a[^>]*href=\{WHATSAPP_URL\}/s);
 });
+
+// F-09 (aria-current) is covered by a rendered router test: aria-current.test.tsx.

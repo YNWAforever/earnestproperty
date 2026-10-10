@@ -166,11 +166,6 @@ const megaMenus: MegaMenuGroup[] = [
         label: "YouTube影片",
         description: "觀看晉誠地產頻道及樓盤影片。",
       },
-      {
-        to: "/transactions",
-        label: "晉誠地產最新成交",
-        description: "追蹤近期成交及區內價格走勢。",
-      },
     ],
     links: [
       { to: "/estate-reviews", label: "屋苑開箱", description: "以實地內容了解屋苑優劣。" },
@@ -256,7 +251,13 @@ function HeaderNavLink({
       href={itemHref(item)}
       onClick={onClick}
       className={linkClassName}
-      aria-current={active ? "page" : undefined}
+      aria-current={
+        active
+          ? hrefPathname(itemHref(item)) === hrefPathname(currentHref)
+            ? "page"
+            : "true"
+          : undefined
+      }
     >
       {item.label}
     </SiteLink>
@@ -285,7 +286,7 @@ function MegaMenuLink({
         {item.label}
       </span>
       {item.description ? (
-        <span className="mt-1 block text-xs leading-5 text-muted-foreground">
+        <span className="mt-1 block text-sm leading-5 text-muted-foreground">
           {item.description}
         </span>
       ) : null}
