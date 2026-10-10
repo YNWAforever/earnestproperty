@@ -1,7 +1,9 @@
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { AdminNoPermission } from "@/components/admin/AdminNoPermission";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { fetchAdminAgents } from "@/lib/neon/admin-data";
 import { WhatsappLinkWizard } from "@/components/admin/whatsapp/WhatsappLinkWizard";
@@ -12,7 +14,7 @@ export const Route = createFileRoute("/admin/whatsapp-links")({
   component: WhatsappLinks,
   head: () => ({
     meta: [
-      { title: "WhatsApp 追蹤連結 | Earnest Admin" },
+      { title: "WhatsApp 來源連結 | Earnest Admin" },
       { name: "robots", content: "noindex,nofollow" },
     ],
   }),
@@ -20,10 +22,16 @@ export const Route = createFileRoute("/admin/whatsapp-links")({
 
 function WhatsappLinks() {
   const identity = useStaffWorkspaceIdentity(["admin", "manager"]);
+  const { user } = useNeonAuth();
+  const { session } = useStaffSession(user?.id ?? null);
   if (!identity)
     return (
-      <AdminShell title="WhatsApp 追蹤連結" description="核對投放位置及批次結果。">
-        <p role="status">正在核實管理員權限…</p>
+      <AdminShell title="WhatsApp 來源連結" description="核對投放位置及批次結果。">
+        {session?.status === "ok" ? (
+          <AdminNoPermission />
+        ) : (
+          <p role="status">正在核實管理員權限…</p>
+        )}
       </AdminShell>
     );
   return <WhatsappLinksWorkspace key={identity} identity={identity} />;
@@ -65,7 +73,7 @@ function WhatsappLinksWorkspace({ identity }: { identity: string }) {
   }, [loading, user]);
   return (
     <AdminShell
-      title="WhatsApp 追蹤連結"
+      title="WhatsApp 來源連結"
       description="為網站、28hse、YouTube 或其他投放建立公司 WhatsApp 短連結，先預覽核對，再分批提交。"
     >
       <div className="space-y-5">

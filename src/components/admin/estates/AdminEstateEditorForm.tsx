@@ -44,6 +44,7 @@ import {
   saveAdminCmsDraft,
 } from "@/lib/neon/admin-cms";
 import type { CmsEditState, CmsPayloadValue, CmsRevisionSummary } from "@/lib/neon/admin-cms.types";
+import { CMS_REVISION_STATE_LABELS } from "@/lib/admin/glossary";
 import { EstatePreviewCard } from "./EstatePreviewCard";
 
 type DistrictOption = { id: string; slug: string; name_zh: string };
@@ -170,13 +171,6 @@ async function callCms<T>(call: () => Promise<T>): Promise<T> {
   }
   return result;
 }
-
-const REVISION_STATE_LABELS: Record<string, string> = {
-  draft: "草稿",
-  published: "已發布",
-  superseded: "已被取代",
-  archived: "已封存",
-};
 
 export function AdminEstateEditorForm({
   resourceId,
@@ -792,7 +786,7 @@ export function AdminEstateEditorForm({
                   <li key={revision.id} className="flex items-center justify-between gap-3 text-sm">
                     <span className="flex items-center gap-2">
                       <Badge variant={revision.state === "published" ? "default" : "outline"}>
-                        {REVISION_STATE_LABELS[revision.state] ?? revision.state}
+                        {CMS_REVISION_STATE_LABELS[revision.state] ?? revision.state}
                       </Badge>
                       <span className="text-muted-foreground">
                         v{revision.versionNumber} ·{" "}

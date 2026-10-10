@@ -992,7 +992,7 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">全部代理</SelectItem>
-                  <SelectItem value="unassigned">未指定代理</SelectItem>
+                  <SelectItem value="unassigned">未指派</SelectItem>
                   {agents.map((agent) => (
                     <SelectItem key={agent.id} value={agent.id}>
                       {agentLabel(agent)}
@@ -1585,7 +1585,7 @@ function LeadDetailEditor({
                 <SelectValue placeholder="選擇代理" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">未指定代理</SelectItem>
+                <SelectItem value="none">未指派</SelectItem>
                 {assignableAgents(agents, lead.assigned_agent_id).map(
                   ({ agent, inactiveCurrent }) => (
                     <SelectItem key={agent.id} value={agent.id}>

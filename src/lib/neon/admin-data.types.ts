@@ -700,8 +700,10 @@ export type AdminCrmSegmentRow = CrmSegment & {
 export type CommandCenterFilterKey =
   | "today"
   | "high_score"
+  | "overdue"
   | "unassigned"
   | "live_agent"
+  | "whatsapp_blocked"
   | "whatsapp"
   | "all";
 

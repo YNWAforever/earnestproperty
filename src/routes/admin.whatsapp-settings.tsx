@@ -1,7 +1,9 @@
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { AdminNoPermission } from "@/components/admin/AdminNoPermission";
 import { AdminShell } from "@/components/admin/AdminShell";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { StaffMappingWizard } from "@/components/admin/whatsapp/StaffMappingWizard";
 import { parseWhatsappSettingsSearch } from "@/components/admin/whatsapp/staff-mapping-wizard-state";
 import { WhatsappServicePolicyEditor } from "@/components/admin/WhatsappServicePolicyEditor";
@@ -21,13 +23,19 @@ export const Route = createFileRoute("/admin/whatsapp-settings")({
 
 function WhatsappSettings() {
   const identity = useStaffWorkspaceIdentity(["admin", "manager"]);
+  const { user } = useNeonAuth();
+  const { session } = useStaffSession(user?.id ?? null);
   if (!identity)
     return (
       <AdminShell
         title="WhatsApp 同事映射"
         description="核對實際 Inbox 帳戶、獨立通知目的地與核實證據。"
       >
-        {null}
+        {session?.status === "ok" ? (
+          <AdminNoPermission />
+        ) : (
+          <p role="status">正在核實管理員權限…</p>
+        )}
       </AdminShell>
     );
   return <WhatsappSettingsWorkspace key={identity} identity={identity} />;

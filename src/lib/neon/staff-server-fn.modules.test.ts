@@ -94,6 +94,7 @@ const table: [string, Call, unknown[]][] = [
 const staffModules = {
   "staff-endpoints": await load("./staff-endpoints"),
   "staff-notifications": await load("./staff-notifications"),
+  "staff-checklist": await load("./staff-checklist"),
   "staff-reference-admin": await load("./staff-reference-admin"),
   "whatsapp-assignment": await load("./whatsapp-assignment"),
   "whatsapp-readiness": await load("./whatsapp-readiness"),
@@ -114,6 +115,8 @@ const staffCalls: [keyof typeof staffModules, string, unknown[]][] = [
   ["staff-notifications", "fetchMyStaffNotifications", [{}]],
   ["staff-notifications", "confirmStaffNotification", [{ notificationId: uuid }]],
   ["staff-notifications", "askStaffNotificationHelp", [{ notificationId: uuid, reason: "r" }]],
+  ["staff-checklist", "fetchFirstLoginChecklistDone", []],
+  ["staff-checklist", "confirmFirstLoginChecklist", []],
   ["staff-reference-admin", "fetchStaffReferences", []],
   ["staff-reference-admin", "createStaffReference", [{ staffId: uuid }]],
   ["staff-reference-admin", "disableStaffReference", [{ id: uuid }]],
@@ -231,7 +234,7 @@ test("a denied chunk commit is not recorded as completed and the batch does not 
 });
 
 test("every staff, notification and enquiry wrapper rejects a resolved 401, 403 and 409 Response", async () => {
-  expect(staffTable).toHaveLength(38);
+  expect(staffTable).toHaveLength(40);
   for (const [name, call, args] of staffTable) {
     expect({ name, type: typeof call }).toEqual({ name, type: "function" });
     for (const status of [401, 403, 409]) {

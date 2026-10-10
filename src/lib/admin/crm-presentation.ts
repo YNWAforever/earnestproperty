@@ -1,18 +1,10 @@
-export type LeadStage =
-  | "new"
-  | "contacted"
-  | "viewing"
-  | "negotiating"
-  | "closed_won"
-  | "closed_lost";
-export const stageOptions: { value: LeadStage; label: string }[] = [
-  { value: "new", label: "新查詢" },
-  { value: "contacted", label: "已聯絡" },
-  { value: "viewing", label: "已約睇樓" },
-  { value: "negotiating", label: "商議中" },
-  { value: "closed_won", label: "已成交" },
-  { value: "closed_lost", label: "已結束（未成交）" },
-];
+import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, type LeadStage } from "@/lib/admin/glossary";
+
+// The stage and source labels live in the glossary (FX-17a G-12); these are re-exports.
+export type { LeadStage };
+export const stageOptions: { value: LeadStage; label: string }[] = (
+  Object.entries(LEAD_STAGE_LABELS) as [LeadStage, string][]
+).map(([value, label]) => ({ value, label }));
 // The leads list filter only: "open" is a query over stages, never a stage a lead can be set to.
 export const stageFilterOptions: { value: LeadStage | "open"; label: string }[] = [
   { value: "open", label: "開放（未完成）" },
@@ -35,15 +27,7 @@ export const intentOptions: { value: string; label: string }[] = Object.entries(
   ([value, label]) => ({ value, label }),
 );
 
-export const sourceLabels: Record<string, string> = {
-  website: "網站",
-  live_agent: "線上客服",
-  whatsapp: "WhatsApp",
-  phone: "電話",
-  referral: "轉介",
-  walk_in: "到店",
-  manual_forward: "人工轉交",
-};
+export const sourceLabels: Record<string, string> = LEAD_SOURCE_LABELS;
 
 export function quickLeadFilter<T extends { stage: string; agent_id: string; cursor?: string }>(
   filters: T,

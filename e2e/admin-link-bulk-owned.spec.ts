@@ -807,7 +807,7 @@ for (const width of [1440, 375]) {
       .evaluateAll((items) => items.map((item) => item.textContent));
     expect(rows).toEqual([
       "樓盤：A000001 · 售",
-      "投放位置：28hse · 4033349",
+      "投放位置：28Hse · 4033349",
       "連結：/w/Syn17aA",
       "指定同事：合成同事甲",
     ]);

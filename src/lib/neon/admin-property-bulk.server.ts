@@ -24,7 +24,7 @@ function safeBulkError(error: unknown): string {
     if (error.status === 401 || error.status === 403) return "你沒有權限修改此物業或放盤。";
     if (error.status === 404) return "找不到所選物業或放盤。請重新載入。";
     if (error.status === 400) return "物業資料不符合要求。請重新載入並核對。";
-    if (error.status === 503) return "物業管理功能暫時未能使用。";
+    if (error.status === 503) return "樓盤管理功能暫時未能使用。";
   }
   return "未能更新此物業。請重新載入核對結果後再操作。";
 }

@@ -9,6 +9,7 @@ import type {
   JobSummary,
   MigrationState,
 } from "@/lib/admin/operations/operations-types";
+import { HEALTH_STATUS_LABELS, JOB_STATUS_LABELS } from "@/lib/admin/glossary";
 
 const healthLabels: Record<string, string> = {
   "database.tables": "資料庫表格",
@@ -23,20 +24,6 @@ const healthLabels: Record<string, string> = {
   cron: "排程工作",
   "jobs.queue": "背景工作排程",
   migrationApproval: "遷移審批",
-};
-
-const jobStatusLabels = {
-  queued: "等候中",
-  running: "執行中",
-  succeeded: "成功",
-  failed: "失敗",
-  cancelled: "已取消",
-} as const;
-
-const HEALTH_STATUS_LABELS: Record<string, string> = {
-  healthy: "正常",
-  degraded: "降級",
-  failed: "故障",
 };
 
 function healthLabel(key: string) {
@@ -128,7 +115,7 @@ function JobSummarySection({
           <div key={status} className="min-h-20 border-l-2 border-muted px-3 py-2">
             <p className="text-2xl font-semibold tabular-nums">{count}</p>
             <p className="text-sm text-muted-foreground">
-              {jobStatusLabels[status as keyof typeof jobStatusLabels] ?? "工作"}
+              {JOB_STATUS_LABELS[status as keyof typeof JOB_STATUS_LABELS] ?? "工作"}
             </p>
           </div>
         ))}

@@ -36,7 +36,7 @@ export async function saveAdminPropertyManagement(
     if (message.includes("INVALID_PROPERTY") || /invalid input syntax|out of range/.test(message))
       throw new Response("Invalid property patch", { status: 400 });
     if (/does not exist/.test(message))
-      throw new Response("物業管理功能尚未準備完成，暫時未能儲存。", { status: 503 });
+      throw new Response("樓盤管理功能尚未準備完成，暫時未能儲存。", { status: 503 });
     throw error;
   }
 }

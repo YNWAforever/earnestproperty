@@ -12,6 +12,9 @@ import {
 } from "@/lib/admin/whatsapp-link-export-api";
 import type { LinkPageFilter } from "@/lib/neon/whatsapp-link-management.types";
 import type { TrackingLink } from "@/lib/neon/whatsapp-enquiries.types";
+import { PLACEMENT_SOURCE_LABELS } from "@/lib/admin/glossary";
+import { placementSourceText } from "@/lib/admin/plain-copy";
+import { LinkCardFacts } from "@/components/admin/plain-copy-parts";
 import { ADMIN_GENERIC_ERROR, staffActionErrorText } from "@/components/admin/admin-error-text";
 
 type Page = Awaited<ReturnType<typeof getWhatsappTrackingLinksPage>>;
@@ -20,12 +23,10 @@ const control = "min-h-11 rounded-md border bg-background px-3 text-sm";
 const codeUrl = (code: string) => `${window.location.origin}/w/${code}`;
 // One map for the 來源 filter options and the 停用 confirmation, typed by the placement enum so
 // a new source cannot get a filter option without a label (or show its raw value).
-const placementLabels: Record<TrackingLink["placementSource"], string> = {
-  website: "網站",
-  "28hse": "28hse",
-  youtube: "YouTube",
-  other: "其他",
-};
+// "unknown" is a report bucket for links with no recorded source, never a source a link is saved with.
+const placementLabels = Object.fromEntries(
+  Object.entries(PLACEMENT_SOURCE_LABELS).filter(([value]) => value !== "unknown"),
+) as Record<TrackingLink["placementSource"], string>;
 
 export function WhatsappLinksTable({
   revision,
@@ -348,7 +349,7 @@ export function WhatsappLinksTable({
               <span>
                 {link.publicListingNo ?? "一般查詢"} ·{" "}
                 {link.dealType === "sale" ? "售" : link.dealType === "rent" ? "租" : "—"} ·{" "}
-                {link.placementSource}
+                {placementSourceText(link.placementSource)}
               </span>
             </label>
             <p className="mt-2 break-all font-mono text-xs">/w/{link.code}</p>
@@ -356,21 +357,7 @@ export function WhatsappLinksTable({
               {link.enabled ? "可用" : "停用"} · v{link.version} ·{" "}
               {link.requestedStaffName ?? "總台"}
             </p>
-            <p>
-              開啟 {link.opens ?? "unknown"} · 歸因查詢 {link.enquiries ?? "unknown"}
-            </p>
-            <details className="mt-2">
-              <summary className="cursor-pointer">投放與就緒詳情</summary>
-              <p className="break-all">投放 ID：{link.sourcePlacementId ?? "未記錄"}</p>
-              <p>核實：{link.placementVerifiedAt ?? "未核實"}</p>
-              <p>指派就緒：{link.readiness}</p>
-              <p>
-                最近試送：
-                {link.recentTest
-                  ? `${link.recentTest.state} · ${link.recentTest.createdAt}`
-                  : "unknown"}
-              </p>
-            </details>
+            <LinkCardFacts link={link} />
             <div className="mt-2 flex flex-wrap gap-2">
               <Button size="sm" variant="outline" disabled={busy} onClick={() => void copy(link)}>
                 複製
@@ -483,7 +470,7 @@ export function WhatsappLinksTable({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="編輯追蹤連結"
+          aria-label="編輯來源連結"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
         >
           <div className="max-h-[90vh] w-full max-w-lg space-y-3 overflow-auto rounded-lg bg-background p-5">
