@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { test } from "node:test";
 import {
   parseAreaFeet,
@@ -313,4 +314,20 @@ test("fullSync deactivates against the full discovered legacy id set", async () 
   assert.equal(result.deactivationSkipped, false);
   assert.equal(seenLegacyIds.length, 10);
   assert.ok(seenLegacyIds.includes("6709182"));
+});
+
+// B-13: a Google Maps Embed key was scraped from the old website into a parser
+// fixture. Redacted in FX-19a-1; this keeps any Google API key (AIza + 35
+// characters) out of every tracked file. docs/reports are scanned too.
+test("no Google API key in the tree", () => {
+  const googleApiKey = /AIza[0-9A-Za-z_-]{35}/;
+  const tracked = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
+    .split("\0")
+    .filter(Boolean);
+  assert.ok(tracked.length > 100, "git ls-files must list the tracked tree");
+  const offenders = tracked.filter((path) => {
+    if (!existsSync(path) || statSync(path).isDirectory()) return false;
+    return googleApiKey.test(readFileSync(path, "latin1"));
+  });
+  assert.deepEqual(offenders, []);
 });

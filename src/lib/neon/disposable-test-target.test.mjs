@@ -3,15 +3,15 @@ import test from "node:test";
 import { assertDisposableNeonTestTarget } from "./disposable-test-target.mjs";
 
 const url =
-  "postgres://tester:secret@ep-square-leaf-aobruyvf.c-2.ap-southeast-1.aws.neon.tech/earnest_audit_acceptance_20260927";
+  "postgres://tester:secret@ep-fixture-0000.c-2.ap-southeast-1.aws.neon.tech/earnest_audit_acceptance_20260927";
 const env = {
   ASTRA_TEST_DATABASE_CONFIRMED: "true",
-  ASTRA_TEST_BRANCH_ID: "br-young-breeze-ao85rtx1",
+  ASTRA_TEST_BRANCH_ID: "br-fixture-0000",
 };
 const identity = {
   database_name: "earnest_audit_acceptance_20260927",
-  branch_id: "br-young-breeze-ao85rtx1",
-  endpoint_id: "ep-square-leaf-aobruyvf",
+  branch_id: "br-fixture-0000",
+  endpoint_id: "ep-fixture-0000",
 };
 const query = async () => [identity];
 
@@ -43,7 +43,7 @@ test("rejects missing confirmation and non-disposable database names before quer
 test("rejects a false branch identity or mismatched endpoint reported by Neon", async () => {
   await assert.rejects(
     assertDisposableNeonTestTarget(url, {
-      env: { ...env, ASTRA_TEST_BRANCH_ID: "br-quiet-hat-aoxbj2ue" },
+      env: { ...env, ASTRA_TEST_BRANCH_ID: "br-fixture-0001" },
       query,
     }),
   );
