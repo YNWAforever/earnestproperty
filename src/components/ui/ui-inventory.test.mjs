@@ -27,6 +27,8 @@ const DELETED_UI_PRIMITIVES = [
   "sidebar",
   "toggle",
   "toggle-group",
+  // FX-19a-2: chart.tsx was the last unused primitive (recharts is used directly).
+  "chart",
 ];
 
 const SCAN_ROOTS = ["src", "scripts", "e2e", "workers"];
@@ -74,7 +76,43 @@ test("no deleted UI primitive exists or is imported", () => {
   assert.deepEqual(offenders, []);
 });
 
-test("the kept primitives chart and sonner are still present", () => {
-  assert.equal(existsSync("src/components/ui/chart.tsx"), true);
+test("the kept primitive sonner is still present", () => {
   assert.equal(existsSync("src/components/ui/sonner.tsx"), true);
+});
+
+// FX-19a-2: dependencies that only the deleted primitives used. Some stay in
+// package-lock.json as transitive dependencies of @neondatabase/auth-ui; this
+// guard only stops them coming back as direct dependencies of the app.
+const REMOVED_PACKAGES = [
+  "@hookform/resolvers",
+  "date-fns",
+  "@radix-ui/react-aspect-ratio",
+  "@radix-ui/react-context-menu",
+  "@radix-ui/react-dropdown-menu",
+  "@radix-ui/react-hover-card",
+  "@radix-ui/react-menubar",
+  "@radix-ui/react-navigation-menu",
+  "@radix-ui/react-progress",
+  "@radix-ui/react-separator",
+  "@radix-ui/react-toggle",
+  "@radix-ui/react-toggle-group",
+  "cmdk",
+  "embla-carousel-react",
+  "input-otp",
+  "react-day-picker",
+  "react-hook-form",
+  "react-resizable-panels",
+  "vaul",
+];
+
+test("package.json lists none of the removed UI dependencies", () => {
+  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+  const listed = REMOVED_PACKAGES.filter((name) =>
+    ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"].some(
+      (field) => pkg[field] && Object.hasOwn(pkg[field], name),
+    ),
+  );
+  assert.deepEqual(listed, []);
+  // recharts stays: EstateMarketSnapshot.tsx and district.sham-tseng.tsx import it.
+  assert.ok(pkg.dependencies.recharts, "recharts must stay a dependency");
 });

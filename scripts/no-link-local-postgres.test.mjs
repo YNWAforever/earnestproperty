@@ -1878,8 +1878,10 @@ test(
         await t.test(
           "campaign audience deletion before queue cannot create a delivery job",
           async () => {
-            const { materializeCampaignRecipients, queueAdminCampaign } =
-              await import("../src/lib/neon/admin-data.server.ts");
+            const {
+              materializeCampaignRecipients,
+              queueAdminCampaignForTests: queueAdminCampaign,
+            } = await import("../src/lib/neon/admin-data.server.ts");
             const templateId = randomUUID(),
               campaignId = randomUUID(),
               audienceId = randomUUID(),

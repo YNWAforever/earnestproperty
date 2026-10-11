@@ -269,9 +269,6 @@ export function createAiGatewayClient(deps: AiGatewayDeps = {}) {
 
 const defaultClient = createAiGatewayClient();
 
-export const generateAiText: ReturnType<typeof createAiGatewayClient>["generateText"] =
-  defaultClient.generateText;
-
 export async function generateAiJson<T>(input: {
   system: string;
   prompt: string;

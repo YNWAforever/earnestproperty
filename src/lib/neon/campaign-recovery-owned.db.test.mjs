@@ -68,7 +68,8 @@ test(
       mock.module(new URL("../control-plane/job-wake.server.ts", import.meta.url).href, {
         exports: { wakeAfterCommit: (lane) => wakes.push(lane), laneForJob: () => "general" },
       });
-      const { queueAdminCampaign, cancelAdminCampaign } = await import("./admin-data.server.ts");
+      const { queueAdminCampaignForTests: queueAdminCampaign, cancelAdminCampaign } =
+        await import("./admin-data.server.ts");
       const [staff] = await query(
         "INSERT INTO staff_users(auth_user_id,email) VALUES('owned-campaign-manager','owned-manager@example.invalid') RETURNING id",
       );

@@ -156,6 +156,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     branchId: "hong-kong-garden",
     hasPage: true,
     // TODO(client): 豪景花園 photo not supplied -- the other four arrived in 屋苑相/.
+    // Do NOT substitute public/branches/hong-kong-garden.jpg: that is the 青山公路豪景分行
+    // shopfront at 青龍頭村11號地下, not the estate.
     photo: null,
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
@@ -172,6 +174,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: "sham-tseng",
     branchId: "lido",
     hasPage: true,
+    // TODO(client): the supplied 浪翠園 photo is 600×357 and captioned 三期 only -- too small
+    // for a card at 2× DPR. Awaiting a higher-resolution estate-level shot.
     photo: "/estates/sea-crest-villa.jpg",
     homepageDistrict: "深井",
     parentEstateSlug: null,
