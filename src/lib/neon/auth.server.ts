@@ -68,6 +68,24 @@ function getBearerToken(request: Request) {
   return match?.[1] ?? null;
 }
 
+/**
+ * Existing zh-HK copy (src/auth.ts staffAuthUnavailable); adminErrorMessage passes a
+ * zh-HK body through, so every staff action shows it instead of a generic error.
+ */
+const SESSION_LOOKUP_UNAVAILABLE = "登入服務暫時無法使用，請稍後再試。";
+
+/**
+ * A session lookup that could not reach its answer (database or auth store down)
+ * is a 503, never "not signed in": a 401 sends staff to sign in again for an
+ * outage. Logs the error CLASS only -- the message of a driver error can carry the
+ * host, the SQL and the bearer token it was given.
+ */
+function sessionLookupFailed(error: unknown) {
+  const errorClass = error instanceof Error ? error.name : typeof error;
+  console.error("[auth] session_lookup_failed", { errorClass });
+  return new Response(SESSION_LOOKUP_UNAVAILABLE, { status: 503 });
+}
+
 function staffRolesFromValue(value: unknown): StaffRole[] {
   if (Array.isArray(value)) return value.map(String) as StaffRole[];
   if (typeof value !== "string") return [];
@@ -75,6 +93,7 @@ function staffRolesFromValue(value: unknown): StaffRole[] {
     try {
       return JSON.parse(value).map(String) as StaffRole[];
     } catch {
+      // Deliberate: an unparseable roles value grants no roles (fails closed to 403).
       return [];
     }
   }
@@ -98,8 +117,10 @@ function staffRolesFromValue(value: unknown): StaffRole[] {
  */
 export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows) {
   async function findNeonAuthSession(token: string) {
-    const rows = await queryRows(
-      `
+    let rows: DbRow[];
+    try {
+      rows = await queryRows(
+        `
       SELECT u.id::text AS id, u.email, u.name
       FROM neon_auth.session s
       INNER JOIN neon_auth."user" u ON u.id = s."userId"
@@ -107,8 +128,12 @@ export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows)
         AND s."expiresAt" > now()
       LIMIT 1
       `,
-      [token],
-    ).catch(() => []);
+        [token],
+      );
+    } catch (error) {
+      throw sessionLookupFailed(error);
+    }
+    // No row = unknown, revoked or expired token: a genuine 401, not an outage.
     return rows[0] ?? null;
   }
 
@@ -128,7 +153,9 @@ export function createNeonSessionReader(queryRows: QueryRows = defaultQueryRows)
 
   return async function getNeonSessionFromRequest(request: Request): Promise<NeonSession | null> {
     const authUrl = getAuthBaseUrl();
+    // Deliberate: with Neon Auth not configured nobody can be signed in, so 401.
     if (!authUrl) return null;
+    // Deliberate: no bearer token (cookies are never read) is "not signed in", so 401.
     const token = getBearerToken(request);
     return token ? getNeonSessionFromBearerToken(token) : null;
   };
@@ -225,6 +252,8 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
         user.email.trim().toLowerCase() === email?.trim().toLowerCase()
       );
     } catch (error) {
+      // Deliberate (kept by H-20): fails closed to the 403 "staff-email-unverified"
+      // path, pinned by "bootstrap rejects provider unavailable" in auth.server.test.mjs.
       // Fail closed, but LOUDLY. If neon_auth."user"."emailVerified" is ever
       // absent or renamed, every first-time staff activation by email stops
       // working -- and silently, because the caller just sees "no match" and falls

@@ -9,6 +9,8 @@ import {
   staffSessionDenialCopy,
 } from "./staff-session";
 import type { StaffSession } from "@/lib/neon/admin-data.types";
+import { staffSessionFromAccessFailure } from "@/lib/neon/admin-data";
+import { ServerFnResponseError } from "@/lib/neon/server-fn-response";
 
 const adminSession: StaffSession = {
   status: "ok",
@@ -125,6 +127,38 @@ describe("staffSessionDenialCopy", () => {
   test("unauthorized asks for a fresh sign-in", () => {
     const copy = staffSessionDenialCopy("unauthorized");
     expect(copy.description).toContain("重新登入");
+  });
+});
+
+describe("a 503 from the staff session lookup (H-20)", () => {
+  const unavailable = "登入服務暫時無法使用，請稍後再試。";
+
+  test("the server function rethrows a 503 instead of reporting it as a denial", async () => {
+    const outage = new Response(unavailable, { status: 503 });
+    await expect(staffSessionFromAccessFailure(outage)).rejects.toBe(outage);
+    await expect(staffSessionFromAccessFailure(new Error("boom"))).rejects.toThrow("boom");
+    expect(
+      await staffSessionFromAccessFailure(new Response("Unauthorized", { status: 401 })),
+    ).toEqual({ status: "denied", reason: "unauthorized" });
+    expect(await staffSessionFromAccessFailure(new Response("Forbidden", { status: 403 }))).toEqual(
+      {
+        status: "denied",
+        reason: "forbidden",
+      },
+    );
+  });
+
+  test("lands in the failed-lookup state, not denied and not signed out", async () => {
+    const store = createStaffSessionStore(async () => {
+      throw new ServerFnResponseError(unavailable, 503);
+    });
+
+    expect(await store.refresh("user-1")).toBeNull();
+    const snapshot = store.getSnapshot();
+    expect(snapshot).toMatchObject({ userId: "user-1", session: null, loading: false });
+    // Failed lookup = null nav roles (AdminShell's 暫時無法確認職員權限 card), never the
+    // empty list a denial gives, and the user id is kept (still signed in).
+    expect(navRolesForStaffSession(snapshot.session, true)).toBeNull();
   });
 });
 

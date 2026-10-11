@@ -46,6 +46,7 @@ async function requireStaff(roles: StaffRole[] = ["admin"]) {
 
 async function staffSessionDenialReason(response: Response): Promise<StaffSessionDenialReason> {
   if (response.status === 401) return "unauthorized";
+  // Deliberate: an unreadable 403 body is still a 403, reported as the generic denial.
   const body = (await response.text().catch(() => "")).trim();
   return body === "staff-email-unverified" ? body : "forbidden";
 }
@@ -71,13 +72,22 @@ const fetchStaffSessionServer = createServerFn({ method: "GET" }).handler(
         roles: staff.roles,
       };
     } catch (error) {
-      if (error instanceof Response && (error.status === 401 || error.status === 403)) {
-        return { status: "denied", reason: await staffSessionDenialReason(error) };
-      }
-      throw error;
+      return staffSessionFromAccessFailure(error);
     }
   },
 );
+
+/**
+ * Only a 401/403 is a denial. Anything else -- the 503 a session-lookup outage
+ * throws, or a raw database error -- is rethrown, so the shell shows its
+ * failed-lookup state (暫時無法確認職員權限) and never 此帳戶不是職員帳戶 or a sign-out.
+ */
+export async function staffSessionFromAccessFailure(error: unknown): Promise<StaffSession> {
+  if (error instanceof Response && (error.status === 401 || error.status === 403)) {
+    return { status: "denied", reason: await staffSessionDenialReason(error) };
+  }
+  throw error;
+}
 
 export async function fetchStaffSession(): Promise<StaffSession> {
   return callStaffServerFn(async () => fetchStaffSessionServer(await withStaffAuthHeaders()));
