@@ -64,3 +64,8 @@ src/lib/neon/.admin-transactions-contract-tmp/
 /.private-sync-evidence/
 /.task-logs/
 /.venv-sync/
+
+# npm and package-lock.json are the only installer (Vercel and CI run npm).
+# Keep a local `bun install` from re-adding a second lockfile.
+bun.lockb
+bun.lock
