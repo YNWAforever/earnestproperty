@@ -1,3 +1,10 @@
+/* FX-20d: layer order. @neondatabase/neon-js/ui/tailwind declares `@layer neon-auth`
+ * with `* { border-color; outline-color }`. Left alone it is declared after Tailwind's
+ * layers and beats every border/outline colour utility. Declaring it here, between
+ * base and components, keeps its border default above preflight's currentColor while
+ * component and utility colour classes win again. `properties` stays first so its
+ * --tw-* initial values never override utilities. Must stay before the imports. */
+@layer properties, theme, base, neon-auth, components, utilities;
 @import "tailwindcss" source(none);
 @import "@neondatabase/neon-js/ui/tailwind";
 @source "../src";
@@ -144,9 +151,7 @@
   --destructive-foreground: oklch(0.985 0.003 157);
 
   --border: oklch(0.912 0.017 157);
-  /* #848F88: 3.34:1 on card, 3.20:1 on surface (WCAG 1.4.11 field boundary). Fields only; buttons and chips use --border.
-     The fields apply it as border-input! because the neon-auth layer's `* { border-color }`
-     outranks every border-colour utility. */
+  /* #848F88: 3.34:1 on card, 3.20:1 on surface (WCAG 1.4.11 field boundary). Fields only; buttons and chips use --border. */
   --input: oklch(0.64 0.017 157);
   --ring: var(--brand-primary);
 }
@@ -246,8 +251,8 @@
 
   /* FX-20 C2: one focus indicator for links and custom controls that set none.
      Primitives draw their own ring and set outline:none, which wins (utilities layer).
-     The colour is !important because the neon-auth layer, declared after Tailwind's
-     layers and so above them, sets every element's outline-color to --ring at 50%. */
+     The colour is !important because the neon-auth layer sits above base (see the
+     @layer order at the top) and sets every element's outline-color to --ring at 50%. */
   :where(a, button, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
     outline: 2px solid var(--ring);
     outline-color: var(--ring) !important;
