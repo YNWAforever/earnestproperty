@@ -41,6 +41,7 @@ import {
 } from "@/lib/admin/job-labels";
 import type { OperationsCapabilities } from "@/lib/control-plane/capabilities";
 import { JOB_STATUS_LABELS } from "@/lib/admin/glossary";
+import { formatHkDateTime } from "@/lib/format";
 
 import {
   canCancelOperationsJob,
@@ -70,10 +71,10 @@ function operationsErrorMessage(error: unknown) {
   return adminErrorMessage(error, "未能載入背景工作。");
 }
 
+// Hong Kong time whatever the staff browser's locale or time zone (H-05).
 function formatDate(value: string | null) {
   if (!value) return "-";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return formatHkDateTime(value) ?? value;
 }
 
 function jobStatusLabel(status: JobStatus) {

@@ -63,6 +63,7 @@ import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { useDirtyCloseGuard, useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { assignableAgents, bulkAssignableAgents } from "@/lib/admin/lead-assignment";
 import { leadBudgetError } from "@/lib/admin/lead-budget";
+import { formatHkDateTime } from "@/lib/format";
 import { LeadConflictNotice } from "@/components/admin/leads/LeadConflictNotice";
 import {
   LEAD_CHANGED_MESSAGE,
@@ -2033,15 +2034,7 @@ function formatBudget(lead: AdminLeadRow) {
 }
 
 function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("zh-HK", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatHkDateTime(value) ?? value;
 }
 
 function formatActivityType(type: string) {

@@ -102,6 +102,7 @@ import type {
   AdminMediaAssetRow,
 } from "@/lib/neon/admin-data.types";
 import { CMS_REVISION_STATE_LABELS } from "@/lib/admin/glossary";
+import { formatHkDateTime } from "@/lib/format";
 
 const adminCmsTabs = ["estates", "articles", "videos", "faqs", "media"] as const;
 type AdminCmsTab = (typeof adminCmsTabs)[number];
@@ -3289,12 +3290,7 @@ function parseNullableNumber(value: string) {
 
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("zh-HK", {
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  return formatHkDateTime(value) ?? value;
 }
 
 function formatBytes(value: number | null) {

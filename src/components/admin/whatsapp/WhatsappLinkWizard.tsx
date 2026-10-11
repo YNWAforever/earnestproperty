@@ -32,7 +32,7 @@ import {
   type WhatsappBatchDraft,
 } from "@/lib/admin/whatsapp-batch-draft";
 import { nativeFieldClassName } from "@/components/ui/native-field";
-import { formatPrice } from "@/lib/format";
+import { formatHkDateTime, formatPrice } from "@/lib/format";
 
 type Staff = { id: string; name: string | null; email: string | null; active?: boolean };
 type Source = BatchRowDraft["input"]["placementSource"];
@@ -935,7 +935,7 @@ export function WhatsappLinkWizard({
           <p className="text-sm">
             預計建立 {progress.preview.counts.create} · 重用 {progress.preview.counts.reuse} · 阻止{" "}
             {progress.preview.counts.blocked}；預覽有效至{" "}
-            {new Date(progress.preview.expiresAt).toLocaleString("zh-HK")}
+            {formatHkDateTime(progress.preview.expiresAt) ?? progress.preview.expiresAt}
           </p>
           {previewDirty ? (
             <p role="alert" className="text-sm text-warning-foreground">

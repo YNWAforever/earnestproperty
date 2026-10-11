@@ -1,3 +1,5 @@
+import { formatHkDate } from "@/lib/format";
+
 /**
  * Lightweight summary of the draft form's current values -- deliberately
  * NOT a mirror of the public estate.$slug.tsx page, which also pulls live
@@ -55,7 +57,7 @@ export function EstatePreviewCard({
           label="核實狀態"
           value={
             form.verified_at
-              ? `已核實（${new Date(form.verified_at).toLocaleDateString("zh-HK")}）`
+              ? `已核實（${formatHkDate(form.verified_at) ?? form.verified_at}）`
               : "尚未核實"
           }
         />

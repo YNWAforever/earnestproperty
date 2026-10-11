@@ -1,5 +1,6 @@
 import { expect, mock, test } from "bun:test";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { AdminOperationsOverview } from "./AdminOperationsOverview";
@@ -644,4 +645,82 @@ test("retrying a delivery job warns that it may send again; other jobs do not", 
   // The list opens on 失敗, so the unknown-outcome read-back must also look without filters.
   expect(jobsSource).toMatch(/fetchOperationsJobs\(\s*\{ ids: \[unconfirmedJob\.current\] \}/);
   expect(jobsSource).not.toMatch(/description=\{[^}]*job\.id/);
+});
+
+test("operations dates render in Asia/Hong_Kong under an en-US locale", async () => {
+  // A staff browser in New York with an en-US locale: a bare toLocaleString()
+  // would print "10/8/2026, 8:00:00 PM" for 08:00 on 9 October in Hong Kong.
+  const originalTz = process.env.TZ;
+  const originalToLocaleString = Date.prototype.toLocaleString;
+  process.env.TZ = "America/New_York";
+  Date.prototype.toLocaleString = function (
+    this: Date,
+    locales?: Intl.LocalesArgument,
+    options?: Intl.DateTimeFormatOptions,
+  ) {
+    return originalToLocaleString.call(this, locales ?? "en-US", options);
+  };
+  try {
+    await signInAs("manager");
+    const jobs = renderJobs([
+      failedJob({ runAfter: "2026-10-09T00:00:00.000Z", updatedAt: "2026-10-09T00:00:00.000Z" }),
+    ]);
+    const receipts = renderToStaticMarkup(
+      <ReceiptsTable
+        rows={[
+          receiptRow({
+            receivedAt: "2026-10-09T00:00:00.000Z",
+            nextRetryAt: "2026-10-09T00:10:00.000Z",
+          }),
+        ]}
+        jobsRetry
+        busy={false}
+        emptyMessage="沒有需要處理的來訊收件。"
+        onRetry={() => undefined}
+      />,
+    );
+    for (const markup of [jobs, receipts]) {
+      expect(markup).toContain("09/10/2026 08:00");
+      expect(markup).not.toContain("10/8/2026");
+      expect(markup).not.toMatch(/\d{1,2}:\d{2}:\d{2} [AP]M/);
+    }
+    expect(receipts).toContain("09/10/2026 08:10");
+  } finally {
+    Date.prototype.toLocaleString = originalToLocaleString;
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
+  }
+  // The audit table renders inside its data-loading panel, so its date path is
+  // pinned at the source: it uses the shared Hong Kong formatter, never a bare
+  // browser-locale toLocaleString().
+  for (const source of [auditSource, jobsSource, receiptsSource]) {
+    expect(source).toContain("formatHkDateTime");
+    expect(source).not.toMatch(/\.toLocale(?:Date|Time)?String\(\)/);
+  }
+});
+
+test("admin code formats dates only in Hong Kong time", () => {
+  // Every Date#toLocale*String call in admin routes and components states the
+  // Asia/Hong_Kong time zone (or uses formatHkDate/formatHkDateTime instead).
+  const src = new URL("../../../", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+  const files = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return files(path);
+      return /\.tsx?$/.test(name) && !/\.test\./.test(name) ? [path] : [];
+    });
+  const adminFiles = [
+    ...files(join(src, "components/admin")),
+    ...readdirSync(join(src, "routes"))
+      .filter((name) => /^admin[._].*\.tsx$|^admin\.tsx$/.test(name))
+      .map((name) => join(src, "routes", name)),
+  ];
+  const offences: string[] = [];
+  const call = /(?:new Date\([^()]*\)|\bdate)\.toLocale(?:Date|Time)?String\(([^()]*)\)/g;
+  for (const path of adminFiles) {
+    for (const match of readFileSync(path, "utf8").matchAll(call))
+      if (!match[1].includes('timeZone: "Asia/Hong_Kong"'))
+        offences.push(`${path.slice(src.length)}: ${match[0].replace(/\s+/g, " ")}`);
+  }
+  expect(offences).toEqual([]);
 });
