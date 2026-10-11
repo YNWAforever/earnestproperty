@@ -2334,7 +2334,10 @@ function replyWindowRemaining(lastInboundAt: string | null) {
 }
 
 function formatClock(timestamp: number) {
-  return new Intl.DateTimeFormat("zh-HK", { timeStyle: "short" }).format(new Date(timestamp));
+  return new Intl.DateTimeFormat("zh-HK", {
+    timeZone: "Asia/Hong_Kong",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {

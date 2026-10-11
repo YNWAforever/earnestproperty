@@ -527,7 +527,10 @@ function Detail({ label, value }: { label: string; value: string }) {
 function formatClock(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("zh-HK", { timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat("zh-HK", {
+    timeZone: "Asia/Hong_Kong",
+    timeStyle: "short",
+  }).format(date);
 }
 
 function errorText(error: unknown) {

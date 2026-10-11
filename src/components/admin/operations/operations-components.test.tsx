@@ -700,7 +700,8 @@ test("operations dates render in Asia/Hong_Kong under an en-US locale", async ()
 });
 
 test("admin code formats dates only in Hong Kong time", () => {
-  // Every Date#toLocale*String call in admin routes and components states the
+  // Every date formatter in admin routes, components and lib/admin -- a
+  // Date#toLocale*String call or a new Intl.DateTimeFormat -- states the
   // Asia/Hong_Kong time zone (or uses formatHkDate/formatHkDateTime instead).
   const src = new URL("../../../", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
   const files = (dir: string): string[] =>
@@ -711,16 +712,23 @@ test("admin code formats dates only in Hong Kong time", () => {
     });
   const adminFiles = [
     ...files(join(src, "components/admin")),
+    ...files(join(src, "lib/admin")),
     ...readdirSync(join(src, "routes"))
       .filter((name) => /^admin[._].*\.tsx$|^admin\.tsx$/.test(name))
       .map((name) => join(src, "routes", name)),
   ];
   const offences: string[] = [];
-  const call = /(?:new Date\([^()]*\)|\bdate)\.toLocale(?:Date|Time)?String\(([^()]*)\)/g;
+  const calls = [
+    // toLocale*String on a date: new Date(...), or a date-named value (date, createdAt, timestamp)
+    /(?:new Date\([^()]*\)|\b\w*(?:[dD]ate|At|[tT]imestamp))\.toLocale(?:Date|Time)?String\(([^()]*)\)/g,
+    /new Intl\.DateTimeFormat\(([^()]*)\)/g,
+  ];
   for (const path of adminFiles) {
-    for (const match of readFileSync(path, "utf8").matchAll(call))
-      if (!match[1].includes('timeZone: "Asia/Hong_Kong"'))
-        offences.push(`${path.slice(src.length)}: ${match[0].replace(/\s+/g, " ")}`);
+    const source = readFileSync(path, "utf8");
+    for (const call of calls)
+      for (const match of source.matchAll(call))
+        if (!match[1].includes('timeZone: "Asia/Hong_Kong"'))
+          offences.push(`${path.slice(src.length)}: ${match[0].replace(/\s+/g, " ")}`);
   }
   expect(offences).toEqual([]);
 });

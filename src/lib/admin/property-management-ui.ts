@@ -77,7 +77,9 @@ export function offeringPatch(
 export function offeringPrice(offer: ManagedOffering | null) {
   if (!offer) return "—";
   const amount = offer.dealType === "sale" ? offer.price : offer.rent;
-  if (amount === null) return "未填價格";
+  if (amount === null || amount === undefined) return "未填價格";
+  // A stored 0 is a real (wrong) value staff must see, not a missing price.
+  if (Number(amount) === 0) return "HK$0";
   // Staff confirm and edit this price: never let 萬 rounding hide digits.
   return formatPrice(Number(amount), { dealType: offer.dealType, exact: true }) ?? "未填價格";
 }

@@ -1,4 +1,5 @@
 import type { ManagedPropertySummary } from "../neon/admin-properties.types.ts";
+import { formatPrice } from "../format.ts";
 
 export type LinkOfferSelection = {
   propertyId: string;
@@ -32,3 +33,13 @@ export function linkOffersFromGroups(groups: ManagedPropertySummary[]): LinkOffe
 }
 
 export const linkSeedKey = "earnest:whatsapp-link-seed:v1";
+
+/** The wizard's offer label. Staff confirm links against it, so the price is exact
+ *  (formatPrice exact), a stored 0 shows as HK$0, and only a missing price says 價格待核實. */
+export function linkOfferLabel(offer: LinkOfferSelection): string {
+  const price =
+    offer.price === 0
+      ? "HK$0"
+      : (formatPrice(offer.price, { dealType: offer.dealType, exact: true }) ?? "價格待核實");
+  return `${offer.publicListingNo} · ${offer.dealType === "sale" ? "售" : "租"} · ${offer.title} · ${price}`;
+}

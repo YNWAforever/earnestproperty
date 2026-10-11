@@ -90,10 +90,14 @@ describe("Admin Team responsive directory", () => {
     expect(table("tr[aria-current='true']")).toHaveLength(1);
     expect(card("[aria-current='true']")).toHaveLength(1);
     expect(card("button[aria-label='更多操作：陳大文']")).toHaveLength(1);
+    // Hong Kong time whatever the runner's zone (bun test runs in UTC): 01:00Z is 09:00 HKT.
+    expect(card.text()).toContain("2026年8月16日 上午9:00");
     expect(card.text()).toContain(
-      new Intl.DateTimeFormat("zh-HK", { dateStyle: "medium", timeStyle: "short" }).format(
-        new Date(member.updatedAt),
-      ),
+      new Intl.DateTimeFormat("zh-HK", {
+        timeZone: "Asia/Hong_Kong",
+        dateStyle: "medium",
+        timeStyle: "short",
+      }).format(new Date(member.updatedAt)),
     );
 
     for (const value of ["陳大文", "tai.man@example.com", "經紀", "已啟用", "待人工分享"]) {

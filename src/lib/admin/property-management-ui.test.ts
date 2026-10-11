@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { linkOfferLabel } from "./whatsapp-link-selection";
 import {
   changedFields,
   offeringPrice,
@@ -69,6 +70,27 @@ test("offer prices use the site price format and keep the 未填價格 fallback"
   // Staff confirm and edit prices here, so a rounded 萬 figure keeps the exact amount.
   expect(offeringPrice({ ...base, dealType: "sale", price: 6_200_040, rent: null })).toBe(
     "HK$620萬（HK$6,200,040）",
+  );
+  // A stored 0 is a real (wrong) value staff must see, not a missing one.
+  expect(offeringPrice({ ...base, dealType: "sale", price: 0, rent: null })).toBe("HK$0");
+  expect(offeringPrice({ ...base, dealType: "rent", price: null, rent: 0 })).toBe("HK$0");
+});
+
+test("WhatsApp link wizard offer labels show the exact price, HK$0 for 0, and 價格待核實 when unset", () => {
+  const offer = {
+    propertyId: "p",
+    publicListingNo: "EP1",
+    dealType: "sale" as const,
+    title: "物業",
+    price: 6_200_040 as number | null,
+    agentId: null,
+    agentName: null,
+  };
+  expect(linkOfferLabel(offer)).toBe("EP1 · 售 · 物業 · HK$620萬（HK$6,200,040）");
+  expect(linkOfferLabel({ ...offer, price: 0 })).toBe("EP1 · 售 · 物業 · HK$0");
+  expect(linkOfferLabel({ ...offer, price: null })).toBe("EP1 · 售 · 物業 · 價格待核實");
+  expect(linkOfferLabel({ ...offer, dealType: "rent", price: 18_000 })).toBe(
+    "EP1 · 租 · 物業 · HK$18,000／月",
   );
 });
 

@@ -12,7 +12,7 @@ import {
 } from "@/lib/neon/whatsapp-link-batches";
 import type { BatchRowDraft } from "@/lib/whatsapp-enquiries/link-batch-policy";
 import { expandBatchDraft, type ImportSource } from "@/lib/whatsapp-enquiries/link-batch-import";
-import type { LinkOfferSelection } from "@/lib/admin/whatsapp-link-selection";
+import { linkOfferLabel, type LinkOfferSelection } from "@/lib/admin/whatsapp-link-selection";
 import {
   linkBatchProgressKey,
   knownFailedBatchRows,
@@ -32,13 +32,12 @@ import {
   type WhatsappBatchDraft,
 } from "@/lib/admin/whatsapp-batch-draft";
 import { nativeFieldClassName } from "@/components/ui/native-field";
-import { formatHkDateTime, formatPrice } from "@/lib/format";
+import { formatHkDateTime } from "@/lib/format";
 
 type Staff = { id: string; name: string | null; email: string | null; active?: boolean };
 type Source = BatchRowDraft["input"]["placementSource"];
 type Routing = "property-agent" | "uniform" | "per-row" | "reception";
-const label = (offer: LinkOfferSelection) =>
-  `${offer.publicListingNo} · ${offer.dealType === "sale" ? "售" : "租"} · ${offer.title} · ${formatPrice(offer.price, { dealType: offer.dealType, exact: true }) ?? "價格待核實"}`;
+const label = linkOfferLabel;
 
 export function WhatsappLinkWizard({
   seed,

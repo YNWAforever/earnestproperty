@@ -297,7 +297,7 @@ describe("price formatting has a single source", () => {
     for (const rel of [
       "lib/admin/property-management-ui.ts", // admin listings, detail and publish confirm
       "routes/admin.transactions.tsx",
-      "components/admin/whatsapp/WhatsappLinkWizard.tsx",
+      "lib/admin/whatsapp-link-selection.ts", // WhatsApp link wizard offer labels
     ]) {
       const source = readFileSync(join(SRC, rel), "utf8");
       const calls = source.match(/formatPrice\([^;]*?\}\)/gs) ?? [];
