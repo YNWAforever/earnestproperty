@@ -626,7 +626,9 @@ for (const width of [1440, 1280, 768, 390]) {
       await page.getByRole("button", { name: "儲存出售設定", exact: true }).click();
       await expect(page.getByRole("alertdialog")).toBeVisible();
       expect(await saveCalls(page)).toBe(0);
-      await expect(page.getByRole("alertdialog")).toContainText("6,200,000");
+      // FX-19d-2: the confirm shows the site price format for the old and new price.
+      await expect(page.getByRole("alertdialog")).toContainText("HK$600萬");
+      await expect(page.getByRole("alertdialog")).toContainText("HK$620萬");
       await page.getByRole("button", { name: "取消", exact: true }).click();
       await expect(page.getByLabel("售價（港元）", { exact: true })).toHaveValue("6200000");
       await page.getByRole("button", { name: "儲存出售設定", exact: true }).click();

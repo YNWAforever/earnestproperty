@@ -45,6 +45,7 @@ import {
 } from "@/lib/neon/admin-cms";
 import type { CmsEditState, CmsPayloadValue, CmsRevisionSummary } from "@/lib/neon/admin-cms.types";
 import { CMS_REVISION_STATE_LABELS } from "@/lib/admin/glossary";
+import { formatHkDate } from "@/lib/format";
 import { EstatePreviewCard } from "./EstatePreviewCard";
 
 type DistrictOption = { id: string; slug: string; name_zh: string };
@@ -640,7 +641,7 @@ export function AdminEstateEditorForm({
               <div className="flex min-h-11 items-center gap-3 rounded-md border px-3">
                 <span className="text-sm text-muted-foreground">
                   {form.verified_at
-                    ? `已核實（${new Date(form.verified_at).toLocaleDateString("zh-HK")}）`
+                    ? `已核實（${formatHkDate(form.verified_at) ?? form.verified_at}）`
                     : "尚未核實"}
                 </span>
                 <Button
@@ -790,7 +791,7 @@ export function AdminEstateEditorForm({
                       </Badge>
                       <span className="text-muted-foreground">
                         v{revision.versionNumber} ·{" "}
-                        {new Date(revision.createdAt).toLocaleDateString("zh-HK")}
+                        {formatHkDate(revision.createdAt) ?? revision.createdAt}
                       </span>
                     </span>
                     {canRestore && revision.state !== "draft" ? (

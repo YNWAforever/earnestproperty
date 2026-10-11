@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import { fetchOperationsAudit } from "@/lib/admin/operations/operations-client";
 import type { AuditRow } from "@/lib/admin/operations/operations-types";
+import { formatHkDateTime } from "@/lib/format";
 
 import {
   auditMetadataOmittedCount,
@@ -33,9 +34,9 @@ import {
 type AuditOutcome = AuditRow["outcome"];
 type AuditFilters = { outcome: "all" | AuditOutcome; action: string; requestId: string };
 
+// Hong Kong time whatever the staff browser's locale or time zone (H-05).
 function formatDate(value: string) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return formatHkDateTime(value) ?? value;
 }
 
 const AUDIT_OUTCOME_LABELS: Record<string, string> = {

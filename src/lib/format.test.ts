@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join, relative } from "node:path";
 
 import {
   formatArea,
@@ -6,9 +8,8 @@ import {
   formatHkd,
   formatHkDate,
   formatHkDateTime,
-  formatManDisplay,
+  formatPrice,
   formatPsf,
-  formatSaleDisplay,
   sanitizeListingText,
 } from "./format";
 
@@ -28,30 +29,6 @@ describe("formatHkd", () => {
     expect(formatHkd(Number.POSITIVE_INFINITY)).toBeNull();
     expect(formatHkd(0)).toBeNull();
     expect(formatHkd(-500)).toBeNull();
-  });
-});
-
-describe("formatManDisplay", () => {
-  test("converts to 萬 with at most one decimal place", () => {
-    expect(formatManDisplay(1280000)).toBe("128萬");
-  });
-
-  test("keeps a single decimal when the amount is not a whole 萬", () => {
-    expect(formatManDisplay(1284000)).toBe("128.4萬");
-  });
-
-  test("adds thousands-grouping once the 萬 value reaches 1000 or more", () => {
-    expect(formatManDisplay(25000000)).toBe("2,500萬");
-    expect(formatManDisplay(12345678)).toBe("1,234.6萬");
-    expect(formatManDisplay(100000000)).toBe("10,000萬");
-  });
-
-  test("returns null for null, undefined, zero, negative, and non-finite input", () => {
-    expect(formatManDisplay(null)).toBeNull();
-    expect(formatManDisplay(undefined)).toBeNull();
-    expect(formatManDisplay(0)).toBeNull();
-    expect(formatManDisplay(-500000)).toBeNull();
-    expect(formatManDisplay(Number.NaN)).toBeNull();
   });
 });
 
@@ -217,20 +194,121 @@ describe("sanitizeListingText", () => {
   });
 });
 
-describe("formatSaleDisplay", () => {
-  test("formats a sale price in millions with two decimal places and an M suffix", () => {
-    expect(formatSaleDisplay(12800000)).toBe("$12.80M");
+describe("formatPrice", () => {
+  test("a sale price is shown in 萬 with thousands separators", () => {
+    expect(formatPrice(12_680_000, { dealType: "sale" })).toBe("HK$1,268萬");
+    expect(formatPrice(8_000_000, { dealType: "sale" })).toBe("HK$800萬");
+    expect(formatPrice(100_000_000, { dealType: "sale" })).toBe("HK$10,000萬");
   });
 
-  test("rounds to two decimal places", () => {
-    expect(formatSaleDisplay(5678900)).toBe("$5.68M");
+  test("a non-round sale price keeps up to two decimals of 萬 with trailing zeros stripped", () => {
+    expect(formatPrice(12_685_000, { dealType: "sale" })).toBe("HK$1,268.5萬");
+    expect(formatPrice(12_684_500, { dealType: "sale" })).toBe("HK$1,268.45萬");
+    expect(formatPrice(12_684_567, { dealType: "sale" })).toBe("HK$1,268.46萬");
+    expect(formatPrice(12_680_040, { dealType: "sale" })).toBe("HK$1,268萬");
   });
 
-  test("returns null for null, undefined, zero, negative, and non-finite input", () => {
-    expect(formatSaleDisplay(null)).toBeNull();
-    expect(formatSaleDisplay(undefined)).toBeNull();
-    expect(formatSaleDisplay(0)).toBeNull();
-    expect(formatSaleDisplay(-1_000_000)).toBeNull();
-    expect(formatSaleDisplay(Number.NaN)).toBeNull();
+  test("exact: true adds the full amount when 萬 rounding hides digits (admin confirm/edit)", () => {
+    expect(formatPrice(6_200_040, { dealType: "sale", exact: true })).toBe(
+      "HK$620萬（HK$6,200,040）",
+    );
+    expect(formatPrice(6_200_000, { dealType: "sale", exact: true })).toBe("HK$620萬");
+    expect(formatPrice(12_685_000, { dealType: "sale", exact: true })).toBe("HK$1,268.5萬");
+    expect(formatPrice(12_684_567, { dealType: "sale", exact: true })).toBe(
+      "HK$1,268.46萬（HK$12,684,567）",
+    );
+    expect(formatPrice(38_000, { dealType: "rent", exact: true })).toBe("HK$38,000／月");
+    expect(formatPrice(5_000, { dealType: "sale", exact: true })).toBe("HK$5,000");
+    expect(formatPrice(null, { dealType: "sale", exact: true })).toBeNull();
+    // Without exact the public rounding is unchanged.
+    expect(formatPrice(6_200_040, { dealType: "sale" })).toBe("HK$620萬");
+  });
+
+  test("a sale price below 1萬 falls back to whole dollars with commas", () => {
+    expect(formatPrice(5_000, { dealType: "sale" })).toBe("HK$5,000");
+  });
+
+  test("a rent is whole dollars per month with a full-width slash", () => {
+    expect(formatPrice(38_000, { dealType: "rent" })).toBe("HK$38,000／月");
+    expect(formatPrice(18_500.4, { dealType: "rent" })).toBe("HK$18,500／月");
+  });
+
+  test("returns null for null, undefined, zero, negative, and non-finite input so callers keep their fallback", () => {
+    for (const dealType of ["sale", "rent"] as const) {
+      expect(formatPrice(null, { dealType })).toBeNull();
+      expect(formatPrice(undefined, { dealType })).toBeNull();
+      expect(formatPrice(0, { dealType })).toBeNull();
+      expect(formatPrice(-1_000_000, { dealType })).toBeNull();
+      expect(formatPrice(Number.NaN, { dealType })).toBeNull();
+      expect(formatPrice(Number.POSITIVE_INFINITY, { dealType })).toBeNull();
+    }
+  });
+});
+
+// One price format (FX-19d-2, D8). Every listing, transaction, budget and
+// enquiry price goes through formatPrice; nothing in src formats a price inline.
+// Allowed money that is not a price: per-square-foot rates (psf), the mortgage
+// calculator's figures, and the analytics commission totals. JSON-LD
+// (src/lib/schema.ts) keeps numeric prices and never formats them.
+describe("price formatting has a single source", () => {
+  const SRC = join(import.meta.dir, "..");
+  const NOT_A_PRICE_FILES = new Set([
+    "components/property/PropertyDecisionActions.tsx", // mortgage monthly payment / deposit
+    "components/site/MortgageCalculator.tsx", // mortgage calculator figures
+    "components/admin/analytics/PerformanceDashboard.tsx", // commission analytics
+  ]);
+  const FORBIDDEN: Array<[string, RegExp]> = [
+    ["old helper", /\bformat(?:SaleDisplay|ManDisplay)\b/],
+    ["millions with toFixed", /\/\s*1_?000_?000\)\.toFixed\(/],
+    ["inline $ + toLocaleString", /(?:\$\$\{|"HK\$"\s*\+|HK\$\$\{)[^`]*toLocaleString\(/],
+    [
+      "toLocaleString on a price, rent, budget or amount",
+      /(?:^|[\s.(!])(?:\w*[pP]rice|rent|budget_\w+|amount)\)?\.toLocaleString\(/,
+    ],
+  ];
+
+  function sourceFiles(dir: string): string[] {
+    return readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) return sourceFiles(path);
+      if (!/\.(?:ts|tsx|js)$/.test(name) || /\.test\.|\.d\.ts$|routeTree\.gen\.ts$/.test(name))
+        return [];
+      return [path];
+    });
+  }
+
+  test("no other price formatter or inline price formatting remains in src", () => {
+    const offences: string[] = [];
+    for (const path of sourceFiles(SRC)) {
+      const rel = relative(SRC, path).replaceAll("\\", "/");
+      if (rel === "lib/format.ts" || NOT_A_PRICE_FILES.has(rel)) continue;
+      readFileSync(path, "utf8")
+        .split(/\r?\n/)
+        .forEach((line, index) => {
+          if (/psf|Psf|呎/.test(line)) return; // a per-square-foot rate is not a price
+          for (const [label, pattern] of FORBIDDEN)
+            if (pattern.test(line)) offences.push(`${rel}:${index + 1} ${label}: ${line.trim()}`);
+        });
+    }
+    expect(offences).toEqual([]);
+  });
+
+  test("admin screens where staff confirm or edit a price use the exact option", () => {
+    for (const rel of [
+      "lib/admin/property-management-ui.ts", // admin listings, detail and publish confirm
+      "routes/admin.transactions.tsx",
+      "lib/admin/whatsapp-link-selection.ts", // WhatsApp link wizard offer labels
+    ]) {
+      const source = readFileSync(join(SRC, rel), "utf8");
+      const calls = source.match(/formatPrice\([^;]*?\}\)/gs) ?? [];
+      expect(calls.length).toBeGreaterThan(0);
+      for (const call of calls) expect(call).toContain("exact: true");
+    }
+  });
+
+  test("JSON-LD keeps numeric prices", () => {
+    const schema = readFileSync(join(SRC, "lib/schema.ts"), "utf8");
+    expect(schema).not.toContain("formatPrice");
+    expect(schema).toContain("return Number(value) || null;");
   });
 });

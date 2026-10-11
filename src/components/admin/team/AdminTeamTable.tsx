@@ -11,9 +11,11 @@ function memberName(member: AdminTeamMember) {
 }
 
 function updatedAt(value: string) {
-  return new Intl.DateTimeFormat("zh-HK", { dateStyle: "medium", timeStyle: "short" }).format(
-    new Date(value),
-  );
+  return new Intl.DateTimeFormat("zh-HK", {
+    timeZone: "Asia/Hong_Kong",
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
 }
 
 export function AdminTeamTable({

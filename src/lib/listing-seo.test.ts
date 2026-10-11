@@ -43,7 +43,7 @@ const bareUnit: ListingSeoInput = {
 describe("listingSeoTitle", () => {
   test("uses the estate, the unit spec, the price and the district", () => {
     const title = listingSeoTitle(richUnit);
-    expect(title).toBe("碧堤半島｜高層 3 房｜售 $1,180萬｜深井放盤｜晉誠地產");
+    expect(title).toBe("碧堤半島｜高層 3 房｜售 HK$1,180萬｜深井放盤｜晉誠地產");
     expect(displayWidth(title)).toBeLessThanOrEqual(TITLE_MAX_UNITS);
   });
 
@@ -58,7 +58,7 @@ describe("listingSeoTitle", () => {
     // that, `${seo_title}｜晉誠地產` shipped a title starting with a bare bar.
     for (const seo_title of ["", "   ", "null", "undefined"]) {
       expect(listingSeoTitle({ ...richUnit, seo_title })).toBe(
-        "碧堤半島｜高層 3 房｜售 $1,180萬｜深井放盤｜晉誠地產",
+        "碧堤半島｜高層 3 房｜售 HK$1,180萬｜深井放盤｜晉誠地產",
       );
     }
   });
@@ -68,7 +68,7 @@ describe("listingSeoTitle", () => {
     // appended a second time. With estates null there is no verified district
     // either, so the head is the cleaned source title on its own.
     const title = listingSeoTitle({ ...bareUnit, estates: null, district_slug: null });
-    expect(title).toBe("深井放盤｜售 $628萬｜編號 PHK-88｜晉誠地產");
+    expect(title).toBe("深井放盤｜售 HK$628萬｜編號 PHK-88｜晉誠地產");
     expect(title.match(/深井放盤/g)).toHaveLength(1);
   });
 
@@ -85,16 +85,27 @@ describe("listingSeoTitle", () => {
   });
 
   test("states both sides of a group that is for sale and for rent", () => {
-    const title = listingSeoTitle({
+    const group = {
       ...richUnit,
       features: null,
       offerings: [
-        { deal_type: "sale", price: 11_800_000, rent: null, status: "active" },
-        { deal_type: "rent", price: null, rent: 32_000, status: "active" },
+        { deal_type: "sale" as const, price: 11_800_000, rent: null, status: "active" },
+        { deal_type: "rent" as const, price: null, rent: 32_000, status: "active" },
       ],
+    };
+    // FX-19d-2: "售 HK$1,180萬、租 HK$32,000／月" is 2 units over this title's
+    // budget, so the title keeps the sale price rather than drop the price
+    // segment; the description, which has room, states both sides.
+    const title = listingSeoTitle(group);
+    expect(title).toBe("碧堤半島｜高層 3 房｜售 HK$1,180萬｜深井放盤｜晉誠地產");
+    const description = listingSeoDescription(group);
+    expect(description).toContain("售 HK$1,180萬、租 HK$32,000／月");
+    // With a short head both sides fit in the title too.
+    const short = listingSeoTitle({
+      ...group,
+      estates: { name_zh: "海韻", district_slug: "sham-tseng" },
     });
-    expect(title).toContain("售 $1,180萬");
-    expect(title).toContain("租 $32,000");
+    expect(short).toContain("售 HK$1,180萬、租 HK$32,000／月");
   });
 
   test("stays inside the SERP budget for the longest realistic inputs", () => {
@@ -145,7 +156,7 @@ describe("listingSeoDescription", () => {
   test("composes the unit's own facts, the price and a call to action", () => {
     const description = listingSeoDescription(richUnit);
     expect(description).toBe(
-      "深井碧堤半島 高層 3 房單位。實用 968 呎，向南，2 廁。售 $1,180萬，呎價 $12,190。連車位、無敵海景。WhatsApp 即時預約睇樓或免費估價。晉誠地產 C-018613。",
+      "深井碧堤半島 高層 3 房單位。實用 968 呎，向南，2 廁。售 HK$1,180萬，呎價 $12,190。連車位、無敵海景。WhatsApp 即時預約睇樓或免費估價。晉誠地產 C-018613。",
     );
     expect(displayWidth(description)).toBeLessThanOrEqual(DESCRIPTION_MAX_UNITS);
   });
@@ -186,7 +197,7 @@ describe("listingSeoDescription", () => {
       description: "碧堤半島，高層，實用面積。",
     });
     expect(description).toBe(
-      "深井碧堤半島 高層 4 房單位。實用 901 呎，南，3 廁。售 $1,268萬，呎價 $14,073。WhatsApp 即時預約睇樓或免費估價。晉誠地產 C-018613。",
+      "深井碧堤半島 高層 4 房單位。實用 901 呎，南，3 廁。售 HK$1,268萬，呎價 $14,073。WhatsApp 即時預約睇樓或免費估價。晉誠地產 C-018613。",
     );
   });
 
@@ -203,7 +214,8 @@ describe("listingSeoDescription", () => {
       floor: "高層",
       orientation: "南",
     };
-    const facts = "深井碧堤半島 高層 4 房單位。實用 901 呎，南，3 廁。售 $1,268萬，呎價 $14,073。";
+    const facts =
+      "深井碧堤半島 高層 4 房單位。實用 901 呎，南，3 廁。售 HK$1,268萬，呎價 $14,073。";
     const cta = "WhatsApp 即時預約睇樓或免費估價。晉誠地產 C-018613。";
 
     const cases: Array<[string, string, string]> = [
@@ -276,7 +288,7 @@ describe("listingSeoDescription", () => {
       bedrooms: 4,
     });
     expect(description).not.toContain("連花園 4 房單位");
-    expect(description).toContain("售 $3,200萬");
+    expect(description).toContain("售 HK$3,200萬");
   });
 
   test("drops a floor value it cannot read rather than guessing at one", () => {
@@ -332,7 +344,7 @@ describe("facts the generator must not get wrong", () => {
       estates: { name_zh: "碧堤半島", district_slug: "青山公路深井段 33 號" },
       district_slug: null,
     });
-    expect(title).toBe("碧堤半島｜高層 3 房｜售 $1,180萬｜實用 968 呎｜晉誠地產");
+    expect(title).toBe("碧堤半島｜高層 3 房｜售 HK$1,180萬｜實用 968 呎｜晉誠地產");
   });
 
   test("strips the deal marker and internal listing number out of a scraped title", () => {
@@ -379,10 +391,12 @@ describe("facts the generator must not get wrong", () => {
   });
 
   test("never prints a zero asking price", () => {
-    // formatManDisplay divides by 10,000, so a nonsense sub-$5,000 price
-    // rounded to "$0萬".
+    // A sub-1萬 asking price is nonsense data (it once rounded to "$0萬"), so
+    // the title drops the price segment rather than print it.
     for (const price of [1, 500, 9_999]) {
-      expect(listingSeoTitle({ ...richUnit, price })).not.toContain("$0萬");
+      const title = listingSeoTitle({ ...richUnit, price });
+      expect(title).not.toContain("$0萬");
+      expect(title).not.toContain("售 HK$");
     }
   });
 
@@ -399,7 +413,7 @@ describe("facts the generator must not get wrong", () => {
     });
     // The facts that qualify a searcher survive the long headline.
     expect(description).toContain("實用 2,100 呎");
-    expect(description).toContain("售 $4,200萬");
+    expect(description).toContain("售 HK$4,200萬");
     expect(displayWidth(description)).toBeLessThanOrEqual(DESCRIPTION_MAX_UNITS);
   });
 

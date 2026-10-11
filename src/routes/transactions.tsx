@@ -22,7 +22,7 @@ import { PageHero } from "@/components/site/PageHero";
 import { whatsappUrl } from "@/config/site";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import { jsonLdScript, organizationRef } from "@/lib/schema";
-import { formatArea, formatHkd, formatHkDate, formatManDisplay } from "@/lib/format";
+import { formatArea, formatHkd, formatHkDate, formatPrice } from "@/lib/format";
 import { shareUrl } from "@/lib/share";
 import {
   fetchEstateOptions,
@@ -363,17 +363,19 @@ function buildActiveFilterChips(
   if (search.month) {
     chips.push({ key: "month", label: `月份：${search.month}`, removeKeys: ["month"] });
   }
+  // A bound under 全部 reads as a sale amount; in 萬 it is still the same figure.
+  const chipDealType = search.dealType === "rent" ? "rent" : "sale";
   if (search.minPrice !== undefined) {
     chips.push({
       key: "minPrice",
-      label: `最低 HK$${search.minPrice.toLocaleString("zh-HK")}`,
+      label: `最低 ${formatPrice(search.minPrice, { dealType: chipDealType }) ?? "HK$0"}`,
       removeKeys: ["minPrice"],
     });
   }
   if (search.maxPrice !== undefined) {
     chips.push({
       key: "maxPrice",
-      label: `最高 HK$${search.maxPrice.toLocaleString("zh-HK")}`,
+      label: `最高 ${formatPrice(search.maxPrice, { dealType: chipDealType }) ?? "HK$0"}`,
       removeKeys: ["maxPrice"],
     });
   }
@@ -674,7 +676,9 @@ function TransactionRow({
       </td>
       <td className="px-4 py-3">{transaction.unit ?? "-"}</td>
       <td className="px-4 py-3">{DEAL_TYPE_LABELS[transaction.deal_type]}</td>
-      <td className="px-4 py-3">{formatPrice(transaction.price)}</td>
+      <td className="px-4 py-3">
+        {formatPrice(transaction.price, { dealType: transaction.deal_type }) ?? "-"}
+      </td>
       <td className="px-4 py-3">{formatAreaCell(transaction.saleable_area)}</td>
       <td className="px-4 py-3">{formatPsf(transaction.saleable_psf)}</td>
       <td className="px-4 py-3">
@@ -693,11 +697,6 @@ function TransactionRow({
 
 function formatDate(value: string | null) {
   return formatHkDate(value) ?? "-";
-}
-
-function formatPrice(value: number | null) {
-  const man = formatManDisplay(value);
-  return man ? `HK$${man}` : "-";
 }
 
 function formatAreaCell(value: number | null) {

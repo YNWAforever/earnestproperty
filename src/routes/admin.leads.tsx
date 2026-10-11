@@ -63,6 +63,7 @@ import { useNeonAuth } from "@/hooks/use-neon-auth";
 import { useDirtyCloseGuard, useRouteLeaveGuard } from "@/hooks/use-unsaved-changes-guard";
 import { assignableAgents, bulkAssignableAgents } from "@/lib/admin/lead-assignment";
 import { leadBudgetError } from "@/lib/admin/lead-budget";
+import { formatHkDateTime } from "@/lib/format";
 import { LeadConflictNotice } from "@/components/admin/leads/LeadConflictNotice";
 import {
   LEAD_CHANGED_MESSAGE,
@@ -101,6 +102,7 @@ import {
   labeledFilterOptions,
   quickLeadFilter,
   aiScoreLabel,
+  leadBudgetAmount,
   leadListingDisplay,
 } from "@/lib/admin/crm-presentation";
 import { ContactIdentityReviewList } from "@/components/admin/leads/ContactIdentityReviewList";
@@ -2023,28 +2025,16 @@ function formatSource(source: string) {
 }
 
 function formatBudget(lead: AdminLeadRow) {
-  if (lead.budget_min && lead.budget_max) {
-    return `${formatMoney(lead.budget_min)} - ${formatMoney(lead.budget_max)}`;
-  }
-  if (lead.budget_min) return `${formatMoney(lead.budget_min)}+`;
-  if (lead.budget_max) return `<= ${formatMoney(lead.budget_max)}`;
+  const min = lead.budget_min ? leadBudgetAmount(lead.budget_min, lead.intent) : null;
+  const max = lead.budget_max ? leadBudgetAmount(lead.budget_max, lead.intent) : null;
+  if (min && max) return `${min} - ${max}`;
+  if (min) return `${min}+`;
+  if (max) return `<= ${max}`;
   return "—";
 }
 
-function formatMoney(value: number) {
-  return `$${Number(value).toLocaleString("zh-HK")}`;
-}
-
 function formatDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("zh-HK", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return formatHkDateTime(value) ?? value;
 }
 
 function formatActivityType(type: string) {

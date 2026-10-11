@@ -54,9 +54,11 @@ export function AdminTeamMemberCard({
       <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
         <span>
           更新於{" "}
-          {new Intl.DateTimeFormat("zh-HK", { dateStyle: "medium", timeStyle: "short" }).format(
-            new Date(member.updatedAt),
-          )}
+          {new Intl.DateTimeFormat("zh-HK", {
+            timeZone: "Asia/Hong_Kong",
+            dateStyle: "medium",
+            timeStyle: "short",
+          }).format(new Date(member.updatedAt))}
         </span>
         <Button onClick={() => onSelect(member.id)} size="sm" type="button" variant="outline">
           查看詳情

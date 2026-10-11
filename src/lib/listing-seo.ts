@@ -5,7 +5,7 @@ import {
   displayWidth,
   truncateToWidth,
 } from "@/content/seo-budget.js";
-import { formatArea, formatManDisplay, formatHkd, formatPsf, sanitizeListingText } from "./format";
+import { formatArea, formatPrice, formatPsf, sanitizeListingText } from "./format";
 import {
   activePropertyOfferings,
   publicPropertyNo,
@@ -178,12 +178,17 @@ function bedroomLabel(value: unknown): string | null {
 }
 
 /**
- * The deal + price segment, in the register a Hong Kong portal uses ("售
- * $1,180萬" / "租 $18,000"). A listing with both an active sale and an active
+ * The deal + price segment, in the site price format ("售 HK$1,180萬" /
+ * "租 HK$18,000／月"). A listing with both an active sale and an active
  * rent offering says so, because that is a genuine selling point and the
  * on-page copy (propertyDealLabel) already calls it 可買可租.
  */
 function priceLabel(input: ListingSeoInput): string | null {
+  return priceParts(input).join("、") || null;
+}
+
+/** Each active offering's "售 …" / "租 …" segment, deduplicated, in offering order. */
+function priceParts(input: ListingSeoInput): string[] {
   const offerings = activePropertyOfferings({
     id: undefined,
     listing_no: input.listing_no,
@@ -205,18 +210,18 @@ function priceLabel(input: ListingSeoInput): string | null {
   const parts: string[] = [];
   for (const offering of offerings) {
     if (offering.deal_type === "rent") {
-      const rent = formatHkd(offering.rent);
+      const rent = formatPrice(offering.rent, { dealType: "rent" });
       if (rent) parts.push(`租 ${rent}`);
     } else {
-      // formatManDisplay divides by 10,000 and rounds to one decimal, so a
-      // nonsense sub-$5,000 price renders as "$0萬". Suppress the segment
-      // rather than print a zero asking price.
-      const man = (offering.price ?? 0) >= 10_000 ? formatManDisplay(offering.price) : null;
-      if (man) parts.push(`售 $${man}`);
+      // A sub-1萬 asking price is nonsense data (it once rendered as "$0萬").
+      // Suppress the segment rather than print it.
+      const sale =
+        (offering.price ?? 0) >= 10_000 ? formatPrice(offering.price, { dealType: "sale" }) : null;
+      if (sale) parts.push(`售 ${sale}`);
     }
   }
   // Dedupe: a group can carry two sale offerings at the same asking price.
-  return [...new Set(parts)].join("、") || null;
+  return [...new Set(parts)];
 }
 
 /**
@@ -229,8 +234,15 @@ function priceLabel(input: ListingSeoInput): string | null {
  * with district_slug `sham-tseng`, "青山公路獨立屋 4房" with bedrooms 4), and
  * without this the assembler produced 深井放盤｜深井放盤.
  */
-function assembleTitle(head: string, segments: Array<string | null>): string {
+// A segment may list alternatives, longest first; the first that fits is used.
+type TitleSegment = string | null | string[];
+
+function assembleTitle(head: string, rawSegments: TitleSegment[]): string {
   const budget = TITLE_MAX_UNITS - displayWidth(BRAND_SUFFIX);
+  const alternatives = rawSegments.map((segment) =>
+    Array.isArray(segment) ? segment.filter(Boolean) : segment ? [segment] : [],
+  );
+  const segments = alternatives.map((options) => options[0] ?? null);
   // Reserve the first segment's width before the head takes the rest. A long
   // source title -- the normal case when estate_id is NULL, so there is no
   // estate name to head with -- used to consume the whole budget and ship a
@@ -238,11 +250,15 @@ function assembleTitle(head: string, segments: Array<string | null>): string {
   const reserved = segments.find(Boolean);
   const headBudget = reserved ? budget - displayWidth(reserved) - displayWidth("｜") : budget;
   let title = truncateToWidth(head, Math.max(headBudget, Math.ceil(budget / 2)));
-  for (const segment of segments) {
-    if (!segment) continue;
-    if (restates(title, segment)) continue;
-    const candidate = `${title}｜${segment}`;
-    if (displayWidth(candidate) <= budget) title = candidate;
+  for (const options of alternatives) {
+    for (const segment of options) {
+      if (restates(title, segment)) break;
+      const candidate = `${title}｜${segment}`;
+      if (displayWidth(candidate) <= budget) {
+        title = candidate;
+        break;
+      }
+    }
   }
   return `${title}${BRAND_SUFFIX}`;
 }
@@ -320,7 +336,9 @@ export function listingSeoTitle(input: ListingSeoInput): string {
   return assembleTitle(head, [
     state,
     spec || null,
-    priceLabel(input),
+    // Both sides of a 可買可租 group when they fit, else the first offering alone
+    // (the site price format is wider than the old "$1,180萬" / "$32,000").
+    [priceLabel(input), ...priceParts(input)].filter((value): value is string => Boolean(value)),
     district ? `${district}放盤` : null,
     // Only reached when the estate name is short enough to leave room; the
     // source title often repeats the estate, so it goes last.

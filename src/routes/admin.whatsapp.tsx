@@ -2334,7 +2334,10 @@ function replyWindowRemaining(lastInboundAt: string | null) {
 }
 
 function formatClock(timestamp: number) {
-  return new Intl.DateTimeFormat("zh-HK", { timeStyle: "short" }).format(new Date(timestamp));
+  return new Intl.DateTimeFormat("zh-HK", {
+    timeZone: "Asia/Hong_Kong",
+    timeStyle: "short",
+  }).format(new Date(timestamp));
 }
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -2452,6 +2455,7 @@ function formatDate(value: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("zh-HK", {
+    timeZone: "Asia/Hong_Kong",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",

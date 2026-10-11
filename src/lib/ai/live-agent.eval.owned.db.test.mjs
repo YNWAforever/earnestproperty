@@ -252,7 +252,7 @@ test(
           assert.ok(card, JSON.stringify(reply.cards));
           assert.equal(card.type, "listing");
           assert.equal(card.title, "碧堤半島 2座 中層 兩房");
-          assert.ok(card.lines.includes("售 $6.80M"), card.lines.join("|"));
+          assert.ok(card.lines.includes("售 HK$680萬"), card.lines.join("|"));
           assert.ok(card.lines.includes("實用 512 呎"), card.lines.join("|"));
           assert.ok(card.lines.includes("2 房"), card.lines.join("|"));
           assert.ok(!hrefs(reply).includes("/property/SYNC-FX11-1"));
@@ -745,13 +745,13 @@ test(
           1: (reply) => {
             case1Cards = reply.cards;
             const card = reply.cards.find((c) => c.href === "/property/EP11001");
-            assert.deepEqual(card.lines, ["售 $6.80M", "實用 512 呎", "2 房"]);
+            assert.deepEqual(card.lines, ["售 HK$680萬", "實用 512 呎", "2 房"]);
           },
           2: (reply, statements) => {
             assert.ok(!statements.some((sql) => /\barticles\b/i.test(sql)), "article read");
           },
           3: (reply) => {
-            assert.deepEqual(reply.cards[0].lines, ["售 $5.20M", "2 房"]);
+            assert.deepEqual(reply.cards[0].lines, ["售 HK$520萬", "2 房"]);
             assert.doesNotMatch(visible(reply), /呎|psf/i);
           },
           4: digitFree,

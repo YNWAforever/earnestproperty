@@ -9,6 +9,7 @@ import {
 } from "recharts";
 
 import { Container } from "@/components/layout/Container";
+import { formatPrice } from "@/lib/format";
 import type { EstateTransaction, ListingRow } from "@/lib/queries";
 
 type PsfTrendPoint = { date: string; psf: number };
@@ -164,7 +165,7 @@ export function EstateMarketSnapshot({
                         {tx.saleable_psf ? `$${tx.saleable_psf.toLocaleString("zh-HK")}` : "-"}
                       </td>
                       <td className="px-3 py-2">
-                        {tx.price ? `$${(tx.price / 1_000_000).toFixed(2)}M` : "-"}
+                        {formatPrice(tx.price, { dealType: "sale" }) ?? "-"}
                       </td>
                     </tr>
                   ))}

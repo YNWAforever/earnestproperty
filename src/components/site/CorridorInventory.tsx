@@ -11,7 +11,7 @@ import { Bath, Bed, Maximize2, MessageCircle } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
-import { formatHkd, formatSaleDisplay, sanitizeListingText } from "@/lib/format";
+import { sanitizeListingText } from "@/lib/format";
 import type { CorridorInventory as CorridorInventoryData, ListingRow } from "@/lib/queries";
 
 type ListingsDeal = "all" | "sale" | "rent";

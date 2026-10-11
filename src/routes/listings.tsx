@@ -55,7 +55,7 @@ import { ListingAlertForm } from "@/components/site/ListingAlertForm";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
 import { canonicalLink, pageSeo, SITE_URL } from "@/content/seo";
 import { listingSearchSeo } from "@/lib/listing-seo";
-import { sanitizeListingText } from "@/lib/format";
+import { formatPrice, sanitizeListingText } from "@/lib/format";
 import { shareUrl } from "@/lib/share";
 import { buildContext, track } from "@/lib/analytics/events";
 import {
@@ -227,10 +227,10 @@ function describeListingSearch(
     // applied). Suppressing them here too keeps the summary from claiming a
     // filter that wasn't actually applied.
     search.deal !== "all" && search.minPrice
-      ? `最低 $${search.minPrice.toLocaleString("zh-HK")}`
+      ? `最低 ${listingPriceBound(search.minPrice, search.deal)}`
       : undefined,
     search.deal !== "all" && search.maxPrice
-      ? `最高 $${search.maxPrice.toLocaleString("zh-HK")}`
+      ? `最高 ${listingPriceBound(search.maxPrice, search.deal)}`
       : undefined,
     search.bedrooms !== undefined
       ? `${search.bedrooms === 4 ? "4+" : search.bedrooms} 房`
@@ -362,14 +362,14 @@ function buildActiveFilterChips(
   if (search.deal !== "all" && search.minPrice !== undefined) {
     chips.push({
       key: "minPrice",
-      label: `最低 $${search.minPrice.toLocaleString("zh-HK")}`,
+      label: `最低 ${listingPriceBound(search.minPrice, search.deal)}`,
       removeKeys: ["minPrice"],
     });
   }
   if (search.deal !== "all" && search.maxPrice !== undefined) {
     chips.push({
       key: "maxPrice",
-      label: `最高 $${search.maxPrice.toLocaleString("zh-HK")}`,
+      label: `最高 ${listingPriceBound(search.maxPrice, search.deal)}`,
       removeKeys: ["maxPrice"],
     });
   }
@@ -414,6 +414,11 @@ function buildActiveFilterChips(
   }
 
   return chips;
+}
+
+/** A price bound in the site price format; only called once a deal type is chosen. */
+function listingPriceBound(value: number, deal: string) {
+  return formatPrice(value, { dealType: deal === "rent" ? "rent" : "sale" }) ?? "HK$0";
 }
 
 function FilterChip({ label, removeKeys }: { label: string; removeKeys: string[] }) {

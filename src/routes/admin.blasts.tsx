@@ -2633,6 +2633,7 @@ function formatDate(value: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat("zh-HK", {
+    timeZone: "Asia/Hong_Kong",
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);

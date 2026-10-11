@@ -60,7 +60,7 @@ import {
   formatArea,
   formatHkd,
   formatHkDate,
-  formatSaleDisplay,
+  formatPrice,
   sanitizeListingText,
 } from "@/lib/format";
 import { AppImage } from "@/components/media/AppImage";
@@ -128,11 +128,9 @@ type PropertyHeadData = {
 const UNAVAILABLE_STATUSES = new Set(["sold", "rented"]);
 
 function formatDealPrice(isRent: boolean, rent: number | null, price: number | null): string {
-  if (isRent) {
-    const rentDisplay = formatHkd(rent);
-    return rentDisplay ? `${rentDisplay} / 月` : "—";
-  }
-  return formatSaleDisplay(price) ?? "—";
+  return isRent
+    ? (formatPrice(rent, { dealType: "rent" }) ?? "—")
+    : (formatPrice(price, { dealType: "sale" }) ?? "—");
 }
 
 export const Route = createFileRoute("/property/$listingNo")({
@@ -929,7 +927,7 @@ function PropertyPage() {
                             {formatArea(t.saleable_area) ?? "—"}
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatSaleDisplay(Number(t.price)) ?? "—"}
+                            {formatPrice(Number(t.price), { dealType: "sale" }) ?? "—"}
                           </TableCell>
                           <TableCell className="text-right">
                             {formatHkd(Number(t.saleable_psf)) ?? "—"}

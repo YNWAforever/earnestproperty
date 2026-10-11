@@ -1,4 +1,5 @@
 import { LEAD_SOURCE_LABELS, LEAD_STAGE_LABELS, type LeadStage } from "@/lib/admin/glossary";
+import { formatPrice } from "@/lib/format";
 
 // The stage and source labels live in the glossary (FX-17a G-12); these are re-exports.
 export type { LeadStage };
@@ -76,4 +77,21 @@ export function leadListingDisplay(lead: {
   if (lead.listing_no)
     return { primary: `#${lead.listing_no}（未能配對現有樓盤）`, secondary: null };
   return { primary: "—", secondary: null };
+}
+
+// Intents whose budget is a monthly rent. Every other intent (buyer, seller,
+// valuation, unknown, ...) reads its budget as a sale amount: in 萬 it is still
+// the same figure (to the nearest HK$100), and an unknown intent is never
+// mislabelled "per month".
+const RENT_BUDGET_INTENTS = new Set(["renter", "tenant", "landlord"]);
+
+/** One lead budget bound in the site price format (FX-19d-2), or null when unset. */
+export function leadBudgetAmount(
+  value: number | string | null | undefined,
+  intent: string | null | undefined,
+): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  return formatPrice(Number(value), {
+    dealType: RENT_BUDGET_INTENTS.has(intent ?? "") ? "rent" : "sale",
+  });
 }

@@ -130,7 +130,7 @@ export function teamMutationFailure(value: unknown): string | null {
     if (reply.failureCode === "STAFF_ACTION_STORE_UNAVAILABLE")
       return `團隊資料暫時無法更新，請稍後再試。參考編號：${reply.requestId}`;
     const retry = reply.retryAfter
-      ? `可於 ${new Intl.DateTimeFormat("zh-HK", { timeStyle: "short" }).format(new Date(reply.retryAfter))} 再試。`
+      ? `可於 ${new Intl.DateTimeFormat("zh-HK", { timeZone: "Asia/Hong_Kong", timeStyle: "short" }).format(new Date(reply.retryAfter))} 再試。`
       : "請稍後再試。";
     return `操作尚未完成。${retry}參考編號：${reply.requestId}`;
   }

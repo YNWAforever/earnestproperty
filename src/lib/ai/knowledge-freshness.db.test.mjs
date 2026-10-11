@@ -145,7 +145,7 @@ test(
         );
         assert.ok(chunks.length >= 1);
         const text = chunks.map((c) => c.chunk_text).join(" ");
-        assert.ok(text.includes("出售：$6,800,000（680萬）"), text);
+        assert.ok(text.includes("出售：HK$680萬"), text);
         assert.ok(text.includes("實用面積：512 呎"), text);
         assert.ok(!text.includes("出售：6800000"), text);
       });

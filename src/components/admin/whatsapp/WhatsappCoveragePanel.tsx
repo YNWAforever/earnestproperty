@@ -9,6 +9,7 @@ import {
 } from "@/lib/admin/whatsapp-link-batch-client";
 import { staffActionErrorText } from "@/components/admin/admin-error-text";
 import { nativeFieldClassName } from "@/components/ui/native-field";
+import { formatHkDateTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function WhatsappCoveragePanel({
@@ -88,8 +89,8 @@ export function WhatsappCoveragePanel({
         {coverage?.conflictedOffers ?? "—"}
       </p>
       <p className="text-xs text-muted-foreground">
-        核對時間：{coverage?.checkedAt ? new Date(coverage.checkedAt).toLocaleString("zh-HK") : "—"}
-        。 網站首頁、搜尋和詳情共用 website:primary；外部平台刊登仍需人工核對。 無 /w/
+        核對時間：{formatHkDateTime(coverage?.checkedAt) ?? "—"}。 網站首頁、搜尋和詳情共用
+        website:primary；外部平台刊登仍需人工核對。 無 /w/
         時公開頁使用帶樓編及租售的聯絡後備，後備不等同完整追蹤。
       </p>
       {coverage && !coverage.trackingEnabled ? (

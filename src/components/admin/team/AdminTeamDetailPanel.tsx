@@ -104,9 +104,11 @@ export function AdminTeamDetailPanel({
         {member.invitationExpiresAt ? (
           <p className="mt-1 text-sm text-muted-foreground">
             邀請有效期至{" "}
-            {new Intl.DateTimeFormat("zh-HK", { dateStyle: "medium", timeStyle: "short" }).format(
-              new Date(member.invitationExpiresAt),
-            )}
+            {new Intl.DateTimeFormat("zh-HK", {
+              timeZone: "Asia/Hong_Kong",
+              dateStyle: "medium",
+              timeStyle: "short",
+            }).format(new Date(member.invitationExpiresAt))}
             ；註冊連結需由管理員人工分享。
           </p>
         ) : null}
@@ -216,9 +218,10 @@ export function AdminTeamDetailPanel({
                   {item.action} · {item.outcome}
                 </span>
                 <time className="shrink-0 text-muted-foreground">
-                  {new Intl.DateTimeFormat("zh-HK", { dateStyle: "medium" }).format(
-                    new Date(item.createdAt),
-                  )}
+                  {new Intl.DateTimeFormat("zh-HK", {
+                    timeZone: "Asia/Hong_Kong",
+                    dateStyle: "medium",
+                  }).format(new Date(item.createdAt))}
                 </time>
               </li>
             ))
