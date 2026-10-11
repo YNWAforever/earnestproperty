@@ -16,7 +16,7 @@ export const LIVE_AGENT_EVAL_CASES = [
     expect: {
       kind: "listings",
       cards: LISTINGS_BELLAGIO_2,
-      mustInclude: ["/property/EP11001", "售 $6.80M"],
+      mustInclude: ["/property/EP11001", "售 HK$680萬"],
       handoffSuggested: false,
     },
     live: true,
@@ -42,7 +42,7 @@ export const LIVE_AGENT_EVAL_CASES = [
     expect: {
       kind: "listings",
       cards: ["/property/EP11004"],
-      mustInclude: ["麗都花園 3座 高層", "售 $5.20M"],
+      mustInclude: ["麗都花園 3座 高層", "售 HK$520萬"],
       mustNotInclude: ["呎", "實用"],
       handoffSuggested: false,
     },
@@ -98,7 +98,7 @@ export const LIVE_AGENT_EVAL_CASES = [
     expect: {
       kind: "listings",
       cards: LISTINGS_BELLAGIO_2,
-      mustNotInclude: ["100萬", "1000000", "1,000,000", "$1.00M", "交易"],
+      mustNotInclude: ["100萬", "1000000", "1,000,000", "$1.00M", "HK$100萬", "交易"],
       handoffSuggested: false,
     },
     live: true,
@@ -195,7 +195,7 @@ export const LIVE_AGENT_EVAL_CASES = [
     expect: {
       kind: "listings",
       cards: ["/property/EP11002"],
-      mustInclude: ["租 $38,000 / 月"],
+      mustInclude: ["租 HK$38,000／月"],
       handoffSuggested: false,
     },
     live: true,
@@ -221,7 +221,7 @@ export const LIVE_AGENT_EVAL_CASES = [
     expect: {
       kind: "listings",
       cards: LISTINGS_BELLAGIO_2,
-      mustInclude: ["售 $6.80M"],
+      mustInclude: ["售 HK$680萬"],
       handoffSuggested: false,
     },
     live: true,
