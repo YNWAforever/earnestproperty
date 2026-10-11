@@ -38,7 +38,7 @@ type Staff = { id: string; name: string | null; email: string | null; active?: b
 type Source = BatchRowDraft["input"]["placementSource"];
 type Routing = "property-agent" | "uniform" | "per-row" | "reception";
 const label = (offer: LinkOfferSelection) =>
-  `${offer.publicListingNo} · ${offer.dealType === "sale" ? "售" : "租"} · ${offer.title} · ${formatPrice(offer.price, { dealType: offer.dealType }) ?? "價格待核實"}`;
+  `${offer.publicListingNo} · ${offer.dealType === "sale" ? "售" : "租"} · ${offer.title} · ${formatPrice(offer.price, { dealType: offer.dealType, exact: true }) ?? "價格待核實"}`;
 
 export function WhatsappLinkWizard({
   seed,

@@ -208,6 +208,22 @@ describe("formatPrice", () => {
     expect(formatPrice(12_680_040, { dealType: "sale" })).toBe("HK$1,268萬");
   });
 
+  test("exact: true adds the full amount when 萬 rounding hides digits (admin confirm/edit)", () => {
+    expect(formatPrice(6_200_040, { dealType: "sale", exact: true })).toBe(
+      "HK$620萬（HK$6,200,040）",
+    );
+    expect(formatPrice(6_200_000, { dealType: "sale", exact: true })).toBe("HK$620萬");
+    expect(formatPrice(12_685_000, { dealType: "sale", exact: true })).toBe("HK$1,268.5萬");
+    expect(formatPrice(12_684_567, { dealType: "sale", exact: true })).toBe(
+      "HK$1,268.46萬（HK$12,684,567）",
+    );
+    expect(formatPrice(38_000, { dealType: "rent", exact: true })).toBe("HK$38,000／月");
+    expect(formatPrice(5_000, { dealType: "sale", exact: true })).toBe("HK$5,000");
+    expect(formatPrice(null, { dealType: "sale", exact: true })).toBeNull();
+    // Without exact the public rounding is unchanged.
+    expect(formatPrice(6_200_040, { dealType: "sale" })).toBe("HK$620萬");
+  });
+
   test("a sale price below 1萬 falls back to whole dollars with commas", () => {
     expect(formatPrice(5_000, { dealType: "sale" })).toBe("HK$5,000");
   });
@@ -275,6 +291,19 @@ describe("price formatting has a single source", () => {
         });
     }
     expect(offences).toEqual([]);
+  });
+
+  test("admin screens where staff confirm or edit a price use the exact option", () => {
+    for (const rel of [
+      "lib/admin/property-management-ui.ts", // admin listings, detail and publish confirm
+      "routes/admin.transactions.tsx",
+      "components/admin/whatsapp/WhatsappLinkWizard.tsx",
+    ]) {
+      const source = readFileSync(join(SRC, rel), "utf8");
+      const calls = source.match(/formatPrice\([^;]*?\}\)/gs) ?? [];
+      expect(calls.length).toBeGreaterThan(0);
+      for (const call of calls) expect(call).toContain("exact: true");
+    }
   });
 
   test("JSON-LD keeps numeric prices", () => {

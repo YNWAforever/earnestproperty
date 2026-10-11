@@ -21,17 +21,24 @@ export type PriceDealType = "sale" | "rent";
  * Display only: JSON-LD and anything machine-read keep the numeric value. A
  * missing, zero, negative or non-finite price is null, so each caller keeps its
  * own fallback copy ("—", "待核實", "價格待核實", ...).
+ *
+ * `exact: true` is for admin screens where staff confirm or edit a price: when
+ * the 萬 figure hides digits it adds the full amount, "HK$620萬（HK$6,200,040）",
+ * so a mistyped price is never silently shown as a round one. A 萬 figure that
+ * is already exact ("HK$620萬", "HK$1,268.5萬") and a rent are shown as is.
  */
 export function formatPrice(
   price: number | null | undefined,
-  { dealType }: { dealType: PriceDealType },
+  { dealType, exact = false }: { dealType: PriceDealType; exact?: boolean },
 ): string | null {
   if (!isFiniteNumber(price) || price <= 0) return null;
-  if (dealType === "rent") return `HK$${Math.round(price).toLocaleString(HK_NUMBER_LOCALE)}／月`;
-  if (price < 10_000) return `HK$${Math.round(price).toLocaleString(HK_NUMBER_LOCALE)}`;
+  const dollars = `HK$${Math.round(price).toLocaleString(HK_NUMBER_LOCALE)}`;
+  if (dealType === "rent") return `${dollars}／月`;
+  if (price < 10_000) return dollars;
   // Round in whole hundreds first so 12,684,500 is exactly 1268.45, not 1268.4499...
-  const man = Math.round(price / 100) / 100;
-  return `HK$${man.toLocaleString(HK_NUMBER_LOCALE, { maximumFractionDigits: 2 })}萬`;
+  const hundreds = Math.round(price / 100);
+  const man = `HK$${(hundreds / 100).toLocaleString(HK_NUMBER_LOCALE, { maximumFractionDigits: 2 })}萬`;
+  return exact && hundreds * 100 !== price ? `${man}（${dollars}）` : man;
 }
 
 export function formatArea(sqft: number | null | undefined): string | null {

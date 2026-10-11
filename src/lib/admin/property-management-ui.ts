@@ -78,7 +78,8 @@ export function offeringPrice(offer: ManagedOffering | null) {
   if (!offer) return "—";
   const amount = offer.dealType === "sale" ? offer.price : offer.rent;
   if (amount === null) return "未填價格";
-  return formatPrice(Number(amount), { dealType: offer.dealType }) ?? "未填價格";
+  // Staff confirm and edit this price: never let 萬 rounding hide digits.
+  return formatPrice(Number(amount), { dealType: offer.dealType, exact: true }) ?? "未填價格";
 }
 
 export function existingOfferingDeals(offerings: {

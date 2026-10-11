@@ -255,6 +255,7 @@ function AdminTransactions() {
                       <TableCell className="whitespace-nowrap text-right">
                         {formatPrice(Number(transaction.price), {
                           dealType: transaction.deal_type === "rent" ? "rent" : "sale",
+                          exact: true,
                         }) ?? "—"}
                       </TableCell>
                       <TableCell>{transaction.deal_date ?? "—"}</TableCell>

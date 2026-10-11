@@ -66,6 +66,10 @@ test("offer prices use the site price format and keep the 未填價格 fallback"
     "HK$38,000／月",
   );
   expect(offeringPrice({ ...base, dealType: "sale", price: null, rent: null })).toBe("未填價格");
+  // Staff confirm and edit prices here, so a rounded 萬 figure keeps the exact amount.
+  expect(offeringPrice({ ...base, dealType: "sale", price: 6_200_040, rent: null })).toBe(
+    "HK$620萬（HK$6,200,040）",
+  );
 });
 
 test("offer summaries show only real offers and retain non-public statuses", () => {
