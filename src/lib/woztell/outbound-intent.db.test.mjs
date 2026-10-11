@@ -32,6 +32,9 @@ test(
         staff,
         `fixture-${staff}@example.invalid`,
       ]);
+      // Since the no-link workflow (5954c446) an outbound reply needs a staff role that may read
+      // the conversation (wa_can_read_conversation); staff_roles rows cascade with staff_users.
+      await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [staff]);
       await query("INSERT INTO crm_contacts(id,source) VALUES($1,'test')", [contact]);
       await query(
         "INSERT INTO whatsapp_conversations(id,contact_id,woztell_member_id,last_inbound_at) VALUES($1,$2,$3,now())",
@@ -200,6 +203,9 @@ test(
         staff,
         `fixture-${staff}@example.invalid`,
       ]);
+      // Since the no-link workflow (5954c446) an outbound reply needs a staff role that may read
+      // the conversation (wa_can_read_conversation); staff_roles rows cascade with staff_users.
+      await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [staff]);
       await query("INSERT INTO crm_contacts(id,whatsapp_member_id,source) VALUES($1,$2,'test')", [
         contact,
         member,
