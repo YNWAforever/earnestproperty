@@ -1,3 +1,4 @@
+import "@tanstack/react-start/server-only";
 import type { StaffAccess } from "./auth.server";
 import { queryRows } from "./db.server";
 import {

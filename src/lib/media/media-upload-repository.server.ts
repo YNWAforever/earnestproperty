@@ -1,3 +1,4 @@
+import "@tanstack/react-start/server-only";
 import { queryRows } from "@/lib/neon/db.server";
 export const mediaUploadRepository = {
   async claim(input: {

@@ -1,3 +1,4 @@
+import "@tanstack/react-start/server-only";
 import { LEAD_ALERT_JOB_TYPE, LEAD_ALERT_RECONCILE_JOB_TYPE } from "../neon/lead-alert-enqueue.js";
 
 export type JobHandler<T = unknown> = {

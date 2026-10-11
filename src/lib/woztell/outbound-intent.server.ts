@@ -1,3 +1,4 @@
+import "@tanstack/react-start/server-only";
 import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 import { createHash, randomUUID } from "node:crypto";
 import {

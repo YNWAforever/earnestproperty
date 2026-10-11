@@ -1,3 +1,4 @@
+import "@tanstack/react-start/server-only";
 // Explicit .js extension: plain-JS module with a .d.ts sibling, so the
 // node --test suite imports it without a build step.
 import { MIGRATION_VERSIONS, pendingMigrations } from "./migration-versions.js";

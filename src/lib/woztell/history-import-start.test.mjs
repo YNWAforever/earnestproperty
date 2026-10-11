@@ -24,6 +24,7 @@ function startImport(row) {
     },
   };
   const mockRequire = (specifier) => {
+    if (specifier === "@tanstack/react-start/server-only") return {};
     if (Object.hasOwn(mocks, specifier)) return mocks[specifier];
     throw new Error("Unexpected dependency: " + specifier);
   };

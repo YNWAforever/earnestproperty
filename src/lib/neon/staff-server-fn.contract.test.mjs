@@ -219,3 +219,26 @@ test("no browser-callable legacy staff channel save remains", () => {
     /requireStaffAccess\(getRequest\(\), \["admin", "manager"\]\)[\s\S]*saveReviewedStaffChannel\(data, actor\)/,
   );
 });
+
+// FX-19d-1 H-18: a .server.ts without the marker can be imported from client code with no build
+// error. Every one must start with the TanStack server-only import (line 1).
+test("every *.server.ts starts with the server-only marker", () => {
+  const found = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.name.endsWith(".server.ts")) found.push(full);
+    }
+  };
+  walk(join(root, "src"));
+  assert.ok(found.length > 0, "expected to find .server.ts files");
+  const unmarked = found
+    .filter(
+      (file) =>
+        readFileSync(file, "utf8").split(/\r?\n/, 1)[0].trim() !==
+        'import "@tanstack/react-start/server-only";',
+    )
+    .map((file) => relative(root, file).split(sep).join("/"));
+  assert.deepEqual(unmarked, []);
+});
