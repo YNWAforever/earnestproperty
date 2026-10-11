@@ -74,7 +74,7 @@ export function WhatsappBatchResult({ progress }: { progress: LinkBatchProgress 
         Batch ID：{progress.batchId} · 已處理 {progress.nextChunk}/{progress.chunkIds.length} 批
       </p>
       {progress.uncertain ? (
-        <p role="alert" className="text-sm text-amber-800">
+        <p role="alert" className="text-sm text-warning-foreground">
           連線中斷，結果未確認。請先查回伺服器紀錄，再繼續同一批次；不要建立新批次。
         </p>
       ) : null}

@@ -92,7 +92,7 @@ export function JobCommandWarning({ command }: { command: JobCommand }) {
   return (
     <p
       role="note"
-      className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"
+      className="rounded-md border border-warning-border bg-warning p-3 text-sm text-warning-foreground"
     >
       {JOB_RETRY_RESEND_WARNING}
     </p>
@@ -454,7 +454,7 @@ export function AdminOperationsJobs({
         </p>
       ) : null}
       {readbackRequired ? (
-        <p role="status" className="text-sm text-amber-800">
+        <p role="status" className="text-sm text-warning-foreground">
           指令結果未明。重新載入原工作前，暫停提交其他工作指令。
         </p>
       ) : null}

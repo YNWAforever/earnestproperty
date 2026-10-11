@@ -284,7 +284,7 @@ export function AdminOperationsMigrations({
                       此遷移檔案在套用之後被修改過，資料庫與程式碼的紀錄不一致。請勿再次套用；
                       交由開發同事核對資料庫實際結構後決定處理方法。
                     </p>
-                    <dl className="grid gap-0.5 font-mono text-[11px] break-all">
+                    <dl className="grid gap-0.5 font-mono text-xs break-all">
                       <div>
                         <dt className="inline text-muted-foreground">目前檔案：</dt>{" "}
                         <dd className="inline">{migration.checksum}</dd>

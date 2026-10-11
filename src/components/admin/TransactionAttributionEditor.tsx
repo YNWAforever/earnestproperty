@@ -20,6 +20,7 @@ import {
   fromPerformance,
   type FormState,
 } from "./transaction-attribution-editor-state";
+import { nativeFieldClassName } from "@/components/ui/native-field";
 
 type Props = {
   transactionId: string;
@@ -145,7 +146,7 @@ export function TransactionAttributionEditor({
         {loading ? <p role="status">載入歸因資料中…</p> : null}
         {loadError ? <p role="alert">未能載入歸因資料，請重新載入後再儲存。</p> : null}
         {!sourceVerified ? (
-          <p className="text-sm text-amber-700">
+          <p className="text-sm text-warning-accent">
             內部核實前，請先在上方核實成交來源；公開發布可以保持關閉。
           </p>
         ) : null}
@@ -155,7 +156,7 @@ export function TransactionAttributionEditor({
           </label>
           <select
             id="attribution-status"
-            className="w-full rounded-md border bg-background px-3 py-2"
+            className={nativeFieldClassName}
             value={form.status}
             onChange={(event) => {
               const status = event.target.value as TransactionAttributionStatus;

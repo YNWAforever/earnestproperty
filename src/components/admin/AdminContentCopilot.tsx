@@ -659,7 +659,7 @@ function Review({
       {proposal.warnings?.length ? (
         <div
           role="status"
-          className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+          className="rounded-md border border-warning-strong/40 bg-warning-strong/10 p-3 text-sm"
         >
           <p className="font-medium">產生時有以下警告：</p>
           <ul className="mt-1 list-inside list-disc">
@@ -673,7 +673,7 @@ function Review({
       {stale ? (
         <div
           role="status"
-          className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm"
+          className="rounded-md border border-warning-strong/40 bg-warning-strong/10 p-3 text-sm"
         >
           <p className="font-medium">表單已改動，此建議已過時。</p>
           <p className="mt-1">套用會被拒絕。請按「重新產生」以目前的表單內容取得新建議。</p>

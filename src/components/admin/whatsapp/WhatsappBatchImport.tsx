@@ -8,6 +8,8 @@ import {
 } from "@/lib/whatsapp-enquiries/link-batch-import";
 import type { BatchRowDraft } from "@/lib/whatsapp-enquiries/link-batch-policy";
 import type { LinkOfferSelection } from "@/lib/admin/whatsapp-link-selection";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 
 const template = "public_listing_no,deal_type,source,placement_url_or_id,staff_reference";
 const messages: Record<string, string> = {
@@ -115,7 +117,7 @@ export function WhatsappBatchImport({
       <label className="block text-sm">
         資料格式
         <select
-          className="ml-2 rounded border p-2"
+          className={cn(nativeFieldClassName, "ml-2 w-auto")}
           value={format}
           onChange={(event) => {
             setFormat(event.target.value as "csv" | "tsv");

@@ -10,7 +10,7 @@ export function AdminNoPermission() {
     <div
       role="status"
       data-admin-no-permission
-      className="rounded-lg border border-amber-700/30 bg-amber-50 p-5 text-sm text-amber-950"
+      className="rounded-lg border border-warning-accent/30 bg-warning p-5 text-sm text-warning-foreground"
     >
       <div className="flex items-start gap-3">
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />

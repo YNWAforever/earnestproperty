@@ -155,7 +155,7 @@ function AdminHome() {
       <section aria-labelledby="overview-metrics-heading">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 id="overview-metrics-heading" className="text-base font-semibold text-slate-950">
+            <h2 id="overview-metrics-heading" className="text-base font-semibold text-foreground">
               營運概況
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -287,10 +287,10 @@ function AdminHome() {
               <ul className="space-y-2 text-sm">
                 {attention.slice(0, 5).map((member) => (
                   <li
-                    className="flex items-center justify-between gap-3 rounded-md bg-amber-50 px-3 py-2"
+                    className="flex items-center justify-between gap-3 rounded-md bg-warning px-3 py-2"
                     key={member.id}
                   >
-                    <span className="font-medium text-slate-900">
+                    <span className="font-medium text-foreground">
                       {member.name?.trim() || "未命名成員"}
                     </span>
                     <span className="text-xs text-muted-foreground">需要檢查邀請或帳戶狀態</span>
@@ -316,7 +316,7 @@ function AdminHome() {
               <ul className="space-y-2 text-sm">
                 {staffActivity.map((entry) => (
                   <li className="flex items-center justify-between gap-3" key={entry.id}>
-                    <span className="font-medium text-slate-900">
+                    <span className="font-medium text-foreground">
                       {staffActivityLabel(entry.action)}
                     </span>
                     <span className="text-xs text-muted-foreground">
@@ -346,11 +346,11 @@ const todayTaskLabels: Record<AdminTodayTask["kind"], string> = {
 
 function TodayTaskLink({ task }: { task: AdminTodayTask }) {
   const className =
-    "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-slate-50 px-3 py-2 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+    "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-muted px-3 py-2 transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
   const content = (
     <>
       <Badge variant="secondary">{todayTaskLabels[task.kind]}</Badge>
-      <span className="min-w-0 break-words font-medium text-slate-900">{task.title}</span>
+      <span className="min-w-0 break-words font-medium text-foreground">{task.title}</span>
       <span className="text-xs text-muted-foreground">
         自 {formatHkDateTime(task.waitingSince) ?? "—"}
       </span>
@@ -411,14 +411,14 @@ function OverviewMetricCard({
 
   return (
     <Link to={to} search={search} aria-label={tileName}>
-      <Card className="h-full border-slate-200 bg-card transition hover:border-primary/50 hover:shadow-sm focus-within:ring-2 focus-within:ring-ring">
+      <Card className="h-full border-border bg-card transition hover:border-primary/50 hover:shadow-sm focus-within:ring-2 focus-within:ring-ring">
         <CardContent className="flex items-start justify-between gap-3 p-4">
           <div>
             <p className="text-sm text-muted-foreground">{label}</p>
             {loading && value === undefined ? (
               <Skeleton className="mt-2 h-7 w-16" />
             ) : (
-              <p className="mt-1 text-2xl font-semibold text-slate-950">{shownValue}</p>
+              <p className="mt-1 text-2xl font-semibold text-foreground">{shownValue}</p>
             )}
             {error ? (
               <p className="mt-2 text-xs text-destructive" role="alert">
@@ -454,7 +454,7 @@ function OperationalCard({
   children: React.ReactNode;
 }) {
   return (
-    <Card aria-labelledby={id} className="border-slate-200">
+    <Card aria-labelledby={id} className="border-border">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base" id={id}>
           <Icon aria-hidden="true" className="h-4 w-4 text-primary" />

@@ -7,6 +7,8 @@ import {
   createStaffReference,
   disableStaffReference,
 } from "@/lib/neon/staff-reference-admin";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 export function StaffReferenceEditor({
   agents,
   selectedStaffId,
@@ -81,6 +83,7 @@ export function StaffReferenceEditor({
         <label>
           來源／帳戶
           <select
+            className={cn(nativeFieldClassName, "w-auto")}
             required
             value={form.namespace.split("/")[0] ?? ""}
             onChange={(e) =>
@@ -126,6 +129,7 @@ export function StaffReferenceEditor({
         <label className={selectedStaffId ? "hidden" : undefined}>
           同事
           <select
+            className={cn(nativeFieldClassName, "w-auto")}
             required
             value={form.staffId}
             onChange={(e) => setForm({ ...form, staffId: e.target.value })}

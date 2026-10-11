@@ -976,13 +976,13 @@ function PropertyCard({
             the underlying photo is. */}
         <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/75 to-transparent" />
         <div className="absolute left-3 top-3 flex gap-2">
-          <span className="rounded-full bg-foreground/90 px-2.5 py-1 text-[11px] font-semibold text-background">
+          <span className="rounded-full bg-foreground/90 px-2.5 py-1 text-xs font-semibold text-background">
             {propertyDealLabel(property)}
           </span>
           {/* Opaque: this used to be bg-card/90 over a fixed gradient, but now
               sits over an arbitrary photo, where the 90%-alpha fill could drop
               its contrast below AA on a dark cover. */}
-          <span className="rounded-full bg-card px-2.5 py-1 text-[11px] font-semibold text-primary">
+          <span className="rounded-full bg-card px-2.5 py-1 text-xs font-semibold text-primary">
             {tag}
           </span>
         </div>
@@ -997,7 +997,7 @@ function PropertyCard({
             {photoCount > 0 ? (
               <Badge
                 variant="outline"
-                className="gap-1 rounded-full border-transparent bg-foreground/80 px-2 py-1 text-[11px] font-semibold text-background backdrop-blur"
+                className="gap-1 rounded-full border-transparent bg-foreground/80 px-2 py-1 text-xs font-semibold text-background backdrop-blur"
               >
                 <Camera className="h-3 w-3" aria-hidden="true" />
                 {photoCount}
@@ -1006,7 +1006,7 @@ function PropertyCard({
             {hasVideo ? (
               <Badge
                 variant="outline"
-                className="gap-1 rounded-full border-transparent bg-coral px-2 py-1 text-[11px] font-semibold text-coral-foreground"
+                className="gap-1 rounded-full border-transparent bg-coral px-2 py-1 text-xs font-semibold text-coral-foreground"
               >
                 <Video className="h-3 w-3" aria-hidden="true" />
                 影片
@@ -1017,7 +1017,7 @@ function PropertyCard({
         <div className="absolute bottom-3 left-3 right-3 flex items-end justify-between gap-2 text-primary-foreground">
           <p className="text-xs">{property.estates?.name_zh ?? ""}</p>
           {photoCount > 1 || hasVideo ? (
-            <span className="text-[11px] font-medium">
+            <span className="text-xs font-medium">
               查看更多{photoCount > 1 ? "相片" : ""}
               {photoCount > 1 && hasVideo ? "、" : ""}
               {hasVideo ? "影片" : ""}

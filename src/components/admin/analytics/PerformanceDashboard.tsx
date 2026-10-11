@@ -11,6 +11,7 @@ import type {
   PerformanceMetric,
   PerformanceReport,
 } from "@/lib/analytics/sales-performance.types";
+import { nativeFieldClassName } from "@/components/ui/native-field";
 
 type Props = {
   filters: PerformanceFilters;
@@ -50,7 +51,9 @@ function MetricCard({
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-sm font-medium text-muted-foreground">{label}</h3>
         {metric.status === "provisional" ? (
-          <span className="rounded bg-amber-100 px-2 text-xs text-amber-900">暫定</span>
+          <span className="rounded bg-warning-subtle px-2 text-xs text-warning-foreground">
+            暫定
+          </span>
         ) : null}
       </div>
       <p className="mt-2 text-2xl font-semibold tabular-nums">{formatMetric(metric)}</p>
@@ -144,7 +147,7 @@ export function PerformanceDashboard({
           <Label htmlFor="performance-branch">分行</Label>
           <select
             id="performance-branch"
-            className="h-10 w-full rounded-md border bg-background px-3"
+            className={nativeFieldClassName}
             value={draft.branchId ?? ""}
             onChange={(e) =>
               setDraft((v) => ({ ...v, branchId: e.target.value || null, staffId: null }))
@@ -162,7 +165,7 @@ export function PerformanceDashboard({
           <Label htmlFor="performance-staff">同事</Label>
           <select
             id="performance-staff"
-            className="h-10 w-full rounded-md border bg-background px-3"
+            className={nativeFieldClassName}
             value={draft.staffId ?? ""}
             onChange={(e) => setDraft((v) => ({ ...v, staffId: e.target.value || null }))}
           >
@@ -178,7 +181,7 @@ export function PerformanceDashboard({
           <Label htmlFor="performance-source">查詢來源</Label>
           <select
             id="performance-source"
-            className="h-10 w-full rounded-md border bg-background px-3"
+            className={nativeFieldClassName}
             value={draft.source ?? ""}
             onChange={(e) =>
               setDraft((v) => ({
@@ -199,7 +202,7 @@ export function PerformanceDashboard({
           <Label htmlFor="performance-deal">租售</Label>
           <select
             id="performance-deal"
-            className="h-10 w-full rounded-md border bg-background px-3"
+            className={nativeFieldClassName}
             value={draft.dealType ?? ""}
             onChange={(e) =>
               setDraft((v) => ({
@@ -217,7 +220,7 @@ export function PerformanceDashboard({
           <Label htmlFor="performance-window">轉換觀察期</Label>
           <select
             id="performance-window"
-            className="h-10 w-full rounded-md border bg-background px-3"
+            className={nativeFieldClassName}
             value={draft.cohortWindowDays}
             onChange={(e) =>
               setDraft((v) => ({ ...v, cohortWindowDays: Number(e.target.value) as 30 | 90 }))

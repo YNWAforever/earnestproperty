@@ -770,7 +770,7 @@ function MobileFiltersSheet({
           <SlidersHorizontal className="h-4 w-4" />
           篩選
           {activeCount > 0 && (
-            <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
+            <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground">
               {activeCount}
             </span>
           )}
@@ -937,7 +937,7 @@ function SavedSearchesPanel({
             <Bookmark className="h-4 w-4" />
             已儲存搜尋
             {savedSearches.length > 0 && (
-              <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-[11px] font-semibold text-primary-foreground">
+              <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1 text-xs font-semibold text-primary-foreground">
                 {savedSearches.length}
               </span>
             )}
@@ -1264,7 +1264,7 @@ function ListingCard({
             fetchPriority={priority ? "high" : undefined}
             className="h-full w-full object-cover transition group-hover:scale-105"
           />
-          <span className="absolute left-2 top-2 rounded bg-background/90 px-2 py-0.5 text-[11px] font-medium">
+          <span className="absolute left-2 top-2 rounded bg-background/90 px-2 py-0.5 text-xs font-medium">
             {propertyDealLabel(p)}
           </span>
         </div>
@@ -1382,7 +1382,7 @@ function ListingCardRow({
               fetchPriority={priority ? "high" : undefined}
               className="h-full w-full object-cover transition group-hover:scale-105"
             />
-            <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1.5 py-0.5 text-[10px] font-medium">
+            <span className="absolute left-1.5 top-1.5 rounded bg-background/90 px-1.5 py-0.5 text-xs font-medium">
               {propertyDealLabel(p)}
             </span>
           </div>

@@ -162,6 +162,30 @@
   --color-whatsapp-hover: var(--whatsapp-hover);
 }
 
+/* FX-20 C9: named status colours, same values the admin already used. */
+:root {
+  --warning: #fffbeb; /* amber-50: notice background */
+  --warning-subtle: #fef3c7; /* amber-100: provisional chip */
+  --warning-strong: #f59e0b; /* amber-500: count badge, unread dot */
+  --warning-border: #fcd34d; /* amber-300 */
+  --warning-accent: #b45309; /* amber-700: tinted borders and fills (/10-/30), 5.02:1 text on card */
+  --warning-foreground: #451a03; /* amber-950: 14.4:1 on --warning, 6.97:1 on --warning-strong */
+  --success: #047857; /* emerald-700 (tints via /10, /20) */
+  --success-subtle: #ecfdf5; /* emerald-50: active-offer chip */
+  --success-foreground: #065f46; /* emerald-800 */
+}
+@theme inline {
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-warning-strong: var(--warning-strong);
+  --color-warning-border: var(--warning-border);
+  --color-warning-accent: var(--warning-accent);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-success-foreground: var(--success-foreground);
+}
+
 .dark {
   --surface: oklch(0.17 0.02 157);
   --text-primary: oklch(0.97 0.01 157);

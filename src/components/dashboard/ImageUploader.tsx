@@ -222,7 +222,7 @@ export function ImageUploader({
                 />
               </div>
               {i === 0 && (
-                <span className="absolute left-1.5 top-1.5 rounded bg-primary px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground">
+                <span className="absolute left-1.5 top-1.5 rounded bg-primary px-1.5 py-0.5 text-xs font-medium text-primary-foreground">
                   封面
                 </span>
               )}

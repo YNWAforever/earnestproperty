@@ -6,8 +6,10 @@ import type { BulkPropertyManagementInput } from "@/lib/neon/admin-property-bulk
 import type { ManagedPropertySummary } from "@/lib/neon/admin-properties.types";
 import { propertyStatusLabels, existingOfferingDeals } from "@/lib/admin/property-management-ui";
 import { runPropertyBulkChunks, type BulkClientResult } from "@/lib/admin/property-bulk-client";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 
-const control = "h-11 rounded-md border bg-background px-3 text-sm";
+const control = cn(nativeFieldClassName, "w-auto");
 type Scope = BulkPropertyManagementInput["scope"];
 export function AdminPropertyBulkActions({
   rows,
@@ -214,7 +216,7 @@ export function AdminPropertyBulkActions({
         只處理本頁勾選項目。沒有相應放盤不會自動新增，售價及租金不會被此操作修改。
       </p>
       {previews.some((p) => p.reason) && (
-        <details className="mt-2 text-sm text-amber-800">
+        <details className="mt-2 text-sm text-warning-foreground">
           <summary>{previews.filter((p) => p.reason).length} 個物業未符合條件，將不會提交</summary>
           {previews
             .filter((p) => p.reason)

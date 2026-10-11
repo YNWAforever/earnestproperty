@@ -34,6 +34,7 @@ import {
   existingOfferingDeals,
   propertyStatusLabels,
 } from "@/lib/admin/property-management-ui";
+import { nativeFieldClassName } from "@/components/ui/native-field";
 
 type Tab = "shared" | "sale" | "rent";
 const labels: Record<string, string> = {
@@ -62,7 +63,6 @@ function conflictLabel(field: string) {
     ? `來源差異（${deal === "sale" ? "出售" : "出租"}）：${labels[key] ?? key}`
     : (labels[field] ?? field);
 }
-const control = "h-11 w-full rounded-md border bg-background px-3 text-sm";
 export function AdminPropertyWorkspace({
   initial,
   sourceId,
@@ -318,13 +318,16 @@ export function AdminPropertyWorkspace({
         ))}
       </div>
       {!detail.managementAvailable ? (
-        <p role="status" className="rounded-lg border bg-amber-50 p-4 text-sm text-amber-900">
+        <p
+          role="status"
+          className="rounded-lg border bg-warning p-4 text-sm text-warning-foreground"
+        >
           物業資料可供查閱。管理功能正在準備，暫時未能儲存修改。
         </p>
       ) : null}
       {propertyContentReviewReasons(detail.shared).length ? (
         <aside
-          className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"
+          className="rounded-lg border border-warning-border bg-warning p-4 text-sm"
           aria-label="內容待核實"
         >
           <p className="font-medium">內容待核實</p>
@@ -339,7 +342,7 @@ export function AdminPropertyWorkspace({
         </aside>
       ) : null}
       {detail.conflicts.length ? (
-        <details className="rounded-lg border border-amber-300 p-4">
+        <details className="rounded-lg border border-warning-border p-4">
           <summary className="cursor-pointer font-medium">
             {detail.conflicts.length} 項資料有差異，請核實
           </summary>
@@ -481,7 +484,7 @@ export function AdminPropertyWorkspace({
                   <span>屋苑</span>
                   <select
                     {...fieldProps("estate_id")}
-                    className={control}
+                    className={nativeFieldClassName}
                     value={shared.estate_id ?? ""}
                     onChange={(e) =>
                       setShared((s) => ({ ...s, estate_id: e.target.value || null }))
@@ -499,7 +502,7 @@ export function AdminPropertyWorkspace({
                   <span>分區</span>
                   <select
                     {...fieldProps("district_slug")}
-                    className={control}
+                    className={nativeFieldClassName}
                     value={shared.district_slug}
                     onChange={(e) => setShared((s) => ({ ...s, district_slug: e.target.value }))}
                   >
@@ -585,7 +588,7 @@ export function AdminPropertyWorkspace({
                   <span>{tab === "sale" ? "出售" : "出租"}狀態</span>
                   <select
                     {...fieldProps("status")}
-                    className={control}
+                    className={nativeFieldClassName}
                     value={offer.status}
                     onChange={(e) => setOffer((s) => ({ ...s, status: e.target.value }))}
                   >
@@ -606,7 +609,7 @@ export function AdminPropertyWorkspace({
                   <span>負責代理</span>
                   <select
                     {...fieldProps("agentId")}
-                    className={control}
+                    className={nativeFieldClassName}
                     value={offer.agentId}
                     onChange={(e) => setOffer((s) => ({ ...s, agentId: e.target.value }))}
                   >

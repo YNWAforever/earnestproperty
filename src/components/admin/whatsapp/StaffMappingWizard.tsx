@@ -30,6 +30,8 @@ import {
   switchWizardStaff,
   type ConnectionDraft,
 } from "./staff-mapping-wizard-state";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 
 type Agent = {
   id: string;
@@ -362,7 +364,7 @@ export function StaffMappingWizard({
         <label className="block max-w-md">
           同事姓名／工作電郵／分行
           <select
-            className="mt-1 block w-full rounded border p-2"
+            className={cn(nativeFieldClassName, "mt-1 block")}
             value={draft.staffId}
             onChange={(event) => changeStaff(event.target.value)}
           >
@@ -393,7 +395,7 @@ export function StaffMappingWizard({
           <label className="block max-w-xl">
             Folder 名稱
             <select
-              className="mt-1 block w-full rounded border p-2"
+              className={cn(nativeFieldClassName, "mt-1 block")}
               value={draft.folderKey}
               disabled={busy || folderState.kind !== "ready"}
               onChange={(event) => {
