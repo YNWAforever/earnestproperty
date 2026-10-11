@@ -17,6 +17,7 @@ import type {
   AdminAudienceInput,
   AdminCampaignInput,
   AdminCmsVideoInput,
+  AdminCrmSegmentSaveInput,
   AdminFaqInput,
   AdminLeadActivityInput,
   AdminLeadUpdateInput,
@@ -86,7 +87,7 @@ export const adminCrmSegmentSaveSchema = z
     structured_filters: z.custom<CrmSegmentFilters>(plainObject, "Expected a filter object"),
     status: z.enum(["draft", "active", "archived"]),
   })
-  .strict();
+  .strict() satisfies z.ZodType<AdminCrmSegmentSaveInput>;
 
 export const adminCrmSegmentIdSchema = z.object({ segmentId: text }).strict();
 
@@ -277,3 +278,18 @@ export const adminCampaignSchema = z
   .strict() satisfies z.ZodType<AdminCampaignInput>;
 
 export const campaignIdSchema = z.object({ campaign_id: text }).strict();
+
+// expectedCount is the number the user confirmed; the server refuses with
+// RETRY_COUNT_CHANGED if it no longer matches what would move.
+export const requeueFailedCampaignRecipientsSchema = z
+  .object({ campaignId: text, expectedCount: z.number().int().nonnegative() })
+  .strict();
+
+export const finishCampaignWithoutSendingSchema = z.object({ campaignId: text }).strict();
+
+// ---- WhatsApp -------------------------------------------------------------
+
+// Retained for stale clients only; the server writes nothing.
+export const clearContactWhatsappOptOutSchema = z
+  .object({ contactId: z.string().trim().uuid(), reason: z.string().trim().min(1).max(500) })
+  .strict();

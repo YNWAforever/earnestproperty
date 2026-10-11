@@ -405,16 +405,29 @@ test("activity completion verifies its lead and audits the stored lead", async (
   }).outputText;
 
   const queries = [];
+  const scopeChecks = [];
   let matched = true;
-  const complete = new Function("queryRows", executable + "\nreturn completeAdminLeadActivity;")(
+  let inScope = true;
+  const complete = new Function(
+    "queryRows",
+    "assertLeadInScope",
+    executable + "\nreturn completeAdminLeadActivity;",
+  )(
     async (sql, params) => {
       queries.push({ sql, params });
       return matched ? [{ id: "activity-1", lead_id: "lead-actual" }] : [];
+    },
+    async (leadId, actor) => {
+      scopeChecks.push({ leadId, actor, queriesSoFar: queries.length });
+      if (!inScope) throw new Response("Forbidden", { status: 403 });
     },
   );
   const input = { activity_id: "activity-1", lead_id: "lead-actual" };
   const actor = { staffId: "manager-1" };
   assert.deepEqual(await complete(input, actor), { ok: true });
+  // Defence in depth: the lead's scope is checked before anything is written,
+  // exactly as createAdminLeadActivity does.
+  assert.deepEqual(scopeChecks, [{ leadId: "lead-actual", actor, queriesSoFar: 0 }]);
   assert.equal(queries.length, 1, "the completion and its audit row are one statement");
   assert.deepEqual(queries[0].params, ["activity-1", "lead-actual", "manager-1"]);
   assert.match(
@@ -433,6 +446,15 @@ test("activity completion verifies its lead and audits the stored lead", async (
     error: "Not found or already complete",
   });
   assert.equal(queries.length, 2, "a rejected completion sends no second statement");
+
+  // An out-of-scope lead is refused before the completion statement runs.
+  inScope = false;
+  await assert.rejects(complete(input, { staffId: "agent-b" }), (error) => {
+    assert.ok(error instanceof Response);
+    assert.equal(error.status, 403);
+    return true;
+  });
+  assert.equal(queries.length, 2, "an out-of-scope completion writes nothing");
 });
 
 test("FAQ reorder rejects invalid batches and skips empty database work", async () => {
@@ -647,20 +669,11 @@ test("audited creates in admin-data.server.ts insert their audit row in the same
   const stillOnWriteAudit = new Set([
     "updateStaffRoles",
     "setStaffActive",
-    "saveAdminProperty",
-    "updateAdminPropertyStatus",
-    "deleteAdminProperty",
-    "saveAdminTransaction",
     "saveAdminAgentProfile",
     "rebuildAdminAiKnowledge",
     "saveAdminCrmSegment",
     "materializeAdminCrmSegment",
     "createAdminAudienceFromSegment",
-    "saveAdminCmsVideo",
-    "saveAdminEstate",
-    "saveAdminArticle",
-    "saveAdminFaq",
-    "deleteAdminFaq",
     "reorderAdminFaqs",
     "updateAdminMediaAsset",
     "analyzeAdminLeadAiProfile",
@@ -691,6 +704,17 @@ test("audited creates in admin-data.server.ts insert their audit row in the same
         `${name} calls writeAudit after its write; insert the audit row in the same statement`,
       );
     }
+  }
+  // The list cannot go stale: every name on it is a function here that still
+  // calls writeAudit. A function moved to a same-statement audit leaves the list.
+  for (const name of stillOnWriteAudit) {
+    const body = bodies.get(name);
+    assert.ok(body, `${name} is listed but is not a function in admin-data.server.ts`);
+    assert.match(
+      body,
+      /\bwriteAudit\(/,
+      `${name} no longer calls writeAudit; remove it from stillOnWriteAudit`,
+    );
   }
   for (const name of sameStatement) {
     const body = bodies.get(name);

@@ -32,21 +32,23 @@ registerHooks({
 
 const image =
   "pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0";
-function docker(...args) {
+function dockerCli(...args) {
   const result = spawnSync("docker", args, { encoding: "utf8", timeout: 30000 });
   if (result.error || result.status !== 0)
     throw new Error("Owned Docker test: " + (result.error?.message ?? result.stderr));
   return result.stdout.trim();
 }
 
-// No connection URL is accepted. Every writable target is a new container with
-// verified identity and a dynamically assigned loopback-only port.
-export async function withOwnedPostgres(run) {
-  const name = "earnest-remediation-qa-" + randomUUID();
-  let id;
-  let pool;
+/**
+ * `docker run` for the named container. If the run fails or times out, the
+ * container may already exist (created but never started, or started after the
+ * CLI gave up), so it is removed by its exact name; nothing else is touched.
+ * The run error is the one thrown; a failed removal rides along as
+ * `error.cleanupError`.
+ */
+function startContainer(docker, name) {
   try {
-    id = docker(
+    return docker(
       "run",
       "--rm",
       "--pull",
@@ -60,6 +62,45 @@ export async function withOwnedPostgres(run) {
       "127.0.0.1::5432",
       image,
     );
+  } catch (error) {
+    try {
+      docker("rm", "-f", name);
+    } catch (cleanupError) {
+      if (error && typeof error === "object") error.cleanupError = cleanupError;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Roll back after `error` without masking it. If ROLLBACK itself fails, the
+ * original error is still the one thrown; the rollback failure rides along as
+ * `error.rollbackError`. Returns the argument for `client.release()`, so a
+ * connection whose ROLLBACK failed is discarded instead of going back to the pool.
+ */
+async function rollbackKeeping(client, error) {
+  try {
+    await client.query("ROLLBACK");
+    return undefined;
+  } catch (rollbackError) {
+    if (error && typeof error === "object") error.rollbackError = rollbackError;
+    return rollbackError;
+  }
+}
+
+// No connection URL is accepted. Every writable target is a new container with
+// verified identity and a dynamically assigned loopback-only port.
+// `deps` lets the harness's own unit tests (owned-neon-sql.test.mjs) stand in
+// for the docker CLI and the pool; every real suite calls it with `run` only.
+export async function withOwnedPostgres(run, deps = {}) {
+  const docker = deps.docker ?? dockerCli;
+  const createPool = deps.createPool ?? ((config) => new pg.Pool(config));
+  const migrationVersions = deps.migrationVersions ?? MIGRATION_VERSIONS;
+  const name = "earnest-remediation-qa-" + randomUUID();
+  let id;
+  let pool;
+  try {
+    id = startContainer(docker, name);
     assert.match(id, /^[a-f0-9]{64}$/);
     const metadata = JSON.parse(docker("inspect", id))[0];
     assert.equal(metadata.Name, "/" + name);
@@ -67,7 +108,7 @@ export async function withOwnedPostgres(run) {
     const bindings = metadata.NetworkSettings.Ports["5432/tcp"];
     assert.equal(bindings.length, 1);
     assert.equal(bindings[0].HostIp, "127.0.0.1");
-    pool = new pg.Pool({
+    pool = createPool({
       host: "127.0.0.1",
       port: Number(bindings[0].HostPort),
       user: "postgres",
@@ -90,25 +131,27 @@ export async function withOwnedPostgres(run) {
     await pool.query(
       "CREATE TABLE app_migrations(version text PRIMARY KEY, applied_at timestamptz DEFAULT now())",
     );
-    for (const version of MIGRATION_VERSIONS) {
+    for (const version of migrationVersions) {
       const client = await pool.connect();
       const sql = readFileSync(new URL("neon/migrations/" + version, repoRoot), "utf8");
       const transactional = !/ALTER\s+TYPE\s+\S+\s+ADD\s+VALUE/i.test(sql);
+      let releaseError;
       try {
         if (transactional) await client.query("BEGIN");
         await client.query(sql);
         await client.query("INSERT INTO app_migrations(version) VALUES($1)", [version]);
         if (transactional) await client.query("COMMIT");
       } catch (error) {
-        if (transactional) await client.query("ROLLBACK");
+        if (transactional) releaseError = await rollbackKeeping(client, error);
         throw new Error("Migration " + version + ": " + error.message, { cause: error });
       } finally {
-        client.release();
+        client.release(releaseError);
       }
     }
     const query = async (sql, params = []) => (await pool.query(sql, params)).rows;
     const transaction = async (statements, options = {}) => {
       const client = await pool.connect();
+      let releaseError;
       try {
         await client.query("BEGIN");
         if (options.isolationLevel === "Serializable")
@@ -119,10 +162,10 @@ export async function withOwnedPostgres(run) {
         await client.query("COMMIT");
         return rows;
       } catch (error) {
-        await client.query("ROLLBACK");
+        releaseError = await rollbackKeeping(client, error);
         throw error;
       } finally {
-        client.release();
+        client.release(releaseError);
       }
     };
     await run({
@@ -228,6 +271,7 @@ export function ownedNeonSql(pool) {
       (options.readOnly ? " READ ONLY" : "") +
       (options.deferrable ? " DEFERRABLE" : "");
     const client = await pool.connect();
+    let releaseError;
     try {
       await client.query(begin);
       const results = [];
@@ -238,10 +282,10 @@ export function ownedNeonSql(pool) {
       await client.query("COMMIT");
       return results;
     } catch (error) {
-      await client.query("ROLLBACK");
+      releaseError = await rollbackKeeping(client, error);
       throw error;
     } finally {
-      client.release();
+      client.release(releaseError);
     }
   };
   return { query, transaction };

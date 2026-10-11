@@ -689,6 +689,16 @@ export type AdminCrmSegmentPreview = {
   }>;
 };
 
+/** The input of saveAdminCrmSegment; adminCrmSegmentSaveSchema satisfies it. */
+export type AdminCrmSegmentSaveInput = {
+  id?: string;
+  name: string;
+  description: string | null;
+  natural_language_prompt: string;
+  structured_filters: AdminCrmSegmentPreview["filters"];
+  status: "draft" | "active" | "archived";
+};
+
 export type AdminCrmSegmentRow = CrmSegment & {
   members: number;
   eligible_members: number;
