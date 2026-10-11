@@ -5,6 +5,7 @@ import {
   onDbTarget,
   ownedNeonSql,
   targetClientPorts,
+  withOwnedPostgres,
 } from "./owned-postgres-test.mjs";
 
 function fakePool({ failOn } = {}) {
@@ -151,4 +152,142 @@ test("targetClientPorts binds owned clients to the loopback pool", async () => {
   assert.equal(ports.connectionString, "postgresql://postgres@127.0.0.1:54321/postgres");
   assert.throws(() => ports.createClient({ connectionString: "postgres://other.invalid/x" }));
   assert.deepEqual(ports.createClient({ connectionString: ports.connectionString }).neonConfig, {});
+});
+
+test("adapter keeps the original error when ROLLBACK also fails", async () => {
+  const pool = fakePool({ failOn: "FAIL" });
+  const sql = ownedNeonSql(pool);
+  const client = await pool.connect();
+  const original = client.query;
+  client.query = async (text, params) => {
+    if (text === "ROLLBACK") {
+      pool.log.push([text]);
+      throw new Error("rollback lost the connection");
+    }
+    return original(text, params);
+  };
+  await assert.rejects(
+    sql.transaction((t) => [t.query("FAIL")]),
+    (error) => {
+      assert.equal(error.message, "boom", "the statement's error, not the rollback's");
+      assert.equal(error.rollbackError?.message, "rollback lost the connection");
+      return true;
+    },
+  );
+  assert.equal(pool.log.at(-1)[0], "ROLLBACK");
+  assert.equal(pool.released(), 1);
+});
+
+/**
+ * A docker CLI stand-in for withOwnedPostgres. `run` answers like `docker run --detach`
+ * unless `runFails` says otherwise; inspect reflects the name and image it was started with.
+ */
+function fakeDocker({ runFails, rmFails } = {}) {
+  const calls = [];
+  let started;
+  const docker = (...args) => {
+    calls.push(args);
+    const [command] = args;
+    if (command === "run") {
+      const name = args[args.indexOf("--name") + 1];
+      if (runFails) throw new Error("Owned Docker test: " + runFails);
+      started = { id: "a".repeat(64), name, image: args.at(-1) };
+      return started.id;
+    }
+    if (command === "inspect")
+      return JSON.stringify([
+        {
+          Name: "/" + started.name,
+          Config: { Image: started.image },
+          NetworkSettings: { Ports: { "5432/tcp": [{ HostIp: "127.0.0.1", HostPort: "54329" }] } },
+        },
+      ]);
+    if (command === "rm" && rmFails) throw new Error("Owned Docker test: " + rmFails);
+    return "";
+  };
+  return { docker, calls };
+}
+
+test("a docker run that fails or times out removes the container it may have created", async () => {
+  const { docker, calls } = fakeDocker({ runFails: "spawnSync docker ETIMEDOUT" });
+  let ran = false;
+  await assert.rejects(
+    withOwnedPostgres(
+      async () => {
+        ran = true;
+      },
+      { docker },
+    ),
+    /ETIMEDOUT/,
+    "the run error is what the caller sees",
+  );
+  assert.equal(ran, false);
+  const run = calls.find(([command]) => command === "run");
+  const name = run[run.indexOf("--name") + 1];
+  assert.match(name, /^earnest-remediation-qa-[0-9a-f-]{36}$/);
+  // Only this harness's container, by the exact name it was given; never a prune.
+  assert.deepEqual(calls.slice(1), [["rm", "-f", name]]);
+  assert.ok(!calls.some(([command]) => command === "prune" || command === "system"));
+});
+
+test("a failed cleanup after a failed docker run still surfaces the run error", async () => {
+  const { docker, calls } = fakeDocker({
+    runFails: "port is already allocated",
+    rmFails: "No such container",
+  });
+  await assert.rejects(
+    withOwnedPostgres(async () => {}, { docker }),
+    (error) => {
+      assert.match(error.message, /port is already allocated/);
+      assert.match(error.cleanupError?.message ?? "", /No such container/);
+      return true;
+    },
+  );
+  assert.deepEqual(
+    calls.map(([command]) => command),
+    ["run", "rm"],
+  );
+});
+
+test("the owned transaction helper keeps the original error when ROLLBACK also fails", async () => {
+  const log = [];
+  const releases = [];
+  const client = {
+    async query(text) {
+      log.push(text);
+      if (text.startsWith("INSERT bad")) throw new Error("duplicate key");
+      if (text === "ROLLBACK") throw new Error("connection terminated");
+      return { rows: [] };
+    },
+    release(error) {
+      releases.push(error);
+    },
+  };
+  const pool = {
+    async query() {
+      return { rows: [{ "?column?": 1 }] };
+    },
+    async connect() {
+      return client;
+    },
+    async end() {},
+  };
+  const { docker, calls } = fakeDocker();
+  let caught;
+  await withOwnedPostgres(
+    async ({ transaction }) => {
+      caught = await transaction([{ statement: "INSERT bad" }]).catch((error) => error);
+    },
+    { docker, createPool: () => pool, migrationVersions: [] },
+  );
+  assert.equal(caught?.message, "duplicate key", "the statement's error, not the rollback's");
+  assert.equal(caught.rollbackError?.message, "connection terminated");
+  assert.deepEqual(log, ["BEGIN", "INSERT bad", "ROLLBACK"]);
+  // A connection whose ROLLBACK failed is discarded, not returned to the pool.
+  assert.equal(releases.length, 1);
+  assert.equal(releases[0]?.message, "connection terminated");
+  assert.deepEqual(
+    calls.map(([command]) => command),
+    ["run", "inspect", "inspect", "stop"],
+  );
 });
