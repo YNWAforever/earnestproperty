@@ -131,6 +131,7 @@ jobs:
       - run: npm run test:youtube-sync
       - run: npm run test:migration
       - run: npm run test:mls:cloudflare
+      - run: npm run test:owned-harness
 
       # Suites added after the original matrix. src/test-wiring.test.mjs now
       # fails when a deterministic test:* script is absent from this workflow.
@@ -143,7 +144,7 @@ jobs:
       - run: npm run test:analytics
   no-link-local-postgres:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -177,6 +178,9 @@ jobs:
       - run: npm run test:operations:owned:db
       - run: npm run test:whatsapp-access:db
       - run: npm run test:lead-alert:owned:db
+      - run: npm run test:crm:db
+      - run: npm run test:woztell:db
+      - run: npm run test:property-sync:db
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:

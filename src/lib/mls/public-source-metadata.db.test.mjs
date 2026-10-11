@@ -1,17 +1,18 @@
-import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
-import { Client } from "@neondatabase/serverless";
 import { readPublicSourceMetadata } from "./public-source-metadata.mjs";
-const url = process.env.ASTRA_TEST_DATABASE_URL;
+import { onDbTarget, targetClientPorts } from "../../../scripts/acceptance/owned-postgres-test.mjs";
+
+// Owned Docker Postgres by default; ASTRA_TEST_DATABASE_URL (behind the disposable guard) keeps
+// the on-demand Neon run of property-sync-acceptance.yml. In CI a missing database fails.
+const neonRun = { urlVar: "ASTRA_TEST_DATABASE_URL" };
 test(
   "public group metadata requires current contact provenance on real SQL",
-  { skip: !url },
-  async () => {
-    await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
+  onDbTarget(async (target) => {
+    const { connectionString: url, createClient: newClient } = await targetClientPorts(target);
     assert.notEqual(url, process.env.DATABASE_URL_UNPOOLED);
-    const client = new Client({ connectionString: url });
+    const client = newClient({ connectionString: url });
     client.neonConfig.webSocketConstructor = globalThis.WebSocket;
     const schema = "source_meta_" + randomUUID().replaceAll("-", "");
     await client.connect();
@@ -52,5 +53,5 @@ test(
       await client.query(`DROP SCHEMA ${schema} CASCADE`);
       await client.end();
     }
-  },
+  }, neonRun),
 );

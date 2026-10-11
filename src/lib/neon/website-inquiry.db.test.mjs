@@ -1,19 +1,18 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { neon } from "@neondatabase/serverless";
+import { dbTargetOrOwned } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import { persistWebsiteInquiry } from "./website-inquiry.js";
 
-const enabled = Boolean(
-  process.env.TEST_DATABASE_URL && process.env.CRM_TEST_DATABASE_CONFIRMED === "true",
-);
-test(
-  "concurrent public retry creates one linked contact, lead and inquiry",
-  { skip: !enabled },
-  async () => {
-    assert.notEqual(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL);
-    assert.notEqual(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL_UNPOOLED);
-    const sql = neon(process.env.TEST_DATABASE_URL);
+// Owned Docker Postgres by default; TEST_DATABASE_URL (behind the disposable guard and
+// CRM_TEST_DATABASE_CONFIRMED) for an explicit Neon run. In CI a missing database fails.
+test("concurrent public retry creates one linked contact, lead and inquiry", async () => {
+  await dbTargetOrOwned(async ({ sql, owned }) => {
+    if (!owned) {
+      assert.equal(process.env.CRM_TEST_DATABASE_CONFIRMED, "true");
+      assert.notEqual(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL);
+      assert.notEqual(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL_UNPOOLED);
+    }
     const schema = "astra_intake_" + randomUUID().replaceAll("-", "");
     const tables =
       /\b(website_inquiry_submissions|properties|staff_users|crm_contacts|crm_leads|inquiries)\b/g;
@@ -59,5 +58,5 @@ test(
     } finally {
       await sql.query('DROP SCHEMA "' + schema + '" CASCADE');
     }
-  },
-);
+  });
+});
