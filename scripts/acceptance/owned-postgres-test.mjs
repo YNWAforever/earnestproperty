@@ -260,10 +260,12 @@ function dockerServerAvailable() {
  * database (TEST_DATABASE_URL, behind the disposable-target guard) or a fresh owned container.
  * In CI a missing database is a failure, never a skipped pass. Outside CI with no Docker the
  * owned harness fails with its usual "Owned Docker test: ..." error, as it always has.
+ * `deps.urlVar` names the env var holding the disposable URL (default TEST_DATABASE_URL), so a
+ * suite whose on-demand Neon run uses ASTRA_TEST_DATABASE_URL keeps that contract.
  */
 export async function dbTargetOrOwned(run, deps = {}) {
   const env = deps.env ?? process.env;
-  const url = env.TEST_DATABASE_URL;
+  const url = env[deps.urlVar ?? "TEST_DATABASE_URL"];
   if (url) {
     const { assertDisposableNeonTestTarget } = await import(
       new URL("src/lib/neon/disposable-test-target.mjs", repoRoot).href
@@ -278,3 +280,16 @@ export async function dbTargetOrOwned(run, deps = {}) {
     run({ ...owned, sql: ownedNeonSql(owned.pool), owned: true }),
   );
 }
+
+/**
+ * MLS-style client ports for a dbTargetOrOwned target: the owned pool's ports, or real Neon
+ * Clients on the guarded disposable URL. Callers set `neonConfig.webSocketConstructor` as before.
+ */
+export async function targetClientPorts(target) {
+  if (target.owned) return ownedMlsPorts(target.pool);
+  const { Client } = await import("@neondatabase/serverless");
+  return { connectionString: target.url, createClient: (config) => new Client(config) };
+}
+
+/** A node:test body `(target, t) => ...` run on dbTargetOrOwned(¡K, deps). */
+export const onDbTarget = (body, deps) => (t) => dbTargetOrOwned((target) => body(target, t), deps);

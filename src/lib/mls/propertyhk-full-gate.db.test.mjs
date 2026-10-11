@@ -2,23 +2,24 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { Client } from "@neondatabase/serverless";
-import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 import { batch, row } from "./ingestion-test-fixtures.mjs";
 import { ingestSnapshot } from "./ingestion-service.mjs";
+import { onDbTarget, targetClientPorts } from "../../../scripts/acceptance/owned-postgres-test.mjs";
+
+// Owned Docker Postgres by default; ASTRA_TEST_DATABASE_URL (behind the disposable guard) keeps
+// the on-demand Neon run of property-sync-acceptance.yml. In CI a missing database fails.
+const neonRun = { urlVar: "ASTRA_TEST_DATABASE_URL" };
 
 test(
   "Property.hk branch collapse cannot bypass full gate on real SQL",
-  { skip: !process.env.ASTRA_TEST_DATABASE_URL },
-  async () => {
-    const connectionString = process.env.ASTRA_TEST_DATABASE_URL;
-    await assertDisposableNeonTestTarget(connectionString);
+  onDbTarget(async (target) => {
+    const { connectionString, createClient: newClient } = await targetClientPorts(target);
     const schema = "branch_gate_" + randomUUID().replaceAll("-", "");
-    const client = new Client({ connectionString });
+    const client = newClient({ connectionString });
     await client.connect();
     const q = async (s, p = []) => (await client.query(s, p)).rows;
     const createClient = (config) => {
-      const c = new Client(config);
+      const c = newClient(config);
       const connect = c.connect.bind(c);
       c.connect = async () => {
         await connect();
@@ -99,5 +100,5 @@ test(
       await q(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
       await client.end();
     }
-  },
+  }, neonRun),
 );

@@ -1,22 +1,23 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { neon } from "@neondatabase/serverless";
+import { onDbTarget } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import { enqueueOutboundIntent, finishOutboundIntent } from "./outbound-intent.server.ts";
 import { ingestWoztellEvent } from "./woztell-ingest.server.ts";
 import { normalizeWoztellEvent } from "./woztell.server.ts";
-const url = process.env.TEST_DATABASE_URL;
-// Owner prepares the reviewed migrations separately. This suite never migrates or reads DATABASE_URL.
+// Owned Docker Postgres (all reviewed migrations applied) by default; TEST_DATABASE_URL, behind
+// the disposable guard and WOZTELL_TEST_DATABASE_CONFIRMED, for an explicit Neon run. The suite
+// never reads DATABASE_URL, and in CI a missing database fails instead of skipping.
 test(
   "disposable database: concurrent intent creation, payload conflicts, early callback reconciliation",
-  { skip: !url },
-  async () => {
-    assert.equal(
-      process.env.WOZTELL_TEST_DATABASE_CONFIRMED,
-      "true",
-      "Explicit disposable target confirmation is required",
-    );
-    const sql = neon(url);
+  onDbTarget(async (target) => {
+    if (!target.owned)
+      assert.equal(
+        process.env.WOZTELL_TEST_DATABASE_CONFIRMED,
+        "true",
+        "Explicit disposable target confirmation is required",
+      );
+    const sql = target.sql;
     const query = (statement, params = []) => sql.query(statement, params);
     const tx = (statements) =>
       sql.transaction((t) =>
@@ -112,15 +113,14 @@ test(
       await query("DELETE FROM crm_contacts WHERE id=$1", [contact]);
       await query("DELETE FROM staff_users WHERE id=$1", [staff]);
     }
-  },
+  }),
 );
 
 test(
   "disposable database: simultaneous webhook and history preserve one identity and monotonic recency",
-  { skip: !url },
-  async () => {
-    assert.equal(process.env.WOZTELL_TEST_DATABASE_CONFIRMED, "true");
-    const sql = neon(url),
+  onDbTarget(async (target) => {
+    if (!target.owned) assert.equal(process.env.WOZTELL_TEST_DATABASE_CONFIRMED, "true");
+    const sql = target.sql,
       member = "fixture-" + randomUUID();
     const tx = (statements) =>
       sql.transaction((t) =>
@@ -169,17 +169,16 @@ test(
       await sql.query("DELETE FROM whatsapp_conversations WHERE woztell_member_id=$1", [member]);
       await sql.query("DELETE FROM crm_contacts WHERE whatsapp_member_id=$1", [member]);
     }
-  },
+  }),
 );
 
 test(
   "disposable database: acceptance write failure then later evidence resolves unknown monotonically",
-  { skip: !url },
-  async () => {
-    assert.equal(process.env.WOZTELL_TEST_DATABASE_CONFIRMED, "true");
+  onDbTarget(async (target) => {
+    if (!target.owned) assert.equal(process.env.WOZTELL_TEST_DATABASE_CONFIRMED, "true");
     const { deliverOutboundIntent } = await import("./outbound-intent.server.ts");
     const { chatNodeToEvent } = await import("./woztell-history.server.ts");
-    const sql = neon(url),
+    const sql = target.sql,
       query = (statement, params = []) => sql.query(statement, params);
     const tx = (statements) =>
       sql.transaction((t) =>
@@ -301,14 +300,13 @@ test(
       ]);
       await query("DELETE FROM staff_users WHERE id=$1", [staff]);
     }
-  },
+  }),
 );
 test(
   "disposable receipts reconcile out of order without transcript bubbles or identity leakage",
-  { skip: !url },
-  async () => {
-    assert.equal(process.env.WOZTELL_TEST_DATABASE_CONFIRMED, "true");
-    const sql = neon(url),
+  onDbTarget(async (target) => {
+    if (!target.owned) assert.equal(process.env.WOZTELL_TEST_DATABASE_CONFIRMED, "true");
+    const sql = target.sql,
       id = randomUUID(),
       member = "receipt-" + id,
       channel = "receipt-channel-" + id,
@@ -394,5 +392,5 @@ test(
       await sql.query("DELETE FROM whatsapp_conversations WHERE woztell_member_id=$1", [member]);
       await sql.query("DELETE FROM crm_contacts WHERE whatsapp_member_id=$1", [member]);
     }
-  },
+  }),
 );

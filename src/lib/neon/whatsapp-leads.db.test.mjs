@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
-import { neon } from "@neondatabase/serverless";
-import { assertDisposableNeonTestTarget } from "./disposable-test-target.mjs";
+import { dbTargetOrOwned } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 function splitSqlStatements(query) {
   const statements = [];
   let current = "",
@@ -40,13 +39,13 @@ function splitSqlStatements(query) {
   return statements;
 }
 
+// The on-demand Neon run keeps its ASTRA_TEST_DATABASE_URL contract.
+const neonRun = { urlVar: "ASTRA_TEST_DATABASE_URL" };
 const file = "neon/migrations/20260906100000_whatsapp_inbound_leads.sql";
-test(
-  "WhatsApp inbound intake and history create factual leads once",
-  { skip: !process.env.ASTRA_TEST_DATABASE_URL },
-  async () => {
-    await assertDisposableNeonTestTarget(process.env.ASTRA_TEST_DATABASE_URL);
-    const db = neon(process.env.ASTRA_TEST_DATABASE_URL);
+// Owned Docker Postgres by default; ASTRA_TEST_DATABASE_URL (behind the disposable guard) for an
+// explicit Neon run. In CI a missing database fails instead of skipping.
+test("WhatsApp inbound intake and history create factual leads once", async () => {
+  await dbTargetOrOwned(async ({ sql: db }) => {
     const schema = "wa_leads_" + randomUUID().replaceAll("-", "");
     const run = async (statement, params = []) =>
       (
@@ -136,5 +135,5 @@ test(
     } finally {
       await db.query(`DROP SCHEMA ${schema} CASCADE`);
     }
-  },
-);
+  }, neonRun);
+});
