@@ -10,6 +10,8 @@ import {
   updateStaffEndpoint,
   fetchStaffNotificationHealth,
 } from "@/lib/neon/staff-endpoints";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 export function StaffEndpointEditor({
   agents,
   selectedStaffId,
@@ -169,6 +171,7 @@ export function StaffEndpointEditor({
           <label className={selectedStaffId ? "hidden" : undefined}>
             同事
             <select
+              className={cn(nativeFieldClassName, "w-auto")}
               required
               disabled={!!edit}
               value={form.staffId}
@@ -187,6 +190,7 @@ export function StaffEndpointEditor({
           <label>
             通知方式
             <select
+              className={cn(nativeFieldClassName, "w-auto")}
               value={form.transport}
               onChange={(e) =>
                 setForm({ ...form, transport: e.target.value as typeof form.transport })

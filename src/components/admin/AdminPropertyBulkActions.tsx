@@ -6,8 +6,10 @@ import type { BulkPropertyManagementInput } from "@/lib/neon/admin-property-bulk
 import type { ManagedPropertySummary } from "@/lib/neon/admin-properties.types";
 import { propertyStatusLabels, existingOfferingDeals } from "@/lib/admin/property-management-ui";
 import { runPropertyBulkChunks, type BulkClientResult } from "@/lib/admin/property-bulk-client";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 
-const control = "h-11 rounded-md border bg-background px-3 text-sm";
+const control = cn(nativeFieldClassName, "w-auto");
 type Scope = BulkPropertyManagementInput["scope"];
 export function AdminPropertyBulkActions({
   rows,

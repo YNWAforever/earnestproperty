@@ -17,6 +17,8 @@ import {
   approveWhatsappServicePolicy,
 } from "@/lib/neon/whatsapp-service-policy";
 import { staffActionErrorText } from "@/components/admin/admin-error-text";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 const choices = [
   ["durationMode", "三小時計算", ["elapsed", "opening"]],
   ["beforeOpen", "08:00 前", ["overnight", "daytime"]],
@@ -142,7 +144,7 @@ export function WhatsappServicePolicyEditor({
         <label className="block">
           載入版本
           <select
-            className="ml-2 rounded border p-2"
+            className={cn(nativeFieldClassName, "ml-2 w-auto")}
             value={policy.id}
             onChange={(e) => {
               setPolicy(policies.find((p) => p.id === e.target.value) ?? draftServicePolicy());
@@ -169,7 +171,7 @@ export function WhatsappServicePolicyEditor({
             <label key={key}>
               {label}
               <select
-                className="ml-2 rounded border p-2"
+                className={cn(nativeFieldClassName, "ml-2 w-auto")}
                 value={policy.rules[key] ?? ""}
                 onChange={(e) => update(key, (e.target.value || null) as never)}
               >
@@ -243,7 +245,7 @@ export function WhatsappServicePolicyEditor({
           <label>
             人手已回覆後的問卷
             <select
-              className="ml-2 rounded border p-2"
+              className={cn(nativeFieldClassName, "ml-2 w-auto")}
               value={
                 policy.rules.suppressSurveyAfterHuman === null
                   ? ""
@@ -264,7 +266,7 @@ export function WhatsappServicePolicyEditor({
           <label>
             負責經理
             <select
-              className="ml-2 rounded border p-2"
+              className={cn(nativeFieldClassName, "ml-2 w-auto")}
               value={policy.rules.managerStaffId ?? ""}
               onChange={(e) => update("managerStaffId", e.target.value || null)}
             >
@@ -343,6 +345,7 @@ export function WhatsappServicePolicyEditor({
             onChange={(e) => setSample(e.target.value)}
           />
           <select
+            className={cn(nativeFieldClassName, "w-auto")}
             aria-label="模擬入口"
             value={entry}
             onChange={(e) => setEntry(e.target.value as typeof entry)}

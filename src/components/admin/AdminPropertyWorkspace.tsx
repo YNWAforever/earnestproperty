@@ -34,6 +34,7 @@ import {
   existingOfferingDeals,
   propertyStatusLabels,
 } from "@/lib/admin/property-management-ui";
+import { nativeFieldClassName } from "@/components/ui/native-field";
 
 type Tab = "shared" | "sale" | "rent";
 const labels: Record<string, string> = {
@@ -62,7 +63,6 @@ function conflictLabel(field: string) {
     ? `來源差異（${deal === "sale" ? "出售" : "出租"}）：${labels[key] ?? key}`
     : (labels[field] ?? field);
 }
-const control = "h-11 w-full rounded-md border bg-background px-3 text-sm";
 export function AdminPropertyWorkspace({
   initial,
   sourceId,
@@ -484,7 +484,7 @@ export function AdminPropertyWorkspace({
                   <span>屋苑</span>
                   <select
                     {...fieldProps("estate_id")}
-                    className={control}
+                    className={nativeFieldClassName}
                     value={shared.estate_id ?? ""}
                     onChange={(e) =>
                       setShared((s) => ({ ...s, estate_id: e.target.value || null }))
@@ -502,7 +502,7 @@ export function AdminPropertyWorkspace({
                   <span>分區</span>
                   <select
                     {...fieldProps("district_slug")}
-                    className={control}
+                    className={nativeFieldClassName}
                     value={shared.district_slug}
                     onChange={(e) => setShared((s) => ({ ...s, district_slug: e.target.value }))}
                   >
@@ -588,7 +588,7 @@ export function AdminPropertyWorkspace({
                   <span>{tab === "sale" ? "出售" : "出租"}狀態</span>
                   <select
                     {...fieldProps("status")}
-                    className={control}
+                    className={nativeFieldClassName}
                     value={offer.status}
                     onChange={(e) => setOffer((s) => ({ ...s, status: e.target.value }))}
                   >
@@ -609,7 +609,7 @@ export function AdminPropertyWorkspace({
                   <span>負責代理</span>
                   <select
                     {...fieldProps("agentId")}
-                    className={control}
+                    className={nativeFieldClassName}
                     value={offer.agentId}
                     onChange={(e) => setOffer((s) => ({ ...s, agentId: e.target.value }))}
                   >

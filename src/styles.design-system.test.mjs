@@ -332,3 +332,66 @@ test("the admin shell background and dashboard neutrals come from tokens", () =>
   assert.match(dashboard, /bg-muted px-3 py-2 transition hover:bg-accent/);
   assert.doesNotMatch(dashboard, /\bslate-/);
 });
+
+// ---------------------------------------------------------------------------
+// 20b Task 3: one class for native selects (Open question 2)
+// ---------------------------------------------------------------------------
+
+// The 17b/17c screens (inbox, leads, blasts, segments, property-sync) keep their selects
+// until those rebuilds land; everything else uses nativeFieldClassName.
+const NATIVE_SELECT_EXEMPT = new Set([
+  "src/components/admin/StaffNotificationPanel.tsx", // admin.whatsapp inbox
+  "src/components/admin/WhatsappConsentDialog.tsx", // admin.whatsapp inbox
+  "src/components/admin/WhatsappEnquiryContext.tsx", // admin.whatsapp inbox
+  "src/components/admin/whatsapp/EnquiryResolutionPanel.tsx", // admin.whatsapp inbox
+  "src/components/admin/whatsapp/ForwardedEnquiryForm.tsx", // admin.leads
+  "src/components/admin/property-sync/WithdrawalReviewWorkspace.tsx", // admin.property-sync
+]);
+
+test("nativeFieldClassName is the 44 px field style with the 3:1 border", () => {
+  const source = read("src/components/ui/native-field.ts");
+  const value = source.match(/export const nativeFieldClassName =\s*"([^"]+)";/);
+  assert.ok(value, "nativeFieldClassName is an exported string");
+  const classes = value[1].split(/\s+/);
+  for (const token of [
+    "h-11",
+    "w-full",
+    "rounded-md",
+    "border",
+    // !important: the neon-auth layer's `* { border-color }` outranks plain utilities.
+    "border-input!",
+    "bg-background",
+    "px-3",
+    "text-sm",
+    "focus-visible:ring-2",
+    "focus-visible:ring-ring",
+    "focus-visible:ring-offset-2",
+    "focus-visible:ring-offset-background",
+    "disabled:opacity-50",
+  ]) {
+    assert.ok(classes.includes(token), token);
+  }
+});
+
+test("native selects outside the 17b/17c screens use nativeFieldClassName", () => {
+  const offenders = [];
+  for (const file of sourceFiles("src/", /\.tsx$/)) {
+    const path = relative(file);
+    if (/\.test\.tsx$/.test(path) || NATIVE_SELECT_EXEMPT.has(path)) continue;
+    const source = readFileSync(file, "utf8");
+    // Local constants built from the shared class (e.g. `const control = cn(nativeFieldClassName, …)`).
+    const aliases = [...source.matchAll(/const (\w+) =\s*cn\(\s*nativeFieldClassName\b/g)].map(
+      (m) => m[1],
+    );
+    for (const match of source.matchAll(/<select\b/g)) {
+      const tag = source.slice(match.index, source.indexOf("<option", match.index));
+      const className = tag.match(/className=\{([^}]*)\}/)?.[1] ?? "";
+      const usesShared =
+        /\bnativeFieldClassName\b/.test(className) || aliases.includes(className.trim());
+      if (!usesShared) {
+        offenders.push(`${path}:${source.slice(0, match.index).split("\n").length}`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, []);
+});

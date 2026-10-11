@@ -31,11 +31,11 @@ import {
   saveDraft,
   type WhatsappBatchDraft,
 } from "@/lib/admin/whatsapp-batch-draft";
+import { nativeFieldClassName } from "@/components/ui/native-field";
 
 type Staff = { id: string; name: string | null; email: string | null; active?: boolean };
 type Source = BatchRowDraft["input"]["placementSource"];
 type Routing = "property-agent" | "uniform" | "per-row" | "reception";
-const control = "min-h-11 w-full rounded-md border bg-background px-3 text-sm";
 const label = (offer: LinkOfferSelection) =>
   `${offer.publicListingNo} · ${offer.dealType === "sale" ? "售" : "租"} · ${offer.title} · ${offer.price == null ? "價格待核實" : offer.price.toLocaleString("en-HK")}`;
 
@@ -788,7 +788,7 @@ export function WhatsappLinkWizard({
               <label className="block text-sm">
                 刊登來源
                 <select
-                  className={control}
+                  className={nativeFieldClassName}
                   value={source}
                   onChange={(event) => {
                     setSource(event.target.value as Source);
@@ -845,7 +845,7 @@ export function WhatsappLinkWizard({
               <label className="block text-sm">
                 指定路線
                 <select
-                  className={control}
+                  className={nativeFieldClassName}
                   value={routing}
                   onChange={(event) => setRouting(event.target.value as Routing)}
                 >
@@ -871,7 +871,7 @@ export function WhatsappLinkWizard({
                 <label className="block text-sm">
                   指定同事
                   <select
-                    className={control}
+                    className={nativeFieldClassName}
                     value={staffId}
                     onChange={(event) => setStaffId(event.target.value)}
                   >
@@ -892,7 +892,7 @@ export function WhatsappLinkWizard({
                     <label key={offer.propertyId} className="block text-sm">
                       {label(offer)}
                       <select
-                        className={control}
+                        className={nativeFieldClassName}
                         value={perRowStaff[offer.propertyId] ?? ""}
                         onChange={(event) =>
                           setPerRowStaff((current) => ({
@@ -988,7 +988,7 @@ export function WhatsappLinkWizard({
                     <label>
                       來源
                       <select
-                        className={control}
+                        className={nativeFieldClassName}
                         value={row.input.placementSource}
                         onChange={(event) =>
                           patchRepairRow(row.rowKey, {
@@ -1005,7 +1005,7 @@ export function WhatsappLinkWizard({
                     <label>
                       查詢路線
                       <select
-                        className={control}
+                        className={nativeFieldClassName}
                         value={row.input.requestedStaffId ?? ""}
                         onChange={(event) =>
                           patchRepairRow(row.rowKey, {

@@ -9,6 +9,7 @@ import type {
   PerformanceRecord,
   PerformanceRecordPage,
 } from "@/lib/analytics/sales-performance.types";
+import { nativeFieldClassName } from "@/components/ui/native-field";
 
 type Props = {
   drilldownKey: string;
@@ -286,7 +287,7 @@ export function PerformanceTable({
                             <Label htmlFor={"quality-" + record.id}>品質狀態</Label>
                             <select
                               id={"quality-" + record.id}
-                              className="h-9 w-full rounded border bg-background px-2"
+                              className={nativeFieldClassName}
                               value={quality}
                               onChange={(e) => {
                                 editingRevision.current++;

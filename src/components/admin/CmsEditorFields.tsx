@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { uploadAdminMedia } from "@/lib/admin/media-upload";
 import { fetchAdminDistrictOptions } from "@/lib/neon/admin-data";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 
 export type CmsDistrictOption = { slug: string; name_zh: string };
 export function CmsDistrictSelect({
@@ -19,7 +21,7 @@ export function CmsDistrictSelect({
       地區
       <select
         required
-        className="h-10 min-w-0 rounded-md border bg-background px-3"
+        className={cn(nativeFieldClassName, "w-auto min-w-0")}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >

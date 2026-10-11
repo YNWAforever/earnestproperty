@@ -20,6 +20,7 @@ import {
   fromPerformance,
   type FormState,
 } from "./transaction-attribution-editor-state";
+import { nativeFieldClassName } from "@/components/ui/native-field";
 
 type Props = {
   transactionId: string;
@@ -155,7 +156,7 @@ export function TransactionAttributionEditor({
           </label>
           <select
             id="attribution-status"
-            className="w-full rounded-md border bg-background px-3 py-2"
+            className={nativeFieldClassName}
             value={form.status}
             onChange={(event) => {
               const status = event.target.value as TransactionAttributionStatus;

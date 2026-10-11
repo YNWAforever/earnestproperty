@@ -16,10 +16,12 @@ import { PLACEMENT_SOURCE_LABELS } from "@/lib/admin/glossary";
 import { placementSourceText } from "@/lib/admin/plain-copy";
 import { LinkCardFacts } from "@/components/admin/plain-copy-parts";
 import { ADMIN_GENERIC_ERROR, staffActionErrorText } from "@/components/admin/admin-error-text";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 
 type Page = Awaited<ReturnType<typeof getWhatsappTrackingLinksPage>>;
 type Item = Page["items"][number];
-const control = "min-h-11 rounded-md border bg-background px-3 text-sm";
+const control = cn(nativeFieldClassName, "w-auto");
 const codeUrl = (code: string) => `${window.location.origin}/w/${code}`;
 // One map for the 來源 filter options and the 停用 confirmation, typed by the placement enum so
 // a new source cannot get a filter option without a label (or show its raw value).
@@ -481,7 +483,7 @@ export function WhatsappLinksTable({
             <label className="block text-sm">
               指定同事
               <select
-                className={`${control} w-full`}
+                className={nativeFieldClassName}
                 value={editStaff}
                 onChange={(event) => setEditStaff(event.target.value)}
               >

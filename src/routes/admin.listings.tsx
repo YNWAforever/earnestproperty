@@ -18,6 +18,8 @@ import { propertyStatusLabels, canSelectProperty } from "@/lib/admin/property-ma
 import { AdminPropertyTable } from "@/components/admin/AdminPropertyTable";
 import { AdminPropertyBulkActions } from "@/components/admin/AdminPropertyBulkActions";
 import { staffActionErrorText } from "@/components/admin/admin-error-text";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 
 function parseListingSearch(search: Record<string, unknown>): PropertyGroupFilters {
   const result: PropertyGroupFilters = {};
@@ -220,7 +222,7 @@ function AdminListingsWorkspace({ identity }: { identity: string }) {
       setError("未能保存樓盤選取，請允許此網站使用瀏覽器儲存空間後重試。尚未建立連結。");
     }
   }
-  const selectClass = "h-11 min-w-0 rounded-md border bg-background px-3 text-sm";
+  const selectClass = cn(nativeFieldClassName, "w-auto min-w-0");
   return (
     <AdminShell
       title="樓盤管理"

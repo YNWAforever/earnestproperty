@@ -8,6 +8,8 @@ import {
   type LinkBatchProgress,
 } from "@/lib/admin/whatsapp-link-batch-client";
 import { staffActionErrorText } from "@/components/admin/admin-error-text";
+import { nativeFieldClassName } from "@/components/ui/native-field";
+import { cn } from "@/lib/utils";
 
 export function WhatsappCoveragePanel({
   actorScope,
@@ -116,7 +118,7 @@ export function WhatsappCoveragePanel({
         <label className="text-sm">
           租售
           <select
-            className="ml-2 min-h-11 rounded border bg-background px-2"
+            className={cn(nativeFieldClassName, "ml-2 w-auto")}
             value={dealType}
             onChange={(event) => setDealType(event.target.value as "sale" | "rent" | "")}
           >
