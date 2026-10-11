@@ -162,6 +162,9 @@ export function decodeAdminCursor(value: string, binding: string): AdminCursor {
 }
 export function pageBinding(input: AdminPageInput, scope: string) {
   const { cursor: _cursor, limit: _limit, direction: _direction, ...filters } = input;
+  // The default FAQ filter binds as "no key", so cursors issued before `archived` existed still
+  // page the live rows; an explicit `only` or `all` binds by value and cannot be swapped.
+  if (filters.resource === "faqs" && filters.archived === "hide") delete filters.archived;
   return JSON.stringify([
     scope,
     Object.fromEntries(Object.entries(filters).sort(([a], [b]) => a.localeCompare(b))),

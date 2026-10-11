@@ -173,6 +173,18 @@ test("a FAQ cursor cannot be replayed under a different archived filter", () => 
       /INVALID_ADMIN_PAGE/,
     );
 });
+test("a FAQ cursor from before the archived filter still works under the default only", () => {
+  // The pre-filter binding format: no `archived` key.
+  const legacy = encodeAdminCursor(
+    { at: "2026-09-05T00:00:00.000000Z", id: actor.staffId },
+    JSON.stringify([`${actor.staffId}:own`, { q: "x", resource: "faqs", scope: "s" }]),
+  );
+  const base = { resource: "faqs", scope: "s", q: "x", cursor: legacy };
+  assert.ok(buildAdminPageQuery(base, actor));
+  assert.ok(buildAdminPageQuery({ ...base, archived: "hide" }, actor));
+  for (const archived of ["only", "all"])
+    assert.throws(() => buildAdminPageQuery({ ...base, archived }, actor), /INVALID_ADMIN_PAGE/);
+});
 test("all resources use deterministic timestamp and id ties with lookahead", () => {
   for (const resource of [
     "leads",
