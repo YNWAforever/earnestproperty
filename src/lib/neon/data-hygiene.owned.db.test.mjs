@@ -524,6 +524,79 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
         },
       );
 
+      await t.test("a re-synced YouTube video is reported as updated, not inserted", async () => {
+        const repository = createYouTubeSyncRepository({ queryRows: query });
+        const channelId = "UCsyntheticFUA5";
+        const youtubeId = "FUA5Video01";
+        const run = async (owner, at, title) => {
+          const now = new Date(at);
+          const lease = await repository.acquireLease({ channelId, owner, now });
+          assert.ok(lease, "lease must be acquired");
+          const summary = await repository.applySnapshot({
+            channelId,
+            owner,
+            mode: "incremental",
+            videos: [
+              {
+                videoId: youtubeId,
+                title,
+                description: "YouTube description",
+                publishedAt: "2026-10-02T00:00:00.000Z",
+                canonicalUrl: `https://www.youtube.com/watch?v=${youtubeId}`,
+                adoptionId: null,
+                expectedManualUrl: null,
+              },
+            ],
+            newestVideoId: youtubeId,
+            completedAt: new Date(now.getTime() + 1000),
+            period: null,
+          });
+          await repository.releaseLease({ channelId, owner, now: new Date(now.getTime() + 2000) });
+          return summary;
+        };
+        const rows = () =>
+          query(
+            `SELECT id::text, title, youtube_available, youtube_last_seen_at
+               FROM cms_videos WHERE youtube_video_id=$1`,
+            [youtubeId],
+          );
+
+        assert.deepEqual(await run(id(311), "2026-10-11T01:00:00.000Z", "第一次"), {
+          inserted: 1,
+          adopted: 0,
+          updated: 0,
+          restored: 0,
+          unavailable: 0,
+        });
+        const [first] = await rows();
+
+        assert.deepEqual(await run(id(312), "2026-10-11T02:00:00.000Z", "第二次"), {
+          inserted: 0,
+          adopted: 0,
+          updated: 1,
+          restored: 0,
+          unavailable: 0,
+        });
+        const second = await rows();
+        assert.equal(second.length, 1, "the re-sync updated the row in place");
+        assert.equal(second[0].id, first.id);
+        assert.equal(second[0].title, "第二次");
+        assert.equal(second[0].youtube_last_seen_at.toISOString(), "2026-10-11T02:00:01.000Z");
+
+        // A video that was unavailable and comes back counts as updated and restored.
+        await query("UPDATE cms_videos SET youtube_available=false WHERE id=$1", [first.id]);
+        assert.deepEqual(await run(id(313), "2026-10-11T03:00:00.000Z", "第三次"), {
+          inserted: 0,
+          adopted: 0,
+          updated: 1,
+          restored: 1,
+          unavailable: 0,
+        });
+        const [third] = await rows();
+        assert.equal(third.youtube_available, true);
+        assert.equal(third.title, "第三次");
+      });
+
       await t.test(
         "import of a question that is archived changes nothing and reports FAQ_ARCHIVED",
         async () => {

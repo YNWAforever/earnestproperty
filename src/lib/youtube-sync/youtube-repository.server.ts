@@ -51,12 +51,16 @@ incoming AS MATERIALIZED (
     expected_manual_url text
   )
 ),
+-- Feeds only the run totals. It reads the statement snapshot, i.e. the rows as
+-- they were before this run. No FOR UPDATE: the final SELECT is what first reads
+-- it, after upserted has already changed those rows, and a row lock on a row this
+-- statement changed is skipped, so every re-synced video looked new.
+-- upserted's ON CONFLICT takes the row locks the writes need.
 existing AS MATERIALIZED (
   SELECT target.id, target.youtube_video_id, target.youtube_available
   FROM cms_videos target
   JOIN incoming ON incoming.video_id = target.youtube_video_id
   CROSS JOIN lease_guard
-  FOR UPDATE OF target
 ),
 adopted AS (
   UPDATE cms_videos AS target
