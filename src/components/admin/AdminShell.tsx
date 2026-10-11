@@ -185,7 +185,7 @@ const navGroups = [
 ] as const;
 
 const navLinkClassName =
-  "flex min-h-11 items-center gap-2 rounded-md border-l-2 border-transparent px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+  "flex min-h-11 items-center gap-2 rounded-md border-l-2 px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 // The active entry gets weight + a left indicator bar on top of the colour
 // change, so "you are here" survives greyscale/colour-blind viewing, and
@@ -194,6 +194,10 @@ const navLinkActiveProps = {
   className: "border-primary bg-primary/10 font-semibold text-primary",
   "aria-current": "page" as const,
 };
+
+// Kept out of navLinkClassName: TanStack joins class strings without
+// tailwind-merge, so a shared border-transparent would hide the active bar.
+const navLinkInactiveProps = { className: "border-transparent" };
 
 const navBadgeClassName =
   "ml-auto min-w-5 rounded-full bg-warning-strong px-1.5 text-center text-xs font-semibold leading-5 text-warning-foreground";
@@ -242,6 +246,7 @@ function AdminNav({
                 aria-describedby={descriptionId}
                 className={navLinkClassName}
                 activeProps={navLinkActiveProps}
+                inactiveProps={navLinkInactiveProps}
                 onClick={onNavigate}
               >
                 <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
