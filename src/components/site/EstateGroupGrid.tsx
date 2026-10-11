@@ -75,14 +75,14 @@ function EstateCard({
           <p className="text-xs opacity-80">{meta}</p>
         </div>
         {estate.photo && estate.photoCredit ? (
-          <p className="absolute bottom-1 right-2 text-[9px] text-primary-foreground/60">
+          <p className="absolute bottom-1 right-2 rounded bg-foreground/50 px-1 text-xs text-primary-foreground">
             {estate.photoCredit}
           </p>
         ) : null}
       </div>
       <div className="grid grid-cols-2 gap-3 p-5">
         <div>
-          <p className="text-[11px] text-muted-foreground">平均放盤實呎</p>
+          <p className="text-xs text-muted-foreground">平均放盤實呎</p>
           <p className="text-base font-semibold text-primary">
             {psf === null || psf === undefined || !Number.isFinite(psf)
               ? "—"
@@ -90,7 +90,7 @@ function EstateCard({
           </p>
         </div>
         <div>
-          <p className="text-[11px] text-muted-foreground">最新放盤</p>
+          <p className="text-xs text-muted-foreground">最新放盤</p>
           <p className="text-base font-semibold text-primary">
             {listingCount === null || listingCount === undefined ? "—" : `${listingCount} 個`}
           </p>

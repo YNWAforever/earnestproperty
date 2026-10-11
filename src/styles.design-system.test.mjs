@@ -231,3 +231,20 @@ test("no transition-all in src", () => {
     .map(relative);
   assert.deepEqual(offenders, []);
 });
+
+// ---------------------------------------------------------------------------
+// 20b Task 1: no text under 12 px (C6)
+// ---------------------------------------------------------------------------
+
+test("no text-[9px], text-[10px] or text-[11px] in src", () => {
+  const offenders = sourceFiles("src/", /\.(tsx|ts)$/)
+    .filter((file) => /\btext-\[(?:[0-9]|1[01])(?:\.\d+)?px\]/.test(readFileSync(file, "utf8")))
+    .map(relative);
+  assert.deepEqual(offenders, []);
+});
+
+test("the estate photo credit is full-opacity text on a dark 50 % backing", () => {
+  const grid = read("src/components/site/EstateGroupGrid.tsx");
+  assert.match(grid, /rounded bg-foreground\/50 px-1 text-xs text-primary-foreground"/);
+  assert.doesNotMatch(grid, /text-primary-foreground\/60/);
+});
