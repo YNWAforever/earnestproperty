@@ -1,6 +1,11 @@
 import { actor } from "./synthetic-api";
 // FX-19d-1 H-08: the real page's payload must pass the server function's own schema.
-import { adminCampaignSchema, adminRowIdSchema } from "../../../src/lib/neon/admin-write-schemas";
+import {
+  adminCampaignSchema,
+  adminRowIdSchema,
+  finishCampaignWithoutSendingSchema,
+  requeueFailedCampaignRecipientsSchema,
+} from "../../../src/lib/neon/admin-write-schemas";
 
 // Presentation-only model. No Auth, SQL, queue job or provider port is used.
 const campaignId = "60000000-0000-4000-8000-000000000001";
@@ -329,6 +334,7 @@ export async function requeueFailedCampaignRecipients({
 }: {
   data: { campaignId: string; expectedCount: number };
 }) {
+  requeueFailedCampaignRecipientsSchema.parse(data);
   call("syntheticCampaignRequeue", data);
   requireManager();
   if (state.retryMode === "forbidden") throw Object.assign(Error("Forbidden"), { status: 403 });
@@ -373,6 +379,7 @@ export async function fetchCampaignSendPreview({ data }: { data: { id: string } 
 }
 // FX-10b I2: finishCampaignWithoutSending, with the server's guards.
 export async function finishCampaignWithoutSending({ data }: { data: { campaignId: string } }) {
+  finishCampaignWithoutSendingSchema.parse(data);
   call("syntheticCampaignFinish", data);
   requireManager();
   const rows = retryRecords(),

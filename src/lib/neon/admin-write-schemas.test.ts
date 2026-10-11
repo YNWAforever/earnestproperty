@@ -483,6 +483,29 @@ const cases: Case[] = [
     // No UI caller; the wrapper's type is { campaign_id }.
     accepts: [{ campaign_id: ROW }],
   },
+  {
+    name: "requeueFailedCampaignRecipients",
+    schema: schemas.requeueFailedCampaignRecipientsSchema,
+    // src/routes/admin.blasts.tsx handleConfirmRetry: { campaignId: campaign.id, expectedCount }.
+    accepts: [
+      { campaignId: ROW, expectedCount: 3 },
+      { campaignId: ROW, expectedCount: 0 },
+    ],
+  },
+  {
+    name: "finishCampaignWithoutSending",
+    schema: schemas.finishCampaignWithoutSendingSchema,
+    // src/routes/admin.blasts.tsx handleConfirmFinish: { campaignId: campaign.id }.
+    accepts: [{ campaignId: ROW }],
+  },
+  // ---- WhatsApp -------------------------------------------------------------
+  {
+    name: "clearContactWhatsappOptOut",
+    schema: schemas.clearContactWhatsappOptOutSchema,
+    // No UI caller in src (retained for stale clients, writes nothing). The last
+    // client to call it (removed in 6d5c016c) sent { contactId, reason }.
+    accepts: [{ contactId: CONTACT, reason: "客戶要求恢復接收" }],
+  },
 ];
 
 describe("staff write schemas", () => {
@@ -538,6 +561,17 @@ describe("wrong types are refused", () => {
         filters: { opted_out: true },
       }).success,
     ).toBe(false);
+  });
+  test("a requeue with a negative or fractional count, or an opt-out clear without a reason", () => {
+    const requeue = schemas.requeueFailedCampaignRecipientsSchema;
+    expect(requeue.safeParse({ campaignId: ROW, expectedCount: -1 }).success).toBe(false);
+    expect(requeue.safeParse({ campaignId: ROW, expectedCount: 1.5 }).success).toBe(false);
+    expect(requeue.safeParse({ campaignId: ROW }).success).toBe(false);
+    expect(schemas.finishCampaignWithoutSendingSchema.safeParse({}).success).toBe(false);
+    const clear = schemas.clearContactWhatsappOptOutSchema;
+    expect(clear.safeParse({ contactId: "not-a-uuid", reason: "x" }).success).toBe(false);
+    expect(clear.safeParse({ contactId: CONTACT, reason: "   " }).success).toBe(false);
+    expect(clear.safeParse({ contactId: CONTACT, reason: "x".repeat(501) }).success).toBe(false);
   });
   test("a CMS draft for an unknown resource type, or with a non-object payload", () => {
     expect(
@@ -637,6 +671,9 @@ describe("no staff write keeps a pass-through validator", () => {
       saveAdminCampaignServer: "adminCampaignSchema",
       materializeCampaignRecipientsServer: "campaignIdSchema",
       cancelAdminCampaignServer: "adminRowIdSchema",
+      requeueFailedCampaignRecipientsServer: "requeueFailedCampaignRecipientsSchema",
+      finishCampaignWithoutSendingServer: "finishCampaignWithoutSendingSchema",
+      clearContactWhatsappOptOutServer: "clearContactWhatsappOptOutSchema",
       saveAdminCmsDraftServer: "cmsDraftSaveSchema",
       publishAdminCmsRevisionServer: "cmsPublishSchema",
       restoreAdminCmsRevisionServer: "cmsRestoreSchema",

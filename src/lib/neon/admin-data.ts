@@ -34,7 +34,10 @@ import {
   adminTransactionSchema,
   bulkUpdateAdminLeadsSchema,
   campaignIdSchema,
+  clearContactWhatsappOptOutSchema,
   completeAdminLeadActivitySchema,
+  finishCampaignWithoutSendingSchema,
+  requeueFailedCampaignRecipientsSchema,
   updateAdminInquiryStatusSchema,
 } from "./admin-write-schemas";
 
@@ -47,6 +50,7 @@ import type {
   AdminConversationAiAssist,
   AdminConversationUpdateInput,
   AdminCrmSegmentPreview,
+  AdminCrmSegmentSaveInput,
   AdminCmsVideoInput,
   AdminFaqInput,
   AdminLeadActivityInput,
@@ -469,15 +473,6 @@ export const previewAdminCrmSegment = async function previewAdminCrmSegment(opti
   return callStaffServerFn(async () =>
     previewAdminCrmSegmentServer(await withStaffAuthHeaders(options)),
   );
-};
-
-type AdminCrmSegmentSaveInput = {
-  id?: string;
-  name: string;
-  description: string | null;
-  natural_language_prompt: string;
-  structured_filters: AdminCrmSegmentPreview["filters"];
-  status: "draft" | "active" | "archived";
 };
 
 const saveAdminCrmSegmentServer = createServerFn({ method: "POST" })
@@ -1335,9 +1330,7 @@ export async function updateAdminConversation(
 // Retained for stale clients only. The server returns evidence-workflow guidance and writes nothing.
 const clearContactWhatsappOptOutServer = createServerFn({ method: "POST" })
   .inputValidator((data: { contactId: string; reason: string }) =>
-    z
-      .object({ contactId: z.string().trim().uuid(), reason: z.string().trim().min(1).max(500) })
-      .parse(data),
+    clearContactWhatsappOptOutSchema.parse(data),
   )
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
@@ -1793,7 +1786,7 @@ const requeueFailedCampaignRecipientsServer = createServerFn({ method: "POST" })
   // expectedCount is the number the user confirmed; the server refuses with
   // RETRY_COUNT_CHANGED if it no longer matches what would move.
   .inputValidator((data: { campaignId: string; expectedCount: number }) =>
-    z.object({ campaignId: z.string(), expectedCount: z.number().int().nonnegative() }).parse(data),
+    requeueFailedCampaignRecipientsSchema.parse(data),
   )
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
@@ -1821,9 +1814,7 @@ export async function requeueFailedCampaignRecipients(
 // send, as completed/failed rather than 已取消. The server refuses unless its
 // own count of sendable recipients is zero.
 const finishCampaignWithoutSendingServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { campaignId: string }) =>
-    z.object({ campaignId: z.string() }).parse(data),
-  )
+  .inputValidator((data: { campaignId: string }) => finishCampaignWithoutSendingSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
