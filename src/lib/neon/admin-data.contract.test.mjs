@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
@@ -18,7 +19,6 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     "saveAdminFaq",
     "deleteAdminFaq",
     "restoreAdminFaq",
-    "reorderAdminFaqs",
     "fetchAdminMediaAssets",
     "updateAdminMediaAsset",
     "updateAdminPropertyStatus",
@@ -43,6 +43,11 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
     assert.match(client, exportPattern, `admin-data.ts should export ${name}`);
     assert.match(server, exportPattern, `admin-data.server.ts should export ${name}`);
   }
+
+  // FX-19a-2: no screen reorders FAQs, so the browser-callable wrapper is gone;
+  // the server implementation (and its unit test below) stays.
+  assert.doesNotMatch(client, /reorderAdminFaqs/);
+  assert.match(server, /export\s+async\s+function\s+reorderAdminFaqs\(/);
 
   for (const typeName of [
     "AdminEstateInput",
@@ -504,10 +509,20 @@ test("the only browser-callable campaign send path re-materialises recipients", 
   assert.doesNotMatch(client, /queueAdminCampaignServer/);
   assert.doesNotMatch(client, /adminData\.queueAdminCampaign\(/);
   assert.doesNotMatch(client, /\bqueueAdminCampaign\b/);
-  // The uncalled server alias is gone too; the server function itself stays
-  // (sendAdminCampaignQueue and the owned DB suites call it).
+  // The uncalled server alias is gone too. The server function itself stays but
+  // is module-private (FX-19a-2): sendAdminCampaignQueue calls it, and the owned
+  // DB suites reach it only through the test-only queueAdminCampaignForTests.
   assert.doesNotMatch(server, /export\s+async\s+function\s+queueCampaign\b/);
-  assert.match(server, /export\s+async\s+function\s+queueAdminCampaign\(/);
+  assert.match(server, /^async\s+function\s+queueAdminCampaign\(/m);
+  assert.doesNotMatch(server, /export\s+(?:async\s+function|const)\s+queueAdminCampaign\b/);
+  assert.match(server, /export const queueAdminCampaignForTests = queueAdminCampaign;/);
+  const testOnlyUsers = execFileSync("git", ["grep", "-l", "queueAdminCampaignForTests"], {
+    encoding: "utf8",
+  })
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .filter((path) => !/\.test\.m?[jt]sx?$/.test(path) && !path.endsWith(".md"));
+  assert.deepEqual(testOnlyUsers, ["src/lib/neon/admin-data.server.ts"]);
 
   // The real path: the queue route calls sendAdminCampaignQueue, which
   // validates, then materialises, and only then queues.

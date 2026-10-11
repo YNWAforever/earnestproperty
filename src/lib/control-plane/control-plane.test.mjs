@@ -855,7 +855,7 @@ test("re-materializing a campaign never re-queues a possibly-delivered recipient
 
 test("the queue flip re-asserts the same statuses canQueueAdminCampaign accepts", () => {
   const source = readFileSync("src/lib/neon/admin-data.server.ts", "utf8").replaceAll("\r\n", "\n");
-  const queue = source.slice(source.indexOf("export async function queueAdminCampaign("));
+  const queue = source.slice(source.indexOf("\nasync function queueAdminCampaign("));
   const start = queue.indexOf("UPDATE whatsapp_campaigns c");
   const clause = queue.slice(start, queue.indexOf("RETURNING c.id", start));
 

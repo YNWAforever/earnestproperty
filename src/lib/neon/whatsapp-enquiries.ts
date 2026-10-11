@@ -26,11 +26,6 @@ const offerSchema = z
     title: z.string().trim().max(160).optional(),
   })
   .strict();
-export const getWhatsappTrackingLinks = createServerFn({ method: "GET" }).handler(async () => {
-  const { requireStaffAccess } = await import("./auth.server");
-  const actor = await requireStaffAccess(getRequest(), ["admin", "manager"]);
-  return (await import("./whatsapp-enquiries.server")).listTrackingLinks(actor);
-});
 export const saveWhatsappTrackingLink = createServerFn({ method: "POST" })
   .inputValidator(
     trackingLinkSchema
@@ -44,13 +39,6 @@ export const saveWhatsappTrackingLink = createServerFn({ method: "POST" })
     const { requireStaffAccess } = await import("./auth.server");
     const actor = await requireStaffAccess(getRequest(), ["admin", "manager"]);
     return (await import("./whatsapp-enquiries.server")).saveTrackingLink(data, actor);
-  });
-export const provisionWhatsappLinks = createServerFn({ method: "POST" })
-  .inputValidator(z.object({ links: z.array(trackingLinkSchema).min(1).max(50) }).strict())
-  .handler(async ({ data }) => {
-    const { requireStaffAccess } = await import("./auth.server");
-    const actor = await requireStaffAccess(getRequest(), ["admin", "manager"]);
-    return (await import("./whatsapp-enquiries.server")).provisionTrackingLinks(data.links, actor);
   });
 export const resolveWhatsappLinks = createServerFn({ method: "GET" })
   .inputValidator(z.object({ offers: z.array(offerSchema).max(50) }).strict())

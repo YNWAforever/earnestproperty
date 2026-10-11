@@ -60,7 +60,7 @@ test("AI modules expose the expected public and server-only contracts", () => {
       ["AiKnowledgeChunk", "CrmAiProfile", "CrmSegment", "LiveAgentSession"],
     ],
     ["src/lib/ai/config.server.ts", ["getAiServerConfig", "isAiEnabled"]],
-    ["src/lib/ai/provider.server.ts", ["generateAiText", "generateAiJson"]],
+    ["src/lib/ai/provider.server.ts", ["generateAiJson"]],
     [
       "src/lib/ai/knowledge.ts",
       ["chunkKnowledgeText", "normalizeKnowledgeSource", "filterPublicKnowledgeChunks"],
@@ -109,6 +109,9 @@ test("AI modules expose the expected public and server-only contracts", () => {
   // FX-11b: the public handoff decision is replyOffersHandoff (live-agent-reply.ts); the old
   // confidence-based helper is gone.
   assert.doesNotMatch(read("src/lib/ai/live-agent.ts"), /shouldOfferHumanHandoff/);
+  // FX-19a-2: nothing called generateAiText; text generation stays reachable only
+  // through createAiGatewayClient().generateText.
+  assert.doesNotMatch(read("src/lib/ai/provider.server.ts"), /\bgenerateAiText\b/);
 });
 
 test("AI knowledge rebuild checks job ownership around provider and database work", () => {

@@ -168,12 +168,7 @@ test("migrated files import callStaffServerFn and never @/auth", () => {
 });
 
 test("staff server functions from whatsapp-enquiries are only called through the wrapper", () => {
-  const staffFns = [
-    "getWhatsappTrackingLinks",
-    "saveWhatsappTrackingLink",
-    "provisionWhatsappLinks",
-    "searchWhatsappLinkOffers",
-  ];
+  const staffFns = ["saveWhatsappTrackingLink", "searchWhatsappLinkOffers"];
   const offenders = [];
   for (const [path, text] of sources) {
     for (const match of text.matchAll(

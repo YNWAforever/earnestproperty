@@ -1195,7 +1195,7 @@ test("WhatsApp selected enquiry is sent for text and template with association-b
 
 test("campaign status and delivery job are committed in one transaction", () => {
   const source = read("src/lib/neon/admin-data.server.ts");
-  const start = source.indexOf("export async function queueAdminCampaign(");
+  const start = source.indexOf("\nasync function queueAdminCampaign(");
   const end = source.indexOf("export async function ", start + 1);
   assert.ok(start >= 0 && end > start);
   const queue = source.slice(start, end);

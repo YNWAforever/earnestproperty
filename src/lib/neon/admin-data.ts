@@ -149,86 +149,6 @@ export async function saveAdminAgentProfile(options: { data: AdminAgentProfileMu
   );
 }
 
-/**
- * zh-HK messages for the terse `Response` bodies the staff-access server
- * functions throw -- the `reason` union from decideStaffRoleChange /
- * decideStaffDeactivation (staff-security-policy.ts), plus the handful of
- * fixed strings fetchStaffAccessSummary / updateStaffRoles / setStaffActive
- * and requireStaffAccess throw directly. Voice matches the banners already
- * in AgentProfileForm.tsx (isProtected / isSelf / isLastAdmin) rather than
- * inventing a second tone for the same situations.
- *
- * Anything NOT in this map is a body text this file's author did not
- * anticipate -- unwrapStaffAccessResponse surfaces it verbatim rather than
- * replacing it with a generic message, so an unrecognised code is visible
- * and reportable instead of silently disappearing.
- */
-const STAFF_ACCESS_ERROR_MESSAGES: Record<string, string> = {
-  "not-admin": "只有管理員可以進行此操作。",
-  "self-admin-removal": "你不能移除自己的管理員權限，請由另一位管理員代為處理。",
-  self: "你不能停用自己的帳戶，請由另一位管理員代為處理。",
-  "last-admin":
-    "此帳戶是目前系統內唯一的管理員，操作後將無人可管理系統，請先將管理員權限授予其他同事。",
-  "protected-account":
-    "此帳戶已在 ADMIN_BOOTSTRAP_EMAILS 名單內，不可移除管理員權限或停用，以免無人可登入系統。",
-  "successor-required": "此同事仍有已指派的工作，請先選擇接手人。",
-  "successor-is-target": "接手人不能是同一位同事，請選擇其他人。",
-  Unauthorized: "登入已失效，請重新登入後再試。",
-  Forbidden: "你沒有權限進行此操作。",
-  "staff-email-unverified":
-    "你的登入電郵尚未完成驗證，系統未能把此帳戶連結至職員記錄。請聯絡管理員在「團隊成員」為你連結帳戶。",
-};
-
-/**
- * TanStack Start does NOT surface a thrown `Response` from a server function
- * handler as a rejected promise on the client. Traced in
- * @tanstack/start-server-core's server-functions-handler.js: a thrown Response
- * lands in `res.error`, and `const unwrapped = res.result || res.error` cannot
- * tell that apart from one the handler simply returned -- either way it sets
- * the `x-tss-raw-response` header and returns it. @tanstack/start-client-core's
- * serverFnFetcher.js's getResponse() then returns that response the moment it
- * sees that header, before it ever reaches the `.ok` / status check a few
- * lines later. So awaiting a staff-access server function RESOLVES with the
- * Response object whenever the handler rejected the mutation -- a last-admin
- * guard, the 409 Serializable conflict, a protected-account block -- and a
- * caller's `try { await x(); toast.success(...) } catch {...}` reports success
- * on a change the database never applied. For a deactivation specifically,
- * that means the admin believes a departing colleague is locked out and their
- * work reassigned, while both are still live.
- *
- * The browser-callable fetchStaffAccessSummary / updateStaffRoles /
- * setStaffActive wrappers that used to pipe their results through this were
- * removed in FX-19a-1: no UI called them, and Team changes roles and active
- * state through admin-team.ts (changeStaffRoles / changeStaffActive). This
- * helper and its message table are kept only for their unit test
- * (admin-data.staff-access-response.test.ts) and go in FX-19a-2, which owns
- * the package.json line that runs that test. It converts a resolved raw
- * Response -- or a rejection with a ServerFnResponseError, which carries the
- * same body text and status -- into a genuinely thrown Error.
- */
-function translateStaffAccessMessage(text: string, status: number): string {
-  const trimmed = text.trim();
-  if (STAFF_ACCESS_ERROR_MESSAGES[trimmed]) return STAFF_ACCESS_ERROR_MESSAGES[trimmed];
-  if (trimmed && trimmed !== `HTTP ${status}`) return trimmed;
-  return `操作失敗（HTTP ${status}）`;
-}
-
-export async function unwrapStaffAccessResponse<T>(promise: Promise<T>): Promise<T> {
-  try {
-    const result = await promise;
-    if (result instanceof Response) {
-      const text = (await result.text().catch(() => "")).trim();
-      throw new Error(translateStaffAccessMessage(text, result.status));
-    }
-    return result;
-  } catch (error) {
-    if (error instanceof ServerFnResponseError) {
-      throw new Error(translateStaffAccessMessage(error.message, error.status));
-    }
-    throw error;
-  }
-}
-
 const STALE_SERVER_FN_RELOAD_KEY = "earnest-admin-stale-server-fn-reloaded";
 
 function errorMessage(error: unknown) {
@@ -1001,18 +921,6 @@ export async function bulkUpdateAdminLeads(options: {
   return callStaffServerFn(async () =>
     bulkUpdateAdminLeadsServer(await withStaffAuthHeaders(options)),
   );
-}
-
-const reorderAdminFaqsServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { orderedIds: string[] }) => data)
-  .handler(async ({ data }) => {
-    const staff = await requireStaff(["admin", "manager"]);
-    const adminData = await import("./admin-data.server");
-    return adminData.reorderAdminFaqs(data.orderedIds, staff);
-  });
-
-export async function reorderAdminFaqs(options: { data: { orderedIds: string[] } }) {
-  return callStaffServerFn(async () => reorderAdminFaqsServer(await withStaffAuthHeaders(options)));
 }
 
 const fetchAdminMediaAssetsServer = createServerFn({ method: "GET" }).handler(async () => {

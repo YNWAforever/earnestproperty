@@ -4182,7 +4182,9 @@ function expectedSendCount(value: unknown): number | null {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
-export async function queueAdminCampaign(
+// Module-private (FX-19a-2): the only way to queue a campaign is
+// sendAdminCampaignQueue, which validates and re-materialises recipients first.
+async function queueAdminCampaign(
   id: string,
   actor: StaffAccess,
   options: { expectedCount?: number | null } = {},
@@ -4332,6 +4334,14 @@ export async function queueAdminCampaign(
     queuedRecipients: eligibleNow,
   };
 }
+
+/**
+ * Test-only handle on the module-private queue step. The owned DB suites
+ * exercise its own guards (status, consent, count, concurrency) directly;
+ * production code must call sendAdminCampaignQueue, and
+ * admin-data.contract.test.mjs fails if any non-test file names this.
+ */
+export const queueAdminCampaignForTests = queueAdminCampaign;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
