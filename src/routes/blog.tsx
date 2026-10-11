@@ -182,7 +182,7 @@ function BlogPage() {
                 className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
                   selectedCategory === category
                     ? "border-primary bg-secondary text-secondary-foreground"
-                    : "border-input bg-background text-muted-foreground hover:bg-muted"
+                    : "border-border bg-background text-muted-foreground hover:bg-muted"
                 }`}
               >
                 {category}

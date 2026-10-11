@@ -56,11 +56,6 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
 
   --shadow-elegant: 0 10px 40px -12px color-mix(in oklab, var(--foreground) 35%, transparent);
   --shadow-card: 0 2px 12px -4px color-mix(in oklab, var(--foreground) 12%, transparent);
@@ -149,14 +144,11 @@
   --destructive-foreground: oklch(0.985 0.003 157);
 
   --border: oklch(0.912 0.017 157);
-  --input: oklch(0.912 0.017 157);
+  /* #848F88: 3.34:1 on card, 3.20:1 on surface (WCAG 1.4.11 field boundary). Fields only; buttons and chips use --border.
+     The fields apply it as border-input! because the neon-auth layer's `* { border-color }`
+     outranks every border-colour utility. */
+  --input: oklch(0.64 0.017 157);
   --ring: var(--brand-primary);
-
-  --chart-1: var(--brand-primary);
-  --chart-2: var(--brand-primary-bright);
-  --chart-3: var(--brand-primary-deep);
-  --chart-4: oklch(0.595 0.066 182.4);
-  --chart-5: oklch(0.6 0.06 60);
 }
 
 /* WhatsApp CTA green, darkened from the brand #25D366 (1.98:1 with white
@@ -226,7 +218,16 @@
   h5,
   h6 {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
+  }
+
+  /* FX-20 C2: one focus indicator for links and custom controls that set none.
+     Primitives draw their own ring and set outline:none, which wins (utilities layer).
+     The colour is !important because the neon-auth layer, declared after Tailwind's
+     layers and so above them, sets every element's outline-color to --ring at 50%. */
+  :where(a, button, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-color: var(--ring) !important;
+    outline-offset: 2px;
   }
 
   /* The codebase had no prefers-reduced-motion handling anywhere, while

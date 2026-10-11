@@ -57,7 +57,7 @@ export function DefaultErrorComponent({ error, reset }: { error: unknown; reset:
           </button>
           <Link
             to="/"
-            className="inline-flex min-h-11 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-semibold text-foreground transition-colors hover:bg-accent"
+            className="inline-flex min-h-11 items-center justify-center rounded-md border border-border bg-background px-5 text-sm font-semibold text-foreground transition-colors hover:bg-accent"
           >
             返回首頁
           </Link>
