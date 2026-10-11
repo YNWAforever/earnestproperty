@@ -50,7 +50,9 @@ function MetricCard({
       <div className="flex items-start justify-between gap-2">
         <h3 className="text-sm font-medium text-muted-foreground">{label}</h3>
         {metric.status === "provisional" ? (
-          <span className="rounded bg-amber-100 px-2 text-xs text-amber-900">暫定</span>
+          <span className="rounded bg-warning-subtle px-2 text-xs text-warning-foreground">
+            暫定
+          </span>
         ) : null}
       </div>
       <p className="mt-2 text-2xl font-semibold tabular-nums">{formatMetric(metric)}</p>

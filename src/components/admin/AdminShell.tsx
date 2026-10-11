@@ -196,7 +196,7 @@ const navLinkActiveProps = {
 };
 
 const navBadgeClassName =
-  "ml-auto min-w-5 rounded-full bg-amber-500 px-1.5 text-center text-xs font-semibold leading-5 text-amber-950";
+  "ml-auto min-w-5 rounded-full bg-warning-strong px-1.5 text-center text-xs font-semibold leading-5 text-warning-foreground";
 
 function AdminNav({
   roles,
@@ -295,7 +295,7 @@ function StaffAccessDenied({
     <div
       role="alert"
       data-staff-access-denied={reason}
-      className="rounded-lg border border-amber-700/30 bg-amber-50 p-5 text-sm text-amber-950"
+      className="rounded-lg border border-warning-accent/30 bg-warning p-5 text-sm text-warning-foreground"
     >
       <div className="flex items-start gap-3">
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
@@ -303,7 +303,7 @@ function StaffAccessDenied({
           <h2 className="text-base font-semibold">{copy.title}</h2>
           <p className="mt-1">{copy.description}</p>
           {email ? (
-            <p className="mt-2 text-xs text-amber-900/80">
+            <p className="mt-2 text-xs text-warning-foreground/80">
               目前登入電郵：<span className="font-medium">{email}</span>
             </p>
           ) : null}
@@ -524,7 +524,7 @@ export function AdminShell({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/70">
+    <div className="min-h-screen bg-background">
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[240px_1fr]">
         {/* The sticky offset used to be lg:top-20 to clear the public
             SiteHeader, which __root.tsx no longer renders on /admin -- that

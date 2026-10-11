@@ -8,12 +8,12 @@ const access = {
   active: {
     label: "已啟用",
     icon: CheckCircle2,
-    className: "border-emerald-700/20 bg-emerald-700/10 text-emerald-800",
+    className: "border-success/20 bg-success/10 text-success-foreground",
   },
   suspended: {
     label: "已停用",
     icon: PauseCircle,
-    className: "border-slate-500/20 bg-slate-500/10 text-slate-700",
+    className: "border-muted-foreground/20 bg-muted-foreground/10 text-foreground/80",
   },
 } as const;
 
@@ -21,22 +21,22 @@ const invitation = {
   none: {
     label: "未邀請",
     icon: Mail,
-    className: "border-slate-500/20 bg-slate-500/10 text-slate-700",
+    className: "border-muted-foreground/20 bg-muted-foreground/10 text-foreground/80",
   },
   pending: {
     label: "處理中",
     icon: Clock3,
-    className: "border-amber-700/20 bg-amber-700/10 text-amber-900",
+    className: "border-warning-accent/20 bg-warning-accent/10 text-warning-foreground",
   },
   sent: {
     label: "待人工分享",
     icon: CheckCircle2,
-    className: "border-emerald-700/20 bg-emerald-700/10 text-emerald-800",
+    className: "border-success/20 bg-success/10 text-success-foreground",
   },
   expired: {
     label: "邀請已過期",
     icon: AlertTriangle,
-    className: "border-amber-700/20 bg-amber-700/10 text-amber-900",
+    className: "border-warning-accent/20 bg-warning-accent/10 text-warning-foreground",
   },
   failed: {
     label: "邀請失敗",
@@ -74,7 +74,7 @@ export function AdminTeamStatusBadge({
           ? {
               label: "需要跟進",
               icon: AlertTriangle,
-              className: "border-amber-700/20 bg-amber-700/10 text-amber-900",
+              className: "border-warning-accent/20 bg-warning-accent/10 text-warning-foreground",
             }
           : null;
   if (!item) return null;

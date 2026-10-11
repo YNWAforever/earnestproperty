@@ -318,13 +318,16 @@ export function AdminPropertyWorkspace({
         ))}
       </div>
       {!detail.managementAvailable ? (
-        <p role="status" className="rounded-lg border bg-amber-50 p-4 text-sm text-amber-900">
+        <p
+          role="status"
+          className="rounded-lg border bg-warning p-4 text-sm text-warning-foreground"
+        >
           物業資料可供查閱。管理功能正在準備，暫時未能儲存修改。
         </p>
       ) : null}
       {propertyContentReviewReasons(detail.shared).length ? (
         <aside
-          className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm"
+          className="rounded-lg border border-warning-border bg-warning p-4 text-sm"
           aria-label="內容待核實"
         >
           <p className="font-medium">內容待核實</p>
@@ -339,7 +342,7 @@ export function AdminPropertyWorkspace({
         </aside>
       ) : null}
       {detail.conflicts.length ? (
-        <details className="rounded-lg border border-amber-300 p-4">
+        <details className="rounded-lg border border-warning-border p-4">
           <summary className="cursor-pointer font-medium">
             {detail.conflicts.length} 項資料有差異，請核實
           </summary>

@@ -214,7 +214,7 @@ export function AdminPropertyBulkActions({
         只處理本頁勾選項目。沒有相應放盤不會自動新增，售價及租金不會被此操作修改。
       </p>
       {previews.some((p) => p.reason) && (
-        <details className="mt-2 text-sm text-amber-800">
+        <details className="mt-2 text-sm text-warning-foreground">
           <summary>{previews.filter((p) => p.reason).length} 個物業未符合條件，將不會提交</summary>
           {previews
             .filter((p) => p.reason)

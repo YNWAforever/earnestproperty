@@ -248,3 +248,87 @@ test("the estate photo credit is full-opacity text on a dark 50 % backing", () =
   assert.match(grid, /rounded bg-foreground\/50 px-1 text-xs text-primary-foreground"/);
   assert.doesNotMatch(grid, /text-primary-foreground\/60/);
 });
+
+// ---------------------------------------------------------------------------
+// 20b Task 2: one neutral family and named status colours in the admin (C8, C9)
+// ---------------------------------------------------------------------------
+
+// Outside the 17b/17c screens only: admin.whatsapp, admin.blasts, admin.segments,
+// admin.property-sync and admin.leads (and AdminShell's nav array) keep theirs until then.
+const STATUS_TOKEN_FILES = [
+  "src/components/admin/AdminShell.tsx",
+  "src/routes/admin.index.tsx",
+  "src/components/admin/team/AdminTeamStatusBadge.tsx",
+  "src/components/admin/operations/AdminOperationsJobs.tsx",
+  "src/components/admin/AdminNoPermission.tsx",
+  "src/components/admin/AdminPropertyWorkspace.tsx",
+  "src/components/admin/AdminPropertyTable.tsx",
+  "src/components/admin/AdminContentCopilot.tsx",
+  "src/components/admin/analytics/PerformanceDashboard.tsx",
+  "src/components/admin/whatsapp/WhatsappLinkWizard.tsx",
+  "src/components/admin/whatsapp/WhatsappBatchResult.tsx",
+  "src/components/admin/TransactionAttributionEditor.tsx",
+  "src/components/admin/AdminPropertyBulkActions.tsx",
+];
+
+test("the listed admin files use no slate-, amber- or emerald- class", () => {
+  const offenders = STATUS_TOKEN_FILES.flatMap((file) =>
+    [...read(file).matchAll(/\b(?:slate|amber|emerald)-\d+\b/g)].map((m) => `${file}: ${m[0]}`),
+  );
+  assert.deepEqual(offenders, []);
+});
+
+test("the warning and success tokens equal the Tailwind values they replace", () => {
+  const pinned = {
+    "--warning": "#fffbeb", // amber-50
+    "--warning-subtle": "#fef3c7", // amber-100
+    "--warning-border": "#fcd34d", // amber-300
+    "--warning-strong": "#f59e0b", // amber-500
+    "--warning-accent": "#b45309", // amber-700
+    "--warning-foreground": "#451a03", // amber-950 (replaces amber-800/-900 text)
+    "--success-subtle": "#ecfdf5", // emerald-50
+    "--success": "#047857", // emerald-700
+    "--success-foreground": "#065f46", // emerald-800
+  };
+  for (const [name, value] of Object.entries(pinned)) {
+    assert.equal(tokens.get(name), value, name);
+    assert.ok(
+      css.includes(`--color${name.slice(1)}: var(${name});`),
+      `${name} is a Tailwind colour`,
+    );
+  }
+});
+
+// Alpha-composite a token over a backdrop (linear-light approximation is fine for a floor check
+// only when done in sRGB space, so convert back first).
+const toSrgb = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+const over = (fg, alpha, bg) =>
+  fg.map((c, i) => lin(alpha * toSrgb(c) + (1 - alpha) * toSrgb(bg[i])));
+
+test("status text stays readable on its backgrounds", () => {
+  const card = color("--card");
+  const fg = color("--warning-foreground");
+  assert.ok(ratio(fg, color("--warning")) >= 4.5, "warning-foreground on warning");
+  assert.ok(ratio(fg, color("--warning-strong")) >= 4.5, "warning-foreground on warning-strong");
+  assert.ok(ratio(fg, color("--warning-subtle")) >= 4.5, "warning-foreground on warning-subtle");
+  assert.ok(
+    ratio(fg, over(color("--warning-accent"), 0.1, card)) >= 4.5,
+    "warning-foreground on warning-accent/10",
+  );
+  assert.ok(ratio(color("--warning-accent"), card) >= 4.5, "warning-accent text on card");
+  const ok = color("--success-foreground");
+  assert.ok(ratio(ok, over(color("--success"), 0.1, card)) >= 4.5, "success-foreground on /10");
+  assert.ok(ratio(ok, color("--success-subtle")) >= 4.5, "success-foreground on success-subtle");
+  // slate-700 → foreground/80, on bg-muted and on the muted-foreground/10 badge tint.
+  const soft = over(color("--foreground"), 0.8, color("--muted"));
+  assert.ok(ratio(soft, color("--muted")) >= 4.5, "foreground/80 on muted");
+  const tint = over(color("--muted-foreground"), 0.1, card);
+  assert.ok(ratio(over(color("--foreground"), 0.8, tint), tint) >= 4.5, "foreground/80 on tint");
+});
+
+test("the admin shell background and dashboard neutrals come from tokens", () => {
+  assert.match(read("src/components/admin/AdminShell.tsx"), /"min-h-screen bg-background"/);
+  const dashboard = read("src/routes/admin.index.tsx");
+  assert.match(dashboard, /bg-muted px-3 py-2 transition hover:bg-accent/);
+  assert.doesNotMatch(dashboard, /\bslate-/);
+});

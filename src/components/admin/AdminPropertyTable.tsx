@@ -20,7 +20,7 @@ function Offer({ offer }: { offer: ManagedOffering | null }) {
     <div className="space-y-1">
       <p className="whitespace-nowrap font-semibold tabular-nums">{offeringPrice(offer)}</p>
       <span
-        className={`inline-block rounded px-2 py-0.5 text-xs ${offer.status === "active" ? "bg-emerald-50 text-emerald-800" : "bg-muted text-muted-foreground"}`}
+        className={`inline-block rounded px-2 py-0.5 text-xs ${offer.status === "active" ? "bg-success-subtle text-success-foreground" : "bg-muted text-muted-foreground"}`}
       >
         {propertyStatusLabels[offer.status] ?? offer.status}
       </span>
@@ -55,9 +55,9 @@ function Identity({ row }: { row: ManagedPropertySummary }) {
         <p className="line-clamp-2 max-w-72 text-xs text-muted-foreground">
           {neutralPropertyTitle(row.title)}
         </p>
-        {!row.estateName ? <p className="text-xs text-amber-800">屋苑待核實</p> : null}
+        {!row.estateName ? <p className="text-xs text-warning-foreground">屋苑待核實</p> : null}
         {(row.reviewRequired || row.unlinked) && (
-          <p className="text-xs text-amber-800">
+          <p className="text-xs text-warning-foreground">
             {row.unlinked ? "編號待核實" : "資料有差異，待核實"}
           </p>
         )}

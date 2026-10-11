@@ -937,7 +937,7 @@ export function WhatsappLinkWizard({
             {new Date(progress.preview.expiresAt).toLocaleString("zh-HK")}
           </p>
           {previewDirty ? (
-            <p role="alert" className="text-sm text-amber-800">
+            <p role="alert" className="text-sm text-warning-foreground">
               已修改行內資料；原有預覽已失效，須重新預覽才可提交。
             </p>
           ) : null}
