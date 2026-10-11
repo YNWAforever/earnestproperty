@@ -240,6 +240,10 @@ function Statuses() {
         <AlertTitle>提示標題：這是一個較長的提示標題，用來檢查兩行中文標題的行距</AlertTitle>
         <AlertDescription>提示內容</AlertDescription>
       </Alert>
+      <Alert variant="destructive" data-alert="destructive">
+        <AlertTitle>提交失敗</AlertTitle>
+        <AlertDescription>請稍後再試。</AlertDescription>
+      </Alert>
       <Dialog>
         <DialogTrigger asChild>
           <Button variant="outline" data-focus="dialog-trigger">

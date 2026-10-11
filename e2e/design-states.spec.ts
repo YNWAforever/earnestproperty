@@ -366,3 +366,46 @@ test("input, textarea and select trigger borders are at least 3:1 against the ca
   expect(ratios.map(([field]) => field)).toEqual(["input", "textarea", "select"]);
   for (const [field, ratio] of ratios) expect(ratio, field).toBeGreaterThanOrEqual(3);
 });
+
+test("border colour classes beat the Neon Auth stylesheet; a bare border keeps --border", async ({
+  page,
+}) => {
+  // FX-20d: @neondatabase/neon-js/ui/tailwind's `@layer neon-auth { * { border-color } }` sits
+  // between base and components, so primitives' own colour classes win and a plain `border`
+  // still falls back to --border, not currentColor.
+  await open(page);
+  const colours = await page.evaluate(() => {
+    const expected = (value: string) => {
+      const probe = document.createElement("div");
+      probe.style.border = `1px solid ${value}`;
+      document.body.append(probe);
+      const colour = getComputedStyle(probe).borderTopColor;
+      probe.remove();
+      return colour;
+    };
+    const actual = (selector: string) =>
+      getComputedStyle(document.querySelector(selector)!).borderTopColor;
+    const bare = document.createElement("div");
+    bare.className = "border";
+    document.body.append(bare);
+    const bareColour = getComputedStyle(bare).borderTopColor;
+    bare.remove();
+    return {
+      checkbox: [actual('[data-focus="checkbox"]'), expected("var(--primary)")],
+      radio: [actual('[data-focus="radio"]'), expected("var(--primary)")],
+      destructiveAlert: [
+        actual('[data-alert="destructive"]'),
+        expected("color-mix(in oklab, var(--destructive) 50%, transparent)"),
+      ],
+      input: [actual('[data-field="input"]'), expected("var(--input)")],
+      badge: [actual('[data-badge="default"]'), expected("transparent")],
+      card: [actual('[data-surface="card"]'), expected("var(--border)")],
+      bareBorder: [bareColour, expected("var(--border)")],
+      border: [expected("var(--border)"), expected("currentColor")],
+    };
+  });
+  for (const [name, [got, want]] of Object.entries(colours)) {
+    if (name === "border") expect(got, "--border is not the text colour").not.toBe(want);
+    else expect(got, name).toBe(want);
+  }
+});

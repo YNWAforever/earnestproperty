@@ -102,9 +102,38 @@ test("only form fields use border-input", () => {
     read("src/components/ui/button.tsx"),
     /outline:\s*\n?\s*"border border-border bg-background/,
   );
-  // The neon-auth layer (@neondatabase/neon-js/ui/tailwind) is declared after Tailwind's layers,
-  // so its `* { border-color }` beats any plain border-colour utility: fields mark theirs !important.
-  for (const field of allowed) assert.match(read(field), /\bborder border-input! /, field);
+  // FX-20d: with the neon-auth layer below components and utilities, the plain class wins.
+  for (const field of allowed) assert.match(read(field), /\bborder border-input /, field);
+});
+
+test("the neon-auth layer sits between base and components, so the site's border colours win", () => {
+  // The first `@layer` naming a layer fixes its place. Without this statement before the imports,
+  // @neondatabase/neon-js/ui/tailwind appends neon-auth after utilities, where its
+  // `* { border-color; outline-color }` beats every border and outline colour utility.
+  const statement = css.match(/^@layer\s+([\w\s,-]+);/m);
+  assert.ok(statement, "styles.css declares the layer order");
+  assert.deepEqual(
+    statement[1].split(",").map((name) => name.trim()),
+    ["properties", "theme", "base", "neon-auth", "components", "utilities"],
+  );
+  const tailwindImport = css.indexOf('@import "tailwindcss"');
+  assert.ok(statement.index < tailwindImport, "the order statement comes before the imports");
+  assert.ok(tailwindImport < css.indexOf('@import "@neondatabase/neon-js/ui/tailwind"'));
+  // The layer name is the one the package really uses, and it still sets the * defaults.
+  const neonTheme = readFileSync(
+    new URL("node_modules/@neondatabase/neon-js/dist/ui/theme.css", root),
+    "utf8",
+  );
+  assert.match(
+    neonTheme,
+    /@layer neon-auth\s*\{[\s\S]*?\*\s*\{[^}]*border-color:\s*var\(--neon-border\)/,
+  );
+  // No border or outline colour class needs !important to beat it any more.
+  const important = sourceFiles("src/", /\.(tsx|ts)$/)
+    .filter((file) => !/\.test\./.test(file))
+    .filter((file) => /\b(?:border|outline)-[\w/-]+!(?=[\s"'`])/.test(readFileSync(file, "utf8")))
+    .map(relative);
+  assert.deepEqual(important, []);
 });
 
 test("a global focus-visible fallback uses --ring with a 2 px outline and 2 px offset", () => {
@@ -113,7 +142,7 @@ test("a global focus-visible fallback uses --ring with a 2 px outline and 2 px o
   );
   assert.ok(rule, "the :where(...):focus-visible base rule exists");
   assert.match(rule[1], /outline:\s*2px solid var\(--ring\);/);
-  // !important: the neon-auth layer sets every outline-color to --ring at 50%.
+  // !important: the neon-auth layer sits above base and sets every outline-color to --ring at 50%.
   assert.match(rule[1], /outline-color:\s*var\(--ring\) !important;/);
   assert.match(rule[1], /outline-offset:\s*2px;/);
 });
@@ -358,8 +387,7 @@ test("nativeFieldClassName is the 44 px field style with the 3:1 border", () => 
     "w-full",
     "rounded-md",
     "border",
-    // !important: the neon-auth layer's `* { border-color }` outranks plain utilities.
-    "border-input!",
+    "border-input",
     "bg-background",
     "px-3",
     "text-sm",
