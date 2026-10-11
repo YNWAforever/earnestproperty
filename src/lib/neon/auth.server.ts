@@ -262,7 +262,8 @@ export function createStaffAccessResolver(dependencies: StaffAccessResolverDepen
       console.error(
         '[auth] Could not read neon_auth."user"."emailVerified"; ' +
           "email-based staff activation is disabled until this is resolved.",
-        error,
+        // Class only (H-20): a driver error can carry SQL text or connection details.
+        { errorClass: error instanceof Error ? error.name : typeof error },
       );
       return false;
     }
