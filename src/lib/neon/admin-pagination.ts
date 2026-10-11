@@ -13,6 +13,8 @@ export type CursorPage<T> = {
   nextCursor: string | null;
   total: number;
   newestCursor?: string | null;
+  /** FAQ pages only: archived rows under the same scope and search, whatever `archived` shows. */
+  archivedTotal?: number;
 };
 export type AdminContactPageRow = {
   id: string;
@@ -49,6 +51,8 @@ export type AdminPageInput = {
   conversationId?: string;
   messageIds?: string[];
   direction?: "older" | "newer";
+  /** FAQ pages only. `hide` (the default) lists live rows, `only` archived rows, `all` both. */
+  archived?: "hide" | "only" | "all";
 };
 const resources = [
   "leads",
@@ -86,6 +90,7 @@ export function parseAdminPageInput(value: AdminPageInput): AdminPageInput & { l
     invalid();
   if (input.optIn && !["all", "yes", "no"].includes(input.optIn)) invalid();
   if (input.direction && !["older", "newer"].includes(input.direction)) invalid();
+  if (input.archived != null && !["hide", "only", "all"].includes(input.archived)) invalid();
   if (input.resource === "messages" && (!input.conversationId || !uuid.test(input.conversationId)))
     invalid();
   if (input.agentId && !["all", "unassigned"].includes(input.agentId) && !uuid.test(input.agentId))
@@ -106,7 +111,7 @@ export function parseAdminPageInput(value: AdminPageInput): AdminPageInput & { l
     estates: [],
     articles: [],
     videos: [],
-    faqs: ["scope"],
+    faqs: ["scope", "archived"],
     media: [],
   };
   for (const key of [
@@ -120,9 +125,12 @@ export function parseAdminPageInput(value: AdminPageInput): AdminPageInput & { l
     "conversationId",
     "messageIds",
     "direction",
+    "archived",
   ])
     if ((input as Record<string, unknown>)[key] != null && !allowed[input.resource].includes(key))
       invalid();
+  // The effective filter is part of the cursor binding, so the default is written out.
+  if (input.resource === "faqs") input.archived ??= "hide";
   return input;
 }
 export type AdminCursor = { at: string; id: string };
@@ -154,6 +162,9 @@ export function decodeAdminCursor(value: string, binding: string): AdminCursor {
 }
 export function pageBinding(input: AdminPageInput, scope: string) {
   const { cursor: _cursor, limit: _limit, direction: _direction, ...filters } = input;
+  // The default FAQ filter binds as "no key", so cursors issued before `archived` existed still
+  // page the live rows; an explicit `only` or `all` binds by value and cannot be swapped.
+  if (filters.resource === "faqs" && filters.archived === "hide") delete filters.archived;
   return JSON.stringify([
     scope,
     Object.fromEntries(Object.entries(filters).sort(([a], [b]) => a.localeCompare(b))),

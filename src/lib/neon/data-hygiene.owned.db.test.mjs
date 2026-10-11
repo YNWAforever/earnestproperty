@@ -1348,6 +1348,83 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
           assert.equal(await count("audit_logs"), auditCount);
         },
       );
+
+      await t.test(
+        "the hub filters and counts archived FAQs on the server, across pages and under search",
+        async () => {
+          const { readAdminPage } = await import("./admin-pagination.server.ts");
+          const scope = "synthetic-fx18a-archive";
+          // 60 FAQs, 55 archived: more archived rows than one 50-row page holds.
+          for (let n = 0; n < 60; n += 1) {
+            const archived = n < 55;
+            await query(
+              "INSERT INTO faqs(id,scope,question,answer,sort_order,published) VALUES($1,$2,$3,$4,$5,$6)",
+              [
+                id(3000 + n),
+                scope,
+                (archived ? "封存問題 " : "現行問題 ") + n,
+                n % 11 === 0 ? "特別答案" : "一般答案",
+                n,
+                !archived,
+              ],
+            );
+          }
+          const page = (filters, cursor = null) =>
+            readAdminPage({ resource: "faqs", scope, cursor, ...filters }, admin);
+
+          const live = await page({});
+          assert.equal(live.rows.length, 5);
+          assert.ok(live.rows.every((row) => row.published === true));
+          assert.equal(live.total, 5);
+          assert.equal(live.archivedTotal, 55);
+          assert.equal(live.nextCursor, null);
+          assert.deepEqual(await page({ archived: "hide" }), live);
+
+          const onlyFirst = await page({ archived: "only" });
+          assert.equal(onlyFirst.rows.length, 50);
+          assert.equal(onlyFirst.total, 55);
+          assert.equal(onlyFirst.archivedTotal, 55);
+          assert.ok(onlyFirst.rows.every((row) => row.published === false));
+          assert.ok(onlyFirst.nextCursor);
+          const onlySecond = await page({ archived: "only" }, onlyFirst.nextCursor);
+          assert.equal(onlySecond.rows.length, 5);
+          assert.equal(onlySecond.archivedTotal, 55);
+          assert.equal(onlySecond.nextCursor, null);
+          const archivedIds = new Set([...onlyFirst.rows, ...onlySecond.rows].map((r) => r.id));
+          assert.equal(archivedIds.size, 55);
+
+          const allFirst = await page({ archived: "all" });
+          assert.equal(allFirst.total, 60);
+          assert.equal(allFirst.archivedTotal, 55);
+          assert.equal(allFirst.rows.length, 50);
+          const allSecond = await page({ archived: "all" }, allFirst.nextCursor);
+          assert.equal(allSecond.rows.length, 10);
+          assert.equal(new Set([...allFirst.rows, ...allSecond.rows].map((r) => r.id)).size, 60);
+
+          // The count follows the search, not the loaded page: n = 0, 11, 22, 33, 44 are
+          // archived and n = 55 is live.
+          const searched = await page({ q: "特別答案" });
+          assert.deepEqual(
+            searched.rows.map((row) => row.question),
+            ["現行問題 55"],
+          );
+          assert.equal(searched.archivedTotal, 5);
+          const searchedArchived = await page({ q: "特別答案", archived: "only" });
+          assert.equal(searchedArchived.total, 5);
+
+          // A cursor issued under one archived filter is refused under another.
+          for (const archived of ["hide", "all"])
+            await assert.rejects(
+              page({ archived }, onlyFirst.nextCursor),
+              /INVALID_ADMIN_PAGE/,
+              archived,
+            );
+          await assert.rejects(
+            page({ archived: "only" }, allFirst.nextCursor),
+            /INVALID_ADMIN_PAGE/,
+          );
+        },
+      );
     });
   } finally {
     network.mock.restore();

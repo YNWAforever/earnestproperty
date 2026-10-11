@@ -21,6 +21,7 @@ export async function readAdminPage<R extends AdminPageResource>(
   const [result] = await queryRows(query.statement, query.params);
   const rows = (result?.rows ?? []) as Array<{ id: string; _cursor_at: string }>;
   const page = finishAdminPage(rows, query.input.limit, query.binding, Number(result?.total ?? 0));
+  if (result?.archived_total != null) page.archivedTotal = Number(result.archived_total);
   // Newer pages advance from their last ascending row; initial/older pages expose their newest edge.
   if (query.ascending)
     page.newestCursor = rows.length

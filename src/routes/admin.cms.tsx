@@ -260,6 +260,8 @@ function AdminCms() {
   const [faqDeleting, setFaqDeleting] = useState(false);
   const [faqDeleteError, setFaqDeleteError] = useState<string | null>(null);
   const [showArchivedFaqs, setShowArchivedFaqs] = useState(false);
+  // Counted by the server over the current scope and search, not from the loaded page.
+  const [faqArchivedTotal, setFaqArchivedTotal] = useState(0);
   const [restoringFaq, setRestoringFaq] = useState<AdminFaqCmsRow | null>(null);
   const [faqRestoring, setFaqRestoring] = useState(false);
   const [faqRestoreError, setFaqRestoreError] = useState<string | null>(null);
@@ -290,10 +292,13 @@ function AdminCms() {
           resource: activeTab,
           cursor,
           q: activeSearch,
-          ...(activeTab === "faqs" ? { scope: faqScopeFilter } : {}),
+          ...(activeTab === "faqs"
+            ? { scope: faqScopeFilter, archived: showArchivedFaqs ? "all" : "hide" }
+            : {}),
         },
       });
       if (sequence !== cmsRequest.current) return;
+      if (activeTab === "faqs") setFaqArchivedTotal(page.archivedTotal ?? 0);
       setCmsCursor(cursor);
       setCmsNextCursor(page.nextCursor);
       setCmsTotal(page.total);
@@ -337,7 +342,7 @@ function AdminCms() {
       setData((current) => current ?? { estates: [], articles: [], faqs: [], faqGroups: [] });
       setError(null);
     },
-    [activeTab, activeSearch, faqScopeFilter],
+    [activeTab, activeSearch, faqScopeFilter, showArchivedFaqs],
   );
 
   const refreshKnowledgeStatus = useCallback(async () => {
@@ -378,16 +383,15 @@ function AdminCms() {
     const groups = new Map<string, AdminFaqCmsRow[]>();
     for (const faq of data?.faqs ?? []) {
       if (faqScopeFilter !== "all" && faq.scope !== faqScopeFilter) continue;
-      if (!faq.published && !showArchivedFaqs) continue;
 
       const existing = groups.get(faq.scope) ?? [];
       existing.push(faq);
       groups.set(faq.scope, existing);
     }
     return Array.from(groups.entries());
-  }, [data?.faqs, faqScopeFilter, showArchivedFaqs]);
+  }, [data?.faqs, faqScopeFilter]);
 
-  const archivedFaqCount = (data?.faqs ?? []).filter((faq) => !faq.published).length;
+  const archivedFaqCount = faqArchivedTotal;
 
   const parsedFaqImportRows = useMemo(
     () => parseAdminFaqImport(faqImportText, faqImportScope),
