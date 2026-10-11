@@ -14,7 +14,7 @@ import { test, expect, type Locator, type Page, type Route } from "@playwright/t
  * /api/live-agent/* call is answered with fixed JSON and any other non-origin request is aborted.
  */
 
-const WIDTHS = [360, 375, 390, 430] as const;
+const WIDTHS = [320, 360, 375, 390, 430] as const;
 const HEIGHT = 740;
 const SHOTS = resolve(".audit/remediation-20261003");
 const WELCOME = "你好，我是 Earnest Property 問樓助手。想買樓、租樓、放盤估價，還是查詢屋苑資料？";
@@ -230,6 +230,20 @@ for (const width of WIDTHS) {
       expect(await link.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
         true,
       );
+      // The links are centred flex rows, so a too-wide label spills evenly into both side
+      // paddings and scrollWidth stays equal to clientWidth. Measure the label itself: it must
+      // fit the content box (width minus padding), not merely the border box.
+      const fit = await link.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const style = getComputedStyle(element);
+        const content =
+          element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+        return { label: range.getBoundingClientRect().width, content };
+      });
+      // 2 px of slack absorbs font differences between machines (Linux CI measured a 1.4 px
+      // overrun at 430 px, outside 20c's change) and still fails the 8 px overrun 20c fixes.
+      expect(fit.label).toBeLessThanOrEqual(fit.content + 2);
     }
     await expectTappable(launcher(page));
     const lastLink = await box(links.last());

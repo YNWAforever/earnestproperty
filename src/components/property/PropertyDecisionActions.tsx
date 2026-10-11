@@ -337,13 +337,22 @@ export function PropertyDecisionActions({
         <div
           className={`mx-auto grid max-w-6xl gap-2 ${decision.showMortgage ? "grid-cols-3" : "grid-cols-2"}`}
         >
-          <Button asChild variant="outline" size="sm" className="px-2">
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="px-2 max-[359px]:px-1 max-[359px]:text-xs"
+          >
             <a href={phoneHref}>
               <Phone className="mr-1 hidden h-4 w-4 min-[420px]:inline" />
               {callLabel}
             </a>
           </Button>
-          <Button asChild size="sm" className="bg-whatsapp px-2 text-white hover:bg-whatsapp-hover">
+          <Button
+            asChild
+            size="sm"
+            className="bg-whatsapp px-2 text-white hover:bg-whatsapp-hover max-[359px]:px-1 max-[359px]:text-xs"
+          >
             <a
               href={whatsappHref ?? "/contact"}
               target={hasWhatsapp ? "_blank" : undefined}
@@ -355,7 +364,12 @@ export function PropertyDecisionActions({
             </a>
           </Button>
           {decision.showMortgage && decision.mortgageHref ? (
-            <Button asChild size="sm" variant="secondary" className="px-2">
+            <Button
+              asChild
+              size="sm"
+              variant="secondary"
+              className="px-2 max-[359px]:px-1 max-[359px]:text-xs"
+            >
               <a href={decision.mortgageHref}>
                 <Calculator className="mr-1 hidden h-4 w-4 min-[420px]:inline" />
                 {mortgageLabel}
