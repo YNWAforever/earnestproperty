@@ -24,6 +24,12 @@ import type {
   CmsRestoreInput,
 } from "./admin-cms.types";
 import type { CmsResourceType } from "./cms-revisions";
+import {
+  cmsArchiveSchema,
+  cmsDraftSaveSchema,
+  cmsPublishSchema,
+  cmsRestoreSchema,
+} from "./admin-write-schemas";
 import { unwrapServerFnResponse } from "./server-fn-response.ts";
 
 const cmsServer = () => import("./admin-cms.server");
@@ -52,7 +58,7 @@ export const fetchAdminCmsEditor = async (options: {
 }) => unwrapServerFnResponse(fetchAdminCmsEditorServer(await withStaffAuthHeaders(options)));
 
 const saveAdminCmsDraftServer = createServerFn({ method: "POST" })
-  .inputValidator((data: CmsDraftSaveInput) => data)
+  .inputValidator((data: CmsDraftSaveInput) => cmsDraftSaveSchema.parse(data))
   .handler(async ({ data }) => {
     const request = getRequest();
     return (await cmsServer()).saveAdminCmsDraft(data, request);
@@ -61,7 +67,7 @@ export const saveAdminCmsDraft = async (options: { data: CmsDraftSaveInput }) =>
   unwrapServerFnResponse(saveAdminCmsDraftServer(await withStaffAuthHeaders(options)));
 
 const publishAdminCmsRevisionServer = createServerFn({ method: "POST" })
-  .inputValidator((data: CmsPublishInput) => data)
+  .inputValidator((data: CmsPublishInput) => cmsPublishSchema.parse(data))
   .handler(async ({ data }) => {
     const request = getRequest();
     return (await cmsServer()).publishAdminCmsRevision(data, request);
@@ -70,7 +76,7 @@ export const publishAdminCmsRevision = async (options: { data: CmsPublishInput }
   unwrapServerFnResponse(publishAdminCmsRevisionServer(await withStaffAuthHeaders(options)));
 
 const restoreAdminCmsRevisionServer = createServerFn({ method: "POST" })
-  .inputValidator((data: CmsRestoreInput) => data)
+  .inputValidator((data: CmsRestoreInput) => cmsRestoreSchema.parse(data))
   .handler(async ({ data }) => {
     const request = getRequest();
     return (await cmsServer()).restoreAdminCmsRevision(data, request);
@@ -79,7 +85,7 @@ export const restoreAdminCmsRevision = async (options: { data: CmsRestoreInput }
   unwrapServerFnResponse(restoreAdminCmsRevisionServer(await withStaffAuthHeaders(options)));
 
 const archiveAdminCmsResourceServer = createServerFn({ method: "POST" })
-  .inputValidator((data: CmsArchiveInput) => data)
+  .inputValidator((data: CmsArchiveInput) => cmsArchiveSchema.parse(data))
   .handler(async ({ data }) => {
     const request = getRequest();
     return (await cmsServer()).archiveAdminCmsResource(data, request);

@@ -5,6 +5,11 @@ import { fetchAdminPage as basePage } from "../no-link/synthetic-api";
 import { fetchAdminAttentionCounts as baseAttention } from "../no-link/synthetic-api";
 import { syntheticIdentityReviewsOpen } from "./identity-review-api";
 import { ServerFnResponseError } from "@/lib/neon/server-fn-response";
+// FX-19d-1 H-08: the real page's payload must pass the server function's own schema.
+import {
+  adminLeadActivitySchema,
+  adminLeadUpdateSchema,
+} from "../../../src/lib/neon/admin-write-schemas";
 const now = "2026-10-03T00:00:00.000Z";
 const state = {
   actor: sessionStorage.getItem("daily-work-actor") ?? "actor-a",
@@ -190,6 +195,7 @@ export async function fetchAdminLead({ data }: { data: { id: string } }) {
   };
 }
 export async function createAdminLeadActivity({ data }: { data: Record<string, unknown> }) {
+  adminLeadActivitySchema.parse(data);
   call("lead-note", data);
   const mode = state.noteMode;
   if (mode !== "delayed-failure")
@@ -201,6 +207,7 @@ export async function createAdminLeadActivity({ data }: { data: Record<string, u
   return { ok: true };
 }
 export async function updateAdminLead({ data }: { data: Record<string, unknown> }) {
+  adminLeadUpdateSchema.parse(data);
   call("lead-update", data);
   const id = String(data.id);
   if (data.expected_version !== leadVersion(id))

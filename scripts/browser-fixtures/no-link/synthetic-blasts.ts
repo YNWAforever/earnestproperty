@@ -1,4 +1,6 @@
 import { actor } from "./synthetic-api";
+// FX-19d-1 H-08: the real page's payload must pass the server function's own schema.
+import { adminCampaignSchema, adminRowIdSchema } from "../../../src/lib/neon/admin-write-schemas";
 
 // Presentation-only model. No Auth, SQL, queue job or provider port is used.
 const campaignId = "60000000-0000-4000-8000-000000000001";
@@ -170,6 +172,7 @@ export async function sendAdminCampaignQueue({
   };
 }
 export async function saveAdminCampaign({ data }: { data: Record<string, unknown> }) {
+  adminCampaignSchema.parse(data);
   call("syntheticCampaignSave", data);
   requireManager();
   const rows = records();
@@ -188,6 +191,7 @@ export const deleteAdminAudience = () => {
   throw Error("Synthetic audience delete not enabled");
 };
 export async function cancelAdminCampaign({ data }: { data: { id: string } }) {
+  adminRowIdSchema.parse(data);
   call("syntheticCampaignCancel", data);
   requireManager();
   if (state.cancelMode === "delay")

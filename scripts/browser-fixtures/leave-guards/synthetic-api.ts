@@ -2,6 +2,14 @@
 // CMS dialogs read and write. Everything lives in memory: no SQL, no provider.
 export * from "../no-link/synthetic-api";
 import { fetchAdminPage as shellPage } from "../no-link/synthetic-api";
+// FX-19d-1 H-08: the real page's payload must pass the server function's own schema.
+import {
+  adminCmsVideoSchema,
+  adminFaqSchema,
+  adminMediaAssetUpdateSchema,
+  adminRowIdSchema,
+  adminTransactionSchema,
+} from "../../../src/lib/neon/admin-write-schemas";
 
 export const membership = { role: "agent", binding: "20000000-0000-4000-8000-000000000001" };
 export async function fetchStaffSession() {
@@ -66,6 +74,7 @@ export async function fetchAdminTransaction({ data }: { data: { id: string } }) 
   return transactions.get(data.id) ?? null;
 }
 export async function saveAdminTransaction({ data }: { data: Row }) {
+  adminTransactionSchema.parse(data);
   const id = (data.id as string | undefined) ?? "70000000-0000-4000-8000-0000000000bb";
   saves.push({ ...data });
   transactions.set(id, {
@@ -92,16 +101,29 @@ export async function fetchAdminAiKnowledgeStatus() {
   return { enabled: false };
 }
 export async function saveAdminFaq({ data }: { data: Row }) {
+  adminFaqSchema.parse(data);
   faqs.push({ ...data, id: `faq-${faqs.length + 1}`, created_at: null });
   saves.push({ faq: data });
   return { id: `faq-${faqs.length}` };
 }
 export const checkAdminFaqConflicts = async () => ({ existing: [], archived: [] });
-export const deleteAdminFaq = async () => ({ ok: true });
-export const restoreAdminFaq = async () => ({ ok: true, version: "" });
+export const deleteAdminFaq = async ({ data }: { data: unknown }) => {
+  adminRowIdSchema.parse(data);
+  return { ok: true };
+};
+export const restoreAdminFaq = async ({ data }: { data: unknown }) => {
+  adminRowIdSchema.parse(data);
+  return { ok: true, version: "" };
+};
 export const rebuildAdminAiKnowledge = async () => ({});
-export const saveAdminCmsVideo = async () => ({});
-export const updateAdminMediaAsset = async () => ({});
+export const saveAdminCmsVideo = async ({ data }: { data: unknown }) => {
+  adminCmsVideoSchema.parse(data);
+  return {};
+};
+export const updateAdminMediaAsset = async ({ data }: { data: unknown }) => {
+  adminMediaAssetUpdateSchema.parse(data);
+  return {};
+};
 export const fetchAdminDistrictOptions = async () => [{ slug: "kowloon", name_zh: "九龍" }];
 // The finance panel is only mounted for admin and manager; this fixture signs in as an agent.
 export const fetchTransactionPerformance = async () => null;
