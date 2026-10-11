@@ -16,12 +16,9 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
 
   const exports = [
     "fetchAdminAgents",
-    "saveAdminFaq",
-    "deleteAdminFaq",
     "restoreAdminFaq",
     "fetchAdminMediaAssets",
     "updateAdminMediaAsset",
-    "updateAdminPropertyStatus",
     "fetchAdminLead",
     "updateAdminLead",
     "createAdminLeadActivity",
@@ -669,20 +666,11 @@ test("audited creates in admin-data.server.ts insert their audit row in the same
   const stillOnWriteAudit = new Set([
     "updateStaffRoles",
     "setStaffActive",
-    "saveAdminProperty",
-    "updateAdminPropertyStatus",
-    "deleteAdminProperty",
-    "saveAdminTransaction",
     "saveAdminAgentProfile",
     "rebuildAdminAiKnowledge",
     "saveAdminCrmSegment",
     "materializeAdminCrmSegment",
     "createAdminAudienceFromSegment",
-    "saveAdminCmsVideo",
-    "saveAdminEstate",
-    "saveAdminArticle",
-    "saveAdminFaq",
-    "deleteAdminFaq",
     "reorderAdminFaqs",
     "updateAdminMediaAsset",
     "analyzeAdminLeadAiProfile",
@@ -713,6 +701,17 @@ test("audited creates in admin-data.server.ts insert their audit row in the same
         `${name} calls writeAudit after its write; insert the audit row in the same statement`,
       );
     }
+  }
+  // The list cannot go stale: every name on it is a function here that still
+  // calls writeAudit. A function moved to a same-statement audit leaves the list.
+  for (const name of stillOnWriteAudit) {
+    const body = bodies.get(name);
+    assert.ok(body, `${name} is listed but is not a function in admin-data.server.ts`);
+    assert.match(
+      body,
+      /\bwriteAudit\(/,
+      `${name} no longer calls writeAudit; remove it from stillOnWriteAudit`,
+    );
   }
   for (const name of sameStatement) {
     const body = bodies.get(name);
