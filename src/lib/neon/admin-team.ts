@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
 
+import { STAFF_ROLES } from "../control-plane/role-permissions.ts";
 import type { StaffAccess, StaffRole } from "./auth.server.ts";
 import { unwrapServerFnResponse } from "./server-fn-response.ts";
 import type {
@@ -20,7 +21,7 @@ import type {
 } from "./admin-team.types.ts";
 
 const staffIdSchema = z.string().uuid();
-const staffRoleSchema = z.enum(["admin", "manager", "agent", "viewer"]);
+const staffRoleSchema = z.enum(STAFF_ROLES);
 const teamStateSchema = z.enum(["active", "suspended", "invited", "attention"]);
 
 export const listAdminTeamSchema = z

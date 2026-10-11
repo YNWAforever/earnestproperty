@@ -1,5 +1,6 @@
 import "@tanstack/react-start/server-only";
 
+import { STAFF_ROLES } from "../control-plane/role-permissions.ts";
 import type { StaffAccess, StaffRole } from "./auth.server.ts";
 import { queryRows, type DbRow } from "./db.server.ts";
 import { deriveTeamOnboarding } from "./team-onboarding-policy.ts";
@@ -28,7 +29,7 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}
 // Must track StaffRole (auth.server.ts): a role missing here is silently
 // stripped from every Team projection and rejected as a filter, which is how
 // members given the viewer role showed no roles at all.
-const staffRoles = new Set<StaffRole>(["admin", "manager", "agent", "viewer"]);
+const staffRoles = new Set<StaffRole>(STAFF_ROLES);
 const filterStates = new Set<AdminTeamFilterState>(["active", "suspended", "invited", "attention"]);
 const actionTypes = new Set([
   "invite",

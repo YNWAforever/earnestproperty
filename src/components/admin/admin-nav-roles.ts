@@ -4,11 +4,13 @@
 // `roles` is the set of roles the destination's FIRST server read accepts. Hiding an entry is a
 // courtesy to the signed-in role and nothing more: every server read still checks the role
 // itself (admin-data.ts, admin-team.ts, permissions.ts), and none of those checks changes here.
-export type NavRole = "admin" | "manager" | "agent" | "viewer";
+import { STAFF_ROLES, type StaffRole } from "../../lib/control-plane/role-permissions.ts";
+
+export type NavRole = StaffRole;
 
 const STAFF: readonly NavRole[] = ["admin", "manager", "agent"];
 const EDITORS: readonly NavRole[] = ["admin", "manager"];
-const EVERYONE: readonly NavRole[] = ["admin", "manager", "agent", "viewer"];
+const EVERYONE: readonly NavRole[] = STAFF_ROLES;
 
 export const NAV_ENTRIES: readonly { to: string; roles: readonly NavRole[] }[] = [
   { to: "/admin", roles: STAFF },

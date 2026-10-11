@@ -8,8 +8,9 @@ import {
   type DbRow,
 } from "./db.server.ts";
 import { shouldBootstrapFirstAdmin } from "./staff-security-policy.ts";
+import type { StaffRole } from "../control-plane/role-permissions.ts";
 
-export type StaffRole = "admin" | "manager" | "agent" | "viewer";
+export type { StaffRole };
 
 export type StaffAccess = {
   staffId: string;

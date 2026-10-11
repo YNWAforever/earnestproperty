@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AdminTeamMemberDetail } from "@/lib/neon/admin-team.types";
+import { STAFF_ROLES } from "@/lib/control-plane/role-permissions";
 import type { StaffRole } from "@/lib/neon/auth.server";
 
 import { AdminTeamStatusBadge, teamRoleLabel } from "./AdminTeamStatusBadge";
@@ -136,7 +137,7 @@ export function AdminTeamDetailPanel({
           {!canManage ? <span className="text-sm text-muted-foreground">唯讀</span> : null}
         </div>
         <div className="mt-3 grid gap-2 sm:grid-cols-3">
-          {(["admin", "manager", "agent", "viewer"] as const).map((role) => (
+          {STAFF_ROLES.map((role) => (
             <div className="flex items-center gap-2" key={role}>
               <Checkbox
                 aria-label={teamRoleLabel(role)}

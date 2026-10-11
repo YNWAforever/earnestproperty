@@ -53,6 +53,7 @@ import {
   sendStaffPasswordReset,
 } from "@/lib/neon/admin-team";
 import type { AdminTeamList, AdminTeamMemberDetail } from "@/lib/neon/admin-team.types";
+import { STAFF_ROLES } from "@/lib/control-plane/role-permissions";
 import type { StaffRole } from "@/lib/neon/auth.server";
 
 type TeamSearch = {
@@ -522,7 +523,7 @@ function AdminTeam() {
                 <fieldset>
                   <legend className="text-sm font-medium">角色</legend>
                   <div className="mt-2 flex flex-wrap gap-3">
-                    {(["admin", "manager", "agent", "viewer"] as StaffRole[]).map((role) => (
+                    {STAFF_ROLES.map((role) => (
                       <Label className="flex items-center gap-2" key={role}>
                         <Checkbox
                           checked={inviteRoles.includes(role)}
