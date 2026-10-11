@@ -1,3 +1,4 @@
+import "@tanstack/react-start/server-only";
 export type RegisteredMigration = {
   id: string;
   checksum: string;

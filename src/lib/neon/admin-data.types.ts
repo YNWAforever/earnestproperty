@@ -6,6 +6,7 @@ import type {
   CrmSegmentFilters,
 } from "@/lib/ai/ai-types";
 import type { LeadPriority, WhatsappLinkStatus } from "./command-center";
+import type { StaffRole as StaffRoleName } from "@/lib/control-plane/role-permissions";
 
 export type StaffRole = "admin" | "manager" | "agent";
 
@@ -769,7 +770,7 @@ export type AdminTodayTask = {
   waitingSince: string; // ISO timestamp
 };
 
-export type StaffAccessRole = "admin" | "manager" | "agent" | "viewer";
+export type StaffAccessRole = StaffRoleName;
 
 /**
  * Why the signed-in Neon Auth account is not (yet) a usable staff account.

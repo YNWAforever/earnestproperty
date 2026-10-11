@@ -61,6 +61,7 @@ export function createStaffSessionStore(fetcher: () => Promise<StaffSession>) {
     publish({ userId, session: state.userId === userId ? state.session : null, loading: true });
     const promise = fetcher()
       .then((session): StaffSession | null => session)
+      // Deliberate: any failure (a 503 outage included) is "unknown", never "denied".
       .catch((): StaffSession | null => null)
       .then((session) => {
         // A sign-out or a newer lookup for the same user supersedes this result.

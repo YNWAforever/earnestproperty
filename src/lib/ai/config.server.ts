@@ -1,3 +1,4 @@
+import "@tanstack/react-start/server-only";
 export type AiServerConfig = {
   apiKey: string | null;
   enabled: boolean;

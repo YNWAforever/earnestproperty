@@ -473,3 +473,116 @@ test("a bound staff identity excludes email-only fallback, including after deact
     "a disabled or active row already bound to this identity must block email fallback",
   );
 });
+
+// H-20: the session lookup used to swallow every database error as "no rows",
+// so a Neon outage read as "not signed in" (401) and staff were told to sign in
+// again. An infrastructure failure is now a 503; a genuinely absent or invalid
+// session is still a 401. Neither path ever reaches the staff or role checks.
+class SyntheticNeonDbError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "NeonDbError";
+  }
+}
+
+const leakyLookupError = () =>
+  new SyntheticNeonDbError(
+    'connection to "ep-secret-host" failed for token=live-token user=kevin@example.test: SELECT u.id FROM neon_auth.session',
+  );
+
+async function withAuthUrl(run) {
+  const previousAuthUrl = process.env.NEON_AUTH_BASE_URL;
+  process.env.NEON_AUTH_BASE_URL = "https://auth.invalid";
+  try {
+    return await run();
+  } finally {
+    if (previousAuthUrl === undefined) delete process.env.NEON_AUTH_BASE_URL;
+    else process.env.NEON_AUTH_BASE_URL = previousAuthUrl;
+  }
+}
+
+async function withCapturedConsoleError(run) {
+  const previous = console.error;
+  const calls = [];
+  console.error = (...args) => {
+    calls.push(args);
+  };
+  try {
+    await run(calls);
+  } finally {
+    console.error = previous;
+  }
+}
+
+const bearerRequest = (token) =>
+  new Request("https://earnest.test/admin", { headers: { authorization: "Bearer " + token } });
+
+test("a database error during session lookup is a 503, not 401", async () => {
+  await withAuthUrl(() =>
+    withCapturedConsoleError(async () => {
+      const read = createNeonSessionReader(async () => {
+        throw leakyLookupError();
+      });
+      const direct = await denial(read(bearerRequest("live-token")));
+      assert.equal(direct.status, 503);
+      assert.equal(direct.body, "登入服務暫時無法使用，請稍後再試。");
+
+      // Through the real resolver (default session reader over the same SQL
+      // runner): the 503 propagates and no staff, role or bind query runs.
+      const queries = [];
+      const resolver = createStaffAccessResolver({
+        queryRows: async (statement) => {
+          queries.push(statement);
+          if (statement.includes("FROM neon_auth.session s")) throw leakyLookupError();
+          return [{ id: staffId, auth_user_id: "auth-kevin", roles: ["admin"] }];
+        },
+      });
+      const refused = await denial(resolver.requireStaffAccess(bearerRequest("live-token")));
+      assert.equal(refused.status, 503);
+      assert.equal(queries.length, 1, "nothing after the failed session lookup may run");
+    }),
+  );
+});
+
+test("a missing or invalid session is still 401", async () => {
+  await withAuthUrl(async () => {
+    const resolver = createStaffAccessResolver({
+      queryRows: async (statement, params = []) =>
+        statement.includes("FROM neon_auth.session s") && params[0] === "live-token"
+          ? [{ id: "auth-kevin", email: "kevin@example.test", name: "Kevin" }]
+          : [],
+    });
+    const missing = await denial(
+      resolver.requireStaffAccess(new Request("https://earnest.test/admin")),
+    );
+    assert.equal(missing.status, 401);
+    const invalid = await denial(resolver.requireStaffAccess(bearerRequest("expired-token")));
+    assert.equal(invalid.status, 401);
+  });
+});
+
+test("the session lookup failure log line carries the error class only", async () => {
+  await withAuthUrl(() =>
+    withCapturedConsoleError(async (calls) => {
+      const read = createNeonSessionReader(async () => {
+        throw leakyLookupError();
+      });
+      await denial(read(bearerRequest("live-token")));
+
+      assert.equal(calls.length, 1);
+      const logged = calls[0]
+        .map((arg) => (typeof arg === "string" ? arg : JSON.stringify(arg)))
+        .join(" ");
+      assert.match(logged, /\[auth\] session_lookup_failed/);
+      assert.match(logged, /NeonDbError/);
+      for (const secret of ["live-token", "kevin@example.test", "ep-secret-host", "SELECT"]) {
+        assert.equal(logged.includes(secret), false, `log must not carry ${secret}`);
+      }
+      assert.equal(
+        calls[0].some((arg) => arg instanceof Error),
+        false,
+        "the raw error object (message, stack) must not be logged",
+      );
+    }),
+  );
+});

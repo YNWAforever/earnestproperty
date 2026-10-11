@@ -16,6 +16,27 @@ import { ServerFnResponseError, unwrapServerFnResponse } from "./server-fn-respo
 import { deriveAgentProfileEditorContext } from "./staff-security-policy";
 import { isHoneypotFilled } from "../public-form-honeypot";
 import type { TransactionPerformanceInput } from "./transaction-performance.types.ts";
+import {
+  adminAgentProfileSchema,
+  adminAiTagDecisionSchema,
+  adminAudienceSchema,
+  adminCampaignSchema,
+  adminCmsVideoSchema,
+  adminCrmSegmentIdSchema,
+  adminCrmSegmentSaveSchema,
+  adminFaqSchema,
+  adminLeadActivitySchema,
+  adminLeadUpdateSchema,
+  adminMediaAssetUpdateSchema,
+  adminPropertySchema,
+  adminPropertyStatusSchema,
+  adminRowIdSchema,
+  adminTransactionSchema,
+  bulkUpdateAdminLeadsSchema,
+  campaignIdSchema,
+  completeAdminLeadActivitySchema,
+  updateAdminInquiryStatusSchema,
+} from "./admin-write-schemas";
 
 import type {
   AdminAgentEditorContext,
@@ -46,6 +67,7 @@ async function requireStaff(roles: StaffRole[] = ["admin"]) {
 
 async function staffSessionDenialReason(response: Response): Promise<StaffSessionDenialReason> {
   if (response.status === 401) return "unauthorized";
+  // Deliberate: an unreadable 403 body is still a 403, reported as the generic denial.
   const body = (await response.text().catch(() => "")).trim();
   return body === "staff-email-unverified" ? body : "forbidden";
 }
@@ -71,13 +93,22 @@ const fetchStaffSessionServer = createServerFn({ method: "GET" }).handler(
         roles: staff.roles,
       };
     } catch (error) {
-      if (error instanceof Response && (error.status === 401 || error.status === 403)) {
-        return { status: "denied", reason: await staffSessionDenialReason(error) };
-      }
-      throw error;
+      return staffSessionFromAccessFailure(error);
     }
   },
 );
+
+/**
+ * Only a 401/403 is a denial. Anything else -- the 503 a session-lookup outage
+ * throws, or a raw database error -- is rethrown, so the shell shows its
+ * failed-lookup state (暫時無法確認職員權限) and never 此帳戶不是職員帳戶 or a sign-out.
+ */
+export async function staffSessionFromAccessFailure(error: unknown): Promise<StaffSession> {
+  if (error instanceof Response && (error.status === 401 || error.status === 403)) {
+    return { status: "denied", reason: await staffSessionDenialReason(error) };
+  }
+  throw error;
+}
 
 export async function fetchStaffSession(): Promise<StaffSession> {
   return callStaffServerFn(async () => fetchStaffSessionServer(await withStaffAuthHeaders()));
@@ -136,7 +167,7 @@ export async function fetchAdminAgentProfile(options: { data: { id: string } }) 
 }
 
 const saveAdminAgentProfileServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminAgentProfileMutationInput) => data)
+  .inputValidator((data: AdminAgentProfileMutationInput) => adminAgentProfileSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
@@ -338,7 +369,7 @@ export async function fetchAdminProperty(options: { data: { id: string } }) {
 }
 
 const saveAdminPropertyServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminPropertyInput) => data)
+  .inputValidator((data: AdminPropertyInput) => adminPropertySchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
@@ -379,7 +410,7 @@ export async function fetchAdminCmsVideos() {
 }
 
 const saveAdminCmsVideoServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminCmsVideoInput) => data)
+  .inputValidator((data: AdminCmsVideoInput) => adminCmsVideoSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
@@ -450,7 +481,7 @@ type AdminCrmSegmentSaveInput = {
 };
 
 const saveAdminCrmSegmentServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminCrmSegmentSaveInput) => data)
+  .inputValidator((data: AdminCrmSegmentSaveInput) => adminCrmSegmentSaveSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
@@ -466,7 +497,7 @@ export const saveAdminCrmSegment = async function saveAdminCrmSegment(options: {
 };
 
 const materializeAdminCrmSegmentServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { segmentId: string }) => data)
+  .inputValidator((data: { segmentId: string }) => adminCrmSegmentIdSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
@@ -482,7 +513,7 @@ export const materializeAdminCrmSegment = async function materializeAdminCrmSegm
 };
 
 const createAdminAudienceFromSegmentServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { segmentId: string }) => data)
+  .inputValidator((data: { segmentId: string }) => adminCrmSegmentIdSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
@@ -534,7 +565,9 @@ export async function fetchCommandCenterInBackground() {
 }
 
 const completeAdminLeadActivityServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { activity_id: string; lead_id: string }) => data)
+  .inputValidator((data: { activity_id: string; lead_id: string }) =>
+    completeAdminLeadActivitySchema.parse(data),
+  )
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
@@ -808,7 +841,9 @@ export const createValuationLead = createServerFn({ method: "POST" })
   });
 
 const updateAdminInquiryStatusServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string; status: string }) => data)
+  .inputValidator((data: { id: string; status: string }) =>
+    updateAdminInquiryStatusSchema.parse(data),
+  )
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
@@ -844,7 +879,7 @@ export async function fetchAdminWoztellStatus() {
 }
 
 const saveAdminFaqServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminFaqInput) => data)
+  .inputValidator((data: AdminFaqInput) => adminFaqSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
@@ -856,7 +891,7 @@ export async function saveAdminFaq(options: { data: AdminFaqInput }) {
 }
 
 const deleteAdminFaqServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string }) => data)
+  .inputValidator((data: { id: string }) => adminRowIdSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
@@ -868,7 +903,7 @@ export async function deleteAdminFaq(options: { data: { id: string } }) {
 }
 
 const restoreAdminFaqServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string }) => data)
+  .inputValidator((data: { id: string }) => adminRowIdSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaffPermission(getRequest(), "cms.publish");
     const adminData = await import("./admin-data.server");
@@ -902,7 +937,7 @@ const bulkUpdateAdminLeadsServer = createServerFn({ method: "POST" })
       stage?: string;
       assigned_agent_id?: string | null;
       assignAgent?: boolean;
-    }) => data,
+    }) => bulkUpdateAdminLeadsSchema.parse(data),
   )
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
@@ -936,7 +971,7 @@ export async function fetchAdminMediaAssets() {
 const updateAdminMediaAssetServer = createServerFn({ method: "POST" })
   .inputValidator(
     (data: { id: string; alt_text: string | null; owner_type: string; owner_id: string | null }) =>
-      data,
+      adminMediaAssetUpdateSchema.parse(data),
   )
   .handler(async ({ data }) => {
     const staff = await requireStaffPermission(getRequest(), "cms.publish");
@@ -967,7 +1002,9 @@ export async function fetchAdminListingsFiltered(options: { data: AdminListingFi
 }
 
 const updateAdminPropertyStatusServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string; status: AdminPropertyInput["status"] }) => data)
+  .inputValidator((data: { id: string; status: AdminPropertyInput["status"] }) =>
+    adminPropertyStatusSchema.parse(data),
+  )
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
@@ -1013,7 +1050,7 @@ export async function fetchAdminTransaction(options: { data: { id: string } }) {
 }
 
 const saveAdminTransactionServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminTransactionInput) => data)
+  .inputValidator((data: AdminTransactionInput) => adminTransactionSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
@@ -1168,7 +1205,7 @@ export const analyzeAdminLeadAiProfile = async function analyzeAdminLeadAiProfil
 };
 
 const approveAdminAiTagServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { tagId: string }) => data)
+  .inputValidator((data: { tagId: string }) => adminAiTagDecisionSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
@@ -1184,7 +1221,7 @@ export const approveAdminAiTag = async function approveAdminAiTag(options: {
 };
 
 const rejectAdminAiTagServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { tagId: string }) => data)
+  .inputValidator((data: { tagId: string }) => adminAiTagDecisionSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
@@ -1198,7 +1235,7 @@ export const rejectAdminAiTag = async function rejectAdminAiTag(options: {
 };
 
 const updateAdminLeadServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminLeadUpdateInput) => data)
+  .inputValidator((data: AdminLeadUpdateInput) => adminLeadUpdateSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
@@ -1212,7 +1249,7 @@ export async function updateAdminLead(options: {
 }
 
 const createAdminLeadActivityServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminLeadActivityInput) => data)
+  .inputValidator((data: AdminLeadActivityInput) => adminLeadActivitySchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager", "agent"]);
     const adminData = await import("./admin-data.server");
@@ -1575,7 +1612,7 @@ export async function fetchAdminWhatsappTemplates() {
 }
 
 const saveAdminAudienceServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminAudienceInput) => data)
+  .inputValidator((data: AdminAudienceInput) => adminAudienceSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
@@ -1583,7 +1620,7 @@ const saveAdminAudienceServer = createServerFn({ method: "POST" })
   });
 
 const deleteAdminAudienceServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string }) => data)
+  .inputValidator((data: { id: string }) => adminRowIdSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
@@ -1640,7 +1677,7 @@ export async function previewAdminAudience(
 }
 
 const saveAdminCampaignServer = createServerFn({ method: "POST" })
-  .inputValidator((data: AdminCampaignInput) => data)
+  .inputValidator((data: AdminCampaignInput) => adminCampaignSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
@@ -1661,7 +1698,7 @@ export async function saveAdminCampaign(
 }
 
 const materializeCampaignRecipientsServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { campaign_id: string }) => data)
+  .inputValidator((data: { campaign_id: string }) => campaignIdSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");
@@ -1709,7 +1746,7 @@ export async function sendAdminCampaignQueue(
 }
 
 const cancelAdminCampaignServer = createServerFn({ method: "POST" })
-  .inputValidator((data: { id: string }) => data)
+  .inputValidator((data: { id: string }) => adminRowIdSchema.parse(data))
   .handler(async ({ data }) => {
     const staff = await requireStaff(["admin", "manager"]);
     const adminData = await import("./admin-data.server");

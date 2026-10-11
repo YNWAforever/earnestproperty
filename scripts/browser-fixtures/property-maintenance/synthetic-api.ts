@@ -8,6 +8,8 @@ import {
   type PropertyGroupFilters,
 } from "../../../src/lib/neon/admin-properties.types";
 import type { BulkPropertyManagementInput } from "../../../src/lib/neon/admin-property-bulk.types";
+// FX-19d-1 H-08: the real page's payload must pass the server function's own schema.
+import { adminPropertySchema } from "../../../src/lib/neon/admin-write-schemas";
 export const actor = sessionStorage.getItem("property-fixture-actor") ?? "manager";
 const staff = "20000000-0000-4000-8000-000000000001";
 const estate = "30000000-0000-4000-8000-000000000001";
@@ -307,6 +309,7 @@ export const snapshotWhatsappLinkOffers = async (filters?: PropertyGroupFilters)
 };
 
 export async function saveAdminProperty({ data }: { data: unknown }) {
+  adminPropertySchema.parse(data);
   const captured = context();
   call("create", data, captured);
   const rows = JSON.parse(localStorage.getItem("property-fixture-created") ?? "[]");

@@ -1,3 +1,4 @@
+import "@tanstack/react-start/server-only";
 import type { StaffAccess } from "../neon/auth.server.ts";
 import type { ControlPlanePermission } from "./permissions.ts";
 import type { OperationContext } from "./request-context.ts";

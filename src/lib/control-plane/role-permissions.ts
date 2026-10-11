@@ -1,7 +1,8 @@
 // Pure role -> permission grants. No server import, so client code (for example the admin-only
 // 「技術資料」 disclosure) can read a grant without pulling permissions.ts and its lazy
 // server-only auth import into the browser bundle. permissions.ts re-exports all of this.
-type StaffRole = "admin" | "manager" | "agent" | "viewer";
+export const STAFF_ROLES = ["admin", "manager", "agent", "viewer"] as const;
+export type StaffRole = (typeof STAFF_ROLES)[number];
 
 export const controlPlanePermissions = [
   "ai.draft.generate",

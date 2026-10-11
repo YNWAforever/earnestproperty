@@ -129,6 +129,7 @@ import { UNKNOWN_RESOLUTION_MIN_AGE_MINUTES } from "../woztell/outbound-resoluti
 import { readOptOutNearMiss } from "./whatsapp-opt-out-near-miss.server";
 import { optOutVersionSql } from "./whatsapp-opt-out.server";
 import { wakeAfterCommit } from "../control-plane/job-wake.server";
+import { STAFF_ROLES } from "../control-plane/role-permissions";
 import { canVerifyTransactions } from "./transaction-verify-policy";
 
 /**
@@ -242,7 +243,7 @@ export async function fetchStaffAccessSummary(
   return summary;
 }
 
-const STAFF_ROLE_NAMES: readonly StaffAccessRole[] = ["admin", "manager", "agent", "viewer"];
+const STAFF_ROLE_NAMES: readonly StaffAccessRole[] = STAFF_ROLES;
 
 /**
  * True when a driver error is the division-by-zero that updateStaffRoles and

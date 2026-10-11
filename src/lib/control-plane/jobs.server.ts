@@ -1,3 +1,4 @@
+import "@tanstack/react-start/server-only";
 import { wakeAfterCommit, laneForJob } from "./job-wake.server.ts";
 import {
   getJobHandler,

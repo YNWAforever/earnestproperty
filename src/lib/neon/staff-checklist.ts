@@ -1,9 +1,10 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { z } from "zod";
+import { STAFF_ROLES } from "../control-plane/role-permissions";
 import { callStaffServerFn } from "./staff-server-fn";
 
-const ALL_STAFF = ["admin", "manager", "agent", "viewer"] as const;
+const ALL_STAFF = STAFF_ROLES;
 const noInput = z.object({}).strict();
 
 const readServer = createServerFn({ method: "GET" })
