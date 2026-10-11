@@ -241,7 +241,9 @@ for (const width of WIDTHS) {
           element.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
         return { label: range.getBoundingClientRect().width, content };
       });
-      expect(fit.label).toBeLessThanOrEqual(fit.content);
+      // 2 px of slack absorbs font differences between machines (Linux CI measured a 1.4 px
+      // overrun at 430 px, outside 20c's change) and still fails the 8 px overrun 20c fixes.
+      expect(fit.label).toBeLessThanOrEqual(fit.content + 2);
     }
     await expectTappable(launcher(page));
     const lastLink = await box(links.last());
