@@ -3198,6 +3198,9 @@ export async function completeAdminLeadActivity(
   input: { activity_id: string; lead_id: string },
   actor: StaffAccess,
 ) {
+  // The wrapper is admin/manager-only, so scope is null today; checking it here
+  // too keeps an agent off another agent's follow-ups if the wrapper ever widens.
+  await assertLeadInScope(input.lead_id, actor);
   // The audit row names the stored lead and is part of the same statement
   // (C-16): a failed audit insert leaves the follow-up open.
   const rows = await queryRows<{ id: string; lead_id: string }>(

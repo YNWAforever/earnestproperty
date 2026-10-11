@@ -1550,6 +1550,16 @@ test("FX-09 lead integrity on owned Postgres", { timeout: 300000 }, async (t) =>
             (await query("SELECT completed_at FROM crm_activities WHERE id=$1", [activityId]))[0]
               .completed_at;
           const input = { activity_id: activityId, lead_id: L1 };
+          // An agent who does not own the lead cannot complete its follow-up:
+          // nothing changes and nothing is audited.
+          await rejectsWith(server.completeAdminLeadActivity(input, agentB), 403);
+          assert.equal(await completedAt(), null, "an out-of-scope completion writes nothing");
+          assert.equal(
+            (await auditRows("lead.activity.complete", L1)).filter(
+              (row) => row.metadata.activityId === activityId,
+            ).length,
+            0,
+          );
           await failAuditFor(["lead.activity.complete"]);
           try {
             await rejectsAudit(server.completeAdminLeadActivity(input, manager));
