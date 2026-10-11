@@ -85,7 +85,7 @@ test("every audited text pair meets 4.5:1 and every UI pair 3:1", () => {
     );
   }
   add("white on destructive", white, color("--destructive"), 4.5);
-  // Badge destructive hover (bg-destructive/90) and the admin team 邀請失敗 badge
+  // Destructive Button hover (bg-destructive/90; Badge no longer has one) and the admin team 邀請失敗 badge
   // (text-destructive on bg-destructive/5), over every surface they sit on.
   for (const [where, base] of [
     ["card", card],
@@ -93,7 +93,7 @@ test("every audited text pair meets 4.5:1 and every UI pair 3:1", () => {
     ["muted", color("--muted")],
   ]) {
     add(
-      `destructive-foreground on destructive/90 over ${where} (badge hover)`,
+      `destructive-foreground on destructive/90 over ${where} (button hover)`,
       color("--destructive-foreground"),
       over(color("--destructive"), 0.9, base),
       4.5,
@@ -125,7 +125,8 @@ test("every audited text pair meets 4.5:1 and every UI pair 3:1", () => {
 
 test("the badge classes are the ones the contrast pairs above measure", () => {
   const badge = readFileSync(new URL("src/components/ui/badge.tsx", root), "utf8");
-  assert.match(badge, /bg-destructive text-destructive-foreground shadow hover:bg-destructive\/90/);
+  assert.match(badge, /bg-destructive text-destructive-foreground shadow"/);
+  assert.doesNotMatch(badge, /hover:/);
   const team = readFileSync(
     new URL("src/components/admin/team/AdminTeamStatusBadge.tsx", root),
     "utf8",

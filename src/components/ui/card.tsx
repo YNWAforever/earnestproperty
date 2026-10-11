@@ -31,11 +31,7 @@ const CardTitle = React.forwardRef<
   HTMLHeadingElement,
   React.HTMLAttributes<HTMLHeadingElement> & { as?: "div" | "h2" | "h3" | "h4" }
 >(({ className, as: Comp = "div", ...props }, ref) => (
-  <Comp
-    ref={ref}
-    className={cn("font-semibold leading-none tracking-tight", className)}
-    {...props}
-  />
+  <Comp ref={ref} className={cn("font-semibold leading-snug", className)} {...props} />
 ));
 CardTitle.displayName = "CardTitle";
 

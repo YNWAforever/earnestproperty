@@ -113,7 +113,7 @@ function EstateCard({
       to="/estate/$slug"
       params={{ slug: estate.slug }}
       hidden={hidden}
-      className={`${shell} transition-all hover:-translate-y-1 hover:shadow-elegant`}
+      className={`${shell} transition-[color,background-color,border-color,box-shadow,translate] hover:-translate-y-1 hover:shadow-elegant`}
     >
       {card}
     </Link>
@@ -232,7 +232,7 @@ export function CoreEstateGrid({
             aria-expanded={otherOpen}
             aria-controls={otherId}
             onClick={() => setOtherOpen((open) => !open)}
-            className="group flex min-h-[12rem] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/40 bg-card p-6 text-center shadow-card transition-all hover:-translate-y-1 hover:border-primary hover:shadow-elegant focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            className="group flex min-h-[12rem] flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/40 bg-card p-6 text-center shadow-card transition-[color,background-color,border-color,box-shadow,translate] hover:-translate-y-1 hover:border-primary hover:shadow-elegant focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
           >
             <Building2 className="h-8 w-8 text-primary/50" aria-hidden="true" />
             <span className="text-2xl font-bold text-primary">{otherLabel}</span>

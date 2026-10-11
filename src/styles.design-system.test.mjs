@@ -141,3 +141,93 @@ test("--primary, --brand-primary, --border, --destructive and SITE_THEME_COLOR a
   assert.equal(tokens.get("--ring"), "var(--brand-primary)");
   assert.match(read("src/content/seo.ts"), /SITE_THEME_COLOR = "#1F7A4D"/);
 });
+
+// ---------------------------------------------------------------------------
+// Task 2: primitive states (C2, C3, C4, C7, C10, C11, C14)
+// ---------------------------------------------------------------------------
+
+const ui = (name) => read(`src/components/ui/${name}.tsx`);
+const RING = "focus-visible:ring-2 focus-visible:ring-ring";
+const OFFSET = "focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+
+test("every primitive focus style is a 2 px ring with a 2 px background offset", () => {
+  for (const name of [
+    "button",
+    "input",
+    "textarea",
+    "checkbox",
+    "radio-group",
+    "slider",
+    "switch",
+    "tabs",
+  ]) {
+    const source = ui(name);
+    assert.ok(source.includes(RING), `${name}: ${RING}`);
+    assert.ok(source.includes(OFFSET), `${name}: ${OFFSET}`);
+    assert.doesNotMatch(source, /focus-visible:ring-1\b/, name);
+  }
+  // Radix opens the select on pointer down and the ring marks the open trigger (shadcn's choice).
+  assert.match(
+    ui("select"),
+    /focus:ring-2 focus:ring-ring focus:ring-offset-2 ring-offset-background|ring-offset-background[^"]*focus:ring-2 focus:ring-ring focus:ring-offset-2/,
+  );
+  for (const name of ["badge", "dialog", "sheet"]) {
+    const source = ui(name);
+    assert.doesNotMatch(
+      source,
+      /(^|\s|")focus:(outline|ring)/,
+      `${name} uses focus: not focus-visible:`,
+    );
+    assert.match(
+      source,
+      /focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2/,
+    );
+  }
+  // No unprefixed ring offset: with shadow-sm it would draw a 2 px halo at rest.
+  for (const name of ["button", "input", "textarea"]) {
+    assert.doesNotMatch(ui(name), /(^|\s|")ring-offset-2\b/, name);
+  }
+});
+
+test("Button has a pressed state and keeps busy buttons readable", () => {
+  const button = ui("button");
+  for (const token of [
+    // Tailwind v4 scale-* sets the `scale` property, not `transform`, so both are listed.
+    "transition-[color,background-color,border-color,box-shadow,transform,scale]",
+    "duration-150",
+    "motion-safe:active:scale-98",
+    "aria-busy:cursor-progress",
+    "aria-busy:disabled:opacity-100",
+    "disabled:opacity-50",
+  ]) {
+    assert.ok(button.includes(token), token);
+  }
+  assert.doesNotMatch(button, /\btransition-colors\b/);
+});
+
+test("Badge has no hover style and the dialog close reads 「關閉」", () => {
+  assert.doesNotMatch(ui("badge"), /hover:/);
+  const dialog = ui("dialog");
+  assert.match(dialog, /<span className="sr-only">關閉<\/span>/);
+  assert.doesNotMatch(dialog, /sr-only">Close</);
+});
+
+test("the dialog and sheet close buttons are fully opaque while keyboard-focused", () => {
+  // At opacity-70 their ring falls under 3:1 against the dialog background.
+  for (const name of ["dialog", "sheet"]) assert.match(ui(name), /focus-visible:opacity-100/, name);
+});
+
+test("titles have no tracking-tight or leading-none", () => {
+  for (const name of ["card", "dialog", "alert"]) {
+    const source = ui(name);
+    assert.doesNotMatch(source, /tracking-tight|leading-none/, name);
+    assert.match(source, /leading-snug/, name);
+  }
+});
+
+test("no transition-all in src", () => {
+  const offenders = sourceFiles("src/", /\.tsx$/)
+    .filter((file) => /\btransition-all\b/.test(readFileSync(file, "utf8")))
+    .map(relative);
+  assert.deepEqual(offenders, []);
+});
