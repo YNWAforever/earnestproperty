@@ -5,7 +5,8 @@ import { resolve, sep, extname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test, expect, type Page } from "@playwright/test";
 
-type Fixture = { saves: unknown[]; editorReads: number };
+type DraftSave = { resourceType: string; resourceId?: string; payload: Record<string, unknown> };
+type Fixture = { saves: unknown[]; editorReads: number; draftSaves: DraftSave[] };
 declare global {
   interface Window {
     leaveGuardFixture: Fixture;
@@ -65,6 +66,7 @@ const sidebarLink = (page: Page) =>
 const clickBehindDialog = (page: Page) =>
   sidebarLink(page).evaluate((link) => (link as HTMLElement).click());
 const saveCount = (page: Page) => page.evaluate(() => window.leaveGuardFixture.saves.length);
+const draftSaves = (page: Page) => page.evaluate(() => window.leaveGuardFixture.draftSaves);
 
 async function open(page: Page, path: string) {
   await page.route("**/*", (route) =>
@@ -182,4 +184,35 @@ test.describe("CMS dialogs", () => {
     await expect(arrived(page)).toBeVisible();
     await expect(prompt(page)).toHaveCount(0);
   });
+
+  // The draft save's `{data}` goes through the server's strict cmsDraftSaveSchema in the
+  // fixture, so a key the hub adds or renames fails here, in the browser, not only in a unit test.
+  for (const { tab, label, value, field } of [
+    { tab: "estates", label: "發展商", value: "合成發展商", field: "developer" },
+    { tab: "articles", label: "分類", value: "合成分類", field: "category" },
+  ])
+    test(`a ${tab} draft save passes the strict schema and leaves the page unguarded`, async ({
+      page,
+    }) => {
+      await open(page, `/admin/cms?tab=${tab}`);
+      await page.getByRole("button", { name: "編輯", exact: true }).first().click();
+      const dialog = page.getByRole("dialog");
+      await expect(dialog).toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => window.leaveGuardFixture.editorReads))
+        .toBeGreaterThan(0);
+      await dialog.getByLabel(label, { exact: true }).fill(value);
+      await expect(dialog.getByRole("status")).toHaveText("有未儲存修改");
+      await dialog.getByRole("button", { name: "儲存草稿" }).click();
+      await expect(page.getByText("草稿已儲存")).toBeVisible();
+      await expect(dialog.getByRole("status")).toHaveText("目前內容已儲存");
+      const saved = await draftSaves(page);
+      expect(saved).toHaveLength(1);
+      expect(saved[0].resourceType).toBe(tab === "estates" ? "estate" : "article");
+      expect(saved[0].payload[field]).toBe(value);
+      // Saved work is not unsaved work: leaving neither prompts nor loses anything.
+      await clickBehindDialog(page);
+      await expect(arrived(page)).toBeVisible();
+      await expect(prompt(page)).toHaveCount(0);
+    });
 });

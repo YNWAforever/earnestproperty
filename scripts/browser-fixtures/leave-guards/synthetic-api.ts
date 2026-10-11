@@ -37,6 +37,22 @@ export const estate = {
   updated_at: null,
 };
 
+export const article = {
+  id: "70000000-0000-4000-8000-000000000002",
+  slug: "synthetic-article",
+  title: "合成文章",
+  excerpt: null,
+  content: "合成內容",
+  cover_image: null,
+  category: null,
+  reading_minutes: 5,
+  published: false,
+  published_at: null,
+  seo_title: null,
+  seo_description: null,
+  updated_at: null,
+};
+
 type Row = Record<string, unknown>;
 const transactions = new Map<string, Row>();
 transactions.set("70000000-0000-4000-8000-0000000000aa", {
@@ -62,9 +78,12 @@ transactions.set("70000000-0000-4000-8000-0000000000aa", {
   finance_visible: true,
 });
 export const saves: Row[] = [];
+// Every CMS draft save, as parsed by the server's own schema (synthetic-cms.ts).
+export const draftSaves: Row[] = [];
 (window as unknown as { leaveGuardFixture: unknown }).leaveGuardFixture = {
   saves,
   editorReads: 0,
+  draftSaves,
 };
 
 export async function fetchAdminEstateOptions() {
@@ -92,8 +111,9 @@ const faqs: Row[] = [];
 export async function fetchAdminPage(options: { data: { resource: string } }) {
   const { resource } = options.data;
   if (resource === "estates") return { rows: [estate], total: 1, nextCursor: null };
+  if (resource === "articles") return { rows: [article], total: 1, nextCursor: null };
   if (resource === "faqs") return { rows: faqs, total: faqs.length, nextCursor: null };
-  if (resource === "articles" || resource === "videos" || resource === "media")
+  if (resource === "videos" || resource === "media")
     return { rows: [], total: 0, nextCursor: null };
   return shellPage(options as never);
 }
