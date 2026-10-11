@@ -32,12 +32,13 @@ import {
   type WhatsappBatchDraft,
 } from "@/lib/admin/whatsapp-batch-draft";
 import { nativeFieldClassName } from "@/components/ui/native-field";
+import { formatPrice } from "@/lib/format";
 
 type Staff = { id: string; name: string | null; email: string | null; active?: boolean };
 type Source = BatchRowDraft["input"]["placementSource"];
 type Routing = "property-agent" | "uniform" | "per-row" | "reception";
 const label = (offer: LinkOfferSelection) =>
-  `${offer.publicListingNo} · ${offer.dealType === "sale" ? "售" : "租"} · ${offer.title} · ${offer.price == null ? "價格待核實" : offer.price.toLocaleString("en-HK")}`;
+  `${offer.publicListingNo} · ${offer.dealType === "sale" ? "售" : "租"} · ${offer.title} · ${formatPrice(offer.price, { dealType: offer.dealType }) ?? "價格待核實"}`;
 
 export function WhatsappLinkWizard({
   seed,

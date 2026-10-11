@@ -30,8 +30,10 @@ async function importSiteWithInjectedPhone(phone) {
   const branchesUrl = dataUrl(
     transpile(readFileSync(join(root, "src/config/site-branches.js"), "utf8")),
   );
+  const formatUrl = dataUrl(transpile(readFileSync(join(root, "src/lib/format.ts"), "utf8")));
   const source = transpile(readFileSync(join(root, "src/config/site.ts"), "utf8"))
     .replace('from "./site-branches.js"', `from "${branchesUrl}"`)
+    .replace('from "@/lib/format"', `from "${formatUrl}"`)
     .replace(
       'const whatsappPhone = import.meta.env.VITE_CONTACT_WHATSAPP_PHONE ?? "";',
       `const whatsappPhone = ${JSON.stringify(phone)};`,
@@ -80,7 +82,7 @@ test("propertyEnquiryMessage carries deal-aware price and does not repeat the li
       dealType: "sale",
       price: 6_000_000,
     });
-    assert.equal(sale, "你好，想查詢 麗都花園 售盤 #C024131（$6,000,000）");
+    assert.equal(sale, "你好，想查詢 麗都花園 售盤 #C024131（HK$600萬）");
     assert.equal((sale.match(/C024131/g) ?? []).length, 1);
 
     const rent = site.propertyEnquiryMessage({
@@ -88,7 +90,7 @@ test("propertyEnquiryMessage carries deal-aware price and does not repeat the li
       dealType: "rent",
       price: 19_500,
     });
-    assert.equal(rent, "你好，想查詢 海韻花園 租盤 #R013153（$19,500/月）");
+    assert.equal(rent, "你好，想查詢 海韻花園 租盤 #R013153（HK$19,500／月）");
 
     const noPrice = site.propertyEnquiryMessage({
       title: "麗都花園 售盤 #C024131",

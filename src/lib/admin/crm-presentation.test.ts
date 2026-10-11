@@ -8,7 +8,20 @@ import {
   quickLeadFilter,
   labeledFilterOptions,
   aiScoreLabel,
+  leadBudgetAmount,
 } from "./crm-presentation";
+
+test("a lead budget uses the site price format: 萬 for buyers, per month for renters", () => {
+  expect(leadBudgetAmount(8_000_000, "buyer")).toBe("HK$800萬");
+  expect(leadBudgetAmount(12_685_000, "seller")).toBe("HK$1,268.5萬");
+  expect(leadBudgetAmount(18_000, "renter")).toBe("HK$18,000／月");
+  expect(leadBudgetAmount(18_000, "tenant")).toBe("HK$18,000／月");
+  expect(leadBudgetAmount(25_000, "landlord")).toBe("HK$25,000／月");
+  // An unknown intent keeps the value exact in 萬 rather than guess "per month".
+  expect(leadBudgetAmount(30_000, "unknown")).toBe("HK$3萬");
+  expect(leadBudgetAmount(null, "buyer")).toBeNull();
+  expect(leadBudgetAmount(0, "buyer")).toBeNull();
+});
 
 test("all server stages use the approved shared display labels", () => {
   expect(Object.fromEntries(stageOptions.map(({ value, label }) => [value, label]))).toEqual({

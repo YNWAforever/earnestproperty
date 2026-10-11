@@ -4,6 +4,7 @@ import type {
   PropertyManagementInput,
 } from "@/lib/neon/admin-properties.types";
 import { PROPERTY_STATUS_LABELS } from "@/lib/admin/glossary";
+import { formatPrice } from "@/lib/format";
 export const propertyStatusLabels: Record<string, string> = PROPERTY_STATUS_LABELS;
 export function neutralPropertyTitle(title: string) {
   return title.replace(/\s*[租售]盤\s*#[A-Za-z0-9-]+\s*$/, "").trim();
@@ -76,9 +77,8 @@ export function offeringPatch(
 export function offeringPrice(offer: ManagedOffering | null) {
   if (!offer) return "—";
   const amount = offer.dealType === "sale" ? offer.price : offer.rent;
-  return amount === null
-    ? "未填價格"
-    : `$${Number(amount).toLocaleString("en-HK")}${offer.dealType === "rent" ? "／月" : ""}`;
+  if (amount === null) return "未填價格";
+  return formatPrice(Number(amount), { dealType: offer.dealType }) ?? "未填價格";
 }
 
 export function existingOfferingDeals(offerings: {

@@ -9,22 +9,29 @@ export function formatHkd(amount: number | null | undefined): string | null {
   return `$${Math.round(amount).toLocaleString(HK_NUMBER_LOCALE)}`;
 }
 
-export function formatManDisplay(amount: number | null | undefined): string | null {
-  if (!isFiniteNumber(amount) || amount <= 0) return null;
-  const man = amount / 10000;
-  const rounded = Math.round(man * 10) / 10;
-  const display = Number.isInteger(rounded)
-    ? rounded.toLocaleString(HK_NUMBER_LOCALE)
-    : rounded.toLocaleString(HK_NUMBER_LOCALE, {
-        minimumFractionDigits: 1,
-        maximumFractionDigits: 1,
-      });
-  return `${display}萬`;
-}
+export type PriceDealType = "sale" | "rent";
 
-export function formatSaleDisplay(price: number | null | undefined): string | null {
+/**
+ * The one price format for the whole site (FX-19d-2, decision D8). A sale is
+ * shown in 萬 with up to two decimals, trailing zeros stripped and thousands
+ * separators ("HK$1,268萬", "HK$1,268.45萬"); a rent is whole dollars per month
+ * with a full-width slash ("HK$38,000／月"). A sale under 1萬 is not a real asking
+ * price, so it falls back to whole dollars ("HK$5,000") rather than "HK$0.5萬".
+ *
+ * Display only: JSON-LD and anything machine-read keep the numeric value. A
+ * missing, zero, negative or non-finite price is null, so each caller keeps its
+ * own fallback copy ("—", "待核實", "價格待核實", ...).
+ */
+export function formatPrice(
+  price: number | null | undefined,
+  { dealType }: { dealType: PriceDealType },
+): string | null {
   if (!isFiniteNumber(price) || price <= 0) return null;
-  return `$${(price / 1_000_000).toFixed(2)}M`;
+  if (dealType === "rent") return `HK$${Math.round(price).toLocaleString(HK_NUMBER_LOCALE)}／月`;
+  if (price < 10_000) return `HK$${Math.round(price).toLocaleString(HK_NUMBER_LOCALE)}`;
+  // Round in whole hundreds first so 12,684,500 is exactly 1268.45, not 1268.4499...
+  const man = Math.round(price / 100) / 100;
+  return `HK$${man.toLocaleString(HK_NUMBER_LOCALE, { maximumFractionDigits: 2 })}萬`;
 }
 
 export function formatArea(sqft: number | null | undefined): string | null {

@@ -101,6 +101,7 @@ import {
   labeledFilterOptions,
   quickLeadFilter,
   aiScoreLabel,
+  leadBudgetAmount,
   leadListingDisplay,
 } from "@/lib/admin/crm-presentation";
 import { ContactIdentityReviewList } from "@/components/admin/leads/ContactIdentityReviewList";
@@ -2023,16 +2024,12 @@ function formatSource(source: string) {
 }
 
 function formatBudget(lead: AdminLeadRow) {
-  if (lead.budget_min && lead.budget_max) {
-    return `${formatMoney(lead.budget_min)} - ${formatMoney(lead.budget_max)}`;
-  }
-  if (lead.budget_min) return `${formatMoney(lead.budget_min)}+`;
-  if (lead.budget_max) return `<= ${formatMoney(lead.budget_max)}`;
+  const min = lead.budget_min ? leadBudgetAmount(lead.budget_min, lead.intent) : null;
+  const max = lead.budget_max ? leadBudgetAmount(lead.budget_max, lead.intent) : null;
+  if (min && max) return `${min} - ${max}`;
+  if (min) return `${min}+`;
+  if (max) return `<= ${max}`;
   return "—";
-}
-
-function formatMoney(value: number) {
-  return `$${Number(value).toLocaleString("zh-HK")}`;
 }
 
 function formatDate(value: string) {

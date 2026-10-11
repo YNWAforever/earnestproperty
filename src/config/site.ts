@@ -1,4 +1,5 @@
 import { SITE_BRANCHES, resolveBranchContact, type SiteBranch } from "./site-branches.js";
+import { formatPrice } from "@/lib/format";
 
 const whatsappPhone = import.meta.env.VITE_CONTACT_WHATSAPP_PHONE ?? "";
 const phoneDisplay = import.meta.env.VITE_CONTACT_PHONE_DISPLAY ?? "";
@@ -121,13 +122,12 @@ export function whatsappIntentUrl(intent: WhatsAppIntent, context: WhatsAppInten
   return whatsappUrl(whatsappIntentMessage(intent, context));
 }
 
+// The prefill price is display text only: inbound parsing never reads it (the
+// listing number in `title` and any EPWA tracking code are what identify an
+// enquiry), so it uses the one site price format (FX-19d-2).
 function formatWhatsAppPrice(dealType: "sale" | "rent", price: number | null) {
-  if (price === null) return "";
-  const amount =
-    dealType === "rent"
-      ? `$${price.toLocaleString("zh-HK")}/月`
-      : `$${price.toLocaleString("zh-HK")}`;
-  return `（${amount}）`;
+  const amount = formatPrice(price, { dealType });
+  return amount ? `（${amount}）` : "";
 }
 
 /**
@@ -135,7 +135,7 @@ function formatWhatsAppPrice(dealType: "sale" | "rent", price: number | null) {
  * (which drives the site-wide buy/rent/valuation CTAs): this one is a single
  * short line carrying enough context for an agent to recognise the property
  * without opening the site, per the audit's example:
- * 「你好，想查詢 麗都花園 第03座 售盤 #C024131（$600萬）」.
+ * 「你好，想查詢 麗都花園 第03座 售盤 #C024131（HK$600萬）」.
  *
  * `title` is expected to be the listing's `title_zh`, which
  * src/lib/mls/normalize-old-site.mjs already builds as

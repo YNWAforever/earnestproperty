@@ -2,7 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { createHash } from "node:crypto";
 
-import { formatArea, formatHkd, formatManDisplay } from "@/lib/format";
+import { formatArea, formatPrice } from "@/lib/format";
 import { getSql, queryRows, stringOrEmpty, stringOrNull } from "@/lib/neon/db.server";
 
 import type { AiKnowledgeChunk, AiKnowledgeSourceType, AiVisibility } from "./ai-types";
@@ -448,17 +448,14 @@ function joinText(values: unknown[]) {
     .join("\n");
 }
 
+// Knowledge chunks carry the site price format (FX-19d-2), so the live agent
+// quotes a price exactly as the listing page shows it. "待核實" stays the fallback.
 function formatSalePrice(value: unknown) {
-  const price = Number(value);
-  const hkd = formatHkd(price);
-  if (!hkd) return "待核實";
-  const man = formatManDisplay(price);
-  return man ? `${hkd}（${man}）` : hkd;
+  return formatPrice(Number(value), { dealType: "sale" }) ?? "待核實";
 }
 
 function formatRent(value: unknown) {
-  const hkd = formatHkd(Number(value));
-  return hkd ? `${hkd}／月` : "待核實";
+  return formatPrice(Number(value), { dealType: "rent" }) ?? "待核實";
 }
 
 function listingFacts(row: Record<string, unknown>) {

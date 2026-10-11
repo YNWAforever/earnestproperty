@@ -36,7 +36,13 @@ function loadActiveFilterChipsFn() {
     source.indexOf("function buildActiveFilterChips("),
     source.indexOf("function FilterChip("),
   );
+  // The chips format their price bounds with format.ts's formatPrice.
+  const formatBlock = readFileSync(new URL("../lib/format.ts", import.meta.url), "utf8").replace(
+    /^export /gm,
+    "",
+  );
   const snippet = [
+    formatBlock,
     districtBlock,
     sortLabelsBlock,
     chipsBlock,
@@ -186,6 +192,18 @@ test("active-filter chips never claim a price filter is active when deal=all, mi
     "maxPrice",
     "minPrice",
   ]);
+});
+
+test("price-bound chips use the one site price format for the chosen deal (FX-19d-2)", () => {
+  const buildActiveFilterChips = loadActiveFilterChipsFn();
+  const labels = (search) =>
+    Object.fromEntries(buildActiveFilterChips(search, []).map((chip) => [chip.key, chip.label]));
+  const base = { deal: "sale", minPrice: 5_000_000, maxPrice: 12_685_000, sort: "newest", page: 1 };
+  assert.equal(labels(base).minPrice, "最低 HK$500萬");
+  assert.equal(labels(base).maxPrice, "最高 HK$1,268.5萬");
+  const rent = labels({ ...base, deal: "rent", minPrice: 15_000, maxPrice: 38_000 });
+  assert.equal(rent.minPrice, "最低 HK$15,000／月");
+  assert.equal(rent.maxPrice, "最高 HK$38,000／月");
 });
 
 test("each filter chip removes only its own param via a search merge function, not a whole-object replace", () => {

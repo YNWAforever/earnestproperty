@@ -1,4 +1,4 @@
-import { formatHkd, formatSaleDisplay } from "./format";
+import { formatPrice } from "./format";
 
 export type PublicOffering = {
   id: string;
@@ -63,8 +63,8 @@ export function propertyPriceSummary(property: PublicProperty) {
     offers
       .map((offer) =>
         offer.deal_type === "rent"
-          ? `租 ${formatHkd(offer.rent) ?? "—"} / 月`
-          : `售 ${formatSaleDisplay(offer.price) ?? "—"}`,
+          ? `租 ${formatPrice(offer.rent, { dealType: "rent" }) ?? "— / 月"}`
+          : `售 ${formatPrice(offer.price, { dealType: "sale" }) ?? "—"}`,
       )
       .join(" · ") || "暫無放盤"
   );

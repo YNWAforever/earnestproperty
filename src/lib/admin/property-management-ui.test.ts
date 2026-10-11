@@ -49,6 +49,25 @@ test("an absent offer has no price or publication status", () => {
   expect(offeringPrice(null)).toBe("—");
 });
 
+test("offer prices use the site price format and keep the 未填價格 fallback", () => {
+  const base = {
+    id: "o",
+    title: "物業",
+    status: "active",
+    description: null,
+    agentId: null,
+    agentName: null,
+    editable: true,
+  };
+  expect(offeringPrice({ ...base, dealType: "sale", price: 12_680_000, rent: null })).toBe(
+    "HK$1,268萬",
+  );
+  expect(offeringPrice({ ...base, dealType: "rent", price: null, rent: 38_000 })).toBe(
+    "HK$38,000／月",
+  );
+  expect(offeringPrice({ ...base, dealType: "sale", price: null, rent: null })).toBe("未填價格");
+});
+
 test("offer summaries show only real offers and retain non-public statuses", () => {
   const sale = {
     id: "sale",

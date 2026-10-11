@@ -218,3 +218,14 @@ test("filter fields are built from the same shadcn Select/Input/Label primitives
   assert.match(source, /role="radiogroup"/);
   assert.match(source, /role="radio"/);
 });
+
+test("a transaction price uses the one site format for its own deal type (FX-19d-2)", () => {
+  // A rent transaction used to render as 萬 ("HK$3.8萬"); formatPrice gives it
+  // "HK$38,000／月" and a sale "HK$1,268萬".
+  assert.match(
+    source,
+    /formatPrice\(transaction\.price, \{ dealType: transaction\.deal_type \}\) \?\? "-"/,
+  );
+  assert.doesNotMatch(source, /formatManDisplay/);
+  assert.match(source, /formatPrice\(search\.minPrice, \{ dealType: chipDealType \}\)/);
+});

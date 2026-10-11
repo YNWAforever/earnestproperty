@@ -1,6 +1,10 @@
 import { adminErrorMessage } from "@/components/admin/admin-error-text";
 import { WhatsappEnquiryQueue } from "@/components/admin/WhatsappEnquiryContext";
-import { stageLabels as STAGE_LABELS, aiScoreLabel } from "@/lib/admin/crm-presentation";
+import {
+  stageLabels as STAGE_LABELS,
+  aiScoreLabel,
+  leadBudgetAmount,
+} from "@/lib/admin/crm-presentation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Check, RefreshCw } from "lucide-react";
@@ -495,8 +499,8 @@ function KpiStrip({
 
 function formatBudget(row: CommandCenterRow) {
   if (row.budget_band) return row.budget_band;
-  const min = row.budget_min ? `$${Number(row.budget_min).toLocaleString()}` : null;
-  const max = row.budget_max ? `$${Number(row.budget_max).toLocaleString()}` : null;
+  const min = row.budget_min ? leadBudgetAmount(row.budget_min, row.intent) : null;
+  const max = row.budget_max ? leadBudgetAmount(row.budget_max, row.intent) : null;
   if (min && max) return `${min} – ${max}`;
   return min ?? max ?? "—";
 }

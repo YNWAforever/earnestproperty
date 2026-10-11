@@ -27,6 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
+import { formatPrice } from "@/lib/format";
 import { fetchAdminEstateOptions, fetchAdminTransactionsFiltered } from "@/lib/neon/admin-data";
 import type {
   AdminTransactionFiltersInput,
@@ -252,7 +253,9 @@ function AdminTransactions() {
                         </Badge>
                       </TableCell>
                       <TableCell className="whitespace-nowrap text-right">
-                        {transaction.price ? `$${Number(transaction.price).toLocaleString()}` : "—"}
+                        {formatPrice(Number(transaction.price), {
+                          dealType: transaction.deal_type === "rent" ? "rent" : "sale",
+                        }) ?? "—"}
                       </TableCell>
                       <TableCell>{transaction.deal_date ?? "—"}</TableCell>
                       <TableCell className="max-w-[10rem] truncate">

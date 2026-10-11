@@ -32,8 +32,7 @@ const unit = { ...sale, public_listing_no: "B", offerings: [sale, rent] };
 describe("unified property presentation", () => {
   test("stable URL and both independently priced offerings", () => {
     expect(publicPropertyNo(unit)).toBe("B");
-    expect(propertyPriceSummary(unit)).toContain("6.48M");
-    expect(propertyPriceSummary(unit)).toContain("18,500");
+    expect(propertyPriceSummary(unit)).toBe("售 HK$648萬 · 租 HK$18,500／月");
     expect(propertyDealLabel(unit)).toBe("可買可租");
   });
   test("rent inquiry targets rent row and never inherits sale price", () => {
