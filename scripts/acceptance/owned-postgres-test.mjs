@@ -187,3 +187,94 @@ export function ownedMlsPorts(pool) {
     },
   };
 }
+
+const ISOLATION = {
+  ReadUncommitted: "READ UNCOMMITTED",
+  ReadCommitted: "READ COMMITTED",
+  RepeatableRead: "REPEATABLE READ",
+  Serializable: "SERIALIZABLE",
+};
+
+function shape(result, options = {}) {
+  if (options.fullResults) return result;
+  return options.arrayMode ? result.rows.map((row) => Object.values(row)) : result.rows;
+}
+
+/**
+ * A client with the shape of `neon(url)` from @neondatabase/serverless 1.x, backed by an owned
+ * pg pool. `query(text, params)` is lazy (like the driver) and resolves to the rows array;
+ * `transaction(build, options)` takes an array of those queries or a callback receiving `t`
+ * (`t.query` makes the same lazy query) and resolves to one rows array per query, in order.
+ * All queries run on one connection inside one BEGIN/COMMIT, with the requested isolation
+ * level; any error rolls back and is rethrown.
+ */
+export function ownedNeonSql(pool) {
+  const lazy = (text, params = [], runner) => ({
+    parameterizedQuery: { query: text, params },
+    then: (resolve, reject) => runner(text, params).then(resolve, reject),
+    catch: (reject) => runner(text, params).catch(reject),
+  });
+  const query = (text, params = []) =>
+    lazy(text, params, async (sqlText, values) => shape(await pool.query(sqlText, values)));
+  const transaction = async (build, options = {}) => {
+    const queries = typeof build === "function" ? build({ query }) : build;
+    for (const item of queries)
+      assert.ok(item?.parameterizedQuery, "transaction expects queries made by sql.query");
+    const level = options.isolationLevel ? ISOLATION[options.isolationLevel] : undefined;
+    assert.ok(!options.isolationLevel || level, "Unknown isolation level");
+    const begin =
+      "BEGIN" +
+      (level ? " ISOLATION LEVEL " + level : "") +
+      (options.readOnly ? " READ ONLY" : "") +
+      (options.deferrable ? " DEFERRABLE" : "");
+    const client = await pool.connect();
+    try {
+      await client.query(begin);
+      const results = [];
+      for (const { parameterizedQuery } of queries)
+        results.push(
+          shape(await client.query(parameterizedQuery.query, parameterizedQuery.params), options),
+        );
+      await client.query("COMMIT");
+      return results;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+  return { query, transaction };
+}
+
+function dockerServerAvailable() {
+  const result = spawnSync("docker", ["version", "--format", "{{.Server.Version}}"], {
+    encoding: "utf8",
+    timeout: 15000,
+  });
+  return !result.error && result.status === 0;
+}
+
+/**
+ * Runs `run({ sql, owned, ... })` against either an explicitly provided disposable Neon
+ * database (TEST_DATABASE_URL, behind the disposable-target guard) or a fresh owned container.
+ * In CI a missing database is a failure, never a skipped pass. Outside CI with no Docker the
+ * owned harness fails with its usual "Owned Docker test: ..." error, as it always has.
+ */
+export async function dbTargetOrOwned(run, deps = {}) {
+  const env = deps.env ?? process.env;
+  const url = env.TEST_DATABASE_URL;
+  if (url) {
+    const { assertDisposableNeonTestTarget } = await import(
+      new URL("src/lib/neon/disposable-test-target.mjs", repoRoot).href
+    );
+    await assertDisposableNeonTestTarget(url, { env });
+    const { neon } = await import("@neondatabase/serverless");
+    return run({ sql: neon(url), owned: false, url });
+  }
+  if (env.CI === "true" && !(deps.dockerAvailable ?? dockerServerAvailable)())
+    throw new Error("OWNED_DB_REQUIRED_NO_SKIPPED_PASS");
+  return (deps.withOwned ?? withOwnedPostgres)((owned) =>
+    run({ ...owned, sql: ownedNeonSql(owned.pool), owned: true }),
+  );
+}

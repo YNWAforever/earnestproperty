@@ -131,6 +131,7 @@ jobs:
       - run: npm run test:youtube-sync
       - run: npm run test:migration
       - run: npm run test:mls:cloudflare
+      - run: npm run test:owned-harness
 
       # Suites added after the original matrix. src/test-wiring.test.mjs now
       # fails when a deterministic test:* script is absent from this workflow.
