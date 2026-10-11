@@ -186,8 +186,24 @@ export function buildAdminPageQuery(
     : "";
   const limit = param(input.limit + 1);
   const order = ascending ? "ASC" : "DESC";
+  // FAQ soft delete: archived rows are published=false. The archived filter runs after scope
+  // and search (`scoped`), and the archived count is taken over `scoped`, so the toggle's
+  // count does not depend on which rows the current page happens to hold.
+  const faqs = input.resource === "faqs";
+  const archivedFilter =
+    input.archived === "only"
+      ? "(row->>'published')::boolean IS NOT TRUE"
+      : input.archived === "all"
+        ? ""
+        : "(row->>'published')::boolean IS TRUE";
+  const filteredCte = faqs
+    ? `scoped AS NOT MATERIALIZED (SELECT * FROM authorized ${filters.length ? "WHERE " + filters.join(" AND ") : ""}), filtered AS NOT MATERIALIZED (SELECT * FROM scoped${archivedFilter ? " WHERE " + archivedFilter : ""})`
+    : `filtered AS NOT MATERIALIZED (SELECT * FROM authorized ${filters.length ? "WHERE " + filters.join(" AND ") : ""})`;
+  const archivedTotal = faqs
+    ? ",(SELECT count(*)::int FROM scoped WHERE (row->>'published')::boolean IS NOT TRUE) AS archived_total"
+    : "";
   const statement = fastConversationPage
     ? `WITH scoped AS NOT MATERIALIZED (SELECT w.id,COALESCE(w.last_message_at,w.created_at) AS page_at FROM whatsapp_conversations w WHERE ${scope ? `w.assigned_agent_id=${own}::uuid AND ` : ""}wa_can_read_conversation(${own}::uuid,w.id)), page AS MATERIALIZED (SELECT id,page_at FROM scoped ${boundary} ORDER BY page_at DESC,id DESC LIMIT ${limit}), authorized AS NOT MATERIALIZED (${source}) SELECT COALESCE((SELECT jsonb_agg(row||jsonb_build_object('_cursor_at',to_char(page_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY page_at DESC,id DESC) FROM authorized),'[]'::jsonb) AS rows,(SELECT count(*)::int FROM scoped) AS total`
-    : `WITH authorized AS NOT MATERIALIZED (${source}), filtered AS NOT MATERIALIZED (SELECT * FROM authorized ${filters.length ? "WHERE " + filters.join(" AND ") : ""}), page AS (SELECT row,page_at,id FROM filtered ${boundary} ORDER BY page_at ${order},id ${order} LIMIT ${limit}) SELECT COALESCE((SELECT jsonb_agg(row||jsonb_build_object('_cursor_at',to_char(page_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY page_at ${order},id ${order}) FROM page),'[]'::jsonb) AS rows,(SELECT count(*)::int FROM filtered) AS total`;
+    : `WITH authorized AS NOT MATERIALIZED (${source}), ${filteredCte}, page AS (SELECT row,page_at,id FROM filtered ${boundary} ORDER BY page_at ${order},id ${order} LIMIT ${limit}) SELECT COALESCE((SELECT jsonb_agg(row||jsonb_build_object('_cursor_at',to_char(page_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')) ORDER BY page_at ${order},id ${order}) FROM page),'[]'::jsonb) AS rows,(SELECT count(*)::int FROM filtered) AS total${archivedTotal}`;
   return { statement, params, input, binding, ascending };
 }

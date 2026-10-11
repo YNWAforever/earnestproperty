@@ -122,6 +122,57 @@ test("hub FAQ and video rows carry the save's row version; other CMS rows do not
   );
   assert.doesNotMatch(media, /'version'/);
 });
+test("FAQ pages take an archived filter that defaults to live rows; other resources reject it", () => {
+  assert.equal(parseAdminPageInput({ resource: "faqs" }).archived, "hide");
+  for (const archived of ["hide", "only", "all"])
+    assert.equal(parseAdminPageInput({ resource: "faqs", archived }).archived, archived);
+  assert.throws(() => parseAdminPageInput({ resource: "faqs", archived: "bogus" }));
+  assert.throws(() => parseAdminPageInput({ resource: "faqs", archived: true }));
+  for (const resource of ["leads", "contacts", "estates", "articles", "videos", "media"]) {
+    assert.throws(() => parseAdminPageInput({ resource, archived: "all" }), resource);
+    assert.equal(parseAdminPageInput({ resource }).archived, undefined);
+  }
+});
+test("the FAQ archived filter runs in SQL after scope and search, and counts archived rows", () => {
+  const live = buildAdminPageQuery({ resource: "faqs", scope: "s", q: "x" }, actor);
+  const only = buildAdminPageQuery({ resource: "faqs", scope: "s", archived: "only" }, actor);
+  const all = buildAdminPageQuery({ resource: "faqs", archived: "all" }, actor);
+  assert.match(live.statement, /\(row->>'published'\)::boolean IS TRUE/);
+  assert.match(only.statement, /\(row->>'published'\)::boolean IS NOT TRUE/);
+  assert.match(all.statement, /filtered AS NOT MATERIALIZED \(SELECT \* FROM scoped\), page AS/);
+  assert.match(
+    live.statement,
+    /scoped AS NOT MATERIALIZED \(SELECT \* FROM authorized WHERE .*row->>'scope'=.*ILIKE/,
+  );
+  // The archived count is taken over the scope/search rows, before the archived filter.
+  for (const q of [live, only, all])
+    assert.match(
+      q.statement,
+      /\(SELECT count\(\*\)::int FROM scoped WHERE \(row->>'published'\)::boolean IS NOT TRUE\) AS archived_total/,
+    );
+  assert.equal(live.params.at(-1), 51);
+  assert.doesNotMatch(
+    buildAdminPageQuery({ resource: "videos" }, actor).statement,
+    /archived_total/,
+  );
+});
+test("a FAQ cursor cannot be replayed under a different archived filter", () => {
+  const live = buildAdminPageQuery({ resource: "faqs" }, actor);
+  assert.equal(
+    live.binding,
+    buildAdminPageQuery({ resource: "faqs", archived: "hide" }, actor).binding,
+  );
+  const token = encodeAdminCursor(
+    { at: "2026-09-05T00:00:00.000000Z", id: actor.staffId },
+    live.binding,
+  );
+  assert.ok(buildAdminPageQuery({ resource: "faqs", cursor: token }, actor));
+  for (const archived of ["only", "all"])
+    assert.throws(
+      () => buildAdminPageQuery({ resource: "faqs", archived, cursor: token }, actor),
+      /INVALID_ADMIN_PAGE/,
+    );
+});
 test("all resources use deterministic timestamp and id ties with lookahead", () => {
   for (const resource of [
     "leads",

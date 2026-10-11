@@ -278,6 +278,12 @@ test("FAQ delete says it can be restored and archived rows offer 還原", () => 
   assert.match(table, /<Badge variant="outline"[^>]*>\s*已封存\s*<\/Badge>/);
   assert.match(table, /onClick=\{\(\) => setRestoringFaq\(faq\)\}/);
   assert.doesNotMatch(table, /onClick=\{[^}]*handleRestoreFaq\(/);
+  // The archived filter and its count come from the server, not from the ≤50 loaded rows.
+  assert.match(source, /archived: showArchivedFaqs \? "all" : "hide"/);
+  assert.match(source, /setFaqArchivedTotal\(page\.archivedTotal \?\? 0\)/);
+  assert.match(source, /const archivedFaqCount = faqArchivedTotal;/);
+  assert.doesNotMatch(source, /!faq\.published && !showArchivedFaqs/);
+  assert.doesNotMatch(source, /\.filter\(\(faq\) => !faq\.published\)/);
   // The import loop never sends an archived question.
   const preview = source.slice(source.indexOf("const faqImportPreview = useMemo("));
   assert.match(preview.slice(0, 1500), /filter\(\(row\) => !faqImportArchivedKeys\.has\(/);
