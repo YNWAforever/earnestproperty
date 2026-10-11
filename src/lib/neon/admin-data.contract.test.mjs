@@ -16,9 +16,12 @@ test("admin data layer exposes CMS, listing, CRM, WhatsApp, and blast mutations"
 
   const exports = [
     "fetchAdminAgents",
+    "saveAdminFaq",
+    "deleteAdminFaq",
     "restoreAdminFaq",
     "fetchAdminMediaAssets",
     "updateAdminMediaAsset",
+    "updateAdminPropertyStatus",
     "fetchAdminLead",
     "updateAdminLead",
     "createAdminLeadActivity",
