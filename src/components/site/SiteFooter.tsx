@@ -38,7 +38,7 @@ function CopyrightYear() {
 
 export function SiteFooter() {
   return (
-    <footer className="mt-24 border-t border-border bg-foreground text-background">
+    <footer className="mt-24 border-t border-border bg-foreground text-background [--ring:var(--brand-bright)]">
       <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div>

@@ -20,6 +20,7 @@ export default defineConfig({
     "public-form-feedback.spec.ts",
     "live-agent-cards.spec.ts",
     "public-mobile-chrome.spec.ts",
+    "design-states.spec.ts",
   ],
   workers: 1,
   fullyParallel: false,

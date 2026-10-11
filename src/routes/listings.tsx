@@ -625,7 +625,7 @@ function FilterFields({
               className={`min-h-11 rounded-md border px-2 py-2 text-sm font-medium transition ${
                 deal === v
                   ? "border-primary bg-primary text-primary-foreground"
-                  : "border-input hover:bg-accent"
+                  : "border-border hover:bg-accent"
               }`}
             >
               {v === "all" ? "全部" : v === "sale" ? "售盤" : "租盤"}
@@ -1493,7 +1493,7 @@ function PageLink({
 }) {
   if (disabled) {
     return (
-      <span className="inline-flex h-11 min-w-11 items-center justify-center rounded-md border border-input px-3 text-sm text-muted-foreground opacity-40">
+      <span className="inline-flex h-11 min-w-11 items-center justify-center rounded-md border border-border px-3 text-sm text-muted-foreground opacity-40">
         {children}
       </span>
     );
@@ -1505,7 +1505,7 @@ function PageLink({
       className={`inline-flex h-11 min-w-11 items-center justify-center rounded-md border px-3 text-sm font-medium transition ${
         active
           ? "border-primary bg-primary text-primary-foreground"
-          : "border-input hover:bg-accent"
+          : "border-border hover:bg-accent"
       }`}
       {...rest}
     >

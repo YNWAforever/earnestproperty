@@ -245,7 +245,7 @@ function VideosPage() {
                       className={`rounded-full border px-3 py-1.5 text-sm transition ${
                         !category
                           ? "border-primary bg-primary text-primary-foreground"
-                          : "border-input bg-background hover:bg-muted"
+                          : "border-border bg-background hover:bg-muted"
                       }`}
                     >
                       全部 {cmsVideos.length}
@@ -259,7 +259,7 @@ function VideosPage() {
                         className={`rounded-full border px-3 py-1.5 text-sm transition ${
                           category === entry.category
                             ? "border-primary bg-primary text-primary-foreground"
-                            : "border-input bg-background hover:bg-muted"
+                            : "border-border bg-background hover:bg-muted"
                         }`}
                       >
                         {entry.category} {entry.count}
@@ -279,7 +279,7 @@ function VideosPage() {
                     className={`rounded-full border px-3 py-1.5 text-sm transition ${
                       !estate
                         ? "border-primary bg-primary text-primary-foreground"
-                        : "border-input bg-background hover:bg-muted"
+                        : "border-border bg-background hover:bg-muted"
                     }`}
                   >
                     全部 {cmsVideos.length}
@@ -293,7 +293,7 @@ function VideosPage() {
                       className={`rounded-full border px-3 py-1.5 text-sm transition ${
                         estate === entry.tag
                           ? "border-primary bg-primary text-primary-foreground"
-                          : "border-input bg-background hover:bg-muted"
+                          : "border-border bg-background hover:bg-muted"
                       }`}
                     >
                       {entry.tag} {entry.count}
@@ -303,7 +303,7 @@ function VideosPage() {
                     <button
                       type="button"
                       onClick={() => setShowAllTags(true)}
-                      className="rounded-full border border-dashed border-input px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+                      className="rounded-full border border-dashed border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
                     >
                       更多 {tagCounts.length - 8} ▾
                     </button>

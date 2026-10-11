@@ -857,7 +857,7 @@ function HomeVideoCard({ video }: { video: HomeVideo }) {
   );
 
   const cardClass =
-    "group block overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-elegant focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+    "group block overflow-hidden rounded-xl border border-border bg-card shadow-card transition-[color,background-color,border-color,box-shadow,translate] duration-300 hover:-translate-y-1 hover:shadow-elegant focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
   if (video.listingNo) {
     return (
@@ -946,7 +946,7 @@ function PropertyCard({
   const hasVideo = isYouTubeVideoUrl(property.video_url);
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-elegant">
+    <div className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card transition-[color,background-color,border-color,box-shadow,translate] duration-300 hover:-translate-y-1 hover:shadow-elegant">
       {/* Decorative/mouse-only: the title link below is the sole keyboard and
           screen-reader path to the listing, so this photo doesn't need (and
           shouldn't have) its own focus stop or announced name. */}

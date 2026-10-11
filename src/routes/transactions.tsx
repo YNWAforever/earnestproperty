@@ -275,7 +275,7 @@ function TransactionFilterFields({
               className={`min-h-11 rounded-md border px-2 py-2 text-sm font-medium transition ${
                 dealType === v
                   ? "border-primary bg-primary text-primary-foreground"
-                  : "border-input hover:bg-accent"
+                  : "border-border hover:bg-accent"
               }`}
             >
               {DEAL_TYPE_LABELS[v]}
@@ -586,8 +586,8 @@ function TransactionsPage() {
                   aria-disabled={search.page === 1}
                   className={`inline-flex h-11 items-center justify-center rounded-md border px-4 text-sm font-medium transition ${
                     search.page === 1
-                      ? "pointer-events-none border-input text-muted-foreground opacity-40"
-                      : "border-input hover:bg-accent"
+                      ? "pointer-events-none border-border text-muted-foreground opacity-40"
+                      : "border-border hover:bg-accent"
                   }`}
                 >
                   上一頁
@@ -604,8 +604,8 @@ function TransactionsPage() {
                   aria-disabled={search.page === totalPages}
                   className={`inline-flex h-11 items-center justify-center rounded-md border px-4 text-sm font-medium transition ${
                     search.page === totalPages
-                      ? "pointer-events-none border-input text-muted-foreground opacity-40"
-                      : "border-input hover:bg-accent"
+                      ? "pointer-events-none border-border text-muted-foreground opacity-40"
+                      : "border-border hover:bg-accent"
                   }`}
                 >
                   下一頁

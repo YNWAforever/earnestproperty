@@ -1480,7 +1480,8 @@ try {
       await expect(page.getByRole("option").filter({ hasText: "深井租客" })).toBeVisible();
       await expect(page.getByRole("option").filter({ hasText: "荃灣買家" })).toBeVisible();
       await page.keyboard.press("Escape");
-      await edit.getByRole("button", { name: "關閉", exact: true }).click();
+      // FX-20a: the dialog's X is also named 關閉 now; this is the form's own close button.
+      await edit.locator("form").getByRole("button", { name: "關閉", exact: true }).click();
       await expect(edit).not.toBeVisible();
       await expect(page.getByRole("alertdialog")).toHaveCount(0);
       const dialog = await campaignConfirmation(page);

@@ -182,7 +182,7 @@ function EstateReviewsPage() {
                   className={`rounded-full border px-3 py-1.5 text-sm font-medium transition ${
                     districtFilter === district
                       ? "border-primary bg-primary text-primary-foreground"
-                      : "border-input bg-background text-muted-foreground hover:bg-muted"
+                      : "border-border bg-background text-muted-foreground hover:bg-muted"
                   }`}
                 >
                   {district}
