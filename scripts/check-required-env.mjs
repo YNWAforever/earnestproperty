@@ -22,8 +22,12 @@
 //
 // WhatsApp intake (FX-10a, C-07/C-08): when WOZTELL_ENABLED=true the webhook
 // answers 503 to everything without WOZTELL_APP_ID, WOZTELL_CHANNEL_ID and
-// WOZTELL_CHANNEL_SECRET; when EP_WA_TRACKED_LINKS_ENABLED=true every tracked
-// /w/ link needs EP_WA_COMPANY_CHANNEL_ID and a usable EP_WA_COMPANY_PHONE.
+// WOZTELL_CHANNEL_SECRET; when tracked links are on every tracked /w/ link needs a
+// company channel and a usable company phone. FX-19c-1 mirrors
+// src/lib/whatsapp-enquiries/wa-config.server.ts (plain JS cannot import it):
+// tracked links = EP_WA_TRACKED_LINKS_ENABLED while set, else EP_WA_ENQUIRY_MODE is
+// observe/active; channel = EP_WA_COMPANY_CHANNEL_ID while set, else WOZTELL_CHANNEL_ID;
+// phone = EP_WA_COMPANY_PHONE while set, else VITE_CONTACT_WHATSAPP_PHONE.
 // Gaps block production builds. Preview builds only warn, because previews
 // legitimately run with partial or no WhatsApp configuration and must stay
 // deployable for review. Messages name variables only, never their values.
@@ -119,19 +123,31 @@ if (isVercelDeploy) {
       if (!process.env[name]?.trim()) problems.push(`${name} is not set (WOZTELL_ENABLED=true)`);
     }
   }
-  if (process.env.EP_WA_TRACKED_LINKS_ENABLED === "true") {
+  const isSet = (value) => typeof value === "string" && value.length > 0;
+  const trackedLinksOn = isSet(process.env.EP_WA_TRACKED_LINKS_ENABLED)
+    ? process.env.EP_WA_TRACKED_LINKS_ENABLED === "true"
+    : process.env.EP_WA_ENQUIRY_MODE === "observe" || process.env.EP_WA_ENQUIRY_MODE === "active";
+  if (trackedLinksOn) {
     // Blank counts as missing, as for WOZTELL_* above. The runtime (companyChannel,
     // usableCompanyPhone) reads both values raw with no trim, so a padded value is
     // unusable there and is flagged here too, rather than trimmed into a pass.
-    const channel = process.env.EP_WA_COMPANY_CHANNEL_ID ?? "";
+    const channel =
+      (isSet(process.env.EP_WA_COMPANY_CHANNEL_ID)
+        ? process.env.EP_WA_COMPANY_CHANNEL_ID
+        : process.env.WOZTELL_CHANNEL_ID) ?? "";
     if (!channel.trim() || channel !== channel.trim() || channel.length > 160) {
       problems.push(
-        "EP_WA_COMPANY_CHANNEL_ID is not set, has surrounding whitespace, or is longer than 160 characters",
+        "EP_WA_COMPANY_CHANNEL_ID / WOZTELL_CHANNEL_ID (company channel) is not set, has surrounding whitespace, or is longer than 160 characters",
       );
     }
-    const phone = process.env.EP_WA_COMPANY_PHONE ?? "";
+    const phone =
+      (isSet(process.env.EP_WA_COMPANY_PHONE)
+        ? process.env.EP_WA_COMPANY_PHONE
+        : process.env.VITE_CONTACT_WHATSAPP_PHONE) ?? "";
     if (!phone.trim() || !/^[1-9]\d{7,14}$/.test(phone) || whatsappPhoneProblem(phone) !== null) {
-      problems.push("EP_WA_COMPANY_PHONE is not a usable company WhatsApp number");
+      problems.push(
+        "EP_WA_COMPANY_PHONE / VITE_CONTACT_WHATSAPP_PHONE (company phone) is not a usable company WhatsApp number",
+      );
     }
   }
 

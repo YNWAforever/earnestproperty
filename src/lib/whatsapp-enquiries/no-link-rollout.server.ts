@@ -6,6 +6,7 @@ import {
   type NoLinkCanary,
 } from "./no-link-rollout.ts";
 import type { EnquiryMode } from "./contracts.ts";
+import { companyChannelId } from "./wa-config.server.ts";
 
 type Query = typeof queryRows;
 type GateRow = {
@@ -38,7 +39,7 @@ export function noLinkCanaryConfig(
   return {
     mode,
     effectsEnabled: env.EP_WA_NO_LINK_EFFECTS_ENABLED === "true",
-    companyChannelId: env.EP_WA_COMPANY_CHANNEL_ID ?? null,
+    companyChannelId: companyChannelId(env),
     canaryChannelId: env.EP_WA_NO_LINK_CANARY_CHANNEL_ID ?? null,
     canaryActivationId: env.EP_WA_NO_LINK_CANARY_ACTIVATION_ID ?? null,
     canaryStaffIds: (env.EP_WA_NO_LINK_CANARY_STAFF_IDS ?? "")
@@ -115,7 +116,7 @@ export async function maybePrepareNoLinkFollowup(
   const env = options.env ?? process.env;
   const configured = noLinkCanaryConfig(
     mode,
-    env.EP_WA_COMPANY_CHANNEL_ID ?? null,
+    companyChannelId(env),
     env.EP_WA_ACTIVATION_ID ?? null,
     env,
   );

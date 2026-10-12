@@ -12,6 +12,7 @@ import {
   type StaffTemplateResponse,
 } from "../woztell/staff-alert-template.ts";
 import { staffDestinationNotACustomer } from "./staff-recipient-guard.ts";
+import { companyChannelId } from "./wa-config.server.ts";
 type Ports = { query: typeof queryRows; transaction: typeof transactionRows };
 const defaults: Ports = { query: queryRows, transaction: transactionRows };
 export type StaffNotificationRuntime = {
@@ -28,7 +29,7 @@ export function staffWhatsappAlertRuntime(): StaffNotificationRuntime {
   return {
     enabled: process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true",
     generationId: process.env.EP_WA_ACTIVATION_ID ?? null,
-    channelId: process.env.EP_WA_COMPANY_CHANNEL_ID ?? null,
+    channelId: companyChannelId(),
     template: parseStaffAlertTemplate(process.env.EP_WA_STAFF_ALERT_TEMPLATE),
   };
 }

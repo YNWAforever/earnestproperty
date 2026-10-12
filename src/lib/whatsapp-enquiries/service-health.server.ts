@@ -9,6 +9,7 @@ import {
 import { assessWhatsappRuntime } from "../neon/whatsapp-readiness-policy.ts";
 import { dueWorkHealth, summarizeStaffCoverage } from "./service-health-model.ts";
 import { redirectCapacity } from "./redirect-capacity.ts";
+import { legacyWaNamesInUse } from "./wa-config.server.ts";
 
 type Actor = Pick<StaffAccess, "staffId" | "roles">;
 type Query = typeof queryRows;
@@ -58,6 +59,8 @@ export async function getServiceHealth(
     serviceEnabled,
     runtime,
     redirectCapacity: redirectCapacity(),
+    // FX-19c-1: an informational note only (names, never values); never a reason.
+    legacyNames: legacyWaNamesInUse(),
     policy: {
       version: null as number | null,
       purpose: null as string | null,

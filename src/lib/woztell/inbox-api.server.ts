@@ -1,5 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { boundedProviderFetch } from "./provider-fetch.ts";
+import { companyChannelId, inboxVerificationRef } from "../whatsapp-enquiries/wa-config.server.ts";
 export class InboxPreDispatchError extends Error {
   readonly code = "WOZTELL_INBOX_PREFLIGHT_BLOCKED";
   constructor() {
@@ -20,11 +21,11 @@ export type InboxConfig = {
 export function inboxConfig(): InboxConfig | null {
   const e = process.env;
   const values = [
-    e.EP_WA_INBOX_VERIFICATION_REF,
+    inboxVerificationRef(e),
     e.WOZTELL_APP_ID,
     e.EP_WA_INBOX_INTEGRATION_ID,
     e.EP_WA_INBOX_SIGNATURE,
-    e.EP_WA_COMPANY_CHANNEL_ID,
+    companyChannelId(e),
     e.EP_WA_INBOX_LIST_THREADS_URL,
     e.EP_WA_INBOX_LIST_USERS_URL,
     e.EP_WA_INBOX_ASSIGN_URL,

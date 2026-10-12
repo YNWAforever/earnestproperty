@@ -133,6 +133,11 @@ export function WhatsappServiceHealth({
             {health.measurement.timezone}；排除
             spam、測試、機械人回覆及未關聯對話。開啟、查詢、分派和真人回覆分開計算。
           </p>
+          {health.legacyNames.length ? (
+            <p className="text-xs text-muted-foreground" data-testid="wa-legacy-names">
+              舊設定名稱仍在使用：{health.legacyNames.join("、")}
+            </p>
+          ) : null}
           {health.reasons.length ? (
             <ul className="text-xs text-destructive">
               {health.reasons.map((reason) => (

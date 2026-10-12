@@ -60,7 +60,15 @@ const intakeGaps = ["WOZTELL_APP_ID", "WOZTELL_CHANNEL_ID", "WOZTELL_CHANNEL_SEC
   (name) => ({ name, env: without(name) }),
 );
 const trackedGaps = [
-  { name: "EP_WA_COMPANY_CHANNEL_ID", env: without("EP_WA_COMPANY_CHANNEL_ID") },
+  // Neither accepted channel name: WOZTELL_CHANNEL_ID is also an intake value, so
+  // intake stays off here to isolate the tracked-link check.
+  {
+    name: "EP_WA_COMPANY_CHANNEL_ID",
+    env: without("EP_WA_COMPANY_CHANNEL_ID", {
+      WOZTELL_ENABLED: "false",
+      WOZTELL_CHANNEL_ID: undefined,
+    }),
+  },
   {
     name: "EP_WA_COMPANY_CHANNEL_ID",
     env: { ...COMPLETE, EP_WA_COMPANY_CHANNEL_ID: "c".repeat(161) },
@@ -75,7 +83,13 @@ const trackedGaps = [
     env: { ...COMPLETE, EP_WA_COMPANY_PHONE: "+85291234567" },
     phone: "+85291234567",
   },
-  { name: "EP_WA_COMPANY_PHONE", env: without("EP_WA_COMPANY_PHONE") },
+  // Old name unset and the surviving name unusable at runtime (padded: the CTA guard
+  // trims, the runtime does not).
+  {
+    name: "EP_WA_COMPANY_PHONE",
+    env: without("EP_WA_COMPANY_PHONE", { VITE_CONTACT_WHATSAPP_PHONE: " 85291234567 " }),
+    phone: "85291234567 ",
+  },
   // Whitespace: blank counts as missing (as for WOZTELL_*), and because the runtime
   // reads these values raw (no trim), a padded value is unusable and is flagged too.
   { name: "EP_WA_COMPANY_CHANNEL_ID", env: { ...COMPLETE, EP_WA_COMPANY_CHANNEL_ID: "   " } },
@@ -137,5 +151,57 @@ test("complete production configuration passes and never prints values", () => {
 
 test("local builds are unaffected", () => {
   const r = run({}, false);
+  assert.equal(r.status, 0, r.output);
+});
+
+// FX-19c-1: the consolidated names. Channel = EP_WA_COMPANY_CHANNEL_ID, else
+// WOZTELL_CHANNEL_ID; phone = EP_WA_COMPANY_PHONE, else VITE_CONTACT_WHATSAPP_PHONE;
+// tracked links, when the old switch is unset, are on in observe/active mode.
+const NEW_ONLY = {
+  WOZTELL_ENABLED: "true",
+  WOZTELL_APP_ID: "fx10a-app-id-value",
+  WOZTELL_CHANNEL_ID: "fx10a-channel-value",
+  WOZTELL_CHANNEL_SECRET: "fx10a-secret-value",
+  EP_WA_ENQUIRY_MODE: "active",
+};
+
+test("production: the surviving names alone pass with tracked links derived from the mode", () => {
+  const r = run(NEW_ONLY);
+  assert.equal(r.status, 0, r.output);
+  for (const value of SECRET_VALUES) assert.ok(!r.output.includes(value), `output leaks ${value}`);
+});
+
+test("production: tracked links on with neither phone usable still blocks, naming both names", () => {
+  for (const env of [
+    { ...NEW_ONLY, VITE_CONTACT_WHATSAPP_PHONE: " 85291234567 " },
+    {
+      ...NEW_ONLY,
+      EP_WA_TRACKED_LINKS_ENABLED: "true",
+      EP_WA_ENQUIRY_MODE: undefined,
+      VITE_CONTACT_WHATSAPP_PHONE: " 85291234567 ",
+    },
+    { ...NEW_ONLY, EP_WA_COMPANY_PHONE: "85200000000" },
+  ]) {
+    const r = run(env);
+    assert.equal(r.status, 1, r.output);
+    assert.ok(r.stderr.includes("EP_WA_COMPANY_PHONE"), r.stderr);
+    assert.ok(r.stderr.includes("VITE_CONTACT_WHATSAPP_PHONE"), r.stderr);
+    assert.ok(!r.stderr.includes("85291234567"), "phone not printed");
+  }
+});
+
+test("production: tracked links on with neither channel name blocks, naming both names", () => {
+  const r = run({ ...NEW_ONLY, WOZTELL_ENABLED: "false", WOZTELL_CHANNEL_ID: undefined });
+  assert.equal(r.status, 1, r.output);
+  assert.ok(r.stderr.includes("EP_WA_COMPANY_CHANNEL_ID"), r.stderr);
+  assert.ok(r.stderr.includes("WOZTELL_CHANNEL_ID"), r.stderr);
+});
+
+test("an explicit EP_WA_TRACKED_LINKS_ENABLED=false keeps tracked links off in active mode", () => {
+  const r = run({
+    ...NEW_ONLY,
+    EP_WA_TRACKED_LINKS_ENABLED: "false",
+    VITE_CONTACT_WHATSAPP_PHONE: " 85291234567 ",
+  });
   assert.equal(r.status, 0, r.output);
 });

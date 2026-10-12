@@ -6,6 +6,7 @@ import { enquiryMode } from "./contracts.ts";
 import { noLinkCaptureSnapshot, maybePrepareNoLinkFollowup } from "./no-link-rollout.server.ts";
 import { buildEnqueueJobStatement } from "../control-plane/jobs.server.ts";
 import type { TransactionStatement } from "../neon/db.server.ts";
+import { companyChannelId, routingEnabled } from "./wa-config.server.ts";
 export async function enquirySchemaAvailable() {
   const { queryRows } = await import("../neon/db.server.ts");
   const [row] = await queryRows(
@@ -75,7 +76,7 @@ export function buildLiveEventStatements(
             : "synthetic_ambiguous",
         JSON.stringify({
           ...classified.evidence,
-          staffRoutingEligible: active && process.env.EP_WA_ROUTING_ENABLED === "true",
+          staffRoutingEligible: active && routingEnabled(),
           staffNotificationsEligible:
             active && process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true",
           noLinkEffectsEligible: noLinkCapture.eligible,
@@ -107,7 +108,7 @@ export function buildLiveEventStatements(
       );
     statements[0].params!.push(
       validGeneration,
-      process.env.EP_WA_COMPANY_CHANNEL_ID ?? null,
+      companyChannelId(),
       process.env.EP_WA_SERVICE_AUTOMATION_ENABLED === "true",
     );
   }
