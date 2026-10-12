@@ -27,14 +27,19 @@ import {
   maybePruneRedirectBuckets,
 } from "../whatsapp-enquiries/redirect-capacity.ts";
 import { whatsappPhoneProblem } from "../../config/whatsapp-phone.js";
+import {
+  companyChannelId,
+  companyPhone as configuredCompanyPhone,
+  trackedLinksEnabled,
+} from "../whatsapp-enquiries/wa-config.server.ts";
 const fields = `l.id,l.code,v.*,l.created_at`;
 export function companyChannel() {
-  const channel = process.env.EP_WA_COMPANY_CHANNEL_ID;
+  const channel = companyChannelId();
   if (!channel || channel.length > 160) throw new Error("WA_COMPANY_CHANNEL_REQUIRED");
   return channel;
 }
 export function trackingEnabled() {
-  return process.env.EP_WA_TRACKED_LINKS_ENABLED === "true";
+  return trackedLinksEnabled();
 }
 const GENERAL_ENQUIRY_TEXT = "您好，我想向晉誠地產查詢。樓盤供應請向職員確認。";
 /**
@@ -56,7 +61,8 @@ export function usableCompanyPhone(value: unknown): string | null {
 }
 /**
  * The only place a fallback WhatsApp target is chosen. Reads env only:
- * EP_WA_COMPANY_PHONE if valid, else VITE_CONTACT_WHATSAPP_PHONE if valid, else "/contact".
+ * companyPhone() (EP_WA_COMPANY_PHONE while set, else VITE_CONTACT_WHATSAPP_PHONE) if valid,
+ * else VITE_CONTACT_WHATSAPP_PHONE if valid, else "/contact".
  * Valid = /^[1-9]\d{7,14}$/ AND whatsappPhoneProblem(value) === null. Never throws.
  * Never derives a number from the link, the request or the database: a fallback must
  * never open a chat with anyone but the company.
@@ -65,7 +71,7 @@ export function companyFallbackLocation(
   env: Record<string, string | undefined> = process.env,
 ): string {
   try {
-    for (const candidate of [env?.EP_WA_COMPANY_PHONE, env?.VITE_CONTACT_WHATSAPP_PHONE]) {
+    for (const candidate of [configuredCompanyPhone(env ?? {}), env?.VITE_CONTACT_WHATSAPP_PHONE]) {
       const phone = usableCompanyPhone(candidate);
       if (phone) return companyWhatsappHref(phone, GENERAL_ENQUIRY_TEXT);
     }
@@ -278,7 +284,7 @@ export async function resolveTrackingLinks(
   query = queryRows,
 ) {
   const enabled = trackingEnabled();
-  const companyPhone = process.env.EP_WA_COMPANY_PHONE ?? process.env.VITE_CONTACT_WHATSAPP_PHONE;
+  const companyPhone = configuredCompanyPhone();
   const fallbackHref = enabled
     ? companyPhone
       ? companyWhatsappHref(companyPhone, "您好，我想向晉誠地產查詢。")
@@ -428,7 +434,7 @@ async function trackedRedirectOrThrow(
   ) {
     // Same strict check as the fallback: an invalid company phone (placeholder,
     // landline, spaced/+ form) never becomes a wa.me target here.
-    const limitedPhone = usableCompanyPhone(process.env.EP_WA_COMPANY_PHONE);
+    const limitedPhone = usableCompanyPhone(configuredCompanyPhone());
     const location =
       row.property_id && limitedPhone
         ? resolvePublicWaAction(
@@ -451,7 +457,7 @@ async function trackedRedirectOrThrow(
   progress.stage = "phone";
   // Strict check before the open INSERT: an invalid company phone throws, so the
   // wrapper's catch sends the customer to companyFallbackLocation() with no orphan open.
-  const phone = usableCompanyPhone(process.env.EP_WA_COMPANY_PHONE);
+  const phone = usableCompanyPhone(configuredCompanyPhone());
   if (!phone) throw new Error("WA_COMPANY_PHONE_REQUIRED");
   const reference = mintReference(),
     snapshot = { ...linkDto(row), propertyResponsibleStaffIdAtIntake };

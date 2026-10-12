@@ -8,10 +8,18 @@ Local implementation only. No deployment or production schema apply authorized/p
 
 ```text
 EP_WA_ENQUIRY_MODE=off
-EP_WA_TRACKED_LINKS_ENABLED=false
-EP_WA_ROUTING_ENABLED=false
 EP_WA_SERVICE_AUTOMATION_ENABLED=false
 ```
+
+FX-19c-1 changes how these settings are derived:
+
+- Tracked links are on when `EP_WA_ENQUIRY_MODE` is `observe` or `active`.
+- Staff routing is on when the mode is `active`.
+- The company channel and phone come from `WOZTELL_CHANNEL_ID` and `VITE_CONTACT_WHATSAPP_PHONE`. The channel fallback applies only in observe or active mode.
+
+The old names (`EP_WA_TRACKED_LINKS_ENABLED`, `EP_WA_ROUTING_ENABLED`, `EP_WA_COMPANY_CHANNEL_ID`, `EP_WA_COMPANY_PHONE`, `EP_WA_REDIRECT_*_PER_MIN`, `EP_WA_INBOX_VERIFICATION_REF`) are deprecated. Do not add them. Each is still read, and wins, until 19c-2 while it is set, so a set `"false"` still turns its feature off.
+
+Once `EP_WA_COMPANY_CHANNEL_ID` is deleted, setting the mode to `off` also clears the company channel. Staff lead alerts, the Inbox and the mapping and endpoint admin screens then stop until the mode is back on.
 
 Enquiry observation and tracked links are implemented. Routing execution is capability-blocked and service automation remains absent. Preserve existing WOZTELL_ENABLED and existing staff messaging configuration. Never expose credentials or controls as public VITE variables.
 
@@ -60,11 +68,11 @@ Server variables added to `.env.example`:
 
 | Variable | Source / release requirement |
 | --- | --- |
-| EP_WA_COMPANY_CHANNEL_ID | Operator-verified company WOZTELL channel; must agree with ingestion channel |
-| EP_WA_COMPANY_PHONE | Verified company WhatsApp number; never individual staff phone |
-| EP_WA_TRACKED_LINKS_ENABLED | false until deployment, company target and placements approved |
+| WOZTELL_CHANNEL_ID | Company channel (FX-19c-1), used once the mode is observe or active. Replaces deprecated EP_WA_COMPANY_CHANNEL_ID, which is still read while set until 19c-2 |
+| VITE_CONTACT_WHATSAPP_PHONE | Verified company WhatsApp number (FX-19c-1); never an individual staff phone. Replaces deprecated EP_WA_COMPANY_PHONE, which is still read while set until 19c-2 |
+| EP_WA_TRACKED_LINKS_ENABLED | Deprecated (FX-19c-1): links follow the mode. Still read while set until 19c-2; do not add it |
 | EP_WA_ENQUIRY_MODE | off or observe only; no active mode implemented |
-| EP_WA_ROUTING_ENABLED | false; live provider factory additionally refuses an unverified contract |
+| EP_WA_ROUTING_ENABLED | Deprecated (FX-19c-1): routing follows mode=active. Still read while set until 19c-2; do not add it. The live provider factory additionally refuses an unverified contract |
 | EP_WA_SERVICE_AUTOMATION_ENABLED | false; Phase 4 not implemented |
 
 Deployment order, for a separately authorized release: review current pending inventory and backup/restore evidence; apply the ordered additive migrations with controls off; deploy compatible app and ops_jobs worker; verify authenticated synthetic capture and staff permissions; verify company channel/number and immutable placements; then obtain operator approval to enable observe/links. Do not use guessed credentials or declare a mock run live verification.

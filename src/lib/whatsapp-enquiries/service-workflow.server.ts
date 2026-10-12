@@ -7,6 +7,7 @@ import {
   unresolvedServicePolicy,
 } from "./service-policy.ts";
 import { serviceRulesSchema } from "./policy-admin.server.ts";
+import { companyChannelId } from "./wa-config.server.ts";
 import { renderServiceCopy, type ServicePurpose } from "./service-copy.ts";
 import { deliverOutboundIntent, finishOutboundIntent } from "../woztell/outbound-intent.server.ts";
 import {
@@ -26,7 +27,7 @@ export function serviceRuntime(): ServiceRuntime {
       process.env.EP_WA_ENQUIRY_MODE === "active" &&
       process.env.EP_WA_SERVICE_AUTOMATION_ENABLED === "true",
     generationId: process.env.EP_WA_ACTIVATION_ID ?? null,
-    channelId: process.env.EP_WA_COMPANY_CHANNEL_ID ?? null,
+    channelId: companyChannelId(),
   };
 }
 export type SurveyReply = { token: string; answer: "satisfied" | "assistance" };

@@ -350,6 +350,8 @@ test("an unreadable jobs.queue row says so in zh-HK", () => {
 test("the WhatsApp card uses the same 未有記錄 copy for a missing heartbeat", () => {
   const card = readFileSync(new URL("./WhatsappServiceHealth.tsx", import.meta.url), "utf8");
   expect(card).toContain('工作程序最後回報：{health.heartbeatAt ?? "未有記錄"}');
+  // FX-19c-1: owner-approved note, names only, rendered outside the reasons list.
+  expect(card).toContain('舊設定名稱仍在使用：{health.legacyNames.join("、")}');
 });
 
 const receiptRow = (overrides: Partial<InboundReceiptProblem>): InboundReceiptProblem => ({

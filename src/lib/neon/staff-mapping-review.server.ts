@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { z } from "zod";
 import { queryRows } from "./db.server.ts";
+import { companyChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
 import type { StaffAccess } from "./auth.server.ts";
 import type { MappingConflict } from "./staff-mapping-review.types.ts";
 
@@ -33,7 +34,7 @@ async function authorize(actor: Actor, query: typeof queryRows) {
   if (!allowed) throw new Response("Forbidden", { status: 403 });
 }
 function scope() {
-  const channelId = process.env.EP_WA_COMPANY_CHANNEL_ID;
+  const channelId = companyChannelId();
   const providerScope = process.env.EP_WA_INBOX_INTEGRATION_ID;
   if (!channelId || !providerScope)
     throw new Response("MAPPING_PROVIDER_SCOPE_UNCONFIGURED", { status: 409 });

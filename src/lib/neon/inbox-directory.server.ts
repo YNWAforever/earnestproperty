@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 import { z } from "zod";
 import { queryRows } from "./db.server.ts";
 import { createInboxApi } from "../woztell/inbox-api.server.ts";
+import { companyChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
 import type { StaffAccess } from "./auth.server.ts";
 import type {
   InboxCandidate,
@@ -46,7 +47,7 @@ const folderSchema = z
   .strict();
 
 function scope() {
-  const channelId = process.env.EP_WA_COMPANY_CHANNEL_ID;
+  const channelId = companyChannelId();
   const providerScope = process.env.EP_WA_INBOX_INTEGRATION_ID;
   if (!channelId || !providerScope)
     throw new Response("INBOX_CONNECTION_NEEDS_ADMIN", { status: 409 });

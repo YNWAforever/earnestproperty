@@ -109,6 +109,40 @@ test("health separates opens, enquiry attribution and human evidence; unknowns r
   assert.ok(health.reasons.includes("SERVICE_DUE_WORK_OVERDUE"));
 });
 
+test("FX-19c-1: legacy WhatsApp names are a note for admins, never a health reason", async () => {
+  const fullRows = () => [[{ id }], [{ available: true, heartbeat: true }], [], [{}], [], [{ id }]];
+  const run = async (values) => {
+    const keys = Object.keys(values);
+    const saved = keys.map((key) => [key, Object.hasOwn(process.env, key), process.env[key]]);
+    for (const key of keys) {
+      if (values[key] === undefined) delete process.env[key];
+      else process.env[key] = values[key];
+    }
+    try {
+      const rows = fullRows();
+      let calls = 0;
+      return await getServiceHealth(actor, async () => rows[calls++] ?? [], { readiness: [] });
+    } finally {
+      for (const [key, had, value] of saved) {
+        if (had) process.env[key] = value;
+        else delete process.env[key];
+      }
+    }
+  };
+  const legacy = await run({
+    EP_WA_TRACKED_LINKS_ENABLED: "true",
+    EP_WA_COMPANY_PHONE: "85291234567",
+  });
+  const clean = await run({
+    EP_WA_TRACKED_LINKS_ENABLED: undefined,
+    EP_WA_COMPANY_PHONE: undefined,
+  });
+  assert.deepEqual(legacy.legacyNames, ["EP_WA_COMPANY_PHONE", "EP_WA_TRACKED_LINKS_ENABLED"]);
+  assert.ok(!JSON.stringify(legacy.legacyNames).includes("85291234567"));
+  assert.deepEqual(legacy.reasons, clean.reasons);
+  assert.ok(!legacy.reasons.some((reason) => /LEGACY|EP_WA_/.test(reason)));
+});
+
 test("routing-only policy can be approved without customer-service rules", async () => {
   const rules = {
     ...draftServicePolicy().rules,

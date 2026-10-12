@@ -13,6 +13,7 @@ import {
 } from "./assignment-policy.ts";
 import { toAssignmentContextView, type AssignmentContextView } from "./assignment-view.js";
 import { canReadDiagnostics } from "../control-plane/permissions.ts";
+import { companyChannelId, routingEnabled } from "./wa-config.server.ts";
 type Ports = { query: typeof queryRows; transaction: typeof transactionRows };
 const defaultPorts: Ports = { query: queryRows, transaction: transactionRows };
 type Actor = Pick<StaffAccess, "staffId" | "roles">;
@@ -158,7 +159,7 @@ export async function saveStaffChannel(value: unknown, actor: Actor, ports: Port
   const { query: queryRows } = ports;
   manager(actor);
   const input = mappingSchema.parse(value);
-  const channel = process.env.EP_WA_COMPANY_CHANNEL_ID;
+  const channel = companyChannelId();
   if (!channel) throw new Response("COMPANY_CHANNEL_NOT_CONFIGURED", { status: 409 });
   // This is the legacy manual-review path. It never upgrades evidence to provider verification.
   // A provider-reviewed mapping cannot be overwritten through this compatibility endpoint.
@@ -227,7 +228,7 @@ export async function saveStaffChannel(value: unknown, actor: Actor, ports: Port
 export async function listStaffChannels(actor: Actor, ports: Ports = defaultPorts) {
   const { query: queryRows } = ports;
   await requireActiveManager(actor, queryRows);
-  const channel = process.env.EP_WA_COMPANY_CHANNEL_ID;
+  const channel = companyChannelId();
   if (!channel) throw new Response("COMPANY_CHANNEL_NOT_CONFIGURED", { status: 409 });
   return queryRows<StaffChannelDto>(
     `SELECT m.*,COALESCE(s.name_zh,s.name_en) AS name FROM whatsapp_staff_channels m JOIN staff_users s ON s.id=m.staff_id WHERE m.channel_id=$1 ORDER BY COALESCE(s.name_zh,s.name_en),m.id`,
@@ -297,11 +298,7 @@ export async function executeAssignment(
 ) {
   const { query: queryRows, transaction: transactionRows } = ports;
   z.string().uuid().parse(requestId);
-  if (
-    ports === defaultPorts &&
-    (process.env.EP_WA_ROUTING_ENABLED !== "true" || process.env.EP_WA_ENQUIRY_MODE !== "active")
-  )
-    return { state: "blocked" };
+  if (ports === defaultPorts && !routingEnabled()) return { state: "blocked" };
   const claim = randomUUID();
   const result = await transactionRows([
     {
@@ -325,12 +322,7 @@ export async function executeAssignment(
       "SELECT r.id FROM whatsapp_assignment_requests r JOIN whatsapp_conversations w ON w.pending_assignment_id=r.id JOIN staff_users s ON s.id=r.desired_staff_id JOIN whatsapp_staff_channels m ON m.staff_id=s.id AND m.channel_id=w.channel_id WHERE r.id=$1::uuid AND r.claim_id=$2::uuid AND r.state='executing' AND w.assignment_version=r.version AND s.active AND m.eligible AND m.retired_at IS NULL AND m.inbox_user_id=r.target_snapshot->>'inboxUserId' AND m.folder_id=r.target_snapshot->>'folderId' AND EXISTS(SELECT 1 FROM staff_roles role WHERE role.staff_user_id=s.id AND role.role IN ('agent','manager','admin'))",
       [requestId, claim],
     );
-    if (
-      !valid ||
-      (ports === defaultPorts &&
-        (process.env.EP_WA_ROUTING_ENABLED !== "true" ||
-          process.env.EP_WA_ENQUIRY_MODE !== "active"))
-    )
+    if (!valid || (ports === defaultPorts && !routingEnabled()))
       throw Object.assign(new Error("WA_ASSIGNMENT_PREFLIGHT_BLOCKED"), {
         code: "WA_ASSIGNMENT_PREFLIGHT_BLOCKED",
       });

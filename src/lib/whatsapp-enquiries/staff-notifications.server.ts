@@ -12,6 +12,7 @@ import {
   type StaffTemplateResponse,
 } from "../woztell/staff-alert-template.ts";
 import { staffDestinationNotACustomer } from "./staff-recipient-guard.ts";
+import { companyChannelId } from "./wa-config.server.ts";
 type Ports = { query: typeof queryRows; transaction: typeof transactionRows };
 const defaults: Ports = { query: queryRows, transaction: transactionRows };
 export type StaffNotificationRuntime = {
@@ -22,13 +23,17 @@ export type StaffNotificationRuntime = {
   template: StaffAlertTemplate | null;
 };
 /** The staff WhatsApp gate shared by lead alerts, staff WhatsApp readiness and the
- * staff template runtime card: `EP_WA_STAFF_NOTIFICATIONS_ENABLED` only, independent
- * of `EP_WA_ENQUIRY_MODE` (transport capability and channel are checked by callers). */
+ * staff template runtime card: `enabled` is `EP_WA_STAFF_NOTIFICATIONS_ENABLED` only,
+ * independent of `EP_WA_ENQUIRY_MODE` (transport capability and channel are checked by
+ * callers). `channelId` comes from companyChannelId(): the old EP_WA_COMPANY_CHANNEL_ID
+ * while set, else WOZTELL_CHANNEL_ID only when EP_WA_ENQUIRY_MODE is observe/active. So
+ * once the old name is deleted, mode off leaves the channel null and lead alerts block
+ * (FX-19c-1; revisit in 19c-2). */
 export function staffWhatsappAlertRuntime(): StaffNotificationRuntime {
   return {
     enabled: process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true",
     generationId: process.env.EP_WA_ACTIVATION_ID ?? null,
-    channelId: process.env.EP_WA_COMPANY_CHANNEL_ID ?? null,
+    channelId: companyChannelId(),
     template: parseStaffAlertTemplate(process.env.EP_WA_STAFF_ALERT_TEMPLATE),
   };
 }
