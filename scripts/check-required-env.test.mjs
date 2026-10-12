@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import test from "node:test";
@@ -230,19 +230,14 @@ test("every non-VITE env var read in src/ or scripts/ is documented in .env.exam
   const isHarnessFile = (path) =>
     /\.(test|spec)\.|(^|\/)test-[^/]*$|(^|\/)(acceptance|browser-fixtures)\//.test(path);
 
-  const files = [];
-  const walk = (dir) => {
-    for (const entry of readdirSync(join(repoRoot, dir), { withFileTypes: true })) {
-      const rel = `${dir}/${entry.name}`;
-      if (entry.isDirectory()) {
-        if (!["node_modules", "artifacts", "__pycache__"].includes(entry.name)) walk(rel);
-      } else if (/\.(?:[cm]?[jt]sx?|py)$/.test(entry.name) && !entry.name.endsWith(".d.ts")) {
-        files.push(rel);
-      }
-    }
-  };
-  walk("src");
-  walk("scripts");
+  // Tracked files only: CI creates untracked trees (e.g. a Python .venv under
+  // scripts/property-sync) whose third-party env reads are not ours to document.
+  const files = execFileSync("git", ["ls-files", "--", "src", "scripts"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  })
+    .split("\n")
+    .filter((path) => /\.(?:[cm]?[jt]sx?|py)$/.test(path) && !path.endsWith(".d.ts"));
 
   const NAME = "[A-Z][A-Z0-9_]{2,}";
   const ENV_OBJECT = String.raw`(?:process\.env|import\.meta\.env|\benv|\benvironment)`;
