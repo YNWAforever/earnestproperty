@@ -145,7 +145,7 @@ jobs:
       - run: npm run test:analytics
   no-link-local-postgres:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:

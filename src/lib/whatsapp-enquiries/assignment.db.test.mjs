@@ -365,7 +365,21 @@ test(
             query("UPDATE whatsapp_enquiry_events SET origin='history_import' WHERE id=$1", [e]),
             /WA_CAPTURE_IMMUTABLE/,
           );
-          assert.equal(await observeQualifiedHumanResponse(e, query), false);
+          // History-import evidence can never enter the ledger in the first place, so it can never
+          // be credited: the origin CHECK rejects it (20260912120000).
+          const history = randomUUID();
+          await assert.rejects(
+            query(
+              "INSERT INTO whatsapp_enquiry_events(id,message_id,origin,kind,identity_quality,timing,evidence,external_message_id,channel_id,member_id,occurred_at,received_at,dedupe_key,app_id) VALUES($1,$2,'history_import','unverified_outbound','provider_id','fresh',$3,'inbox-synthetic-history','fixture','synthetic','2026-09-12T00:06:00Z','2026-09-12T00:06:01Z',$4,'fixture-app')",
+              [
+                history,
+                m,
+                JSON.stringify({ integrationId: "inbox", agentUserId: "user-a" }),
+                createHash("sha256").update(history).digest("hex"),
+              ],
+            ),
+            /whatsapp_enquiry_events_origin_check/,
+          );
         },
       );
     } finally {

@@ -63,8 +63,12 @@ export const migrationsBefore = (version) => MIGRATION_VERSIONS.slice(0, indexOf
 /** Every migration strictly after `version`, in apply order. */
 export const migrationsAfter = (version) => MIGRATION_VERSIONS.slice(indexOfVersion(version) + 1);
 
-export const migrationStatements = (version) =>
-  splitSqlStatements(readFileSync(new URL("neon/migrations/" + version, repoRoot), "utf8"));
+const migrationSql = (version) =>
+  readFileSync(new URL("neon/migrations/" + version, repoRoot), "utf8");
+export const migrationStatements = (version) => splitSqlStatements(migrationSql(version));
+// Copied from withOwnedPostgres: ALTER TYPE ... ADD VALUE cannot share a transaction with a use.
+const isTransactional = (version) =>
+  !/ALTER\s+TYPE\s+\S+\s+ADD\s+VALUE/i.test(migrationSql(version));
 
 /**
  * Applies the named migration files into `schema`, one transaction per file, through the
@@ -77,12 +81,19 @@ export const migrationStatements = (version) =>
  */
 export async function applyMigrations(db, schema, versions, { publicFallback = true } = {}) {
   const searchPath = publicFallback ? schema + ",public" : schema;
+  const run = (statements) =>
+    db.transaction((q) => [
+      q.query("SELECT set_config('search_path',$1,true)", [searchPath]),
+      ...statements.map((statement) => q.query(statement)),
+    ]);
   for (const version of versions) {
     try {
-      await db.transaction((q) => [
-        q.query("SELECT set_config('search_path',$1,true)", [searchPath]),
-        ...migrationStatements(version).map((statement) => q.query(statement)),
-      ]);
+      const statements = migrationStatements(version);
+      // Same rule as the owned harness (owned-postgres-test.mjs): a file that adds an enum value
+      // is not applied as one transaction. Each statement commits on its own (with the search
+      // path set), so a later statement in the file may use the new value.
+      if (isTransactional(version)) await run(statements);
+      else for (const statement of statements) await run([statement]);
     } catch (error) {
       throw new Error("Migration " + version + " in " + schema + ": " + error.message, {
         cause: error,

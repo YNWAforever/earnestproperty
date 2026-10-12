@@ -109,8 +109,8 @@ async function seedNotificationFixture(
   return { enquiry, first };
 }
 
-// Owned Docker Postgres by default (its own minimal tables in a fresh, empty database in the
-// container); ASTRA_TEST_DATABASE_URL (behind the disposable guard) for an explicit Neon run.
+// Owned Docker Postgres by default (every real migration, via seedNotificationFixture, in a
+// fresh, empty database in the container); ASTRA_TEST_DATABASE_URL (behind the disposable guard) for an explicit Neon run.
 // In CI a missing database fails instead of skipping.
 test(
   "NT-07/08/11/19/23 notification production transactions",
