@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -215,4 +216,81 @@ test("an explicit EP_WA_TRACKED_LINKS_ENABLED=false keeps tracked links off in a
     VITE_CONTACT_WHATSAPP_PHONE: " 85291234567 ",
   });
   assert.equal(r.status, 0, r.output);
+});
+
+// FX-19b-2: .env.example is the one list of environment variables. A static scan keeps it honest
+// in both directions.
+test("every non-VITE env var read in src/ or scripts/ is documented in .env.example, and every documented name is read somewhere", () => {
+  // Names the platform or CI provides, or that tooling reads. They are deliberately not documented.
+  const PLATFORM_PROVIDED =
+    /^(VERCEL_.+|GITHUB_.+|GH_REPO|CI|NODE_ENV|NODE_TEST_CONTEXT|DEV|PATH|TZ)$/;
+  // Knobs of tests, browser fixtures, acceptance runs and one-off scripts: never set in a deployment.
+  const HARNESS_ONLY = /(^|_)TEST(_|$)|BROWSER|FIXTURE|^PLAYWRIGHT_|^MIGRATION_|^RECORD_|^MODE$/;
+  // Files that only exercise the code; they are excluded from the "must be documented" direction.
+  const isHarnessFile = (path) =>
+    /\.(test|spec)\.|(^|\/)test-[^/]*$|(^|\/)(acceptance|browser-fixtures)\//.test(path);
+
+  // Tracked files only: CI creates untracked trees (e.g. a Python .venv under
+  // scripts/property-sync) whose third-party env reads are not ours to document.
+  const files = execFileSync("git", ["ls-files", "--", "src", "scripts"], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  })
+    .split("\n")
+    .filter((path) => /\.(?:[cm]?[jt]sx?|py)$/.test(path) && !path.endsWith(".d.ts"));
+
+  const NAME = "[A-Z][A-Z0-9_]{2,}";
+  const ENV_OBJECT = String.raw`(?:process\.env|import\.meta\.env|\benv|\benvironment)`;
+  const readPatterns = [
+    // process.env.X, import.meta.env.X, and env/environment/e aliases (`const e = process.env`)
+    new RegExp(String.raw`(?:${ENV_OBJECT}|\be)\.(${NAME})\b`, "g"),
+    new RegExp(String.raw`(?:${ENV_OBJECT}|os\.environ)\s*\[\s*["'](${NAME})["']\s*\]`, "g"),
+    // helpers: optionalEnvironment(environment, "X"), readEnv("X"), os.environ.get("X"), os.getenv("X")
+    new RegExp(
+      String.raw`\b\w*(?:[Ee]nv\w*|getenv|environ\.get)\(\s*(?:\w+\s*,\s*)?["'](${NAME})["']`,
+      "g",
+    ),
+  ];
+  const read = new Map(); // name -> first non-test file that reads it
+  const sources = [];
+  for (const file of files) {
+    const text = readFileSync(join(repoRoot, file), "utf8");
+    sources.push({ file, text });
+    if (isHarnessFile(file)) continue;
+    for (const pattern of readPatterns) {
+      for (const match of text.matchAll(pattern)) if (!read.has(match[1])) read.set(match[1], file);
+    }
+  }
+
+  const example = readFileSync(join(repoRoot, ".env.example"), "utf8");
+  // Active lines and commented-out (deprecated) ones both document a name.
+  const documented = new Set(
+    [...example.matchAll(new RegExp(String.raw`^#?\s*(${NAME})=`, "gm"))].map((m) => m[1]),
+  );
+  assert.ok(documented.size > 50, "the .env.example scan found too few names");
+
+  const undocumented = [...read.entries()]
+    .filter(
+      ([name]) =>
+        !documented.has(name) && !PLATFORM_PROVIDED.test(name) && !HARNESS_ONLY.test(name),
+    )
+    .map(([name, file]) => `${name} (${file})`);
+  assert.deepEqual(undocumented, [], "env vars read in code but missing from .env.example");
+
+  // Reverse direction: a documented name must still appear in code (or a workflow) outside tests.
+  const workflowDir = join(repoRoot, ".github/workflows");
+  const workflowText = readdirSync(workflowDir)
+    .map((name) => readFileSync(join(workflowDir, name), "utf8"))
+    .join("\n");
+  const unread = [...documented].filter((name) => {
+    const word = new RegExp(String.raw`\b${name}\b`);
+    const inCode = sources.some(({ file, text }) => !isHarnessFile(file) && word.test(text));
+    return !inCode && !word.test(workflowText);
+  });
+  assert.deepEqual(unread, [], "names documented in .env.example that nothing reads");
+
+  // VITE_ names are build-time and must be documented too.
+  const viteRead = [...read.keys()].filter((name) => name.startsWith("VITE_"));
+  assert.ok(viteRead.length > 0, "the scan found no VITE_ reads");
+  for (const name of viteRead) assert.ok(documented.has(name), `${name} missing from .env.example`);
 });

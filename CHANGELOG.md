@@ -22,6 +22,34 @@
   (`npm run test:public-forms:ui`, 28 tests at 390px and 1440px) runs in CI on a synthetic fixture with
   no database.
 
+### FX-19 — Cleanup, test wiring and documentation
+
+- **FX-19a-1 (#245): dead weight removed.** Deleted 20 unused shadcn primitives, the retired
+  `scripts/jev` pilot and the unused browser-callable staff role and deactivation wrappers, stopped
+  tracking `.superpowers` and `.lovable`, and removed the unused legacy staff-channel save that
+  skipped provider review.
+- **FX-19a-2 (#251): unused packages and exports.** Removed 19 packages that only the deleted
+  primitives used, and the remaining dead server-function exports.
+- **FX-19b-1 (#250): database suites on owned Postgres.** `test:crm:db`, `test:woztell:db` and
+  `test:property-sync:db` now run in CI against a throwaway Docker Postgres
+  (`scripts/acceptance/owned-postgres-test.mjs`) instead of being skipped, and `src/test-wiring.test.mjs`
+  lists the `test:*` scripts CI still does not run.
+- **FX-19d-1 (#252): consistency fixes.** Staff writes reject unknown keys (Zod), a database error
+  during session lookup is a 503 rather than a sign-out, and the auth path logs only the error class when
+  the email-verified read fails.
+- **FX-19d-2 (#256): dates and prices.** Admin and operations dates show Hong Kong time, a stored price
+  of 0 shows HK$0, and admin confirm and edit screens show the exact price when 萬 rounds.
+- **O-1 (#260): `bun.lockb` deleted.** npm and `package-lock.json` are the only installer.
+- **FX-19c-1 (#261): consolidated WhatsApp settings.** The code reads the surviving names
+  (`WOZTELL_CHANNEL_ID`, `VITE_CONTACT_WHATSAPP_PHONE`, `EP_WA_ENQUIRY_MODE`) and still honours the old
+  `EP_WA_*` names until FX-19c-2.
+- **FX-19b-2 (docs): CLAUDE.md, README and .env.example match the code.** CLAUDE.md now says staff auth
+  uses an opaque Neon Auth session token (not a JWT) and that CI runs every `test:*` script except the
+  exempt ones in `src/test-wiring.test.mjs`. `.env.example` is regrouped (required in production,
+  WhatsApp, optional features, operator-only) and documents every variable the code reads.
+  `scripts/check-required-env.test.mjs` now fails when code reads an undocumented variable or
+  `.env.example` documents one nothing reads. The README links the production activation status page.
+
 ---
 
 # 客戶批註修訂 (Wang-Ye-27072026)
