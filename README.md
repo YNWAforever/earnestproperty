@@ -81,7 +81,11 @@ npm.cmd run test:whatsapp-enquiries
 npm.cmd run test:analytics
 ```
 
-The test scripts combine Node's test runner and Bun. `:db` suites require an isolated test database; browser suites need a running app. CI runs deterministic checks and keeps database-dependent and staging browser gates separate.
+The test scripts combine Node's test runner and Bun; browser suites need a running app. CI runs every `test:*` script except those listed as exempt in [src/test-wiring.test.mjs](src/test-wiring.test.mjs).
+
+Database (`:db`) suites that CI runs use an owned, throwaway Postgres in Docker, started by [scripts/acceptance/owned-postgres-test.mjs](scripts/acceptance/owned-postgres-test.mjs), so Docker must be running to execute them locally. They never touch a Neon branch or production data.
+
+Current production activation state is tracked in [docs/production-activation-status.md](docs/production-activation-status.md).
 
 ## Data and operations
 

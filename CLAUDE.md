@@ -29,13 +29,17 @@ npx tsc --noEmit # typecheck — `npm run build` does NOT typecheck
 
 **There is no `npm test`.** Tests are split by runner and invoked per named script:
 
-- `*.test.mjs` → `node --test` (17 scripts: `test:seo`, `test:command-center`,
+- `*.test.mjs` → `node --test` (`test:seo`, `test:command-center`,
   `test:operations`, `test:control-plane`, …)
 - `*.test.ts` / `*.test.tsx` → `bun test` (bundled inside `test:woztell`,
   `test:operations`, `test:property-experience`, `test:content-copilot`)
 
-Run the scripts that cover the area you touched; check `package.json` for the list.
-`*.contract.test.mjs` asserts module/API shape; `*.integration.test.mjs` needs a live DB.
+`package.json` has 113 `test:*` scripts; run the ones that cover the area you touched. CI
+runs every `test:*` script except those listed as exempt in `src/test-wiring.test.mjs`
+(which also fails if a test file is in no script). The WhatsApp enquiry and CMS DB suites
+are still exempt pending a fixture refresh (FX-19b-2b). `*.contract.test.mjs` asserts
+module/API shape. `:db` suites (and `*.integration.test.mjs`) need a real database; the ones
+CI runs use a throwaway Docker Postgres via `scripts/acceptance/owned-postgres-test.mjs`.
 
 ## Project Structure
 
@@ -59,15 +63,19 @@ vercel.ts         Vercel config-as-TS: redirects + security headers (from script
   Never import one from a client component.
 - **Two-file DB boundary**: `x.ts` holds `createServerFn` wrappers (+ Zod
   `inputValidator`) and lazily `await import("./x.server")`; `x.server.ts` holds the
-  SQL. Types live in `x.types.ts`. `public-data.ts`, `admin-data.ts`, `admin-cms.ts`,
-  `content-copilot-admin.ts`, and `admin-team.ts` define server functions.
+  SQL. Types live in `x.types.ts`. 30 non-test files call `createServerFn` — most are
+  `src/lib/neon/*.ts` (`public-data.ts`, `admin-data.ts`, `admin-cms.ts`, `admin-team.ts`, …),
+  plus `lib/ai/content-copilot-admin.ts`, `lib/analytics/*-client.ts` and
+  `lib/admin/whatsapp-link-export-api.ts`.
 - **`.js` + `.d.ts` pairs** (`website-inquiry.js`, `property-decision.js`,
   `site-branches.js`): pure logic authored as plain JS so `node --test` `.mjs` tests
   import it with no build step. Import with the explicit `.js` extension.
 - **SQL**: parameterized via `queryRows(sql, params)` / `addParam()` in
   `lib/neon/db.server.ts`. Never interpolate values into SQL strings.
 - **Admin auth**: client calls `withStaffAuthHeaders()` (`src/auth.ts`) to attach the
-  Neon Auth JWT; the server fn calls `requireStaffAccess(getRequest(), roles)`.
+  Neon Auth session token. It is an opaque token, **not a JWT**: the server looks it up
+  per request in `neon_auth.session` (`src/lib/neon/auth.server.ts`). The server fn calls
+  `requireStaffAccess(getRequest(), roles)`.
   Roles are `admin | manager | agent`; capability grants in
   `lib/control-plane/permissions.ts`.
 - **Errors**: typed error classes (`LiveAgentPublicError`) mapped to status codes in
@@ -84,6 +92,9 @@ vercel.ts         Vercel config-as-TS: redirects + security headers (from script
 - Vercel crons are unused (`crons: []`). Jobs drain through post-commit wakes (when
   `OPS_WAKE_URL` is set) plus a cron sweep from `workers/cron/` (every 10 minutes
   08:00-22:00 HKT, hourly overnight); both drain `ops_jobs` under a lease, so overlap is safe.
+- WhatsApp settings: see `src/lib/whatsapp-enquiries/wa-config.server.ts`; the old
+  `EP_WA_*` names are still read until FX-19c-2. `.env.example` lists every env var, and
+  `scripts/check-required-env.test.mjs` keeps it in sync with the code.
 - Public site copy is **zh-HK**. No i18n framework — strings are inline.
 
 ## Git
