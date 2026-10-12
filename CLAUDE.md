@@ -34,12 +34,14 @@ npx tsc --noEmit # typecheck — `npm run build` does NOT typecheck
 - `*.test.ts` / `*.test.tsx` → `bun test` (bundled inside `test:woztell`,
   `test:operations`, `test:property-experience`, `test:content-copilot`)
 
-`package.json` has 113 `test:*` scripts; run the ones that cover the area you touched. CI
+`package.json` has 112 `test:*` scripts; run the ones that cover the area you touched. CI
 runs every `test:*` script except those listed as exempt in `src/test-wiring.test.mjs`
-(which also fails if a test file is in no script). The WhatsApp enquiry and CMS DB suites
-are still exempt pending a fixture refresh (FX-19b-2b). `*.contract.test.mjs` asserts
-module/API shape. `:db` suites (and `*.integration.test.mjs`) need a real database; the ones
-CI runs use a throwaway Docker Postgres via `scripts/acceptance/owned-postgres-test.mjs`.
+(which also fails if a test file is in no script). The WhatsApp enquiry, staff-notification
+and CMS DB suites run in CI on owned Postgres and build their isolated schemas from the real
+`neon/migrations` files in order (`scripts/acceptance/migrated-schema.mjs`), not hand-copied
+tables; `staff-reference.db` runs there too (in `test:lead-alert:owned:db`). `*.contract.test.mjs` asserts module/API shape. `:db` suites (and
+`*.integration.test.mjs`) need a real database; the ones CI runs use a throwaway Docker
+Postgres via `scripts/acceptance/owned-postgres-test.mjs`.
 
 ## Project Structure
 
