@@ -1,58 +1,36 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { neon } from "@neondatabase/serverless";
-import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
+import { onDbTarget } from "../../../scripts/acceptance/owned-postgres-test.mjs";
+import {
+  applyMigrations,
+  isolatedDatabase,
+  migrationsAfter,
+  migrationsBefore,
+} from "../../../scripts/acceptance/migrated-schema.mjs";
 import { ingestWoztellEvent } from "../woztell/woztell-ingest.server.ts";
 import { parseWoztellProviderResult } from "../woztell/provider-result.ts";
 import { normalizeWoztellEvent } from "../woztell/woztell.server.ts";
 import { enqueueOutboundIntent, finishOutboundIntent } from "../woztell/outbound-intent.server.ts";
 import { observeEnquiryEvent } from "./workflow.server.ts";
-function splitSqlStatements(query) {
-  const statements = [];
-  let current = "",
-    single = false,
-    double = false,
-    dollar = null;
-  for (let index = 0; index < query.length; index += 1) {
-    const char = query[index],
-      next = query[index + 1];
-    if (!single && !double && !dollar && char === "-" && next === "-") {
-      const end = query.indexOf("\n", index + 2);
-      if (end === -1) break;
-      index = end;
-      continue;
-    }
-    if (!double && !dollar && char === "'" && query[index - 1] !== "\\") single = !single;
-    if (!single && !dollar && char === '"') double = !double;
-    if (!single && !double && char === "$") {
-      const match = query.slice(index).match(/^\$[A-Za-z0-9_]*\$/);
-      if (match) {
-        const tag = match[0];
-        dollar = dollar ? (dollar === tag ? null : dollar) : tag;
-        current += tag;
-        index += tag.length - 1;
-        continue;
-      }
-    }
-    if (!single && !double && !dollar && char === ";") {
-      if (current.trim()) statements.push(current.trim());
-      current = "";
-    } else current += char;
-  }
-  if (current.trim()) statements.push(current.trim());
-  return statements;
-}
-
 // Synthetic, isolated schema ONLY; never reads DATABASE_URL or production inventory.
-const url = process.env.ASTRA_TEST_DATABASE_URL;
+// Owned Docker Postgres by default (a fresh database in the container); ASTRA_TEST_DATABASE_URL
+// (behind the disposable guard) keeps the explicit Neon run. In CI a missing database fails
+// instead of skipping. The schema is built from the real migrations, in order.
+const neonRun = { urlVar: "ASTRA_TEST_DATABASE_URL" };
+const ENQUIRY_EVENTS = "20260912120000_whatsapp_enquiry_events.sql";
+// Contact migrations every ingest reads in any enquiry mode (opt-out evidence, profile name,
+// FX-12 identity review). They are additive, re-runnable and independent of the enquiry
+// ledger, so the "before the ledger" state includes them; migrationsAfter re-applies them.
+const CONTACT_MIGRATIONS = [
+  "20261008100000_whatsapp_opt_out_evidence.sql",
+  "20261009100000_contact_profile_name.sql",
+  "20261013100000_contact_identity_review.sql",
+];
 test(
   "Phase 1 integrated capture, replay, rollback and observation (disposable)",
-  { skip: !url },
-  async (t) => {
-    await assertDisposableNeonTestTarget(url);
-    const db = neon(url),
+  onDbTarget(async (target, t) => {
+    const { sql: db, end } = await isolatedDatabase(target),
       schema = "wa_p1_" + randomUUID().replaceAll("-", "");
     const tx = async (statements) =>
       (
@@ -62,10 +40,6 @@ test(
         ])
       ).slice(1);
     const query = async (statement, params = []) => (await tx([{ statement, params }]))[0];
-    const migrate = async (file) => {
-      const chunks = splitSqlStatements(readFileSync(file, "utf8"));
-      await tx(chunks.map((statement) => ({ statement })));
-    };
     const now = new Date("2026-09-12T04:00:00Z");
     const event = (id = randomUUID(), extra = {}) =>
       normalizeWoztellEvent({
@@ -88,23 +62,9 @@ test(
     const count = async (table) => Number((await query(`SELECT count(*) n FROM ${table}`))[0].n);
     try {
       await db.query(`CREATE SCHEMA ${schema}`);
-      for (const statement of [
-        `CREATE TYPE whatsapp_message_direction AS ENUM ('inbound','outbound')`,
-        `CREATE TABLE staff_users(id uuid PRIMARY KEY,email text,active boolean DEFAULT true)`,
-        `CREATE TABLE crm_contacts(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text,phone text,normalized_phone text UNIQUE,whatsapp_member_id text UNIQUE,source text,opt_in_whatsapp boolean DEFAULT false,opted_out_whatsapp boolean DEFAULT false,last_inbound_at timestamptz,assigned_agent_id uuid,updated_at timestamptz DEFAULT now(),opted_out_at timestamptz,opted_out_message_id text,opted_out_text text,opted_out_source text,opted_out_cleared_at timestamptz,opted_out_cleared_by uuid REFERENCES staff_users(id) ON DELETE SET NULL)`,
-        `CREATE TABLE crm_leads(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),contact_id uuid REFERENCES crm_contacts(id),assigned_agent_id uuid,stage text,intent text,source text,note text,created_at timestamptz,updated_at timestamptz)`,
-        `CREATE TABLE whatsapp_conversations(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),contact_id uuid REFERENCES crm_contacts(id),woztell_member_id text,channel_id text,last_message_at timestamptz,last_inbound_at timestamptz,updated_at timestamptz DEFAULT now(),assigned_agent_id uuid,UNIQUE(woztell_member_id,channel_id))`,
-        // FX-12: ingest and every customer-bound send read the identity review table.
-        `CREATE TABLE crm_contact_identity_reviews(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),reason text NOT NULL,contact_a uuid,contact_b uuid,conversation_id uuid,evidence jsonb NOT NULL DEFAULT '{}'::jsonb,status text NOT NULL DEFAULT 'open',updated_at timestamptz DEFAULT now())`,
-        `CREATE UNIQUE INDEX ux_identity_review_open_conversation ON crm_contact_identity_reviews(conversation_id) WHERE reason='whatsapp_identity_conflict' AND status='open'`,
-        `CREATE TABLE whatsapp_messages(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),conversation_id uuid REFERENCES whatsapp_conversations(id),contact_id uuid REFERENCES crm_contacts(id),direction whatsapp_message_direction,message_type text,text text,external_message_id text UNIQUE,woztell_member_id text,channel_id text,payload jsonb DEFAULT '{}'::jsonb,status text,error text,sent_by uuid,created_at timestamptz DEFAULT now())`,
-        `ALTER TABLE crm_contacts ADD COLUMN whatsapp_profile_name text`,
-      ])
-        await query(statement);
-      // Use real queue, outbox and lead-trigger migrations, not mocks of transaction behaviour.
-      await migrate("neon/migrations/20260714180000_backend_control_plane.sql");
-      await migrate("neon/migrations/20260905130000_outbound_intents.sql");
-      await migrate("neon/migrations/20260906100000_whatsapp_inbound_leads.sql");
+      // Production's schema just before the enquiry ledger (queue, outbox, inbound-lead trigger).
+      await applyMigrations(db, schema, migrationsBefore(ENQUIRY_EVENTS));
+      await applyMigrations(db, schema, CONTACT_MIGRATIONS);
       await t.test("AT-14 off works without ledger; observe rejects absent schema", async () => {
         await ingestWoztellEvent(event(), "live_webhook", tx, { mode: "off" });
         const before = await count("crm_contacts");
@@ -114,8 +74,9 @@ test(
         );
         assert.equal(await count("crm_contacts"), before);
       });
-      await migrate("neon/migrations/20260912120000_whatsapp_enquiry_events.sql");
-      await migrate("neon/migrations/20260912120000_whatsapp_enquiry_events.sql");
+      await applyMigrations(db, schema, [ENQUIRY_EVENTS]);
+      await applyMigrations(db, schema, [ENQUIRY_EVENTS]);
+      await applyMigrations(db, schema, migrationsAfter(ENQUIRY_EVENTS));
       await t.test("AT-10 concurrent live duplicates produce one event/job/lead", async () => {
         const e = event(),
           before = await count("ops_jobs");
@@ -191,6 +152,9 @@ test(
             staff,
             "fixture@example.invalid",
           ]);
+          // Staff replies require read access to the conversation (wa_can_read_conversation,
+          // 4ff9fa59 and 846b0e5d); a manager may act on every conversation.
+          await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [staff]);
           await enqueueOutboundIntent(
             {
               requestId: intentId,
@@ -332,7 +296,9 @@ test(
             );
             await assert.rejects(
               query("UPDATE whatsapp_enquiry_events SET effects_eligible=true WHERE id=$1", [e.id]),
-              /check constraint/,
+              // b6d049e9 replaced the column CHECK with the wa_capture_immutable trigger, which
+              // rejects any change to a captured event's eligibility before constraints run.
+              /WA_CAPTURE_IMMUTABLE/,
             );
           } finally {
             if (prior === undefined) delete process.env.EP_WA_ENQUIRY_MODE;
@@ -341,7 +307,11 @@ test(
         },
       );
     } finally {
-      await db.query(`DROP SCHEMA ${schema} CASCADE`);
+      try {
+        await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+      } finally {
+        await end();
+      }
     }
-  },
+  }, neonRun),
 );
