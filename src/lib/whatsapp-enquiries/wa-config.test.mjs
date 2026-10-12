@@ -291,9 +291,27 @@ test("the legacy-name log carries the variable name only, never a value", () => 
       routingEnabled(env);
       inboxVerificationRef(env);
     }
-    // New-only names never log.
-    companyPhone({ VITE_CONTACT_WHATSAPP_PHONE: NEW_PHONE });
-    companyChannelId({ WOZTELL_CHANNEL_ID: "new-channel" });
+    // New-only names never log, with every fallback branch actually taken.
+    const newOnly = {
+      EP_WA_ENQUIRY_MODE: "active",
+      VITE_CONTACT_WHATSAPP_PHONE: NEW_PHONE,
+      WOZTELL_CHANNEL_ID: "new-channel",
+    };
+    const before = calls.length;
+    assert.equal(companyPhone(newOnly), NEW_PHONE);
+    assert.equal(companyChannelId(newOnly), "new-channel");
+    assert.equal(trackedLinksEnabled(newOnly), true);
+    assert.equal(routingEnabled(newOnly), true);
+    assert.equal(inboxVerificationRef(newOnly), "env-config");
+    resetLegacyNameLog();
+    for (let i = 0; i < 2; i++) {
+      companyPhone(newOnly);
+      companyChannelId(newOnly);
+      trackedLinksEnabled(newOnly);
+      routingEnabled(newOnly);
+      inboxVerificationRef(newOnly);
+    }
+    assert.equal(calls.length, before, "new-only names must not log");
     const logged = calls.map((args) => args[1]?.name).sort();
     assert.deepEqual(logged, [
       "EP_WA_COMPANY_CHANNEL_ID",

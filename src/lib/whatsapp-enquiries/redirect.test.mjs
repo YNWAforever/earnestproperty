@@ -335,6 +335,61 @@ test("a malformed or missing company phone falls back without throwing", async (
   );
 });
 
+// FX-19c-1: after the owner deletes the old names, the tracked redirect runs on the
+// surviving names only: mode active, WOZTELL_CHANNEL_ID, VITE_CONTACT_WHATSAPP_PHONE.
+const NEW_NAMES_ONLY = {
+  EP_WA_TRACKED_LINKS_ENABLED: undefined,
+  EP_WA_COMPANY_CHANNEL_ID: undefined,
+  EP_WA_COMPANY_PHONE: undefined,
+  EP_WA_ENQUIRY_MODE: "active",
+  WOZTELL_CHANNEL_ID: "fixture",
+};
+
+test("new names only: the tracked redirect opens a chat with the VITE company number", async (t) => {
+  await withTrackedEnv(
+    t,
+    { ...NEW_NAMES_ONLY, VITE_CONTACT_WHATSAPP_PHONE: "85291234567" },
+    async ({ errors }) => {
+      const { query, calls } = registeredQuery();
+      const r = await trackedRedirect(
+        new Request("https://fixture/w/abcdefghijklmnop?phone=85299999999"),
+        "abcdefghijklmnop",
+        query,
+      );
+      assert.equal(r.status, 302);
+      assert.ok(r.headers.get("location").startsWith("https://wa.me/85291234567?"));
+      assert.notEqual(r.headers.get("x-wa-tracking"), "untracked");
+      assert.equal(errors.mock.callCount(), 0);
+      const open = calls.find((x) => x.sql.includes("INSERT INTO whatsapp_link_opens"));
+      assert.ok(open, "tracked open recorded");
+      assert.ok(open.params.includes("fixture"), "open carries the WOZTELL channel");
+    },
+  );
+});
+
+test("new names only: no usable phone falls back to /contact with no open, as today", async (t) => {
+  for (const vite of [undefined, "85200000000", " 85291234567 "]) {
+    await withTrackedEnv(
+      t,
+      { ...NEW_NAMES_ONLY, VITE_CONTACT_WHATSAPP_PHONE: vite },
+      async ({ errors }) => {
+        const { query, calls } = registeredQuery();
+        const r = await trackedRedirect(
+          new Request("https://fixture/w/abcdefghijklmnop"),
+          "abcdefghijklmnop",
+          query,
+        );
+        assert.equal(r.status, 302);
+        assert.equal(r.headers.get("location"), "/contact");
+        assert.equal(r.headers.get("x-wa-tracking"), "untracked");
+        assert.equal(calls.filter((x) => x.sql.includes("whatsapp_link_opens")).length, 0);
+        assert.equal(errors.mock.callCount(), 1);
+        assert.equal(JSON.parse(errors.mock.calls[0].arguments[1]).reason, "company_phone_invalid");
+      },
+    );
+  }
+});
+
 test("the fallback log never contains the link code, request URL, phone numbers or error text", () => {
   assert.ok(fallbackPayloads.length >= 12, `collected ${fallbackPayloads.length} payloads`);
   for (const payload of fallbackPayloads) {

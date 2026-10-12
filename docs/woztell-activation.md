@@ -17,15 +17,19 @@ for either secret.
 
 ## Tracked `/w/` links
 
-Tracked WhatsApp links need these as well:
+Tracked WhatsApp links (FX-19c-1) are on when `EP_WA_ENQUIRY_MODE` is `observe` or `active`. Set these now:
 
 ```text
-EP_WA_TRACKED_LINKS_ENABLED=true
-EP_WA_COMPANY_PHONE=<digits only, the company WhatsApp, never a staff phone>
-EP_WA_COMPANY_CHANNEL_ID=<WozTell channel id of the company WhatsApp>
+EP_WA_ENQUIRY_MODE=observe|active
+VITE_CONTACT_WHATSAPP_PHONE=<digits only, the company WhatsApp of the WozTell channel, never a staff phone>
+WOZTELL_CHANNEL_ID=<WozTell channel id of the company WhatsApp>
 ```
 
-A production build fails when `WOZTELL_ENABLED=true` or `EP_WA_TRACKED_LINKS_ENABLED=true` and these are missing; preview builds only warn.
+`WOZTELL_CHANNEL_ID` serves as the company channel only while `EP_WA_ENQUIRY_MODE` is `observe` or `active`.
+
+The old names `EP_WA_TRACKED_LINKS_ENABLED`, `EP_WA_COMPANY_PHONE` and `EP_WA_COMPANY_CHANNEL_ID` are deprecated. Do not add them. Each is still read, and wins, until 19c-2 while it is set. In particular, `EP_WA_TRACKED_LINKS_ENABLED=false` turns links off even in active mode. Delete them in Vercel after 7 days with no `[wa-config] legacy_name_in_use` log. Until then, the WhatsApp service health card shows 「舊設定名稱仍在使用」 with the names.
+
+A production build fails when `WOZTELL_ENABLED=true` and the intake values are missing, or when tracked links are on and no usable company phone or channel resolves. Preview builds only warn.
 
 ## Webhook
 
