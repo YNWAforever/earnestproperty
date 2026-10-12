@@ -26,7 +26,8 @@
 // company channel and a usable company phone. FX-19c-1 mirrors
 // src/lib/whatsapp-enquiries/wa-config.server.ts (plain JS cannot import it):
 // tracked links = EP_WA_TRACKED_LINKS_ENABLED while set, else EP_WA_ENQUIRY_MODE is
-// observe/active; channel = EP_WA_COMPANY_CHANNEL_ID while set, else WOZTELL_CHANNEL_ID;
+// observe/active; channel = EP_WA_COMPANY_CHANNEL_ID while set, else WOZTELL_CHANNEL_ID
+// only when EP_WA_ENQUIRY_MODE is observe/active;
 // phone = EP_WA_COMPANY_PHONE while set, else VITE_CONTACT_WHATSAPP_PHONE.
 // Gaps block production builds. Preview builds only warn, because previews
 // legitimately run with partial or no WhatsApp configuration and must stay
@@ -131,10 +132,16 @@ if (isVercelDeploy) {
     // Blank counts as missing, as for WOZTELL_* above. The runtime (companyChannel,
     // usableCompanyPhone) reads both values raw with no trim, so a padded value is
     // unusable there and is flagged here too, rather than trimmed into a pass.
+    // WOZTELL_CHANNEL_ID counts only once an enquiry mode (observe/active) is set,
+    // matching companyChannelId() at runtime.
+    const modeSet =
+      process.env.EP_WA_ENQUIRY_MODE === "observe" || process.env.EP_WA_ENQUIRY_MODE === "active";
     const channel =
       (isSet(process.env.EP_WA_COMPANY_CHANNEL_ID)
         ? process.env.EP_WA_COMPANY_CHANNEL_ID
-        : process.env.WOZTELL_CHANNEL_ID) ?? "";
+        : modeSet
+          ? process.env.WOZTELL_CHANNEL_ID
+          : undefined) ?? "";
     if (!channel.trim() || channel !== channel.trim() || channel.length > 160) {
       problems.push(
         "EP_WA_COMPANY_CHANNEL_ID / WOZTELL_CHANNEL_ID (company channel) is not set, has surrounding whitespace, or is longer than 160 characters",

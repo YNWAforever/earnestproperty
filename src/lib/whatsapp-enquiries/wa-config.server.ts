@@ -48,12 +48,18 @@ export function companyPhone(env: Env = process.env): string | undefined {
   return env.VITE_CONTACT_WHATSAPP_PHONE;
 }
 
+/**
+ * Old name while set. The WOZTELL_CHANNEL_ID fallback applies only once an enquiry
+ * mode (observe/active) is set: environments without one (General Preview) keep
+ * null exactly as before, so admin channel writes there still refuse (409/throw).
+ */
 export function companyChannelId(env: Env = process.env): string | null {
   if (isSet(env.EP_WA_COMPANY_CHANNEL_ID)) {
     legacy("EP_WA_COMPANY_CHANNEL_ID");
     return env.EP_WA_COMPANY_CHANNEL_ID;
   }
-  return isSet(env.WOZTELL_CHANNEL_ID) ? env.WOZTELL_CHANNEL_ID : null;
+  const modeSet = env.EP_WA_ENQUIRY_MODE === "observe" || env.EP_WA_ENQUIRY_MODE === "active";
+  return modeSet && isSet(env.WOZTELL_CHANNEL_ID) ? env.WOZTELL_CHANNEL_ID : null;
 }
 
 /** Old switch wins while set ("false" still turns links off); else on in observe/active. */

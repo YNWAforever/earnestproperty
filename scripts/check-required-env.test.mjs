@@ -197,6 +197,17 @@ test("production: tracked links on with neither channel name blocks, naming both
   assert.ok(r.stderr.includes("WOZTELL_CHANNEL_ID"), r.stderr);
 });
 
+test("production: tracked links on by the old switch with no enquiry mode ignore WOZTELL_CHANNEL_ID", () => {
+  const r = run({
+    ...NEW_ONLY,
+    EP_WA_ENQUIRY_MODE: undefined,
+    EP_WA_TRACKED_LINKS_ENABLED: "true",
+  });
+  assert.equal(r.status, 1, r.output);
+  assert.ok(r.stderr.includes("EP_WA_COMPANY_CHANNEL_ID"), r.stderr);
+  assert.ok(!r.output.includes("fx10a-channel-value"), "channel value not printed");
+});
+
 test("an explicit EP_WA_TRACKED_LINKS_ENABLED=false keeps tracked links off in active mode", () => {
   const r = run({
     ...NEW_ONLY,

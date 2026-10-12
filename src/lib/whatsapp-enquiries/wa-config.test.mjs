@@ -124,7 +124,7 @@ test("companyFallbackLocation and resolveTrackingLinks never return a number tha
       assert.ok(allowed.includes(number), `fallback ${number} not in env`);
     for (const extra of [
       {},
-      { EP_WA_TRACKED_LINKS_ENABLED: "true", WOZTELL_CHANNEL_ID: "fixture-channel" },
+      { EP_WA_TRACKED_LINKS_ENABLED: "true", EP_WA_COMPANY_CHANNEL_ID: "fixture-channel" },
       { EP_WA_ENQUIRY_MODE: "active", WOZTELL_CHANNEL_ID: "fixture-channel" },
     ]) {
       const result = await withEnvAsync({ ...env, ...extra }, () =>
@@ -138,7 +138,10 @@ test("companyFallbackLocation and resolveTrackingLinks never return a number tha
 
 test("channel: old-only, new-only, both (old wins), neither is null", () => {
   assert.equal(companyChannelId({ EP_WA_COMPANY_CHANNEL_ID: "old-channel" }), "old-channel");
-  assert.equal(companyChannelId({ WOZTELL_CHANNEL_ID: "new-channel" }), "new-channel");
+  assert.equal(
+    companyChannelId({ WOZTELL_CHANNEL_ID: "new-channel", EP_WA_ENQUIRY_MODE: "active" }),
+    "new-channel",
+  );
   assert.equal(
     companyChannelId({
       EP_WA_COMPANY_CHANNEL_ID: "old-channel",
@@ -148,6 +151,31 @@ test("channel: old-only, new-only, both (old wins), neither is null", () => {
   );
   assert.equal(companyChannelId({}), null);
   assert.equal(companyChannelId({ EP_WA_COMPANY_CHANNEL_ID: "", WOZTELL_CHANNEL_ID: "" }), null);
+});
+
+test("channel fallback to WOZTELL_CHANNEL_ID is ignored when EP_WA_ENQUIRY_MODE is unset or off", () => {
+  for (const mode of [undefined, "", "off"]) {
+    const env = { WOZTELL_CHANNEL_ID: "new-channel" };
+    if (mode !== undefined) env.EP_WA_ENQUIRY_MODE = mode;
+    assert.equal(companyChannelId(env), null, `mode ${mode}`);
+    // The old name still wins regardless of mode.
+    assert.equal(
+      companyChannelId({ ...env, EP_WA_COMPANY_CHANNEL_ID: "old-channel" }),
+      "old-channel",
+    );
+  }
+  // General Preview today: mode unset, WOZTELL_CHANNEL_ID set -> the admin channel
+  // readers and the Inbox config stay unconfigured exactly as before.
+  withEnv({ ...INBOX }, () => assert.equal(inboxConfig(), null));
+});
+
+test("channel fallback to WOZTELL_CHANNEL_ID is used when EP_WA_ENQUIRY_MODE is observe or active", () => {
+  for (const mode of ["observe", "active"])
+    assert.equal(
+      companyChannelId({ WOZTELL_CHANNEL_ID: "new-channel", EP_WA_ENQUIRY_MODE: mode }),
+      "new-channel",
+      `mode ${mode}`,
+    );
 });
 
 test("routing is on only when mode=active, and EP_WA_ROUTING_ENABLED=false still turns it off", () => {
@@ -208,18 +236,21 @@ const INBOX = {
 };
 
 test("inboxConfig is null when any of the other 8 values is missing, and uses env-config when the ref is unset", () => {
-  withEnv(INBOX, () => {
+  withEnv({ ...INBOX, EP_WA_ENQUIRY_MODE: "active" }, () => {
     const config = inboxConfig();
     assert.equal(config?.verificationRef, "env-config");
     assert.equal(config?.channelId, "fixture-channel");
   });
-  withEnv({ ...INBOX, EP_WA_INBOX_VERIFICATION_REF: "fixture-ref" }, () =>
-    assert.equal(inboxConfig()?.verificationRef, "fixture-ref"),
+  withEnv(
+    { ...INBOX, EP_WA_ENQUIRY_MODE: "active", EP_WA_INBOX_VERIFICATION_REF: "fixture-ref" },
+    () => assert.equal(inboxConfig()?.verificationRef, "fixture-ref"),
   );
   for (const key of Object.keys(INBOX)) {
     const env = { ...INBOX };
     delete env[key];
-    withEnv(env, () => assert.equal(inboxConfig(), null, `${key} missing`));
+    withEnv({ ...env, EP_WA_ENQUIRY_MODE: "active" }, () =>
+      assert.equal(inboxConfig(), null, `${key} missing`),
+    );
   }
   assert.equal(inboxVerificationRef({}), "env-config");
 });
