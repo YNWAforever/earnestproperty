@@ -151,7 +151,17 @@ function AdminHome() {
   };
 
   return (
-    <AdminShell title="總覽" description="團隊、客戶查詢與系統狀態的即時工作起點。">
+    <AdminShell
+      contentWidth="standard"
+      title="總覽"
+      description="團隊、客戶查詢與系統狀態的即時工作起點。"
+      actions={
+        <Button onClick={refreshAll} size="sm" type="button" variant="outline">
+          <RefreshCw aria-hidden="true" />
+          重新整理
+        </Button>
+      }
+    >
       <section aria-labelledby="overview-metrics-heading">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -171,10 +181,6 @@ function AdminHome() {
                 : ""}
             </p>
           </div>
-          <Button onClick={refreshAll} size="sm" type="button" variant="outline">
-            <RefreshCw aria-hidden="true" />
-            重新整理
-          </Button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {canSeeTeam ? (
@@ -251,7 +257,7 @@ function AdminHome() {
         </div>
       </section>
 
-      <section className="mt-5 grid gap-4 lg:grid-cols-2">
+      <section className="mt-6 grid gap-6 lg:grid-cols-2">
         <OperationalCard
           id="overview-today"
           title="今日待辦"

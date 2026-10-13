@@ -160,7 +160,7 @@ test("no admin page title, nav label or breadcrumb uses a rejected variant", () 
 });
 
 const APPROVED_PLACEMENTS: Array<[file: string, text: string]> = [
-  ["src/components/admin/AdminShell.tsx", "樓盤管理"],
+  ["src/components/admin/admin-navigation.ts", "樓盤管理"],
   ["src/routes/admin.listings.tsx", '"樓盤管理｜Earnest Admin"'],
   ["src/routes/admin.listings.tsx", 'title="樓盤管理"'],
   ["src/routes/admin.listings_.$id.tsx", ">樓盤管理</Link>"],

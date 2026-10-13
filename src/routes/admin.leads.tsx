@@ -206,7 +206,11 @@ function AdminLeads() {
   const { session } = useStaffSession(user?.id ?? null);
   if (!user || session?.status !== "ok") {
     return (
-      <AdminShell title="客戶查詢" description="集中處理買樓、租樓及業主估價查詢。">
+      <AdminShell
+        contentWidth="standard"
+        title="客戶查詢"
+        description="集中處理買樓、租樓及業主估價查詢。"
+      >
         {null}
       </AdminShell>
     );
@@ -941,7 +945,24 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
     : "查看聯絡資料、查詢資料及 內部跟進紀錄。";
 
   return (
-    <AdminShell title="客戶查詢" description="集中處理買樓、租樓及業主估價查詢。">
+    <AdminShell
+      contentWidth="standard"
+      title="客戶查詢"
+      description="集中處理買樓、租樓及業主估價查詢。"
+      actions={
+        <>
+          {" "}
+          <Button type="button" size="sm" variant="outline" onClick={() => setForwardOpen(true)}>
+            記錄人工轉交
+          </Button>
+          {canReviewIdentity ? (
+            <Button asChild size="sm" className="h-11 lg:h-9">
+              <Link to="/admin/leads/command-center">前往跟進工作台</Link>
+            </Button>
+          ) : null}
+        </>
+      }
+    >
       <AdminToolbar
         filters={
           reviewMode ? null : (
@@ -1018,12 +1039,6 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
         }
         actions={
           <>
-            <Button type="button" size="sm" variant="outline" onClick={() => setForwardOpen(true)}>
-              記錄人工轉交
-            </Button>
-            <Button asChild size="sm" className="h-11 lg:h-9">
-              <Link to="/admin/leads/command-center">前往跟進工作台</Link>
-            </Button>
             {/* `listAdminLeads` is capped at LIMIT 100 server-side and every
                 filter here runs client-side over that slice, so a bare
                 "{n} Leads" read as a total and made filtering look like it had
@@ -1198,7 +1213,13 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
           {filteredRows.length > 0 ? (
             <Card>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
+                <div
+                  data-admin-table-region
+                  role="region"
+                  aria-label="客戶查詢列表"
+                  tabIndex={0}
+                  className="min-w-0 overflow-x-auto"
+                >
                   <Table className="min-w-[920px]">
                     <TableHeader>
                       <TableRow>

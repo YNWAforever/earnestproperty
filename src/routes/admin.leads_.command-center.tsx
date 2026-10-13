@@ -244,6 +244,34 @@ function CommandCenter() {
     <AdminShell
       title="跟進工作台"
       description="每日跟進工作台：誰要跟、為何重要、下一步、WhatsApp 狀態。"
+      contentWidth="standard"
+      breadcrumb={
+        <nav aria-label="麵包屑">
+          <Link to="/admin">後台</Link>
+          {" › "}
+          <Link to="/admin/leads">客戶查詢</Link>
+          {" › 跟進工作台"}
+        </nav>
+      }
+      actions={
+        <>
+          {" "}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-11 lg:h-9"
+            disabled={loading}
+            onClick={() => void refresh()}
+          >
+            <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            重新整理
+          </Button>
+          <Button asChild variant="outline" size="sm" className="h-11 lg:h-9">
+            <Link to="/admin/leads">返回 CRM 列表</Link>
+          </Button>
+        </>
+      }
     >
       <WhatsappEnquiryQueue />
       {data ? <KpiStrip data={data} activeQueue={filter} /> : null}
@@ -279,20 +307,6 @@ function CommandCenter() {
                 最後更新 {formatClock(data.generated_at)}
               </span>
             ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-11 lg:h-9"
-              disabled={loading}
-              onClick={() => void refresh()}
-            >
-              <RefreshCw className={loading ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-              重新整理
-            </Button>
-            <Button asChild variant="outline" size="sm" className="h-11 lg:h-9">
-              <Link to="/admin/leads">返回 CRM 列表</Link>
-            </Button>
           </div>
         }
       />
@@ -308,7 +322,13 @@ function CommandCenter() {
       {data && visibleRows.length > 0 ? (
         <Card>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div
+              data-admin-table-region
+              role="region"
+              aria-label="跟進工作列表"
+              tabIndex={0}
+              className="min-w-0 overflow-x-auto"
+            >
               <table className="w-full min-w-[1040px] text-sm">
                 <thead className="border-b text-left text-xs text-muted-foreground">
                   <tr>

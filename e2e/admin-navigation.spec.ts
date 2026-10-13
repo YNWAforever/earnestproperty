@@ -123,3 +123,9 @@ test("NAV-08 a short screen keeps account and sign-out reachable while the menu 
   await page.getByRole("button", { name: "取消", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("總覽");
 });
+
+test("agent daily page offers no manager-only command-center shortcut", async ({ page }) => {
+  await fixture.open(page, { role: "agent", path: "/admin/leads" });
+  await expect(page.locator('a[href="/admin/leads/command-center"]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "記錄人工轉交" })).toBeVisible();
+});

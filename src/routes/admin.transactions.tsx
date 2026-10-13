@@ -115,7 +115,19 @@ function AdminTransactions() {
   }, [refreshTransactions]);
 
   return (
-    <AdminShell title="成交管理" description="登記成交、核實來源、管理公開發布及內部歸因。">
+    <AdminShell
+      title="成交管理"
+      description="登記成交、核實來源、管理公開發布及內部歸因。"
+      contentWidth="standard"
+      actions={
+        <Button asChild size="sm" className="h-11 lg:h-9">
+          <Link to="/admin/transactions/new">
+            <Plus className="mr-2 h-4 w-4" />
+            新增成交
+          </Link>
+        </Button>
+      }
+    >
       <AdminToolbar
         filters={
           <>
@@ -201,33 +213,23 @@ function AdminTransactions() {
             ) : null}
           </>
         }
-        actions={
-          <Button asChild size="sm" className="h-11 lg:h-9">
-            <Link to="/admin/transactions/new">
-              <Plus className="mr-2 h-4 w-4" />
-              新增成交
-            </Link>
-          </Button>
-        }
       />
 
       {error ? <AdminError message={error} /> : null}
       {loadingRows && !rows ? <Skeleton className="h-72 w-full" /> : null}
       {rows && rows.length === 0 ? (
-        <AdminEmptyState
-          title="未有符合條件的成交記錄"
-          description="調整篩選或新增一筆成交。"
-          action={
-            <Button asChild>
-              <Link to="/admin/transactions/new">新增成交</Link>
-            </Button>
-          }
-        />
+        <AdminEmptyState title="未有符合條件的成交記錄" description="調整篩選或新增一筆成交。" />
       ) : null}
       {rows && rows.length > 0 ? (
         <Card>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div
+              data-admin-table-region
+              role="region"
+              aria-label="成交列表"
+              tabIndex={0}
+              className="min-w-0 overflow-x-auto"
+            >
               <Table className="min-w-[840px]">
                 <TableHeader>
                   <TableRow>

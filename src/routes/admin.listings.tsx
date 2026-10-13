@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createFileRoute, Link, useBlocker } from "@tanstack/react-router";
+import { AdminToolbar } from "@/components/admin/AdminToolbar";
 import { AdminShell, AdminError } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,6 +67,7 @@ function AdminListings() {
   if (!user || session?.status !== "ok")
     return (
       <AdminShell
+        contentWidth="standard"
         title="樓盤管理"
         description="一個樓編號，一個管理頁。出售與出租的價格和狀態獨立管理。"
       >
@@ -225,124 +227,143 @@ function AdminListingsWorkspace({ identity }: { identity: string }) {
   const selectClass = cn(nativeFieldClassName, "w-auto min-w-0");
   return (
     <AdminShell
+      contentWidth="standard"
       title="樓盤管理"
       description="一個樓編號，一個管理頁。出售與出租的價格和狀態獨立管理。"
+      actions={
+        <Button asChild disabled={bulkBusy}>
+          <Link
+            to="/admin/listings/new"
+            aria-disabled={bulkBusy}
+            tabIndex={bulkBusy ? -1 : undefined}
+            onClick={(event) => {
+              if (bulkBusy) event.preventDefault();
+            }}
+          >
+            新增物業／放盤
+          </Link>
+        </Button>
+      }
     >
-      <p className="mb-4">
-        <Link to="/admin/property-sync" className="text-sm underline">
-          查看盤源同步及待處理紀錄
-        </Link>
-      </p>
-      <fieldset disabled={bulkBusy} className="mb-5 flex flex-wrap items-center gap-2">
-        <Input
-          aria-label="搜尋物業"
-          placeholder="搜尋樓編號、舊放盤編號或屋苑"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          className="h-11 w-full sm:w-72"
-        />
-        <select
-          className={selectClass}
-          aria-label="狀態"
-          value={search.status ?? "active"}
-          onChange={(e) => filter({ status: e.target.value as PropertyGroupFilters["status"] })}
-        >
-          <option value="active">目前公開</option>
-          <option value="all">全部（含已結束）</option>
-          {["draft", "offline", "inactive", "sold", "rented"].map((s) => (
-            <option key={s} value={s}>
-              {propertyStatusLabels[s]}
-            </option>
-          ))}
-        </select>
-        <select
-          className={selectClass}
-          aria-label="刊登範圍"
-          value={search.publication ?? "all"}
-          onChange={(e) =>
-            filter({ publication: e.target.value as PropertyGroupFilters["publication"] })
-          }
-        >
-          <option value="all">所有管理紀錄</option>
-          <option value="public">有公開樓編</option>
-        </select>
-        <select
-          className={selectClass}
-          aria-label="放盤類型"
-          value={search.deal ?? "all"}
-          onChange={(e) => filter({ deal: e.target.value as "all" | "sale" | "rent" })}
-        >
-          <option value="all">出售及出租</option>
-          <option value="sale">出售</option>
-          <option value="rent">出租</option>
-        </select>
-        <select
-          className={selectClass}
-          aria-label="屋苑"
-          value={search.estateId ?? ""}
-          onChange={(e) => filter({ estateId: e.target.value || undefined })}
-        >
-          <option value="">全部屋苑</option>
-          {estates.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.name_zh}
-            </option>
-          ))}
-        </select>
-        <select
-          className={selectClass}
-          aria-label="代理"
-          value={search.agentId ?? ""}
-          onChange={(e) => filter({ agentId: e.target.value || undefined })}
-        >
-          <option value="">全部代理</option>
-          {agents.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name ?? a.email ?? "未命名代理"}
-            </option>
-          ))}
-        </select>
-        <select
-          className={selectClass}
-          aria-label="排序欄位"
-          value={search.sort ?? "updated"}
-          onChange={(e) => filter({ sort: e.target.value as PropertyGroupFilters["sort"] })}
-        >
-          <option value="updated">更新時間</option>
-          <option value="propertyNo">樓編</option>
-          <option value="estate">屋苑</option>
-          <option value="area">實用面積</option>
-          <option value="salePrice">售價</option>
-          <option value="rentPrice">租金</option>
-        </select>
-        <select
-          className={selectClass}
-          aria-label="排序方向"
-          value={search.direction ?? "desc"}
-          onChange={(e) => filter({ direction: e.target.value as "asc" | "desc" })}
-        >
-          <option value="desc">由高至低／由新至舊</option>
-          <option value="asc">由低至高／由舊至新</option>
-        </select>
-        <select
-          className={selectClass}
-          aria-label="每頁物業數量"
-          value={search.pageSize ?? 30}
-          onChange={(e) => filter({ pageSize: Number(e.target.value) })}
-        >
-          {[30, 50, 100].map((n) => (
-            <option key={n} value={n}>
-              每頁 {n} 個
-            </option>
-          ))}
-        </select>
-        <Button variant="ghost" onClick={() => void navigate({ search: {}, replace: true })}>
-          重設
-        </Button>
-        <Button asChild className="sm:ml-auto">
-          <Link to="/admin/listings/new">新增物業／放盤</Link>
-        </Button>
-      </fieldset>
+      {canMakeLinks ? (
+        <p className="mb-4">
+          <Link to="/admin/property-sync" className="text-sm underline">
+            查看盤源同步及待處理紀錄
+          </Link>
+        </p>
+      ) : null}
+      <AdminToolbar
+        disabled={bulkBusy}
+        filters={
+          <>
+            <Input
+              aria-label="搜尋物業"
+              placeholder="搜尋樓編號、舊放盤編號或屋苑"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="h-11 w-full sm:w-72"
+            />
+            <select
+              className={selectClass}
+              aria-label="狀態"
+              value={search.status ?? "active"}
+              onChange={(e) => filter({ status: e.target.value as PropertyGroupFilters["status"] })}
+            >
+              <option value="active">目前公開</option>
+              <option value="all">全部（含已結束）</option>
+              {["draft", "offline", "inactive", "sold", "rented"].map((s) => (
+                <option key={s} value={s}>
+                  {propertyStatusLabels[s]}
+                </option>
+              ))}
+            </select>
+            <select
+              className={selectClass}
+              aria-label="刊登範圍"
+              value={search.publication ?? "all"}
+              onChange={(e) =>
+                filter({ publication: e.target.value as PropertyGroupFilters["publication"] })
+              }
+            >
+              <option value="all">所有管理紀錄</option>
+              <option value="public">有公開樓編</option>
+            </select>
+            <select
+              className={selectClass}
+              aria-label="放盤類型"
+              value={search.deal ?? "all"}
+              onChange={(e) => filter({ deal: e.target.value as "all" | "sale" | "rent" })}
+            >
+              <option value="all">出售及出租</option>
+              <option value="sale">出售</option>
+              <option value="rent">出租</option>
+            </select>
+            <select
+              className={selectClass}
+              aria-label="屋苑"
+              value={search.estateId ?? ""}
+              onChange={(e) => filter({ estateId: e.target.value || undefined })}
+            >
+              <option value="">全部屋苑</option>
+              {estates.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name_zh}
+                </option>
+              ))}
+            </select>
+            <select
+              className={selectClass}
+              aria-label="代理"
+              value={search.agentId ?? ""}
+              onChange={(e) => filter({ agentId: e.target.value || undefined })}
+            >
+              <option value="">全部代理</option>
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name ?? a.email ?? "未命名代理"}
+                </option>
+              ))}
+            </select>
+            <select
+              className={selectClass}
+              aria-label="排序欄位"
+              value={search.sort ?? "updated"}
+              onChange={(e) => filter({ sort: e.target.value as PropertyGroupFilters["sort"] })}
+            >
+              <option value="updated">更新時間</option>
+              <option value="propertyNo">樓編</option>
+              <option value="estate">屋苑</option>
+              <option value="area">實用面積</option>
+              <option value="salePrice">售價</option>
+              <option value="rentPrice">租金</option>
+            </select>
+            <select
+              className={selectClass}
+              aria-label="排序方向"
+              value={search.direction ?? "desc"}
+              onChange={(e) => filter({ direction: e.target.value as "asc" | "desc" })}
+            >
+              <option value="desc">由高至低／由新至舊</option>
+              <option value="asc">由低至高／由舊至新</option>
+            </select>
+            <select
+              className={selectClass}
+              aria-label="每頁物業數量"
+              value={search.pageSize ?? 30}
+              onChange={(e) => filter({ pageSize: Number(e.target.value) })}
+            >
+              {[30, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  每頁 {n} 個
+                </option>
+              ))}
+            </select>
+            <Button variant="ghost" onClick={() => void navigate({ search: {}, replace: true })}>
+              重設
+            </Button>
+          </>
+        }
+      />
       {error ? (
         <div className="mb-4">
           <AdminError message={error} />

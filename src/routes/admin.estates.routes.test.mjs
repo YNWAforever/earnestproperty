@@ -52,7 +52,7 @@ test("verified_at is stamped by a button, never a manually-editable date field",
 });
 
 test("the sidebar has a 屋苑管理 entry pointing at /admin/estates", () => {
-  const source = read("src/components/admin/AdminShell.tsx");
+  const source = read("src/components/admin/admin-navigation.ts");
   // Whitespace-tolerant: the entry gained a `roles` field and prettier now
   // wraps it across lines (CJK labels count double toward its 100-col width).
   assert.match(source, /to: "\/admin\/estates",\s*label: "屋苑管理"/);
