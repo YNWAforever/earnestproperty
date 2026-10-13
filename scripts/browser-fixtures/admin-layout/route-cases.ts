@@ -1,5 +1,14 @@
 export const routeCases = [
   {
+    id: "ROUTE-04",
+    path: "/admin/whatsapp",
+    route: "/admin/whatsapp",
+    variant: "wide",
+    roles: ["admin", "manager", "agent"],
+    states: ["normal", "empty", "error"],
+    title: "WhatsApp 收件匣",
+  },
+  {
     id: "ROUTE-01",
     path: "/admin",
     route: "/admin",

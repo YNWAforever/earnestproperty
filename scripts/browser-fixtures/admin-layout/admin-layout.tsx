@@ -1,3 +1,4 @@
+import { Route as Page10 } from "../../../src/routes/admin.whatsapp";
 import { Route as Page0 } from "../../../src/routes/admin.index";
 import { Route as Page1 } from "../../../src/routes/admin.leads";
 import { Route as Page2 } from "../../../src/routes/admin.listings_.new";
@@ -44,6 +45,11 @@ const root = createRootRoute({
 });
 const router = createRouter({
   routeTree: root.addChildren([
+    Page10.update({
+      id: "/admin/whatsapp",
+      path: "/admin/whatsapp",
+      getParentRoute: () => root,
+    } as never),
     Page0.update({ id: "/admin", path: "/admin", getParentRoute: () => root } as never),
     Page1.update({ id: "/admin/leads", path: "/admin/leads", getParentRoute: () => root } as never),
     Page2.update({

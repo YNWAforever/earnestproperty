@@ -98,3 +98,23 @@ for (const [path, label] of [
     await prompt.getByRole("button", { name: "取消", exact: true }).click();
     await expect(input).toHaveValue(draft);
   });
+
+test("inbox uses the wide workspace on a large display", async ({ page }) => {
+  await fixture.open(page, { path: "/admin/whatsapp", width: 2000, height: 1000 });
+  await expect(page.getByRole("button").filter({ hasText: "合成客戶甲" })).toBeVisible();
+  await expectGeometry(page, 2000, "wide");
+});
+
+test("inbox reply draft survives sidebar collapse and conversation A B A", async ({ page }) => {
+  await fixture.open(page, { path: "/admin/whatsapp" });
+  const select = (name: string) => page.getByRole("button").filter({ hasText: name }).click();
+  await select("合成客戶甲");
+  const reply = page.getByLabel("WhatsApp 回覆", { exact: true }).filter({ visible: true });
+  await reply.fill("保留甲客戶草稿，尚未發送");
+  await page.getByRole("button", { name: "收合後台選單" }).click();
+  await expect(reply).toHaveValue("保留甲客戶草稿，尚未發送");
+  await select("合成客戶乙");
+  await expect(reply).toHaveValue("");
+  await select("合成客戶甲");
+  await expect(reply).toHaveValue("保留甲客戶草稿，尚未發送");
+});
