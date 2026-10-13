@@ -3,6 +3,7 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: [
     "admin-navigation.spec.ts",
+    "admin-layout.spec.ts",
     "admin-property-maintenance.spec.ts",
     "admin-operations-recovery.spec.ts",
     "admin-workspace-scope.spec.ts",

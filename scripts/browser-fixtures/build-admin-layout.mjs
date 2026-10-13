@@ -26,7 +26,7 @@ await build({
       },
       {
         find: /^@\/lib\/(neon\/(admin-data|admin-team|whatsapp-assignment|staff-notifications|staff-checklist|enquiry-resolution|forwarded-enquiries)|admin\/operations\/operations-client)$/,
-        replacement: resolve(daily, "synthetic-api.ts"),
+        replacement: resolve(root, "synthetic-api.ts"),
       },
       { find: /^@\/(auth|hooks\/use-neon-auth)$/, replacement: resolve(daily, "auth.ts") },
       { find: "@", replacement: resolve(workspace, "src") },

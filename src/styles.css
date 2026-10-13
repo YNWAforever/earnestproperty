@@ -284,3 +284,49 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 900px;
 }
+
+/* Admin-only layout tokens. The page owns gutters; children never add a second rail. */
+.admin-shell-grid {
+  --admin-gutter: 16px;
+  display: grid;
+  min-width: 0;
+}
+.admin-page {
+  min-width: 0;
+  padding: 24px var(--admin-gutter);
+}
+.admin-content {
+  width: 100%;
+  min-width: 0;
+  max-width: 1440px;
+}
+.admin-content[data-content-width="wide"] {
+  max-width: none;
+}
+.admin-content[data-content-width="form"] {
+  max-width: 896px;
+}
+.admin-toolbar-fields > *,
+.admin-toolbar-fields input,
+.admin-toolbar-fields select {
+  min-width: 0;
+  max-width: 100%;
+}
+@media (min-width: 768px) {
+  .admin-shell-grid {
+    --admin-gutter: 24px;
+  }
+}
+@media (min-width: 1024px) {
+  .admin-shell-grid {
+    grid-template-columns: 256px minmax(0, 1fr);
+  }
+  .admin-shell-grid[data-nav-collapsed="true"] {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+}
+@media (min-width: 1280px) {
+  .admin-shell-grid {
+    --admin-gutter: 32px;
+  }
+}

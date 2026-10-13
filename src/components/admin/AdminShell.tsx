@@ -36,6 +36,7 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
 import type { StaffSessionDenialReason } from "@/lib/neon/admin-data.types";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminNavigation } from "@/components/admin/AdminNavigation";
 
 /**
@@ -131,6 +132,7 @@ export function AdminShell({
   description,
   breadcrumb,
   actions,
+  contentWidth = "standard",
   children,
 }: {
   title: string;
@@ -140,6 +142,7 @@ export function AdminShell({
   /** Page-specific primary action(s). Replaces the old hard-coded 管理放盤 button,
    * which duplicated the sidebar's 放盤 entry and was irrelevant on CRM/WhatsApp/群發. */
   actions?: React.ReactNode;
+  contentWidth?: "standard" | "wide" | "form";
   children: React.ReactNode;
 }) {
   const { loading, user, signOut } = useNeonAuth();
@@ -320,12 +323,14 @@ export function AdminShell({
 
   return (
     <div className="min-h-screen bg-background">
-      <div
-        data-admin-shell
-        data-nav-collapsed={navCollapsed}
-        className={`grid gap-4 px-4 py-4 ${navCollapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[256px_minmax(0,1fr)]"}`}
+      <a
+        href="#admin-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-background focus:p-3 focus:ring-2"
       >
-        <aside className="hidden min-w-0 flex-col rounded-lg border bg-background p-[12px] lg:sticky lg:top-[16px] lg:flex lg:h-[calc(100dvh-32px)]">
+        跳至後台內容
+      </a>
+      <div data-admin-shell data-nav-collapsed={navCollapsed} className="admin-shell-grid">
+        <aside className="hidden min-w-0 flex-col border-r bg-background p-[12px] lg:sticky lg:top-0 lg:flex lg:h-dvh">
           <Button
             type="button"
             variant="ghost"
@@ -368,19 +373,26 @@ export function AdminShell({
           </div>
         </aside>
 
-        <div className="min-w-0 py-4 lg:px-6 lg:py-0">
-          <header className="mb-5 flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                {/* Below lg the sidebar is a drawer: previously the 11-item nav
-                    stacked above every page, pushing the actual content ~600px
-                    down on any phone or tablet visit. */}
+        <div className="admin-page">
+          <div
+            id="admin-content"
+            tabIndex={-1}
+            data-admin-content
+            data-content-width={contentWidth}
+            className="admin-content"
+          >
+            <AdminPageHeader
+              title={staffReady ? title : "後台"}
+              description={staffReady ? description : "請先核實職員存取權限。"}
+              breadcrumb={staffReady ? breadcrumb : undefined}
+              actions={staffReady ? actions : undefined}
+              navigation={
                 <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
                   <SheetTrigger asChild>
                     <Button
                       variant="outline"
                       size="icon"
-                      className="lg:hidden"
+                      className="shrink-0 lg:hidden"
                       aria-label="開啟後台選單"
                     >
                       <Menu className="h-5 w-5" aria-hidden="true" />
@@ -392,7 +404,7 @@ export function AdminShell({
                       <div className="mt-8">
                         <AdminIdentity email={user.email} />
                       </div>
-                      <div className="mt-4 flex-1 overflow-y-auto pr-1">
+                      <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
                         <AdminNavigation
                           roles={staffRoles}
                           attention={attention}
@@ -412,81 +424,73 @@ export function AdminShell({
                     </div>
                   </SheetContent>
                 </Sheet>
-                <h1 className="truncate text-2xl font-semibold tracking-normal">
-                  {staffReady ? title : "後台"}
-                </h1>
-              </div>
-              {staffReady && breadcrumb ? (
-                <div className="mt-1 text-xs text-muted-foreground">{breadcrumb}</div>
-              ) : null}
-              <p className="mt-1 text-sm text-muted-foreground">
-                {staffReady ? description : "請先核實職員存取權限。"}
-              </p>
-            </div>
-            {staffReady && actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
-          </header>
-          {showFirstLogin && staffSession?.status === "ok" ? (
-            <section
-              aria-label="首次登入核對"
-              className="mb-4 rounded-lg border bg-card p-4 text-sm"
-            >
-              <h2 className="font-semibold">首次登入核對</h2>
-              <ol className="mt-2 list-decimal space-y-1 pl-5">
-                <li>
-                  <a className="underline" href="/account/settings">
-                    核對本人登入姓名及帳戶資料
-                  </a>
-                </li>
-                <li>確認職員角色及所屬分行；資料不符時聯絡管理員。</li>
-                <li>需要 Inbox 分派或手機通知時，請管理員在映射設定核實各條路線。</li>
-              </ol>
-              <Button
-                className="mt-3"
-                size="sm"
-                variant="outline"
-                disabled={checklistSaving}
-                onClick={() => void confirmChecklist()}
-              >
-                我已核對
-              </Button>
-              {checklistError ? (
-                <p role="alert" className="mt-2 text-sm text-destructive">
-                  未能記錄核對，請重試。
-                </p>
-              ) : null}
-            </section>
-          ) : null}
-          {staffSession?.status === "denied" ? (
-            <StaffAccessDenied
-              reason={staffSession.reason}
-              email={user.email}
-              rechecking={rechecking}
-              onRecheck={() => void refreshStaffSession()}
-              onSignOut={() => setSignOutOpen(true)}
+              }
             />
-          ) : staffReady ? (
-            children
-          ) : (
-            <section role="status" className="rounded-lg border bg-card p-5 text-sm">
-              <h2 className="text-base font-semibold">
-                {rechecking ? "正在核實職員權限" : "未能核實職員權限"}
-              </h2>
-              <p className="mt-2 text-muted-foreground">
-                {rechecking
-                  ? "核實完成後才會顯示頁面資料。"
-                  : "暫時無法確認職員權限，頁面資料已隱藏。請重新檢查；如登入已失效，請登出後重新登入。"}
-              </p>
-              <Button
-                className="mt-4"
-                size="sm"
-                type="button"
-                disabled={rechecking}
-                onClick={() => void refreshStaffSession()}
-              >
-                {rechecking ? "檢查中…" : "重新檢查"}
-              </Button>
-            </section>
-          )}
+            <div data-admin-body className="w-full min-w-0">
+              {showFirstLogin && staffSession?.status === "ok" ? (
+                <section
+                  aria-label="首次登入核對"
+                  className="mb-4 rounded-lg border bg-card p-4 text-sm"
+                >
+                  <h2 className="font-semibold">首次登入核對</h2>
+                  <ol className="mt-2 list-decimal space-y-1 pl-5">
+                    <li>
+                      <a className="underline" href="/account/settings">
+                        核對本人登入姓名及帳戶資料
+                      </a>
+                    </li>
+                    <li>確認職員角色及所屬分行；資料不符時聯絡管理員。</li>
+                    <li>需要 Inbox 分派或手機通知時，請管理員在映射設定核實各條路線。</li>
+                  </ol>
+                  <Button
+                    className="mt-3"
+                    size="sm"
+                    variant="outline"
+                    disabled={checklistSaving}
+                    onClick={() => void confirmChecklist()}
+                  >
+                    我已核對
+                  </Button>
+                  {checklistError ? (
+                    <p role="alert" className="mt-2 text-sm text-destructive">
+                      未能記錄核對，請重試。
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
+              {staffSession?.status === "denied" ? (
+                <StaffAccessDenied
+                  reason={staffSession.reason}
+                  email={user.email}
+                  rechecking={rechecking}
+                  onRecheck={() => void refreshStaffSession()}
+                  onSignOut={() => setSignOutOpen(true)}
+                />
+              ) : staffReady ? (
+                children
+              ) : (
+                <section role="status" className="rounded-lg border bg-card p-5 text-sm">
+                  <h2 className="text-base font-semibold">
+                    {rechecking ? "正在核實職員權限" : "未能核實職員權限"}
+                  </h2>
+                  <p className="mt-2 text-muted-foreground">
+                    {rechecking
+                      ? "核實完成後才會顯示頁面資料。"
+                      : "暫時無法確認職員權限，頁面資料已隱藏。請重新檢查；如登入已失效，請登出後重新登入。"}
+                  </p>
+                  <Button
+                    className="mt-4"
+                    size="sm"
+                    type="button"
+                    disabled={rechecking}
+                    onClick={() => void refreshStaffSession()}
+                  >
+                    {rechecking ? "檢查中…" : "重新檢查"}
+                  </Button>
+                </section>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

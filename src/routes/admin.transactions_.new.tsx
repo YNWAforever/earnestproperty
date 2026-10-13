@@ -24,6 +24,7 @@ function NewAdminTransactionPage() {
 
   return (
     <AdminShell
+      contentWidth="form"
       title="新增成交"
       description="先登記成交資料，再於編輯頁記錄私有歸因及佣金。"
       breadcrumb={
@@ -39,7 +40,7 @@ function NewAdminTransactionPage() {
         </nav>
       }
     >
-      <div className="max-w-2xl">
+      <div className="w-full min-w-0">
         <Button asChild variant="ghost" size="sm" className="mb-4">
           <Link to="/admin/transactions">
             <ArrowLeft className="mr-1 h-4 w-4" />

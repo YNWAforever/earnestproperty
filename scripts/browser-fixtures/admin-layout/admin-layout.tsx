@@ -1,9 +1,19 @@
 import React from "react";
 import { Toaster } from "sonner";
 import { createRoot } from "react-dom/client";
-import { createRootRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
+import {
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Route as Overview } from "../../../src/routes/admin.index";
+import { AdminShell } from "../../../src/components/admin/AdminShell";
+import { AdminToolbar } from "../../../src/components/admin/AdminToolbar";
+import { Button } from "../../../src/components/ui/button";
+import { Route as NewTransaction } from "../../../src/routes/admin.transactions_.new";
 import { Route as Leads } from "../../../src/routes/admin.leads";
 import { staffSessionStore } from "../../../src/components/admin/staff-session";
 import { changeActor } from "../daily-work/auth";
@@ -27,6 +37,12 @@ const root = createRootRoute({
 });
 const router = createRouter({
   routeTree: root.addChildren([
+    NewTransaction.update({
+      id: "/admin/transactions/new",
+      path: "/admin/transactions/new",
+      getParentRoute: () => root,
+    } as never),
+    createRoute({ getParentRoute: () => root, path: "/__layout-probe", component: () => <AdminShell title={"長標題測試".repeat(16)} description={"說明內容需要完整換行。".repeat(12)} actions={<>{[1,2,3].map(i => <Button key={i} onClick={() => { document.documentElement.dataset.clicked = String(i); }}>{`第${i}個主要工作操作`}</Button>)}</>}><AdminToolbar filters={<label>搜尋<input aria-label="搜尋" /></label>} /><p>實際共用元件的邊界情況</p></AdminShell> }),
     Overview.update({ id: "/admin", path: "/admin", getParentRoute: () => root } as never),
     Leads.update({ id: "/admin/leads", path: "/admin/leads", getParentRoute: () => root } as never),
   ]),
