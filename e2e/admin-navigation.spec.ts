@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
-import { useAdminLayoutFixture } from "./admin-layout-fixture";
+import { createAdminLayoutFixture } from "./admin-layout-fixture";
 
-const fixture = useAdminLayoutFixture("navigation");
+const fixture = createAdminLayoutFixture("navigation");
 
 test("NAV-01 desktop collapse persists only the preference and keeps named links and attention", async ({
   page,

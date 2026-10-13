@@ -1,7 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
-import { useAdminLayoutFixture } from "./admin-layout-fixture";
+import { createAdminLayoutFixture } from "./admin-layout-fixture";
 import { routeCases } from "../scripts/browser-fixtures/admin-layout/route-cases";
-const fixture = useAdminLayoutFixture("layout");
+const fixture = createAdminLayoutFixture("layout");
 const viewports = [
   { width: 390, height: 844 },
   { width: 768, height: 900 },

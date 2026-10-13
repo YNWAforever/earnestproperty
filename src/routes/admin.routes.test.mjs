@@ -74,20 +74,58 @@ test("Team route prevents self-reset confusion and gives a safe 400 recovery mes
 });
 
 test("operations shell follows the approved navigation groups and exact Team state", () => {
-  const entries = ADMIN_NAV_GROUPS.flatMap(group => group.items);
+  const entries = ADMIN_NAV_GROUPS.flatMap((group) => group.items);
   for (const [label, paths] of [
-    ["日常工作", ["/admin", "/admin/leads", "/admin/whatsapp", "/admin/leads/command-center", "/admin/listings", "/admin/transactions"]],
-    ["管理與推廣", ["/admin/analytics", "/admin/blasts", "/admin/segments", "/admin/cms", "/admin/estates", "/admin/whatsapp-links"]],
-    ["設定與處理問題", ["/admin/team", "/admin/agents", "/admin/whatsapp-settings", "/admin/property-sync", "/admin/operations"]],
-  ]) assert.deepEqual(ADMIN_NAV_GROUPS.find(group=>group.label===label)?.items.map(item=>item.to), paths);
-  assert.equal(entries.find(item=>item.to==="/admin/team")?.activeExact,true);
-  assert.equal(entries.find(item=>item.to==="/admin/agents")?.activeExact,false);
-  assert.equal(entries.find(item=>item.to==="/admin/operations")?.activeExact,true);
-  assert.match(read("src/components/admin/AdminNavigation.tsx"),/includeSearch:\s*false/);
+    [
+      "日常工作",
+      [
+        "/admin",
+        "/admin/leads",
+        "/admin/whatsapp",
+        "/admin/leads/command-center",
+        "/admin/listings",
+        "/admin/transactions",
+      ],
+    ],
+    [
+      "管理與推廣",
+      [
+        "/admin/analytics",
+        "/admin/blasts",
+        "/admin/segments",
+        "/admin/cms",
+        "/admin/estates",
+        "/admin/whatsapp-links",
+      ],
+    ],
+    [
+      "設定與處理問題",
+      [
+        "/admin/team",
+        "/admin/agents",
+        "/admin/whatsapp-settings",
+        "/admin/property-sync",
+        "/admin/operations",
+      ],
+    ],
+  ])
+    assert.deepEqual(
+      ADMIN_NAV_GROUPS.find((group) => group.label === label)?.items.map((item) => item.to),
+      paths,
+    );
+  assert.equal(entries.find((item) => item.to === "/admin/team")?.activeExact, true);
+  assert.equal(entries.find((item) => item.to === "/admin/agents")?.activeExact, false);
+  assert.equal(entries.find((item) => item.to === "/admin/operations")?.activeExact, true);
+  assert.match(read("src/components/admin/AdminNavigation.tsx"), /includeSearch:\s*false/);
 });
 
 test("sidebar includes a 成交管理 entry linking to /admin/transactions", () => {
-  assert.equal(ADMIN_NAV_GROUPS.flatMap(group=>group.items).find(item=>item.to==="/admin/transactions")?.label,"成交管理");
+  assert.equal(
+    ADMIN_NAV_GROUPS.flatMap((group) => group.items).find(
+      (item) => item.to === "/admin/transactions",
+    )?.label,
+    "成交管理",
+  );
 });
 
 test("Overview reads operational sources independently without polling", () => {
@@ -1038,34 +1076,43 @@ test("protected owner accounts are enforced server-side, not only hidden in the 
 // that named the wrong tab, while three of that screen's five tabs had no entry
 // at all. A duplicate destination is the shape of that bug.
 test("sidebar has no duplicate destinations and is fully grouped", () => {
-  const entries=ADMIN_NAV_GROUPS.flatMap(group=>group.items);
-  const destinations=entries.map(item=>item.to);
-  assert.equal(new Set(destinations).size,17);
-  assert.equal(destinations.length,17);
-  assert.equal(entries.find(item=>item.to==="/admin/property-sync")?.label,"盤源同步");
-  assert.ok(read("src/components/admin/admin-nav-roles.ts").includes('{ to: "/admin/property-sync", roles: EDITORS }'));
-  for (const path of ["/admin/whatsapp-links","/admin/whatsapp-settings","/admin/analytics"]) assert.ok(destinations.includes(path));
-  for (const path of ["/admin","/admin/leads"]) assert.equal(entries.find(item=>item.to===path)?.activeExact,true);
-  const source=read("src/components/admin/AdminNavigation.tsx");
-  assert.match(source,/activeOptions=\{\{[\s\S]*?exact: item\.activeExact/);
-  assert.match(source,/includeSearch:\s*false/);
-  assert.match(source,/explicitUndefined:\s*true/);
-  assert.doesNotMatch(read("src/components/admin/admin-navigation.ts"),/search: \{ tab: "faqs" \}|"AI Agent"|"CMS \/ FAQ"/);
+  const entries = ADMIN_NAV_GROUPS.flatMap((group) => group.items);
+  const destinations = entries.map((item) => item.to);
+  assert.equal(new Set(destinations).size, 17);
+  assert.equal(destinations.length, 17);
+  assert.equal(entries.find((item) => item.to === "/admin/property-sync")?.label, "盤源同步");
+  assert.ok(
+    read("src/components/admin/admin-nav-roles.ts").includes(
+      '{ to: "/admin/property-sync", roles: EDITORS }',
+    ),
+  );
+  for (const path of ["/admin/whatsapp-links", "/admin/whatsapp-settings", "/admin/analytics"])
+    assert.ok(destinations.includes(path));
+  for (const path of ["/admin", "/admin/leads"])
+    assert.equal(entries.find((item) => item.to === path)?.activeExact, true);
+  const source = read("src/components/admin/AdminNavigation.tsx");
+  assert.match(source, /activeOptions=\{\{[\s\S]*?exact: item\.activeExact/);
+  assert.match(source, /includeSearch:\s*false/);
+  assert.match(source, /explicitUndefined:\s*true/);
+  assert.doesNotMatch(
+    read("src/components/admin/admin-navigation.ts"),
+    /search: \{ tab: "faqs" \}|"AI Agent"|"CMS \/ FAQ"/,
+  );
 });
 
 test("nav badges keep link names and come from the shared attention store", () => {
-  const shell=read("src/components/admin/AdminShell.tsx");
-  const nav=read("src/components/admin/AdminNavigation.tsx");
-  assert.match(shell,/useAdminAttention\(identity\)/);
-  assert.match(shell,/withAttentionTitle\(/);
-  assert.doesNotMatch(shell,/setInterval|setTimeout/,"the shell must poll only via the store");
-  assert.match(shell,/<AdminNavigation[\s\S]*?attention=\{attention\}/);
-  assert.match(nav,/aria-label=\{item\.label\}/);
-  assert.match(nav,/aria-describedby=/);
-  assert.match(nav,/aria-hidden="true"[\s\S]{0,80}data-attention-badge/);
-  const entries=ADMIN_NAV_GROUPS.flatMap(group=>group.items);
-  assert.equal(entries.find(item=>item.to==="/admin/leads")?.attention,"leads");
-  assert.equal(entries.find(item=>item.to==="/admin/whatsapp")?.attention,"inbox");
+  const shell = read("src/components/admin/AdminShell.tsx");
+  const nav = read("src/components/admin/AdminNavigation.tsx");
+  assert.match(shell, /useAdminAttention\(identity\)/);
+  assert.match(shell, /withAttentionTitle\(/);
+  assert.doesNotMatch(shell, /setInterval|setTimeout/, "the shell must poll only via the store");
+  assert.match(shell, /<AdminNavigation[\s\S]*?attention=\{attention\}/);
+  assert.match(nav, /aria-label=\{item\.label\}/);
+  assert.match(nav, /aria-describedby=/);
+  assert.match(nav, /aria-hidden="true"[\s\S]{0,80}data-attention-badge/);
+  const entries = ADMIN_NAV_GROUPS.flatMap((group) => group.items);
+  assert.equal(entries.find((item) => item.to === "/admin/leads")?.attention, "leads");
+  assert.equal(entries.find((item) => item.to === "/admin/whatsapp")?.attention, "inbox");
 });
 
 test("Neon Auth UI is given the absolute site origin so password-reset links return to this app", () => {

@@ -1,14 +1,22 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer, type Server } from "node:http";
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { resolve, sep, extname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test, expect, type Page } from "@playwright/test";
 
-export function useAdminLayoutFixture(suite: string) {
+export function createAdminLayoutFixture(suite: string) {
   let server: Server;
   let origin: string;
+  const runId = `${suite}-${randomUUID()}`;
+  const artifactRoot = `.audit/admin-ux-20261013/runs/${runId}`;
+  const source = {
+    sha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
+    worktreeChanges: spawnSync("git", ["status", "--porcelain"], {
+      encoding: "utf8",
+    }).stdout.trim(),
+  };
   const results: Record<string, unknown>[] = [];
   const browserErrors = new WeakMap<Page, string[]>();
   test.beforeAll(async () => {
@@ -19,7 +27,7 @@ export function useAdminLayoutFixture(suite: string) {
       }).status,
       0,
     );
-    await mkdir(".audit/admin-ux-20261013/screenshots", { recursive: true });
+    await mkdir(artifactRoot, { recursive: true });
     const root = resolve(".audit/admin-layout-browser");
     server = createServer(async (request, response) => {
       try {
@@ -54,7 +62,10 @@ export function useAdminLayoutFixture(suite: string) {
       info.title.startsWith("normal ") &&
       [390, 1440].includes(page.viewportSize()!.width)
     ) {
-      screenshot = `.audit/admin-ux-20261013/screenshots/${createHash("sha256").update(info.title).digest("hex").slice(0, 16)}.png`;
+      screenshot = `${artifactRoot}/${createHash("sha256")
+        .update(info.title + info.repeatEachIndex)
+        .digest("hex")
+        .slice(0, 16)}.png`;
       await page.screenshot({ path: screenshot, fullPage: true });
     }
     const context = await page.evaluate(() => ({
@@ -94,25 +105,26 @@ export function useAdminLayoutFixture(suite: string) {
   test.afterAll(async () => {
     if (server) await new Promise<void>((done) => server.close(() => done()));
     await mkdir(".audit/admin-ux-20261013", { recursive: true });
-    await writeFile(
-      `.audit/admin-ux-20261013/${suite}.json`,
-      JSON.stringify(
-        {
-          sha: spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).stdout.trim(),
-          worktreeChanges: spawnSync("git", ["status", "--porcelain"], {
-            encoding: "utf8",
-          }).stdout.trim(),
-          layer: "actual-react-routes-synthetic-auth-api-owned-loopback",
-          normalAuth: false,
-          realDatabase: false,
-          realProvider: false,
-          capturedAt: new Date().toISOString(),
-          results,
-        },
-        null,
-        2,
-      ),
+    const manifest = JSON.stringify(
+      {
+        ...source,
+        runId,
+        archive: `${artifactRoot}/manifest.json`,
+        recordScope:
+          "This worker run; retain runner log and all run archives when a failed worker restarts",
+        layer: "actual-react-routes-synthetic-auth-api-owned-loopback",
+        normalAuth: false,
+        realDatabase: false,
+        realProvider: false,
+        capturedAt: new Date().toISOString(),
+        results,
+      },
+      null,
+      2,
     );
+    await writeFile(`${artifactRoot}/manifest.json`, manifest, { flag: "wx" });
+    // Convenient latest pointer; the UUID archive and screenshots are never overwritten.
+    await writeFile(`.audit/admin-ux-20261013/${suite}.json`, manifest);
   });
   return {
     async open(

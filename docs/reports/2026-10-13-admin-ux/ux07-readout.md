@@ -13,3 +13,7 @@ Retained intermediate results: states2 31 passed/6 failed; states3 42 passed/one
 Typecheck passed; wiring+agent contracts 27/27, transaction 76 Node/PGlite +5 component, estate 27/27, operations 28 Node+29 Bun passed. No normal Auth, hosted, native IME or provider result is inferred. Same clean source version will be rerun in T-UX09.
 
 Owned UI uses actual React routes with synthetic Auth/API. No normal Auth, real provider or human acceptance claim. Run logs are private under .audit/admin-ux-20261013/. Browser contexts and servers were disposed; no production writes. Historical F/RPK/UC statuses are unchanged.
+
+## Evidence retention correction (T-UX09)
+
+The first screenshot writer reused title-based filenames across reruns; the T-UX09 run superseded the initial T-UX07 PNG files. Original logs, geometry and recorded hashes remain, but those earlier PNG bytes are no longer claimed available. The writer now archives every worker run under a fresh UUID with an immutable manifest and source snapshot captured before execution. Final delivery binds its screenshots to that archived run.
