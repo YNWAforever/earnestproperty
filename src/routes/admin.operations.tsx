@@ -72,7 +72,11 @@ function AdminOperations() {
   const identity = useStaffWorkspaceIdentity();
   if (!identity)
     return (
-      <AdminShell title="系統營運" description="控制平面狀態，以及按權限開放的營運工具。">
+      <AdminShell
+        contentWidth="standard"
+        title="系統營運"
+        description="控制平面狀態，以及按權限開放的營運工具。"
+      >
         {null}
       </AdminShell>
     );
@@ -191,7 +195,22 @@ function AdminOperationsWorkspace({ identity }: { identity: string }) {
   }, [health, refreshNow, isWorkspaceCurrent]);
 
   return (
-    <AdminShell title="系統營運" description="控制平面狀態，以及按權限開放的營運工具。">
+    <AdminShell
+      contentWidth="standard"
+      title="系統營運"
+      description="控制平面狀態，以及按權限開放的營運工具。"
+      actions={
+        <Button
+          type="button"
+          variant="outline"
+          onClick={refreshNow}
+          aria-label="重新檢查控制平面狀態"
+        >
+          <RefreshCw className="h-4 w-4" />
+          重新整理
+        </Button>
+      }
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* aria-live sits on the status badge only. It previously wrapped the
             timestamp too, so screen readers re-announced the whole region every
@@ -215,15 +234,6 @@ function AdminOperationsWorkspace({ identity }: { identity: string }) {
             </span>
           ) : null}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={refreshNow}
-          aria-label="重新檢查控制平面狀態"
-        >
-          <RefreshCw className="h-4 w-4" />
-          重新整理
-        </Button>
       </div>
 
       {error ? (

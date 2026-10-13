@@ -21,7 +21,11 @@ export const Route = createFileRoute("/admin/property-sync")({
 });
 function PropertySyncPage() {
   return (
-    <AdminShell title="盤源同步" description="查看每日來源進度、待上架及核實撤盤。">
+    <AdminShell
+      contentWidth="standard"
+      title="盤源同步"
+      description="查看每日來源進度、待上架及核實撤盤。"
+    >
       <SyncContent />
     </AdminShell>
   );

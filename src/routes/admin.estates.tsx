@@ -68,7 +68,19 @@ function AdminEstates() {
   const capped = (estates?.length ?? 0) >= ESTATE_ROW_CAP;
 
   return (
-    <AdminShell title="屋苑管理" description="管理屋苑別名、地址、座標、交通、校網及核實狀態。">
+    <AdminShell
+      contentWidth="standard"
+      title="屋苑管理"
+      description="管理屋苑別名、地址、座標、交通、校網及核實狀態。"
+      actions={
+        <Button asChild size="sm" className="h-11 lg:h-9">
+          <Link to="/admin/estates/new">
+            <Plus className="mr-2 h-4 w-4" />
+            新增屋苑
+          </Link>
+        </Button>
+      }
+    >
       <AdminToolbar
         filters={
           <Input
@@ -80,30 +92,11 @@ function AdminEstates() {
             className="h-11 w-full max-w-sm lg:h-9"
           />
         }
-        actions={
-          <Button asChild size="sm" className="h-11 lg:h-9">
-            <Link to="/admin/estates/new">
-              <Plus className="mr-2 h-4 w-4" />
-              新增屋苑
-            </Link>
-          </Button>
-        }
       />
       {error ? <AdminError message={error} /> : null}
       {!estates && !error ? <Skeleton className="h-72 w-full" /> : null}
       {estates?.length === 0 ? (
-        <AdminEmptyState
-          title="未有屋苑"
-          description="新增第一個屋苑後即可管理完整資料。"
-          action={
-            <Button asChild>
-              <Link to="/admin/estates/new">
-                <Plus className="mr-2 h-4 w-4" />
-                新增屋苑
-              </Link>
-            </Button>
-          }
-        />
+        <AdminEmptyState title="未有屋苑" description="新增第一個屋苑後即可管理完整資料。" />
       ) : null}
       {estates && estates.length > 0 && visibleEstates ? (
         <Card>
@@ -129,7 +122,13 @@ function AdminEstates() {
                 />
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div
+                role="region"
+                aria-label="屋苑清單"
+                tabIndex={0}
+                data-admin-table-region
+                className="min-w-0 overflow-x-auto"
+              >
                 <Table className="min-w-[640px]">
                   <TableHeader>
                     <TableRow>

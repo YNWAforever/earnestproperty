@@ -26,7 +26,11 @@ function WhatsappLinks() {
   const { session } = useStaffSession(user?.id ?? null);
   if (!identity)
     return (
-      <AdminShell title="WhatsApp 來源連結" description="核對投放位置及批次結果。">
+      <AdminShell
+        contentWidth="standard"
+        title="WhatsApp 來源連結"
+        description="核對投放位置及批次結果。"
+      >
         {session?.status === "ok" ? (
           <AdminNoPermission />
         ) : (
@@ -73,10 +77,11 @@ function WhatsappLinksWorkspace({ identity }: { identity: string }) {
   }, [loading, user]);
   return (
     <AdminShell
+      contentWidth="standard"
       title="WhatsApp 來源連結"
       description="為網站、28hse、YouTube 或其他投放建立公司 WhatsApp 短連結，先預覽核對，再分批提交。"
     >
-      <div className="space-y-5">
+      <div className="space-y-6">
         <nav aria-label="相關待辦" className="flex flex-wrap gap-x-4 gap-y-2 text-sm underline">
           <a href="/admin/listings?status=active">核對未指派代理與公開樓盤</a>
           <a href="/admin/whatsapp-settings">核對同事映射與試送狀態</a>

@@ -975,7 +975,70 @@ function AdminCms() {
   }
 
   return (
-    <AdminShell title="內容中心" description="CMS：管理屋苑內容、文章、FAQ 及 SEO 資料。">
+    <AdminShell
+      contentWidth="standard"
+      title="內容中心"
+      description="管理屋苑內容、文章、FAQ 及搜尋資料。"
+      actions={
+        data ? (
+          activeTab === "estates" ? (
+            <Button
+              onClick={() => {
+                setEstateEdit(null);
+                ++estateLoadSequence.current;
+                setEstateRevisions(null);
+                setEstateLatestPayload(null);
+                setEditingEstate({ ...emptyEstate });
+                setEstateRevisions(null);
+                setEstateLatestPayload(null);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              新增屋苑
+            </Button>
+          ) : activeTab === "articles" ? (
+            <Button
+              onClick={() => {
+                setArticleEdit(null);
+                ++articleLoadSequence.current;
+                setArticleRevisions(null);
+                setEditingArticle({ ...emptyArticle });
+                setArticleRevisions(null);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              新增文章
+            </Button>
+          ) : activeTab === "videos" ? (
+            <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
+              <Plus className="h-4 w-4" />
+              新增影片
+            </Button>
+          ) : activeTab === "faqs" ? (
+            <Button
+              onClick={() =>
+                setEditingFaq({
+                  ...emptyFaq,
+                  scope: data.faqGroups[0]?.scope ?? emptyFaq.scope,
+                })
+              }
+            >
+              <Plus className="h-4 w-4" />
+              新增 FAQ
+            </Button>
+          ) : activeTab === "media" ? (
+            <Button
+              type="button"
+              disabled={mediaUploading}
+              onClick={() => mediaFileInputRef.current?.click()}
+            >
+              <Upload className="h-4 w-4" />
+              {mediaUploading ? "上載中…" : "上載媒體"}
+            </Button>
+          ) : null
+        ) : null
+      }
+    >
       {error ? (
         <div role="alert" className="space-y-2">
           <AdminError message={error} />
@@ -1005,7 +1068,7 @@ function AdminCms() {
               </Button>
             ))}
           </div>
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <span>
               {activeSearch.trim() ? "符合搜尋" : "目前分類"}共 {cmsTotal} 項（包括草稿）
             </span>
@@ -1063,20 +1126,6 @@ function AdminCms() {
                         setSearchByTab((current) => ({ ...current, estates: value }))
                       }
                     />
-                    <Button
-                      onClick={() => {
-                        setEstateEdit(null);
-                        ++estateLoadSequence.current;
-                        setEstateRevisions(null);
-                        setEstateLatestPayload(null);
-                        setEditingEstate({ ...emptyEstate });
-                        setEstateRevisions(null);
-                        setEstateLatestPayload(null);
-                      }}
-                    >
-                      <Plus className="h-4 w-4" />
-                      新增屋苑
-                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -1087,7 +1136,7 @@ function AdminCms() {
                     label="屋苑"
                   />
                   {filteredEstates.length ? (
-                    <Table>
+                    <Table containerLabel="屋苑內容">
                       <TableHeader>
                         <TableRow>
                           <TableHead>屋苑</TableHead>
@@ -1149,21 +1198,6 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有屋苑"
                           description="新增第一個屋苑後即可管理 SEO 及頁面內容。"
-                          action={
-                            <Button
-                              onClick={() => {
-                                setEstateEdit(null);
-                                ++estateLoadSequence.current;
-                                setEstateRevisions(null);
-                                setEstateLatestPayload(null);
-                                setEditingEstate({ ...emptyEstate });
-                                setEstateRevisions(null);
-                              }}
-                            >
-                              <Plus className="h-4 w-4" />
-                              新增屋苑
-                            </Button>
-                          }
                         />
                       )}
                     </div>
@@ -1189,18 +1223,6 @@ function AdminCms() {
                         setSearchByTab((current) => ({ ...current, articles: value }))
                       }
                     />
-                    <Button
-                      onClick={() => {
-                        setArticleEdit(null);
-                        ++articleLoadSequence.current;
-                        setArticleRevisions(null);
-                        setEditingArticle({ ...emptyArticle });
-                        setArticleRevisions(null);
-                      }}
-                    >
-                      <Plus className="h-4 w-4" />
-                      新增文章
-                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -1211,7 +1233,7 @@ function AdminCms() {
                     label="文章"
                   />
                   {filteredArticles.length ? (
-                    <Table>
+                    <Table containerLabel="文章內容">
                       <TableHeader>
                         <TableRow>
                           <TableHead>標題</TableHead>
@@ -1275,20 +1297,6 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有文章"
                           description="新增文章後即可管理內容及發布狀態。"
-                          action={
-                            <Button
-                              onClick={() => {
-                                setArticleEdit(null);
-                                ++articleLoadSequence.current;
-                                setArticleRevisions(null);
-                                setEditingArticle({ ...emptyArticle });
-                                setArticleRevisions(null);
-                              }}
-                            >
-                              <Plus className="h-4 w-4" />
-                              新增文章
-                            </Button>
-                          }
                         />
                       )}
                     </div>
@@ -1314,15 +1322,11 @@ function AdminCms() {
                         setSearchByTab((current) => ({ ...current, videos: value }))
                       }
                     />
-                    <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
-                      <Plus className="h-4 w-4" />
-                      新增影片
-                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   {filteredVideos.length ? (
-                    <Table>
+                    <Table containerLabel="影片內容">
                       <TableHeader>
                         <TableRow>
                           <TableHead>影片</TableHead>
@@ -1377,12 +1381,6 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有 YouTube 影片"
                           description="新增影片連結後，/videos 會顯示官方頻道影片。"
-                          action={
-                            <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
-                              <Plus className="h-4 w-4" />
-                              新增影片
-                            </Button>
-                          }
                         />
                       )}
                     </div>
@@ -1452,17 +1450,6 @@ function AdminCms() {
                       <FileText className="h-4 w-4" />
                       貼上 FAQ
                     </Button>
-                    <Button
-                      onClick={() =>
-                        setEditingFaq({
-                          ...emptyFaq,
-                          scope: data.faqGroups[0]?.scope ?? emptyFaq.scope,
-                        })
-                      }
-                    >
-                      <Plus className="h-4 w-4" />
-                      新增 FAQ
-                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -1473,7 +1460,7 @@ function AdminCms() {
                     label="條 FAQ"
                   />
                   {faqsByScope.length ? (
-                    <Table>
+                    <Table containerLabel="FAQ 內容">
                       <TableHeader>
                         <TableRow>
                           <TableHead>分組</TableHead>
@@ -1561,12 +1548,6 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有 FAQ"
                           description="新增 FAQ 後即可在對應頁面顯示常見問題。"
-                          action={
-                            <Button onClick={() => setEditingFaq({ ...emptyFaq })}>
-                              <Plus className="h-4 w-4" />
-                              新增 FAQ
-                            </Button>
-                          }
                         />
                       )}
                     </div>
@@ -1594,14 +1575,7 @@ function AdminCms() {
                         }
                       />
                     ) : null}
-                    <Button
-                      type="button"
-                      disabled={mediaUploading}
-                      onClick={() => mediaFileInputRef.current?.click()}
-                    >
-                      <Upload className="h-4 w-4" />
-                      {mediaUploading ? "上載中…" : "上載媒體"}
-                    </Button>
+
                     <input
                       ref={mediaFileInputRef}
                       className="hidden"
@@ -1617,7 +1591,7 @@ function AdminCms() {
                 <CardContent className="p-0">
                   {!mediaAssets ? <Skeleton className="m-6 h-48 w-auto" /> : null}
                   {filteredMediaAssets.length ? (
-                    <Table>
+                    <Table containerLabel="媒體內容">
                       <TableHeader>
                         <TableRow>
                           <TableHead>檔案</TableHead>
@@ -1680,16 +1654,6 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有媒體"
                           description="上載相片後即可在媒體庫管理替代文字。"
-                          action={
-                            <Button
-                              type="button"
-                              disabled={mediaUploading}
-                              onClick={() => mediaFileInputRef.current?.click()}
-                            >
-                              <Upload className="h-4 w-4" />
-                              上載媒體
-                            </Button>
-                          }
                         />
                       )}
                     </div>
@@ -1973,7 +1937,7 @@ function AdminCms() {
           >
             {faqImportOverwriteCount > 0 || faqImportArchived.length > 0 ? (
               <div className="max-h-48 overflow-y-auto rounded-md border">
-                <Table>
+                <Table containerLabel="內容資料">
                   <TableHeader>
                     <TableRow>
                       <TableHead>問題</TableHead>

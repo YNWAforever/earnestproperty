@@ -28,7 +28,13 @@ export function AdminTeamTable({
   onSelect: (memberId: string) => void;
 }) {
   return (
-    <div className="hidden overflow-hidden rounded-lg border bg-card shadow-sm md:block">
+    <div
+      role="region"
+      aria-label="團隊成員目錄"
+      tabIndex={0}
+      data-admin-table-region
+      className="hidden min-w-0 overflow-x-auto rounded-lg border bg-card shadow-sm md:block"
+    >
       <table className="w-full text-left text-sm">
         <caption className="sr-only">團隊成員目錄</caption>
         <thead className="bg-muted/50 text-xs text-muted-foreground">

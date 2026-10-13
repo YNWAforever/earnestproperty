@@ -58,8 +58,14 @@ function AdminAnalytics() {
   )
     return (
       <AdminShell
+        contentWidth="standard"
         title="營運及轉換統計"
         description="香港時間每日匯總，只顯示數量，不載入客戶明細。"
+        actions={
+          <Button asChild variant="outline">
+            <Link to="/admin/operations">返回系統營運</Link>
+          </Button>
+        }
       >
         {identity ? (
           <AdminError message="需要管理員或主管權限，請聯絡管理員。" />
@@ -345,14 +351,21 @@ function AdminAnalyticsWorkspace() {
     }
   }
   return (
-    <AdminShell title="營運及轉換統計" description="香港時間每日匯總，只顯示數量，不載入客戶明細。">
-      <div className="space-y-6">
+    <AdminShell
+      contentWidth="standard"
+      title="營運及轉換統計"
+      description="香港時間每日匯總，只顯示數量，不載入客戶明細。"
+      actions={
         <Button asChild variant="outline">
           <Link to="/admin/operations">返回系統營運</Link>
         </Button>
+      }
+    >
+      <div className="space-y-6">
         <form
           onSubmit={submit}
-          className="flex flex-wrap items-end gap-3"
+          data-admin-toolbar
+          className="flex min-w-0 flex-wrap items-end gap-4 [&>div]:grid [&>div]:gap-2"
           aria-label="統計日期範圍"
         >
           <div>
@@ -416,7 +429,13 @@ function AdminAnalyticsWorkspace() {
               <h2 id="analytics-daily-title" className="mb-3 font-semibold">
                 每日建立數量
               </h2>
-              <div className="overflow-x-auto rounded border">
+              <div
+                role="region"
+                aria-label="每日營運統計"
+                tabIndex={0}
+                data-admin-table-region
+                className="min-w-0 overflow-x-auto rounded border"
+              >
                 <table className="w-full text-sm">
                   <caption className="sr-only">香港時間每日客戶查詢及 WhatsApp 對話數量</caption>
                   <thead>

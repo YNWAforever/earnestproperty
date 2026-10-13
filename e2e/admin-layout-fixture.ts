@@ -9,6 +9,7 @@ export function useAdminLayoutFixture(suite: string) {
   let server: Server;
   let origin: string;
   const results: Record<string, unknown>[] = [];
+  const browserErrors = new WeakMap<Page, string[]>();
   test.beforeAll(async () => {
     assert.ok(!process.env.PLAYWRIGHT_BASE_URL, "Owned fixture refuses remote targets");
     assert.equal(
@@ -44,6 +45,7 @@ export function useAdminLayoutFixture(suite: string) {
     origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
   });
   test.afterEach(async ({ page }, info) => {
+    expect(browserErrors.get(page) ?? []).toEqual([]);
     results.push({
       name: info.title,
       result: info.status,
@@ -91,6 +93,9 @@ export function useAdminLayoutFixture(suite: string) {
       page: Page,
       { role = "admin", path = "/admin", width = 1280, height = 800, storageFailure = false } = {},
     ) {
+      const errors: string[] = [];
+      browserErrors.set(page, errors);
+      page.on("pageerror", (error) => errors.push(error.message));
       await page.setViewportSize({ width, height });
       await page.route("**/*", (route) =>
         new URL(route.request().url()).origin === origin &&
@@ -102,6 +107,9 @@ export function useAdminLayoutFixture(suite: string) {
         ({ role, storageFailure }) => {
           sessionStorage.setItem("daily-work-actor", "actor-a");
           sessionStorage.setItem("daily-work-role", role);
+          sessionStorage.setItem("property-fixture-actor", role);
+          sessionStorage.setItem("no-link-fixture-role", role);
+          sessionStorage.setItem("sync-fixture-role", role);
           if (storageFailure) {
             const fail = () => {
               throw new DOMException("Storage denied", "SecurityError");

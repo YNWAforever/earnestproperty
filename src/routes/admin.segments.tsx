@@ -344,6 +344,7 @@ function AdminSegments() {
 
   return (
     <AdminShell
+      contentWidth="standard"
       title="客戶分群"
       description="AI 分群：用自然語言描述條件，建立可供 WhatsApp 群發使用的客戶名單。"
     >
@@ -474,7 +475,7 @@ function AdminSegments() {
                   <EligibilityBadge status="eligible" label={`${preview.eligible} 位合資格`} />
                 </div>
                 <div className="max-h-[420px] overflow-auto">
-                  <Table>
+                  <Table containerLabel="分群預覽客戶">
                     <TableHeader>
                       <TableRow>
                         <TableHead>客戶</TableHead>

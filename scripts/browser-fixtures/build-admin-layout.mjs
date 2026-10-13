@@ -16,8 +16,49 @@ await build({
   envPrefix: "OWNED_ADMIN_LAYOUT_",
   resolve: {
     alias: [
-      { find: /^@\/lib\/(neon\/(admin-properties|admin-property-bulk|whatsapp-link-selection)|admin\/media-upload|ai\/content-copilot-admin)$/, replacement: resolve(workspace,"scripts/browser-fixtures/property-maintenance/synthetic-api.ts") },
-      { find: /^@\/lib\/neon\/admin-cms$/, replacement: resolve(workspace,"scripts/browser-fixtures/leave-guards/synthetic-cms.ts") },
+      {
+        find: /^@\/lib\/neon\/(inbox-directory|whatsapp-readiness|staff-endpoints|staff-reference-admin|whatsapp-service-policy|whatsapp-test-notification)$/,
+        replacement: resolve(
+          workspace,
+          "scripts/browser-fixtures/property-maintenance/synthetic-staff.ts",
+        ),
+      },
+      {
+        find: /^@\/lib\/(admin\/operations\/operations-client|neon\/whatsapp-service-health)$/,
+        replacement: resolve(
+          workspace,
+          "scripts/browser-fixtures/property-maintenance/synthetic-operations.ts",
+        ),
+      },
+      {
+        find: /^@\/lib\/neon\/admin-property-sync$/,
+        replacement: resolve(workspace, "scripts/browser-fixtures/property-sync/synthetic-api.ts"),
+      },
+      {
+        find: /^@\/lib\/neon\/whatsapp-link-batches$/,
+        replacement: resolve(
+          workspace,
+          "scripts/browser-fixtures/link-bulk-owned/synthetic-batches.ts",
+        ),
+      },
+      {
+        find: /^@\/lib\/(neon\/(whatsapp-link-import|whatsapp-enquiries|whatsapp-link-management|whatsapp-coverage)|admin\/whatsapp-link-export-api)$/,
+        replacement: resolve(
+          workspace,
+          "scripts/browser-fixtures/link-bulk-owned/synthetic-api.ts",
+        ),
+      },
+      {
+        find: /^@\/lib\/(neon\/(admin-properties|admin-property-bulk|whatsapp-link-selection)|admin\/media-upload|ai\/content-copilot-admin)$/,
+        replacement: resolve(
+          workspace,
+          "scripts/browser-fixtures/property-maintenance/synthetic-api.ts",
+        ),
+      },
+      {
+        find: /^@\/lib\/neon\/admin-cms$/,
+        replacement: resolve(workspace, "scripts/browser-fixtures/leave-guards/synthetic-cms.ts"),
+      },
 
       {
         find: /^@\/lib\/analytics\/(sales-performance-client|reporting-client)$/,
