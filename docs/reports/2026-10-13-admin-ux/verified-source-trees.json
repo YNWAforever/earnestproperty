@@ -1,0 +1,27 @@
+{
+  "source_sha": "bd044145d324fcdf5c748df1425c621db7cdc6fb",
+  "captured_at": "2026-10-13T05:22:37.071677+00:00",
+  "git_objects": {
+    "src": "e25ec780993dbd4d24642d3d517b64d2c8a79b9f",
+    "e2e": "8c2b4c97eacbab0c6a1308d5d71c2f24a9396f79",
+    "scripts": "099e62893e8c3798b8e4ed8bffc2c341a83e0c90",
+    ".github/workflows": "ef28d3346ba7bf2c51e668a67330893a57a42836",
+    "package.json": "a0a886175d65b81b802dfd7fa5e246416c19f78d",
+    "package-lock.json": "b2215ce276e0245ad8b6c005e1fa89db8520ff9f",
+    "vite.config.ts": "f7d26198a77366ec5f14c481a8962894bd4d3a4c",
+    "playwright.config.ts": "09878d9cfabf51eead6c631335fe462b44dae4c5",
+    "playwright.admin-owned.config.ts": "35587c4f524638b68f7564a72e0c7ee067d8f3c0"
+  },
+  "validation_input_file_count": 1424,
+  "private_input_manifest_sha256": "a1a2d2905d6383fc59723a4ca6ea26088516816113920f5ba170f948aec6f55f",
+  "layout_archive": ".audit/admin-ux-20261013/runs/layout-797acc08-175e-4f5f-b8be-41d235c575bf/manifest.json",
+  "navigation_archive": ".audit/admin-ux-20261013/runs/navigation-9c117405-2d01-4e36-adc9-ff4e0c0e3270/manifest.json",
+  "layout_sha256": "89c3c769a9070dff4b104d2f049e76fd73ca9008659d0a07a156d2bc2f52f50b",
+  "navigation_sha256": "31e881c08d3b21f5f39bb90f91e557b57dda654d120dbf06f9e9e104d7283b5e",
+  "normal_geometry": {
+    "passed": 100,
+    "total": 100,
+    "scope": "synthetic Auth/API actual React routes; not normal Auth"
+  },
+  "screenshots": 50
+}

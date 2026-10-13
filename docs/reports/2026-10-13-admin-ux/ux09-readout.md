@@ -12,3 +12,7 @@ Local validation at bb13af29045bcbe35a001bfc66b41fde69e94393, whose application 
 CI already invokes both new named UI suites and the default remote config ignores them. Remote main rechecked as 433ab194f9e51c789d89d49216fe2983f2791616. Rollout/rollback steps are in rollout-rollback.md. A fresh whole-branch review, exact-head evidence capture and draft PR publication are the remaining T-UX09 steps; no merge/deploy is planned.
 
 Owned UI uses actual React routes with synthetic Auth/API. No normal Auth, real provider or human acceptance claim. Run logs are private under .audit/admin-ux-20261013/. Browser contexts and servers were disposed; no production writes. Historical F/RPK/UC statuses are unchanged.
+
+## Additive final-review correction
+
+The preceding statement that both new suites were ignored by the default remote config was incorrect at ce6e9a69. The fresh reviewer identified the missing layout ignore and two client state/read-error issues. All three were reproduced and fixed at bd044145d324fcdf5c748df1425c621db7cdc6fb. The exact clean-source rerun passed 387/387; 100/100 normal geometry instances are fixture evidence, not normal Auth. Full details, retained failures and review limitations are in review-fixes.md and final-verification.md.

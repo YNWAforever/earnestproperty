@@ -30,3 +30,5 @@ A stored collapse preference can remain after rollback and must not be used as a
 ## Preserved limitations
 
 The 50 cases are partial and the 100 normal-Auth role-route reads are blocked. Native mobile IME, human UAT, authenticated HKWTIA comparison and deployed app/worker/schema/flag parity are unverified. Agent access to CMS own drafts/resource editors is an existing backend policy distinct from admin/manager-only directory navigation; this branch records that difference without changing it. No real recipient send, paid model, merge or production deployment occurred.
+
+Final client fix: `bd044145d324fcdf5c748df1425c621db7cdc6fb` retires 12 route workspaces on verified staff changes and revalidates agent editor capability. Server membership resolution, permissions, DB schema, CAS and provider/receipt algorithms are unchanged. Agent editor opening adds a capability GET after loader preflight. Roll back client commits as a reviewed unit; retain server security fixes. Exact validation and immutable capture references are in final-verification.md.
