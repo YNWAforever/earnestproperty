@@ -2,6 +2,68 @@ import { test, expect, type Page } from "@playwright/test";
 import { createAdminLayoutFixture } from "./admin-layout-fixture";
 import { routeCases } from "../scripts/browser-fixtures/admin-layout/route-cases";
 const fixture = createAdminLayoutFixture("layout");
+type ScopeFixture = {
+  dailyWorkFixture: {
+    changeContext: (actor: string, role: string, binding?: string) => Promise<void>;
+  };
+  adminLayoutReads: {
+    mode: string;
+    hold: string[];
+    pendingReads: { name: string; release: () => void }[];
+  };
+};
+const changeScope = (page: Page, role: string, binding = "staff-a") =>
+  page.evaluate(
+    ({ role, binding }) =>
+      (window as unknown as ScopeFixture).dailyWorkFixture.changeContext("actor-a", role, binding),
+    { role, binding },
+  );
+
+test("SEC review command center drops private board on same-account downgrade", async ({
+  page,
+}) => {
+  await fixture.open(page, { path: "/admin/leads/command-center" });
+  await page.getByRole("button", { name: "合成跟進客戶", exact: true }).click();
+  await changeScope(page, "agent");
+  await expect(page.getByText("合成跟進客戶", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "重新 AI 分析", exact: true })).toHaveCount(0);
+});
+
+test("SEC review transaction draft belongs to its staff binding", async ({ page }) => {
+  await fixture.open(page, { path: "/admin/transactions/new" });
+  const price = page.locator('input[name="price"]');
+  await price.fill("8823456");
+  await changeScope(page, "admin");
+  await expect(price).toHaveValue("8823456");
+  await changeScope(page, "admin", "staff-b");
+  await expect(price).toHaveValue("");
+});
+
+for (const [path, state, retry, missing] of [
+  [
+    "/admin/transactions/70000000-0000-4000-8000-0000000000aa",
+    "error:transaction",
+    "重新載入成交",
+    "找不到此成交記錄",
+  ],
+  [
+    "/admin/agents/20000000-0000-4000-8000-000000000001",
+    "error:agent-profile",
+    "重新載入代理",
+    "找不到代理資料",
+  ],
+])
+  test(`READ review ${state} retries a failed record read separately`, async ({ page }) => {
+    await fixture.open(page, { path, state });
+    await expect(page.getByRole("alert").filter({ hasText: "未能載入" })).toBeVisible();
+    await expect(page.locator("[data-admin-body]")).not.toContainText(missing);
+    await page.evaluate(
+      () => ((window as unknown as ScopeFixture).adminLayoutReads.mode = "normal"),
+    );
+    await page.getByRole("button", { name: retry, exact: true }).click();
+    await expect(page.locator("[data-admin-body] form")).toBeVisible();
+    await expect(page.getByRole("button", { name: retry, exact: true })).toHaveCount(0);
+  });
 const viewports = [
   { width: 390, height: 844 },
   { width: 768, height: 900 },
@@ -226,7 +288,7 @@ for (const item of routeCases)
         ),
       )
       .toBeGreaterThan(0);
-    await expect(page.locator("[data-admin-body]")).toContainText(/失敗|未能|重試|錯誤|權限|讀取/);
+    await expect(page.locator("[data-admin-body]")).toContainText(/失敗|未能|重試|錯誤|讀取/);
     await expectGeometry(page, 390, item.variant);
   });
 for (const path of [
@@ -310,4 +372,99 @@ for (const role of ["agent", "viewer"])
           (window as unknown as { adminLayoutReads: { reads: string[] } }).adminLayoutReads.reads,
       ),
     ).not.toContain("fetchWhatsappServiceHealth");
+  });
+
+const reviewedPaths = routeCases.filter(
+  ({ route }) =>
+    /^\/admin\/(agents|estates|transactions|cms|segments)(\/|$)/.test(route) ||
+    route.endsWith("command-center"),
+);
+for (const item of reviewedPaths)
+  test(`SEC review viewer downgrade unmounts the private workspace ${item.path}`, async ({
+    page,
+  }) => {
+    await fixture.open(page, { path: item.path });
+    await changeScope(page, "viewer");
+    await expect(page.locator("[data-admin-body]").getByRole("status")).toHaveText(
+      "目前沒有此頁的存取權限，請從後台選單選擇可用工作。",
+    );
+    await expect(
+      page.locator("[data-admin-body] table, [data-admin-body] input, [data-admin-body] textarea"),
+    ).toHaveCount(0);
+    await expect(page.locator("[data-admin-body] form")).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+for (const [path, selector, value] of [
+  ["/admin/agents/new", "#name_zh", "另一員工不可見的草稿"],
+  ["/admin/agents/20000000-0000-4000-8000-000000000001", "#name_zh", "另一員工不可見的草稿"],
+  ["/admin/estates/new", "#name_zh", "另一員工不可見的草稿"],
+  ["/admin/estates/70000000-0000-4000-8000-000000000001", "#name_zh", "另一員工不可見的草稿"],
+  ["/admin/transactions/70000000-0000-4000-8000-0000000000aa", 'input[name="price"]', "8823456"],
+])
+  test(`SEC review unchanged identity keeps draft and rebind resets ${path}`, async ({ page }) => {
+    await fixture.open(page, { path });
+    const field = page.locator(selector);
+    await expect(field).toBeVisible();
+    const initial = await field.inputValue();
+    await field.fill(value);
+    await changeScope(page, "admin");
+    await expect(field).toHaveValue(value);
+    await changeScope(page, "admin", "staff-b");
+    await expect(field).toHaveValue(initial);
+  });
+
+for (const path of ["/admin/agents/new", "/admin/agents/20000000-0000-4000-8000-000000000001"])
+  test(`SEC review agent editor refreshes the server capability ${path}`, async ({ page }) => {
+    await fixture.open(page, { path });
+    await expect(page.getByLabel("Neon Auth 使用者 ID", { exact: true })).toBeVisible();
+    await changeScope(page, "manager");
+    await expect(page.getByLabel("中文名稱", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Neon Auth 使用者 ID", { exact: true })).toHaveCount(0);
+    await changeScope(page, "admin");
+    await expect(page.getByLabel("Neon Auth 使用者 ID", { exact: true })).toBeVisible();
+  });
+
+for (const [path, readName, privateText] of [
+  ["/admin/leads/command-center", "command-center", "合成跟進客戶"],
+  ["/admin/cms", "page", "合成屋苑"],
+  ["/admin/agents", "agent-profiles", "合成代理甲"],
+  ["/admin/estates", "cms", "合成屋苑"],
+  ["/admin/segments", "segments", "合成客戶分群"],
+  ["/admin/transactions", "transactions", "合成屋苑"],
+  ["/admin/agents/20000000-0000-4000-8000-000000000001", "agent-profile", "合成代理甲"],
+  ["/admin/estates/70000000-0000-4000-8000-000000000001", "fetchAdminCmsEditor", "合成屋苑"],
+  ["/admin/transactions/70000000-0000-4000-8000-0000000000aa", "transaction", "合成屋苑"],
+])
+  test(`SEC review delayed ${readName} cannot repopulate a rebound workspace`, async ({ page }) => {
+    await fixture.open(page, { path, state: `hold:${readName}` });
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as unknown as ScopeFixture).adminLayoutReads.pendingReads.length,
+        ),
+      )
+      .toBeGreaterThan(0);
+    await page.evaluate((readName) => {
+      const reads = (window as unknown as ScopeFixture).adminLayoutReads;
+      reads.hold = [];
+      reads.mode = `error:${readName}`;
+    }, readName);
+    await changeScope(page, "admin", "staff-b");
+    await expect(page.locator("[data-admin-body]")).toContainText(/失敗|未能/);
+    await page.evaluate(() =>
+      (window as unknown as ScopeFixture).adminLayoutReads.pendingReads
+        .slice()
+        .forEach((read) => read.release()),
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => (window as unknown as ScopeFixture).adminLayoutReads.pendingReads.length,
+        ),
+      )
+      .toBe(0);
+    await expect(page.locator("[data-admin-body]")).not.toContainText(privateText);
+    if (/\/[^/]+\/[\da-f-]{36}$/.test(path))
+      await expect(page.locator("[data-admin-body] form")).toHaveCount(0);
   });

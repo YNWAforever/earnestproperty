@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ExternalLink, Pencil, Plus } from "lucide-react";
@@ -17,10 +19,18 @@ export const Route = createFileRoute("/admin/agents")({
   head: () => ({
     meta: [{ title: "代理管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: AdminAgents,
+  component: () => (
+    <AdminStaffWorkspace
+      component={AdminAgents}
+      title="經紀檔案"
+      roles={["admin", "manager"]}
+      contentWidth="standard"
+    />
+  ),
 });
 
-function AdminAgents() {
+function AdminAgents({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const [profiles, setProfiles] = useState<AdminAgentProfileRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,15 +40,15 @@ function AdminAgents() {
     let cancelled = false;
     fetchAdminAgentProfiles()
       .then((data) => {
-        if (!cancelled) setProfiles(data as AdminAgentProfileRow[]);
+        if (!cancelled && isWorkspaceCurrent()) setProfiles(data as AdminAgentProfileRow[]);
       })
       .catch((reason) => {
-        if (!cancelled) setError(errorText(reason));
+        if (!cancelled && isWorkspaceCurrent()) setError(errorText(reason));
       });
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, isWorkspaceCurrent]);
 
   return (
     <AdminShell

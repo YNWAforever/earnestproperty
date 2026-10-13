@@ -171,7 +171,7 @@ const APPROVED_PLACEMENTS: Array<[file: string, text: string]> = [
   ["src/routes/admin.whatsapp-links.tsx", 'title="WhatsApp 來源連結"'],
   ["src/components/admin/whatsapp/WhatsappLinksTable.tsx", 'aria-label="編輯來源連結"'],
   ["src/routes/admin.blasts.tsx", '"推廣活動｜Earnest Admin"'],
-  ["src/routes/admin.blasts.tsx", '<AdminShell title="推廣活動"'],
+  ["src/routes/admin.blasts.tsx", 'title="推廣活動"'],
   [
     "src/routes/admin.blasts.tsx",
     'description="推廣活動：只用已審批範本、只發給已同意接收的客戶。"',

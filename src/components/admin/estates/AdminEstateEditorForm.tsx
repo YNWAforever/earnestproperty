@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -178,12 +179,15 @@ export function AdminEstateEditorForm({
   payload,
   editState,
   onSaved,
+  isWorkspaceCurrent,
 }: {
   resourceId?: string;
   editState?: CmsEditState<Record<string, CmsPayloadValue>> | null;
   payload?: Record<string, CmsPayloadValue> | null;
+  isWorkspaceCurrent?: () => boolean;
   onSaved: (resourceId: string) => void;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const [form, setForm] = useState<FormState>(() => createInitialForm(payload, resourceId));
   // The last saved/loaded state, so leaving with unsaved edits can be caught.
   // This is the largest form in the admin (~40 fields) and a sidebar click
@@ -239,11 +243,16 @@ export function AdminEstateEditorForm({
       return;
     }
     try {
+      if (!isCurrent()) return;
       const result = await fetchAdminCmsEditor({
         data: { resourceType: "estate", resourceId: id },
       });
+      if (!isCurrent()) return;
+
       setRevisions(result.revisions);
     } catch {
+      if (!isCurrent()) return;
+
       setRevisions(null);
     }
   }
@@ -254,10 +263,15 @@ export function AdminEstateEditorForm({
       return;
     }
     try {
+      if (!isCurrent()) return;
       const cms = await fetchAdminCms();
+      if (!isCurrent()) return;
+
       const scope = `estate:${slug}`;
       setFaqs((cms.faqs as AdminFaqCmsRow[]).filter((faq) => faq.scope === scope));
     } catch {
+      if (!isCurrent()) return;
+
       setFaqs(null);
     }
   }
@@ -288,6 +302,7 @@ export function AdminEstateEditorForm({
     }
     setSaving(true);
     try {
+      if (!isCurrent()) return;
       const result = await callCms(() =>
         saveAdminCmsDraft({
           data: {
@@ -300,17 +315,30 @@ export function AdminEstateEditorForm({
           },
         }),
       );
+      if (!isCurrent()) return;
+
       setReviewed(result.editState);
       set("id", result.resourceId);
       setPristine({ ...form, id: result.resourceId });
       onSaved(result.resourceId);
+
+      if (!isCurrent()) return;
       await refreshRevisions(result.resourceId);
+      if (!isCurrent()) return;
+
+      if (!isCurrent()) return;
       await refreshFaqs(form.slug);
+      if (!isCurrent()) return;
+
       toast.success("草稿已儲存");
     } catch (err) {
+      if (!isCurrent()) return;
+
       toast.error(adminErrorMessage(err, "未能儲存草稿"));
     } finally {
-      setSaving(false);
+      if (isCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -324,6 +352,8 @@ export function AdminEstateEditorForm({
     try {
       if (!reviewed?.draftRevisionId || isDirty) throw new Error("請先儲存草稿並核對內容後發布。");
       const draft = { resourceId: reviewed.resourceId, revisionId: reviewed.draftRevisionId };
+
+      if (!isCurrent()) return;
       await callCms(() =>
         publishAdminCmsRevision({
           data: {
@@ -335,38 +365,66 @@ export function AdminEstateEditorForm({
           },
         }),
       );
+      if (!isCurrent()) return;
+
       set("id", draft.resourceId);
+
+      if (!isCurrent()) return;
       const editor = await fetchAdminCmsEditor({
         data: { resourceType: "estate", resourceId: draft.resourceId },
       });
+      if (!isCurrent()) return;
+
       setReviewed(editor.editState);
       onSaved(draft.resourceId);
+
+      if (!isCurrent()) return;
       await refreshRevisions(draft.resourceId);
+      if (!isCurrent()) return;
+
       toast.success("屋苑已發布");
     } catch (err) {
+      if (!isCurrent()) return;
+
       toast.error(adminErrorMessage(err, "未能發布"));
     } finally {
-      setPublishing(false);
+      if (isCurrent()) {
+        setPublishing(false);
+      }
     }
   }
 
   async function handleRestore(revisionId: string) {
     setSaving(true);
     try {
+      if (!isCurrent()) return;
       const result = await callCms(() => restoreAdminCmsRevision({ data: { revisionId } }));
+      if (!isCurrent()) return;
+
+      if (!isCurrent()) return;
       const editor = await fetchAdminCmsEditor({
         data: { resourceType: "estate", resourceId: result.resourceId },
       });
+      if (!isCurrent()) return;
+
       setReviewed(editor.editState);
       const restored = createInitialForm(editor.payload, result.resourceId);
       setForm(restored);
       setPristine(restored);
+
+      if (!isCurrent()) return;
       await refreshRevisions(result.resourceId);
+      if (!isCurrent()) return;
+
       toast.success("已還原為新草稿，請檢查內容後發布");
     } catch (err) {
+      if (!isCurrent()) return;
+
       toast.error(adminErrorMessage(err, "還原失敗"));
     } finally {
-      setSaving(false);
+      if (isCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -374,16 +432,27 @@ export function AdminEstateEditorForm({
     if (!form.id) return;
     setSaving(true);
     try {
+      if (!isCurrent()) return;
       await callCms(() =>
         archiveAdminCmsResource({ data: { resourceType: "estate", resourceId: form.id! } }),
       );
+      if (!isCurrent()) return;
+
       setArchiving(false);
+
+      if (!isCurrent()) return;
       await refreshRevisions(form.id);
+      if (!isCurrent()) return;
+
       toast.success("屋苑已封存");
     } catch (err) {
+      if (!isCurrent()) return;
+
       toast.error(adminErrorMessage(err, "封存失敗"));
     } finally {
-      setSaving(false);
+      if (isCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -395,6 +464,7 @@ export function AdminEstateEditorForm({
       return;
     }
     try {
+      if (!isCurrent()) return;
       const result = await saveAdminFaq({
         data: {
           id: editingFaq.id,
@@ -406,28 +476,44 @@ export function AdminEstateEditorForm({
           expected_version: editingFaq.expected_version,
         },
       });
+      if (!isCurrent()) return;
+
       // A returned { error } is a refusal, not a save.
       if ("error" in result && typeof result.error === "string" && result.error) {
         throw new Error(result.error);
       }
       setEditingFaq(null);
+
+      if (!isCurrent()) return;
       await refreshFaqs(form.slug);
+      if (!isCurrent()) return;
+
       toast.success("FAQ 已儲存");
     } catch (err) {
+      if (!isCurrent()) return;
+
       toast.error(adminErrorMessage(err, "未能儲存 FAQ"));
     }
   }
 
   async function handleDeleteFaq(id: string) {
     try {
+      if (!isCurrent()) return;
       const result = await deleteAdminFaq({ data: { id } });
+      if (!isCurrent()) return;
+
+      if (!isCurrent()) return;
       await refreshFaqs(form.slug);
+      if (!isCurrent()) return;
+
       if (!result.ok) {
         toast.error("此 FAQ 已被封存或刪除，請重新載入頁面。");
         return;
       }
       toast.success("已封存");
     } catch (err) {
+      if (!isCurrent()) return;
+
       toast.error(adminErrorMessage(err, "未能封存，請重試。"));
     }
   }

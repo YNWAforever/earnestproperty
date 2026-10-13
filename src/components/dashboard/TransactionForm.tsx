@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { z } from "zod";
@@ -87,9 +88,17 @@ type Props = {
   /** Admin or manager. Others cannot verify or publish, or edit a verified deal. */
   canVerify: boolean;
   onSaved: (id: string) => void;
+  isWorkspaceCurrent?: () => boolean;
 };
 
-export function TransactionForm({ transaction, staffName, canVerify, onSaved }: Props) {
+export function TransactionForm({
+  transaction,
+  staffName,
+  canVerify,
+  onSaved,
+  isWorkspaceCurrent,
+}: Props) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   // B-04: an agent cannot edit a deal a manager verified or published.
   const lockedForAgent =
     !canVerify &&
@@ -192,10 +201,14 @@ export function TransactionForm({ transaction, staffName, canVerify, onSaved }: 
     };
 
     setSubmitting(true);
+
+    if (!isCurrent()) return;
     const result = await saveAdminTransaction({ data: payload }).catch((err) => ({
       error: adminErrorMessage(err, err instanceof Error ? err.message : String(err)),
       id: null,
     }));
+    if (!isCurrent()) return;
+
     setSubmitting(false);
 
     if ("error" in result && result.error) {

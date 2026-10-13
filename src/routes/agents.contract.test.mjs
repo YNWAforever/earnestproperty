@@ -198,21 +198,26 @@ test("agent CMS source and generated tree register all three admin paths", () =>
   assert.doesNotMatch(list, /deleteAdminAgentProfile|刪除代理/i);
 });
 
-test("new and edit agent route loaders pass only the server-derived identity capability", () => {
+test("new and edit agents revalidate server-derived capability within the current staff workspace", () => {
   for (const file of ["src/routes/admin.agents_.new.tsx", "src/routes/admin.agents_.$id.tsx"]) {
     const source = readExisting(file);
     assert.match(source, /fetchAdminAgentEditorContext/);
     assert.match(source, /loader:\s*(?:async\s*)?\(\)\s*=>\s*fetchAdminAgentEditorContext\(\)/);
-    assert.match(source, /Route\.useLoaderData\(\)/);
+    assert.match(source, /useAgentEditorContext\(identity\)/);
+    assert.doesNotMatch(source, /Route\.useLoaderData\(\)/);
     assert.match(source, /canManageIdentity=\{editorContext\.canManageIdentity\}/);
     assert.equal(
       (source.match(/fetchAdminAgentEditorContext\(\)/g) ?? []).length,
       1,
-      `${file} should obtain editor context only through its route loader`,
+      `${file} should retain exactly one server capability preflight in its route loader`,
     );
     assert.doesNotMatch(source, /roles\.includes\(["']admin["']\)/);
   }
 
+  const scopedContext = read("src/components/admin/use-agent-editor-context.ts");
+  assert.match(scopedContext, /fetchAdminAgentEditorContext\(\)/);
+  assert.match(scopedContext, /if \(cancelled \|\| !isCurrent\(\)\) return/);
+  assert.doesNotMatch(scopedContext, /roles\.includes|canManageIdentity:/);
   const adminData = read("src/lib/neon/admin-data.ts");
   assert.match(
     adminData,

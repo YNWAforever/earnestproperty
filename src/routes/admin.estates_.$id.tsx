@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
@@ -14,10 +16,18 @@ export const Route = createFileRoute("/admin/estates_/$id")({
   head: () => ({
     meta: [{ title: "編輯屋苑｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: EditAdminEstate,
+  component: () => (
+    <AdminStaffWorkspace
+      component={EditAdminEstate}
+      title="編輯屋苑"
+      roles={["admin", "manager", "agent"]}
+      contentWidth="form"
+    />
+  ),
 });
 
-function EditAdminEstate() {
+function EditAdminEstate({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { id } = Route.useParams();
   const { user, loading } = useNeonAuth();
   const [editor, setEditor] = useState<CmsEditorResult | null>(null);
@@ -35,24 +45,24 @@ function EditAdminEstate() {
     setFetching(true);
     fetchAdminCmsEditor({ data: { resourceType: "estate", resourceId: id } })
       .then((result) => {
-        if (!cancelled) {
+        if (!cancelled && isWorkspaceCurrent()) {
           setEditor(result);
           setReadError(false);
         }
       })
       .catch(() => {
-        if (!cancelled) {
+        if (!cancelled && isWorkspaceCurrent()) {
           setReadError(true);
           setEditor(null);
         }
       })
       .finally(() => {
-        if (!cancelled) setFetching(false);
+        if (!cancelled && isWorkspaceCurrent()) setFetching(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [id, loading, user, readAttempt]);
+  }, [id, loading, user, readAttempt, isWorkspaceCurrent]);
 
   return (
     <AdminShell
@@ -99,6 +109,7 @@ function EditAdminEstate() {
         ) : null}
         {!loading && !fetching && editor?.editState ? (
           <AdminEstateEditorForm
+            isWorkspaceCurrent={isWorkspaceCurrent}
             key={id}
             resourceId={id}
             payload={editor.payload}

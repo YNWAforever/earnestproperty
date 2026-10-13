@@ -1,9 +1,10 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { toast } from "sonner";
 
-import { AdminShell } from "@/components/admin/AdminShell";
+import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { TransactionForm } from "@/components/dashboard/TransactionForm";
 import { TransactionAttributionEditor } from "@/components/admin/TransactionAttributionEditor";
 import { useStaffSession } from "@/components/admin/staff-session";
@@ -17,10 +18,18 @@ export const Route = createFileRoute("/admin/transactions_/$id")({
   head: () => ({
     meta: [{ title: "編輯成交｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: EditAdminTransactionPage,
+  component: () => (
+    <AdminStaffWorkspace
+      component={EditAdminTransactionPage}
+      title="編輯成交"
+      roles={["admin", "manager", "agent"]}
+      contentWidth="form"
+    />
+  ),
 });
 
-function EditAdminTransactionPage() {
+function EditAdminTransactionPage({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { id } = Route.useParams();
   const { user, loading } = useNeonAuth();
   const { session: staffSession } = useStaffSession(user?.id ?? null);
@@ -29,10 +38,12 @@ function EditAdminTransactionPage() {
     (staffSession.roles.includes("admin") || staffSession.roles.includes("manager"));
   const [transaction, setTransaction] = useState<AdminTransactionRow | null>(null);
   const [fetching, setFetching] = useState(true);
+  const [readError, setReadError] = useState(false);
+  const [readAttempt, setReadAttempt] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
-    setTransaction(null);
+    setTransaction((current) => (current?.id === id ? current : null));
 
     if (loading)
       return () => {
@@ -48,23 +59,23 @@ function EditAdminTransactionPage() {
     setFetching(true);
     fetchAdminTransaction({ data: { id } })
       .then((data) => {
-        if (cancelled) return;
+        if (cancelled || !isWorkspaceCurrent()) return;
         setTransaction(data as AdminTransactionRow | null);
+        setReadError(false);
       })
-      .catch((err) => {
-        if (cancelled) return;
-        toast.error(err instanceof Error ? err.message : String(err));
-        setTransaction(null);
+      .catch(() => {
+        if (cancelled || !isWorkspaceCurrent()) return;
+        setReadError(true);
       })
       .finally(() => {
-        if (cancelled) return;
+        if (cancelled || !isWorkspaceCurrent()) return;
         setFetching(false);
       });
 
     return () => {
       cancelled = true;
     };
-  }, [id, loading, user]);
+  }, [id, loading, user, readAttempt, isWorkspaceCurrent]);
 
   return (
     <AdminShell
@@ -91,8 +102,21 @@ function EditAdminTransactionPage() {
             返回
           </Link>
         </Button>
-        {loading || fetching ? <Skeleton className="h-96 w-full" /> : null}
-        {!loading && !fetching && !transaction ? (
+        {(loading || fetching) && !transaction ? <Skeleton className="h-96 w-full" /> : null}
+        {readError ? (
+          <div>
+            <AdminError message="未能載入成交資料，並非確認資料不存在。請重試或核對存取權限。" />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={fetching}
+              onClick={() => setReadAttempt((value) => value + 1)}
+            >
+              重新載入成交
+            </Button>
+          </div>
+        ) : null}
+        {!loading && !fetching && !readError && !transaction ? (
           <div className="rounded-lg border bg-background p-8 text-center">
             <p className="text-sm text-muted-foreground">找不到此成交記錄或無權限編輯。</p>
             <Button asChild variant="link" className="mt-3">
@@ -100,17 +124,23 @@ function EditAdminTransactionPage() {
             </Button>
           </div>
         ) : null}
-        {!loading && !fetching && transaction ? (
+        {!loading && transaction ? (
           <>
             <TransactionForm
+              isWorkspaceCurrent={isWorkspaceCurrent}
               transaction={transaction}
               canVerify={canSeeFinance}
               onSaved={() => {
                 void fetchAdminTransaction({ data: { id } })
-                  .then((data) => setTransaction(data as AdminTransactionRow | null))
-                  .catch((error) =>
-                    toast.error(error instanceof Error ? error.message : String(error)),
-                  );
+                  .then((data) => {
+                    if (isWorkspaceCurrent()) {
+                      setTransaction(data as AdminTransactionRow | null);
+                      setReadError(false);
+                    }
+                  })
+                  .catch(() => {
+                    if (isWorkspaceCurrent()) setReadError(true);
+                  });
               }}
             />
             {canSeeFinance ? (

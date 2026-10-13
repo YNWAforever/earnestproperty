@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 
@@ -11,10 +13,18 @@ export const Route = createFileRoute("/admin/transactions_/new")({
   head: () => ({
     meta: [{ title: "新增成交｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: NewAdminTransactionPage,
+  component: () => (
+    <AdminStaffWorkspace
+      component={NewAdminTransactionPage}
+      title="新增成交"
+      roles={["admin", "manager", "agent"]}
+      contentWidth="form"
+    />
+  ),
 });
 
-function NewAdminTransactionPage() {
+function NewAdminTransactionPage({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const navigate = useNavigate();
   const { user } = useNeonAuth();
   const { session: staffSession } = useStaffSession(user?.id ?? null);
@@ -48,6 +58,7 @@ function NewAdminTransactionPage() {
           </Link>
         </Button>
         <TransactionForm
+          isWorkspaceCurrent={isWorkspaceCurrent}
           staffName={user?.name ?? undefined}
           canVerify={canVerify}
           onSaved={(id) => navigate({ to: "/admin/transactions/$id", params: { id } })}

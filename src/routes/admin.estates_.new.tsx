@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 
@@ -9,10 +11,18 @@ export const Route = createFileRoute("/admin/estates_/new")({
   head: () => ({
     meta: [{ title: "新增屋苑｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: NewAdminEstate,
+  component: () => (
+    <AdminStaffWorkspace
+      component={NewAdminEstate}
+      title="新增屋苑"
+      roles={["admin", "manager", "agent"]}
+      contentWidth="form"
+    />
+  ),
 });
 
-function NewAdminEstate() {
+function NewAdminEstate({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const navigate = useNavigate();
 
   return (
@@ -37,6 +47,7 @@ function NewAdminEstate() {
           </Link>
         </Button>
         <AdminEstateEditorForm
+          isWorkspaceCurrent={isWorkspaceCurrent}
           onSaved={(id) => navigate({ to: "/admin/estates/$id", params: { id } })}
         />
       </div>

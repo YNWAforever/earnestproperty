@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
@@ -31,10 +33,18 @@ export const Route = createFileRoute("/admin/estates")({
   head: () => ({
     meta: [{ title: "屋苑管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: AdminEstates,
+  component: () => (
+    <AdminStaffWorkspace
+      component={AdminEstates}
+      title="屋苑管理"
+      roles={["admin", "manager"]}
+      contentWidth="standard"
+    />
+  ),
 });
 
-function AdminEstates() {
+function AdminEstates({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const [estates, setEstates] = useState<AdminEstateCmsRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,15 +55,16 @@ function AdminEstates() {
     let cancelled = false;
     fetchAdminCms()
       .then((data) => {
-        if (!cancelled) setEstates((data as AdminCmsData).estates);
+        if (!cancelled && isWorkspaceCurrent()) setEstates((data as AdminCmsData).estates);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "未能載入屋苑資料");
+        if (!cancelled && isWorkspaceCurrent())
+          setError(err instanceof Error ? err.message : "未能載入屋苑資料");
       });
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, isWorkspaceCurrent]);
 
   const visibleEstates = useMemo(() => {
     if (!estates) return null;

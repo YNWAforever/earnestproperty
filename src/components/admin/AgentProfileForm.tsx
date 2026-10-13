@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useMemo, useRef, useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -52,6 +53,7 @@ export function AgentProfileForm({
   canManageIdentity,
   branches = [],
   onSaved,
+  isWorkspaceCurrent,
 }: {
   profile?: AgentProfile;
   canManageIdentity: boolean;
@@ -59,8 +61,10 @@ export function AgentProfileForm({
    * (fetchAdminBranches()) -- defaults to [] so the dropdown just offers
    * "未連結" if the caller hasn't fetched them (e.g. the fetch failed). */
   branches?: AdminBranchOption[];
+  isWorkspaceCurrent?: () => boolean;
   onSaved: (id: string) => void;
 }) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const formRef = useRef<HTMLFormElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(() => createInitialForm(profile));
@@ -132,7 +136,10 @@ export function AgentProfileForm({
 
     setSubmitting(true);
     try {
+      if (!isCurrent()) return;
       const result = await saveAdminAgentProfile({ data: payload });
+      if (!isCurrent()) return;
+
       if (!result.id || result.error) throw new Error(result.error || "未能儲存代理資料");
       toast.success(profile?.id ? "代理資料已更新" : "代理資料已建立");
       // Before onSaved(): that navigates, and the guard would otherwise fire on
@@ -140,9 +147,13 @@ export function AgentProfileForm({
       setSaved(true);
       onSaved(result.id);
     } catch (error) {
+      if (!isCurrent()) return;
+
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
-      setSubmitting(false);
+      if (isCurrent()) {
+        setSubmitting(false);
+      }
     }
   }
 

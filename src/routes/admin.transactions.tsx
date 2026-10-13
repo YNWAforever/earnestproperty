@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Pencil, Plus } from "lucide-react";
@@ -67,10 +69,18 @@ export const Route = createFileRoute("/admin/transactions")({
   head: () => ({
     meta: [{ title: "成交管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: AdminTransactions,
+  component: () => (
+    <AdminStaffWorkspace
+      component={AdminTransactions}
+      title="成交管理"
+      roles={["admin", "manager", "agent"]}
+      contentWidth="standard"
+    />
+  ),
 });
 
-function AdminTransactions() {
+function AdminTransactions({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const { session: staffSession } = useStaffSession(user?.id ?? null);
   const canSeeFinance =
@@ -84,7 +94,7 @@ function AdminTransactions() {
   const requestIdRef = useRef(0);
 
   const refreshTransactions = useCallback(async () => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setLoadingRows(true);
@@ -92,23 +102,27 @@ function AdminTransactions() {
       const data = await fetchAdminTransactionsFiltered({
         data: filters as AdminTransactionFiltersInput,
       });
-      if (requestId !== requestIdRef.current) return;
+      if (!isWorkspaceCurrent() || requestId !== requestIdRef.current) return;
       setRows(data as AdminTransactionRow[]);
       setError(null);
     } catch (err) {
-      if (requestId !== requestIdRef.current) return;
+      if (!isWorkspaceCurrent() || requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      if (requestId === requestIdRef.current) setLoadingRows(false);
+      if (isWorkspaceCurrent() && requestId === requestIdRef.current) setLoadingRows(false);
     }
-  }, [filters, user]);
+  }, [filters, user, isWorkspaceCurrent]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
     fetchAdminEstateOptions()
-      .then((data) => setEstates(data as Estate[]))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }, [user]);
+      .then((data) => {
+        if (isWorkspaceCurrent()) setEstates(data as Estate[]);
+      })
+      .catch((err) => {
+        if (isWorkspaceCurrent()) setError(err instanceof Error ? err.message : String(err));
+      });
+  }, [user, isWorkspaceCurrent]);
 
   useEffect(() => {
     refreshTransactions();

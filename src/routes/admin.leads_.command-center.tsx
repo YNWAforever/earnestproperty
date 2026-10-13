@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { adminErrorMessage } from "@/components/admin/admin-error-text";
 import { WhatsappEnquiryQueue } from "@/components/admin/WhatsappEnquiryContext";
 import {
@@ -61,7 +63,14 @@ export const Route = createFileRoute("/admin/leads_/command-center")({
   head: () => ({
     meta: [{ title: "跟進工作台｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: CommandCenter,
+  component: () => (
+    <AdminStaffWorkspace
+      component={CommandCenter}
+      title="跟進工作台"
+      roles={["admin", "manager"]}
+      contentWidth="standard"
+    />
+  ),
 });
 
 const REASON_LABELS: Record<string, string> = {
@@ -124,7 +133,8 @@ const WHATSAPP_BLOCKED_LABELS: Record<string, string> = {
   NO_CONVERSATION: "未連接 WhatsApp",
 };
 
-function CommandCenter() {
+function CommandCenter({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -158,16 +168,19 @@ function CommandCenter() {
 
   const refresh = useCallback(
     async (options: { background?: boolean } = {}) => {
-      if (!user) return;
+      if (!user || !isWorkspaceCurrent()) return;
       if (options.background) {
         // A poll never takes the request slot or the loading flag (see canApplyBackgroundRead),
         // and a failed or timed-out one keeps the board as it is, without a banner.
         const started = { requestId: requestIdRef.current, cursor: null };
         try {
+          if (!isWorkspaceCurrent()) return;
           const result = (await withTimeout(
             fetchCommandCenterInBackground(),
             BACKGROUND_READ_TIMEOUT_MS,
           )) as CommandCenterData;
+          if (!isWorkspaceCurrent()) return;
+
           const current = {
             requestId: requestIdRef.current,
             cursor: null,
@@ -177,6 +190,8 @@ function CommandCenter() {
           setData(result);
           setError(null);
         } catch (err) {
+          if (!isWorkspaceCurrent()) return;
+
           pollGate.backgroundFailed(err);
           // The next tick, or 重新整理, reads again.
         }
@@ -186,19 +201,26 @@ function CommandCenter() {
       requestIdRef.current = requestId;
       setLoading(true);
       try {
+        if (!isWorkspaceCurrent()) return;
         const result = (await fetchCommandCenter()) as CommandCenterData;
+        if (!isWorkspaceCurrent()) return;
+
         if (requestId !== requestIdRef.current) return;
         setData(result);
         setError(null);
         pollGate.foregroundSucceeded();
       } catch (err) {
+        if (!isWorkspaceCurrent()) return;
+
         if (requestId !== requestIdRef.current) return;
         setError(errorText(err));
       } finally {
-        if (requestId === requestIdRef.current) setLoading(false);
+        if (isWorkspaceCurrent()) {
+          if (requestId === requestIdRef.current) setLoading(false);
+        }
       }
     },
-    [user, pollGate],
+    [user, pollGate, isWorkspaceCurrent],
   );
 
   useEffect(() => {
@@ -215,13 +237,23 @@ function CommandCenter() {
   async function runAnalysis(row: CommandCenterRow) {
     setBusy(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       await analyzeAdminLeadAiProfile({ data: { leadId: row.lead_id } });
+      if (!isWorkspaceCurrent()) return;
+
       toast.success("已重新分析");
+
+      if (!isWorkspaceCurrent()) return;
       await refresh();
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setBusy(false);
+      if (isWorkspaceCurrent()) {
+        setBusy(false);
+      }
     }
   }
 

@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { adminErrorMessage } from "@/components/admin/admin-error-text";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -68,10 +70,18 @@ export const Route = createFileRoute("/admin/segments")({
   head: () => ({
     meta: [{ title: "Segments｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: AdminSegments,
+  component: () => (
+    <AdminStaffWorkspace
+      component={AdminSegments}
+      title="客戶分群"
+      roles={["admin", "manager"]}
+      contentWidth="standard"
+    />
+  ),
 });
 
-function AdminSegments() {
+function AdminSegments({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const [segments, setSegments] = useState<AdminCrmSegmentRow[] | null>(null);
   const [selectedSegmentId, setSelectedSegmentId] = useState("");
@@ -99,10 +109,13 @@ function AdminSegments() {
 
   const refreshSegments = useCallback(
     async (preferredSegmentId?: string) => {
-      if (!user) return;
+      if (!user || !isWorkspaceCurrent()) return;
       setLoading(true);
       try {
+        if (!isWorkspaceCurrent()) return;
         const rows = (await fetchAdminCrmSegments()) as AdminCrmSegmentRow[];
+        if (!isWorkspaceCurrent()) return;
+
         const preferredSegment = preferredSegmentId
           ? rows.find((segment) => segment.id === preferredSegmentId)
           : null;
@@ -120,12 +133,16 @@ function AdminSegments() {
         }
         setError(null);
       } catch (err) {
+        if (!isWorkspaceCurrent()) return;
+
         setError(errorText(err));
       } finally {
-        setLoading(false);
+        if (isWorkspaceCurrent()) {
+          setLoading(false);
+        }
       }
     },
-    [clearPreviewState, user],
+    [clearPreviewState, user, isWorkspaceCurrent],
   );
 
   useEffect(() => {
@@ -218,9 +235,12 @@ function AdminSegments() {
     setPreviewState(null);
     setPreviewLoading(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       const result = (await previewAdminCrmSegment({
         data: { prompt: previewPrompt },
       })) as AdminCrmSegmentPreview;
+      if (!isWorkspaceCurrent()) return;
+
       if (!isCurrentPreview(requestId, previewPrompt, previewSegmentId)) return;
       setPreviewState({
         result,
@@ -229,9 +249,13 @@ function AdminSegments() {
       });
       toast.success("Segment preview ready");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       if (requestId === previewRequestRef.current) toast.error(errorText(err));
     } finally {
-      if (requestId === previewRequestRef.current) setPreviewLoading(false);
+      if (isWorkspaceCurrent()) {
+        if (requestId === previewRequestRef.current) setPreviewLoading(false);
+      }
     }
   }
 
@@ -259,6 +283,7 @@ function AdminSegments() {
 
     setSaving(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       const id = await saveAdminCrmSegment({
         data: {
           id: selectedSegmentId || undefined,
@@ -269,13 +294,23 @@ function AdminSegments() {
           status,
         },
       });
+      if (!isWorkspaceCurrent()) return;
+
       setSelectedSegmentId(String(id));
+
+      if (!isWorkspaceCurrent()) return;
       await refreshSegments(String(id));
+      if (!isWorkspaceCurrent()) return;
+
       toast.success("Segment 已儲存");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -287,10 +322,16 @@ function AdminSegments() {
 
     setMaterializing(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       const result = (await materializeAdminCrmSegment({
         data: { segmentId: selectedSegmentId },
       })) as SegmentMutationResult;
+      if (!isWorkspaceCurrent()) return;
+
+      if (!isWorkspaceCurrent()) return;
       await refreshSegments();
+      if (!isWorkspaceCurrent()) return;
+
       setMaterializeOpen(false);
       // The old copy counted every contact enrolled, including those who cannot
       // be messaged, so a segment reported far more reach than it had.
@@ -299,9 +340,13 @@ function AdminSegments() {
           (typeof result.eligible === "number" ? `，其中 ${result.eligible} 位合資格接收訊息` : ""),
       );
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setMaterializing(false);
+      if (isWorkspaceCurrent()) {
+        setMaterializing(false);
+      }
     }
   }
 
@@ -323,22 +368,33 @@ function AdminSegments() {
     creatingAudienceSegmentIdRef.current = segmentId;
     setCreatingAudienceSegmentId(segmentId);
     try {
+      if (!isWorkspaceCurrent()) return;
       const result = (await createAdminAudienceFromSegment({ data: { segmentId } })) as {
         id?: string;
         error?: string;
       };
+      if (!isWorkspaceCurrent()) return;
+
       if (result.error || !result.id) throw new Error(result.error || "建立收件群組失敗");
+
+      if (!isWorkspaceCurrent()) return;
       await refreshSegments(selectedSegmentId || undefined);
+      if (!isWorkspaceCurrent()) return;
+
       toast.success(
         hadAudience
           ? `已更新推廣活動的收件群組「${segmentName}」。`
           : `已在推廣活動建立收件群組「${segmentName}」，可在 WhatsApp 群發選用。`,
       );
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      creatingAudienceSegmentIdRef.current = null;
-      setCreatingAudienceSegmentId(null);
+      if (isWorkspaceCurrent()) {
+        creatingAudienceSegmentIdRef.current = null;
+        setCreatingAudienceSegmentId(null);
+      }
     }
   }
 

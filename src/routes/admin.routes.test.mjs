@@ -666,8 +666,7 @@ test("跟進工作台 flags a remembered lead that left the board and blocks its
 });
 
 test("跟進工作台 polls only for the roles its read accepts, and stops after a refusal", () => {
-  // No browser fixture renders this route; createBackgroundReadGate is unit-tested in
-  // background-refresh.test.ts, and this pins the board's poll to it.
+  // The real route has owned browser coverage; retain this wiring check for the poll gate.
   const commandCenter = read("src/routes/admin.leads_.command-center.tsx");
   assert.match(commandCenter, /createBackgroundReadGate\(BACKGROUND_READ_ROLES\.commandCenter\)/);
   // Roles come from the shared staff session the shell already loaded: no request of its own.
@@ -676,7 +675,10 @@ test("跟進工作台 polls only for the roles its read accepts, and stops after
     commandCenter,
     /useVisibleInterval\(\(\) => \{\s*if \(!pollGate\.allows\(staffRoles\)[^)]*\) return undefined;[\s\S]*?background: true[\s\S]*?MIN_VISIBLE_INTERVAL_MS\)/,
   );
-  assert.match(commandCenter, /catch \(err\) \{\s*pollGate\.backgroundFailed\(err\);/);
+  assert.match(
+    commandCenter,
+    /catch \(err\) \{\s*if \(!isWorkspaceCurrent\(\)\) return;\s*pollGate\.backgroundFailed\(err\);/,
+  );
   assert.match(
     commandCenter,
     /setData\(result\);\s*setError\(null\);\s*pollGate\.foregroundSucceeded\(\);/,
