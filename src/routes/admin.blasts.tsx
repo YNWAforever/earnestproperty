@@ -1310,14 +1310,8 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                 「未有 Campaign」 empty state off `campaignRows.length` alone
                 painted it under the loading skeleton on every visit. */}
             {!rows ? null : campaignRows.length ? (
-              <div
-                role="region"
-                aria-label="推廣活動清單"
-                tabIndex={0}
-                data-admin-table-region
-                className="min-w-0 overflow-x-auto"
-              >
-                <Table>
+              <div className="min-w-0">
+                <Table containerLabel="推廣活動清單">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Campaign</TableHead>

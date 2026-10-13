@@ -1213,14 +1213,8 @@ function AdminLeadsWorkspace({ identity }: { identity: string }) {
           {filteredRows.length > 0 ? (
             <Card>
               <CardContent className="p-0">
-                <div
-                  data-admin-table-region
-                  role="region"
-                  aria-label="客戶查詢列表"
-                  tabIndex={0}
-                  className="min-w-0 overflow-x-auto"
-                >
-                  <Table className="min-w-[920px]">
+                <div className="min-w-0">
+                  <Table containerLabel="客戶查詢列表" className="min-w-[920px]">
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-10">

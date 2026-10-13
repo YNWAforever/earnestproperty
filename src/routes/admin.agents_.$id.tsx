@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 import { AgentProfileForm } from "@/components/admin/AgentProfileForm";
+import { AgentEditorReadError } from "@/components/admin/AgentEditorReadError";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,6 +22,7 @@ export const Route = createFileRoute("/admin/agents_/$id")({
     meta: [{ title: "編輯代理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
   component: EditAdminAgent,
+  errorComponent: ({ reset }) => <AgentEditorReadError title="編輯代理" reset={reset} />,
 });
 
 function EditAdminAgent() {

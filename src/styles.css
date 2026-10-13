@@ -294,6 +294,10 @@
 .admin-page {
   min-width: 0;
   padding: 24px var(--admin-gutter);
+  padding-top: max(24px, env(safe-area-inset-top));
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+  padding-left: max(var(--admin-gutter), env(safe-area-inset-left));
+  padding-right: max(var(--admin-gutter), env(safe-area-inset-right));
 }
 .admin-content {
   width: 100%;

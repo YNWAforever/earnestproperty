@@ -13,3 +13,7 @@ Retained failures: initial operations source assertions referred to the old Shel
 route-guard-inventory.csv covers all 25 templates. Existing CMS revision-engine reads/own-draft saves allow agent independently of admin/manager-only directory navigation; publishing remains admin/manager. No backend role changes were made. Full normal Auth and hosted acceptance remain pending.
 
 Owned UI uses actual React routes with synthetic Auth/API. No normal Auth, real provider or human acceptance claim. Run logs are private under .audit/admin-ux-20261013/. Browser contexts and servers were disposed; no production writes. Historical F/RPK/UC statuses are unchanged.
+
+## T-UX07 evidence correction
+
+The later named-scroll check exposed a campaign fixture actor mismatch: four `/admin/blasts` viewport checks in this task measured its error state, not normal content. The 675 test results are retained, but this run proves only 96/100 normal instances. T-UX07 aligns the synthetic actor and requires successful read outcomes plus content readiness before re-running the complete denominator. Three other routes reproduced the nested scroll-focus issue; the campaign case was a fixture failure, not a fourth observed product failure.

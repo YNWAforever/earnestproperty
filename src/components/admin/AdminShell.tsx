@@ -398,7 +398,10 @@ export function AdminShell({
                       <Menu className="h-5 w-5" aria-hidden="true" />
                     </Button>
                   </SheetTrigger>
-                  <SheetContent side="left" className="w-80 max-w-[calc(100vw-2rem)]">
+                  <SheetContent
+                    side="left"
+                    className="w-80 max-w-[calc(100vw-2rem)] pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+                  >
                     <SheetTitle className="sr-only">後台選單</SheetTitle>
                     <div className="flex h-full flex-col">
                       <div className="mt-8">

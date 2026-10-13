@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { toast } from "sonner";
 
 import { AdminEstateEditorForm } from "@/components/admin/estates/AdminEstateEditorForm";
-import { AdminShell } from "@/components/admin/AdminShell";
+import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
@@ -23,6 +22,8 @@ function EditAdminEstate() {
   const { user, loading } = useNeonAuth();
   const [editor, setEditor] = useState<CmsEditorResult | null>(null);
   const [fetching, setFetching] = useState(true);
+  const [readError, setReadError] = useState(false);
+  const [readAttempt, setReadAttempt] = useState(0);
 
   useEffect(() => {
     if (loading) return;
@@ -34,11 +35,14 @@ function EditAdminEstate() {
     setFetching(true);
     fetchAdminCmsEditor({ data: { resourceType: "estate", resourceId: id } })
       .then((result) => {
-        if (!cancelled) setEditor(result);
-      })
-      .catch((err) => {
         if (!cancelled) {
-          toast.error(err instanceof Error ? err.message : "未能載入屋苑資料");
+          setEditor(result);
+          setReadError(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setReadError(true);
           setEditor(null);
         }
       })
@@ -48,7 +52,7 @@ function EditAdminEstate() {
     return () => {
       cancelled = true;
     };
-  }, [id, loading, user]);
+  }, [id, loading, user, readAttempt]);
 
   return (
     <AdminShell
@@ -72,7 +76,20 @@ function EditAdminEstate() {
           </Link>
         </Button>
         {loading || fetching ? <Skeleton className="h-96 w-full" /> : null}
-        {!loading && !fetching && !editor?.editState ? (
+        {readError ? (
+          <div className="space-y-2">
+            <AdminError message="未能載入屋苑資料，並非確認資料不存在。請重試或核對存取權限。" />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={fetching}
+              onClick={() => setReadAttempt((value) => value + 1)}
+            >
+              重新載入屋苑
+            </Button>
+          </div>
+        ) : null}
+        {!loading && !fetching && !readError && !editor?.editState ? (
           <div className="border-y py-10 text-center">
             <p className="text-sm text-muted-foreground">找不到此屋苑資料。</p>
             <Button asChild variant="link" className="mt-3">

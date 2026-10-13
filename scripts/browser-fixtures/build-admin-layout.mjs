@@ -8,7 +8,6 @@ const workspace = resolve(import.meta.dirname, "../..");
 assert.equal(resolve(process.cwd()), workspace);
 const root = resolve(workspace, "scripts/browser-fixtures/admin-layout");
 const daily = resolve(workspace, "scripts/browser-fixtures/daily-work");
-const shared = resolve(workspace, "scripts/browser-fixtures/no-link");
 await build({
   configFile: false,
   root,
@@ -25,14 +24,11 @@ await build({
       },
       {
         find: /^@\/lib\/(admin\/operations\/operations-client|neon\/whatsapp-service-health)$/,
-        replacement: resolve(
-          workspace,
-          "scripts/browser-fixtures/property-maintenance/synthetic-operations.ts",
-        ),
+        replacement: resolve(root, "operations-reads.ts"),
       },
       {
         find: /^@\/lib\/neon\/admin-property-sync$/,
-        replacement: resolve(workspace, "scripts/browser-fixtures/property-sync/synthetic-api.ts"),
+        replacement: resolve(root, "sync-reads.ts"),
       },
       {
         find: /^@\/lib\/neon\/whatsapp-link-batches$/,
@@ -50,19 +46,16 @@ await build({
       },
       {
         find: /^@\/lib\/(neon\/(admin-properties|admin-property-bulk|whatsapp-link-selection)|admin\/media-upload|ai\/content-copilot-admin)$/,
-        replacement: resolve(
-          workspace,
-          "scripts/browser-fixtures/property-maintenance/synthetic-api.ts",
-        ),
+        replacement: resolve(root, "property-reads.ts"),
       },
       {
         find: /^@\/lib\/neon\/admin-cms$/,
-        replacement: resolve(workspace, "scripts/browser-fixtures/leave-guards/synthetic-cms.ts"),
+        replacement: resolve(root, "cms-reads.ts"),
       },
 
       {
         find: /^@\/lib\/analytics\/(sales-performance-client|reporting-client)$/,
-        replacement: resolve(shared, "synthetic-analytics.ts"),
+        replacement: resolve(root, "analytics-reads.ts"),
       },
       {
         find: /^@\/lib\/neon\/contact-identity-review$/,
@@ -70,7 +63,7 @@ await build({
       },
       {
         find: /^@\/lib\/(neon\/(admin-data|admin-team|whatsapp-assignment|staff-notifications|staff-checklist|enquiry-resolution|forwarded-enquiries)|admin\/operations\/operations-client)$/,
-        replacement: resolve(root, "synthetic-api.ts"),
+        replacement: resolve(root, "read-scenarios.ts"),
       },
       { find: /^@\/(auth|hooks\/use-neon-auth)$/, replacement: resolve(daily, "auth.ts") },
       { find: "@", replacement: resolve(workspace, "src") },

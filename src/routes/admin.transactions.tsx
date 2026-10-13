@@ -223,14 +223,8 @@ function AdminTransactions() {
       {rows && rows.length > 0 ? (
         <Card>
           <CardContent className="p-0">
-            <div
-              data-admin-table-region
-              role="region"
-              aria-label="成交列表"
-              tabIndex={0}
-              className="min-w-0 overflow-x-auto"
-            >
-              <Table className="min-w-[840px]">
+            <div className="min-w-0">
+              <Table containerLabel="成交列表" className="min-w-[840px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>屋苑</TableHead>

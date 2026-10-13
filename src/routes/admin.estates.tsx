@@ -122,14 +122,8 @@ function AdminEstates() {
                 />
               </div>
             ) : (
-              <div
-                role="region"
-                aria-label="屋苑清單"
-                tabIndex={0}
-                data-admin-table-region
-                className="min-w-0 overflow-x-auto"
-              >
-                <Table className="min-w-[640px]">
+              <div className="min-w-0">
+                <Table containerLabel="屋苑清單" className="min-w-[640px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>屋苑</TableHead>

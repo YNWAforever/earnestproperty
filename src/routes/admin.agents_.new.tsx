@@ -3,6 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 
 import { AgentProfileForm } from "@/components/admin/AgentProfileForm";
+import { AgentEditorReadError } from "@/components/admin/AgentEditorReadError";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { fetchAdminAgentEditorContext, fetchAdminBranches } from "@/lib/neon/admin-data";
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/admin/agents_/new")({
     meta: [{ title: "新增代理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
   component: NewAdminAgent,
+  errorComponent: ({ reset }) => <AgentEditorReadError title="新增代理" reset={reset} />,
 });
 
 function NewAdminAgent() {

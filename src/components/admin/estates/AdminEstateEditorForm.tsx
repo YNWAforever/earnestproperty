@@ -199,6 +199,9 @@ export function AdminEstateEditorForm({
   const canRestore = useCmsCanRestore();
   const [pendingFaqDeleteId, setPendingFaqDeleteId] = useState<string | null>(null);
   const [districts, setDistricts] = useState<DistrictOption[]>([]);
+  const [districtError, setDistrictError] = useState(false);
+  const [districtLoading, setDistrictLoading] = useState(false);
+  const [districtAttempt, setDistrictAttempt] = useState(0);
   const [revisions, setRevisions] = useState<CmsRevisionSummary[] | null>(null);
   const [faqs, setFaqs] = useState<AdminFaqCmsRow[] | null>(null);
   const [editingFaq, setEditingFaq] = useState<{
@@ -210,10 +213,25 @@ export function AdminEstateEditorForm({
   } | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    setDistrictLoading(true);
     fetchAdminDistrictOptions()
-      .then((data) => setDistricts(data as DistrictOption[]))
-      .catch(() => undefined);
-  }, []);
+      .then((data) => {
+        if (!cancelled) {
+          setDistricts(data as DistrictOption[]);
+          setDistrictError(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDistrictError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setDistrictLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [districtAttempt]);
 
   async function refreshRevisions(id: string | undefined) {
     if (!id) {
@@ -427,6 +445,19 @@ export function AdminEstateEditorForm({
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
       <form onSubmit={handleSaveDraft} className="space-y-7" noValidate>
+        {districtError ? (
+          <div role="alert" className="space-y-2 rounded-md border p-3 text-sm">
+            <p>未能載入地區選項。已輸入內容會保留，請重試或核對存取權限。</p>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={districtLoading}
+              onClick={() => setDistrictAttempt((value) => value + 1)}
+            >
+              重新載入選項
+            </Button>
+          </div>
+        ) : null}
         <CmsPublicationCompare
           resourceType="estate"
           resourceId={form.id}

@@ -1,4 +1,6 @@
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
+import { useNeonAuth } from "@/hooks/use-neon-auth";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { WhatsappServiceHealth } from "@/components/admin/operations/WhatsappServiceHealth";
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -84,6 +86,11 @@ function AdminOperations() {
 }
 function AdminOperationsWorkspace({ identity }: { identity: string }) {
   const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
+  const { user } = useNeonAuth();
+  const { session } = useStaffSession(user?.id ?? null);
+  const canReadServiceHealth =
+    session?.status === "ok" &&
+    session.roles.some((role) => role === "admin" || role === "manager");
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const { pulse, refreshNow } = useOperationsPulse();
@@ -245,7 +252,9 @@ function AdminOperationsWorkspace({ identity }: { identity: string }) {
       ) : null}
       {!health && !error ? <Skeleton className="mt-4 h-48 w-full" /> : null}
 
-      {health ? <WhatsappServiceHealth isWorkspaceCurrent={isWorkspaceCurrent} /> : null}
+      {health && canReadServiceHealth ? (
+        <WhatsappServiceHealth isWorkspaceCurrent={isWorkspaceCurrent} />
+      ) : null}
       {health ? (
         <Tabs.Root value={activeTab} onValueChange={handleTabChange} className="mt-4">
           {/* Every tab is rendered, not just the permitted ones. Omitting them
