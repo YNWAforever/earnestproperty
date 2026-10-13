@@ -170,7 +170,11 @@ function AdminBlasts() {
   const identity = useStaffWorkspaceIdentity(["admin", "manager"]);
   if (!identity)
     return (
-      <AdminShell title="推廣活動" description="核對收件範圍及推廣操作結果。">
+      <AdminShell
+        contentWidth="standard"
+        title="推廣活動"
+        description="核對收件範圍及推廣操作結果。"
+      >
         <AdminError message="尚未取得已核實的推廣管理權限。" />
       </AdminShell>
     );
@@ -1189,7 +1193,31 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
   }
 
   return (
-    <AdminShell title="推廣活動" description="推廣活動：只用已審批範本、只發給已同意接收的客戶。">
+    <AdminShell
+      contentWidth="standard"
+      title="推廣活動"
+      description="推廣活動：只用已審批範本、只發給已同意接收的客戶。"
+      actions={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              const blank = { name: "", description: null, filters: {} };
+              setSavedAudienceDraft(blank);
+              setAudienceDraft(blank);
+            }}
+          >
+            <Users />
+            新增收件群組
+          </Button>
+          <Button type="button" onClick={openCampaignDialog}>
+            <Plus />
+            新增 Campaign
+          </Button>
+        </>
+      }
+    >
       {error ? <AdminError message={error} /> : null}
       {queueJournalError ? <AdminError message={queueJournalError} /> : null}
       {cancelJournalError ? <AdminError message={cancelJournalError} /> : null}
@@ -1267,26 +1295,6 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
             </Button>
           </div>
         }
-        actions={
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                const blank = { name: "", description: null, filters: {} };
-                setSavedAudienceDraft(blank);
-                setAudienceDraft(blank);
-              }}
-            >
-              <Users />
-              新增收件群組
-            </Button>
-            <Button type="button" onClick={openCampaignDialog}>
-              <Plus />
-              新增 Campaign
-            </Button>
-          </>
-        }
       />
 
       {!rows && loading ? <Skeleton className="h-72 w-full" /> : null}
@@ -1302,8 +1310,8 @@ function AdminBlastsWorkspace({ identity }: { identity: string }) {
                 「未有 Campaign」 empty state off `campaignRows.length` alone
                 painted it under the loading skeleton on every visit. */}
             {!rows ? null : campaignRows.length ? (
-              <div className="overflow-x-auto">
-                <Table>
+              <div className="min-w-0">
+                <Table containerLabel="推廣活動清單">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Campaign</TableHead>

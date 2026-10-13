@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { ADMIN_NAV_GROUPS } from "../components/admin/admin-navigation.ts";
 
 const root = process.cwd();
 
@@ -73,33 +74,58 @@ test("Team route prevents self-reset confusion and gives a safe 400 recovery mes
 });
 
 test("operations shell follows the approved navigation groups and exact Team state", () => {
-  const shell = read("src/components/admin/AdminShell.tsx");
-
-  for (const [heading, paths] of [
-    ["日常跟進", ["/admin", "/admin/leads", "/admin/listings"]],
-    ["內容與推廣", ["/admin/cms", "/admin/segments", "/admin/whatsapp", "/admin/blasts"]],
-    ["團隊與系統", ["/admin/team", "/admin/agents", "/admin/operations"]],
-  ]) {
-    assert.match(shell, new RegExp(`heading: "${heading}"`));
-    for (const path of paths)
-      assert.match(shell, new RegExp(`to: "${path.replaceAll("/", "\\/")}"`));
-  }
-  assert.match(shell, /to: "\/admin\/team"[\s\S]{0,120}activeExact: true/);
-  assert.match(shell, /to: "\/admin\/agents"[\s\S]{0,120}activeExact: false/);
-  assert.doesNotMatch(shell, /to: "\/admin\/operations"[\s\S]{0,120}activeExact: false/);
-
-  // The Team directory persists filters and selected detail in its URL. Its
-  // navigation item must remain active for a route such as
-  // /admin/team?q=ann&role=agent&state=invited&cursor=next&member=staff-1.
-  const teamEntry = shell.match(/\{\s*to:\s*"\/admin\/team",[^}]*\}/)?.[0];
-  assert.ok(teamEntry, "/admin/team entry must exist in navGroups");
-  assert.match(teamEntry, /includeSearch:\s*false/);
+  const entries = ADMIN_NAV_GROUPS.flatMap((group) => group.items);
+  for (const [label, paths] of [
+    [
+      "日常工作",
+      [
+        "/admin",
+        "/admin/leads",
+        "/admin/whatsapp",
+        "/admin/leads/command-center",
+        "/admin/listings",
+        "/admin/transactions",
+      ],
+    ],
+    [
+      "管理與推廣",
+      [
+        "/admin/analytics",
+        "/admin/blasts",
+        "/admin/segments",
+        "/admin/cms",
+        "/admin/estates",
+        "/admin/whatsapp-links",
+      ],
+    ],
+    [
+      "設定與處理問題",
+      [
+        "/admin/team",
+        "/admin/agents",
+        "/admin/whatsapp-settings",
+        "/admin/property-sync",
+        "/admin/operations",
+      ],
+    ],
+  ])
+    assert.deepEqual(
+      ADMIN_NAV_GROUPS.find((group) => group.label === label)?.items.map((item) => item.to),
+      paths,
+    );
+  assert.equal(entries.find((item) => item.to === "/admin/team")?.activeExact, true);
+  assert.equal(entries.find((item) => item.to === "/admin/agents")?.activeExact, false);
+  assert.equal(entries.find((item) => item.to === "/admin/operations")?.activeExact, true);
+  assert.match(read("src/components/admin/AdminNavigation.tsx"), /includeSearch:\s*false/);
 });
 
 test("sidebar includes a 成交管理 entry linking to /admin/transactions", () => {
-  const shell = read("src/components/admin/AdminShell.tsx");
-  assert.match(shell, /to: "\/admin\/transactions"/);
-  assert.match(shell, /label: "成交管理"/);
+  assert.equal(
+    ADMIN_NAV_GROUPS.flatMap((group) => group.items).find(
+      (item) => item.to === "/admin/transactions",
+    )?.label,
+    "成交管理",
+  );
 });
 
 test("Overview reads operational sources independently without polling", () => {
@@ -640,8 +666,7 @@ test("跟進工作台 flags a remembered lead that left the board and blocks its
 });
 
 test("跟進工作台 polls only for the roles its read accepts, and stops after a refusal", () => {
-  // No browser fixture renders this route; createBackgroundReadGate is unit-tested in
-  // background-refresh.test.ts, and this pins the board's poll to it.
+  // The real route has owned browser coverage; retain this wiring check for the poll gate.
   const commandCenter = read("src/routes/admin.leads_.command-center.tsx");
   assert.match(commandCenter, /createBackgroundReadGate\(BACKGROUND_READ_ROLES\.commandCenter\)/);
   // Roles come from the shared staff session the shell already loaded: no request of its own.
@@ -650,7 +675,10 @@ test("跟進工作台 polls only for the roles its read accepts, and stops after
     commandCenter,
     /useVisibleInterval\(\(\) => \{\s*if \(!pollGate\.allows\(staffRoles\)[^)]*\) return undefined;[\s\S]*?background: true[\s\S]*?MIN_VISIBLE_INTERVAL_MS\)/,
   );
-  assert.match(commandCenter, /catch \(err\) \{\s*pollGate\.backgroundFailed\(err\);/);
+  assert.match(
+    commandCenter,
+    /catch \(err\) \{\s*if \(!isWorkspaceCurrent\(\)\) return;\s*pollGate\.backgroundFailed\(err\);/,
+  );
   assert.match(
     commandCenter,
     /setData\(result\);\s*setError\(null\);\s*pollGate\.foregroundSucceeded\(\);/,
@@ -1050,103 +1078,43 @@ test("protected owner accounts are enforced server-side, not only hidden in the 
 // that named the wrong tab, while three of that screen's five tabs had no entry
 // at all. A duplicate destination is the shape of that bug.
 test("sidebar has no duplicate destinations and is fully grouped", () => {
-  const shell = read("src/components/admin/AdminShell.tsx");
-
-  const start = shell.indexOf("const navGroups = [");
-  assert.notEqual(start, -1, "navGroups must exist");
-  const block = shell.slice(start, shell.indexOf("] as const;", start));
-
-  const destinations = [...block.matchAll(/to:\s*"([^"]+)"/g)].map((match) => match[1]);
-  assert.equal(
-    new Set(destinations).size,
-    destinations.length,
-    `duplicate sidebar destination: ${destinations.join(", ")}`,
-  );
-  // Includes the reviewed source-sync workspace without removing duplicate protection.
+  const entries = ADMIN_NAV_GROUPS.flatMap((group) => group.items);
+  const destinations = entries.map((item) => item.to);
+  assert.equal(new Set(destinations).size, 17);
   assert.equal(destinations.length, 17);
-  assert.ok(destinations.includes("/admin/property-sync"));
-  const syncEntry = block.match(/to: "\/admin\/property-sync",([\s\S]*?)\}/)?.[1];
-  assert.ok(syncEntry, "source-sync has one explicit entry");
-  assert.match(syncEntry, /label: "盤源同步"/);
-  // Which roles may open it lives in admin-nav-roles.ts (see admin-nav-roles.test.mjs).
+  assert.equal(entries.find((item) => item.to === "/admin/property-sync")?.label, "盤源同步");
   assert.ok(
     read("src/components/admin/admin-nav-roles.ts").includes(
       '{ to: "/admin/property-sync", roles: EDITORS }',
     ),
   );
-  assert.ok(destinations.includes("/admin/whatsapp-links"));
-  assert.ok(destinations.includes("/admin/whatsapp-settings"));
-  assert.ok(destinations.includes("/admin/analytics"));
-
-  for (const heading of ["日常跟進", "內容與推廣", "團隊與系統"]) {
-    assert.match(block, new RegExp(`heading: "${heading}"`), `missing group ${heading}`);
-  }
-
-  // The old duplicate + its misleading labels must not come back.
-  assert.doesNotMatch(block, /search: \{ tab: "faqs" \}/);
-  assert.doesNotMatch(block, /"AI Agent"/);
-  assert.doesNotMatch(block, /"CMS \/ FAQ"/);
-  assert.match(block, /"團隊成員"/);
-
-  // Pinned on the entries themselves (not the whole block) so a future
-  // reorder of navGroups cannot silently invalidate this without failing
-  // here. See the comment above navGroups for why these two are exact.
-  const adminEntry = block.match(/\{\s*to:\s*"\/admin",[^}]*\}/)?.[0];
-  assert.ok(adminEntry, "/admin entry must exist in navGroups");
+  for (const path of ["/admin/whatsapp-links", "/admin/whatsapp-settings", "/admin/analytics"])
+    assert.ok(destinations.includes(path));
+  for (const path of ["/admin", "/admin/leads"])
+    assert.equal(entries.find((item) => item.to === path)?.activeExact, true);
+  const source = read("src/components/admin/AdminNavigation.tsx");
+  assert.match(source, /activeOptions=\{\{[\s\S]*?exact: item\.activeExact/);
+  assert.match(source, /includeSearch:\s*false/);
+  assert.match(source, /explicitUndefined:\s*true/);
   assert.doesNotMatch(
-    adminEntry,
-    /activeExact:\s*false/,
-    "/admin must stay exact (no activeExact: false) or it matches every admin page",
-  );
-
-  const adminLeadsEntry = block.match(/\{\s*to:\s*"\/admin\/leads",[^}]*\}/)?.[0];
-  assert.ok(adminLeadsEntry, "/admin/leads entry must exist in navGroups");
-  const leadsHighlightMessage =
-    "/admin/leads has no child routes; prefix matching lit 客戶查詢 on /admin/leads/command-center too (G-16), and exact matching without includeSearch:false unlights /admin/leads?stage=open";
-  assert.match(adminLeadsEntry, /activeExact:\s*true/, leadsHighlightMessage);
-  assert.match(adminLeadsEntry, /includeSearch:\s*false/, leadsHighlightMessage);
-
-  // `activeOptions` is where each entry's activeExact/includeSearch above
-  // actually takes effect, and `explicitUndefined: true` is what makes an
-  // entry with no search params (like /admin) refuse to match a URL that
-  // carries extra search state it should not.
-  const navLinkOpening = shell.match(
-    /<Link\s+key=\{`\$\{item\.to\}-\$\{item\.label\}`\}[\s\S]*?>/,
-  )?.[0];
-  assert.ok(navLinkOpening, "admin nav Link opening tag should exist");
-  assert.match(
-    navLinkOpening,
-    /activeOptions=\{\{/,
-    "nav Link must pass activeOptions, or every entry's activeExact/includeSearch setting above is ignored and falls back to the Link's own defaults",
-  );
-  assert.match(
-    navLinkOpening,
-    /explicitUndefined:\s*true/,
-    "explicitUndefined must stay true, or an entry with no search params (like /admin) can match a URL carrying extra search state it should not",
+    read("src/components/admin/admin-navigation.ts"),
+    /search: \{ tab: "faqs" \}|"AI Agent"|"CMS \/ FAQ"/,
   );
 });
 
-// The badges must not change the link names 客戶查詢 and WhatsApp 收件匣, which other
-// suites match exactly, and every count comes from the one shared, visibility-gated store.
 test("nav badges keep link names and come from the shared attention store", () => {
   const shell = read("src/components/admin/AdminShell.tsx");
-
+  const nav = read("src/components/admin/AdminNavigation.tsx");
   assert.match(shell, /useAdminAttention\(identity\)/);
-  assert.match(shell, /aria-describedby=/);
-  assert.match(shell, /aria-hidden="true"[\s\S]{0,80}data-attention-badge/);
   assert.match(shell, /withAttentionTitle\(/);
-  assert.match(shell, /attention: "leads"/);
-  assert.match(shell, /attention: "inbox"/);
   assert.doesNotMatch(shell, /setInterval|setTimeout/, "the shell must poll only via the store");
-
-  const block = shell.slice(
-    shell.indexOf("const navGroups = ["),
-    shell.indexOf("] as const;", shell.indexOf("const navGroups = [")),
-  );
-  const leadsEntry = block.match(/\{\s*to:\s*"\/admin\/leads",[^}]*\}/)?.[0] ?? "";
-  const inboxEntry = block.match(/\{\s*to:\s*"\/admin\/whatsapp",[^}]*\}/)?.[0] ?? "";
-  assert.match(leadsEntry, /attention: "leads"/, "the leads badge belongs on 客戶查詢");
-  assert.match(inboxEntry, /attention: "inbox"/, "the inbox badge belongs on WhatsApp 收件匣");
+  assert.match(shell, /<AdminNavigation[\s\S]*?attention=\{attention\}/);
+  assert.match(nav, /aria-label=\{item\.label\}/);
+  assert.match(nav, /aria-describedby=/);
+  assert.match(nav, /aria-hidden="true"[\s\S]{0,80}data-attention-badge/);
+  const entries = ADMIN_NAV_GROUPS.flatMap((group) => group.items);
+  assert.equal(entries.find((item) => item.to === "/admin/leads")?.attention, "leads");
+  assert.equal(entries.find((item) => item.to === "/admin/whatsapp")?.attention, "inbox");
 });
 
 test("Neon Auth UI is given the absolute site origin so password-reset links return to this app", () => {

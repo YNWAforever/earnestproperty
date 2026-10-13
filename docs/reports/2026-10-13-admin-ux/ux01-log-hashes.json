@@ -1,0 +1,15 @@
+{
+  "ux01-daily-work.log": "506e17db85c20fea1a38c07e6b245aae1534df91a7f88faffca2ab37e6533841",
+  "ux01-format.log": "b8050c2dc44a76ae57e47bcc804e8f3d7e9601c0d83f485696296ade24b6bb61",
+  "ux01-format2.log": "ab207cb12510814b3bd937a3329914f6087733f836d614397ca367fb6e1ec3f5",
+  "ux01-green.log": "7bfa20d08933151ddccaae8ded6b79c974b47f64f529972bbece7d9f1b270654",
+  "ux01-green2.log": "3deba312141f2452987da20787bce0182315cb7b55b430d2a6addb5dacfeffbe",
+  "ux01-red.json": "653e08774a641736c3ca5b52ec5b9360c9ee669cda2b9d8fba13cb149e771a5e",
+  "ux01-red.log": "e53f1ebee011bc5b07716b071f041e51bc29e1c631d1b27e2ce4b72685e53d25",
+  "ux01-short-screen-diagnostic.log": "cc44347086219d06d682da20af2e593257eac874af18c79d166c01ba1e78526d",
+  "ux01-short-screen-red.json": "ad70db7d3fd04661387b0e6004be5ba7b4c634ac3619b363ebef35401901513f",
+  "ux01-typecheck-final.log": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+  "ux01-typecheck.log": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+  "ux01-unit-final.log": "e77a0de4559e375e08c08bbfa82cf0b4b875405a248bda302b02e8868aac020c",
+  "ux01-unit.log": "7529db8bcfa45f5395758684a4d53bbe7c69e6a5c3fe701b02bfadf5c39692dc"
+}

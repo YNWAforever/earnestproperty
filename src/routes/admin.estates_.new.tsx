@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 
@@ -9,15 +11,35 @@ export const Route = createFileRoute("/admin/estates_/new")({
   head: () => ({
     meta: [{ title: "新增屋苑｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: NewAdminEstate,
+  component: () => (
+    <AdminStaffWorkspace
+      component={NewAdminEstate}
+      title="新增屋苑"
+      roles={["admin", "manager", "agent"]}
+      contentWidth="form"
+    />
+  ),
 });
 
-function NewAdminEstate() {
+function NewAdminEstate({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const navigate = useNavigate();
 
   return (
-    <AdminShell title="新增屋苑" description="填寫屋苑資料，儲存草稿後可繼續編輯及發布。">
-      <div className="max-w-5xl">
+    <AdminShell
+      title="新增屋苑"
+      description="填寫屋苑資料，儲存草稿後可繼續編輯及發布。"
+      contentWidth="form"
+      breadcrumb={
+        <nav aria-label="麵包屑">
+          <Link to="/admin">後台</Link>
+          {" › "}
+          <Link to="/admin/estates">屋苑管理</Link>
+          {" › 新增"}
+        </nav>
+      }
+    >
+      <div className="w-full min-w-0">
         <Button asChild variant="ghost" size="sm" className="mb-4">
           <Link to="/admin/estates">
             <ArrowLeft className="mr-1 h-4 w-4" />
@@ -25,6 +47,7 @@ function NewAdminEstate() {
           </Link>
         </Button>
         <AdminEstateEditorForm
+          isWorkspaceCurrent={isWorkspaceCurrent}
           onSaved={(id) => navigate({ to: "/admin/estates/$id", params: { id } })}
         />
       </div>

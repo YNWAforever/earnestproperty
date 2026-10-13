@@ -1,0 +1,14 @@
+{
+  "ux04-agents-baseline.log": "71e73fdf54e5e5ceac2d38898dde04078f1a7120b375127d49b71294a541dd45",
+  "ux04-agents-green.log": "73805376c100eacd4f881ab20e3125d9186b16a65b583c8166788ea016c88812",
+  "ux04-estates-baseline.log": "f16522843ab2a4257727caa3e296c745f6cc2c97e562127551a299e39f421fc2",
+  "ux04-estates-green.log": "a6ef1f6d4119e116f23569b4a1a0ad4ba992c7a005afdad19d1cc91941c956f3",
+  "ux04-format.log": "cc7d8633353702a69e9d00ebbb2aa5fd9bad2d9c87c70934508ed31fd8ab47b6",
+  "ux04-green.log": "53f9856729d20d125ed1ade257725fe22bd572c6a5ea490745819730aae472e8",
+  "ux04-leave-baseline.log": "18eb2a8faa667d9e8f36b34d2225105dbe57ff3ff09dbbca34d44baaf68b710b",
+  "ux04-red.log": "26f383796ad5ef0bf52fd0be30000554fff9d26b623333db732545313c1810ef",
+  "ux04-role-recheck.log": "eca0c4483ba747850b3ee6b5f74a60921ed06acbb0b47178f376c80383c2525f",
+  "ux04-transactions-baseline.log": "7fad2dcd416a3e9178c6f1e4aeca6b5cfb4ae4ed9cd74410d1790ade192cdbfe",
+  "ux04-transactions-green.log": "5651654f9425aa466db4212cbdd82969fd5ae3aa5c58373ec0e9693268934911",
+  "ux04-typecheck.log": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0"
+}

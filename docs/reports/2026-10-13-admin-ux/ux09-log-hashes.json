@@ -1,0 +1,19 @@
+{
+  "ux09-browser.log": "5c29cb3e5e0a52113298b82b9d3dae5fe1e159853178cff6513b3c9bca6bf197",
+  "ux09-build.log": "5e0ba4144c579323177be73dd57fc7856266a677213ebbc2e3f235fd6f741cfe",
+  "ux09-checks.json": "1dc6790b45ffb4f04e7ea7e5fb6db97e8eee4049fe55b0a833f75051101e4235",
+  "ux09-evidence-format.log": "11f0b49971d23672369824430a17ad8e1544fd3c246532a63a1942e169e215d8",
+  "ux09-final-typecheck.log": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+  "ux09-format.log": "8c2f159957f9ecdf2bbbd89bafccca65d9958c277f64b1d59764b4109b379a93",
+  "ux09-layout.json": "95776383ba778dffe4b76b72ac0bc036f18a60cf078fd5204645be1de9cfaf41",
+  "ux09-lint-fixture-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "ux09-lint-green.log": "80d117a0db834decdd7a17aa7ff043344c6242e47530a0d7ecc7d6aa8df09fc2",
+  "ux09-lint.log": "a04a6643acc91d65ea604db625e559f7ad384b3a632cc81323278c18a9344ddf",
+  "ux09-navigation.json": "21186170e2612ccf3545343529d18bc75c5cfc701423b41c78179204f8c1f4a6",
+  "ux09-retention-empty-selection.log": "df0a195bef1d6c64383e372f15ec3e11cb5369414ee6117ee9cf3254b8878b08",
+  "ux09-retention.log": "ecaf9ff72443d2e8d1bd466700d04475bd8f67385fb1db3b31d7dddbec85b34d",
+  "ux09-test-layout.log": "5b05553f377332b8a789e85bc4622b4f4f46c7b47e662921edade53cffd356a9",
+  "ux09-test-styles.log": "fdb713259810f4fd46b4b562c8b4a44024297a11192bb4cf76db41817cd33b03",
+  "ux09-typecheck.log": "e5046545a3a9fcc0cf6950c9402c78a2b227f07a6a658d2a0c1fbc5f4a194da0",
+  "ux09-wiring-green.log": "8518ed441e28560a22c5e8c43c62e30e82f14745f57b307f152c655808dd3bec"
+}

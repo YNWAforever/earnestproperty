@@ -4,6 +4,8 @@
   "sideEffects": false,
   "type": "module",
   "scripts": {
+    "test:admin-layout:ui": "playwright test --config=playwright.admin-owned.config.ts e2e/admin-layout.spec.ts",
+    "test:admin-navigation:ui": "playwright test --config playwright.admin-owned.config.ts e2e/admin-navigation.spec.ts",
     "dev": "vite dev",
     "prebuild": "node scripts/check-required-env.mjs",
     "build": "vite build",

@@ -1,3 +1,4 @@
+import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { z } from "zod";
@@ -87,9 +88,17 @@ type Props = {
   /** Admin or manager. Others cannot verify or publish, or edit a verified deal. */
   canVerify: boolean;
   onSaved: (id: string) => void;
+  isWorkspaceCurrent?: () => boolean;
 };
 
-export function TransactionForm({ transaction, staffName, canVerify, onSaved }: Props) {
+export function TransactionForm({
+  transaction,
+  staffName,
+  canVerify,
+  onSaved,
+  isWorkspaceCurrent,
+}: Props) {
+  const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   // B-04: an agent cannot edit a deal a manager verified or published.
   const lockedForAgent =
     !canVerify &&
@@ -97,6 +106,9 @@ export function TransactionForm({ transaction, staffName, canVerify, onSaved }: 
     (transaction.verification_state === "verified" || transaction.published);
   const formRef = useRef<HTMLFormElement>(null);
   const [estates, setEstates] = useState<Estate[]>([]);
+  const [optionsError, setOptionsError] = useState(false);
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [optionsAttempt, setOptionsAttempt] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   // The dirty baseline: the loaded values, replaced by the saved values after each save.
   const [baseline, setBaseline] = useState(() =>
@@ -108,10 +120,25 @@ export function TransactionForm({ transaction, staffName, canVerify, onSaved }: 
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
 
   useEffect(() => {
+    let cancelled = false;
+    setOptionsLoading(true);
     fetchAdminEstateOptions()
-      .then((data) => setEstates(data as Estate[]))
-      .catch((err) => toast.error(err instanceof Error ? err.message : String(err)));
-  }, []);
+      .then((data) => {
+        if (!cancelled) {
+          setEstates(data as Estate[]);
+          setOptionsError(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setOptionsError(true);
+      })
+      .finally(() => {
+        if (!cancelled) setOptionsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [optionsAttempt]);
 
   function focusField(field: string) {
     if (!field) return;
@@ -174,10 +201,14 @@ export function TransactionForm({ transaction, staffName, canVerify, onSaved }: 
     };
 
     setSubmitting(true);
+
+    if (!isCurrent()) return;
     const result = await saveAdminTransaction({ data: payload }).catch((err) => ({
       error: adminErrorMessage(err, err instanceof Error ? err.message : String(err)),
       id: null,
     }));
+    if (!isCurrent()) return;
+
     setSubmitting(false);
 
     if ("error" in result && result.error) {
@@ -196,6 +227,20 @@ export function TransactionForm({ transaction, staffName, canVerify, onSaved }: 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6" noValidate>
       {leaveGuardDialog}
+      {optionsError ? (
+        <div role="alert" className="space-y-2 rounded-md border p-3 text-sm">
+          <p>未能載入屋苑選項。已輸入內容會保留，請重試或核對存取權限。</p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={optionsLoading}
+            onClick={() => setOptionsAttempt((value) => value + 1)}
+          >
+            重新載入選項
+          </Button>
+        </div>
+      ) : null}
+
       <Section title="成交資料">
         <Field label="屋苑 *" htmlFor="estate_id" error={fieldErrors.estate_id}>
           <Select value={form.estate_id} onValueChange={(v) => set("estate_id", v)}>

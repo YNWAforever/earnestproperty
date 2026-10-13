@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Pencil, Plus } from "lucide-react";
@@ -67,10 +69,18 @@ export const Route = createFileRoute("/admin/transactions")({
   head: () => ({
     meta: [{ title: "成交管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: AdminTransactions,
+  component: () => (
+    <AdminStaffWorkspace
+      component={AdminTransactions}
+      title="成交管理"
+      roles={["admin", "manager", "agent"]}
+      contentWidth="standard"
+    />
+  ),
 });
 
-function AdminTransactions() {
+function AdminTransactions({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const { session: staffSession } = useStaffSession(user?.id ?? null);
   const canSeeFinance =
@@ -84,7 +94,7 @@ function AdminTransactions() {
   const requestIdRef = useRef(0);
 
   const refreshTransactions = useCallback(async () => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     setLoadingRows(true);
@@ -92,30 +102,46 @@ function AdminTransactions() {
       const data = await fetchAdminTransactionsFiltered({
         data: filters as AdminTransactionFiltersInput,
       });
-      if (requestId !== requestIdRef.current) return;
+      if (!isWorkspaceCurrent() || requestId !== requestIdRef.current) return;
       setRows(data as AdminTransactionRow[]);
       setError(null);
     } catch (err) {
-      if (requestId !== requestIdRef.current) return;
+      if (!isWorkspaceCurrent() || requestId !== requestIdRef.current) return;
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      if (requestId === requestIdRef.current) setLoadingRows(false);
+      if (isWorkspaceCurrent() && requestId === requestIdRef.current) setLoadingRows(false);
     }
-  }, [filters, user]);
+  }, [filters, user, isWorkspaceCurrent]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
     fetchAdminEstateOptions()
-      .then((data) => setEstates(data as Estate[]))
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)));
-  }, [user]);
+      .then((data) => {
+        if (isWorkspaceCurrent()) setEstates(data as Estate[]);
+      })
+      .catch((err) => {
+        if (isWorkspaceCurrent()) setError(err instanceof Error ? err.message : String(err));
+      });
+  }, [user, isWorkspaceCurrent]);
 
   useEffect(() => {
     refreshTransactions();
   }, [refreshTransactions]);
 
   return (
-    <AdminShell title="成交管理" description="登記成交、核實來源、管理公開發布及內部歸因。">
+    <AdminShell
+      title="成交管理"
+      description="登記成交、核實來源、管理公開發布及內部歸因。"
+      contentWidth="standard"
+      actions={
+        <Button asChild size="sm" className="h-11 lg:h-9">
+          <Link to="/admin/transactions/new">
+            <Plus className="mr-2 h-4 w-4" />
+            新增成交
+          </Link>
+        </Button>
+      }
+    >
       <AdminToolbar
         filters={
           <>
@@ -201,34 +227,18 @@ function AdminTransactions() {
             ) : null}
           </>
         }
-        actions={
-          <Button asChild size="sm" className="h-11 lg:h-9">
-            <Link to="/admin/transactions/new">
-              <Plus className="mr-2 h-4 w-4" />
-              新增成交
-            </Link>
-          </Button>
-        }
       />
 
       {error ? <AdminError message={error} /> : null}
       {loadingRows && !rows ? <Skeleton className="h-72 w-full" /> : null}
       {rows && rows.length === 0 ? (
-        <AdminEmptyState
-          title="未有符合條件的成交記錄"
-          description="調整篩選或新增一筆成交。"
-          action={
-            <Button asChild>
-              <Link to="/admin/transactions/new">新增成交</Link>
-            </Button>
-          }
-        />
+        <AdminEmptyState title="未有符合條件的成交記錄" description="調整篩選或新增一筆成交。" />
       ) : null}
       {rows && rows.length > 0 ? (
         <Card>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table className="min-w-[840px]">
+            <div className="min-w-0">
+              <Table containerLabel="成交列表" className="min-w-[840px]">
                 <TableHeader>
                   <TableRow>
                     <TableHead>屋苑</TableHead>

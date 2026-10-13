@@ -470,7 +470,7 @@ function AdminTeam() {
 
   if (forbidden)
     return (
-      <AdminShell title="團隊成員" description="管理 Earnest 後台存取權。">
+      <AdminShell contentWidth="standard" title="團隊成員" description="管理 Earnest 後台存取權。">
         <AdminError message="你沒有檢視團隊成員的權限。" />
       </AdminShell>
     );
@@ -478,6 +478,7 @@ function AdminTeam() {
 
   return (
     <AdminShell
+      contentWidth="standard"
       title="團隊成員"
       description="搜尋、檢視並安全管理帳戶存取權。"
       actions={

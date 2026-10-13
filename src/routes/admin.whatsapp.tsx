@@ -184,7 +184,11 @@ function AdminWhatsapp() {
   const identity = useStaffWorkspaceIdentity();
   if (!identity)
     return (
-      <AdminShell title="WhatsApp 收件匣" description="核對查詢、跟進及回覆草稿。">
+      <AdminShell
+        contentWidth="wide"
+        title="WhatsApp 收件匣"
+        description="核對查詢、跟進及回覆草稿。"
+      >
         <Skeleton className="h-56 w-full" />
       </AdminShell>
     );
@@ -1155,8 +1159,48 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
 
   return (
     <AdminShell
+      contentWidth="wide"
       title="WhatsApp 收件匣"
       description="查看客戶訊息、指派負責代理及回覆；對話列表每分鐘自動更新，亦可按「重新整理」即時讀取。"
+      actions={
+        <>
+          {/* History import. Deliberately not automatic: it reaches out to
+                Woztell and writes to crm_contacts, so it stays an explicit,
+                admin-initiated action rather than something a page load does. */}
+          {canBackfill ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-11 lg:h-9"
+              disabled={backfilling}
+              onClick={() => void runBackfill()}
+              title="匯入 Woztell 上早於本系統的歷史對話"
+            >
+              <History className={backfilling ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+              {backfilling ? "匯入中…" : "匯入歷史訊息"}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-11 lg:h-9"
+            disabled={loadingRows}
+            // Refreshing only the list left the open conversation frozen, so
+            // an agent could stare at a stale thread and answer a question the
+            // customer had already followed up on.
+            onClick={() => {
+              void refreshConversations();
+              const openId = selectedIdRef.current;
+              if (openId) void loadConversationDetail(openId, { background: true });
+            }}
+          >
+            <RefreshCw className={loadingRows ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
+            重新整理
+          </Button>
+        </>
+      }
     >
       {user ? (
         <StaffNotificationPanel
@@ -1233,41 +1277,6 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
                 最後更新 {formatClock(listUpdatedAt)}
               </span>
             ) : null}
-            {/* History import. Deliberately not automatic: it reaches out to
-                Woztell and writes to crm_contacts, so it stays an explicit,
-                admin-initiated action rather than something a page load does. */}
-            {canBackfill ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-11 lg:h-9"
-                disabled={backfilling}
-                onClick={() => void runBackfill()}
-                title="匯入 Woztell 上早於本系統的歷史對話"
-              >
-                <History className={backfilling ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-                {backfilling ? "匯入中…" : "匯入歷史訊息"}
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="h-11 lg:h-9"
-              disabled={loadingRows}
-              // Refreshing only the list left the open conversation frozen, so
-              // an agent could stare at a stale thread and answer a question the
-              // customer had already followed up on.
-              onClick={() => {
-                void refreshConversations();
-                const openId = selectedIdRef.current;
-                if (openId) void loadConversationDetail(openId, { background: true });
-              }}
-            >
-              <RefreshCw className={loadingRows ? "h-4 w-4 animate-spin" : "h-4 w-4"} />
-              重新整理
-            </Button>
           </div>
         }
       />
@@ -1295,8 +1304,8 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
       </div>
       {error ? <AdminError message={error} /> : null}
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(18rem,24rem)_1fr]">
-        <Card>
+      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
+        <Card className="min-w-0">
           <CardContent className="p-0">
             <ConversationList
               rows={filteredRows}
@@ -1316,7 +1325,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
           </CardContent>
         </Card>
 
-        <Card className="hidden lg:block">
+        <Card className="hidden min-w-0 lg:block">
           <CardContent className="p-0">
             <ConversationWorkspace
               selectedEnquiryId={selectedId ? (enquirySelections[selectedId] ?? "") : ""}

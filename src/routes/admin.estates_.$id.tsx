@@ -1,10 +1,11 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
-import { toast } from "sonner";
 
 import { AdminEstateEditorForm } from "@/components/admin/estates/AdminEstateEditorForm";
-import { AdminShell } from "@/components/admin/AdminShell";
+import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
@@ -15,14 +16,24 @@ export const Route = createFileRoute("/admin/estates_/$id")({
   head: () => ({
     meta: [{ title: "編輯屋苑｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: EditAdminEstate,
+  component: () => (
+    <AdminStaffWorkspace
+      component={EditAdminEstate}
+      title="編輯屋苑"
+      roles={["admin", "manager", "agent"]}
+      contentWidth="form"
+    />
+  ),
 });
 
-function EditAdminEstate() {
+function EditAdminEstate({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { id } = Route.useParams();
   const { user, loading } = useNeonAuth();
   const [editor, setEditor] = useState<CmsEditorResult | null>(null);
   const [fetching, setFetching] = useState(true);
+  const [readError, setReadError] = useState(false);
+  const [readAttempt, setReadAttempt] = useState(0);
 
   useEffect(() => {
     if (loading) return;
@@ -34,25 +45,40 @@ function EditAdminEstate() {
     setFetching(true);
     fetchAdminCmsEditor({ data: { resourceType: "estate", resourceId: id } })
       .then((result) => {
-        if (!cancelled) setEditor(result);
+        if (!cancelled && isWorkspaceCurrent()) {
+          setEditor(result);
+          setReadError(false);
+        }
       })
-      .catch((err) => {
-        if (!cancelled) {
-          toast.error(err instanceof Error ? err.message : "未能載入屋苑資料");
+      .catch(() => {
+        if (!cancelled && isWorkspaceCurrent()) {
+          setReadError(true);
           setEditor(null);
         }
       })
       .finally(() => {
-        if (!cancelled) setFetching(false);
+        if (!cancelled && isWorkspaceCurrent()) setFetching(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [id, loading, user]);
+  }, [id, loading, user, readAttempt, isWorkspaceCurrent]);
 
   return (
-    <AdminShell title="編輯屋苑" description="更新屋苑資料、核實狀態及 FAQ。">
-      <div className="max-w-5xl">
+    <AdminShell
+      title="編輯屋苑"
+      description="更新屋苑資料、核實狀態及 FAQ。"
+      contentWidth="form"
+      breadcrumb={
+        <nav aria-label="麵包屑">
+          <Link to="/admin">後台</Link>
+          {" › "}
+          <Link to="/admin/estates">屋苑管理</Link>
+          {" › 編輯"}
+        </nav>
+      }
+    >
+      <div className="w-full min-w-0">
         <Button asChild variant="ghost" size="sm" className="mb-4">
           <Link to="/admin/estates">
             <ArrowLeft className="mr-1 h-4 w-4" />
@@ -60,7 +86,20 @@ function EditAdminEstate() {
           </Link>
         </Button>
         {loading || fetching ? <Skeleton className="h-96 w-full" /> : null}
-        {!loading && !fetching && !editor?.editState ? (
+        {readError ? (
+          <div className="space-y-2">
+            <AdminError message="未能載入屋苑資料，並非確認資料不存在。請重試或核對存取權限。" />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={fetching}
+              onClick={() => setReadAttempt((value) => value + 1)}
+            >
+              重新載入屋苑
+            </Button>
+          </div>
+        ) : null}
+        {!loading && !fetching && !readError && !editor?.editState ? (
           <div className="border-y py-10 text-center">
             <p className="text-sm text-muted-foreground">找不到此屋苑資料。</p>
             <Button asChild variant="link" className="mt-3">
@@ -70,6 +109,7 @@ function EditAdminEstate() {
         ) : null}
         {!loading && !fetching && editor?.editState ? (
           <AdminEstateEditorForm
+            isWorkspaceCurrent={isWorkspaceCurrent}
             key={id}
             resourceId={id}
             payload={editor.payload}

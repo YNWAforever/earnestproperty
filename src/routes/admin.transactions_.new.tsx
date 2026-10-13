@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { ArrowLeft } from "lucide-react";
 
@@ -11,10 +13,18 @@ export const Route = createFileRoute("/admin/transactions_/new")({
   head: () => ({
     meta: [{ title: "新增成交｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: NewAdminTransactionPage,
+  component: () => (
+    <AdminStaffWorkspace
+      component={NewAdminTransactionPage}
+      title="新增成交"
+      roles={["admin", "manager", "agent"]}
+      contentWidth="form"
+    />
+  ),
 });
 
-function NewAdminTransactionPage() {
+function NewAdminTransactionPage({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const navigate = useNavigate();
   const { user } = useNeonAuth();
   const { session: staffSession } = useStaffSession(user?.id ?? null);
@@ -24,6 +34,7 @@ function NewAdminTransactionPage() {
 
   return (
     <AdminShell
+      contentWidth="form"
       title="新增成交"
       description="先登記成交資料，再於編輯頁記錄私有歸因及佣金。"
       breadcrumb={
@@ -39,7 +50,7 @@ function NewAdminTransactionPage() {
         </nav>
       }
     >
-      <div className="max-w-2xl">
+      <div className="w-full min-w-0">
         <Button asChild variant="ghost" size="sm" className="mb-4">
           <Link to="/admin/transactions">
             <ArrowLeft className="mr-1 h-4 w-4" />
@@ -47,6 +58,7 @@ function NewAdminTransactionPage() {
           </Link>
         </Button>
         <TransactionForm
+          isWorkspaceCurrent={isWorkspaceCurrent}
           staffName={user?.name ?? undefined}
           canVerify={canVerify}
           onSaved={(id) => navigate({ to: "/admin/transactions/$id", params: { id } })}

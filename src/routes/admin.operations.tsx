@@ -1,4 +1,6 @@
 import { useStaffWorkspaceIdentity, useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
+import { useNeonAuth } from "@/hooks/use-neon-auth";
+import { useStaffSession } from "@/components/admin/staff-session";
 import { WhatsappServiceHealth } from "@/components/admin/operations/WhatsappServiceHealth";
 import { useCallback, useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -72,7 +74,11 @@ function AdminOperations() {
   const identity = useStaffWorkspaceIdentity();
   if (!identity)
     return (
-      <AdminShell title="系統營運" description="控制平面狀態，以及按權限開放的營運工具。">
+      <AdminShell
+        contentWidth="standard"
+        title="系統營運"
+        description="控制平面狀態，以及按權限開放的營運工具。"
+      >
         {null}
       </AdminShell>
     );
@@ -80,6 +86,11 @@ function AdminOperations() {
 }
 function AdminOperationsWorkspace({ identity }: { identity: string }) {
   const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
+  const { user } = useNeonAuth();
+  const { session } = useStaffSession(user?.id ?? null);
+  const canReadServiceHealth =
+    session?.status === "ok" &&
+    session.roles.some((role) => role === "admin" || role === "manager");
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const { pulse, refreshNow } = useOperationsPulse();
@@ -191,7 +202,22 @@ function AdminOperationsWorkspace({ identity }: { identity: string }) {
   }, [health, refreshNow, isWorkspaceCurrent]);
 
   return (
-    <AdminShell title="系統營運" description="控制平面狀態，以及按權限開放的營運工具。">
+    <AdminShell
+      contentWidth="standard"
+      title="系統營運"
+      description="控制平面狀態，以及按權限開放的營運工具。"
+      actions={
+        <Button
+          type="button"
+          variant="outline"
+          onClick={refreshNow}
+          aria-label="重新檢查控制平面狀態"
+        >
+          <RefreshCw className="h-4 w-4" />
+          重新整理
+        </Button>
+      }
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         {/* aria-live sits on the status badge only. It previously wrapped the
             timestamp too, so screen readers re-announced the whole region every
@@ -215,15 +241,6 @@ function AdminOperationsWorkspace({ identity }: { identity: string }) {
             </span>
           ) : null}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          onClick={refreshNow}
-          aria-label="重新檢查控制平面狀態"
-        >
-          <RefreshCw className="h-4 w-4" />
-          重新整理
-        </Button>
       </div>
 
       {error ? (
@@ -235,7 +252,9 @@ function AdminOperationsWorkspace({ identity }: { identity: string }) {
       ) : null}
       {!health && !error ? <Skeleton className="mt-4 h-48 w-full" /> : null}
 
-      {health ? <WhatsappServiceHealth isWorkspaceCurrent={isWorkspaceCurrent} /> : null}
+      {health && canReadServiceHealth ? (
+        <WhatsappServiceHealth isWorkspaceCurrent={isWorkspaceCurrent} />
+      ) : null}
       {health ? (
         <Tabs.Root value={activeTab} onValueChange={handleTabChange} className="mt-4">
           {/* Every tab is rendered, not just the permitted ones. Omitting them

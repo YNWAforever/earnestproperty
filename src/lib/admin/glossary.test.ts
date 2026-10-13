@@ -160,7 +160,7 @@ test("no admin page title, nav label or breadcrumb uses a rejected variant", () 
 });
 
 const APPROVED_PLACEMENTS: Array<[file: string, text: string]> = [
-  ["src/components/admin/AdminShell.tsx", "樓盤管理"],
+  ["src/components/admin/admin-navigation.ts", "樓盤管理"],
   ["src/routes/admin.listings.tsx", '"樓盤管理｜Earnest Admin"'],
   ["src/routes/admin.listings.tsx", 'title="樓盤管理"'],
   ["src/routes/admin.listings_.$id.tsx", ">樓盤管理</Link>"],
@@ -171,7 +171,7 @@ const APPROVED_PLACEMENTS: Array<[file: string, text: string]> = [
   ["src/routes/admin.whatsapp-links.tsx", 'title="WhatsApp 來源連結"'],
   ["src/components/admin/whatsapp/WhatsappLinksTable.tsx", 'aria-label="編輯來源連結"'],
   ["src/routes/admin.blasts.tsx", '"推廣活動｜Earnest Admin"'],
-  ["src/routes/admin.blasts.tsx", '<AdminShell title="推廣活動"'],
+  ["src/routes/admin.blasts.tsx", 'title="推廣活動"'],
   [
     "src/routes/admin.blasts.tsx",
     'description="推廣活動：只用已審批範本、只發給已同意接收的客戶。"',

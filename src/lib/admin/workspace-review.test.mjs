@@ -344,3 +344,92 @@ for (const [file, marker, write, read, extra] of [
     await pending;
     assert.equal(reads, 0);
   });
+
+for (const retired of [false, true]) {
+  test(`UX SEC: FAQ import ${retired ? "stops after membership replacement" : "completes while current"}`, async () => {
+    const accepted = deferred();
+    let live = true;
+    let writes = 0;
+    let reads = 0;
+    const notices = [];
+    const run = callback("src/routes/admin.cms.tsx", "handleImportFaqs", {
+      isWorkspaceCurrent: () => live,
+      faqImportPreview: [
+        { scope: "general", question: "synthetic one", answer: "one" },
+        { scope: "general", question: "synthetic two", answer: "two" },
+      ],
+      saveAdminFaq: async () => {
+        writes++;
+        if (writes === 1) await accepted.promise;
+        return { id: "owned" };
+      },
+      assertNoServerError: () => {},
+      refreshCmsData: async () => {
+        reads++;
+      },
+      refreshKnowledgeStatus: async () => {
+        reads++;
+      },
+      toast: { success: (text) => notices.push(text), error: (text) => notices.push(text) },
+      errorText: String,
+      ...setters([
+        "setFaqImportSaving",
+        "setFaqImportConfirmOpen",
+        "setFaqImportOpen",
+        "setFaqImportText",
+      ]),
+    });
+    const pending = run();
+    assert.equal(writes, 1);
+    live = !retired;
+    accepted.resolve();
+    await pending;
+    assert.equal(writes, retired ? 1 : 2);
+    assert.equal(reads, retired ? 0 : 2);
+    assert.equal(notices.length, retired ? 0 : 1);
+  });
+
+  test(`UX SEC: transaction save ${retired ? "cannot navigate another staff workspace" : "keeps successful save navigation"}`, async () => {
+    const accepted = deferred();
+    let live = true;
+    let saved = 0;
+    let notices = 0;
+    const run = callback("src/components/dashboard/TransactionForm.tsx", "handleSubmit", {
+      isCurrent: () => live,
+      form: { price: "8000000" },
+      transaction: { id: "owned" },
+      schema: { safeParse: () => ({ success: true, data: {} }) },
+      saveAdminTransaction: () => accepted.promise,
+      flushSync: (fn) => fn(),
+      onSaved: () => saved++,
+      toast: { success: () => notices++, error: () => notices++ },
+      ...setters(["setFieldErrors", "setSubmitting", "setBaseline"]),
+    });
+    const pending = run({ preventDefault() {} });
+    live = !retired;
+    accepted.resolve({ id: "owned" });
+    await pending;
+    assert.equal(saved, retired ? 0 : 1);
+    assert.equal(notices, retired ? 0 : 1);
+  });
+}
+
+test("UX SEC: retired command-center analysis cannot announce or refetch into the next scope", async () => {
+  const accepted = deferred();
+  let live = true;
+  let readbacks = 0;
+  let notices = 0;
+  const run = callback("src/routes/admin.leads_.command-center.tsx", "runAnalysis", {
+    isWorkspaceCurrent: () => live,
+    analyzeAdminLeadAiProfile: () => accepted.promise,
+    refresh: async () => readbacks++,
+    toast: { success: () => notices++, error: () => notices++ },
+    ...setters(["setBusy"]),
+  });
+  const pending = run({ lead_id: "owned" });
+  live = false;
+  accepted.resolve();
+  await pending;
+  assert.equal(readbacks, 0);
+  assert.equal(notices, 0);
+});

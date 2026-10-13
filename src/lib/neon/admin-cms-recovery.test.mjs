@@ -309,6 +309,7 @@ test("dedicated publish sends only the saved reviewed revision with its base, ne
     draftEditVersion: 5,
   };
   const { handlePublish } = extractedFunctions(estateFormPath, ["handlePublish"], {
+    isCurrent: () => true,
     validate: () => null,
     setPublishing: () => {},
     reviewed,
@@ -350,6 +351,7 @@ test("dedicated publish sends only the saved reviewed revision with its base, ne
 test("dedicated publish retains unsaved local edits and refuses a stale reviewed snapshot", async () => {
   const errors = [];
   const { handlePublish } = extractedFunctions(estateFormPath, ["handlePublish"], {
+    isCurrent: () => true,
     validate: () => null,
     setPublishing: () => {},
     reviewed: { draftRevisionId: "old" },
@@ -394,6 +396,7 @@ for (const kind of ["Estate", "Article"])
       const pending = new Map();
       const writes = [];
       const context = {
+        isWorkspaceCurrent: () => true,
         fetchAdminCmsEditor: ({ data }) =>
           new Promise((resolve) => pending.set(data.resourceId, resolve)),
         toast: { error: () => assert.fail("unexpected load error") },
@@ -445,6 +448,7 @@ for (const kind of ["Estate", "Article"])
     const errors = [];
     const prefix = kind.toLowerCase();
     const context = {
+      isWorkspaceCurrent: () => true,
       callCms: (fn) => fn(),
       saveAdminCmsDraft: () =>
         new Promise((resolve) => {

@@ -17,7 +17,11 @@ function NewAdminListingPage() {
   const identity = useStaffWorkspaceIdentity(["admin", "manager", "agent"]);
   if (!identity)
     return (
-      <AdminShell title="新增放盤" description="建立售盤或租盤，設定相片、代理、SEO 及發布狀態。">
+      <AdminShell
+        contentWidth="form"
+        title="新增放盤"
+        description="建立售盤或租盤，設定相片、代理、SEO 及發布狀態。"
+      >
         {null}
       </AdminShell>
     );
@@ -30,6 +34,7 @@ function NewAdminListingWorkspace({ identity }: { identity: string }) {
 
   return (
     <AdminShell
+      contentWidth="form"
       title="新增放盤"
       description="建立售盤或租盤，設定相片、代理、SEO 及發布狀態。"
       breadcrumb={
@@ -45,7 +50,7 @@ function NewAdminListingWorkspace({ identity }: { identity: string }) {
         </nav>
       }
     >
-      <div className="max-w-3xl">
+      <div className="w-full min-w-0">
         <Button asChild variant="ghost" size="sm" className="mb-4">
           <Link to="/admin/listings">
             <ArrowLeft className="mr-1 h-4 w-4" />

@@ -1,0 +1,109 @@
+{
+  "created_date_hkt": "2026-10-13",
+  "deliverable": "plan/spec/UAT, not implementation",
+  "repository": "https://github.com/YNWAforever/earnestproperty",
+  "branch": "main",
+  "sha": "433ab194f9e51c789d89d49216fe2983f2791616",
+  "original_archive": {
+    "filename": "EarnestProperty_Admin_Audit_2026-10-02_zhHK.zip",
+    "sha256": "ffcfe4160a23080caee6b0bf7ca126df298cf29a3ae60bd14394486ba6acb2d2",
+    "bundled": false,
+    "reason": "Reference archive already supplied; avoid duplicating original screenshots and evidence. Retain original separately."
+  },
+  "evidence": [
+    {
+      "id": "E-ARCHIVE",
+      "type": "archive-read",
+      "contents_read": [
+        "00_Status_and_Findings_zhHK.md",
+        "01_Use_Cases_and_Acceptance_zhHK.md",
+        "05_SME_Admin_UX_Spec_zhHK.md",
+        "06_Implementation_Backlog_zhHK.md",
+        "07_Admin_Runbook_and_Release_Gates_zhHK.md",
+        "02_Action_Inventory.csv",
+        "03_Test_Results.csv"
+      ]
+    },
+    {
+      "id": "E-CODE",
+      "type": "github-pinned-source",
+      "url": "https://github.com/YNWAforever/earnestproperty/tree/433ab194f9e51c789d89d49216fe2983f2791616",
+      "paths": [
+        "CLAUDE.md",
+        "package.json",
+        "src/components/admin/AdminShell.tsx",
+        "src/components/admin/admin-nav-roles.ts",
+        "src/components/admin/AdminToolbar.tsx",
+        "src/components/admin/AdminDetailPanel.tsx",
+        "src/components/admin/staff-session.ts",
+        "src/lib/control-plane/role-permissions.ts",
+        "src/routes/__root.tsx",
+        "src/routes/admin.index.tsx",
+        "src/routes/admin.leads.tsx",
+        "src/routes/admin.leads_.command-center.tsx",
+        "src/routes/admin.whatsapp.tsx",
+        "src/routes/admin.listings.tsx",
+        "src/routes/admin.listings_.new.tsx",
+        "src/routes/admin.listings_.$id.tsx",
+        "src/routes/admin.transactions.tsx",
+        "src/routes/admin.transactions_.new.tsx",
+        "src/routes/admin.transactions_.$id.tsx",
+        "src/routes/admin.analytics.tsx",
+        "src/routes/admin.blasts.tsx",
+        "src/routes/admin.cms.tsx",
+        "src/routes/admin.estates.tsx",
+        "src/routes/admin.estates_.new.tsx",
+        "src/routes/admin.estates_.$id.tsx",
+        "src/routes/admin.segments.tsx",
+        "src/routes/admin.whatsapp-links.tsx",
+        "src/routes/admin.whatsapp-settings.tsx",
+        "src/routes/admin.team.tsx",
+        "src/routes/admin.agents.tsx",
+        "src/routes/admin.agents_.new.tsx",
+        "src/routes/admin.agents_.$id.tsx",
+        "src/routes/admin.property-sync.tsx",
+        "src/routes/admin.operations.tsx"
+      ]
+    },
+    {
+      "id": "E-LIVE",
+      "type": "browser",
+      "date_hkt": "2026-10-13",
+      "observations": [
+        {
+          "url": "https://www.earnestproperty.com/admin",
+          "state": "職員登入；登入後台 link；authenticated pages blocked"
+        },
+        {
+          "url": "https://hkwtia.vercel.app/zh/admin-login?next=%2Fadmin",
+          "state": "職員登入；Google or staff-email link；sidebar not observed"
+        }
+      ]
+    },
+    {
+      "id": "E-HISTORY",
+      "type": "historical-repo-report-not-rerun",
+      "paths": [
+        "docs/reports/2026-10-03-admin-remediation/master-plan-execution-reconciliation-2026-10-04.md",
+        "docs/reports/2026-10-03-admin-remediation-release.md"
+      ],
+      "caveat": "The report dates and old runtime results are not current production status."
+    }
+  ],
+  "coverage": {
+    "route_templates_source_read": 25,
+    "sidebar_destinations": 17,
+    "new_case_definitions": 50,
+    "new_cases_executed": 0,
+    "planned_admin_normal_geometry_instances": 100,
+    "planned_role_route_pairs": 100,
+    "product_tests_run_this_turn": false,
+    "historical_core_scenarios": {
+      "PASS": 29,
+      "FAIL": 9,
+      "BLOCKED": 22
+    },
+    "historical_business_actions": 68,
+    "historical_source_candidates": 1332
+  }
+}

@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
@@ -31,10 +33,18 @@ export const Route = createFileRoute("/admin/estates")({
   head: () => ({
     meta: [{ title: "屋苑管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: AdminEstates,
+  component: () => (
+    <AdminStaffWorkspace
+      component={AdminEstates}
+      title="屋苑管理"
+      roles={["admin", "manager"]}
+      contentWidth="standard"
+    />
+  ),
 });
 
-function AdminEstates() {
+function AdminEstates({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const [estates, setEstates] = useState<AdminEstateCmsRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -45,15 +55,16 @@ function AdminEstates() {
     let cancelled = false;
     fetchAdminCms()
       .then((data) => {
-        if (!cancelled) setEstates((data as AdminCmsData).estates);
+        if (!cancelled && isWorkspaceCurrent()) setEstates((data as AdminCmsData).estates);
       })
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "未能載入屋苑資料");
+        if (!cancelled && isWorkspaceCurrent())
+          setError(err instanceof Error ? err.message : "未能載入屋苑資料");
       });
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, isWorkspaceCurrent]);
 
   const visibleEstates = useMemo(() => {
     if (!estates) return null;
@@ -68,7 +79,19 @@ function AdminEstates() {
   const capped = (estates?.length ?? 0) >= ESTATE_ROW_CAP;
 
   return (
-    <AdminShell title="屋苑管理" description="管理屋苑別名、地址、座標、交通、校網及核實狀態。">
+    <AdminShell
+      contentWidth="standard"
+      title="屋苑管理"
+      description="管理屋苑別名、地址、座標、交通、校網及核實狀態。"
+      actions={
+        <Button asChild size="sm" className="h-11 lg:h-9">
+          <Link to="/admin/estates/new">
+            <Plus className="mr-2 h-4 w-4" />
+            新增屋苑
+          </Link>
+        </Button>
+      }
+    >
       <AdminToolbar
         filters={
           <Input
@@ -80,30 +103,11 @@ function AdminEstates() {
             className="h-11 w-full max-w-sm lg:h-9"
           />
         }
-        actions={
-          <Button asChild size="sm" className="h-11 lg:h-9">
-            <Link to="/admin/estates/new">
-              <Plus className="mr-2 h-4 w-4" />
-              新增屋苑
-            </Link>
-          </Button>
-        }
       />
       {error ? <AdminError message={error} /> : null}
       {!estates && !error ? <Skeleton className="h-72 w-full" /> : null}
       {estates?.length === 0 ? (
-        <AdminEmptyState
-          title="未有屋苑"
-          description="新增第一個屋苑後即可管理完整資料。"
-          action={
-            <Button asChild>
-              <Link to="/admin/estates/new">
-                <Plus className="mr-2 h-4 w-4" />
-                新增屋苑
-              </Link>
-            </Button>
-          }
-        />
+        <AdminEmptyState title="未有屋苑" description="新增第一個屋苑後即可管理完整資料。" />
       ) : null}
       {estates && estates.length > 0 && visibleEstates ? (
         <Card>
@@ -129,8 +133,8 @@ function AdminEstates() {
                 />
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table className="min-w-[640px]">
+              <div className="min-w-0">
+                <Table containerLabel="屋苑清單" className="min-w-[640px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>屋苑</TableHead>

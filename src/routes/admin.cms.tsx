@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
 import { cmsEditorHasChanges } from "@/components/admin/cms-editor-state";
 import { CmsDistrictField, CmsImageField } from "@/components/admin/CmsEditorFields";
@@ -122,7 +124,14 @@ export const Route = createFileRoute("/admin/cms")({
   head: () => ({
     meta: [{ title: "CMS｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: AdminCms,
+  component: () => (
+    <AdminStaffWorkspace
+      component={AdminCms}
+      title="內容中心"
+      roles={["admin", "manager", "agent"]}
+      contentWidth="standard"
+    />
+  ),
 });
 
 type EditingMediaAsset = Pick<
@@ -198,7 +207,8 @@ function useEditingDirty<T>(value: T | null): boolean {
   return value !== null && JSON.stringify(value) !== baselineRef.current;
 }
 
-function AdminCms() {
+function AdminCms({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -287,6 +297,8 @@ function AdminCms() {
   const refreshCmsData = useCallback(
     async (cursor: string | null = null) => {
       const sequence = ++cmsRequest.current;
+
+      if (!isWorkspaceCurrent()) return;
       const page = await fetchAdminPage({
         data: {
           resource: activeTab,
@@ -297,6 +309,8 @@ function AdminCms() {
             : {}),
         },
       });
+      if (!isWorkspaceCurrent()) return;
+
       if (sequence !== cmsRequest.current) return;
       if (activeTab === "faqs") setFaqArchivedTotal(page.archivedTotal ?? 0);
       setCmsCursor(cursor);
@@ -342,29 +356,36 @@ function AdminCms() {
       setData((current) => current ?? { estates: [], articles: [], faqs: [], faqGroups: [] });
       setError(null);
     },
-    [activeTab, activeSearch, faqScopeFilter, showArchivedFaqs],
+    [activeTab, activeSearch, faqScopeFilter, showArchivedFaqs, isWorkspaceCurrent],
   );
 
   const refreshKnowledgeStatus = useCallback(async () => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
     setKnowledgeLoading(true);
     try {
-      setKnowledgeStatus((await fetchAdminAiKnowledgeStatus()) as AdminAiKnowledgeStatus);
+      if (!isWorkspaceCurrent()) return;
+      const status = (await fetchAdminAiKnowledgeStatus()) as AdminAiKnowledgeStatus;
+      if (!isWorkspaceCurrent()) return;
+      setKnowledgeStatus(status);
       setKnowledgeError(null);
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       // Deliberately not rethrown: a status read failing must not report the
       // rebuild that just succeeded as a failure.
       setKnowledgeStatus(null);
       setKnowledgeError(errorText(err));
     } finally {
-      setKnowledgeLoading(false);
+      if (isWorkspaceCurrent()) {
+        setKnowledgeLoading(false);
+      }
     }
-  }, [user]);
+  }, [user, isWorkspaceCurrent]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || !isWorkspaceCurrent()) return;
     refreshCmsData().catch((err) => setError(errorText(err)));
-  }, [refreshCmsData, user]);
+  }, [refreshCmsData, user, isWorkspaceCurrent]);
   useEffect(() => {
     if (user) void refreshKnowledgeStatus();
   }, [refreshKnowledgeStatus, user]);
@@ -448,9 +469,14 @@ function AdminCms() {
    * violation. A failed refresh is now reported as exactly what it is. */
   async function refreshAfterWrite(successMessage: string) {
     try {
+      if (!isWorkspaceCurrent()) return;
       await refreshCmsData();
+      if (!isWorkspaceCurrent()) return;
+
       toast.success(successMessage);
     } catch {
+      if (!isWorkspaceCurrent()) return;
+
       toast.success(`${successMessage}（列表未能更新，請重新載入頁面）`);
     }
   }
@@ -464,9 +490,12 @@ function AdminCms() {
       return;
     }
     try {
+      if (!isWorkspaceCurrent()) return;
       const { revisions, payload, editState } = await fetchAdminCmsEditor({
         data: { resourceType: "estate", resourceId },
       });
+      if (!isWorkspaceCurrent()) return;
+
       if (sequence !== estateLoadSequence.current) return;
       setEstateEdit(editState);
       if (payload)
@@ -474,6 +503,8 @@ function AdminCms() {
       setEstateRevisions(revisions);
       setEstateLatestPayload(payload);
     } catch {
+      if (!isWorkspaceCurrent()) return;
+
       if (sequence === estateLoadSequence.current) toast.error("未能載入完整草稿，請重試。");
     }
   }
@@ -493,6 +524,7 @@ function AdminCms() {
     const sequence = estateLoadSequence.current;
     setSaving(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       const result = await callCms(() =>
         saveAdminCmsDraft({
           data: {
@@ -508,6 +540,8 @@ function AdminCms() {
           },
         }),
       );
+      if (!isWorkspaceCurrent()) return;
+
       if (sequence === estateLoadSequence.current) {
         setEstateEdit(result.editState);
         setEditingEstate((current) => (current ? { ...current, id: result.resourceId } : current));
@@ -515,9 +549,13 @@ function AdminCms() {
       void refreshCmsData().catch(() => undefined);
       toast.success("草稿已儲存");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -539,6 +577,8 @@ function AdminCms() {
         throw new Error("請先儲存草稿並核對內容後發布。");
       }
       const draft = { resourceId: estateEdit.resourceId, revisionId: estateEdit.draftRevisionId };
+
+      if (!isWorkspaceCurrent()) return;
       await callCms(() =>
         publishAdminCmsRevision({
           data: {
@@ -550,40 +590,69 @@ function AdminCms() {
           },
         }),
       );
+      if (!isWorkspaceCurrent()) return;
+
       setEditingEstate(null);
+
+      if (!isWorkspaceCurrent()) return;
       await refreshAfterWrite("屋苑已發布");
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setPublishing(false);
+      if (isWorkspaceCurrent()) {
+        setPublishing(false);
+      }
     }
   }
 
   async function handleRestoreEstateRevision(revisionId: string) {
     setSaving(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       const result = await callCms(() => restoreAdminCmsRevision({ data: { revisionId } }));
+      if (!isWorkspaceCurrent()) return;
+
+      if (!isWorkspaceCurrent()) return;
       await loadEstateRevisions(result.resourceId);
+      if (!isWorkspaceCurrent()) return;
+
       toast.success("已還原為新草稿，請檢查內容後發布");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
   async function handleArchiveEstate(estateId: string) {
     setSaving(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       await callCms(() =>
         archiveAdminCmsResource({ data: { resourceType: "estate", resourceId: estateId } }),
       );
+      if (!isWorkspaceCurrent()) return;
+
       setArchiving(null);
+
+      if (!isWorkspaceCurrent()) return;
       await refreshAfterWrite("屋苑已封存");
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -595,15 +664,20 @@ function AdminCms() {
       return;
     }
     try {
+      if (!isWorkspaceCurrent()) return;
       const { revisions, payload, editState } = await fetchAdminCmsEditor({
         data: { resourceType: "article", resourceId },
       });
+      if (!isWorkspaceCurrent()) return;
+
       if (sequence !== articleLoadSequence.current) return;
       setArticleEdit(editState);
       if (payload)
         setEditingArticle({ ...emptyArticle, ...payload, id: resourceId } as AdminArticleInput);
       setArticleRevisions(revisions);
     } catch {
+      if (!isWorkspaceCurrent()) return;
+
       if (sequence === articleLoadSequence.current) toast.error("未能載入完整草稿，請重試。");
     }
   }
@@ -619,6 +693,7 @@ function AdminCms() {
     const sequence = articleLoadSequence.current;
     setSaving(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       const result = await callCms(() =>
         saveAdminCmsDraft({
           data: {
@@ -631,6 +706,8 @@ function AdminCms() {
           },
         }),
       );
+      if (!isWorkspaceCurrent()) return;
+
       if (sequence === articleLoadSequence.current) {
         setArticleEdit(result.editState);
         setEditingArticle((current) => (current ? { ...current, id: result.resourceId } : current));
@@ -638,9 +715,13 @@ function AdminCms() {
       void refreshCmsData().catch(() => undefined);
       toast.success("草稿已儲存");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -662,6 +743,8 @@ function AdminCms() {
         throw new Error("請先儲存草稿並核對內容後發布。");
       }
       const draft = { resourceId: articleEdit.resourceId, revisionId: articleEdit.draftRevisionId };
+
+      if (!isWorkspaceCurrent()) return;
       await callCms(() =>
         publishAdminCmsRevision({
           data: {
@@ -673,40 +756,69 @@ function AdminCms() {
           },
         }),
       );
+      if (!isWorkspaceCurrent()) return;
+
       setEditingArticle(null);
+
+      if (!isWorkspaceCurrent()) return;
       await refreshAfterWrite("文章已發布");
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setPublishing(false);
+      if (isWorkspaceCurrent()) {
+        setPublishing(false);
+      }
     }
   }
 
   async function handleRestoreArticleRevision(revisionId: string) {
     setSaving(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       const result = await callCms(() => restoreAdminCmsRevision({ data: { revisionId } }));
+      if (!isWorkspaceCurrent()) return;
+
+      if (!isWorkspaceCurrent()) return;
       await loadArticleRevisions(result.resourceId);
+      if (!isWorkspaceCurrent()) return;
+
       toast.success("已還原為新草稿，請檢查內容後發布");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
   async function handleArchiveArticle(articleId: string) {
     setSaving(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       await callCms(() =>
         archiveAdminCmsResource({ data: { resourceType: "article", resourceId: articleId } }),
       );
+      if (!isWorkspaceCurrent()) return;
+
       setArchiving(null);
+
+      if (!isWorkspaceCurrent()) return;
       await refreshAfterWrite("文章已封存");
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -720,13 +832,23 @@ function AdminCms() {
 
     setSaving(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       assertNoServerError(await saveAdminFaq({ data: editingFaq }));
+      if (!isWorkspaceCurrent()) return;
+
       setEditingFaq(null);
+
+      if (!isWorkspaceCurrent()) return;
       await refreshAfterWrite(editingFaq.id ? "FAQ 編輯已儲存" : "FAQ 已新增");
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -735,10 +857,18 @@ function AdminCms() {
     setFaqDeleting(true);
     setFaqDeleteError(null);
     try {
+      if (!isWorkspaceCurrent()) return;
       assertNoServerError(await deleteAdminFaq({ data: { id: deletingFaq.id } }));
+      if (!isWorkspaceCurrent()) return;
+
       setDeletingFaq(null);
+
+      if (!isWorkspaceCurrent()) return;
       await refreshAfterWrite("已封存");
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       const message = errorText(err);
       setFaqDeleteError(
         err instanceof Error && err.message === "Not found"
@@ -746,7 +876,9 @@ function AdminCms() {
           : message,
       );
     } finally {
-      setFaqDeleting(false);
+      if (isWorkspaceCurrent()) {
+        setFaqDeleting(false);
+      }
     }
   }
 
@@ -755,17 +887,27 @@ function AdminCms() {
     setFaqRestoring(true);
     setFaqRestoreError(null);
     try {
+      if (!isWorkspaceCurrent()) return;
       assertNoServerError(await restoreAdminFaq({ data: { id: restoringFaq.id } }));
+      if (!isWorkspaceCurrent()) return;
+
       setRestoringFaq(null);
+
+      if (!isWorkspaceCurrent()) return;
       await refreshAfterWrite("已還原");
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       setFaqRestoreError(
         err instanceof Error && err.message === "Not found"
           ? "此 FAQ 已被封存或刪除，請重新載入頁面。"
           : errorText(err),
       );
     } finally {
-      setFaqRestoring(false);
+      if (isWorkspaceCurrent()) {
+        setFaqRestoring(false);
+      }
     }
   }
 
@@ -783,13 +925,23 @@ function AdminCms() {
 
     setSaving(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       assertNoServerError(await saveAdminCmsVideo({ data: editingCmsVideo }));
+      if (!isWorkspaceCurrent()) return;
+
       setEditingCmsVideo(null);
+
+      if (!isWorkspaceCurrent()) return;
       await refreshAfterWrite(editingCmsVideo.id ? "影片已更新" : "影片已新增");
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -798,11 +950,16 @@ function AdminCms() {
     event.target.value = "";
     if (!file) return;
     try {
+      if (!isWorkspaceCurrent()) return;
       const text = await file.text();
+      if (!isWorkspaceCurrent()) return;
+
       setFaqImportText(text);
       setFaqImportOpen(true);
       toast.success(`已讀取 ${file.name}`);
     } catch {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error("未能讀取 FAQ 檔案");
     }
   }
@@ -820,7 +977,11 @@ function AdminCms() {
         scope: row.scope ?? faqImportScope,
         question: row.question,
       }));
+
+      if (!isWorkspaceCurrent()) return;
       const result = await checkAdminFaqConflicts({ data: { keys } });
+      if (!isWorkspaceCurrent()) return;
+
       setFaqImportConflicts(
         new Set(result.existing.map((row) => faqImportKey(row.scope, row.question))),
       );
@@ -829,13 +990,17 @@ function AdminCms() {
       );
       setFaqImportConfirmOpen(true);
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       // Never fall through to the confirm on failure: without the conflict set
       // it would assert 「全部為新增」 with no basis.
       setFaqImportConflicts(null);
       setFaqImportArchivedKeys(new Set());
       toast.error(`未能檢查是否會覆寫現有 FAQ：${errorText(err)}`);
     } finally {
-      setFaqImportChecking(false);
+      if (isWorkspaceCurrent()) {
+        setFaqImportChecking(false);
+      }
     }
   }
 
@@ -849,6 +1014,7 @@ function AdminCms() {
     try {
       for (const [index, row] of faqImportPreview.entries()) {
         try {
+          if (!isWorkspaceCurrent()) return;
           assertNoServerError(
             await saveAdminFaq({
               data: {
@@ -862,8 +1028,12 @@ function AdminCms() {
               },
             }),
           );
+          if (!isWorkspaceCurrent()) return;
+
           imported += 1;
         } catch (err) {
+          if (!isWorkspaceCurrent()) return;
+
           // Stop at the first failure and report how far it got: the loop is not
           // transactional, so silently continuing left staff with no idea which
           // rows were saved.
@@ -872,12 +1042,19 @@ function AdminCms() {
         }
       }
 
+      if (!isWorkspaceCurrent()) return;
       await refreshCmsData();
+      if (!isWorkspaceCurrent()) return;
+
       if (failure) {
         setFaqImportConfirmOpen(false);
         // The table now shows the imported rows. Published FAQs are read live, so
         // refresh the AI card's status and ask staff to fix and re-import the rest.
+
+        if (!isWorkspaceCurrent()) return;
         await refreshKnowledgeStatus();
+        if (!isWorkspaceCurrent()) return;
+
         toast.error(
           `已匯入 ${imported}／${total}，第 ${failure.position} 條失敗：${failure.message}。` +
             `請修正後重新匯入。`,
@@ -887,17 +1064,29 @@ function AdminCms() {
 
       // FX-11a (E-10): no in-request rebuild. Published FAQs are used live, and the
       // knowledge index catches up through the ai.knowledge.rebuild/repair jobs.
+
+      if (!isWorkspaceCurrent()) return;
       await refreshKnowledgeStatus();
+      if (!isWorkspaceCurrent()) return;
+
       toast.success(`已匯入 ${total} 條 FAQ。`);
       setFaqImportConfirmOpen(false);
       setFaqImportOpen(false);
       setFaqImportText("");
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       setFaqImportConfirmOpen(false);
+
+      if (!isWorkspaceCurrent()) return;
       await refreshKnowledgeStatus().catch(() => undefined);
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(`已匯入 ${imported}／${total}，其後失敗：${errorText(err)}。`);
     } finally {
-      setFaqImportSaving(false);
+      if (isWorkspaceCurrent()) {
+        setFaqImportSaving(false);
+      }
     }
   }
 
@@ -907,6 +1096,7 @@ function AdminCms() {
 
     setSaving(true);
     try {
+      if (!isWorkspaceCurrent()) return;
       assertNoServerError(
         await updateAdminMediaAsset({
           data: {
@@ -917,12 +1107,21 @@ function AdminCms() {
           },
         }),
       );
+      if (!isWorkspaceCurrent()) return;
+
       setEditingMedia(null);
+
+      if (!isWorkspaceCurrent()) return;
       await refreshAfterWrite("媒體庫資料已更新");
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setSaving(false);
+      if (isWorkspaceCurrent()) {
+        setSaving(false);
+      }
     }
   }
 
@@ -942,21 +1141,32 @@ function AdminCms() {
     try {
       for (const file of list) {
         try {
-          await uploadAdminMedia(file, "cms");
+          if (!isWorkspaceCurrent()) return;
+          await uploadAdminMedia(file, "cms", isWorkspaceCurrent);
+          if (!isWorkspaceCurrent()) return;
+
           uploaded += 1;
         } catch (error) {
+          if (!isWorkspaceCurrent()) return;
+
           failed.push(`${file.name}：${error instanceof Error ? error.message : "上載未完成"}`);
         }
       }
+
+      if (!isWorkspaceCurrent()) return;
       await refreshCmsData();
+      if (!isWorkspaceCurrent()) return;
+
       if (failed.length) {
         toast.error(`已上載 ${uploaded}／${list.length}，失敗：${failed.join("、")}`);
       } else {
         toast.success(`已上載 ${uploaded} 個檔案`);
       }
     } finally {
-      setMediaUploading(false);
-      if (mediaFileInputRef.current) mediaFileInputRef.current.value = "";
+      if (isWorkspaceCurrent()) {
+        setMediaUploading(false);
+        if (mediaFileInputRef.current) mediaFileInputRef.current.value = "";
+      }
     }
   }
 
@@ -964,18 +1174,92 @@ function AdminCms() {
     setKnowledgeLoading(true);
     try {
       // Queues the ai.knowledge.rebuild background job; it does not rebuild in-request.
+
+      if (!isWorkspaceCurrent()) return;
       await rebuildAdminAiKnowledge();
+      if (!isWorkspaceCurrent()) return;
+
       toast.success("已排程重建 AI 知識庫，完成後「待重建段數」會歸零。");
+
+      if (!isWorkspaceCurrent()) return;
       await refreshKnowledgeStatus();
+      if (!isWorkspaceCurrent()) return;
     } catch (err) {
+      if (!isWorkspaceCurrent()) return;
+
       toast.error(errorText(err));
     } finally {
-      setKnowledgeLoading(false);
+      if (isWorkspaceCurrent()) {
+        setKnowledgeLoading(false);
+      }
     }
   }
 
   return (
-    <AdminShell title="內容中心" description="CMS：管理屋苑內容、文章、FAQ 及 SEO 資料。">
+    <AdminShell
+      contentWidth="standard"
+      title="內容中心"
+      description="管理屋苑內容、文章、FAQ 及搜尋資料。"
+      actions={
+        data ? (
+          activeTab === "estates" ? (
+            <Button
+              onClick={() => {
+                setEstateEdit(null);
+                ++estateLoadSequence.current;
+                setEstateRevisions(null);
+                setEstateLatestPayload(null);
+                setEditingEstate({ ...emptyEstate });
+                setEstateRevisions(null);
+                setEstateLatestPayload(null);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              新增屋苑
+            </Button>
+          ) : activeTab === "articles" ? (
+            <Button
+              onClick={() => {
+                setArticleEdit(null);
+                ++articleLoadSequence.current;
+                setArticleRevisions(null);
+                setEditingArticle({ ...emptyArticle });
+                setArticleRevisions(null);
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              新增文章
+            </Button>
+          ) : activeTab === "videos" ? (
+            <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
+              <Plus className="h-4 w-4" />
+              新增影片
+            </Button>
+          ) : activeTab === "faqs" ? (
+            <Button
+              onClick={() =>
+                setEditingFaq({
+                  ...emptyFaq,
+                  scope: data.faqGroups[0]?.scope ?? emptyFaq.scope,
+                })
+              }
+            >
+              <Plus className="h-4 w-4" />
+              新增 FAQ
+            </Button>
+          ) : activeTab === "media" ? (
+            <Button
+              type="button"
+              disabled={mediaUploading}
+              onClick={() => mediaFileInputRef.current?.click()}
+            >
+              <Upload className="h-4 w-4" />
+              {mediaUploading ? "上載中…" : "上載媒體"}
+            </Button>
+          ) : null
+        ) : null
+      }
+    >
       {error ? (
         <div role="alert" className="space-y-2">
           <AdminError message={error} />
@@ -1005,7 +1289,7 @@ function AdminCms() {
               </Button>
             ))}
           </div>
-          <div className="mb-3 flex items-center gap-2">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <span>
               {activeSearch.trim() ? "符合搜尋" : "目前分類"}共 {cmsTotal} 項（包括草稿）
             </span>
@@ -1063,20 +1347,6 @@ function AdminCms() {
                         setSearchByTab((current) => ({ ...current, estates: value }))
                       }
                     />
-                    <Button
-                      onClick={() => {
-                        setEstateEdit(null);
-                        ++estateLoadSequence.current;
-                        setEstateRevisions(null);
-                        setEstateLatestPayload(null);
-                        setEditingEstate({ ...emptyEstate });
-                        setEstateRevisions(null);
-                        setEstateLatestPayload(null);
-                      }}
-                    >
-                      <Plus className="h-4 w-4" />
-                      新增屋苑
-                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -1087,7 +1357,7 @@ function AdminCms() {
                     label="屋苑"
                   />
                   {filteredEstates.length ? (
-                    <Table>
+                    <Table containerLabel="屋苑內容">
                       <TableHeader>
                         <TableRow>
                           <TableHead>屋苑</TableHead>
@@ -1149,21 +1419,6 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有屋苑"
                           description="新增第一個屋苑後即可管理 SEO 及頁面內容。"
-                          action={
-                            <Button
-                              onClick={() => {
-                                setEstateEdit(null);
-                                ++estateLoadSequence.current;
-                                setEstateRevisions(null);
-                                setEstateLatestPayload(null);
-                                setEditingEstate({ ...emptyEstate });
-                                setEstateRevisions(null);
-                              }}
-                            >
-                              <Plus className="h-4 w-4" />
-                              新增屋苑
-                            </Button>
-                          }
                         />
                       )}
                     </div>
@@ -1189,18 +1444,6 @@ function AdminCms() {
                         setSearchByTab((current) => ({ ...current, articles: value }))
                       }
                     />
-                    <Button
-                      onClick={() => {
-                        setArticleEdit(null);
-                        ++articleLoadSequence.current;
-                        setArticleRevisions(null);
-                        setEditingArticle({ ...emptyArticle });
-                        setArticleRevisions(null);
-                      }}
-                    >
-                      <Plus className="h-4 w-4" />
-                      新增文章
-                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -1211,7 +1454,7 @@ function AdminCms() {
                     label="文章"
                   />
                   {filteredArticles.length ? (
-                    <Table>
+                    <Table containerLabel="文章內容">
                       <TableHeader>
                         <TableRow>
                           <TableHead>標題</TableHead>
@@ -1275,20 +1518,6 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有文章"
                           description="新增文章後即可管理內容及發布狀態。"
-                          action={
-                            <Button
-                              onClick={() => {
-                                setArticleEdit(null);
-                                ++articleLoadSequence.current;
-                                setArticleRevisions(null);
-                                setEditingArticle({ ...emptyArticle });
-                                setArticleRevisions(null);
-                              }}
-                            >
-                              <Plus className="h-4 w-4" />
-                              新增文章
-                            </Button>
-                          }
                         />
                       )}
                     </div>
@@ -1314,15 +1543,11 @@ function AdminCms() {
                         setSearchByTab((current) => ({ ...current, videos: value }))
                       }
                     />
-                    <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
-                      <Plus className="h-4 w-4" />
-                      新增影片
-                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
                   {filteredVideos.length ? (
-                    <Table>
+                    <Table containerLabel="影片內容">
                       <TableHeader>
                         <TableRow>
                           <TableHead>影片</TableHead>
@@ -1377,12 +1602,6 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有 YouTube 影片"
                           description="新增影片連結後，/videos 會顯示官方頻道影片。"
-                          action={
-                            <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
-                              <Plus className="h-4 w-4" />
-                              新增影片
-                            </Button>
-                          }
                         />
                       )}
                     </div>
@@ -1452,17 +1671,6 @@ function AdminCms() {
                       <FileText className="h-4 w-4" />
                       貼上 FAQ
                     </Button>
-                    <Button
-                      onClick={() =>
-                        setEditingFaq({
-                          ...emptyFaq,
-                          scope: data.faqGroups[0]?.scope ?? emptyFaq.scope,
-                        })
-                      }
-                    >
-                      <Plus className="h-4 w-4" />
-                      新增 FAQ
-                    </Button>
                   </div>
                 </CardHeader>
                 <CardContent className="p-0">
@@ -1473,7 +1681,7 @@ function AdminCms() {
                     label="條 FAQ"
                   />
                   {faqsByScope.length ? (
-                    <Table>
+                    <Table containerLabel="FAQ 內容">
                       <TableHeader>
                         <TableRow>
                           <TableHead>分組</TableHead>
@@ -1561,12 +1769,6 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有 FAQ"
                           description="新增 FAQ 後即可在對應頁面顯示常見問題。"
-                          action={
-                            <Button onClick={() => setEditingFaq({ ...emptyFaq })}>
-                              <Plus className="h-4 w-4" />
-                              新增 FAQ
-                            </Button>
-                          }
                         />
                       )}
                     </div>
@@ -1594,14 +1796,7 @@ function AdminCms() {
                         }
                       />
                     ) : null}
-                    <Button
-                      type="button"
-                      disabled={mediaUploading}
-                      onClick={() => mediaFileInputRef.current?.click()}
-                    >
-                      <Upload className="h-4 w-4" />
-                      {mediaUploading ? "上載中…" : "上載媒體"}
-                    </Button>
+
                     <input
                       ref={mediaFileInputRef}
                       className="hidden"
@@ -1617,7 +1812,7 @@ function AdminCms() {
                 <CardContent className="p-0">
                   {!mediaAssets ? <Skeleton className="m-6 h-48 w-auto" /> : null}
                   {filteredMediaAssets.length ? (
-                    <Table>
+                    <Table containerLabel="媒體內容">
                       <TableHeader>
                         <TableRow>
                           <TableHead>檔案</TableHead>
@@ -1680,16 +1875,6 @@ function AdminCms() {
                         <AdminEmptyState
                           title="未有媒體"
                           description="上載相片後即可在媒體庫管理替代文字。"
-                          action={
-                            <Button
-                              type="button"
-                              disabled={mediaUploading}
-                              onClick={() => mediaFileInputRef.current?.click()}
-                            >
-                              <Upload className="h-4 w-4" />
-                              上載媒體
-                            </Button>
-                          }
                         />
                       )}
                     </div>
@@ -1973,7 +2158,7 @@ function AdminCms() {
           >
             {faqImportOverwriteCount > 0 || faqImportArchived.length > 0 ? (
               <div className="max-h-48 overflow-y-auto rounded-md border">
-                <Table>
+                <Table containerLabel="內容資料">
                   <TableHeader>
                     <TableRow>
                       <TableHead>問題</TableHead>

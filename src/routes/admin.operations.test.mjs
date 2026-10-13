@@ -6,7 +6,8 @@ import test from "node:test";
 const root = process.cwd();
 const packagePath = join(root, "package.json");
 const routePath = join(root, "src/routes/admin.operations.tsx");
-const shellPath = join(root, "src/components/admin/AdminShell.tsx");
+const shellPath = join(root, "src/components/admin/admin-navigation.ts");
+const navigationPath = join(root, "src/components/admin/AdminNavigation.tsx");
 
 test("Operations package script runs the focused route, library, and component suites", () => {
   const packageJson = JSON.parse(readFileSync(packagePath, "utf8"));
@@ -28,7 +29,7 @@ test("Operations route and sidebar expose the capability-gated center", () => {
   assert.match(routeSource, /search:\s*\{ tab:/);
   assert.match(shellSource, /to: "\/admin\/operations"/);
   assert.match(shellSource, /to: "\/admin\/operations",[\s\S]*?label:/);
-  assert.match(shellSource, /ServerCog|Activity/);
+  assert.match(shellSource, /icon: "operations"/);
 });
 
 test("Operations route integration contracts gate protected reads and remain accessible", () => {
@@ -58,9 +59,6 @@ test("Operations route integration contracts gate protected reads and remain acc
   assert.match(routeSource, /AdminOperationsJobs/);
   assert.match(routeSource, /aria-live="polite"/);
   assert.match(routeSource, /<Tabs\.List[^>]*aria-label="營運工具分頁"/);
-  assert.match(shellSource, /to: "\/admin\/operations",[\s\S]*?includeSearch: false/);
-  assert.match(
-    shellSource,
-    /includeSearch:\s*\(?"includeSearch" in item \? item\.includeSearch : true\)?/,
-  );
+  assert.match(shellSource, /to: "\/admin\/operations"/);
+  assert.match(readFileSync(navigationPath, "utf8"), /includeSearch: false/);
 });

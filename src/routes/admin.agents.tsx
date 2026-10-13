@@ -1,3 +1,5 @@
+import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
+import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ExternalLink, Pencil, Plus } from "lucide-react";
@@ -17,10 +19,18 @@ export const Route = createFileRoute("/admin/agents")({
   head: () => ({
     meta: [{ title: "代理管理｜Earnest Admin" }, { name: "robots", content: "noindex" }],
   }),
-  component: AdminAgents,
+  component: () => (
+    <AdminStaffWorkspace
+      component={AdminAgents}
+      title="經紀檔案"
+      roles={["admin", "manager"]}
+      contentWidth="standard"
+    />
+  ),
 });
 
-function AdminAgents() {
+function AdminAgents({ identity }: { identity: string }) {
+  const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
   const [profiles, setProfiles] = useState<AdminAgentProfileRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,29 +40,33 @@ function AdminAgents() {
     let cancelled = false;
     fetchAdminAgentProfiles()
       .then((data) => {
-        if (!cancelled) setProfiles(data as AdminAgentProfileRow[]);
+        if (!cancelled && isWorkspaceCurrent()) setProfiles(data as AdminAgentProfileRow[]);
       })
       .catch((reason) => {
-        if (!cancelled) setError(errorText(reason));
+        if (!cancelled && isWorkspaceCurrent()) setError(errorText(reason));
       });
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, isWorkspaceCurrent]);
 
   return (
-    <AdminShell title="經紀檔案" description="管理公開代理資料、帳戶連結、聯絡方式及發布狀態。">
+    <AdminShell
+      contentWidth="standard"
+      title="經紀檔案"
+      description="管理公開代理資料、帳戶連結、聯絡方式及發布狀態。"
+      actions={
+        <Button asChild size="sm" className="h-11 lg:h-9">
+          <Link to="/admin/agents/new">
+            <Plus className="mr-2 h-4 w-4" />
+            新增代理
+          </Link>
+        </Button>
+      }
+    >
       <AdminToolbar
         filters={
           <p className="self-center text-sm text-muted-foreground">代理資料由管理員或經理更新。</p>
-        }
-        actions={
-          <Button asChild size="sm" className="h-11 lg:h-9">
-            <Link to="/admin/agents/new">
-              <Plus className="mr-2 h-4 w-4" />
-              新增代理
-            </Link>
-          </Button>
         }
       />
       {error ? <AdminError message={error} /> : null}
@@ -61,15 +75,16 @@ function AdminAgents() {
         <AdminEmptyState
           title="未有代理資料"
           description="新增第一位代理後，即可設定公開個人頁及聯絡資料。"
-          action={
-            <Button asChild>
-              <Link to="/admin/agents/new">新增代理</Link>
-            </Button>
-          }
         />
       ) : null}
       {profiles && profiles.length > 0 ? (
-        <div className="overflow-x-auto border">
+        <div
+          role="region"
+          aria-label="代理清單"
+          tabIndex={0}
+          data-admin-table-region
+          className="min-w-0 overflow-x-auto border"
+        >
           <table className="w-full min-w-[760px] text-sm">
             <thead className="border-b bg-muted/30 text-left text-muted-foreground">
               <tr>

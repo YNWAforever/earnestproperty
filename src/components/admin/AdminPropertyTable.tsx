@@ -141,7 +141,13 @@ export function AdminPropertyTable({
         />
         選擇本頁（{selectable.length} 個可管理物業）
       </label>
-      <div className="hidden overflow-x-auto rounded-xl border lg:block">
+      <div
+        data-admin-table-region
+        role="region"
+        aria-label="物業列表"
+        tabIndex={0}
+        className="hidden min-w-0 overflow-x-auto rounded-xl border lg:block"
+      >
         <table className="w-full text-left text-sm">
           <caption className="sr-only">樓盤管理；每個樓編一行，售租價格與狀態分開顯示</caption>
           <thead className="bg-muted/50">

@@ -28,7 +28,8 @@ function WhatsappSettings() {
   if (!identity)
     return (
       <AdminShell
-        title="WhatsApp 同事映射"
+        contentWidth="standard"
+        title="WhatsApp 接收設定"
         description="核對實際 Inbox 帳戶、獨立通知目的地與核實證據。"
       >
         {session?.status === "ok" ? (
@@ -64,10 +65,11 @@ function WhatsappSettingsWorkspace({ identity }: { identity: string }) {
   }, [userId, loading, isWorkspaceCurrent]);
   return (
     <AdminShell
-      title="WhatsApp 同事映射"
+      contentWidth="standard"
+      title="WhatsApp 接收設定"
       description="核對實際 Inbox 帳戶、獨立通知目的地與核實證據。"
     >
-      <div className="space-y-4">
+      <div className="space-y-6">
         <p className="rounded border p-3 text-sm">
           自動分派仍需核實 WOZTELL
           執行／查證介面及人工改派政策。儲存映射不會執行分派；試送只有明確提交才會進入專用工作佇列。

@@ -4,6 +4,7 @@ import { join } from "node:path";
 import test from "node:test";
 
 import { NAV_ENTRIES, roleCanOpen, visibleNavEntries } from "./admin-nav-roles.ts";
+import { ADMIN_NAV_GROUPS } from "./admin-navigation.ts";
 import { hasPermission } from "../../lib/control-plane/role-permissions.ts";
 
 const root = process.cwd();
@@ -86,8 +87,8 @@ function rolesAcceptedByServer(spec) {
 
 test("the table names every sidebar entry exactly once", () => {
   assert.deepEqual(Object.keys(FIRST_READ).sort(), NAV_ENTRIES.map((e) => e.to).sort());
-  const shell = read("src/components/admin/AdminShell.tsx");
-  const shellTargets = [...shell.matchAll(/\bto: "(\/admin[^"]*)"/g)].map((m) => m[1]);
+  const shellTargets = ADMIN_NAV_GROUPS.flatMap((group) => group.items.map((item) => item.to));
+  assert.equal(new Set(shellTargets).size, 17);
   assert.deepEqual([...shellTargets].sort(), NAV_ENTRIES.map((e) => e.to).sort());
 });
 
@@ -108,7 +109,7 @@ test("an agent sees exactly the entries whose first read accepts agent, and none
     "/admin/operations",
   ]);
   // Hidden, not greyed: the shell no longer has a locked rendering at all.
-  const shell = read("src/components/admin/AdminShell.tsx");
+  const shell = read("src/components/admin/AdminNavigation.tsx");
   for (const gone of ["navDisabledClassName", "requiredRoleLabel", "aria-disabled", "Lock"]) {
     assert.ok(!shell.includes(gone), `AdminShell still mentions ${gone}`);
   }
@@ -139,4 +140,13 @@ test("a failed session lookup (null roles) still renders every entry", () => {
   assert.equal(visibleNavEntries(null).length, NAV_ENTRIES.length);
   assert.equal(roleCanOpen(null, ["admin"]), true);
   assert.equal(roleCanOpen([], ["admin"]), false);
+});
+
+test("a viewer sees operations only and empty roles show no destinations", () => {
+  assert.deepEqual(
+    visibleNavEntries(["viewer"]).map((entry) => entry.to),
+    ["/admin/operations"],
+  );
+  assert.deepEqual(visibleNavEntries([]), []);
+  assert.equal(hasPermission(["manager"], "staff.manage"), false);
 });

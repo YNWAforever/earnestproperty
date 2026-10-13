@@ -141,6 +141,9 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
   const isCurrent = useWorkspaceCurrent(isWorkspaceCurrent);
   const formRef = useRef<HTMLFormElement>(null);
   const [estates, setEstates] = useState<Estate[]>([]);
+  const [optionsError, setOptionsError] = useState(false);
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [optionsAttempt, setOptionsAttempt] = useState(0);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState(() => createInitialForm(property));
@@ -176,20 +179,24 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
   useEffect(() => {
     if (!isCurrent()) return;
     let cancelled = false;
+    setOptionsLoading(true);
     Promise.all([fetchAdminEstateOptions(), fetchAdminAgents()])
       .then(([estateData, agentData]) => {
         if (cancelled || !isCurrent()) return;
         setEstates(estateData as Estate[]);
         setAgents(agentData as Agent[]);
+        setOptionsError(false);
       })
-      .catch((err) => {
-        if (!cancelled && isCurrent())
-          toast.error(err instanceof Error ? err.message : String(err));
+      .catch(() => {
+        if (!cancelled && isCurrent()) setOptionsError(true);
+      })
+      .finally(() => {
+        if (!cancelled && isCurrent()) setOptionsLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [isCurrent]);
+  }, [isCurrent, optionsAttempt]);
 
   // Editing a field (by hand or via the copilot) has to drop its stale inline
   // error, otherwise the message from the last failed submit stays under a value
@@ -306,6 +313,20 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6" noValidate>
       {leaveGuardDialog}
+      {optionsError ? (
+        <div role="alert" className="space-y-2 rounded-md border p-3 text-sm">
+          <p>未能載入屋苑及代理選項。已輸入內容會保留，請重試或核對存取權限。</p>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={optionsLoading}
+            onClick={() => setOptionsAttempt((value) => value + 1)}
+          >
+            重新載入選項
+          </Button>
+        </div>
+      ) : null}
+
       <Section title="基本資料">
         <Field label="放盤編號 *" htmlFor="listing_no" error={fieldErrors.listing_no}>
           <Input
