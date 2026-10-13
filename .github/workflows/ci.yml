@@ -182,6 +182,8 @@ jobs:
       - run: npm run test:crm:db
       - run: npm run test:woztell:db
       - run: npm run test:property-sync:db
+      - run: npm run test:whatsapp-enquiries:db
+      - run: npm run test:cms:db
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:

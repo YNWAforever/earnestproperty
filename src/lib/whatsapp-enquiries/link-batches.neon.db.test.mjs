@@ -1,60 +1,29 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { readFileSync } from "node:fs";
 import test from "node:test";
-import { neon } from "@neondatabase/serverless";
-import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
+import { onDbTarget } from "../../../scripts/acceptance/owned-postgres-test.mjs";
+import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
+import { applyMigrations, isolatedDatabase } from "../../../scripts/acceptance/migrated-schema.mjs";
 import {
   previewWhatsappLinkBatch,
   commitWhatsappLinkChunk,
   getWhatsappLinkBatchResult,
 } from "../neon/whatsapp-link-batches.server.ts";
 
-function splitSqlStatements(query) {
-  const statements = [];
-  let current = "";
-  let single = false;
-  let double = false;
-  let dollar = null;
-  for (let index = 0; index < query.length; index += 1) {
-    const char = query[index];
-    const next = query[index + 1];
-    if (!single && !double && !dollar && char === "-" && next === "-") {
-      const end = query.indexOf("\n", index + 2);
-      if (end === -1) break;
-      index = end;
-      continue;
-    }
-    if (!double && !dollar && char === "'" && query[index - 1] !== "\\") single = !single;
-    if (!single && !dollar && char === '"') double = !double;
-    if (!single && !double && char === "$") {
-      const match = query.slice(index).match(/^\$[A-Za-z0-9_]*\$/);
-      if (match) {
-        const tag = match[0];
-        dollar = dollar ? (dollar === tag ? null : dollar) : tag;
-        current += tag;
-        index += tag.length - 1;
-        continue;
-      }
-    }
-    if (!single && !double && !dollar && char === ";") {
-      if (current.trim()) statements.push(current.trim());
-      current = "";
-    } else current += char;
-  }
-  if (current.trim()) statements.push(current.trim());
-  return statements;
-}
-
-const url = process.env.ASTRA_TEST_DATABASE_URL;
+// The on-demand Neon run keeps its ASTRA_TEST_DATABASE_URL contract.
+const neonRun = { urlVar: "ASTRA_TEST_DATABASE_URL" };
+// Owned Docker Postgres by default (a fresh database in the container, two clients on separate
+// pooled connections); ASTRA_TEST_DATABASE_URL (behind the disposable guard) for an explicit Neon
+// run with two HTTP clients. In CI a missing database fails instead of skipping. The isolated
+// schema is built from every real migration, in order.
 test(
-  "real Neon batch 50+10 recovery and independent-connection placement race",
-  { skip: !url },
-  async (t) => {
-    await assertDisposableNeonTestTarget(url);
+  "real database batch 50+10 recovery and independent-connection placement race",
+  onDbTarget(async (target, t) => {
+    const { sql: primary, pool, end } = await isolatedDatabase(target);
     const schema = "wa_batch_" + randomUUID().replaceAll("-", "");
-    const primary = neon(url);
-    const secondary = neon(url);
+    const secondary = target.owned
+      ? (await import("../../../scripts/acceptance/owned-postgres-test.mjs")).ownedNeonSql(pool)
+      : (await import("@neondatabase/serverless")).neon(target.url);
     const queryFor =
       (db) =>
       async (statement, params = []) => {
@@ -92,44 +61,30 @@ test(
     try {
       await primary.query("CREATE SCHEMA " + schema);
       schemaCreated = true;
-      for (const statement of [
-        "CREATE TYPE staff_role AS ENUM ('admin','manager','agent','viewer')",
-        "CREATE TYPE deal_type AS ENUM ('sale','rent')",
-        "CREATE TABLE staff_users(id uuid PRIMARY KEY,active boolean,name_zh text,name_en text)",
-        "CREATE TABLE staff_roles(staff_user_id uuid,role staff_role)",
-        "CREATE TABLE properties(id uuid PRIMARY KEY,title_zh text,deal_type deal_type,status text,source_updated_at timestamptz,last_seen_at timestamptz,updated_at timestamptz,created_at timestamptz)",
-        "CREATE TABLE property_public_members(property_id uuid,public_listing_no text)",
-        "CREATE TABLE whatsapp_staff_channels(staff_id uuid,channel_id text,eligible boolean,retired_at timestamptz,verified_at timestamptz,verification_ref text)",
-        "CREATE TABLE staff_external_references(id uuid PRIMARY KEY,staff_id uuid,valid_from timestamptz,valid_until timestamptz,verified_at timestamptz)",
-        "CREATE TABLE whatsapp_tracking_links(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),code text NOT NULL UNIQUE,current_version integer NOT NULL DEFAULT 1,created_by uuid,created_at timestamptz DEFAULT now())",
-        "CREATE TABLE whatsapp_tracking_link_versions(link_id uuid,version integer,channel_id text,placement_source text,entry_point_type text,public_listing_no text,property_id uuid,deal_type text,requested_staff_id uuid,branch_id text,external_listing_id text,video_id text,enabled boolean,created_by uuid,placement_verified_at timestamptz,reference_mapping_id uuid,PRIMARY KEY(link_id,version))",
-      ])
-        await query(statement);
-      const migration = splitSqlStatements(
-        readFileSync("neon/migrations/20260927090000_whatsapp_link_batch_operations.sql", "utf8"),
-      );
-      await primary.transaction((tx) => [
-        tx.query("SELECT set_config('search_path',$1,true)", [schema]),
-        ...migration.map((statement) => tx.query(statement)),
-      ]);
+      await applyMigrations(primary, schema, MIGRATION_VERSIONS);
       await query(
-        "INSERT INTO staff_users VALUES($1,true,'Admin',null),($2,true,'Manager',null),($3,true,'Agent',null)",
+        "INSERT INTO staff_users(id,active,name_zh,name_en) VALUES($1,true,'Admin',null),($2,true,'Manager',null),($3,true,'Agent',null)",
         [adminId, managerId, agentId],
       );
-      await query("INSERT INTO staff_roles VALUES($1,'admin'),($2,'manager'),($3,'agent')", [
-        adminId,
-        managerId,
-        agentId,
-      ]);
       await query(
-        "INSERT INTO whatsapp_staff_channels VALUES($1,'synthetic-company',true,null,now(),'synthetic')",
+        "INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'admin'),($2,'manager'),($3,'agent')",
+        [adminId, managerId, agentId],
+      );
+      await query(
+        "INSERT INTO whatsapp_staff_channels(staff_id,channel_id,inbox_user_id,folder_id,routing_node_id,eligible,retired_at,verified_at,verification_ref) VALUES($1,'synthetic-company','synthetic-inbox-user','synthetic-folder','synthetic-node',true,null,now(),'synthetic')",
         [agentId],
       );
+      // The real public-identity trigger makes listing SYNTHETIC-1 its own public group.
       await query(
-        "INSERT INTO properties VALUES($1,'Synthetic','sale','active',now(),now(),now(),now())",
+        "INSERT INTO properties(id,listing_no,title_zh,deal_type,district_slug,status,source_updated_at,last_seen_at,updated_at,created_at) VALUES($1,'SYNTHETIC-1','Synthetic','sale','synthetic','active',now(),now(),now(),now())",
         [propertyId],
       );
-      await query("INSERT INTO property_public_members VALUES($1,'SYNTHETIC-1')", [propertyId]);
+      assert.deepEqual(
+        await query("SELECT public_listing_no FROM property_public_members WHERE property_id=$1", [
+          propertyId,
+        ]),
+        [{ public_listing_no: "SYNTHETIC-1" }],
+      );
 
       const rows = Array.from({ length: 60 }, (_, index) => makeRow(index));
       const batchId = randomUUID();
@@ -147,7 +102,12 @@ test(
         admin,
         query,
       );
-      t.diagnostic("real Neon 50-row chunk " + Math.round(performance.now() - firstStart) + " ms");
+      t.diagnostic(
+        (target.owned ? "owned Postgres" : "real Neon") +
+          " 50-row chunk " +
+          Math.round(performance.now() - firstStart) +
+          " ms",
+      );
       assert.equal(first.state, "committed");
       assert.equal(first.rows.length, 50);
       const replay = await commitWhatsappLinkChunk(
@@ -218,7 +178,11 @@ test(
     } finally {
       if (previousChannel === undefined) delete process.env.EP_WA_COMPANY_CHANNEL_ID;
       else process.env.EP_WA_COMPANY_CHANNEL_ID = previousChannel;
-      if (schemaCreated) await primary.query("DROP SCHEMA " + schema + " CASCADE");
+      try {
+        if (schemaCreated) await primary.query("DROP SCHEMA " + schema + " CASCADE");
+      } finally {
+        await end();
+      }
     }
-  },
+  }, neonRun),
 );
