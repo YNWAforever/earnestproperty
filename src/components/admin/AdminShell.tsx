@@ -1,25 +1,14 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useRouter, useRouterState } from "@tanstack/react-router";
 import {
-  BarChart3,
-  BookOpen,
-  Building2,
-  ContactRound,
   ExternalLink,
   Home,
-  Landmark,
   LogOut,
   Menu,
-  MessageCircle,
-  Radar,
-  Receipt,
+  PanelLeftClose,
+  PanelLeftOpen,
   RefreshCw,
-  Send,
-  ServerCog,
   ShieldAlert,
-  UserRoundCog,
-  Users,
-  UsersRound,
 } from "lucide-react";
 
 import { toast } from "sonner";
@@ -27,9 +16,7 @@ import { toast } from "sonner";
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
 import {
   adminAttentionIdentity,
-  attentionBadge,
   attentionBadges,
-  badgeText,
   useAdminAttention,
   withAttentionTitle,
 } from "@/components/admin/admin-attention";
@@ -48,232 +35,8 @@ import {
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNeonAuth } from "@/hooks/use-neon-auth";
-import type {
-  AdminAttentionCounts,
-  StaffAccessRole,
-  StaffSessionDenialReason,
-} from "@/lib/neon/admin-data.types";
-import { visibleNavEntries } from "@/components/admin/admin-nav-roles";
-
-// Prefix matching is reserved for sections that own child routes. Team and
-// Operations deliberately stay exact so neither can illuminate the other.
-//
-// Which roles may open each entry lives in admin-nav-roles.ts (the roles its first server read
-// accepts). An entry the signed-in role cannot use is not rendered at all; it used to show as a
-// locked row. The server still checks every read, so hiding is only a courtesy.
-const navGroups = [
-  {
-    heading: "日常跟進",
-    items: [
-      { to: "/admin", label: "總覽", icon: BarChart3, activeExact: true },
-      {
-        to: "/admin/leads",
-        label: "客戶查詢",
-        icon: ContactRound,
-        // Exact: /admin/leads has no child routes, and prefix matching also lit this entry on
-        // 跟進工作台 (/admin/leads/command-center). includeSearch: false keeps a filtered list
-        // (/admin/leads?stage=open) highlighted.
-        activeExact: true,
-        includeSearch: false,
-        attention: "leads",
-      },
-      {
-        to: "/admin/whatsapp",
-        label: "WhatsApp 收件匣",
-        icon: MessageCircle,
-        activeExact: false,
-        attention: "inbox",
-      },
-      {
-        // The daily lead-triage workspace had no sidebar entry at all: its only
-        // way in was one button on /admin/leads.
-        to: "/admin/leads/command-center",
-        label: "跟進工作台",
-        icon: Radar,
-        activeExact: true,
-        includeSearch: false,
-      },
-      {
-        to: "/admin/listings",
-        label: "樓盤管理",
-        icon: Building2,
-        activeExact: false,
-      },
-      {
-        to: "/admin/property-sync",
-        label: "盤源同步",
-        icon: Building2,
-        activeExact: false,
-      },
-      {
-        to: "/admin/transactions",
-        label: "成交管理",
-        icon: Receipt,
-        activeExact: false,
-      },
-    ],
-  },
-  {
-    heading: "內容與推廣",
-    items: [
-      {
-        to: "/admin/cms",
-        label: "內容中心",
-        icon: BookOpen,
-        activeExact: false,
-        includeSearch: false,
-      },
-      {
-        to: "/admin/estates",
-        label: "屋苑管理",
-        icon: Landmark,
-        activeExact: false,
-      },
-      {
-        to: "/admin/segments",
-        label: "客戶分群",
-        icon: UsersRound,
-        activeExact: false,
-      },
-      {
-        to: "/admin/whatsapp-links",
-        label: "WhatsApp 來源連結",
-        icon: MessageCircle,
-        activeExact: true,
-      },
-      {
-        to: "/admin/whatsapp-settings",
-        label: "WhatsApp 映射設定",
-        icon: MessageCircle,
-        activeExact: true,
-      },
-      { to: "/admin/blasts", label: "推廣活動", icon: Send, activeExact: false },
-    ],
-  },
-  {
-    heading: "團隊與系統",
-    items: [
-      {
-        to: "/admin/team",
-        label: "團隊成員",
-        icon: Users,
-        activeExact: true,
-        includeSearch: false,
-      },
-      {
-        to: "/admin/agents",
-        label: "經紀檔案",
-        icon: UserRoundCog,
-        activeExact: false,
-      },
-      {
-        to: "/admin/analytics",
-        label: "營運與轉換",
-        icon: ServerCog,
-        activeExact: true,
-        includeSearch: false,
-      },
-      {
-        to: "/admin/operations",
-        label: "系統營運",
-        icon: ServerCog,
-        activeExact: true,
-        includeSearch: false,
-      },
-    ],
-  },
-] as const;
-
-const navLinkClassName =
-  "flex min-h-11 items-center gap-2 rounded-md border-l-2 px-3 text-sm font-medium text-muted-foreground transition hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
-
-// The active entry gets weight + a left indicator bar on top of the colour
-// change, so "you are here" survives greyscale/colour-blind viewing, and
-// aria-current announces it to screen readers.
-const navLinkActiveProps = {
-  className: "border-primary bg-primary/10 font-semibold text-primary",
-  "aria-current": "page" as const,
-};
-
-// Kept out of navLinkClassName: TanStack joins class strings without
-// tailwind-merge, so a shared border-transparent would hide the active bar.
-const navLinkInactiveProps = { className: "border-transparent" };
-
-const navBadgeClassName =
-  "ml-auto min-w-5 rounded-full bg-warning-strong px-1.5 text-center text-xs font-semibold leading-5 text-warning-foreground";
-
-function AdminNav({
-  roles,
-  attention,
-  onNavigate,
-}: {
-  roles: readonly StaffAccessRole[] | null;
-  attention: AdminAttentionCounts | null;
-  onNavigate?: () => void;
-}) {
-  // Per instance: the desktop sidebar and the mobile drawer can both be in the DOM.
-  const navId = useId();
-  // Hidden, not greyed out: a destination this role cannot open is simply not listed.
-  const visible = new Set(visibleNavEntries(roles).map((entry) => entry.to));
-  const groups = navGroups
-    .map((group) => ({ group, items: group.items.filter((item) => visible.has(item.to)) }))
-    .filter(({ items }) => items.length > 0);
-  return (
-    <nav aria-label="後台選單" className="grid gap-4">
-      {groups.map(({ group, items }) => (
-        <div key={group.heading ?? "root"} className="grid gap-1">
-          {group.heading ? (
-            <p className="px-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {group.heading}
-            </p>
-          ) : null}
-          {items.map((item) => {
-            const Icon = item.icon;
-            // The badge is aria-hidden and its description sits in a hidden node, so the link's
-            // accessible name stays exactly the label; aria-describedby still exposes the count.
-            const kind = "attention" in item ? item.attention : null;
-            const badge = kind ? attentionBadge(kind, attention) : null;
-            const descriptionId = kind && badge ? `${navId}-${kind}` : undefined;
-            return (
-              <Link
-                key={`${item.to}-${item.label}`}
-                to={item.to}
-                activeOptions={{
-                  exact: "activeExact" in item ? item.activeExact : true,
-                  includeSearch: "includeSearch" in item ? item.includeSearch : true,
-                  explicitUndefined: true,
-                }}
-                aria-describedby={descriptionId}
-                className={navLinkClassName}
-                activeProps={navLinkActiveProps}
-                inactiveProps={navLinkInactiveProps}
-                onClick={onNavigate}
-              >
-                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-                {item.label}
-                {kind && badge ? (
-                  <>
-                    <span
-                      aria-hidden="true"
-                      data-attention-badge={kind}
-                      title={badge.description}
-                      className={navBadgeClassName}
-                    >
-                      {badgeText(badge.count)}
-                    </span>
-                    <span id={descriptionId} hidden>
-                      {badge.description}
-                    </span>
-                  </>
-                ) : null}
-              </Link>
-            );
-          })}
-        </div>
-      ))}
-    </nav>
-  );
-}
+import type { StaffSessionDenialReason } from "@/lib/neon/admin-data.types";
+import { AdminNavigation } from "@/components/admin/AdminNavigation";
 
 /**
  * Shown in place of the page when the signed-in Neon Auth account is not a
@@ -328,14 +91,20 @@ function StaffAccessDenied({
   );
 }
 
-function AdminIdentity({ email }: { email: string | null | undefined }) {
+function AdminIdentity({
+  email,
+  collapsed = false,
+}: {
+  email: string | null | undefined;
+  collapsed?: boolean;
+}) {
   return (
-    <div className="px-2 py-2">
-      <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-          <Home className="h-4 w-4" aria-hidden="true" />
+    <div className={collapsed ? "py-[8px]" : "px-[8px] py-[8px]"}>
+      <div className="flex items-center gap-[8px]">
+        <div className="flex h-[36px] w-[36px] shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
+          <Home className="h-[16px] w-[16px]" aria-hidden="true" />
         </div>
-        <div className="min-w-0">
+        <div className={collapsed ? "sr-only" : "min-w-0"}>
           <p className="truncate text-sm font-semibold">Earnest Admin</p>
           <p className="truncate text-xs text-muted-foreground" title={email ?? undefined}>
             {email}
@@ -346,10 +115,12 @@ function AdminIdentity({ email }: { email: string | null | undefined }) {
           only way from the back office to the site it manages. */}
       <Link
         to="/"
-        className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-md px-1 text-xs font-medium text-muted-foreground hover:text-primary"
+        aria-label="查看公開網站"
+        title={collapsed ? "查看公開網站" : undefined}
+        className={`mt-[8px] inline-flex min-h-[44px] items-center gap-[6px] rounded-md px-[4px] text-xs font-medium text-muted-foreground hover:text-primary ${collapsed ? "w-[44px] justify-center" : ""}`}
       >
         <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-        查看公開網站
+        <span className={collapsed ? "sr-only" : undefined}>查看公開網站</span>
       </Link>
     </div>
   );
@@ -379,6 +150,25 @@ export function AdminShell({
     select: (state) => `${state.location.pathname}${state.location.searchStr ?? ""}`,
   });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  // Expanded on the server and the first client render; storage is optional.
+  const [navCollapsed, setNavCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      setNavCollapsed(localStorage.getItem("earnest:admin-nav-collapsed") === "true");
+    } catch {
+      /* unavailable storage must not block navigation */
+    }
+  }, []);
+  function toggleNavigation() {
+    const next = !navCollapsed;
+    setNavCollapsed(next);
+    try {
+      localStorage.setItem("earnest:admin-nav-collapsed", String(next));
+    } catch {
+      /* the preference remains usable for this mounted page */
+    }
+  }
+
   const [signOutOpen, setSignOutOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   // Unknown staff identity hides private presentation until the server can
@@ -530,25 +320,50 @@ export function AdminShell({
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-4 lg:grid-cols-[240px_1fr]">
-        {/* The sticky offset used to be lg:top-20 to clear the public
-            SiteHeader, which __root.tsx no longer renders on /admin -- that
-            left 80px of dead space above the identity block and lost 96px of
-            sidebar height on every page. overflow-y-auto lets the last nav
-            items and 登出 be reached on short laptop viewports. */}
-        <aside className="hidden rounded-lg border bg-background p-3 lg:sticky lg:top-4 lg:block lg:h-[calc(100vh-2rem)] lg:overflow-y-auto">
-          <AdminIdentity email={user.email} />
-          <div className="mt-4">
-            <AdminNav roles={staffRoles} attention={attention} />
+      <div
+        data-admin-shell
+        data-nav-collapsed={navCollapsed}
+        className={`grid gap-4 px-4 py-4 ${navCollapsed ? "lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid-cols-[256px_minmax(0,1fr)]"}`}
+      >
+        <aside className="hidden min-w-0 flex-col rounded-lg border bg-background p-[12px] lg:sticky lg:top-[16px] lg:flex lg:h-[calc(100dvh-32px)]">
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-auto min-h-[44px] w-full shrink-0 px-[4px] py-[4px]"
+            aria-expanded={!navCollapsed}
+            aria-controls="admin-desktop-navigation"
+            aria-label={navCollapsed ? "展開後台選單" : "收合後台選單"}
+            onClick={toggleNavigation}
+          >
+            {navCollapsed ? (
+              <PanelLeftOpen className="h-5 w-5" aria-hidden="true" />
+            ) : (
+              <>
+                <PanelLeftClose className="mr-2 h-5 w-5" aria-hidden="true" />
+                收合選單
+              </>
+            )}
+          </Button>
+          <AdminIdentity email={user.email} collapsed={navCollapsed} />
+          <div
+            id="admin-desktop-navigation"
+            className="mt-[16px] min-h-0 flex-1 overflow-y-auto overflow-x-clip py-[4px]"
+          >
+            <AdminNavigation roles={staffRoles} attention={attention} collapsed={navCollapsed} />
           </div>
-          <div className="mt-4 border-t pt-3">
+          <div className="mt-[16px] shrink-0 border-t pt-[12px]">
             <Button
+              type="button"
               variant="ghost"
-              className="w-full justify-start"
+              aria-label="登出"
+              className={`h-auto min-h-[44px] w-full py-[4px] ${navCollapsed ? "justify-center px-[4px]" : "justify-start"}`}
               onClick={() => setSignOutOpen(true)}
             >
-              <LogOut className="mr-2 h-4 w-4" aria-hidden="true" />
-              登出
+              <LogOut
+                className={`h-4 w-4 shrink-0 ${navCollapsed ? "" : "mr-2"}`}
+                aria-hidden="true"
+              />
+              <span className={navCollapsed ? "sr-only" : undefined}>登出</span>
             </Button>
           </div>
         </aside>
@@ -578,7 +393,7 @@ export function AdminShell({
                         <AdminIdentity email={user.email} />
                       </div>
                       <div className="mt-4 flex-1 overflow-y-auto pr-1">
-                        <AdminNav
+                        <AdminNavigation
                           roles={staffRoles}
                           attention={attention}
                           onNavigate={() => setMobileNavOpen(false)}
