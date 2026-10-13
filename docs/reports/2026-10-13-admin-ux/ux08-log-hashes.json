@@ -1,0 +1,17 @@
+{
+  "ux08-admin-campaign-db.log": "a6d2dbc9b7ea4d887cb83c4c4e133a4dc6d2aee56dc96180abb5b514416dbcee",
+  "ux08-admin-golden-db.log": "97c951949f57c98fd0523d976aa28820280d77ad49be2db79f281483d590c123",
+  "ux08-backend-diff-paths.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "ux08-browser.log": "6935f27809f9099aee46da793261ee411886509e856fc5279a7e3d37ab6d2cdd",
+  "ux08-cms.log": "1931ae9f9e98ec3a86185b291d95b8f6c054bc32f84a5d16965db3b49bd722d6",
+  "ux08-contact-identity-db.log": "5cf107eff8c5ca1b41fcf8147e895d9ffeb0d63eea272983b5924f6f34308aa1",
+  "ux08-containers-after.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "ux08-lead-integrity-db.log": "f5d7f2322125ed441951d53aedefb27cfc2003b7390f44d510b0da45ec8382c8",
+  "ux08-operations-owned-db.log": "9f976f32f0767956cd747bb521a6f5521b7a7c2e947c957da1539f3e45f3a647",
+  "ux08-property-maintenance-owned-db.log": "377cf5faaf0b5257dca5b7a051419c149379e7658886570ac39c241a31115014",
+  "ux08-safe-presentation.log": "259acb7dd5bacbc82b0aedbbf6647c980c7f371e912b8383142f689fe431d0e6",
+  "ux08-safe-redirect.log": "7ba3aa5665aaa56bbf646a7d6b8299707533928153630859f8ea823cc8a2fe22",
+  "ux08-sql-results.json": "9611baa8528b345a158f3ff262616e005e40e56266a29d996fb4b7cf9fdf7f62",
+  "ux08-team.log": "5996c640e2b3b72fb520d1dd035d4d47d230b798c6899f5d8391a7a3879bb908",
+  "ux08-woztell-owned-db.log": "58f59e94f3a00299f60f948307093af4a1e909624cd2b38d63a13f7ae7d33361"
+}
