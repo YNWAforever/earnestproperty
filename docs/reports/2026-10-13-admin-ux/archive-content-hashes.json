@@ -1,0 +1,17 @@
+{
+  "EarnestProperty_Admin_Audit_2026-10-02/00_Status_and_Findings_zhHK.md": "248b9a043cf0a2d42d4743225118aa3ba7e8e961fd2ee5dbd368df6eadfe9734",
+  "EarnestProperty_Admin_Audit_2026-10-02/01_Use_Cases_and_Acceptance_zhHK.md": "9d6351908ab5e21bfd106b0fbca1dee605ee430af1b399cdb9ae619c83761707",
+  "EarnestProperty_Admin_Audit_2026-10-02/02_Action_Inventory.csv": "5aed141746bf279024389649e7c9f62ebb78bdc333322bf000b2a7aa840d4706",
+  "EarnestProperty_Admin_Audit_2026-10-02/03_Test_Results.csv": "966f604c28048b47ebe5ae0042a1d5f298f0a999995ce8c6d79f6527dec962df",
+  "EarnestProperty_Admin_Audit_2026-10-02/04_WhatsApp_AI_Validation_zhHK.md": "0648e360dc98a22eef3c8b1c4aa754a39171a7dd80863e26d63efaaedbd34c47",
+  "EarnestProperty_Admin_Audit_2026-10-02/05_SME_Admin_UX_Spec_zhHK.md": "451b6f7eeee598adb35b8dc5cf74f49bc7ccb6d8db5570b93153d03ed46c5392",
+  "EarnestProperty_Admin_Audit_2026-10-02/06_Implementation_Backlog_zhHK.md": "f9d32f895dfe67dd875f2f7f944809f5819c1213dfb1d00ae0a65317f297faa4",
+  "EarnestProperty_Admin_Audit_2026-10-02/07_Admin_Runbook_and_Release_Gates_zhHK.md": "46ae879fbce19a6c49fa5f766bc17e942af22b07dcb26cd824b88c37b2cc22df",
+  "EarnestProperty_Admin_Audit_2026-10-02/README_zhHK.md": "1670c2a142bc5f7b5b916a7d438feaf7a96a8f4d9722f642da8aae1bbd1eacb6",
+  "EarnestProperty_Admin_Audit_2026-10-02/evidence/INDEX_zhHK.md": "337c439124c4f2052d9e78235b6db5e3f0efa213b86c0ba94a3b9b69ee1bb8f0",
+  "EarnestProperty_Admin_Audit_2026-10-02/evidence/browser-observations.md": "1fa650ebd2d4e6e1084429115b1288e4b1699074c3e1539396c6a0d4ddae32cf",
+  "EarnestProperty_Admin_Audit_2026-10-02/evidence/coverage-by-module-environment.csv": "c6a8262c8272b47ae5fa6cb2a9b94626c7e031392faa68d32e41ddcb49c02ca7",
+  "EarnestProperty_Admin_Audit_2026-10-02/evidence/route-inventory.csv": "23201f7b39dba77e523e435e9bcc8a5d6d60b6dc887f5b03f9e66df1127569b4",
+  "EarnestProperty_Admin_Audit_2026-10-02/evidence/source-control-candidates.csv": "7405dbf134af618d938ec92b64dc319448ee57e7eb1e8aba870be5cdcabf17c4",
+  "EarnestProperty_Admin_Audit_2026-10-02/evidence/source-excerpts.md": "c337be9cda74e6410cb42f74ccf7223328c1161aecfdac59dbe228486a227eed"
+}

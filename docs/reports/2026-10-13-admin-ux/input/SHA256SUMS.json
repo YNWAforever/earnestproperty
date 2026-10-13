@@ -1,0 +1,13 @@
+{
+  "00_README_zhHK.md": "19e65f355289eb304c6dbe99340507e44134f642924959731be0a88051d33e87",
+  "01_Scope_and_UX_Spec_zhHK.md": "4f78cd85fe779cd91b44178a068f5421aab87ca2d1925f88de3582c3fae549b9",
+  "03_Admin_Agent_UAT.csv": "f753ff53a88de656fb7cd5637f62af97486affe9d829a7818183984f5d54e43c",
+  "04_Route_Coverage.csv": "d05794e686293509358bbf65472b64cdebb681e5708aee60a2af990e3d8e5794",
+  "05_Task_Traceability.csv": "506625331d2dbd30f5de0cb33d4f20e93048132960688569274ed13ae603c136",
+  "06_Codex_Start_Prompt_zhHK.txt": "9b1406b70cf7bbccb6550e955d37e292917aaf525714c548fce9b9df788f3256",
+  "07_Source_and_Evidence_Manifest.json": "b9df3220282daf0d8fc91965fe028b66b8c1f83bb9ba798a6c5ae0812a018e75",
+  "08_Test_Cases_Readable_zhHK.md": "85ffbfb17db2031bbb2a9ca884c84d74b254f916b8b23e69400d669e3a55482c",
+  "09_Artifact_Validation.json": "6961fa62ca50346a907e79f4ca2422edc0c3c6722929bf8c55181f79b14a5e57",
+  "EarnestProperty_Admin_UX_Plan_2026-10-13_zhHK.html": "7c1811a7ff06c953b30b95d5810246f2a0abcdd6308ad67e019253b2df329e23",
+  "EarnestProperty_Codex_GPT-6.1_Sol_Admin_UX_Plan_2026-10-13_zhHK.md": "a92d8698285f7121d68772d783d2054304d64409d962a5dfd7145a9d02b5e17f"
+}
