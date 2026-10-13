@@ -19,7 +19,11 @@ function EditAdminListingPage() {
   const { session } = useStaffSession(user?.id ?? null);
   if (!user || session?.status !== "ok")
     return (
-      <AdminShell title="管理物業" description="共用物業資料，獨立管理出售與出租。">
+      <AdminShell
+        contentWidth="standard"
+        title="管理物業"
+        description="共用物業資料，獨立管理出售與出租。"
+      >
         {null}
       </AdminShell>
     );
@@ -84,10 +88,13 @@ function EditAdminListingWorkspace({ identity }: { identity: string }) {
   }, [id, userId, loading, retry, isWorkspaceCurrent]);
   return (
     <AdminShell
+      contentWidth="standard"
       title="管理物業"
       description="共用物業資料，獨立管理出售與出租。"
       breadcrumb={
         <nav aria-label="麵包屑">
+          <Link to="/admin">後台</Link>
+          {" › "}
           <Link to="/admin/listings">樓盤管理</Link>
           {" › 管理物業"}
         </nav>

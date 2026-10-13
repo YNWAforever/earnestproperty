@@ -16,6 +16,9 @@ await build({
   envPrefix: "OWNED_ADMIN_LAYOUT_",
   resolve: {
     alias: [
+      { find: /^@\/lib\/(neon\/(admin-properties|admin-property-bulk|whatsapp-link-selection)|admin\/media-upload|ai\/content-copilot-admin)$/, replacement: resolve(workspace,"scripts/browser-fixtures/property-maintenance/synthetic-api.ts") },
+      { find: /^@\/lib\/neon\/admin-cms$/, replacement: resolve(workspace,"scripts/browser-fixtures/leave-guards/synthetic-cms.ts") },
+
       {
         find: /^@\/lib\/analytics\/(sales-performance-client|reporting-client)$/,
         replacement: resolve(shared, "synthetic-analytics.ts"),

@@ -68,6 +68,7 @@ function EditAdminTransactionPage() {
 
   return (
     <AdminShell
+      contentWidth="form"
       title="編輯成交"
       description="更新成交金額、面積、來源及發布狀態。"
       breadcrumb={
@@ -83,7 +84,7 @@ function EditAdminTransactionPage() {
         </nav>
       }
     >
-      <div className="max-w-2xl">
+      <div className="w-full min-w-0">
         <Button asChild variant="ghost" size="sm" className="mb-4">
           <Link to="/admin/transactions">
             <ArrowLeft className="mr-1 h-4 w-4" />

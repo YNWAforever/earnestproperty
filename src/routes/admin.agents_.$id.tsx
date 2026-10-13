@@ -71,8 +71,20 @@ function EditAdminAgent() {
   }, [id, loading, user]);
 
   return (
-    <AdminShell title="編輯代理" description="更新代理公開資料、帳戶連結及發布狀態。">
-      <div className="max-w-3xl">
+    <AdminShell
+      title="編輯代理"
+      description="更新代理公開資料、帳戶連結及發布狀態。"
+      contentWidth="form"
+      breadcrumb={
+        <nav aria-label="麵包屑">
+          <Link to="/admin">後台</Link>
+          {" › "}
+          <Link to="/admin/agents">經紀檔案</Link>
+          {" › 編輯"}
+        </nav>
+      }
+    >
+      <div className="w-full min-w-0">
         <Button asChild variant="ghost" size="sm" className="mb-4">
           <Link to="/admin/agents">
             <ArrowLeft className="mr-1 h-4 w-4" />

@@ -51,8 +51,20 @@ function EditAdminEstate() {
   }, [id, loading, user]);
 
   return (
-    <AdminShell title="編輯屋苑" description="更新屋苑資料、核實狀態及 FAQ。">
-      <div className="max-w-5xl">
+    <AdminShell
+      title="編輯屋苑"
+      description="更新屋苑資料、核實狀態及 FAQ。"
+      contentWidth="form"
+      breadcrumb={
+        <nav aria-label="麵包屑">
+          <Link to="/admin">後台</Link>
+          {" › "}
+          <Link to="/admin/estates">屋苑管理</Link>
+          {" › 編輯"}
+        </nav>
+      }
+    >
+      <div className="w-full min-w-0">
         <Button asChild variant="ghost" size="sm" className="mb-4">
           <Link to="/admin/estates">
             <ArrowLeft className="mr-1 h-4 w-4" />

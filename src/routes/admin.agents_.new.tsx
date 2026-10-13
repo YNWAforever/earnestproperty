@@ -38,8 +38,20 @@ function NewAdminAgent() {
   }, []);
 
   return (
-    <AdminShell title="新增代理" description="建立代理公開資料。">
-      <div className="max-w-3xl">
+    <AdminShell
+      title="新增代理"
+      description="建立代理公開資料。"
+      contentWidth="form"
+      breadcrumb={
+        <nav aria-label="麵包屑">
+          <Link to="/admin">後台</Link>
+          {" › "}
+          <Link to="/admin/agents">經紀檔案</Link>
+          {" › 新增"}
+        </nav>
+      }
+    >
+      <div className="w-full min-w-0">
         <Button asChild variant="ghost" size="sm" className="mb-4">
           <Link to="/admin/agents">
             <ArrowLeft className="mr-1 h-4 w-4" />

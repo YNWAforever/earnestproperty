@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { useAdminLayoutFixture } from "./admin-layout-fixture";
+import { routeCases } from "../scripts/browser-fixtures/admin-layout/route-cases";
 const fixture = useAdminLayoutFixture("layout");
 const viewports = [
   { width: 390, height: 844 },
@@ -38,10 +39,15 @@ export async function expectGeometry(page: Page, width: number, variant = "stand
   await expect(page.getByRole("main")).toHaveCount(1);
 }
 for (const viewport of viewports)
-  for (const path of ["/admin", "/admin/leads", "/admin/transactions/new"]) {
+  for (const item of routeCases) {
+    const path = item.path;
     test(`normal ${path} ${viewport.width}`, async ({ page }) => {
       await fixture.open(page, { path, ...viewport });
-      await expectGeometry(page, viewport.width, path.endsWith("/new") ? "form" : "standard");
+      await expectGeometry(page, viewport.width, item.variant);
+      if (item.route.endsWith("/new") || item.route.includes(":id")) {
+        await expect(page.getByRole("navigation", { name: "麵包屑" })).toContainText("後台");
+        await expect(page.locator("[data-admin-body] form").first()).toBeVisible();
+      }
     });
   }
 for (const width of [390, 768])
@@ -68,3 +74,27 @@ test("skip link reaches the focusable page content", async ({ page }) => {
   await page.keyboard.press("Enter");
   await expect(page.locator("#admin-content")).toBeFocused();
 });
+
+for (const [path, label] of [
+  ["/admin/agents/new", "中文名稱"],
+  ["/admin/estates/new", "中文名"],
+  ["/admin/transactions/new", "成交金額"],
+])
+  test(`editor draft survives collapse and cancelled breadcrumb ${path}`, async ({ page }) => {
+    await fixture.open(page, { path });
+    const input = path.includes("transactions")
+      ? page.locator('input[name="price"]')
+      : page.getByLabel(label, { exact: true });
+    await input.fill(path.includes("transactions") ? "8800000" : "未儲存測試內容");
+    const draft = await input.inputValue();
+    await page.getByRole("button", { name: "收合後台選單" }).click();
+    await expect(input).toHaveValue(draft);
+    await page
+      .getByRole("navigation", { name: "麵包屑" })
+      .getByRole("link", { name: "後台", exact: true })
+      .click();
+    const prompt = page.getByRole("alertdialog", { name: "尚未儲存" });
+    await expect(prompt).toBeVisible();
+    await prompt.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(input).toHaveValue(draft);
+  });

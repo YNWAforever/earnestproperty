@@ -333,7 +333,7 @@ test("agent avatars and profile form include required accessibility details", ()
 });
 
 test("admin navigation includes agent management", () => {
-  const shell = read("src/components/admin/AdminShell.tsx");
+  const shell = read("src/components/admin/admin-navigation.ts");
   assert.match(shell, /經紀檔案/);
   assert.match(shell, /to: "\/admin\/agents"/);
 });
