@@ -739,3 +739,31 @@ def test_strongest_grade_merges_repeat_sightings_deterministically():
     assert w.strongest_grade("", "") == ""
     # Order of sighting must not change the answer.
     assert w.strongest_grade("鑽石", "黃金") == w.strongest_grade("黃金", "鑽石")
+
+
+class CollectionDiagnosticsTests(unittest.TestCase):
+    def test_robots_403_preserves_inventory_and_reports_no_pages_read(self):
+        cfg, fixtures = w.synthetic_fixture("28hse")
+        fixtures["https://www.28hse.com/robots.txt"] = {
+            "status": 403, "html": "<title>28hse challenge page</title>"
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result = w.run("28hse", cfg, root, True, fixtures)
+            self.assertFalse(result["success"])
+            self.assertEqual(result["collection"], {
+                "error_code": "SOURCE_ROBOTS_HTTP_403",
+                "pages_read": 0, "pages_failed": 2,
+            })
+            self.assertFalse(list(root.rglob("baseline.json")))
+            request = json.loads((Path(result["snapshot"]) / "request.json").read_bytes())
+            self.assertFalse(request["meta"]["eligible_for_absence"])
+            self.assertEqual(request["listings"], [])
+            raw = json.loads((Path(result["snapshot"]) / "raw-evidence.json").read_bytes())
+            self.assertEqual([r["status"] for r in raw["requests"]], [403, 403])
+            self.assertTrue(all(r["url"].endswith("/robots.txt") for r in raw["requests"]))
+
+    def test_successful_collection_reports_only_verified_pages(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            result = w.run("28hse", {}, Path(temporary), True, synthetic=True)
+            self.assertEqual(result["collection"], {"pages_read": 4, "pages_failed": 0})

@@ -285,7 +285,9 @@ export function PropertySyncWorkspace({
                     {row.dispatch_status === "unknown" ||
                     (row.dispatch_status === "failed" && !row.finished_at)
                       ? "結果待核實，請勿重複提交"
-                      : row.dispatch_status === "failed" || row.error_code
+                      : row.dispatch_status === "failed" ||
+                          row.error_code ||
+                          row.stages.collection?.status === "failed"
                         ? "同步失敗，保留現有資料"
                         : null}
                   </span>
@@ -320,8 +322,29 @@ export function PropertySyncWorkspace({
                 <p className="text-sm">
                   {row.dispatch_status === "failed" && row.finished_at && !row.request_asset
                     ? "工作流程未被接收；請管理員核對接駁設定後再提交同步。"
-                    : "等待核實，暫不下架。失敗後可按階段重試，沿用原採集證據。"}
+                    : !row.request_asset &&
+                        ["failed", "blocked", "cancelled"].includes(row.stages.collection?.status)
+                      ? "未有可重試匯入的完整證據。現有物業保持不變，暫不下架；請管理員保留原採集資料，先核對採集、證據凍結及上傳紀錄，再決定如何恢復。"
+                      : "等待核實，暫不下架。失敗後可按階段重試，沿用原採集證據。"}
                 </p>
+                {row.stages.collection?.status === "failed" &&
+                  /^SOURCE_(?:ROBOTS_)?HTTP_(?:401|403|429)$/.test(
+                    row.stages.collection.errorCode ?? "",
+                  ) && (
+                    <p className="text-sm">
+                      {row.stages.collection.errorCode?.endsWith("_429") ? (
+                        "來源限制請求頻率（HTTP 429）。請管理員稍後核對採集狀態，再安排完整採集。"
+                      ) : (
+                        <>
+                          來源拒絕存取（HTTP {row.stages.collection.errorCode?.slice(-3)}）。
+                          {row.stages.collection.errorCode?.startsWith("SOURCE_ROBOTS_")
+                            ? "未能讀取採集規則，已停止讀取盤源。"
+                            : "盤源採集未完成。"}
+                          請管理員向來源方核對自動採集的存取許可。
+                        </>
+                      )}
+                    </p>
+                  )}
                 {admin && row.request_asset && (
                   <div className="flex flex-wrap gap-2">
                     <Button
@@ -361,7 +384,7 @@ export function PropertySyncWorkspace({
                     <dt>私有證據識別</dt>
                     <dd>{row.request_asset ?? "未有紀錄"}</dd>
                     <dt>錯誤代碼</dt>
-                    <dd>{row.error_code ?? "未有錯誤代碼"}</dd>
+                    <dd>{row.error_code ?? row.stages.collection?.errorCode ?? "未有錯誤代碼"}</dd>
                   </dl>
                 </details>
               </article>

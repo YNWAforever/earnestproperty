@@ -308,11 +308,40 @@ def retention_candidates(assets, now, *, pinned, unresolved_runs):
     return candidates
 
 
+def write_collection_outputs(request, destination):
+    if request.stat().st_size > 64 * 1024:
+        raise ValueError('collection_diagnostics_too_large')
+    result = json.loads(request.read_bytes())
+    if not isinstance(result, dict):
+        raise ValueError('collection_diagnostics_invalid')
+    data = result.get('collection', {})
+    if not isinstance(data, dict):
+        raise ValueError('collection_diagnostics_invalid')
+    lines = []
+    code = data.get('error_code')
+    if code is not None:
+        if not isinstance(code, str) or not re.fullmatch(
+            r'SOURCE_(?:ROBOTS_)?HTTP_(?:401|403|429)|SOURCE_ROBOTS_DISALLOWED|COLLECTION_INCOMPLETE', code
+        ):
+            raise ValueError('collection_diagnostics_invalid')
+        lines.append('error_code=' + code)
+    for name in ('pages_read', 'pages_failed'):
+        if name in data:
+            value = data[name]
+            if type(value) is not int or not 0 <= value <= 1000000:
+                raise ValueError('collection_diagnostics_invalid')
+            lines.append(f'{name}={value}')
+    if lines:
+        with destination.open('a', encoding='utf-8', newline='\n') as output:
+            output.write('\n'.join(lines) + '\n')
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('command', choices=['validate', 'archive', 'baseline', 'restore', 'select', 'unpack', 'latest', 'name', 'freeze', 'verify', 'private', 'authority', 'pin', 'fetch'])
+    parser.add_argument('command', choices=['validate', 'archive', 'baseline', 'restore', 'select', 'unpack', 'latest', 'name', 'freeze', 'verify', 'private', 'authority', 'pin', 'fetch', 'diagnostics'])
     parser.add_argument('--root', type=Path, default=Path('daily-output'))
     parser.add_argument('--destination', type=Path, default=Path('daily-archives'))
+    parser.add_argument('--output', type=Path)
     parser.add_argument('--request', type=Path)
     parser.add_argument('--receipt', type=Path)
     parser.add_argument('--run-id')
@@ -328,7 +357,11 @@ def main():
     parser.add_argument('--authority', type=Path)
     parser.add_argument('--canonical-hash')
     args = parser.parse_args()
-    if args.command == 'freeze':
+    if args.command == 'diagnostics':
+        if args.request is None or args.output is None:
+            parser.error('diagnostics requires --request and --output')
+        write_collection_outputs(args.request, args.output)
+    elif args.command == 'freeze':
         freeze_manifest(args.request,args.raw,args.destination,git_sha=args.git_sha,gate=json.loads(args.gate.read_bytes()))
     elif args.command == 'verify': verify_manifest(args.request,args.root,scope=args.scope)
     elif args.command == 'fetch': fetch_private_manifest(args.asset,args.root)

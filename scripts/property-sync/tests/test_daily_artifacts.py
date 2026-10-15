@@ -216,3 +216,56 @@ def test_operator_baseline_remains_pinned_and_invalid_names_fail_closed(tmp_path
     assert m.retention_candidates([{'name': name, 'created_at': '2026-01-01T00:00:00Z'}], datetime(2026, 10, 2, tzinfo=timezone.utc), pinned=set(), unresolved_runs=set()) == []
     for bad in [name.replace('fd5cb539', 'not-uuid'), name.replace('operator-', '../'), name.replace('20260907', '20261307')]:
         with pytest.raises(ValueError): m.latest_accepted([bad])
+
+
+def test_collection_outputs_export_only_bounded_diagnostics(tmp_path):
+    import subprocess, sys
+    request = tmp_path / "result.json"
+    output = tmp_path / "github-output"
+    request.write_text(json.dumps({
+        "success": False, "snapshot": "private/path",
+        "collection": {"error_code": "SOURCE_ROBOTS_HTTP_403", "pages_read": 0, "pages_failed": 2},
+        "raw": "<html>private source response</html>",
+    }))
+    result = subprocess.run([sys.executable, str(Path(__file__).parents[1] / "daily_artifacts.py"),
+        "diagnostics", "--request", str(request), "--output", str(output)], capture_output=True)
+    assert result.returncode == 0, result.stderr.decode()
+    assert output.read_text().splitlines() == ["error_code=SOURCE_ROBOTS_HTTP_403", "pages_read=0", "pages_failed=2"]
+    assert result.stdout == b""
+
+@pytest.mark.parametrize("collection", [
+    {"error_code": "secret\\ninjected=true", "pages_read": 0, "pages_failed": 2},
+    {"pages_read": -1, "pages_failed": 2},
+    {"pages_read": True, "pages_failed": 2},
+    {"pages_read": 0, "pages_failed": "2\\ninjected=true"},
+])
+def test_invalid_collection_outputs_are_never_partially_written(tmp_path, collection):
+    request = tmp_path / "result.json"
+    output = tmp_path / "github-output"
+    request.write_text(json.dumps({"collection": collection}))
+    with pytest.raises(ValueError):
+        m.write_collection_outputs(request, output)
+    assert not output.exists()
+
+@pytest.mark.parametrize("result", [[], "invalid"])
+def test_collection_outputs_reject_non_object_results(tmp_path, result):
+    request = tmp_path / "result.json"
+    request.write_text(json.dumps(result))
+    with pytest.raises(ValueError, match="collection_diagnostics_invalid"):
+        m.write_collection_outputs(request, tmp_path / "outputs")
+
+@pytest.mark.parametrize("missing", ["request", "output", "both"])
+def test_diagnostics_cli_requires_explicit_input_and_output(tmp_path, missing):
+    import subprocess, sys
+    request = tmp_path / "result.json"
+    request.write_text('{"collection":{"pages_read":0,"pages_failed":2}}')
+    args = [sys.executable, str(Path(__file__).parents[1] / 'daily_artifacts.py'), 'diagnostics']
+    if missing not in ('request', 'both'):
+        args += ['--request', str(request)]
+    if missing not in ('output', 'both'):
+        args += ['--output', str(tmp_path / 'outputs')]
+    result = subprocess.run(args, cwd=tmp_path, capture_output=True)
+    assert result.returncode == 2
+    assert b'Traceback' not in result.stderr
+    assert not (tmp_path / 'daily-archives').exists()
+    assert not (tmp_path / 'outputs').exists()

@@ -67,9 +67,25 @@ export function executionSummary({
       ...(result === "skipped" ? {} : measuredClocks[job]),
     };
   }
+  const collectionOutputs = needs.collect?.outputs ?? {};
+  if (["success", "failure"].includes(needs.collect?.result)) {
+    for (const [output, field] of [
+      ["pages_read", "pagesRead"],
+      ["pages_failed", "pagesFailed"],
+    ])
+      if (/^(?:0|[1-9][0-9]{0,5}|1000000)$/.test(collectionOutputs[output] ?? ""))
+        stages.collection[field] = Number(collectionOutputs[output]);
+    if (
+      needs.collect.result === "failure" &&
+      /^(?:SOURCE_(?:ROBOTS_)?HTTP_(?:401|403|429)|SOURCE_ROBOTS_DISALLOWED|COLLECTION_INCOMPLETE)$/.test(
+        collectionOutputs.error_code ?? "",
+      )
+    )
+      stages.collection.errorCode = collectionOutputs.error_code;
+  }
   if (payload) {
     stages.collection.pagesRead =
-      payload.meta?.pages?.filter((p) => p.status !== "failed").length ?? 0;
+      payload.meta?.pages?.filter((p) => ["listings", "terminal"].includes(p.status)).length ?? 0;
     stages.collection.pagesFailed = payload.meta?.pages_failed ?? 0;
   }
   if (needs.preflight?.result === "failure")
@@ -131,6 +147,7 @@ export function executionSummary({
     workflowRunId,
     workflowAttempt,
     gitSha,
+    errorCode: stages.collection.status === "failed" ? stages.collection.errorCode : undefined,
     branches: manifest?.branchSummaries ?? {},
     requestHash: payload ? hashPayload(payload) : undefined,
     privateEvidenceRef: requestAsset ? { requestAsset } : undefined,
