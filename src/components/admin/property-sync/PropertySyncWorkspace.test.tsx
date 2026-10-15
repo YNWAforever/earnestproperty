@@ -63,6 +63,30 @@ describe("collection failure guidance", () => {
     expect(html).not.toContain("HTTP 403");
     expect(html).not.toContain("沿用原採集證據");
   });
+  test("post-crawl handoff failure preserves read evidence without recommending another crawl", () => {
+    const html = render([
+      {
+        ...row,
+        stages: {
+          collection: {
+            status: "failed",
+            errorCode: "WORKFLOW_FAILED",
+            pagesRead: 4,
+            pagesFailed: 0,
+          },
+        },
+      },
+    ]);
+    expect(html).toContain("已讀 4 頁；失敗 0 頁");
+    expect(html).toContain("未有可重試匯入的完整證據");
+    expect(html).toContain("保留原採集資料");
+    expect(html).toContain("核對採集、證據凍結及上傳紀錄");
+    expect(html).not.toContain("採集未完成");
+    expect(html).not.toContain("再安排完整採集");
+    expect(html).not.toContain("沿用原採集證據");
+    expect(html).not.toMatch(/<button[^>]*>重試匯入<\/button>/);
+    expect(html).not.toMatch(/<button[^>]*>重試上架<\/button>/);
+  });
   test("failed downstream stages retain frozen request replay guidance", () => {
     const html = render([
       {

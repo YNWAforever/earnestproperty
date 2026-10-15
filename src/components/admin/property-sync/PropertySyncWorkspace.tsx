@@ -324,7 +324,7 @@ export function PropertySyncWorkspace({
                     ? "工作流程未被接收；請管理員核對接駁設定後再提交同步。"
                     : !row.request_asset &&
                         ["failed", "blocked", "cancelled"].includes(row.stages.collection?.status)
-                      ? "採集未完成，未有可重試匯入的完整證據。現有物業保持不變，暫不下架；請管理員處理採集原因後，再安排完整採集。"
+                      ? "未有可重試匯入的完整證據。現有物業保持不變，暫不下架；請管理員保留原採集資料，先核對採集、證據凍結及上傳紀錄，再決定如何恢復。"
                       : "等待核實，暫不下架。失敗後可按階段重試，沿用原採集證據。"}
                 </p>
                 {row.stages.collection?.status === "failed" &&
