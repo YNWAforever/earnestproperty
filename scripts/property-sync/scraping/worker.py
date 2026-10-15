@@ -29,6 +29,12 @@ class WorkerError(Exception):
     pass
 
 
+class TransportError(WorkerError):
+    def __init__(self, code, *, retryable=False):
+        super().__init__(code)
+        self.retryable = retryable
+
+
 def text(value):
     return " ".join(unicodedata.normalize("NFKC", str(value or "")).split())
 
@@ -156,7 +162,7 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def http_request(url, data=None, token=None):
+def http_request(url, data=None, token=None, *, max_bytes=2 * 1024 * 1024):
     headers = {
         "User-Agent": "EarnestPropertyBot/2.0",
         "Accept": "text/html,application/json",
@@ -172,8 +178,8 @@ def http_request(url, data=None, token=None):
     except HTTPError as e:
         response = e
     with response:
-        raw = response.read(2 * 1024 * 1024 + 1)
-        if len(raw) > 2 * 1024 * 1024:
+        raw = response.read(max_bytes + 1)
+        if len(raw) > max_bytes:
             raise WorkerError("response_too_large")
         return response.status, dict(response.headers), raw
 
@@ -249,6 +255,11 @@ class Fetcher:
                     if status != 200:
                         raise WorkerError("http_failed")
                     return body.decode("utf-8", errors="strict")
+            except TransportError as error:
+                if not error.retryable or attempt == 2:
+                    raise
+                if self.fixtures is None:
+                    self.sleep(2 ** (attempt + 1))
             except (URLError, TimeoutError, OSError):
                 if attempt == 2:
                     raise WorkerError("network_failed")
@@ -1336,6 +1347,18 @@ def collection_diagnostics(payload, evidence):
     if payload["meta"]["crawl_complete"]:
         return result
     result["error_code"] = "COLLECTION_INCOMPLETE"
+    for error in evidence["errors"]:
+        reason = error.get("reason", "")
+        if reason.startswith("firecrawl_"):
+            provider_reason = reason.removeprefix("firecrawl_").removeprefix("provider_")
+            if re.fullmatch(
+                r"http_[1-5]\d{2}|key_required|network_failed|response_invalid|response_too_large|source_response_too_large",
+                provider_reason,
+            ):
+                result["error_code"] = "PROVIDER_" + provider_reason.upper()
+            else:
+                result["error_code"] = "PROVIDER_RESPONSE_INVALID"
+            return result
     for response in evidence["requests"]:
         if response["status"] in (401, 403, 429):
             target = "ROBOTS_" if urlsplit(response["url"]).path == "/robots.txt" else ""

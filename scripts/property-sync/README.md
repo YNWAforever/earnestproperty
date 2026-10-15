@@ -60,6 +60,13 @@ Provider response bytes are saved before interpreting success or metadata in
 exact provider bytes as base64 and SHA-256. Source HTML is saved separately by
 the existing checkpoint. Keep all these files in restricted evidence storage;
 provider responses and source pages can contain personal/contact data.
+Provider HTTP/credential/network failures use bounded `PROVIDER_*` diagnostics
+through the workflow and recorded run, rather than source HTTP diagnostics.
+Only a provider-reported source status can become `SOURCE_HTTP_*`.
+The HTTP envelope has a separate 16 MiB limit so JSON escaping does not reduce
+the existing 2 MiB UTF-8 source-document budget. The private frozen raw archive
+still has its existing 512 MiB limit; larger runs fail the evidence gate rather
+than dropping provider bytes or accepting a partial archive.
 
 The October 16, 2026 bounded public-source experiment found modern headings
 without the previous `#ID` marker. For that layout the parser requires the

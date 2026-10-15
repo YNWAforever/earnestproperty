@@ -2,9 +2,11 @@
 import base64
 import copy
 import importlib
+import io
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -38,7 +40,7 @@ def response(url, html=HTML, source_status=200):
 def transport(monkeypatch, data=None, status=200, checkpoint=None):
     monkeypatch.setenv("FIRECRAWL_API_KEY", "test-only-provider-key")
 
-    def request(endpoint, payload, token):
+    def request(endpoint, payload, token, *, max_bytes=None):
         assert endpoint == API
         assert token == "test-only-provider-key"
         options = json.loads(payload)
@@ -131,7 +133,8 @@ def test_missing_key_never_falls_back_to_direct_or_another_proxy(monkeypatch):
         module().FirecrawlBasic(request=forbidden)(SALE)
 
 
-def provider_crawl(monkeypatch, tmp_path, *, change=None, max_pages=3, cli=False):
+def provider_crawl(monkeypatch, tmp_path, *, change=None, max_pages=3, cli=False,
+                   provider_http_status=200, transport_override="firecrawl-basic"):
     cfg, fixtures = w.synthetic_fixture("28hse")
     cfg.update(transport="firecrawl-basic", max_pages=max_pages)
     # Parser identity is exercised with modern detail bodies, not synthetic roots.
@@ -145,18 +148,27 @@ def provider_crawl(monkeypatch, tmp_path, *, change=None, max_pages=3, cli=False
     monkeypatch.setenv("FIRECRAWL_API_KEY", "test-only-provider-key")
     monkeypatch.setattr(w.time, "sleep", lambda seconds: None)
 
-    def request(endpoint, payload=None, token=None):
-        assert endpoint == API, "Firecrawl configuration used direct HTTP"
-        assert token == "test-only-provider-key"
-        options = json.loads(payload)
-        assert options["proxy"] == "basic" and options["maxAge"] == 0
-        url = options["url"]
+    def request(endpoint, payload=None, token=None, *, max_bytes=None):
+        if endpoint == API:
+            assert not cli or transport_override == "firecrawl-basic", "HTTP default activated provider"
+            assert token == "test-only-provider-key"
+            options = json.loads(payload)
+            assert options["proxy"] == "basic" and options["maxAge"] == 0
+            url = options["url"]
+        else:
+            assert cli and transport_override in (None, "http"), "Basic configuration used direct HTTP"
+            assert token is None and payload is None
+            url = endpoint
         requests.append(url)
+        if provider_http_status != 200:
+            return provider_http_status, {}, b'{"success":false,"error":"Provider unavailable"}'
         source = fixtures.get(url, {"status": 403, "html": "<h1>Access denied</h1>"})
         html = source.get("html", "")
         if not url.endswith("/robots.txt") and not html.startswith("<!"):
             html = "<!doctype html><html><head></head><body>" + html + "</body></html>"
-        return 200, {}, json.dumps(response(url, html, source.get("status", 200))).encode()
+        if endpoint == API:
+            return 200, {}, json.dumps(response(url, html, source.get("status", 200))).encode()
+        return source.get("status", 200), {}, html.encode()
 
     monkeypatch.setattr(w, "http_request", request)
     monkeypatch.setattr(module(), "http_request", request)
@@ -169,7 +181,10 @@ def provider_crawl(monkeypatch, tmp_path, *, change=None, max_pages=3, cli=False
         cfg["transport"] = "http"
         config = tmp_path / "config.json"
         config.write_text(json.dumps({"sources": {"28hse": cfg}}), encoding="utf-8")
-        monkeypatch.setenv("PROPERTY_SYNC_28HSE_TRANSPORT", "firecrawl-basic")
+        if transport_override is None:
+            monkeypatch.delenv("PROPERTY_SYNC_28HSE_TRANSPORT", raising=False)
+        else:
+            monkeypatch.setenv("PROPERTY_SYNC_28HSE_TRANSPORT", transport_override)
         monkeypatch.setattr(sys, "argv", ["collector", "--config", str(config), "--root", str(tmp_path / "out"), "--dry-run"])
         assert w.cli("28hse") == 0
         snapshots = list((tmp_path / "out").rglob("request.json"))
@@ -220,6 +235,8 @@ def test_partial_basic_collection_is_not_full_and_cannot_submit(monkeypatch, tmp
     assert not list(tmp_path.rglob("baseline.json"))
     if failure == "robots":
         assert requests == [ORIGIN + "/robots.txt"]
+    if failure == "detail_403":
+        assert result["collection"]["error_code"] == "SOURCE_HTTP_403"
 
 
 def test_claimed_complete_metadata_cannot_replace_missing_page_proof(monkeypatch, tmp_path):
@@ -248,14 +265,63 @@ def test_unsupported_transport_fails_configuration(source, value):
 def test_provider_failures_obey_fetcher_attempt_budget_without_fallback(monkeypatch, provider_status, attempts):
     monkeypatch.setenv("FIRECRAWL_API_KEY", "test-only-key")
     calls = []
-    def request(endpoint, payload, token):
+    def request(endpoint, payload, token, *, max_bytes=None):
         assert endpoint == API
         calls.append(json.loads(payload))
         return provider_status, {}, b'{"success":false,"error":"Unavailable"}'
     provider = module().FirecrawlBasic(request=request)
     fetcher = w.Fetcher(ORIGIN, [r"/agent/540"], sleep=lambda seconds: None, transport=provider)
-    with pytest.raises(w.WorkerError, match="blocked|network_failed"):
+    with pytest.raises(w.WorkerError, match=f"firecrawl_provider_http_{provider_status}"):
         fetcher.get(SALE)
     assert len(calls) == attempts
     assert all(options["proxy"] == "basic" for options in calls)
     assert all(options["url"] == ORIGIN + "/robots.txt" for options in calls)
+
+
+@pytest.mark.parametrize("provider_status", [401, 403, 429, 503])
+def test_provider_http_failures_have_provider_diagnostics_and_no_source_response(monkeypatch, tmp_path, provider_status):
+    result, payload, _ = provider_crawl(monkeypatch, tmp_path, provider_http_status=provider_status)
+    assert result["collection"]["error_code"] == f"PROVIDER_HTTP_{provider_status}"
+    assert result["collection"]["pages_read"] == 0
+    assert result["status"] == "rejected_incomplete"
+    assert not w.gate(payload, None)["full"]
+    evidence = json.loads((Path(result["snapshot"]) / "raw-evidence.json").read_bytes())
+    assert evidence["requests"] == []
+    assert all(row["provider_status"] == provider_status for row in evidence["provider_requests"])
+
+
+def test_provider_envelope_does_not_reduce_two_mib_source_budget(monkeypatch):
+    monkeypatch.setenv("FIRECRAWL_API_KEY", "test-only-key")
+    html = "<html><head></head><body>" + "x" * (2 * 1024 * 1024 - 100) + "</body></html>"
+    raw = json.dumps(response(SALE, html)).encode()
+    assert len(html.encode()) < 2 * 1024 * 1024 < len(raw)
+    class Reply(io.BytesIO):
+        status = 200
+        headers = {}
+    def open_request(request, timeout):
+        assert request.full_url == API and timeout == 30
+        return Reply(raw)
+    monkeypatch.setattr(w, "build_opener", lambda *args: SimpleNamespace(open=open_request))
+    status, _, body = module().FirecrawlBasic()(SALE)
+    assert status == 200 and body == html.encode()
+    with pytest.raises(w.WorkerError, match="response_too_large"):
+        w.http_request(API)
+
+
+def test_provider_cannot_expand_the_source_document_budget(monkeypatch):
+    html = HTML.replace("Complete source document", "x" * (2 * 1024 * 1024))
+    with pytest.raises(w.WorkerError, match="firecrawl_source_response_too_large"):
+        transport(monkeypatch, response(SALE, html))(SALE)
+
+
+@pytest.mark.parametrize("override", [None, "http"])
+def test_cli_keeps_http_without_explicit_provider_opt_in(monkeypatch, tmp_path, override):
+    payload, requests = provider_crawl(monkeypatch, tmp_path, cli=True, transport_override=override)
+    assert payload["meta"]["crawl_complete"] is True and len(requests) == 7
+
+
+def test_provider_page_ceiling_is_rejected_before_collection():
+    cfg, _ = w.synthetic_fixture("28hse")
+    cfg.update(transport="firecrawl-basic", max_pages=1001)
+    with pytest.raises(w.WorkerError, match="configuration_page_limit"):
+        w.validate_config("28hse", cfg)

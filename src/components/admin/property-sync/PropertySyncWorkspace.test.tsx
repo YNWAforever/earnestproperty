@@ -115,3 +115,19 @@ test("rate limits explain waiting rather than requesting source access permissio
   expect(html).toContain("限制請求頻率");
   expect(html).not.toContain("存取許可");
 });
+
+test("provider errors do not blame source access or offer ingestion replay", () => {
+  for (const errorCode of ["PROVIDER_HTTP_401", "PROVIDER_HTTP_429", "PROVIDER_KEY_REQUIRED"]) {
+    const html = render([
+      {
+        ...row,
+        stages: { collection: { status: "failed", errorCode, pagesRead: 0, pagesFailed: 2 } },
+      },
+    ]);
+    expect(html).toContain(errorCode);
+    expect(html).toContain("未有可重試匯入的完整證據");
+    expect(html).not.toContain("來源拒絕存取");
+    expect(html).not.toContain("來源限制請求頻率");
+    expect(html).not.toMatch(/<button[^>]*>重試匯入<\/button>/);
+  }
+});

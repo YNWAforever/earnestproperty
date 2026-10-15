@@ -77,7 +77,7 @@ export function executionSummary({
         stages.collection[field] = Number(collectionOutputs[output]);
     if (
       needs.collect.result === "failure" &&
-      /^(?:SOURCE_(?:ROBOTS_)?HTTP_(?:401|403|429)|SOURCE_ROBOTS_DISALLOWED|COLLECTION_INCOMPLETE)$/.test(
+      /^(?:SOURCE_(?:ROBOTS_)?HTTP_(?:401|403|429)|SOURCE_ROBOTS_DISALLOWED|COLLECTION_INCOMPLETE|PROVIDER_(?:HTTP_[1-5]\d{2}|KEY_REQUIRED|NETWORK_FAILED|RESPONSE_INVALID|RESPONSE_TOO_LARGE|SOURCE_RESPONSE_TOO_LARGE))$/.test(
         collectionOutputs.error_code ?? "",
       )
     )

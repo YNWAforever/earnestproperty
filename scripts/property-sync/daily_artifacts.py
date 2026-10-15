@@ -321,7 +321,8 @@ def write_collection_outputs(request, destination):
     code = data.get('error_code')
     if code is not None:
         if not isinstance(code, str) or not re.fullmatch(
-            r'SOURCE_(?:ROBOTS_)?HTTP_(?:401|403|429)|SOURCE_ROBOTS_DISALLOWED|COLLECTION_INCOMPLETE', code
+            r'SOURCE_(?:ROBOTS_)?HTTP_(?:401|403|429)|SOURCE_ROBOTS_DISALLOWED|COLLECTION_INCOMPLETE'
+            r'|PROVIDER_(?:HTTP_[1-5]\d{2}|KEY_REQUIRED|NETWORK_FAILED|RESPONSE_INVALID|RESPONSE_TOO_LARGE|SOURCE_RESPONSE_TOO_LARGE)', code
         ):
             raise ValueError('collection_diagnostics_invalid')
         lines.append('error_code=' + code)

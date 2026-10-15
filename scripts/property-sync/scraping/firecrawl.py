@@ -5,11 +5,14 @@ import json
 import os
 import re
 from urllib.parse import parse_qs, urlsplit
+from urllib.error import URLError
 
-from .worker import WorkerError, checked_url, http_request
+from .worker import TransportError, WorkerError, checked_url, http_request
 
 API_URL = "https://api.firecrawl.dev/v2/scrape"
 ORIGIN = "https://www.28hse.com"
+SOURCE_BODY_LIMIT = 2 * 1024 * 1024
+PROVIDER_BODY_LIMIT = 16 * 1024 * 1024
 
 
 def approved_url(url):
@@ -60,7 +63,16 @@ class FirecrawlBasic:
             "onlyMainContent": False,
             "timeout": 25000,
         }
-        status, _, raw = self.request(API_URL, json.dumps(options).encode(), token)
+        try:
+            status, _, raw = self.request(
+                API_URL, json.dumps(options).encode(), token, max_bytes=PROVIDER_BODY_LIMIT
+            )
+        except (URLError, TimeoutError, OSError):
+            raise TransportError("firecrawl_provider_network_failed", retryable=True) from None
+        except WorkerError as error:
+            if str(error) == "response_too_large":
+                raise TransportError("firecrawl_provider_response_too_large") from None
+            raise
         # Request evidence omits Authorization; provider bytes remain private.
         self.evidence.append({
             "request": options,
@@ -70,10 +82,11 @@ class FirecrawlBasic:
         })
         if self.checkpoint:
             self.checkpoint.provider_response(url, status, raw)
-        if status in (401, 403, 408, 429) or 500 <= status < 600:
-            return status, {}, b""
         if status != 200:
-            raise WorkerError("firecrawl_api_failed")
+            raise TransportError(
+                f"firecrawl_provider_http_{status}",
+                retryable=status == 408 or 500 <= status < 600,
+            )
         try:
             result = json.loads(raw)
             if not isinstance(result, dict) or result.get("success") is not True:
@@ -109,6 +122,9 @@ class FirecrawlBasic:
                 r"<html(?:\s|>)", r"<head(?:\s|>)", r"<body(?:\s|>)", r"</html\s*>",
             )):
                 raise ValueError
-            return 200, {}, content.encode("utf-8")
+            body = content.encode("utf-8")
+            if len(body) > SOURCE_BODY_LIMIT:
+                raise WorkerError("firecrawl_source_response_too_large")
+            return 200, {}, body
         except (KeyError, TypeError, ValueError, UnicodeError):
             raise WorkerError("firecrawl_response_invalid") from None
