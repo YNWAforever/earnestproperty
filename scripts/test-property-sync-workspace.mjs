@@ -72,7 +72,7 @@ window.fixture={loads:0,requests:0};
 const card=(label,source,branch=null)=>({label,source,branch,health:'never_synced',message:'從未成功同步',connected:false,lastCollectionAt:null,lastAcceptedFullAt:null,lastPublishedAt:null,advertisements:null,backlog:null,publicCount:null,stages:{},branchEvidence:null,capability:{enabled:source==='28hse_agent_540',reason:'未接通'}});
 const cards=[card('28Hse','28hse_agent_540'),...['EPS','EPT','EPW'].map(b=>card(b,'propertyhk',b))];
 const history=Array.from({length:75},(_,i)=>({id:'20000000-0000-0000-0000-'+String(i+1).padStart(12,'0'),source:'28hse_agent_540',scope_id:'agent:540',operation:'collect',workflow_run_id:'123',git_sha:'a'.repeat(40),request_asset:'request-123-1.json',request_hash:'b'.repeat(64),receipt_id:'30000000-0000-0000-0000-000000000001',stages:{collection:{status:'succeeded'},ingestion:{status:'succeeded'},publication:{status:'failed'},verification:{status:'pending'}},branches:{},counts:{canonicalCreated:2,canonicalUpdated:3,published:0,held:1},dispatch_status:'failed',error_code:'MEDIA_FAILED',started_at:'2026-10-01T02:00:00Z',finished_at:null}));
-const load=async cursor=>{window.fixture.loads++;await new Promise(r=>setTimeout(r,300));if(scenario==='previous-publication-failed')return ${JSON.stringify(retainedPublication)};if(scenario==='failure')throw Error('synthetic unavailable');const start=cursor?Number(cursor.id):0;const rows=scenario==='history'?history.slice(start,start+25):[];return{cards,history:rows,nextCursor:scenario==='history'&&start+25<75?{id:String(start+25),at:'2026-10-01T02:00:00Z'}:null,asOf:'2026-10-01T02:00:00Z'}};
+const load=async cursor=>{window.fixture.loads++;await new Promise(r=>setTimeout(r,300));if(scenario==='previous-publication-failed')return ${JSON.stringify(retainedPublication)};if(scenario==='failure')throw Error('synthetic unavailable');if(scenario==='collection-blocked')return{cards,history:[{...history[0],request_asset:null,request_hash:null,receipt_id:null,counts:{},dispatch_status:'not_requested',error_code:null,finished_at:'2026-10-14T23:17:34Z',stages:{collection:{status:'failed',errorCode:'SOURCE_ROBOTS_HTTP_403',pagesRead:0,pagesFailed:2},ingestion:{status:'pending'},publication:{status:'pending'},verification:{status:'pending'}}}],nextCursor:null,asOf:'2026-10-14T23:18:00Z'};const start=cursor?Number(cursor.id):0;const rows=scenario==='history'?history.slice(start,start+25):[];return{cards,history:rows,nextCursor:scenario==='history'&&start+25<75?{id:String(start+25),at:'2026-10-01T02:00:00Z'}:null,asOf:'2026-10-01T02:00:00Z'}};
 const request=async input=>{window.fixture.lastKey=input.idempotencyKey;window.fixture.requests++;await new Promise(r=>setTimeout(r,300));if(scenario.startsWith('unknown'))throw Error('synthetic timeout');return{runId:'reserved',status:'accepted'}};
 const syncReconcile=async key=>{window.fixture.reconciles=(window.fixture.reconciles||0)+1;window.fixture.readKey=key;return{runId:'reserved',state:scenario==='unknown'?'unknown':'completed',reconciled:scenario!=='unknown'}};
 const withdrawalRows=[true,scenario==='withdrawal-partial'].map((allowed,i)=>({candidateId:'40000000-0000-0000-0000-'+String(i+1).padStart(12,'0'),propertyNo:'FIXTURE-'+i,title:i===0?'合成候選甲':'合成候選乙',dealType:'sale',version:'a'.repeat(32),status:'active',decision:{allowed,approval:allowed?'REVIEW_REQUIRED':'NOT_APPROVED',reason:allowed?'confirmed_absence':'active_source_conflict',ruleVersion:'review-withdrawal-v1'},evidence:{kind:'historical_absence',terminalReason:null,otherActiveSources:allowed?[]:['propertyhk']}}));
@@ -186,6 +186,22 @@ try {
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
     await page.screenshot({
       path: resolve(root, ".task-logs/t9-last-publication-" + width + ".png"),
+      fullPage: true,
+    });
+    cases++;
+    await page.goto(origin + "/?scenario=collection-blocked");
+    await page.getByText(/來源拒絕存取（HTTP 403）/).waitFor();
+    assert.equal(await page.getByText("已讀 0 頁；失敗 2 頁", { exact: true }).count(), 1);
+    assert.equal(await page.getByRole("button", { name: "重試匯入", exact: true }).count(), 0);
+    assert.equal(await page.getByRole("button", { name: "重試上架", exact: true }).count(), 0);
+    assert.equal(await page.getByText(/沿用原採集證據/).count(), 0);
+    assert.equal(await page.getByText(/未有可重試匯入的完整證據/).count(), 1);
+    await page.getByText("支援診斷", { exact: true }).click();
+    assert.equal(await page.getByText("SOURCE_ROBOTS_HTTP_403", { exact: true }).isVisible(), true);
+    assert.equal(await page.evaluate(() => window.fixture.requests), 0);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({
+      path: resolve(root, ".task-logs/collection-blocked-" + width + ".png"),
       fullPage: true,
     });
     cases++;

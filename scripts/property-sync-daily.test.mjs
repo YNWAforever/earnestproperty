@@ -4,6 +4,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { executionSummary } from "./mls/record-sync-execution.mjs";
 const path = new URL("../.github/workflows/property-sync-daily.yml", import.meta.url);
 async function workflow() {
   const { createRequire } = await import("node:module");
@@ -302,6 +304,93 @@ test("manual canary and scheduled apply require their own operator gates", async
     );
   } finally {
     assert.ok(directory.startsWith(join(tmpdir(), "property-sync-apply-gate-")));
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("actual collection shell exports safe diagnostics while preserving failed exit and handoff gate", async () => {
+  const w = await workflow();
+  const step = w.jobs.collect.steps.find((item) => item.name === "Collect without database access");
+  const directory = mkdtempSync(join(tmpdir(), "property-sync-collection-"));
+  const bash =
+    [process.env.PROPERTY_SYNC_TEST_BASH, "C:/Program Files/Git/bin/bash.exe"]
+      .filter(Boolean)
+      .find((candidate) => existsSync(candidate)) ?? "bash";
+  const stubs = `
+    python() {
+      if [ "$1" = scripts/property-sync/run_28hse_sync.py ]; then
+        printf '%s\\n' "$COLLECTOR_RESULT"
+        if [ "$COLLECTOR_EXIT" = 0 ]; then
+          mkdir -p daily-output/snapshots/28hse/test
+          printf '{}' > daily-output/snapshots/28hse/test/request.json
+        fi
+        return "$COLLECTOR_EXIT"
+      fi
+      command "$PYTHON_TEST" "$DIAGNOSTICS_SCRIPT" "\${@:2}"
+    }
+  `;
+  try {
+    for (const exit of [1, 0]) {
+      const output = join(directory, `collection-${exit}.outputs`);
+      const environment = join(directory, `collection-${exit}.environment`);
+      const collection = exit
+        ? { error_code: "SOURCE_ROBOTS_HTTP_403", pages_read: 0, pages_failed: 2 }
+        : { pages_read: 4, pages_failed: 0 };
+      const result = spawnSync(bash, ["-c", stubs + step.run], {
+        cwd: directory,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          BASH_ENV: "",
+          GITHUB_OUTPUT: output.replaceAll("\\", "/"),
+          GITHUB_ENV: environment.replaceAll("\\", "/"),
+          PYTHON_TEST: process.env.PROPERTY_SYNC_TEST_PYTHON ?? "python",
+          DIAGNOSTICS_SCRIPT: fileURLToPath(
+            new URL("./property-sync/daily_artifacts.py", import.meta.url),
+          ).replaceAll("\\", "/"),
+          COLLECTOR_EXIT: String(exit),
+          COLLECTOR_RESULT: JSON.stringify({
+            success: exit === 0,
+            collection,
+            privateResponse: "must remain private",
+          }),
+        },
+      });
+      assert.ifError(result.error);
+      assert.equal(result.status, exit, result.stderr);
+      const outputs = Object.fromEntries(
+        readFileSync(output, "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => line.split("=")),
+      );
+      assert.deepEqual(
+        outputs,
+        Object.fromEntries(Object.entries(collection).map(([k, v]) => [k, String(v)])),
+      );
+      assert.equal(
+        existsSync(environment),
+        exit === 0,
+        "failed collection must never export a handoff payload",
+      );
+      const summary = executionSummary({
+        workflowRunId: "123",
+        gitSha: "a".repeat(40),
+        needs: { collect: { result: exit ? "failure" : "success", outputs } },
+      });
+      assert.equal(summary.stages.collection.pagesRead, exit ? 0 : 4);
+      assert.equal(summary.stages.collection.pagesFailed, exit ? 2 : 0);
+      assert.equal(
+        summary.stages.collection.errorCode,
+        exit ? "SOURCE_ROBOTS_HTTP_403" : undefined,
+      );
+      assert.equal(summary.privateEvidenceRef, undefined);
+    }
+    for (const key of ["error_code", "pages_read", "pages_failed"])
+      assert.equal(w.jobs.collect.outputs[key], `\${{ steps.collection.outputs.${key} }}`);
+    assert.equal(step.id, "collection");
+  } finally {
+    assert.ok(directory.startsWith(join(tmpdir(), "property-sync-collection-")));
     rmSync(directory, { recursive: true, force: true });
   }
 });

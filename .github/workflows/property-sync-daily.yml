@@ -168,12 +168,20 @@ jobs:
            python scripts/property-sync/daily_artifacts.py restore --destination baseline-download/baseline --root daily-output
           fi
       - name: Collect without database access
+        id: collection
         shell: bash
         run: >-
           set -euo pipefail
 
+          collection_status=0
+
           python scripts/property-sync/run_28hse_sync.py --root daily-output --dry-run >
-          collection-result.json
+          collection-result.json || collection_status=$?
+
+          python scripts/property-sync/daily_artifacts.py diagnostics --request collection-result.json
+          --output "$GITHUB_OUTPUT"
+
+          if [ "$collection_status" -ne 0 ]; then exit "$collection_status"; fi
 
           payload=$(python scripts/property-sync/daily_artifacts.py select --root daily-output)
 
@@ -262,6 +270,9 @@ jobs:
     env:
       BASELINE_ASSET: ${{ needs.preflight.outputs.baseline }}
     outputs:
+      error_code: ${{ steps.collection.outputs.error_code }}
+      pages_read: ${{ steps.collection.outputs.pages_read }}
+      pages_failed: ${{ steps.collection.outputs.pages_failed }}
       handoff: ${{ steps.handoff.outputs.handoff }}
       started_at: ${{ steps.execution-start.outputs.at }}
       finished_at: ${{ steps.execution-finish.outputs.at }}

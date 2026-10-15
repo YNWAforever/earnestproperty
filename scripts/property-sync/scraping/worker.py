@@ -1249,6 +1249,26 @@ def receipt_is_full(receipt):
     )
 
 
+def collection_diagnostics(payload, evidence):
+    pages = payload["meta"]["pages"]
+    result = {
+        "pages_read": sum(p["status"] in ("listings", "terminal") for p in pages),
+        "pages_failed": payload["meta"]["pages_failed"],
+    }
+    if payload["meta"]["crawl_complete"]:
+        return result
+    result["error_code"] = "COLLECTION_INCOMPLETE"
+    for response in evidence["requests"]:
+        if response["status"] in (401, 403, 429):
+            target = "ROBOTS_" if urlsplit(response["url"]).path == "/robots.txt" else ""
+            result["error_code"] = f"SOURCE_{target}HTTP_{response['status']}"
+            break
+    else:
+        if any(e["reason"] == "robots_disallowed" for e in evidence["errors"]):
+            result["error_code"] = "SOURCE_ROBOTS_DISALLOWED"
+    return result
+
+
 def run(source, cfg, root, dry_run=False, fixtures=None, synthetic=False):
     if synthetic:
         if not dry_run:
@@ -1268,6 +1288,7 @@ def run(source, cfg, root, dry_run=False, fixtures=None, synthetic=False):
         if source == "propertyhk":
             payload["id_scope"] = cfg["id_scope"]
         decision = gate(payload, baseline)
+        diagnostics = collection_diagnostics(payload, evidence)
         path = save_snapshot(root, payload, evidence)
         (path / "gate.json").write_bytes(frozen(decision))
         checkpoint.finish(decision)
@@ -1290,6 +1311,7 @@ def run(source, cfg, root, dry_run=False, fixtures=None, synthetic=False):
             return {
                 "success": False,
                 "status": "rejected_incomplete",
+                "collection": diagnostics,
                 "snapshot": str(path),
                 "reasons": decision["reasons"],
             }
@@ -1297,6 +1319,7 @@ def run(source, cfg, root, dry_run=False, fixtures=None, synthetic=False):
             return {
                 "success": True,
                 "status": "dry_run",
+                "collection": diagnostics,
                 "snapshot": str(path),
                 "baseline_advanced": False,
             }
@@ -1314,6 +1337,7 @@ def run(source, cfg, root, dry_run=False, fixtures=None, synthetic=False):
         return {
             "success": receipt.get("success") is True,
             "status": receipt.get("status", "failed"),
+            "collection": diagnostics,
             "snapshot": str(path),
             "baseline_advanced": advance,
         }

@@ -246,3 +246,81 @@ test("clock validation refuses impossible calendar dates while accepting leap da
     assert.doesNotThrow(() => validateRunSummary({ startedAt: value }));
   }
 });
+
+test("failed collection retains bounded native diagnostics without a replayable request", () => {
+  const result = executionSummary({
+    ...base,
+    needs: {
+      collect: {
+        result: "failure",
+        outputs: {
+          error_code: "SOURCE_ROBOTS_HTTP_403",
+          pages_read: "0",
+          pages_failed: "2",
+        },
+      },
+      ingest: { result: "skipped" },
+      publish: { result: "skipped" },
+      verify: { result: "success" },
+    },
+  });
+  assert.equal(result.stages.collection.status, "failed");
+  assert.equal(result.stages.collection.errorCode, "SOURCE_ROBOTS_HTTP_403");
+  assert.equal(result.stages.collection.pagesRead, 0);
+  assert.equal(result.stages.collection.pagesFailed, 2);
+  assert.equal(result.errorCode, "SOURCE_ROBOTS_HTTP_403");
+  assert.equal(result.privateEvidenceRef, undefined);
+  assert.equal(result.requestHash, undefined);
+  assert.deepEqual(result.counts, {});
+  for (const stage of ["ingestion", "publication", "verification"])
+    assert.equal(result.stages[stage].status, "pending");
+});
+
+test("native diagnostics cannot inject text or turn blocked pages into pages read", () => {
+  const unsafe = executionSummary({
+    ...base,
+    needs: {
+      collect: {
+        result: "failure",
+        outputs: {
+          error_code: "https://secret.test/?token=private",
+          pages_read: "-1",
+          pages_failed: "2\\nx=3",
+        },
+      },
+    },
+  });
+  assert.equal(unsafe.stages.collection.errorCode, "WORKFLOW_FAILED");
+  assert.equal(unsafe.stages.collection.pagesRead, undefined);
+  assert.equal(unsafe.stages.collection.pagesFailed, undefined);
+  const skipped = executionSummary({
+    ...base,
+    needs: {
+      collect: {
+        result: "skipped",
+        outputs: {
+          error_code: "SOURCE_ROBOTS_HTTP_403",
+          pages_read: "0",
+          pages_failed: "2",
+        },
+      },
+    },
+  });
+  assert.equal(skipped.stages.collection.errorCode, undefined);
+  assert.equal(skipped.stages.collection.pagesFailed, undefined);
+  const withPayload = executionSummary({
+    ...base,
+    payload: {
+      meta: {
+        pages: [
+          { status: "listings" },
+          { status: "terminal" },
+          { status: "blocked" },
+          { status: "parser_error" },
+        ],
+        pages_failed: 2,
+      },
+    },
+  });
+  assert.equal(withPayload.stages.collection.pagesRead, 2);
+});
