@@ -18,13 +18,16 @@ def module():
     return importlib.import_module("scraping.propertyhk_review")
 
 
-def observation(ad="00101", price="HK$710\u842c", *, branch="SYNTHETIC-A", extra=""):
+def observation(ad="00101", price="HK$710\u842c", *, branch="SYNTHETIC-A", branch_label=None,
+                rent="HK$22,000 / month", extra=""):
     from scraping.propertyhk_candidates import normalize_detail_url
     from scraping.propertyhk_text import parse_provider_text
-    text = (f"# Listing details\nAdvertisement ID: {ad}\nBranch: {branch}\n"
-            f"Estate: Synthetic Gardens\nSale price: {price}\nRent: HK$22,000 / month\n" + extra)
+    label = branch if branch_label is None else branch_label
+    text = (f"# Listing details\nAdvertisement ID: {ad}\nBranch: {label}\n"
+            f"Estate: Synthetic Gardens\nSale price: {price}\n"
+            + (f"Rent: {rent}\n" if rent is not None else "") + extra)
     return parse_provider_text(text, detail=normalize_detail_url(f"https://www.property.hk/asking_detail/{ad}.html"),
-                               scope={"query_id": "q1", "branch_id": branch, "branch_labels": [branch]},
+                               scope={"query_id": "q1", "branch_id": branch, "branch_labels": [label]},
                                provider={"provider": "exa", "retrieved_at": NOW})
 
 
@@ -364,3 +367,79 @@ def test_partial_budget_and_interruption_preserve_observations(tmp_path):
     actual = app.run_review(config, client=client, known=None, now=request.now)
     assert actual["stop_reason"] == "cost_reservation_limit"
     assert actual["metrics"]["total_requests"] == 1 and actual["metrics"]["reserved_usd"] == "0.007"
+
+
+@pytest.mark.parametrize("noise", ["rent", "area"])
+def test_optional_unparsed_field_does_not_hide_threshold_meeting_candidate(noise):
+    current = observation(rent="negotiable") if noise == "rent" else observation(extra="Usable area: 700\n")
+    actual = report([current])
+    assert len(actual["groups"]["new_candidates"]) == 1
+    entry = actual["groups"]["new_candidates"][0]
+    assert any(reason.endswith("_unparsed") for reason in entry["reasons"])
+    assert entry["observations"][0]["identity"]["state"] == "verified"
+
+
+@pytest.mark.parametrize("side", ["candidate", "reference"])
+def test_one_sided_optional_values_are_visible_but_not_claimed_changed(side):
+    with_floor, without_floor = observation(extra="Floor: 10\n"), observation()
+    current, old = (with_floor, without_floor) if side == "candidate" else (without_floor, with_floor)
+    actual = report([current], reference(old))
+    entry = actual["groups"]["known_candidates"][0]
+    assert entry["differences"] == []
+    assert side + "_only:floor" in entry["reasons"]
+    one_sided = next(x for x in entry["one_sided_fields"] if x["field"] == "floor")
+    assert one_sided["candidate"] == ("10" if side == "candidate" else None)
+    assert one_sided["reference"] == ("10" if side == "reference" else None)
+    assert actual["metrics"]["comparable_fields"] == 3
+
+
+def test_new_offer_against_unknown_reference_is_not_a_confirmed_price_change():
+    actual = report([observation()], reference(observation(rent=None)))
+    entry = actual["groups"]["known_candidates"][0]
+    assert "candidate_only:offers.rent" in entry["reasons"]
+    assert entry["differences"] == [] and actual["metrics"]["comparable_fields"] == 2
+
+
+def test_partial_offer_can_compare_complete_sale_without_inventing_rent():
+    actual = report([observation(rent="negotiable")], reference(observation(rent=None)))
+    assert len(actual["groups"]["known_candidates"]) == 1
+    assert actual["metrics"]["comparable_fields"] == 2
+    assert "candidate_unparsed:offers.rent" in actual["groups"]["known_candidates"][0]["reasons"]
+    existing_rent = report([observation(rent="negotiable")], reference(observation()))
+    assert len(existing_rent["groups"]["insufficient_data"]) == 1
+
+
+@pytest.mark.parametrize("field,value", [
+    ("branch", "SYNTHETIC-Z"), ("source_advertisement_id", "999"),
+    ("source_property_number", "OTHER-P"), ("agency_reference", "OTHER-A"),
+])
+def test_reference_identity_fields_cannot_contradict_declared_identity(tmp_path, field, value):
+    known = reference(observation(extra="Property number: SYN-P\nAgency reference: SYN-A\n"))
+    known["entries"][0]["fields"][field]["value"] = value
+    path = tmp_path / "conflict.json"
+    path.write_text(json.dumps(known), encoding="utf-8")
+    with pytest.raises(ValueError, match="reference_invalid"):
+        module().load_reference(path)
+
+
+def test_reference_branch_label_alias_requires_explicit_mapping(tmp_path):
+    label = "\u5408\u6210\u5206\u884c"
+    known = reference(observation(branch_label=label))
+    path = tmp_path / "known.json"
+    path.write_text(json.dumps(known), encoding="utf-8")
+    with pytest.raises(ValueError, match="reference_invalid"):
+        module().load_reference(path)
+    known["entries"][0]["branch_labels"] = [label]
+    path.write_text(json.dumps(known), encoding="utf-8")
+    loaded = module().load_reference(path)
+    assert loaded["entries"][0]["review_key"] == ["propertyhk", "SYNTHETIC-A", "00101"]
+
+
+def test_observed_branch_aliases_can_group_under_verified_branch_identity():
+    original, translated = observation(), observation(branch_label="\u5408\u6210\u5206\u884c")
+    translated["language"] = "zh-Hant"
+    actual = report([original, translated])
+    assert len(actual["groups"]["new_candidates"]) == 1
+    assert {item["fields"]["branch"]["value"] for item in actual["groups"]["new_candidates"][0]["observations"]} == {
+        "SYNTHETIC-A", "\u5408\u6210\u5206\u884c"
+    }

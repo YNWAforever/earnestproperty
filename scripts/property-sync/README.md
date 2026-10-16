@@ -189,8 +189,18 @@ a supplied reference; it does not mean absent from production.
 Reference files use `propertyhk-exa-known/v1`, explicit provenance, branch-scoped
 `review_key` values, fields, timestamps and evidence. Artifact references must
 stay beneath the reference file's directory; duplicate/ambiguous identities fail.
+Observed branch labels must match the review key's branch or an explicit
+`branch_labels` list on that reference entry; this keeps human/source aliases
+separate from the stable branch identifier. Advertisement/property/custom ID
+fields cannot contradict the declared reference identity.
 Source evidence and references remain private. Only clearly synthetic samples
 may be committed.
+Fields present on only one side are labelled `candidate_only` or
+`reference_only`, with their raw evidence retained in `one_sided_fields`;
+they are not counted as confirmed changes or comparable fields. A complete
+sale/rent offer can keep a candidate reviewable while an optional offer/area
+remains unparsed. Actual field conflicts, missing identity and genuinely
+incomparable reference values still require review as insufficient/conflicting.
 
 Config keys are `kind`, `synthetic`, `query_plan`, `fixture_aliases`, `limits`
 and `approval_refs`. The example lists all bounds and four synthetic queries.

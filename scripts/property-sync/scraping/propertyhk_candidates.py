@@ -150,6 +150,8 @@ def group_language_observations(observations: list[dict]) -> list[dict]:
             continue
         reasons = []
         for name in sorted({name for x in items for name in x.get("fields", {})}):
+            if name in ("branch", "source_advertisement_id"):
+                continue
             values = {json.dumps(semantic_value(x["fields"][name]["value"]), sort_keys=True, ensure_ascii=False)
                       for x in items if x.get("fields", {}).get(name, {}).get("value") is not None}
             if len(values) > 1:

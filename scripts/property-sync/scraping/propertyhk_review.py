@@ -84,6 +84,23 @@ def _validate_reference(value):
                         if amount is not None and (not isinstance(amount, str)
                                 or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", amount) or Decimal(amount) <= 0):
                             raise ValueError
+            labels = entry.get("branch_labels", [key[1]])
+            if (not isinstance(labels, list) or not labels
+                    or any(not isinstance(x, str) or not x.strip() for x in labels)
+                    or len(set(labels)) != len(labels)):
+                raise ValueError
+            branch = fields.get("branch", {}).get("value")
+            ad = fields.get("source_advertisement_id", {}).get("value")
+            if branch is not None and branch not in labels or ad is not None and ad != key[2]:
+                raise ValueError
+            for name in ("branch", "source_advertisement_id", "source_property_number", "agency_reference"):
+                if fields.get(name, {}).get("state") == "conflict":
+                    raise ValueError
+                field_value = fields.get(name, {}).get("value")
+                if name in ("source_property_number", "agency_reference") and (
+                    field_value is not None and entry.get(name) is not None and field_value != entry[name]
+                ):
+                    raise ValueError
         bindings = value.get("native_index", [])
         if not isinstance(bindings, list):
             raise ValueError
@@ -151,46 +168,65 @@ def _chosen_fields(items):
 
 
 def _differences(fields, reference):
-    differences, reasons, compared = [], [], 0
+    differences, reasons, compared, one_sided = [], [], 0, []
     old_fields = reference["fields"]
+
+    def record(name, old, candidate, old_field, candidate_field):
+        return {"field": name, "reference": old, "candidate": candidate,
+                "reference_raw": old_field.get("raw", []), "candidate_raw": candidate_field.get("raw", []),
+                "reference_evidence": old_field.get("evidence", [reference["evidence"]]),
+                "candidate_evidence": candidate_field.get("evidence", [])}
 
     def append(name, old, candidate, old_field, candidate_field):
         nonlocal compared
         compared += 1
         if old != candidate:
-            differences.append({
-                "field": name, "reference": old, "candidate": candidate,
-                "reference_raw": old_field.get("raw", []), "candidate_raw": candidate_field.get("raw", []),
-                "reference_evidence": old_field.get("evidence", [reference["evidence"]]),
-                "candidate_evidence": candidate_field.get("evidence", []),
-            })
+            differences.append(record(name, old, candidate, old_field, candidate_field))
+
+    def single(direction, name, old, candidate, old_field, candidate_field):
+        one_sided.append({**record(name, old, candidate, old_field, candidate_field), "direction": direction})
+        reasons.append(direction + ":" + name)
 
     for name, field in sorted(fields.items()):
         value = field.get("value")
         old_field = old_fields.get(name, {})
         old = old_field.get("value")
-        if value is None or name in ("branch", "source_advertisement_id"):
+        if name in ("branch", "source_advertisement_id"):
             continue
-        if field.get("state") in ("unparsed", "conflict"):
-            reasons.append("comparison_unavailable:" + name)
+        if value is None:
+            if old is not None:
+                single("reference_only", name, semantic_value(old), None, old_field, field)
+                if name in ("saleable_area", "gross_area") and field.get("raw"):
+                    reasons.append("comparison_unavailable:" + name)
             continue
         if name == "offers":
             old_offers = {x["deal_type"]: x for x in old or []}
+            current_deals = set()
             for offer in value:
                 deal = offer["deal_type"]
+                current_deals.add(deal)
                 previous = old_offers.get(deal)
                 if offer.get("amount") is None:
-                    reasons.append("comparison_unavailable:offers." + deal)
-                elif previous is not None and any(previous.get(k) != offer.get(k) for k in ("currency", "period", "unit")):
+                    reasons.append(("comparison_unavailable:" if previous else "candidate_unparsed:") + "offers." + deal)
+                elif previous is None:
+                    single("candidate_only", "offers." + deal, None, semantic_value(offer), old_field, field)
+                elif previous.get("amount") is None or any(previous.get(k) != offer.get(k) for k in ("currency", "period", "unit")):
                     reasons.append("comparison_unavailable:offers." + deal)
                 else:
-                    append("offers." + deal + ".amount", previous.get("amount") if previous else None,
+                    append("offers." + deal + ".amount", previous["amount"],
                            offer["amount"], old_field, field)
+            for deal, previous in sorted(old_offers.items()):
+                if deal not in current_deals:
+                    single("reference_only", "offers." + deal, semantic_value(previous), None, old_field, field)
+        elif old is None:
+            single("candidate_only", name, None, semantic_value(value), old_field, field)
+        elif field.get("state") in ("unparsed", "conflict") or old_field.get("state") in ("unparsed", "conflict"):
+            reasons.append("comparison_unavailable:" + name)
         elif name in ("saleable_area", "gross_area") and old is not None and old.get("unit") != value.get("unit"):
             reasons.append("comparison_unavailable:" + name)
         else:
             append(name, semantic_value(old), semantic_value(value), old_field, field)
-    return differences, reasons, compared
+    return differences, reasons, compared, one_sided
 
 
 def build_review_report(observations: list[dict], *, known: dict | None, metrics: dict,
@@ -212,9 +248,10 @@ def build_review_report(observations: list[dict], *, known: dict | None, metrics
         if reference:
             matched.add(tuple(key))
         reasons = sorted(set(group["reasons"] + [r for x in items for r in x.get("reasons", [])]))
-        differences, unavailable, count = _differences(fields, reference) if reference else ([], [], 0)
+        differences, comparisons, count, one_sided = _differences(fields, reference) if reference else ([], [], 0, [])
         compared += count
-        reasons = sorted(set(reasons + unavailable))
+        reasons = sorted(set(reasons + comparisons))
+        unavailable = [reason for reason in comparisons if reason.startswith("comparison_unavailable:")]
         identity_conflict = any(x["identity"]["state"] == "conflict" for x in items) or "language_identity_conflict" in reasons
         if reference:
             identity_conflict |= any(
@@ -233,13 +270,14 @@ def build_review_report(observations: list[dict], *, known: dict | None, metrics
         elif identity_conflict:
             category = "identity_conflicts"
         elif (not ready or any(x.get("parse_state") == "unparsed" for x in items) or unavailable
-              or any(x.startswith("field_conflict:") or x.endswith(("_conflict", "_unparsed")) for x in reasons)):
+              or any(x.startswith("field_conflict:") or x.endswith("_conflict") for x in reasons)):
             category = "insufficient_data"
         else:
             category = "field_differences" if differences else "known_candidates" if reference else "new_candidates"
         groups[category].append({
             "review_key": key, "observations": copy.deepcopy(items), "reasons": reasons,
-            "differences": differences, "missing_fields": sorted(name for name in FIELD_NAMES if fields.get(name, {}).get("value") is None),
+            "differences": differences, "one_sided_fields": one_sided,
+            "missing_fields": sorted(name for name in FIELD_NAMES if fields.get(name, {}).get("value") is None),
             "reference_identity": {name: reference.get(name) for name in ("review_key", "source_property_number", "agency_reference")}
             if reference else None,
         })
@@ -286,11 +324,12 @@ def _render(report):
             rows += ["Review identity: " + _markdown(entry["review_key"]), "",
                      "Reasons: " + _markdown(entry["reasons"]), "",
                      "| Field | Reference | Candidate | Evidence |", "| --- | --- | --- | --- |"]
-            for difference in entry["differences"]:
+            for difference in entry["differences"] + entry.get("one_sided_fields", []):
                 evidence = {"reference": difference["reference_evidence"], "candidate": difference["candidate_evidence"],
                             "reference_raw": difference["reference_raw"], "candidate_raw": difference["candidate_raw"]}
+                label = difference["field"] + (" (" + difference["direction"] + ")" if difference.get("direction") else "")
                 rows.append("| " + " | ".join(_markdown(x) for x in (
-                    difference["field"], difference["reference"], difference["candidate"], evidence)) + " |")
+                    label, difference["reference"], difference["candidate"], evidence)) + " |")
             for observation in entry["observations"]:
                 digest = observation.get("content_sha256")
                 if digest:

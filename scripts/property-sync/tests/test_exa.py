@@ -8,6 +8,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
+from http.client import HTTPException, IncompleteRead
 
 import pytest
 
@@ -383,3 +384,26 @@ def test_interruption_during_backoff_stops_without_new_request():
     except KeyboardInterrupt:
         pytest.fail("Backoff interruption escaped instead of stopping safely")
     assert len(recorded) == 1 and client.stop_reason == "interrupted"
+
+
+@pytest.mark.parametrize("kind", ["incomplete", "http_error", "message_echo", "partial_echo"])
+def test_http_protocol_exceptions_are_sanitized_and_preserve_reservations(kind):
+    token = "synthetic-" + secrets.token_hex(16)
+    def request(*args, **kwargs):
+        if kind == "incomplete":
+            raise IncompleteRead(b"synthetic truncated response")
+        if kind == "partial_echo":
+            raise IncompleteRead(token.encode())
+        raise HTTPException(token if kind == "message_echo" else "synthetic invalid header")
+    client, recorded = client_for(request=request, token=token)
+    try:
+        result = client.contents([URL])
+    except HTTPException:
+        pytest.fail("HTTP protocol exception bypassed sanitized partial-report path")
+    assert token not in json.dumps(result)
+    if kind == "incomplete":
+        assert len(recorded) == 3 and client.ledger.snapshot()["reserved_usd"] == "0.030"
+        assert result["stop_reason"] == "contents_retries_exhausted"
+    else:
+        assert len(recorded) == 1 and client.ledger.snapshot()["reserved_usd"] == "0.010"
+        assert result["stop_reason"] == ("credential_echo" if kind.endswith("echo") else "provider_transport_failed")

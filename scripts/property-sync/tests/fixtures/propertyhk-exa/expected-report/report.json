@@ -333,6 +333,7 @@
             "text": null
           }
         ],
+        "one_sided_fields": [],
         "reasons": [
           "contents_fetch_failed"
         ],
@@ -1001,6 +1002,7 @@
             "text": "# Listing details\nAdvertisement ID: 00101\nBranch: SYNTHETIC-A\nEstate: Synthetic Gardens\nSale price: HK$7.1M\nRent: HK$22,000 / month\n"
           }
         ],
+        "one_sided_fields": [],
         "reasons": [],
         "reference_identity": {
           "agency_reference": null,
@@ -1322,6 +1324,7 @@
             "text": "# Listing details\nAdvertisement ID: 999\nBranch: SYNTHETIC-A\nEstate: Synthetic Gardens\nSale price: HK$710萬\nRent: HK$22,000 / month\n"
           }
         ],
+        "one_sided_fields": [],
         "reasons": [
           "main_advertisement_id_mismatch"
         ],
@@ -1539,6 +1542,7 @@
             "text": "Synthetic unknown layout; identity and listing block deliberately unavailable.\n"
           }
         ],
+        "one_sided_fields": [],
         "reasons": [
           "main_advertisement_id_missing",
           "main_block_unrecognized",
@@ -1852,6 +1856,7 @@
             "text": "# Listing details\nAdvertisement ID: 00103\nBranch: SYNTHETIC-A\nEstate: Synthetic Gardens\nSale price: HK$710萬\nRent: HK$22,000 / month\n"
           }
         ],
+        "one_sided_fields": [],
         "reasons": [],
         "reference_identity": {
           "agency_reference": null,
@@ -2173,6 +2178,7 @@
             "text": "# Listing details\nAdvertisement ID: 00102\nBranch: SYNTHETIC-A\nEstate: Synthetic Gardens\nSale price: HK$710萬\nRent: HK$22,000 / month\n"
           }
         ],
+        "one_sided_fields": [],
         "reasons": [],
         "reference_identity": null,
         "review_key": [

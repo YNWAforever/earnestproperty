@@ -39,6 +39,7 @@ def test_dual_offers_and_ten_thousand_amount():
     ("HK$ 7,100,000", "7100000"), ("HKD 7.1M", "7100000"), ("HK$710\u842c", "7100000"),
     ("710\u842c", None), ("$7.1M", None), ("HK$ 12,34", None), ("negotiable", None),
     ("HK$ -100", None), ("HK$ NaN", None), ("HK$ 7.1", "7.1"),
+    ("HK$ 999,999,999,999,999,999,999,999,999,999", None),
 ])
 def test_explicit_money_conversion_or_unparsed(raw, amount):
     text = "# Listing details\nAdvertisement ID: 00101\nBranch: SYNTHETIC-A\nSale price: " + raw

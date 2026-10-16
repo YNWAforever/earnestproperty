@@ -27,7 +27,7 @@ ALIASES = {
 }
 LABELS = {label.casefold(): name for name, labels in ALIASES.items() for label in labels}
 HEADINGS = {"listing details": "en", "\u6a13\u76e4\u8a73\u60c5": "zh-Hant"}
-NUMBER = r"(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]{1,15})(?:\.[0-9]{1,6})?"
+NUMBER = r"(?:[0-9]{1,3}(?:,[0-9]{3}){1,4}|[0-9]{1,15})(?:\.[0-9]{1,6})?"
 
 
 def _empty():

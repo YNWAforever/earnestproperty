@@ -5,6 +5,7 @@ import ssl
 from datetime import timezone
 from decimal import Decimal
 from email.utils import parsedate_to_datetime
+from http.client import HTTPException, IncompleteRead
 from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
@@ -199,10 +200,14 @@ class ExaClient:
             )
         except KeyboardInterrupt:
             raise ExaError("interrupted") from None
-        except OSError as error:
-            if self.token and self.token in str(error):
+        except (OSError, HTTPException) as error:
+            partial = getattr(error, "partial", None)
+            if self.token and (self.token in str(error)
+                               or isinstance(partial, bytes) and self.token.encode() in partial):
                 raise ExaError("credential_echo") from None
-            raise ExaError("provider_network_failed", retryable=True) from None
+            if isinstance(error, (OSError, IncompleteRead)):
+                raise ExaError("provider_network_failed", retryable=True) from None
+            raise ExaError("provider_transport_failed") from None
         if (type(status) is not int or not 100 <= status <= 599 or not isinstance(headers, dict)
                 or not isinstance(raw, bytes)):
             raise ExaError("provider_response_invalid")
