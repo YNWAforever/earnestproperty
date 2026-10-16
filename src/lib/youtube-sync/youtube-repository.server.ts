@@ -109,6 +109,13 @@ upserted AS (
     youtube_last_seen_at = EXCLUDED.youtube_last_seen_at,
     youtube_missing_full_runs = 0,
     updated_at = EXCLUDED.updated_at
+  WHERE $4::text = 'full'
+     OR (cms_videos.title, cms_videos.video_url, cms_videos.youtube_published_at,
+         cms_videos.youtube_managed, cms_videos.youtube_available,
+         cms_videos.youtube_missing_full_runs)
+        IS DISTINCT FROM
+        (EXCLUDED.title, EXCLUDED.video_url, EXCLUDED.youtube_published_at,
+         true, true, 0::smallint)
   RETURNING id, youtube_video_id
 ),
 missing_before AS MATERIALIZED (

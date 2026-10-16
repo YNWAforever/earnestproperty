@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 
 import { createYouTubeClient, readYouTubeSyncConfig } from "./youtube-client.server";
 import { hongKongMonthPeriod, planManualAdoptions } from "./youtube-reconciliation";
+import { createYouTubeSyncHistory, type YouTubeHistoryPort } from "./youtube-history.server";
 import { createYouTubeSyncRepository } from "./youtube-repository.server";
 import {
   YOUTUBE_CHANNEL_ID,
@@ -20,6 +21,7 @@ import {
 type ClientPort = {
   listUploads(input: {
     boundaryVideoId?: string | null;
+    backfillVideoIds?: readonly string[];
     onPage?: (progress: YouTubePageProgress) => Promise<void>;
   }): Promise<YouTubeFetchResult>;
 };
@@ -56,6 +58,7 @@ type Dependencies = {
   now?: () => Date;
   client?: ClientPort;
   repository?: RepositoryPort;
+  history?: YouTubeHistoryPort;
   timers?: TimersPort;
   logger?: {
     info: (event: Record<string, unknown>) => void;
@@ -108,21 +111,28 @@ function startLeaseHeartbeat(renew: () => Promise<void>, timers: TimersPort) {
 }
 
 export async function runYouTubeSync(
-  input: { mode: YouTubeSyncMode; trigger: YouTubeSyncTrigger },
+  input: {
+    mode: YouTubeSyncMode;
+    trigger: YouTubeSyncTrigger;
+    backfillVideoIds?: readonly string[];
+  },
   overrides: Dependencies = {},
 ): Promise<YouTubeSyncOutcome> {
+  if (input.mode === "full" && input.backfillVideoIds?.length) {
+    throw new YouTubeSyncError(
+      "youtube_validation_error",
+      "Targeted repair requires incremental mode.",
+    );
+  }
   const now = overrides.now ?? (() => new Date());
   const startedAt = now();
   const owner = (overrides.owner ?? (() => crypto.randomUUID()))();
   const channelId = overrides.channelId ?? YOUTUBE_CHANNEL_ID;
   const logger = overrides.logger ?? defaultLogger;
   const repository = overrides.repository ?? createYouTubeSyncRepository();
-  const client =
-    overrides.client ??
-    createYouTubeClient({
-      ...readYouTubeSyncConfig(),
-      channelId,
-    });
+  // Injected repositories are isolated test ports; never fall back to a live history writer.
+  const history =
+    overrides.history ?? (overrides.repository ? undefined : createYouTubeSyncHistory());
 
   const lease = await repository.acquireLease({ channelId, owner, now: startedAt });
   if (!lease) {
@@ -152,10 +162,20 @@ export async function runYouTubeSync(
   let outcome: Extract<YouTubeSyncOutcome, { status: "completed" }> | null = null;
 
   try {
+    await history?.started({
+      runId: owner,
+      channelId,
+      startedAt,
+      mode: input.mode,
+      trigger: input.trigger,
+    });
+    const client =
+      overrides.client ?? createYouTubeClient({ ...readYouTubeSyncConfig(), channelId });
     const heartbeat = startLeaseHeartbeat(renew, overrides.timers ?? defaultTimers);
     startedHeartbeat = heartbeat;
     const fetched = await client.listUploads({
       boundaryVideoId: input.mode === "incremental" ? lease.lastIncrementalVideoId : null,
+      backfillVideoIds: input.backfillVideoIds,
       onPage: async () => {
         await heartbeat.checkpoint();
         await renew();
@@ -223,6 +243,21 @@ export async function runYouTubeSync(
 
   if (primaryFailed || cleanupFailed) {
     const failure = primaryFailed ? primaryFailure : cleanupFailure;
+    await history
+      ?.finished({
+        runId: owner,
+        channelId,
+        startedAt,
+        finishedAt: now(),
+        mode: input.mode,
+        trigger: input.trigger,
+        status: outcome ? "partial" : "failed",
+        summary: outcome?.summary ?? null,
+        code: failure instanceof YouTubeSyncError ? failure.code : "internal_error",
+      })
+      .catch(() => {
+        logger.error({ event: "youtube_status_record_failed" });
+      });
     logger.error({
       event: "youtube_sync_failed",
       mode: input.mode,
@@ -236,6 +271,24 @@ export async function runYouTubeSync(
     throw new YouTubeSyncError(
       "youtube_validation_error",
       "YouTube synchronization did not produce a result.",
+    );
+  }
+  try {
+    await history?.finished({
+      runId: owner,
+      channelId,
+      startedAt,
+      finishedAt: now(),
+      mode: input.mode,
+      trigger: input.trigger,
+      status: "completed",
+      summary: outcome.summary,
+      code: null,
+    });
+  } catch {
+    throw new YouTubeSyncError(
+      "youtube_status_unavailable",
+      "YouTube result could not be recorded.",
     );
   }
   logger.info({ event: "youtube_sync_completed", ...outcome.summary });

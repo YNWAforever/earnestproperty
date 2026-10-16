@@ -321,3 +321,60 @@ test("unknown sync failures serialize only fixed response and audit fields", asy
     /unknown-sync-raw-internal|unknown-sync-description|unknown-sync\.example\.test|unknown-sync-stack|providerUrl|description|stack/i,
   );
 });
+
+test("unprivileged staff cannot trigger sync or write an audit", async () => {
+  let calls = 0;
+  const subject = handlers({
+    requireStaffPermission: async () => {
+      throw new Response("Forbidden", { status: 403 });
+    },
+    runSync: async () => {
+      calls++;
+      throw new Error("must not sync");
+    },
+    writeAudit: async () => {
+      calls++;
+    },
+  });
+  const response = await subject.staff(
+    new Request("https://example.test/api/youtube-sync", {
+      method: "POST",
+      body: JSON.stringify({ mode: "incremental" }),
+    }),
+  );
+  assert.equal(response.status, 403);
+  assert.equal(calls, 0);
+});
+
+test("targeted repair is staff-only incremental input and never narrows a full snapshot", async () => {
+  const captured: unknown[] = [];
+  const subject = handlers({
+    runSync: async (input) => {
+      captured.push(input);
+      return { status: "skipped", reason: "sync_in_progress" };
+    },
+  });
+  const request = (body: unknown) =>
+    new Request("https://example.test/api/youtube-sync", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  assert.equal(
+    (
+      await subject.staff(
+        request({
+          mode: "full",
+          backfillVideoIds: ["AAAAAAAAAAA"],
+        }),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(captured.length, 0);
+  await subject.staff(request({ mode: "incremental", backfillVideoIds: ["AAAAAAAAAAA"] }));
+  assert.deepEqual(captured[0], {
+    mode: "incremental",
+    trigger: "staff",
+    backfillVideoIds: ["AAAAAAAAAAA"],
+  });
+});

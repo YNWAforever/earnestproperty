@@ -676,3 +676,60 @@ test("completion whitelists mutation counts from the repository boundary", async
   assert.equal("description" in logs[0], false);
   assert.doesNotMatch(JSON.stringify(logs), /must not cross/i);
 });
+
+test("a later playlist page failure cannot apply earlier pages or advance completion", async () => {
+  let applies = 0;
+  const responses = [
+    { items: [{ id: channelId, contentDetails: { relatedPlaylists: { uploads: "UPLOADS" } } }] },
+    {
+      items: [
+        {
+          snippet: {
+            channelId,
+            title: "Synthetic new video",
+            resourceId: { videoId: "AAAAAAAAAAA" },
+            publishedAt: "2026-10-15T00:00:00Z",
+          },
+        },
+      ],
+      nextPageToken: "next",
+    },
+    { error: { errors: [{ reason: "quotaExceeded" }] } },
+  ];
+  let calls = 0;
+  const fetchImpl = Object.assign(
+    async () =>
+      new Response(JSON.stringify(responses[calls]), {
+        status: ++calls === 3 ? 403 : 200,
+      }),
+    { preconnect: fetch.preconnect },
+  ) as typeof fetch;
+  await assert.rejects(
+    () =>
+      runYouTubeSync(
+        { mode: "incremental", trigger: "cron" },
+        {
+          client: createYouTubeClient({ apiKey: "synthetic", fetchImpl }),
+          repository: {
+            acquireLease: async () => ({
+              channelId,
+              owner: "11111111-1111-4111-8111-111111111111",
+              lastIncrementalVideoId: "BBBBBBBBBBB",
+              lastFullPeriod: null,
+            }),
+            renewLease: async () => true,
+            releaseLease: async () => {},
+            listManualCandidates: async () => [],
+            applySnapshot: async () => {
+              applies++;
+              throw new Error("must not write");
+            },
+          },
+          logger: { info() {}, error() {} },
+        },
+      ),
+    (error) => error instanceof YouTubeSyncError && error.code === "youtube_quota_exhausted",
+  );
+  assert.equal(calls, 3);
+  assert.equal(applies, 0);
+});

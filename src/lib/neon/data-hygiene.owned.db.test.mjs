@@ -465,14 +465,14 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
           const repository = createYouTubeSyncRepository({ queryRows: query });
           const channelId = "UCsyntheticFX18a";
           const youtubeId = "FX18aVideo1";
-          const run = async (owner, at) => {
+          const run = async (owner, at, mode = "incremental") => {
             const now = new Date(at);
             const lease = await repository.acquireLease({ channelId, owner, now });
             assert.ok(lease, "lease must be acquired");
             const summary = await repository.applySnapshot({
               channelId,
               owner,
-              mode: "incremental",
+              mode,
               videos: [
                 {
                   videoId: youtubeId,
@@ -486,7 +486,7 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
               ],
               newestVideoId: youtubeId,
               completedAt: new Date(now.getTime() + 1000),
-              period: null,
+              period: mode === "full" ? "2026-10-01" : null,
             });
             await repository.releaseLease({
               channelId,
@@ -511,6 +511,12 @@ test("FX-18a data hygiene on owned Postgres", { timeout: 300000 }, async (t) => 
             youtubeId,
           ]);
           assert.deepEqual(synced, [{ id: videoId }]);
+          assert.equal((await videoRow(videoId)).updated_at.toISOString(), updatedBefore);
+          assert.equal((await readVideo(videoId)).version, staffView.version);
+
+          // Full reconciliation still updates observation bookkeeping. Neither
+          // a no-op increment nor that bookkeeping invalidates a staff editor.
+          await run(id(303), "2026-10-10T03:00:00.000Z", "full");
           assert.notEqual((await videoRow(videoId)).updated_at.toISOString(), updatedBefore);
           assert.equal((await readVideo(videoId)).version, staffView.version);
 

@@ -29,6 +29,7 @@ type YouTubeClientDependencies = {
 
 type ListUploadsInput = {
   boundaryVideoId?: string | null;
+  backfillVideoIds?: readonly string[];
   onPage?: (progress: YouTubePageProgress) => Promise<void>;
 };
 
@@ -103,6 +104,7 @@ function classifyProviderError(status: number, reason: string): YouTubeProviderE
   }
   if (
     status === 401 ||
+    status === 403 ||
     reason === "keyInvalid" ||
     reason === "accessNotConfigured" ||
     reason === "forbidden"
@@ -123,14 +125,21 @@ function retryAfterMilliseconds(response: Response) {
 
 async function requestJson(
   url: URL,
-  dependencies: Required<Pick<YouTubeClientDependencies, "fetchImpl" | "sleep" | "random">>,
+  dependencies: Required<Pick<YouTubeClientDependencies, "fetchImpl" | "sleep" | "random">> & {
+    signal: AbortSignal;
+  },
 ) {
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt += 1) {
+    if (dependencies.signal.aborted) {
+      throw new YouTubeSyncError("youtube_unavailable", "YouTube read deadline exceeded.", true);
+    }
     let response: Response;
     try {
-      response = await dependencies.fetchImpl(url, { signal: AbortSignal.timeout(15_000) });
+      response = await dependencies.fetchImpl(url, {
+        signal: AbortSignal.any([dependencies.signal, AbortSignal.timeout(15_000)]),
+      });
     } catch {
-      if (attempt + 1 === MAX_ATTEMPTS) {
+      if (dependencies.signal.aborted || attempt + 1 === MAX_ATTEMPTS) {
         throw new YouTubeSyncError(
           "youtube_unavailable",
           "YouTube is temporarily unavailable.",
@@ -148,7 +157,10 @@ async function requestJson(
 
     const reason = providerReason(body);
     const code = classifyProviderError(response.status, reason);
-    const retryable = response.status === 429 || response.status >= 500;
+    const retryable =
+      (response.status === 429 || response.status >= 500) &&
+      code !== "youtube_auth_failed" &&
+      code !== "youtube_quota_exhausted";
     if (!retryable || attempt + 1 === MAX_ATTEMPTS) {
       throw new YouTubeSyncError(
         code,
@@ -158,6 +170,9 @@ async function requestJson(
     }
     const retryAfter = retryAfterMilliseconds(response);
     const backoff = BASE_BACKOFF_MS * 2 ** attempt + Math.floor(dependencies.random() * 250);
+    if (retryAfter !== null && retryAfter > 5_000) {
+      throw new YouTubeSyncError(code, "YouTube retry delay exceeds the run budget.", true);
+    }
     await dependencies.sleep(retryAfter ?? backoff);
   }
   throw new YouTubeSyncError("youtube_unavailable", "YouTube is temporarily unavailable.", true);
@@ -175,12 +190,12 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
     random: input.random ?? Math.random,
   };
 
-  async function uploadsPlaylistId() {
+  async function uploadsPlaylistId(signal: AbortSignal) {
     const url = new URL(`${API_ROOT}/channels`);
     url.searchParams.set("part", "contentDetails");
     url.searchParams.set("id", channelId);
     url.searchParams.set("key", apiKey);
-    const responseBody = await requestJson(url, dependencies);
+    const responseBody = await requestJson(url, { ...dependencies, signal });
     const body =
       responseBody && typeof responseBody === "object"
         ? (responseBody as Record<string, unknown>)
@@ -249,7 +264,12 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
   }
 
   async function listUploads(listInput: ListUploadsInput = {}): Promise<YouTubeFetchResult> {
-    const playlistId = await uploadsPlaylistId();
+    const wanted = new Set(listInput.backfillVideoIds ?? []);
+    if (wanted.size > 50 || [...wanted].some((id) => !/^[A-Za-z0-9_-]{11}$/.test(id))) {
+      throw new YouTubeSyncError("youtube_validation_error", "Invalid backfill video IDs.");
+    }
+    const signal = AbortSignal.timeout(90_000);
+    const playlistId = await uploadsPlaylistId(signal);
     const videos: YouTubeVideo[] = [];
     const seenVideoIds = new Set<string>();
     const seenTokens = new Set<string>();
@@ -260,6 +280,9 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
     let cumulativeProviderItems = 0;
 
     do {
+      if (pageNumber >= 100) {
+        throw new YouTubeSyncError("youtube_invalid_snapshot", "YouTube page limit exceeded.");
+      }
       const url = new URL(`${API_ROOT}/playlistItems`);
       url.searchParams.set("part", "snippet,contentDetails");
       url.searchParams.set("playlistId", playlistId);
@@ -267,7 +290,7 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
       url.searchParams.set("key", apiKey);
       if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-      const responseBody = await requestJson(url, dependencies);
+      const responseBody = await requestJson(url, { ...dependencies, signal });
       const body =
         responseBody && typeof responseBody === "object"
           ? (responseBody as Record<string, unknown>)
@@ -333,8 +356,14 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
       const boundaryIndex = listInput.boundaryVideoId
         ? pageVideos.findIndex((item) => item.videoId === listInput.boundaryVideoId)
         : -1;
-      const acceptedOnPage = boundaryIndex === -1 ? pageVideos.length : boundaryIndex + 1;
-      videos.push(...pageVideos.slice(0, acceptedOnPage));
+      const accepted = pageVideos.filter(
+        (item, index) =>
+          (!boundaryFound && (boundaryIndex === -1 || index <= boundaryIndex)) ||
+          wanted.has(item.videoId),
+      );
+      for (const item of pageVideos) wanted.delete(item.videoId);
+      const acceptedOnPage = accepted.length;
+      videos.push(...accepted);
       if (boundaryIndex !== -1) {
         boundaryFound = true;
       }
@@ -350,11 +379,17 @@ export function createYouTubeClient(input: YouTubeClientDependencies) {
         );
       }
       await listInput.onPage?.({ pageNumber, itemCount: acceptedOnPage });
-      if (boundaryFound) break;
+      if (boundaryFound && wanted.size === 0) break;
 
       pageToken = next;
     } while (pageToken);
 
+    if (wanted.size > 0) {
+      throw new YouTubeSyncError(
+        "youtube_invalid_snapshot",
+        "Requested backfill IDs were not returned.",
+      );
+    }
     return { videos, pages: pageNumber, boundaryFound };
   }
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { assertDisposableNeonTestTarget } from "../neon/disposable-test-target.mjs";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const channelId = "UCTwcj9hcQoKVpKEZY-ZgnwA";
@@ -50,6 +51,8 @@ test(
   { skip: !testDatabaseUrl },
   async () => {
     assert.ok(testDatabaseUrl);
+    // Verify target identity before migrations, application imports or cleanup.
+    await assertDisposableNeonTestTarget(testDatabaseUrl);
 
     const migrationEnv = {
       ...process.env,

@@ -1,3 +1,6 @@
+import { useStaffSession } from "@/components/admin/staff-session";
+import { hasPermission } from "@/lib/control-plane/role-permissions";
+import { YouTubeSyncStatusPanel } from "@/components/admin/YouTubeSyncStatus";
 import { AdminStaffWorkspace } from "@/components/admin/AdminStaffWorkspace";
 import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
@@ -210,6 +213,9 @@ function useEditingDirty<T>(value: T | null): boolean {
 function AdminCms({ identity }: { identity: string }) {
   const isWorkspaceCurrent = useStaffWorkspaceCurrent(identity);
   const { user } = useNeonAuth();
+  const { session: staffSession } = useStaffSession(user?.id ?? null);
+  const canReadYouTubeStatus =
+    staffSession?.status === "ok" && hasPermission(staffSession.roles, "cms.publish");
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const [data, setData] = useState<AdminCmsData | null>(null);
@@ -1527,6 +1533,13 @@ function AdminCms({ identity }: { identity: string }) {
             </TabsContent>
 
             <TabsContent value="videos">
+              {canReadYouTubeStatus ? (
+                <YouTubeSyncStatusPanel />
+              ) : (
+                <p className="mb-4 text-sm text-muted-foreground">
+                  需要內容發布權限才能查看同步狀態。
+                </p>
+              )}
               <Card>
                 <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
