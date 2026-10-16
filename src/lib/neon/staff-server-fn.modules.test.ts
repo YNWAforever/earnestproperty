@@ -42,7 +42,10 @@ const modules = {
   exportApi: await load("../admin/whatsapp-link-export-api"),
 };
 
+const youtubeStatus = await load("../youtube-sync/youtube-status");
+
 const table: [string, Call, unknown[]][] = [
+  ["youtube-status fetchYouTubeSyncStatus", youtubeStatus.fetchYouTubeSyncStatus, []],
   [
     "whatsapp-link-management getWhatsappTrackingLinksPage",
     modules.management.getWhatsappTrackingLinksPage,
@@ -273,4 +276,20 @@ test('getWhatsappAssignment still returns the handler\'s own { kind: "error" } r
   fixture.__fx10aStub = async () => handled;
   const call = staffModules["whatsapp-assignment"].getWhatsappAssignment;
   expect(await call({ conversationId: uuid })).toEqual(handled);
+});
+
+test("YouTube status normalizes rejected Responses through the canonical staff wrapper", async () => {
+  for (const status of [401, 403, 409]) {
+    fixture.__fx10aStub = async () => {
+      throw new Response("Denied", { status });
+    };
+    let error: unknown;
+    try {
+      await youtubeStatus.fetchYouTubeSyncStatus();
+    } catch (cause) {
+      error = cause;
+    }
+    expect(error).toBeInstanceOf(ServerFnResponseError);
+    expect((error as ServerFnResponseError).status).toBe(status);
+  }
 });

@@ -1,9 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 
-import { withStaffAuthHeaders } from "@/auth";
 import { requireStaffPermission } from "../control-plane/permissions";
-import { unwrapServerFnResponse } from "../neon/server-fn-response";
+import { callStaffServerFn } from "../neon/staff-server-fn";
 
 const statusServer = createServerFn({ method: "GET" }).handler(async () => {
   await requireStaffPermission(getRequest(), "cms.publish");
@@ -12,5 +11,5 @@ const statusServer = createServerFn({ method: "GET" }).handler(async () => {
 });
 
 export async function fetchYouTubeSyncStatus() {
-  return unwrapServerFnResponse(statusServer(await withStaffAuthHeaders()));
+  return callStaffServerFn(statusServer, {});
 }

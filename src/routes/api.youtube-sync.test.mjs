@@ -78,7 +78,8 @@ test("CMS status visibility uses the same permission as the protected status rea
     "utf8",
   );
   assert.match(status, /requireStaffPermission\(getRequest\(\), "cms.publish"\)/);
-  assert.match(status, /unwrapServerFnResponse/);
+  assert.match(status, /callStaffServerFn\(statusServer,\s*\{\}\)/);
+  assert.doesNotMatch(status, /withStaffAuthHeaders|from\s*["']@\/auth["']/);
   assert.match(cms, /hasPermission\(staffSession.roles, "cms.publish"\)/);
   assert.match(cms, /canReadYouTubeStatus \? \([\s\S]*?<YouTubeSyncStatusPanel/);
 });
