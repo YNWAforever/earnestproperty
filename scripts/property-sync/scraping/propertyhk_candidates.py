@@ -121,7 +121,8 @@ def validate_review_identity(detail: dict, fields: dict, scope: dict, *,
 def semantic_value(value):
     """Remove evidence presentation when comparing observed normalized values."""
     if isinstance(value, dict):
-        return {k: semantic_value(v) for k, v in value.items() if k not in ("raw", "evidence")}
+        return {k: semantic_value(v) for k, v in value.items()
+                if k not in ("raw", "evidence") and not k.startswith("raw_")}
     if isinstance(value, list):
         result = [semantic_value(x) for x in value]
         return sorted(result, key=lambda x: json.dumps(x, sort_keys=True, ensure_ascii=False))
