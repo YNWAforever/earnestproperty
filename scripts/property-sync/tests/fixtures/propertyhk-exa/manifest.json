@@ -1,6 +1,11 @@
 {
+  "artifacts": {
+    "contents": "contents.json",
+    "discovery": "discovery.json",
+    "query_plan": "query-plan.json"
+  },
+  "description": "Designed examples only; not verified Property.hk layouts or real Exa retrieval.",
   "kind": "propertyhk-exa-fixtures/v1",
-  "synthetic": true,
-  "description": "Designed parser/API examples, not real Property.hk or Exa retrieval evidence.",
-  "retrieved_at": "2026-10-16T00:00:00Z"
+  "retrieved_at": "2026-10-16T00:00:00Z",
+  "synthetic": true
 }

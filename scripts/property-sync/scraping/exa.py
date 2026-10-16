@@ -197,6 +197,8 @@ class ExaClient:
                 timeout_seconds=min(self.limits["timeout_seconds"], self.ledger.remaining()),
                 max_bytes=self.limits["max_response_bytes"],
             )
+        except KeyboardInterrupt:
+            raise ExaError("interrupted") from None
         except OSError as error:
             if self.token and self.token in str(error):
                 raise ExaError("credential_echo") from None
@@ -246,7 +248,11 @@ class ExaClient:
             self.stop_reason = "elapsed_budget_exhausted"
             return False
         if delay:
-            self.sleep(delay)
+            try:
+                self.sleep(delay)
+            except KeyboardInterrupt:
+                self.stop_reason = "interrupted"
+                return False
         return True
 
     def _request(self, operation, payload):

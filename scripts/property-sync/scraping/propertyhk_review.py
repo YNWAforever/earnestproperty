@@ -9,7 +9,7 @@ from decimal import Decimal
 from pathlib import Path, PureWindowsPath
 
 from .exa import strict_json
-from .propertyhk_candidates import group_language_observations, semantic_value
+from .propertyhk_candidates import group_language_observations, normalize_detail_url, semantic_value
 from .propertyhk_text import ALIASES
 
 GROUPS = ("fetch_failures", "identity_conflicts", "insufficient_data",
@@ -53,6 +53,23 @@ def _validate_reference(value):
                 if (not isinstance(field, dict) or field.get("state") not in ("valid", "missing", "unparsed", "conflict")
                         or not all(isinstance(field.get(k), list) for k in ("raw", "evidence", "alternatives"))):
                     raise ValueError
+                observed = field.get("value")
+                if observed is not None:
+                    if name in ("saleable_area", "gross_area"):
+                        if (not isinstance(observed, dict) or observed.get("unit") not in ("sq_ft", "sq_m")
+                                or type(observed.get("approximate")) is not bool
+                                or not isinstance(observed.get("amount"), str)
+                                or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", observed["amount"])):
+                            raise ValueError
+                    elif name in ("source_updated", "source_published"):
+                        if not isinstance(observed, dict) or not isinstance(observed.get("iso"), str):
+                            raise ValueError
+                        datetime.fromisoformat(observed["iso"])
+                    elif name == "contacts":
+                        if not isinstance(observed, list) or any(not isinstance(x, dict) for x in observed):
+                            raise ValueError
+                    elif name != "offers" and not isinstance(observed, str):
+                        raise ValueError
                 if name == "offers" and field.get("value") is not None:
                     if not isinstance(field["value"], list):
                         raise ValueError
@@ -67,6 +84,23 @@ def _validate_reference(value):
                         if amount is not None and (not isinstance(amount, str)
                                 or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)?", amount) or Decimal(amount) <= 0):
                             raise ValueError
+        bindings = value.get("native_index", [])
+        if not isinstance(bindings, list):
+            raise ValueError
+        bound_keys = set()
+        for binding in bindings:
+            if not isinstance(binding, dict):
+                raise ValueError
+            detail = normalize_detail_url(binding["normalized_url"])
+            if (detail["normalized_url"] != binding["normalized_url"]
+                    or detail["source_advertisement_id"] != binding.get("source_advertisement_id")
+                    or not isinstance(binding.get("branch_id"), str) or not binding["branch_id"]
+                    or not isinstance(binding.get("evidence"), dict) or not binding["evidence"]):
+                raise ValueError
+            key = (binding["normalized_url"], binding["branch_id"])
+            if key in bound_keys:
+                raise ValueError
+            bound_keys.add(key)
         return value
     except (ValueError, TypeError, KeyError, ArithmeticError):
         raise ValueError("reference_invalid") from None
@@ -117,10 +151,12 @@ def _chosen_fields(items):
 
 
 def _differences(fields, reference):
-    differences, reasons = [], []
+    differences, reasons, compared = [], [], 0
     old_fields = reference["fields"]
 
     def append(name, old, candidate, old_field, candidate_field):
+        nonlocal compared
+        compared += 1
         if old != candidate:
             differences.append({
                 "field": name, "reference": old, "candidate": candidate,
@@ -154,7 +190,7 @@ def _differences(fields, reference):
             reasons.append("comparison_unavailable:" + name)
         else:
             append(name, semantic_value(old), semantic_value(value), old_field, field)
-    return differences, reasons
+    return differences, reasons, compared
 
 
 def build_review_report(observations: list[dict], *, known: dict | None, metrics: dict,
@@ -166,8 +202,9 @@ def build_review_report(observations: list[dict], *, known: dict | None, metrics
         if known["synthetic"] != synthetic:
             raise ValueError("reference_provenance_mismatch")
     lookup = {tuple(x["review_key"]): x for x in known["entries"]} if known else {}
-    matched, groups = set(), {name: [] for name in GROUPS}
-    for group in group_language_observations(observations):
+    matched, groups, compared = set(), {name: [] for name in GROUPS}, 0
+    language_groups = group_language_observations(observations)
+    for group in language_groups:
         items = group["observations"]
         fields = _chosen_fields(items)
         key = group["review_key"]
@@ -175,7 +212,8 @@ def build_review_report(observations: list[dict], *, known: dict | None, metrics
         if reference:
             matched.add(tuple(key))
         reasons = sorted(set(group["reasons"] + [r for x in items for r in x.get("reasons", [])]))
-        differences, unavailable = _differences(fields, reference) if reference else ([], [])
+        differences, unavailable, count = _differences(fields, reference) if reference else ([], [], 0)
+        compared += count
         reasons = sorted(set(reasons + unavailable))
         identity_conflict = any(x["identity"]["state"] == "conflict" for x in items) or "language_identity_conflict" in reasons
         if reference:
@@ -213,7 +251,16 @@ def build_review_report(observations: list[dict], *, known: dict | None, metrics
         "comparison_performed": known is not None,
         "reference": {"sample_size": len(lookup), "matched_review_identities": len(matched),
                       "provenance": copy.deepcopy(known["provenance"]), "file_sha256": known.get("_file_sha256")} if known else None,
-        "groups": groups, "metrics": copy.deepcopy(metrics), "stop_reason": stop_reason,
+        "groups": groups, "metrics": {
+            **copy.deepcopy(metrics),
+            "parsed_observations": sum(x.get("parse_state") == "parsed" for x in observations),
+            "unparsed_observations": sum(x.get("parse_state") == "unparsed" for x in observations),
+            "identity_conflicting_observations": sum(x["identity"].get("state") == "conflict" for x in observations),
+            "language_groups": sum(len({x.get("language") for x in group["observations"] if x.get("language")}) > 1
+                                   for group in language_groups),
+            "comparable_fields": compared,
+            "group_counts": {name: len(items) for name, items in groups.items()},
+        }, "stop_reason": stop_reason,
         "limitations": ["Discovery is not full inventory coverage or active-listing verification.",
                         "No provided reference means no claim about production absence.",
                         "Source access and reuse rights remain independently required.",

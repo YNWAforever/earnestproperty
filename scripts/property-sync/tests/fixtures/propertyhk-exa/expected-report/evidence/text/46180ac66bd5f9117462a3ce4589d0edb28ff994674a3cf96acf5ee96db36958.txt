@@ -1,0 +1,6 @@
+# 樓盤詳情
+Advertisement ID: 00101
+Branch: SYNTHETIC-A
+Estate: Synthetic Gardens
+Sale price: HK$710萬
+Rent: HK$22,000 / month

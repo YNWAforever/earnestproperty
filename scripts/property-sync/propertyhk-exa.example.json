@@ -1,0 +1,106 @@
+{
+  "kind": "propertyhk-exa-config/v1",
+  "synthetic": true,
+  "query_plan": [
+    {
+      "query_id": "q1",
+      "branch_id": "SYNTHETIC-A",
+      "branch_labels": [
+        "SYNTHETIC-A"
+      ],
+      "estate_terms": [
+        "Synthetic Gardens",
+        "Synthetic Shore",
+        "Synthetic Quay"
+      ],
+      "district_terms": [
+        "Synthetic District"
+      ],
+      "query_terms": [
+        "SYNTHETIC-A",
+        "Synthetic Gardens"
+      ]
+    },
+    {
+      "query_id": "q2",
+      "branch_id": "SYNTHETIC-A",
+      "branch_labels": [
+        "SYNTHETIC-A"
+      ],
+      "estate_terms": [
+        "Synthetic Gardens",
+        "Synthetic Shore",
+        "Synthetic Quay"
+      ],
+      "district_terms": [
+        "Synthetic District"
+      ],
+      "query_terms": [
+        "SYNTHETIC-A",
+        "Synthetic District"
+      ]
+    },
+    {
+      "query_id": "q3",
+      "branch_id": "SYNTHETIC-B",
+      "branch_labels": [
+        "SYNTHETIC-B"
+      ],
+      "estate_terms": [
+        "Synthetic Gardens",
+        "Synthetic Shore",
+        "Synthetic Quay"
+      ],
+      "district_terms": [
+        "Synthetic District"
+      ],
+      "query_terms": [
+        "SYNTHETIC-B",
+        "Synthetic Shore"
+      ]
+    },
+    {
+      "query_id": "q4",
+      "branch_id": "SYNTHETIC-A",
+      "branch_labels": [
+        "SYNTHETIC-A"
+      ],
+      "estate_terms": [
+        "Synthetic Gardens",
+        "Synthetic Shore",
+        "Synthetic Quay"
+      ],
+      "district_terms": [
+        "Synthetic District"
+      ],
+      "query_terms": [
+        "SYNTHETIC-A",
+        "Synthetic Quay"
+      ]
+    }
+  ],
+  "fixture_aliases": {
+    "/fixture-en/asking_detail/{id}.html": "en"
+  },
+  "limits": {
+    "max_queries": 4,
+    "max_search_requests": 4,
+    "max_results_per_search": 5,
+    "max_unique_urls": 20,
+    "batch_size": 5,
+    "max_attempts": 3,
+    "max_contents_requests": 12,
+    "max_total_requests": 16,
+    "max_cost_usd": "0.20",
+    "timeout_seconds": 20,
+    "max_elapsed_seconds": 120,
+    "max_response_bytes": 2097152,
+    "max_retry_after_seconds": 30
+  },
+  "approval_refs": {
+    "query_plan": null,
+    "source_access": null,
+    "content_reuse": null,
+    "online_trial": null
+  }
+}

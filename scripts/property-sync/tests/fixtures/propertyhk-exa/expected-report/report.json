@@ -1,0 +1,2249 @@
+{
+  "baseline_advanced": false,
+  "comparison_performed": true,
+  "discovery": [
+    {
+      "errors": [],
+      "query_id": "q1",
+      "rejected_results": [],
+      "request_ids": [
+        {
+          "attempt": 1,
+          "body_request_id": "synthetic-q1",
+          "endpoint": "search",
+          "header_request_id": null,
+          "provider": "exa",
+          "provider_document_id": null,
+          "provider_estimated_published_date": null,
+          "provider_retrieval_time": null,
+          "retrieved_at": "2026-10-16T00:00:00Z",
+          "status": null,
+          "status_source": null
+        }
+      ],
+      "results": [
+        {
+          "language": null,
+          "normalized_url": "https://www.property.hk/asking_detail/00101.html",
+          "original_url": "https://www.property.hk/asking_detail/00101.html",
+          "provider": {
+            "attempt": 1,
+            "body_request_id": "synthetic-q1",
+            "endpoint": "search",
+            "header_request_id": null,
+            "provider": "exa",
+            "provider_document_id": "synthetic-document-0",
+            "provider_estimated_published_date": null,
+            "provider_retrieval_time": null,
+            "retrieved_at": "2026-10-16T00:00:00Z",
+            "status": null,
+            "status_source": null
+          },
+          "source_advertisement_id": "00101"
+        },
+        {
+          "language": null,
+          "normalized_url": "https://www.property.hk/asking_detail/00102.html",
+          "original_url": "https://www.property.hk/asking_detail/00102.html",
+          "provider": {
+            "attempt": 1,
+            "body_request_id": "synthetic-q1",
+            "endpoint": "search",
+            "header_request_id": null,
+            "provider": "exa",
+            "provider_document_id": "synthetic-document-1",
+            "provider_estimated_published_date": null,
+            "provider_retrieval_time": null,
+            "retrieved_at": "2026-10-16T00:00:00Z",
+            "status": null,
+            "status_source": null
+          },
+          "source_advertisement_id": "00102"
+        },
+        {
+          "language": null,
+          "normalized_url": "https://www.property.hk/asking_detail/00103.html",
+          "original_url": "https://www.property.hk/asking_detail/00103.html",
+          "provider": {
+            "attempt": 1,
+            "body_request_id": "synthetic-q1",
+            "endpoint": "search",
+            "header_request_id": null,
+            "provider": "exa",
+            "provider_document_id": "synthetic-document-2",
+            "provider_estimated_published_date": null,
+            "provider_retrieval_time": null,
+            "retrieved_at": "2026-10-16T00:00:00Z",
+            "status": null,
+            "status_source": null
+          },
+          "source_advertisement_id": "00103"
+        },
+        {
+          "language": null,
+          "normalized_url": "https://www.property.hk/asking_detail/00104.html",
+          "original_url": "https://www.property.hk/asking_detail/00104.html",
+          "provider": {
+            "attempt": 1,
+            "body_request_id": "synthetic-q1",
+            "endpoint": "search",
+            "header_request_id": null,
+            "provider": "exa",
+            "provider_document_id": "synthetic-document-3",
+            "provider_estimated_published_date": null,
+            "provider_retrieval_time": null,
+            "retrieved_at": "2026-10-16T00:00:00Z",
+            "status": null,
+            "status_source": null
+          },
+          "source_advertisement_id": "00104"
+        },
+        {
+          "language": null,
+          "normalized_url": "https://www.property.hk/asking_detail/00105.html",
+          "original_url": "https://www.property.hk/asking_detail/00105.html",
+          "provider": {
+            "attempt": 1,
+            "body_request_id": "synthetic-q1",
+            "endpoint": "search",
+            "header_request_id": null,
+            "provider": "exa",
+            "provider_document_id": "synthetic-document-4",
+            "provider_estimated_published_date": null,
+            "provider_retrieval_time": null,
+            "retrieved_at": "2026-10-16T00:00:00Z",
+            "status": null,
+            "status_source": null
+          },
+          "source_advertisement_id": "00105"
+        }
+      ]
+    },
+    {
+      "errors": [],
+      "query_id": "q2",
+      "rejected_results": [],
+      "request_ids": [
+        {
+          "attempt": 1,
+          "body_request_id": "synthetic-q2",
+          "endpoint": "search",
+          "header_request_id": null,
+          "provider": "exa",
+          "provider_document_id": null,
+          "provider_estimated_published_date": null,
+          "provider_retrieval_time": null,
+          "retrieved_at": "2026-10-16T00:00:00Z",
+          "status": null,
+          "status_source": null
+        }
+      ],
+      "results": [
+        {
+          "language": null,
+          "normalized_url": "https://www.property.hk/asking_detail/00106.html",
+          "original_url": "https://www.property.hk/asking_detail/00106.html",
+          "provider": {
+            "attempt": 1,
+            "body_request_id": "synthetic-q2",
+            "endpoint": "search",
+            "header_request_id": null,
+            "provider": "exa",
+            "provider_document_id": "synthetic-document-0",
+            "provider_estimated_published_date": null,
+            "provider_retrieval_time": null,
+            "retrieved_at": "2026-10-16T00:00:00Z",
+            "status": null,
+            "status_source": null
+          },
+          "source_advertisement_id": "00106"
+        },
+        {
+          "language": "en",
+          "normalized_url": "https://www.property.hk/fixture-en/asking_detail/00101.html",
+          "original_url": "https://www.property.hk/fixture-en/asking_detail/00101.html",
+          "provider": {
+            "attempt": 1,
+            "body_request_id": "synthetic-q2",
+            "endpoint": "search",
+            "header_request_id": null,
+            "provider": "exa",
+            "provider_document_id": "synthetic-document-1",
+            "provider_estimated_published_date": null,
+            "provider_retrieval_time": null,
+            "retrieved_at": "2026-10-16T00:00:00Z",
+            "status": null,
+            "status_source": null
+          },
+          "source_advertisement_id": "00101"
+        },
+        {
+          "language": null,
+          "normalized_url": "https://www.property.hk/asking_detail/00101.html",
+          "original_url": "https://www.property.hk/asking_detail/00101.html",
+          "provider": {
+            "attempt": 1,
+            "body_request_id": "synthetic-q2",
+            "endpoint": "search",
+            "header_request_id": null,
+            "provider": "exa",
+            "provider_document_id": "synthetic-document-2",
+            "provider_estimated_published_date": null,
+            "provider_retrieval_time": null,
+            "retrieved_at": "2026-10-16T00:00:00Z",
+            "status": null,
+            "status_source": null
+          },
+          "source_advertisement_id": "00101"
+        }
+      ]
+    },
+    {
+      "errors": [],
+      "query_id": "q3",
+      "rejected_results": [],
+      "request_ids": [
+        {
+          "attempt": 1,
+          "body_request_id": "synthetic-q3",
+          "endpoint": "search",
+          "header_request_id": null,
+          "provider": "exa",
+          "provider_document_id": null,
+          "provider_estimated_published_date": null,
+          "provider_retrieval_time": null,
+          "retrieved_at": "2026-10-16T00:00:00Z",
+          "status": null,
+          "status_source": null
+        }
+      ],
+      "results": []
+    },
+    {
+      "errors": [],
+      "query_id": "q4",
+      "rejected_results": [],
+      "request_ids": [
+        {
+          "attempt": 1,
+          "body_request_id": "synthetic-q4",
+          "endpoint": "search",
+          "header_request_id": null,
+          "provider": "exa",
+          "provider_document_id": null,
+          "provider_estimated_published_date": null,
+          "provider_retrieval_time": null,
+          "retrieved_at": "2026-10-16T00:00:00Z",
+          "status": null,
+          "status_source": null
+        }
+      ],
+      "results": []
+    }
+  ],
+  "eligible_for_absence": false,
+  "full_snapshot": false,
+  "groups": {
+    "fetch_failures": [
+      {
+        "differences": [],
+        "missing_fields": [
+          "address",
+          "agency_reference",
+          "block",
+          "branch",
+          "contacts",
+          "district",
+          "estate",
+          "floor",
+          "gross_area",
+          "observed_source_status",
+          "offers",
+          "saleable_area",
+          "source_advertisement_id",
+          "source_property_number",
+          "source_published",
+          "source_updated",
+          "unit"
+        ],
+        "observations": [
+          {
+            "content_format": "provider_text",
+            "content_sha256": null,
+            "detail": {
+              "language": null,
+              "normalized_url": "https://www.property.hk/asking_detail/00106.html",
+              "original_url": "https://www.property.hk/asking_detail/00106.html",
+              "source_advertisement_id": "00106"
+            },
+            "fields": {},
+            "identity": {
+              "agency_reference": null,
+              "branch_id": null,
+              "reasons": [
+                "contents_fetch_failed"
+              ],
+              "review_key": null,
+              "source_advertisement_id": "00106",
+              "source_property_number": null,
+              "state": "missing"
+            },
+            "language": null,
+            "parse_state": "fetch_failed",
+            "parser_version": "propertyhk-exa-text-v1",
+            "provider": {
+              "attempt": 1,
+              "body_request_id": "synthetic-contents",
+              "endpoint": "contents",
+              "error_http_status": 404,
+              "error_tag": null,
+              "header_request_id": null,
+              "provider": "exa",
+              "provider_document_id": null,
+              "provider_estimated_published_date": null,
+              "provider_retrieval_time": null,
+              "retrieved_at": "2026-10-16T00:00:00Z",
+              "status": "error",
+              "status_source": null
+            },
+            "query_scopes": [
+              {
+                "branch_id": "SYNTHETIC-A",
+                "branch_labels": [
+                  "SYNTHETIC-A"
+                ],
+                "district_terms": [
+                  "Synthetic District"
+                ],
+                "estate_terms": [
+                  "Synthetic Gardens",
+                  "Synthetic Shore",
+                  "Synthetic Quay"
+                ],
+                "query_id": "q2",
+                "query_terms": [
+                  "SYNTHETIC-A",
+                  "Synthetic District"
+                ]
+              }
+            ],
+            "reasons": [
+              "contents_fetch_failed"
+            ],
+            "text": null
+          }
+        ],
+        "reasons": [
+          "contents_fetch_failed"
+        ],
+        "reference_identity": null,
+        "review_key": null
+      }
+    ],
+    "field_differences": [
+      {
+        "differences": [
+          {
+            "candidate": "7100000",
+            "candidate_evidence": [
+              {
+                "char_end": 96,
+                "char_start": 89,
+                "content_sha256": "46180ac66bd5f9117462a3ce4589d0edb28ff994674a3cf96acf5ee96db36958",
+                "kind": "source_text",
+                "line_end": 5,
+                "line_start": 5,
+                "raw": "HK$710萬"
+              },
+              {
+                "char_end": 120,
+                "char_start": 103,
+                "content_sha256": "46180ac66bd5f9117462a3ce4589d0edb28ff994674a3cf96acf5ee96db36958",
+                "kind": "source_text",
+                "line_end": 6,
+                "line_start": 6,
+                "raw": "HK$22,000 / month"
+              }
+            ],
+            "candidate_raw": [
+              "HK$710萬",
+              "HK$22,000 / month"
+            ],
+            "field": "offers.sale.amount",
+            "reference": "7000000",
+            "reference_evidence": [
+              {
+                "char_end": 107,
+                "char_start": 100,
+                "content_sha256": "6f448d26f5d48fc0931c1f86e9902f590ef0bc536605f707e6412370a2c41aee",
+                "kind": "source_text",
+                "line_end": 5,
+                "line_start": 5,
+                "raw": "HK$700萬"
+              },
+              {
+                "char_end": 131,
+                "char_start": 114,
+                "content_sha256": "6f448d26f5d48fc0931c1f86e9902f590ef0bc536605f707e6412370a2c41aee",
+                "kind": "source_text",
+                "line_end": 6,
+                "line_start": 6,
+                "raw": "HK$22,000 / month"
+              }
+            ],
+            "reference_raw": [
+              "HK$700萬",
+              "HK$22,000 / month"
+            ]
+          }
+        ],
+        "missing_fields": [
+          "address",
+          "agency_reference",
+          "block",
+          "contacts",
+          "district",
+          "floor",
+          "gross_area",
+          "observed_source_status",
+          "saleable_area",
+          "source_property_number",
+          "source_published",
+          "source_updated",
+          "unit"
+        ],
+        "observations": [
+          {
+            "content_format": "provider_text",
+            "content_sha256": "46180ac66bd5f9117462a3ce4589d0edb28ff994674a3cf96acf5ee96db36958",
+            "detail": {
+              "language": null,
+              "normalized_url": "https://www.property.hk/asking_detail/00101.html",
+              "original_url": "https://www.property.hk/asking_detail/00101.html",
+              "source_advertisement_id": "00101"
+            },
+            "fields": {
+              "address": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "agency_reference": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "block": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "branch": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 50,
+                    "char_start": 39,
+                    "content_sha256": "46180ac66bd5f9117462a3ce4589d0edb28ff994674a3cf96acf5ee96db36958",
+                    "kind": "source_text",
+                    "line_end": 3,
+                    "line_start": 3,
+                    "raw": "SYNTHETIC-A"
+                  }
+                ],
+                "raw": [
+                  "SYNTHETIC-A"
+                ],
+                "state": "valid",
+                "value": "SYNTHETIC-A"
+              },
+              "contacts": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "district": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "estate": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 76,
+                    "char_start": 59,
+                    "content_sha256": "46180ac66bd5f9117462a3ce4589d0edb28ff994674a3cf96acf5ee96db36958",
+                    "kind": "source_text",
+                    "line_end": 4,
+                    "line_start": 4,
+                    "raw": "Synthetic Gardens"
+                  }
+                ],
+                "raw": [
+                  "Synthetic Gardens"
+                ],
+                "state": "valid",
+                "value": "Synthetic Gardens"
+              },
+              "floor": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "gross_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "observed_source_status": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "offers": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 96,
+                    "char_start": 89,
+                    "content_sha256": "46180ac66bd5f9117462a3ce4589d0edb28ff994674a3cf96acf5ee96db36958",
+                    "kind": "source_text",
+                    "line_end": 5,
+                    "line_start": 5,
+                    "raw": "HK$710萬"
+                  },
+                  {
+                    "char_end": 120,
+                    "char_start": 103,
+                    "content_sha256": "46180ac66bd5f9117462a3ce4589d0edb28ff994674a3cf96acf5ee96db36958",
+                    "kind": "source_text",
+                    "line_end": 6,
+                    "line_start": 6,
+                    "raw": "HK$22,000 / month"
+                  }
+                ],
+                "raw": [
+                  "HK$710萬",
+                  "HK$22,000 / month"
+                ],
+                "state": "valid",
+                "value": [
+                  {
+                    "amount": "7100000",
+                    "currency": "HKD",
+                    "deal_type": "sale",
+                    "evidence": [
+                      {
+                        "char_end": 96,
+                        "char_start": 89,
+                        "content_sha256": "46180ac66bd5f9117462a3ce4589d0edb28ff994674a3cf96acf5ee96db36958",
+                        "kind": "source_text",
+                        "line_end": 5,
+                        "line_start": 5,
+                        "raw": "HK$710萬"
+                      }
+                    ],
+                    "period": null,
+                    "raw": "HK$710萬",
+                    "raw_currency": "HK$",
+                    "raw_unit": "萬",
+                    "unit": "HKD"
+                  },
+                  {
+                    "amount": "22000",
+                    "currency": "HKD",
+                    "deal_type": "rent",
+                    "evidence": [
+                      {
+                        "char_end": 120,
+                        "char_start": 103,
+                        "content_sha256": "46180ac66bd5f9117462a3ce4589d0edb28ff994674a3cf96acf5ee96db36958",
+                        "kind": "source_text",
+                        "line_end": 6,
+                        "line_start": 6,
+                        "raw": "HK$22,000 / month"
+                      }
+                    ],
+                    "period": "month",
+                    "raw": "HK$22,000 / month",
+                    "raw_currency": "HK$",
+                    "raw_unit": null,
+                    "unit": "HKD"
+                  }
+                ]
+              },
+              "saleable_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_advertisement_id": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 30,
+                    "char_start": 25,
+                    "content_sha256": "46180ac66bd5f9117462a3ce4589d0edb28ff994674a3cf96acf5ee96db36958",
+                    "kind": "source_text",
+                    "line_end": 2,
+                    "line_start": 2,
+                    "raw": "00101"
+                  }
+                ],
+                "raw": [
+                  "00101"
+                ],
+                "state": "valid",
+                "value": "00101"
+              },
+              "source_property_number": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_published": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_updated": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "unit": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              }
+            },
+            "identity": {
+              "agency_reference": null,
+              "branch_id": "SYNTHETIC-A",
+              "reasons": [],
+              "review_key": [
+                "propertyhk",
+                "SYNTHETIC-A",
+                "00101"
+              ],
+              "source_advertisement_id": "00101",
+              "source_property_number": null,
+              "state": "verified"
+            },
+            "language": "zh-Hant",
+            "parse_state": "parsed",
+            "parser_version": "propertyhk-exa-text-v1",
+            "provider": {
+              "attempt": 1,
+              "body_request_id": "synthetic-contents",
+              "endpoint": "contents",
+              "header_request_id": null,
+              "provider": "exa",
+              "provider_document_id": "synthetic-content-0",
+              "provider_estimated_published_date": null,
+              "provider_retrieval_time": null,
+              "retrieved_at": "2026-10-16T00:00:00Z",
+              "status": "success",
+              "status_source": "crawled"
+            },
+            "query_scopes": [
+              {
+                "branch_id": "SYNTHETIC-A",
+                "branch_labels": [
+                  "SYNTHETIC-A"
+                ],
+                "district_terms": [
+                  "Synthetic District"
+                ],
+                "estate_terms": [
+                  "Synthetic Gardens",
+                  "Synthetic Shore",
+                  "Synthetic Quay"
+                ],
+                "query_id": "q1",
+                "query_terms": [
+                  "SYNTHETIC-A",
+                  "Synthetic Gardens"
+                ]
+              },
+              {
+                "branch_id": "SYNTHETIC-A",
+                "branch_labels": [
+                  "SYNTHETIC-A"
+                ],
+                "district_terms": [
+                  "Synthetic District"
+                ],
+                "estate_terms": [
+                  "Synthetic Gardens",
+                  "Synthetic Shore",
+                  "Synthetic Quay"
+                ],
+                "query_id": "q2",
+                "query_terms": [
+                  "SYNTHETIC-A",
+                  "Synthetic District"
+                ]
+              }
+            ],
+            "reasons": [],
+            "text": "# 樓盤詳情\nAdvertisement ID: 00101\nBranch: SYNTHETIC-A\nEstate: Synthetic Gardens\nSale price: HK$710萬\nRent: HK$22,000 / month\n"
+          },
+          {
+            "content_format": "provider_text",
+            "content_sha256": "d0d85f845f0515e268e2bd51cefe52e22de4ee507f3ac950ba56714a8d5e0adf",
+            "detail": {
+              "language": "en",
+              "normalized_url": "https://www.property.hk/fixture-en/asking_detail/00101.html",
+              "original_url": "https://www.property.hk/fixture-en/asking_detail/00101.html",
+              "source_advertisement_id": "00101"
+            },
+            "fields": {
+              "address": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "agency_reference": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "block": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "branch": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 61,
+                    "char_start": 50,
+                    "content_sha256": "d0d85f845f0515e268e2bd51cefe52e22de4ee507f3ac950ba56714a8d5e0adf",
+                    "kind": "source_text",
+                    "line_end": 3,
+                    "line_start": 3,
+                    "raw": "SYNTHETIC-A"
+                  }
+                ],
+                "raw": [
+                  "SYNTHETIC-A"
+                ],
+                "state": "valid",
+                "value": "SYNTHETIC-A"
+              },
+              "contacts": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "district": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "estate": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 87,
+                    "char_start": 70,
+                    "content_sha256": "d0d85f845f0515e268e2bd51cefe52e22de4ee507f3ac950ba56714a8d5e0adf",
+                    "kind": "source_text",
+                    "line_end": 4,
+                    "line_start": 4,
+                    "raw": "Synthetic Gardens"
+                  }
+                ],
+                "raw": [
+                  "Synthetic Gardens"
+                ],
+                "state": "valid",
+                "value": "Synthetic Gardens"
+              },
+              "floor": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "gross_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "observed_source_status": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "offers": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 107,
+                    "char_start": 100,
+                    "content_sha256": "d0d85f845f0515e268e2bd51cefe52e22de4ee507f3ac950ba56714a8d5e0adf",
+                    "kind": "source_text",
+                    "line_end": 5,
+                    "line_start": 5,
+                    "raw": "HK$7.1M"
+                  },
+                  {
+                    "char_end": 131,
+                    "char_start": 114,
+                    "content_sha256": "d0d85f845f0515e268e2bd51cefe52e22de4ee507f3ac950ba56714a8d5e0adf",
+                    "kind": "source_text",
+                    "line_end": 6,
+                    "line_start": 6,
+                    "raw": "HK$22,000 / month"
+                  }
+                ],
+                "raw": [
+                  "HK$7.1M",
+                  "HK$22,000 / month"
+                ],
+                "state": "valid",
+                "value": [
+                  {
+                    "amount": "7100000",
+                    "currency": "HKD",
+                    "deal_type": "sale",
+                    "evidence": [
+                      {
+                        "char_end": 107,
+                        "char_start": 100,
+                        "content_sha256": "d0d85f845f0515e268e2bd51cefe52e22de4ee507f3ac950ba56714a8d5e0adf",
+                        "kind": "source_text",
+                        "line_end": 5,
+                        "line_start": 5,
+                        "raw": "HK$7.1M"
+                      }
+                    ],
+                    "period": null,
+                    "raw": "HK$7.1M",
+                    "raw_currency": "HK$",
+                    "raw_unit": "M",
+                    "unit": "HKD"
+                  },
+                  {
+                    "amount": "22000",
+                    "currency": "HKD",
+                    "deal_type": "rent",
+                    "evidence": [
+                      {
+                        "char_end": 131,
+                        "char_start": 114,
+                        "content_sha256": "d0d85f845f0515e268e2bd51cefe52e22de4ee507f3ac950ba56714a8d5e0adf",
+                        "kind": "source_text",
+                        "line_end": 6,
+                        "line_start": 6,
+                        "raw": "HK$22,000 / month"
+                      }
+                    ],
+                    "period": "month",
+                    "raw": "HK$22,000 / month",
+                    "raw_currency": "HK$",
+                    "raw_unit": null,
+                    "unit": "HKD"
+                  }
+                ]
+              },
+              "saleable_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_advertisement_id": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 41,
+                    "char_start": 36,
+                    "content_sha256": "d0d85f845f0515e268e2bd51cefe52e22de4ee507f3ac950ba56714a8d5e0adf",
+                    "kind": "source_text",
+                    "line_end": 2,
+                    "line_start": 2,
+                    "raw": "00101"
+                  }
+                ],
+                "raw": [
+                  "00101"
+                ],
+                "state": "valid",
+                "value": "00101"
+              },
+              "source_property_number": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_published": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_updated": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "unit": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              }
+            },
+            "identity": {
+              "agency_reference": null,
+              "branch_id": "SYNTHETIC-A",
+              "reasons": [],
+              "review_key": [
+                "propertyhk",
+                "SYNTHETIC-A",
+                "00101"
+              ],
+              "source_advertisement_id": "00101",
+              "source_property_number": null,
+              "state": "verified"
+            },
+            "language": "en",
+            "parse_state": "parsed",
+            "parser_version": "propertyhk-exa-text-v1",
+            "provider": {
+              "attempt": 1,
+              "body_request_id": "synthetic-contents",
+              "endpoint": "contents",
+              "header_request_id": null,
+              "provider": "exa",
+              "provider_document_id": "synthetic-content-6",
+              "provider_estimated_published_date": null,
+              "provider_retrieval_time": null,
+              "retrieved_at": "2026-10-16T00:00:00Z",
+              "status": "success",
+              "status_source": "crawled"
+            },
+            "query_scopes": [
+              {
+                "branch_id": "SYNTHETIC-A",
+                "branch_labels": [
+                  "SYNTHETIC-A"
+                ],
+                "district_terms": [
+                  "Synthetic District"
+                ],
+                "estate_terms": [
+                  "Synthetic Gardens",
+                  "Synthetic Shore",
+                  "Synthetic Quay"
+                ],
+                "query_id": "q2",
+                "query_terms": [
+                  "SYNTHETIC-A",
+                  "Synthetic District"
+                ]
+              }
+            ],
+            "reasons": [],
+            "text": "# Listing details\nAdvertisement ID: 00101\nBranch: SYNTHETIC-A\nEstate: Synthetic Gardens\nSale price: HK$7.1M\nRent: HK$22,000 / month\n"
+          }
+        ],
+        "reasons": [],
+        "reference_identity": {
+          "agency_reference": null,
+          "review_key": [
+            "propertyhk",
+            "SYNTHETIC-A",
+            "00101"
+          ],
+          "source_property_number": null
+        },
+        "review_key": [
+          "propertyhk",
+          "SYNTHETIC-A",
+          "00101"
+        ]
+      }
+    ],
+    "identity_conflicts": [
+      {
+        "differences": [],
+        "missing_fields": [
+          "address",
+          "agency_reference",
+          "block",
+          "contacts",
+          "district",
+          "floor",
+          "gross_area",
+          "observed_source_status",
+          "saleable_area",
+          "source_property_number",
+          "source_published",
+          "source_updated",
+          "unit"
+        ],
+        "observations": [
+          {
+            "content_format": "provider_text",
+            "content_sha256": "8bbeee2d7d432c5fb9a361a5550cc1cb7b865482ad6b9ac17018ff8382c623a8",
+            "detail": {
+              "language": null,
+              "normalized_url": "https://www.property.hk/asking_detail/00105.html",
+              "original_url": "https://www.property.hk/asking_detail/00105.html",
+              "source_advertisement_id": "00105"
+            },
+            "fields": {
+              "address": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "agency_reference": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "block": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "branch": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 59,
+                    "char_start": 48,
+                    "content_sha256": "8bbeee2d7d432c5fb9a361a5550cc1cb7b865482ad6b9ac17018ff8382c623a8",
+                    "kind": "source_text",
+                    "line_end": 3,
+                    "line_start": 3,
+                    "raw": "SYNTHETIC-A"
+                  }
+                ],
+                "raw": [
+                  "SYNTHETIC-A"
+                ],
+                "state": "valid",
+                "value": "SYNTHETIC-A"
+              },
+              "contacts": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "district": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "estate": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 85,
+                    "char_start": 68,
+                    "content_sha256": "8bbeee2d7d432c5fb9a361a5550cc1cb7b865482ad6b9ac17018ff8382c623a8",
+                    "kind": "source_text",
+                    "line_end": 4,
+                    "line_start": 4,
+                    "raw": "Synthetic Gardens"
+                  }
+                ],
+                "raw": [
+                  "Synthetic Gardens"
+                ],
+                "state": "valid",
+                "value": "Synthetic Gardens"
+              },
+              "floor": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "gross_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "observed_source_status": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "offers": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 105,
+                    "char_start": 98,
+                    "content_sha256": "8bbeee2d7d432c5fb9a361a5550cc1cb7b865482ad6b9ac17018ff8382c623a8",
+                    "kind": "source_text",
+                    "line_end": 5,
+                    "line_start": 5,
+                    "raw": "HK$710萬"
+                  },
+                  {
+                    "char_end": 129,
+                    "char_start": 112,
+                    "content_sha256": "8bbeee2d7d432c5fb9a361a5550cc1cb7b865482ad6b9ac17018ff8382c623a8",
+                    "kind": "source_text",
+                    "line_end": 6,
+                    "line_start": 6,
+                    "raw": "HK$22,000 / month"
+                  }
+                ],
+                "raw": [
+                  "HK$710萬",
+                  "HK$22,000 / month"
+                ],
+                "state": "valid",
+                "value": [
+                  {
+                    "amount": "7100000",
+                    "currency": "HKD",
+                    "deal_type": "sale",
+                    "evidence": [
+                      {
+                        "char_end": 105,
+                        "char_start": 98,
+                        "content_sha256": "8bbeee2d7d432c5fb9a361a5550cc1cb7b865482ad6b9ac17018ff8382c623a8",
+                        "kind": "source_text",
+                        "line_end": 5,
+                        "line_start": 5,
+                        "raw": "HK$710萬"
+                      }
+                    ],
+                    "period": null,
+                    "raw": "HK$710萬",
+                    "raw_currency": "HK$",
+                    "raw_unit": "萬",
+                    "unit": "HKD"
+                  },
+                  {
+                    "amount": "22000",
+                    "currency": "HKD",
+                    "deal_type": "rent",
+                    "evidence": [
+                      {
+                        "char_end": 129,
+                        "char_start": 112,
+                        "content_sha256": "8bbeee2d7d432c5fb9a361a5550cc1cb7b865482ad6b9ac17018ff8382c623a8",
+                        "kind": "source_text",
+                        "line_end": 6,
+                        "line_start": 6,
+                        "raw": "HK$22,000 / month"
+                      }
+                    ],
+                    "period": "month",
+                    "raw": "HK$22,000 / month",
+                    "raw_currency": "HK$",
+                    "raw_unit": null,
+                    "unit": "HKD"
+                  }
+                ]
+              },
+              "saleable_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_advertisement_id": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 39,
+                    "char_start": 36,
+                    "content_sha256": "8bbeee2d7d432c5fb9a361a5550cc1cb7b865482ad6b9ac17018ff8382c623a8",
+                    "kind": "source_text",
+                    "line_end": 2,
+                    "line_start": 2,
+                    "raw": "999"
+                  }
+                ],
+                "raw": [
+                  "999"
+                ],
+                "state": "valid",
+                "value": "999"
+              },
+              "source_property_number": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_published": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_updated": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "unit": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              }
+            },
+            "identity": {
+              "agency_reference": null,
+              "branch_id": "SYNTHETIC-A",
+              "reasons": [
+                "main_advertisement_id_mismatch"
+              ],
+              "review_key": null,
+              "source_advertisement_id": "00105",
+              "source_property_number": null,
+              "state": "conflict"
+            },
+            "language": "en",
+            "parse_state": "parsed",
+            "parser_version": "propertyhk-exa-text-v1",
+            "provider": {
+              "attempt": 1,
+              "body_request_id": "synthetic-contents",
+              "endpoint": "contents",
+              "header_request_id": null,
+              "provider": "exa",
+              "provider_document_id": "synthetic-content-4",
+              "provider_estimated_published_date": null,
+              "provider_retrieval_time": null,
+              "retrieved_at": "2026-10-16T00:00:00Z",
+              "status": "success",
+              "status_source": "crawled"
+            },
+            "query_scopes": [
+              {
+                "branch_id": "SYNTHETIC-A",
+                "branch_labels": [
+                  "SYNTHETIC-A"
+                ],
+                "district_terms": [
+                  "Synthetic District"
+                ],
+                "estate_terms": [
+                  "Synthetic Gardens",
+                  "Synthetic Shore",
+                  "Synthetic Quay"
+                ],
+                "query_id": "q1",
+                "query_terms": [
+                  "SYNTHETIC-A",
+                  "Synthetic Gardens"
+                ]
+              }
+            ],
+            "reasons": [
+              "main_advertisement_id_mismatch"
+            ],
+            "text": "# Listing details\nAdvertisement ID: 999\nBranch: SYNTHETIC-A\nEstate: Synthetic Gardens\nSale price: HK$710萬\nRent: HK$22,000 / month\n"
+          }
+        ],
+        "reasons": [
+          "main_advertisement_id_mismatch"
+        ],
+        "reference_identity": null,
+        "review_key": null
+      }
+    ],
+    "insufficient_data": [
+      {
+        "differences": [],
+        "missing_fields": [
+          "address",
+          "agency_reference",
+          "block",
+          "branch",
+          "contacts",
+          "district",
+          "estate",
+          "floor",
+          "gross_area",
+          "observed_source_status",
+          "offers",
+          "saleable_area",
+          "source_advertisement_id",
+          "source_property_number",
+          "source_published",
+          "source_updated",
+          "unit"
+        ],
+        "observations": [
+          {
+            "content_format": "provider_text",
+            "content_sha256": "7c2567b568b36cc5674ff6e8cd09fdf09106aeee9f2ed75d044ad386b33f922a",
+            "detail": {
+              "language": null,
+              "normalized_url": "https://www.property.hk/asking_detail/00104.html",
+              "original_url": "https://www.property.hk/asking_detail/00104.html",
+              "source_advertisement_id": "00104"
+            },
+            "fields": {
+              "address": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "agency_reference": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "block": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "branch": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "contacts": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "district": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "estate": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "floor": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "gross_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "observed_source_status": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "offers": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "saleable_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_advertisement_id": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_property_number": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_published": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_updated": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "unit": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              }
+            },
+            "identity": {
+              "agency_reference": null,
+              "branch_id": null,
+              "reasons": [
+                "main_advertisement_id_missing",
+                "observed_branch_missing"
+              ],
+              "review_key": null,
+              "source_advertisement_id": "00104",
+              "source_property_number": null,
+              "state": "missing"
+            },
+            "language": null,
+            "parse_state": "unparsed",
+            "parser_version": "propertyhk-exa-text-v1",
+            "provider": {
+              "attempt": 1,
+              "body_request_id": "synthetic-contents",
+              "endpoint": "contents",
+              "header_request_id": null,
+              "provider": "exa",
+              "provider_document_id": "synthetic-content-3",
+              "provider_estimated_published_date": null,
+              "provider_retrieval_time": null,
+              "retrieved_at": "2026-10-16T00:00:00Z",
+              "status": "success",
+              "status_source": "crawled"
+            },
+            "query_scopes": [
+              {
+                "branch_id": "SYNTHETIC-A",
+                "branch_labels": [
+                  "SYNTHETIC-A"
+                ],
+                "district_terms": [
+                  "Synthetic District"
+                ],
+                "estate_terms": [
+                  "Synthetic Gardens",
+                  "Synthetic Shore",
+                  "Synthetic Quay"
+                ],
+                "query_id": "q1",
+                "query_terms": [
+                  "SYNTHETIC-A",
+                  "Synthetic Gardens"
+                ]
+              }
+            ],
+            "reasons": [
+              "main_block_unrecognized",
+              "main_advertisement_id_missing",
+              "observed_branch_missing"
+            ],
+            "text": "Synthetic unknown layout; identity and listing block deliberately unavailable.\n"
+          }
+        ],
+        "reasons": [
+          "main_advertisement_id_missing",
+          "main_block_unrecognized",
+          "observed_branch_missing"
+        ],
+        "reference_identity": null,
+        "review_key": null
+      }
+    ],
+    "known_candidates": [
+      {
+        "differences": [],
+        "missing_fields": [
+          "address",
+          "agency_reference",
+          "block",
+          "contacts",
+          "district",
+          "floor",
+          "gross_area",
+          "observed_source_status",
+          "saleable_area",
+          "source_property_number",
+          "source_published",
+          "source_updated",
+          "unit"
+        ],
+        "observations": [
+          {
+            "content_format": "provider_text",
+            "content_sha256": "00d7201e0874b9a1af7626595c0fd8842699e4dea13330e748d28a76264bf671",
+            "detail": {
+              "language": null,
+              "normalized_url": "https://www.property.hk/asking_detail/00103.html",
+              "original_url": "https://www.property.hk/asking_detail/00103.html",
+              "source_advertisement_id": "00103"
+            },
+            "fields": {
+              "address": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "agency_reference": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "block": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "branch": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 61,
+                    "char_start": 50,
+                    "content_sha256": "00d7201e0874b9a1af7626595c0fd8842699e4dea13330e748d28a76264bf671",
+                    "kind": "source_text",
+                    "line_end": 3,
+                    "line_start": 3,
+                    "raw": "SYNTHETIC-A"
+                  }
+                ],
+                "raw": [
+                  "SYNTHETIC-A"
+                ],
+                "state": "valid",
+                "value": "SYNTHETIC-A"
+              },
+              "contacts": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "district": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "estate": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 87,
+                    "char_start": 70,
+                    "content_sha256": "00d7201e0874b9a1af7626595c0fd8842699e4dea13330e748d28a76264bf671",
+                    "kind": "source_text",
+                    "line_end": 4,
+                    "line_start": 4,
+                    "raw": "Synthetic Gardens"
+                  }
+                ],
+                "raw": [
+                  "Synthetic Gardens"
+                ],
+                "state": "valid",
+                "value": "Synthetic Gardens"
+              },
+              "floor": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "gross_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "observed_source_status": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "offers": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 107,
+                    "char_start": 100,
+                    "content_sha256": "00d7201e0874b9a1af7626595c0fd8842699e4dea13330e748d28a76264bf671",
+                    "kind": "source_text",
+                    "line_end": 5,
+                    "line_start": 5,
+                    "raw": "HK$710萬"
+                  },
+                  {
+                    "char_end": 131,
+                    "char_start": 114,
+                    "content_sha256": "00d7201e0874b9a1af7626595c0fd8842699e4dea13330e748d28a76264bf671",
+                    "kind": "source_text",
+                    "line_end": 6,
+                    "line_start": 6,
+                    "raw": "HK$22,000 / month"
+                  }
+                ],
+                "raw": [
+                  "HK$710萬",
+                  "HK$22,000 / month"
+                ],
+                "state": "valid",
+                "value": [
+                  {
+                    "amount": "7100000",
+                    "currency": "HKD",
+                    "deal_type": "sale",
+                    "evidence": [
+                      {
+                        "char_end": 107,
+                        "char_start": 100,
+                        "content_sha256": "00d7201e0874b9a1af7626595c0fd8842699e4dea13330e748d28a76264bf671",
+                        "kind": "source_text",
+                        "line_end": 5,
+                        "line_start": 5,
+                        "raw": "HK$710萬"
+                      }
+                    ],
+                    "period": null,
+                    "raw": "HK$710萬",
+                    "raw_currency": "HK$",
+                    "raw_unit": "萬",
+                    "unit": "HKD"
+                  },
+                  {
+                    "amount": "22000",
+                    "currency": "HKD",
+                    "deal_type": "rent",
+                    "evidence": [
+                      {
+                        "char_end": 131,
+                        "char_start": 114,
+                        "content_sha256": "00d7201e0874b9a1af7626595c0fd8842699e4dea13330e748d28a76264bf671",
+                        "kind": "source_text",
+                        "line_end": 6,
+                        "line_start": 6,
+                        "raw": "HK$22,000 / month"
+                      }
+                    ],
+                    "period": "month",
+                    "raw": "HK$22,000 / month",
+                    "raw_currency": "HK$",
+                    "raw_unit": null,
+                    "unit": "HKD"
+                  }
+                ]
+              },
+              "saleable_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_advertisement_id": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 41,
+                    "char_start": 36,
+                    "content_sha256": "00d7201e0874b9a1af7626595c0fd8842699e4dea13330e748d28a76264bf671",
+                    "kind": "source_text",
+                    "line_end": 2,
+                    "line_start": 2,
+                    "raw": "00103"
+                  }
+                ],
+                "raw": [
+                  "00103"
+                ],
+                "state": "valid",
+                "value": "00103"
+              },
+              "source_property_number": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_published": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_updated": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "unit": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              }
+            },
+            "identity": {
+              "agency_reference": null,
+              "branch_id": "SYNTHETIC-A",
+              "reasons": [],
+              "review_key": [
+                "propertyhk",
+                "SYNTHETIC-A",
+                "00103"
+              ],
+              "source_advertisement_id": "00103",
+              "source_property_number": null,
+              "state": "verified"
+            },
+            "language": "en",
+            "parse_state": "parsed",
+            "parser_version": "propertyhk-exa-text-v1",
+            "provider": {
+              "attempt": 1,
+              "body_request_id": "synthetic-contents",
+              "endpoint": "contents",
+              "header_request_id": null,
+              "provider": "exa",
+              "provider_document_id": "synthetic-content-2",
+              "provider_estimated_published_date": null,
+              "provider_retrieval_time": null,
+              "retrieved_at": "2026-10-16T00:00:00Z",
+              "status": "success",
+              "status_source": "crawled"
+            },
+            "query_scopes": [
+              {
+                "branch_id": "SYNTHETIC-A",
+                "branch_labels": [
+                  "SYNTHETIC-A"
+                ],
+                "district_terms": [
+                  "Synthetic District"
+                ],
+                "estate_terms": [
+                  "Synthetic Gardens",
+                  "Synthetic Shore",
+                  "Synthetic Quay"
+                ],
+                "query_id": "q1",
+                "query_terms": [
+                  "SYNTHETIC-A",
+                  "Synthetic Gardens"
+                ]
+              }
+            ],
+            "reasons": [],
+            "text": "# Listing details\nAdvertisement ID: 00103\nBranch: SYNTHETIC-A\nEstate: Synthetic Gardens\nSale price: HK$710萬\nRent: HK$22,000 / month\n"
+          }
+        ],
+        "reasons": [],
+        "reference_identity": {
+          "agency_reference": null,
+          "review_key": [
+            "propertyhk",
+            "SYNTHETIC-A",
+            "00103"
+          ],
+          "source_property_number": null
+        },
+        "review_key": [
+          "propertyhk",
+          "SYNTHETIC-A",
+          "00103"
+        ]
+      }
+    ],
+    "new_candidates": [
+      {
+        "differences": [],
+        "missing_fields": [
+          "address",
+          "agency_reference",
+          "block",
+          "contacts",
+          "district",
+          "floor",
+          "gross_area",
+          "observed_source_status",
+          "saleable_area",
+          "source_property_number",
+          "source_published",
+          "source_updated",
+          "unit"
+        ],
+        "observations": [
+          {
+            "content_format": "provider_text",
+            "content_sha256": "a74386f79a4ad8a0c7c504b58e16687adc0e08690b937546ed431824ccec931e",
+            "detail": {
+              "language": null,
+              "normalized_url": "https://www.property.hk/asking_detail/00102.html",
+              "original_url": "https://www.property.hk/asking_detail/00102.html",
+              "source_advertisement_id": "00102"
+            },
+            "fields": {
+              "address": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "agency_reference": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "block": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "branch": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 61,
+                    "char_start": 50,
+                    "content_sha256": "a74386f79a4ad8a0c7c504b58e16687adc0e08690b937546ed431824ccec931e",
+                    "kind": "source_text",
+                    "line_end": 3,
+                    "line_start": 3,
+                    "raw": "SYNTHETIC-A"
+                  }
+                ],
+                "raw": [
+                  "SYNTHETIC-A"
+                ],
+                "state": "valid",
+                "value": "SYNTHETIC-A"
+              },
+              "contacts": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "district": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "estate": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 87,
+                    "char_start": 70,
+                    "content_sha256": "a74386f79a4ad8a0c7c504b58e16687adc0e08690b937546ed431824ccec931e",
+                    "kind": "source_text",
+                    "line_end": 4,
+                    "line_start": 4,
+                    "raw": "Synthetic Gardens"
+                  }
+                ],
+                "raw": [
+                  "Synthetic Gardens"
+                ],
+                "state": "valid",
+                "value": "Synthetic Gardens"
+              },
+              "floor": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "gross_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "observed_source_status": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "offers": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 107,
+                    "char_start": 100,
+                    "content_sha256": "a74386f79a4ad8a0c7c504b58e16687adc0e08690b937546ed431824ccec931e",
+                    "kind": "source_text",
+                    "line_end": 5,
+                    "line_start": 5,
+                    "raw": "HK$710萬"
+                  },
+                  {
+                    "char_end": 131,
+                    "char_start": 114,
+                    "content_sha256": "a74386f79a4ad8a0c7c504b58e16687adc0e08690b937546ed431824ccec931e",
+                    "kind": "source_text",
+                    "line_end": 6,
+                    "line_start": 6,
+                    "raw": "HK$22,000 / month"
+                  }
+                ],
+                "raw": [
+                  "HK$710萬",
+                  "HK$22,000 / month"
+                ],
+                "state": "valid",
+                "value": [
+                  {
+                    "amount": "7100000",
+                    "currency": "HKD",
+                    "deal_type": "sale",
+                    "evidence": [
+                      {
+                        "char_end": 107,
+                        "char_start": 100,
+                        "content_sha256": "a74386f79a4ad8a0c7c504b58e16687adc0e08690b937546ed431824ccec931e",
+                        "kind": "source_text",
+                        "line_end": 5,
+                        "line_start": 5,
+                        "raw": "HK$710萬"
+                      }
+                    ],
+                    "period": null,
+                    "raw": "HK$710萬",
+                    "raw_currency": "HK$",
+                    "raw_unit": "萬",
+                    "unit": "HKD"
+                  },
+                  {
+                    "amount": "22000",
+                    "currency": "HKD",
+                    "deal_type": "rent",
+                    "evidence": [
+                      {
+                        "char_end": 131,
+                        "char_start": 114,
+                        "content_sha256": "a74386f79a4ad8a0c7c504b58e16687adc0e08690b937546ed431824ccec931e",
+                        "kind": "source_text",
+                        "line_end": 6,
+                        "line_start": 6,
+                        "raw": "HK$22,000 / month"
+                      }
+                    ],
+                    "period": "month",
+                    "raw": "HK$22,000 / month",
+                    "raw_currency": "HK$",
+                    "raw_unit": null,
+                    "unit": "HKD"
+                  }
+                ]
+              },
+              "saleable_area": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_advertisement_id": {
+                "alternatives": [],
+                "evidence": [
+                  {
+                    "char_end": 41,
+                    "char_start": 36,
+                    "content_sha256": "a74386f79a4ad8a0c7c504b58e16687adc0e08690b937546ed431824ccec931e",
+                    "kind": "source_text",
+                    "line_end": 2,
+                    "line_start": 2,
+                    "raw": "00102"
+                  }
+                ],
+                "raw": [
+                  "00102"
+                ],
+                "state": "valid",
+                "value": "00102"
+              },
+              "source_property_number": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_published": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "source_updated": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              },
+              "unit": {
+                "alternatives": [],
+                "evidence": [],
+                "raw": [],
+                "state": "missing",
+                "value": null
+              }
+            },
+            "identity": {
+              "agency_reference": null,
+              "branch_id": "SYNTHETIC-A",
+              "reasons": [],
+              "review_key": [
+                "propertyhk",
+                "SYNTHETIC-A",
+                "00102"
+              ],
+              "source_advertisement_id": "00102",
+              "source_property_number": null,
+              "state": "verified"
+            },
+            "language": "en",
+            "parse_state": "parsed",
+            "parser_version": "propertyhk-exa-text-v1",
+            "provider": {
+              "attempt": 1,
+              "body_request_id": "synthetic-contents",
+              "endpoint": "contents",
+              "header_request_id": null,
+              "provider": "exa",
+              "provider_document_id": "synthetic-content-1",
+              "provider_estimated_published_date": null,
+              "provider_retrieval_time": null,
+              "retrieved_at": "2026-10-16T00:00:00Z",
+              "status": "success",
+              "status_source": "crawled"
+            },
+            "query_scopes": [
+              {
+                "branch_id": "SYNTHETIC-A",
+                "branch_labels": [
+                  "SYNTHETIC-A"
+                ],
+                "district_terms": [
+                  "Synthetic District"
+                ],
+                "estate_terms": [
+                  "Synthetic Gardens",
+                  "Synthetic Shore",
+                  "Synthetic Quay"
+                ],
+                "query_id": "q1",
+                "query_terms": [
+                  "SYNTHETIC-A",
+                  "Synthetic Gardens"
+                ]
+              }
+            ],
+            "reasons": [],
+            "text": "# Listing details\nAdvertisement ID: 00102\nBranch: SYNTHETIC-A\nEstate: Synthetic Gardens\nSale price: HK$710萬\nRent: HK$22,000 / month\n"
+          }
+        ],
+        "reasons": [],
+        "reference_identity": null,
+        "review_key": [
+          "propertyhk",
+          "SYNTHETIC-A",
+          "00102"
+        ]
+      }
+    ]
+  },
+  "ingestion_allowed": false,
+  "kind": "propertyhk-exa-review/v1",
+  "limitations": [
+    "Discovery is not full inventory coverage or active-listing verification.",
+    "No provided reference means no claim about production absence.",
+    "Source access and reuse rights remain independently required.",
+    "Synthetic evidence does not establish real provider retrieval."
+  ],
+  "metrics": {
+    "comparable_fields": 6,
+    "contents_requests": 2,
+    "group_counts": {
+      "fetch_failures": 1,
+      "field_differences": 1,
+      "identity_conflicts": 1,
+      "insufficient_data": 1,
+      "known_candidates": 1,
+      "new_candidates": 1
+    },
+    "identity_conflicting_observations": 1,
+    "language_groups": 1,
+    "pages_failed": 1,
+    "pages_succeeded": 6,
+    "parsed_observations": 5,
+    "provider_estimated_usd": "0.035",
+    "queries_attempted": 4,
+    "queries_completed": 4,
+    "queries_planned": 4,
+    "raw_results": 8,
+    "rejected_urls": 0,
+    "reserved_usd": "0.048",
+    "search_requests": 4,
+    "stop_reason": null,
+    "total_requests": 6,
+    "unique_detail_urls": 7,
+    "unique_discovered_urls": 7,
+    "unparsed_observations": 1,
+    "url_attempts": {
+      "https://www.property.hk/asking_detail/00101.html": 1,
+      "https://www.property.hk/asking_detail/00102.html": 1,
+      "https://www.property.hk/asking_detail/00103.html": 1,
+      "https://www.property.hk/asking_detail/00104.html": 1,
+      "https://www.property.hk/asking_detail/00105.html": 1,
+      "https://www.property.hk/asking_detail/00106.html": 1,
+      "https://www.property.hk/fixture-en/asking_detail/00101.html": 1
+    }
+  },
+  "mode": "fixture",
+  "production_writes": 0,
+  "publish_allowed": false,
+  "reference": {
+    "file_sha256": "1db69cfc995ca0c3f226cedfd9f41f5e9e9b86b31138bd698ac4fae399048a35",
+    "matched_review_identities": 2,
+    "provenance": {
+      "kind": "synthetic",
+      "reference": "synthetic-reference",
+      "source": "propertyhk"
+    },
+    "sample_size": 2
+  },
+  "retrieved_at": "2026-10-16T00:00:00Z",
+  "stop_reason": null,
+  "synthetic": true
+}

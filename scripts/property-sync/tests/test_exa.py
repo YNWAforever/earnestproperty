@@ -371,3 +371,15 @@ def test_elapsed_budget_blocks_retry_before_sleep():
     client.contents([URL])
     assert len(recorded) == 1 and clock.delays == []
     assert client.stop_reason == "elapsed_budget_exhausted"
+
+
+def test_interruption_during_backoff_stops_without_new_request():
+    client, recorded, clock = retry_client([503, 200])
+    def interrupted_sleep(seconds):
+        raise KeyboardInterrupt
+    client.sleep = interrupted_sleep
+    try:
+        client.discover(scope())
+    except KeyboardInterrupt:
+        pytest.fail("Backoff interruption escaped instead of stopping safely")
+    assert len(recorded) == 1 and client.stop_reason == "interrupted"

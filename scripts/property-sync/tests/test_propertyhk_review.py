@@ -69,6 +69,10 @@ def test_report_cannot_confer_apply_or_absence_authority():
         "field_differences": 1, "new_candidates": 1, "known_candidates": 1,
         "insufficient_data": 1, "identity_conflicts": 1, "fetch_failures": 1,
     }
+    assert actual["metrics"]["parsed_observations"] == 4
+    assert actual["metrics"]["unparsed_observations"] == 1
+    assert actual["metrics"]["identity_conflicting_observations"] == 1
+    assert actual["metrics"]["comparable_fields"] == 6
 
 
 def test_diffs_show_old_candidate_and_evidence_without_null_deletions():
@@ -103,6 +107,7 @@ def test_equivalent_raw_units_can_group_but_conflicts_cannot():
     actual = report([b, a])
     assert len(actual["groups"]["new_candidates"]) == 1
     assert len(actual["groups"]["new_candidates"][0]["observations"]) == 2
+    assert actual["metrics"]["language_groups"] == 1
     different = observation(price="HK$720\u842c")
     different["language"] = "zh-Hant"
     assert len(report([a, different])["groups"]["insufficient_data"]) == 1
@@ -115,7 +120,7 @@ def test_known_property_identity_conflict_is_not_a_field_update():
     assert len(report([current], old)["groups"]["identity_conflicts"]) == 1
 
 
-@pytest.mark.parametrize("change", ["kind", "duplicate", "unscoped", "staff_field", "bad_amount"])
+@pytest.mark.parametrize("change", ["kind", "duplicate", "unscoped", "staff_field", "bad_amount", "bad_area", "bad_scalar", "bad_index"])
 def test_reference_is_explicit_scoped_and_not_a_snapshot(tmp_path, change):
     value = reference(observation())
     if change == "kind":
@@ -126,8 +131,14 @@ def test_reference_is_explicit_scoped_and_not_a_snapshot(tmp_path, change):
         value["entries"][0]["review_key"] = ["propertyhk", "", "00101"]
     elif change == "staff_field":
         value["entries"][0]["fields"]["staff_id"] = {"value": "fake"}
-    else:
+    elif change == "bad_amount":
         value["entries"][0]["fields"]["offers"]["value"][0]["amount"] = True
+    elif change == "bad_area":
+        value["entries"][0]["fields"]["saleable_area"]["value"] = True
+    elif change == "bad_scalar":
+        value["entries"][0]["fields"]["estate"]["value"] = {"unexpected": True}
+    else:
+        value["native_index"] = [True]
     path = tmp_path / "known.json"
     path.write_text(json.dumps(value))
     with pytest.raises(ValueError):
@@ -204,3 +215,152 @@ def test_rerun_is_identical_with_same_clock_and_order_independent_inputs(tmp_pat
     assert (tmp_path / "a/report.json").read_bytes() == (tmp_path / "b/report.json").read_bytes()
     raw = json.dumps(first)
     assert '"staff_id"' not in raw and '"canonical_id"' not in raw and '"receipt_id"' not in raw
+
+
+FIXTURES = Path(__file__).parent / "fixtures/propertyhk-exa"
+CONFIG = Path(__file__).parents[1] / "propertyhk-exa.example.json"
+
+
+def cli():
+    assert (Path(__file__).parents[1] / "review_propertyhk_exa.py").exists(), "Review CLI missing"
+    return importlib.import_module("review_propertyhk_exa")
+
+
+def fixture_args(output):
+    return ["--config", str(CONFIG), "--fixture-bundle", str(FIXTURES),
+            "--known", str(FIXTURES / "known.json"), "--output", str(output)]
+
+
+def test_fixture_cli_is_complete_without_network_credentials_or_db(monkeypatch, tmp_path, capsys):
+    app = cli()
+    import socket
+    import subprocess
+    import urllib.request
+    original = type(os.environ).__getitem__
+    def guarded(environ, key):
+        if key in ("EXA_API_KEY", "DATABASE_URL"):
+            pytest.fail("Offline workflow read credentials or DB environment")
+        return original(environ, key)
+    def forbidden(*args, **kwargs):
+        pytest.fail("Offline workflow attempted external I/O")
+    monkeypatch.setattr(type(os.environ), "__getitem__", guarded)
+    monkeypatch.setattr(socket, "socket", forbidden)
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    monkeypatch.setattr(urllib.request, "urlopen", forbidden)
+    monkeypatch.setattr(app, "exa_http_request", forbidden)
+    output = tmp_path / "report"
+    assert app.main(fixture_args(output)) == 0
+    actual = json.loads((output / "report.json").read_text(encoding="utf-8"))
+    assert actual["synthetic"] is True
+    assert {key: len(value) for key, value in actual["groups"].items()} == {
+        "field_differences": 1, "new_candidates": 1, "known_candidates": 1,
+        "insufficient_data": 1, "identity_conflicts": 1, "fetch_failures": 1,
+    }
+    assert actual["metrics"]["search_requests"] == 4 and actual["metrics"]["contents_requests"] == 2
+    assert actual["metrics"]["unique_detail_urls"] == 7
+    console = capsys.readouterr()
+    assert "Synthetic Gardens" not in console.out and "HK$" not in console.out
+
+
+def approval_config():
+    value = json.loads(CONFIG.read_text())
+    value["synthetic"], value["fixture_aliases"] = False, {}
+    digest = lambda data: hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    for key in value["approval_refs"]:
+        value["approval_refs"][key] = {"reference": "synthetic-test-only", "approved": True, "hostname": "property.hk"}
+    value["approval_refs"]["query_plan"]["query_plan_sha256"] = digest(value["query_plan"])
+    value["approval_refs"]["online_trial"].update(
+        query_plan_sha256=digest(value["query_plan"]), limits_sha256=digest(value["limits"]))
+    return value
+
+
+@pytest.mark.parametrize("missing", ["switch", "query_plan", "source_access", "content_reuse", "online_trial", "key", "changed_query", "changed_limits", "wrong_host"])
+def test_online_gate_precedes_transport_creation(tmp_path, monkeypatch, missing):
+    app = cli()
+    value = approval_config()
+    env = {"PROPERTYHK_EXA_ONLINE_ENABLED": "true", "EXA_API_KEY": "synthetic-not-a-real-key"}
+    if missing == "switch":
+        env.pop("PROPERTYHK_EXA_ONLINE_ENABLED")
+    elif missing == "key":
+        env.pop("EXA_API_KEY")
+    elif missing == "changed_query":
+        value["query_plan"][0]["query_terms"].reverse()
+    elif missing == "changed_limits":
+        value["limits"]["max_cost_usd"] = "0.19"
+    elif missing == "wrong_host":
+        value["approval_refs"]["source_access"]["hostname"] = "other.invalid"
+    else:
+        value["approval_refs"][missing] = None
+    with pytest.raises(ValueError):
+        app.validate_online_approval(value, env)
+
+
+@pytest.mark.parametrize("change", ["bool_limit", "extra_key", "synthetic_online", "aliases_online", "duplicate_key"])
+def test_config_validation_rejects_ambiguous_or_unapproved_inputs(tmp_path, change):
+    app = cli()
+    value = json.loads(CONFIG.read_text())
+    online = change in ("synthetic_online", "aliases_online")
+    if change == "bool_limit":
+        value["limits"]["max_attempts"] = True
+    elif change == "extra_key":
+        value["api_key"] = "not-allowed"
+    elif change == "aliases_online":
+        value["synthetic"] = False
+    path = tmp_path / "config.json"
+    path.write_text('{"kind":"one","kind":"two"}' if change == "duplicate_key" else json.dumps(value))
+    with pytest.raises(ValueError):
+        app.load_review_config(path, online=online)
+
+
+def test_fixture_artifacts_cannot_escape_manifest_root(tmp_path):
+    app = cli()
+    manifest = json.loads((FIXTURES / "manifest.json").read_text())
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}")
+    root = tmp_path / "bundle"
+    root.mkdir()
+    manifest["artifacts"]["discovery"] = "../outside.json"
+    (root / "manifest.json").write_text(json.dumps(manifest))
+    with pytest.raises(ValueError):
+        app.load_fixture_request(root)
+
+
+def test_cli_missing_inputs_and_live_default_fail_before_transport(tmp_path, monkeypatch, capsys):
+    app = cli()
+    def forbidden(*args, **kwargs):
+        pytest.fail("Denied configuration reached transport construction")
+    monkeypatch.setattr(app, "ExaClient", forbidden)
+    assert app.main(["--config", str(CONFIG), "--output", str(tmp_path / "missing")]) == 2
+    assert app.main(["--config", str(CONFIG), "--online", "--output", str(tmp_path / "online")]) == 2
+    assert "not-a-real-key" not in capsys.readouterr().err
+
+
+def test_partial_budget_and_interruption_preserve_observations(tmp_path):
+    app = cli()
+    from scraping.exa import ExaClient
+    config = app.load_review_config(CONFIG, online=False)
+    request = app.load_fixture_request(FIXTURES)
+    count = 0
+    def interrupted(endpoint, payload, token, **kwargs):
+        nonlocal count
+        if endpoint.endswith("/contents"):
+            count += 1
+            if count == 2:
+                raise KeyboardInterrupt
+        return request(endpoint, payload, token, **kwargs)
+    client = ExaClient(request=interrupted, now=request.now, monotonic=request.monotonic,
+                       sleep=request.sleep, limits=config["limits"], fixture_aliases=config["fixture_aliases"])
+    try:
+        actual = app.run_review(config, client=client, known=module().load_reference(FIXTURES / "known.json"), now=request.now)
+    except KeyboardInterrupt:
+        pytest.fail("Provider interruption escaped instead of preserving a partial report")
+    assert actual["stop_reason"] == "interrupted"
+    assert actual["metrics"]["reserved_usd"] == "0.048"
+    assert any(x["observations"][0]["text"] is not None for group in actual["groups"].values() for x in group)
+    config["limits"]["max_cost_usd"] = "0.008"
+    request = app.load_fixture_request(FIXTURES)
+    client = ExaClient(request=request, now=request.now, monotonic=request.monotonic, sleep=request.sleep,
+                       limits=config["limits"], fixture_aliases=config["fixture_aliases"])
+    actual = app.run_review(config, client=client, known=None, now=request.now)
+    assert actual["stop_reason"] == "cost_reservation_limit"
+    assert actual["metrics"]["total_requests"] == 1 and actual["metrics"]["reserved_usd"] == "0.007"
