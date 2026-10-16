@@ -19,6 +19,7 @@ type VercelRedirect = {
 
 type VercelConfig = {
   buildCommand: string;
+  git: { deploymentEnabled: Record<string, boolean> };
   headers: Array<{ source: string; headers: Array<{ key: string; value: string }> }>;
   crons: Array<{ path: string; schedule: string }>;
   redirects: VercelRedirect[];
@@ -51,9 +52,11 @@ function canonicalHostRedirects(env = process.env): VercelRedirect[] {
 
 export const config: VercelConfig = {
   buildCommand: "npm run build",
+  // This review is authorized for GitHub CI only; keep Vercel previews disabled.
+  git: { deploymentEnabled: { "codex/youtube-daily-sync-20261016": false } },
   headers: SECURITY_HEADERS,
-  // No recurring Vercel requests: manual sync remains available to staff.
-  crons: [],
+  // Daily channel updates only; job lanes keep their demand-driven wakes.
+  crons: [{ path: "/api/youtube-sync", schedule: "0 19 * * *" }],
   // F-01: run next to Neon (aws-ap-southeast-1); see FX-15 fact 3.
   regions: ["sin1"],
   redirects: [

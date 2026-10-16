@@ -17,7 +17,16 @@ import {
   type YouTubeSyncTrigger,
 } from "./youtube-sync.types";
 
-const staffBodySchema = z.object({ mode: z.enum(["incremental", "full"]) }).strict();
+const staffBodySchema = z
+  .object({
+    mode: z.enum(["incremental", "full"]),
+    backfillVideoIds: z
+      .array(z.string().regex(/^[A-Za-z0-9_-]{11}$/))
+      .max(50)
+      .optional(),
+  })
+  .strict()
+  .refine((value) => !value.backfillVideoIds?.length || value.mode === "incremental");
 
 type Context = { requestId: string; startedAt: string };
 type Dependencies = {
@@ -28,6 +37,7 @@ type Dependencies = {
   runSync: (input: {
     mode: YouTubeSyncMode;
     trigger: YouTubeSyncTrigger;
+    backfillVideoIds?: readonly string[];
   }) => Promise<YouTubeSyncOutcome>;
 };
 
@@ -40,6 +50,8 @@ const publicMessages = {
   youtube_sync_in_progress: "A YouTube synchronization is already running.",
   youtube_lease_lost: "The YouTube synchronization lease was lost.",
   youtube_validation_error: "The YouTube synchronization request is invalid.",
+  youtube_status_unavailable:
+    "The result could not be recorded. Review sync status before retrying.",
 } as const;
 
 function errorStatus(code: keyof typeof publicMessages) {
@@ -165,7 +177,11 @@ export function createYouTubeSyncHttpHandlers(overrides: Partial<Dependencies> =
 
     let outcome: YouTubeSyncOutcome;
     try {
-      outcome = await dependencies.runSync({ mode: parsed.data.mode, trigger: "staff" });
+      outcome = await dependencies.runSync({
+        mode: parsed.data.mode,
+        trigger: "staff",
+        ...(parsed.data.backfillVideoIds ? { backfillVideoIds: parsed.data.backfillVideoIds } : {}),
+      });
     } catch (error) {
       await writeAuditSafely({
         actor,

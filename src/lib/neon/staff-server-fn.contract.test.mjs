@@ -32,6 +32,7 @@ const MIGRATED = [
   "src/lib/neon/staff-notifications.ts",
   "src/lib/neon/staff-checklist.ts",
   "src/lib/neon/staff-reference-admin.ts",
+  "src/lib/youtube-sync/youtube-status.ts",
   "src/lib/neon/whatsapp-assignment.ts",
   "src/lib/neon/whatsapp-readiness.ts",
   "src/lib/neon/whatsapp-service-health.ts",

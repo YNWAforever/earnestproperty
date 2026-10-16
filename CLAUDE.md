@@ -56,7 +56,7 @@ src/content/      SEO copy, estate/corridor content constants
 src/config/       site.ts (contact/CTA config), site-branches, site-team
 src/components/ui shadcn primitives — vendored, keep in sync with upstream
 neon/migrations/  timestamped .sql, applied via `npm run neon:migrate`
-vercel.ts         Vercel config-as-TS: redirects + security headers (from scripts/vercel-headers.mjs); no crons
+vercel.ts         Vercel config-as-TS: redirects + security headers (from scripts/vercel-headers.mjs); daily incremental YouTube cron
 ```
 
 ## Conventions
@@ -91,7 +91,7 @@ vercel.ts         Vercel config-as-TS: redirects + security headers (from script
 - Missing `VITE_CONTACT_WHATSAPP_PHONE` / `_PHONE_DISPLAY` / `_PHONE_TEL` silently
   degrades every WhatsApp CTA to `/contact`. `prebuild` fails Vercel builds on it;
   local dev only warns. See `.env.example`.
-- Vercel crons are unused (`crons: []`). Jobs drain through post-commit wakes (when
+- Vercel runs only daily incremental YouTube (`0 19 * * *`). Jobs drain through post-commit wakes (when
   `OPS_WAKE_URL` is set) plus a cron sweep from `workers/cron/` (every 10 minutes
   08:00-22:00 HKT, hourly overnight); both drain `ops_jobs` under a lease, so overlap is safe.
 - WhatsApp settings: see `src/lib/whatsapp-enquiries/wa-config.server.ts`; the old

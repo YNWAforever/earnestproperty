@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -5,6 +6,27 @@ import { latestRunPublisher } from "../lib/mls/status-publisher.mjs";
 
 const source = readFileSync(new URL("./api.mls-sync.ts", import.meta.url), "utf8");
 const vercel = readFileSync(new URL("../../vercel.ts", import.meta.url), "utf8");
+
+const vercelCrons = JSON.parse(
+  execFileSync(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      "--no-warnings",
+      "--input-type=module",
+      "-e",
+      "import { config } from './vercel.ts'; console.log(JSON.stringify(config.crons));",
+    ],
+    {
+      cwd: new URL("../../", import.meta.url),
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH,
+        ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+      },
+    },
+  ),
+);
 
 test("mls route is protected and read-only", () => {
   assert.match(source, /createFileRoute\(["']\/api\/mls-sync["']\)/);
@@ -36,10 +58,9 @@ test("protected status identifies the actual run publisher with legacy compatibi
   assert.doesNotMatch(source, /\bPOST\b|\bPUT\b|\bDELETE\b/);
 });
 
-test("Vercel has no idle database schedules", () => {
-  assert.match(vercel, /crons:\s*\[\s*\]/);
+test("Vercel allows only daily YouTube refresh and no idle MLS schedule", () => {
+  assert.deepEqual(vercelCrons, [{ path: "/api/youtube-sync", schedule: "0 19 * * *" }]);
   assert.doesNotMatch(vercel, /\/api\/mls-sync/);
-  assert.doesNotMatch(vercel, /schedule:\s*"/);
 });
 
 test("Cloudflare wakes the appropriate job lane after a signal, a due alarm or the job sweep", () => {

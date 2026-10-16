@@ -446,3 +446,119 @@ test("non-transient key failures are classified once without exposing the key", 
   );
   assert.equal(fake.urls.length, 1);
 });
+
+test("targeted incremental repair finds older missing IDs beyond the boundary", async () => {
+  const fake = queuedFetch([
+    channelResponse(),
+    json({
+      items: [playlistItem("AAAAAAAAAAA"), playlistItem("BBBBBBBBBBB")],
+      nextPageToken: "older",
+    }),
+    json({ items: [playlistItem("CCCCCCCCCCC"), playlistItem("DDDDDDDDDDD")] }),
+  ]);
+  const client = createYouTubeClient({ apiKey, fetchImpl: fake.fetchImpl });
+  const result = await client.listUploads({
+    boundaryVideoId: "BBBBBBBBBBB",
+    backfillVideoIds: ["DDDDDDDDDDD"],
+  });
+  assert.deepEqual(
+    result.videos.map((entry) => entry.videoId),
+    ["AAAAAAAAAAA", "BBBBBBBBBBB", "DDDDDDDDDDD"],
+  );
+  assert.equal(result.pages, 2);
+});
+
+test("bare 403 is a permanent authorization failure and never retries", async () => {
+  const fake = queuedFetch([json({ error: { message: apiKey } }, 403)]);
+  await assert.rejects(
+    () => createYouTubeClient({ apiKey, fetchImpl: fake.fetchImpl }).listUploads(),
+    (error) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "youtube_auth_failed" &&
+      !error.message.includes(apiKey),
+  );
+  assert.equal(fake.urls.length, 1);
+});
+
+test("unbounded Retry-After stops instead of sleeping beyond the run budget", async () => {
+  const sleeps: number[] = [];
+  const fake = queuedFetch([json({}, 429, { "retry-after": "86400" })]);
+  await assert.rejects(() =>
+    createYouTubeClient({
+      apiKey,
+      fetchImpl: fake.fetchImpl,
+      sleep: async (ms) => {
+        sleeps.push(ms);
+      },
+    }).listUploads(),
+  );
+  assert.deepEqual(sleeps, []);
+});
+
+test("a missing targeted repair ID fails the entire read before reconciliation", async () => {
+  const fake = queuedFetch([channelResponse(), json({ items: [playlistItem("BBBBBBBBBBB")] })]);
+  await assert.rejects(() =>
+    createYouTubeClient({ apiKey, fetchImpl: fake.fetchImpl }).listUploads({
+      boundaryVideoId: "BBBBBBBBBBB",
+      backfillVideoIds: ["DDDDDDDDDDD"],
+    }),
+  );
+});
+
+test("fifty newer items still request the next page including Shorts", async () => {
+  const ids = Array.from({ length: 50 }, (_, index) => String(index).padStart(11, "A"));
+  const fake = queuedFetch([
+    channelResponse(),
+    json({ items: ids.map((id) => playlistItem(id)), nextPageToken: "older" }),
+    json({ items: [playlistItem("SHORTS00001"), playlistItem("BBBBBBBBBBB")] }),
+  ]);
+  const result = await createYouTubeClient({ apiKey, fetchImpl: fake.fetchImpl }).listUploads({
+    boundaryVideoId: "BBBBBBBBBBB",
+  });
+  assert.equal(result.videos.length, 52);
+  assert.equal(result.pages, 2);
+  assert.equal(result.videos[50].videoId, "SHORTS00001");
+  assert.equal(result.videos[50].publishedAt, "2026-08-01T00:00:00.000Z");
+});
+
+test("transport timeouts use a deadline and stop after four attempts without leaking URLs", async () => {
+  let calls = 0;
+  const sleeps: number[] = [];
+  const fetchImpl = Object.assign(
+    async (_url: string | URL | Request, options?: RequestInit) => {
+      calls++;
+      assert.ok(options?.signal instanceof AbortSignal);
+      throw new DOMException(`timeout with ${apiKey}`, "TimeoutError");
+    },
+    { preconnect: fetch.preconnect },
+  ) as typeof fetch;
+  await assert.rejects(
+    () =>
+      createYouTubeClient({
+        apiKey,
+        fetchImpl,
+        random: () => 0,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+      }).listUploads(),
+    (error) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "youtube_unavailable" &&
+      !error.message.includes(apiKey),
+  );
+  assert.equal(calls, 4);
+  assert.deepEqual(sleeps, [500, 1000, 2000]);
+});
+
+test("malformed targeted IDs fail before any provider request", async () => {
+  const fake = queuedFetch([]);
+  await assert.rejects(() =>
+    createYouTubeClient({ apiKey, fetchImpl: fake.fetchImpl }).listUploads({
+      backfillVideoIds: ["bad/id"],
+    }),
+  );
+  assert.equal(fake.urls.length, 0);
+});

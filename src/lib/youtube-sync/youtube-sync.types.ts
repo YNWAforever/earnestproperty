@@ -16,7 +16,8 @@ export type YouTubeSyncErrorCode =
   | YouTubeProviderErrorCode
   | "youtube_sync_in_progress"
   | "youtube_lease_lost"
-  | "youtube_validation_error";
+  | "youtube_validation_error"
+  | "youtube_status_unavailable";
 
 export class YouTubeSyncError extends Error {
   readonly code: YouTubeSyncErrorCode;

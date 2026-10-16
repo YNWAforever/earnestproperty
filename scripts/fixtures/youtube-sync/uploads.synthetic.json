@@ -1,0 +1,33 @@
+{
+  "channel": {
+    "id": "UCTwcj9hcQoKVpKEZY-ZgnwA",
+    "verified": true,
+    "capturedAt": "2026-10-16T00:00:00.000Z",
+    "complete": true,
+    "synthetic": true
+  },
+  "uploads": [
+    {
+      "videoId": "SHORTS00001",
+      "title": "Synthetic SHORTS00001",
+      "description": "Synthetic fixture only; no live video.",
+      "publishedAt": "2026-10-15T00:00:00.000Z",
+      "canonicalUrl": "https://www.youtube.com/watch?v=SHORTS00001"
+    },
+    {
+      "videoId": "VIDEO000001",
+      "title": "Synthetic VIDEO000001",
+      "description": "Synthetic fixture only; no live video.",
+      "publishedAt": "2026-10-14T00:00:00.000Z",
+      "canonicalUrl": "https://www.youtube.com/watch?v=VIDEO000001"
+    },
+    {
+      "videoId": "OLDER000001",
+      "title": "Synthetic OLDER000001",
+      "description": "Synthetic fixture only; no live video.",
+      "publishedAt": "2026-10-10T00:00:00.000Z",
+      "canonicalUrl": "https://www.youtube.com/watch?v=OLDER000001"
+    }
+  ],
+  "boundaryVideoId": "VIDEO000001"
+}

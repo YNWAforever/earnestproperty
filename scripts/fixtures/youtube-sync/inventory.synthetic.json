@@ -1,0 +1,20 @@
+{
+  "capturedAt": "2026-10-16T00:00:00.000Z",
+  "complete": true,
+  "scope": "full_db",
+  "synthetic": true,
+  "rows": [
+    {
+      "id": "synthetic-existing-video",
+      "title": "Synthetic VIDEO000001",
+      "videoUrl": "https://www.youtube.com/watch?v=VIDEO000001",
+      "description": "Synthetic staff description, preserved.",
+      "publishedAt": "2026-10-14T00:00:00.000Z",
+      "published": false,
+      "managed": true,
+      "available": true,
+      "sortOrder": 1000,
+      "youtubeVideoId": "VIDEO000001"
+    }
+  ]
+}

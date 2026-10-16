@@ -6,6 +6,7 @@ export default defineConfig({
   testDir: "./e2e",
   // These suites own loopback servers and refuse external targets. Use their named scripts.
   testIgnore: [
+    "**/youtube-videos.spec.ts",
     "**/admin-layout.spec.ts",
     "**/admin-navigation.spec.ts",
     "**/admin-property-maintenance.spec.ts",

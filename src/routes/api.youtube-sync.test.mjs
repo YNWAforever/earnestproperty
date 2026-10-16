@@ -45,8 +45,15 @@ test("public CMS video reads combine staff publication with source availability"
   assert.match(fetchCmsVideos, /SELECT id, title, video_url, description, sort_order, created_at/);
 });
 
-test("Vercel does not invoke YouTube or job routes on an idle schedule", () => {
-  assert.match(vercel, /crons:\s*\[\s*\]/);
+test("Vercel schedules only daily incremental YouTube at 19 UTC", () => {
+  const block = vercel.match(/crons:\s*\[([\s\S]*?)\]/)?.[1] ?? "";
+  assert.deepEqual(
+    [...block.matchAll(/path:\s*"([^"]+)", schedule:\s*"([^"]+)"/g)].map((match) => [
+      match[1],
+      match[2],
+    ]),
+    [["/api/youtube-sync", "0 19 * * *"]],
+  );
 });
 
 test("server-only configuration is documented without values", () => {
@@ -62,4 +69,29 @@ test("package exposes deterministic and disposable-database YouTube suites", () 
     packageJson.scripts["test:youtube-sync:db"],
     "bun test --no-env-file src/lib/youtube-sync/youtube-sync.integration.test.mjs",
   );
+});
+
+test("CMS status visibility uses the same permission as the protected status reader", () => {
+  const cms = readFileSync(new URL("./admin.cms.tsx", import.meta.url), "utf8");
+  const status = readFileSync(
+    new URL("../lib/youtube-sync/youtube-status.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(status, /requireStaffPermission\(getRequest\(\), "cms.publish"\)/);
+  assert.match(status, /callStaffServerFn\(statusServer,\s*\{\}\)/);
+  assert.doesNotMatch(status, /withStaffAuthHeaders|from\s*["']@\/auth["']/);
+  assert.match(cms, /hasPermission\(staffSession.roles, "cms.publish"\)/);
+  assert.match(cms, /canReadYouTubeStatus \? \([\s\S]*?<YouTubeSyncStatusPanel/);
+});
+
+test("YouTube browser suite is CI-wired after the owned Chromium install", () => {
+  assert.equal(
+    packageJson.scripts["test:youtube-sync:ui"],
+    "node node_modules/@playwright/test/cli.js test --config playwright.youtube-owned.config.ts",
+  );
+  const ci = readFileSync(new URL("../../.github/workflows/ci.yml", import.meta.url), "utf8");
+  const install = ci.indexOf("npx playwright install --with-deps chromium");
+  const suite = ci.indexOf("npm run test:youtube-sync:ui");
+  assert.ok(install >= 0 && suite > install, "Install Chromium before this fixture");
+  assert.doesNotMatch(packageJson.scripts["test:videos"], /playwright/);
 });
