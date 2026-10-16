@@ -35,6 +35,17 @@ class Checkpoint:
     def page(self,page):
         self.data['pages'].append(dict(page));self.write_progress()
 
+    def provider_response(self, url, status, body):
+        """Persist provider bytes before interpreting its success or source status."""
+        index = self.data.get('provider_responses', 0) + 1
+        directory = self.path / 'provider-responses'
+        atomic_bytes(directory / f'{index:06d}.body', body)
+        atomic_bytes(directory / f'{index:06d}.json', json.dumps({
+            'url': url, 'provider_status': status, 'transport': 'firecrawl-basic',
+        }).encode())
+        self.data['provider_responses'] = index
+        self.write_progress()
+
     def finish(self,gate):
         final={**self.data,'full':gate.get('allowed') is True and gate.get('full') is True,'gate':gate}
         atomic_bytes(self.path/'final.json',json.dumps(final,ensure_ascii=False).encode('utf-8'))

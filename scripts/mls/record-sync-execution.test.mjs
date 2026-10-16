@@ -276,6 +276,36 @@ test("failed collection retains bounded native diagnostics without a replayable 
     assert.equal(result.stages[stage].status, "pending");
 });
 
+test("provider diagnostics remain distinct from source access failures", () => {
+  for (const code of [
+    "PROVIDER_HTTP_401",
+    "PROVIDER_HTTP_429",
+    "PROVIDER_HTTP_503",
+    "PROVIDER_KEY_REQUIRED",
+    "PROVIDER_NETWORK_FAILED",
+    "PROVIDER_RESPONSE_INVALID",
+    "PROVIDER_RESPONSE_TOO_LARGE",
+    "PROVIDER_SOURCE_RESPONSE_TOO_LARGE",
+  ]) {
+    const result = executionSummary({
+      ...base,
+      needs: {
+        collect: {
+          result: "failure",
+          outputs: { error_code: code, pages_read: "0", pages_failed: "2" },
+        },
+        ingest: { result: "skipped" },
+        publish: { result: "skipped" },
+        verify: { result: "skipped" },
+      },
+    });
+    assert.equal(result.stages.collection.errorCode, code);
+    assert.equal(result.errorCode, code);
+    assert.equal(result.stages.ingestion.status, "pending");
+    assert.equal(result.privateEvidenceRef, undefined);
+  }
+});
+
 test("native diagnostics cannot inject text or turn blocked pages into pages read", () => {
   const unsafe = executionSummary({
     ...base,

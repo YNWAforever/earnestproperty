@@ -186,6 +186,9 @@ jobs:
           payload=$(python scripts/property-sync/daily_artifacts.py select --root daily-output)
 
           echo "PAYLOAD=$payload" >> "$GITHUB_ENV"
+        env:
+          PROPERTY_SYNC_28HSE_TRANSPORT: ${{ vars.PROPERTY_SYNC_28HSE_TRANSPORT || 'http' }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
         if: ${{ !startsWith(env.MODE, 'replay-') && env.MODE != 'publication-only' }}
       - name: Freeze and pin immutable request and raw before database access
         shell: bash

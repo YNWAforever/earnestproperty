@@ -3,6 +3,7 @@
   "sources": {
     "28hse": {
       "scope_id": "agent:540",
+      "transport": "http",
       "list_url_template": "https://www.28hse.com/agent/540?page={page}",
       "request_delay_seconds": [
         2,

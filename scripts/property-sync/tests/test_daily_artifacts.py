@@ -233,6 +233,19 @@ def test_collection_outputs_export_only_bounded_diagnostics(tmp_path):
     assert output.read_text().splitlines() == ["error_code=SOURCE_ROBOTS_HTTP_403", "pages_read=0", "pages_failed=2"]
     assert result.stdout == b""
 
+
+@pytest.mark.parametrize("code", [
+    "PROVIDER_HTTP_401", "PROVIDER_HTTP_429", "PROVIDER_HTTP_503", "PROVIDER_KEY_REQUIRED",
+    "PROVIDER_NETWORK_FAILED", "PROVIDER_RESPONSE_INVALID", "PROVIDER_RESPONSE_TOO_LARGE",
+    "PROVIDER_SOURCE_RESPONSE_TOO_LARGE",
+])
+def test_provider_diagnostics_reach_workflow_outputs_without_becoming_source_codes(tmp_path, code):
+    request = tmp_path / "result.json"
+    output = tmp_path / "outputs"
+    request.write_text(json.dumps({"collection": {"error_code": code, "pages_read": 0, "pages_failed": 2}}))
+    m.write_collection_outputs(request, output)
+    assert output.read_text().splitlines() == [f"error_code={code}", "pages_read=0", "pages_failed=2"]
+
 @pytest.mark.parametrize("collection", [
     {"error_code": "secret\\ninjected=true", "pages_read": 0, "pages_failed": 2},
     {"pages_read": -1, "pages_failed": 2},

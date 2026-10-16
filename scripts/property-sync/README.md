@@ -27,7 +27,65 @@ For an uncertain Property.hk response, run `sync_propertyhk.py --payload <origin
 Crawl-only CLIs accept `--output <csv>`; diff_agent540.py accepts `--old`, `--new`, `--output`. Existing outputs fail rather than being overwritten. Locks are exclusive local lock files; after a crashed process an operator must confirm it is stopped before removing a stale lock. No scheduler, production configuration, source terms authorization, live selectors or notification service is created here.
 
 
-Live adapter verification (2026-09-07): the authorized agent 540 response uses the full bilingual company heading, matching C-018613 licence, same-origin absolute listing links and `table.tablePair` detail fields. Sanitized sale/rent structure excerpts are regression fixtures. Detail headings must match source ID and offer type; main price/area values are separated from per-foot prices, and conflicting duplicate fields reject the page. Exact units are never inferred from floor bands. Full collection evidence remains a separate run result; these fixture tests alone do not attest to every live page.
+Live adapter verification (2026-09-07): the authorized agent 540 response uses the full bilingual company heading, matching C-018613 licence, same-origin absolute listing links and `table.tablePair` detail fields. Sanitized sale/rent structure excerpts are regression fixtures. Legacy detail headings bind source ID and offer type. Modern headings use the additional page-URL checks below. Main price/area values are separated from per-foot prices, and conflicting duplicate fields reject the page. Exact units are never inferred from floor bands. Full collection evidence remains a separate run result; these fixture tests alone do not attest to every live page.
+
+## Optional 28Hse Firecrawl basic transport
+
+The default remains `transport: "http"`. To select the optional adapter, set
+`sources.28hse.transport` to `firecrawl-basic` in a deployment-owned config, or
+set `PROPERTY_SYNC_28HSE_TRANSPORT=firecrawl-basic` for the 28Hse CLI.
+`FIRECRAWL_API_KEY` is read from the environment; there is no key in config,
+request evidence or command arguments. The daily workflow forwards the
+repository variable `PROPERTY_SYNC_28HSE_TRANSPORT` (default `http`) and secret
+`FIRECRAWL_API_KEY` only to the collection step. This code does not create or
+change either setting, enable a schedule, or grant ingestion/publication authority.
+Validate the opt-in with an explicitly authorized dry-run before activation.
+
+The adapter calls only `https://api.firecrawl.dev/v2/scrape`, using `proxy: basic`,
+`maxAge: 0`, `storeInCache: false`, `skipTlsVerification: false` and a 25-second
+provider timeout within the existing HTTP timeout. There is no auto/enhanced
+proxy or direct-HTTP fallback. The approved source scope is robots.txt,
+agent 540's exact sale/rent query shape and same-origin detail URLs without
+query/fragment credentials. The same Fetcher applies robots, pacing, attempt
+bounds and fail-closed source status handling to this transport.
+
+Robots uses markdown; inventory and detail pages require `rawHtml`. Cleaned
+`html` removes head/meta elements needed to verify identity and is rejected.
+The provider's original and final URLs must both match the requested URL, its
+reported proxy must be basic, and source status must be explicit. Provider
+errors, unexpected proxy/redirects, cache-hit markers, empty output, truncated
+output and documents missing their full HTML structure fail closed.
+Provider response bytes are saved before interpreting success or metadata in
+`checkpoints/.../provider-responses/`; frozen raw evidence also retains the
+exact provider bytes as base64 and SHA-256. Source HTML is saved separately by
+the existing checkpoint. Keep all these files in restricted evidence storage;
+provider responses and source pages can contain personal/contact data.
+Provider HTTP/credential/network failures use bounded `PROVIDER_*` diagnostics
+through the workflow and recorded run, rather than source HTTP diagnostics.
+Only a provider-reported source status can become `SOURCE_HTTP_*`.
+The HTTP envelope has a separate 16 MiB limit so JSON escaping does not reduce
+the existing 2 MiB UTF-8 source-document budget. The private frozen raw archive
+still has its existing 512 MiB limit; larger runs fail the evidence gate rather
+than dropping provider bytes or accepting a partial archive.
+
+The October 16, 2026 bounded public-source experiment found modern headings
+without the previous `#ID` marker. For that layout the parser requires the
+index's requested detail URL, one matching `og:url`, and one matching
+`al:web:url` or canonical URL, plus an unambiguous sale/rent heading.
+All supplied identity URLs must agree on origin, path, advertisement ID and
+offer type, including for legacy headings; conflicting or duplicate identity
+tags reject the page. Live collection also refuses synthetic/structured detail
+roots that could otherwise bypass public-page identity. Sanitized modern
+fixtures explicitly identify their reconstruction from captured headings,
+primary fact rows and provider-returned page metadata; they are not full raw
+responses or production acceptance evidence.
+
+Both sale and rent must finish contiguous pagination through verified empty
+pages, with complete detail evidence. The 28Hse gate now checks that page proof
+directly instead of trusting only `crawl_complete`. Existing rejected-record,
+count-drop, baseline scope/version, receipt and absence rules remain in force.
+Dry-run cannot submit, publish or advance a baseline. The optional transport
+does not turn a few successful pages into a complete snapshot.
 
 
 ## Daily inventory recovery (2026-10-01)

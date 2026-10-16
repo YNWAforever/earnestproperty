@@ -29,6 +29,12 @@ class WorkerError(Exception):
     pass
 
 
+class TransportError(WorkerError):
+    def __init__(self, code, *, retryable=False):
+        super().__init__(code)
+        self.retryable = retryable
+
+
 def text(value):
     return " ".join(unicodedata.normalize("NFKC", str(value or "")).split())
 
@@ -156,7 +162,7 @@ class NoRedirect(HTTPRedirectHandler):
         return None
 
 
-def http_request(url, data=None, token=None):
+def http_request(url, data=None, token=None, *, max_bytes=2 * 1024 * 1024):
     headers = {
         "User-Agent": "EarnestPropertyBot/2.0",
         "Accept": "text/html,application/json",
@@ -172,18 +178,19 @@ def http_request(url, data=None, token=None):
     except HTTPError as e:
         response = e
     with response:
-        raw = response.read(2 * 1024 * 1024 + 1)
-        if len(raw) > 2 * 1024 * 1024:
+        raw = response.read(max_bytes + 1)
+        if len(raw) > max_bytes:
             raise WorkerError("response_too_large")
         return response.status, dict(response.headers), raw
 
 
 class Fetcher:
-    def __init__(self, origin, paths, fixtures=None, sleep=time.sleep, checkpoint=None):
+    def __init__(self, origin, paths, fixtures=None, sleep=None, checkpoint=None, transport=None):
         self.origin = origin
         self.paths = paths
         self.fixtures = fixtures
-        self.sleep = sleep
+        self.sleep = time.sleep if sleep is None else sleep
+        self.transport = http_request if transport is None else transport
         self.policy = None
         self.last = 0
         self.evidence = []
@@ -223,7 +230,7 @@ class Fetcher:
                             )
                         )
                         self.last = time.monotonic()
-                        status, headers, body = http_request(active)
+                        status, headers, body = self.transport(active)
                     if self.checkpoint:
                         self.checkpoint.response(active, status, attempt + 1, body)
                     self.evidence.append(
@@ -248,6 +255,11 @@ class Fetcher:
                     if status != 200:
                         raise WorkerError("http_failed")
                     return body.decode("utf-8", errors="strict")
+            except TransportError as error:
+                if not error.retryable or attempt == 2:
+                    raise
+                if self.fixtures is None:
+                    self.sleep(2 ** (attempt + 1))
             except (URLError, TimeoutError, OSError):
                 if attempt == 2:
                     raise WorkerError("network_failed")
@@ -395,17 +407,78 @@ def extract_28_company_number(html):
     return next(iter(numbers), None)
 
 
-def parse_28_detail(html, record):
+def verify_28_detail_identity(s, record):
+    """Bind a live document to the index advertisement without inferring a unit."""
+    try:
+        ident = clean_id(record["property_id"], "28hse")
+        deal = record["deal_type"]
+        if deal not in ("sale", "rent"):
+            raise WorkerError("detail_identity")
+        path = "buy" if deal == "sale" else "rent"
+
+        def identity_url(value):
+            checked_url(value, "https://www.28hse.com")
+            parsed = urlsplit(value)
+            if parsed.query or not re.fullmatch(
+                "/" + path + r"/[^/%?#]+/property-" + re.escape(ident) + r"/?", parsed.path
+            ):
+                raise WorkerError("detail_identity")
+            return value.rstrip("/")
+
+        expected = record.get("source_url")
+        expected = identity_url(expected) if expected is not None else None
+        headings = [text(node.get_text()) for node in s.select("h1")]
+        if len(headings) != 1:
+            raise WorkerError("detail_identity")
+        marker = "售盤" if deal == "sale" else "租盤"
+        heading_ids = set(re.findall(r"#(\d+)\s+(售盤|租盤)", headings[0]))
+        if heading_ids and heading_ids != {(ident, marker)}:
+            raise WorkerError("detail_identity")
+        selectors = {
+            "og": 'meta[property="og:url"], meta[name="og:url"]',
+            "web": 'meta[property="al:web:url"], meta[name="al:web:url"]',
+            "canonical": 'link[rel~="canonical"]',
+        }
+        observed = {}
+        for name, selector in selectors.items():
+            nodes = s.select(selector)
+            if len(nodes) > 1:
+                raise WorkerError("detail_identity")
+            if nodes:
+                value = nodes[0].get("href" if name == "canonical" else "content")
+                if not isinstance(value, str) or not value:
+                    raise WorkerError("detail_identity")
+                observed[name] = identity_url(value)
+                if expected is not None and observed[name] != expected:
+                    raise WorkerError("detail_identity")
+        if not heading_ids:
+            quote_marker = "售" if deal == "sale" else "租"
+            if (
+                expected is None
+                or "og" not in observed
+                or not ("web" in observed or "canonical" in observed)
+                or set(re.findall(r"(售|租)\s*(?:HK)?\$", headings[0])) != {quote_marker}
+            ):
+                raise WorkerError("detail_identity")
+        return {
+            "method": "legacy-heading" if heading_ids else "page-urls",
+            "advertisement_id": ident,
+            "deal_type": deal,
+            "page_urls": observed,
+        }
+    except (KeyError, TypeError, ValueError, WorkerError):
+        raise WorkerError("detail_identity") from None
+
+
+def parse_28_detail(html, record, *, require_live_identity=False):
     s = soup_checked(html)
     roots = s.select("[data-listing-detail]")
     live = not roots
+    identity = {"method": "structured-excerpt"}
+    if require_live_identity and not live:
+        raise WorkerError("detail_identity")
     if live:
-        headings = [text(n.get_text()) for n in s.select("h1")]
-        marker = "售盤" if record["deal_type"] == "sale" else "租盤"
-        if len(headings) != 1 or not re.search(
-            r"#" + re.escape(record["property_id"]) + r"\s+" + marker, headings[0]
-        ):
-            raise WorkerError("detail_identity")
+        identity = verify_28_detail_identity(s, record)
         roots = s.select("table.tablePair")
     if len(roots) != 1:
         raise WorkerError("detail_template")
@@ -505,7 +578,11 @@ def parse_28_detail(html, record):
         "phase": None,
         "estate": None,
         "agency_property_no": extract_28_company_number(html),
-        "raw_payload": {"detail_fields": raw, "source_status_labels": sorted(lifecycle)},
+        "raw_payload": {
+            "detail_fields": raw,
+            "source_status_labels": sorted(lifecycle),
+            "detail_identity": identity,
+        },
     }
     for k, v in raw.items():
         if k in ("price", "rent", "gross_unit_price", "saleable_unit_price"):
@@ -523,6 +600,9 @@ def parse_28_detail(html, record):
 
 
 def validate_config(source, cfg):
+    transport = cfg.get("transport", "http")
+    if transport != "http" and not (source == "28hse" and transport == "firecrawl-basic"):
+        raise WorkerError("configuration_transport")
     if source == "propertyhk":
         if (
             cfg.get("id_scope") not in ("global", "branch")
@@ -757,7 +837,11 @@ def crawl(source, cfg, fixtures=None, checkpoint=None):
         if source == "28hse"
         else cfg["allowed_paths"]
     )
-    fetch = Fetcher(origin, paths, fixtures, checkpoint=checkpoint)
+    provider = None
+    if source == "28hse" and cfg.get("transport") == "firecrawl-basic" and fixtures is None:
+        from .firecrawl import FirecrawlBasic
+        provider = FirecrawlBasic(checkpoint=checkpoint)
+    fetch = Fetcher(origin, paths, fixtures, checkpoint=checkpoint, transport=provider)
     pages = []
     def save_page(evidence):
         pages.append(evidence)
@@ -807,7 +891,7 @@ def crawl(source, cfg, fixtures=None, checkpoint=None):
                     )
                     try:
                         r = (
-                            parse_28_detail(detail, row)
+                            parse_28_detail(detail, row, require_live_identity=fixtures is None)
                             if source == "28hse"
                             else parse_property_detail(detail, row, cfg)
                         )
@@ -893,6 +977,9 @@ def crawl(source, cfg, fixtures=None, checkpoint=None):
         "pages": pages,
         "rejected_records": rejected,
     }
+    evidence = {"requests": fetch.evidence, "errors": errors}
+    if provider is not None:
+        evidence["provider_requests"] = provider.evidence
     return {
         "source": source,
         "branches": BRANCHES if source == "propertyhk" else [],
@@ -900,7 +987,7 @@ def crawl(source, cfg, fixtures=None, checkpoint=None):
         "scraped_at": now,
         "listings": list(accepted.values()),
         "meta": meta,
-    }, {"requests": fetch.evidence, "errors": errors}
+    }, evidence
 
 
 def ad_keys(payload):
@@ -959,6 +1046,8 @@ def gate(payload, baseline):
         reasons.append("index_only_source_evidence")
     if payload.get("source") == "propertyhk" and (not collection_page_proof(payload) or m.get("worker_rejected_count",0)):
         reasons.append("incomplete_branch_evidence")
+    if payload.get("source") == "28hse" and not collection_page_proof(payload):
+        reasons.append("incomplete_page_evidence")
     if not m.get("crawl_complete") or m.get("pages_failed", 0):
         reasons.append("incomplete_crawl")
     if not count:
@@ -1258,6 +1347,18 @@ def collection_diagnostics(payload, evidence):
     if payload["meta"]["crawl_complete"]:
         return result
     result["error_code"] = "COLLECTION_INCOMPLETE"
+    for error in evidence["errors"]:
+        reason = error.get("reason", "")
+        if reason.startswith("firecrawl_"):
+            provider_reason = reason.removeprefix("firecrawl_").removeprefix("provider_")
+            if re.fullmatch(
+                r"http_[1-5]\d{2}|key_required|network_failed|response_invalid|response_too_large|source_response_too_large",
+                provider_reason,
+            ):
+                result["error_code"] = "PROVIDER_" + provider_reason.upper()
+            else:
+                result["error_code"] = "PROVIDER_RESPONSE_INVALID"
+            return result
     for response in evidence["requests"]:
         if response["status"] in (401, 403, 429):
             target = "ROBOTS_" if urlsplit(response["url"]).path == "/robots.txt" else ""
@@ -1384,6 +1485,8 @@ def cli(source, crawl_only=False):
             raise WorkerError("index_collection_arguments")
         config = json.loads(args.config.read_text(encoding="utf-8-sig"))
         cfg = config["sources"][source]
+        if source == "28hse" and "PROPERTY_SYNC_28HSE_TRANSPORT" in os.environ:
+            cfg = {**cfg, "transport": os.environ["PROPERTY_SYNC_28HSE_TRANSPORT"]}
         fixtures = (
             json.loads(args.fixtures.read_text(encoding="utf-8-sig"))
             if args.fixtures
