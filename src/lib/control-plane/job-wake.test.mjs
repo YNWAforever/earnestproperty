@@ -1,9 +1,31 @@
+import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createJobWake, signalJobWake, wakeEnabledFromEnv } from "./job-wake.js";
+
+const vercelCrons = JSON.parse(
+  execFileSync(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      "--no-warnings",
+      "--input-type=module",
+      "-e",
+      "import { config } from './vercel.ts'; console.log(JSON.stringify(config.crons));",
+    ],
+    {
+      cwd: new URL("../../../", import.meta.url),
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH,
+        ...(process.env.SystemRoot ? { SystemRoot: process.env.SystemRoot } : {}),
+      },
+    },
+  ),
+);
 
 test("disabled wake does not schedule or run any work", async () => {
   const pending = [],
@@ -82,15 +104,15 @@ test("job drains have one business-hours Cloudflare sweep and no Vercel schedule
   assert.match(worker, /hasBearerSecret\(request, env\.CRON_SECRET\)/);
   // The cron sweeps; it must never signal(), which would reset the failure backoff every tick.
   assert.doesNotMatch(worker.slice(worker.indexOf("async scheduled(")), /\.signal\(\)/);
-  assert.match(vercel, /crons:\s*\[\s*\]/);
+  assert.deepEqual(vercelCrons, [{ path: "/api/youtube-sync", schedule: "0 19 * * *" }]);
   assert.doesNotMatch(vercel, /path:\s*"\/api\/admin\/(control-plane\/worker|jobs\/send-queue)"/);
 });
 
-test("maintenance stays event driven while property refresh has one gated daily schedule", () => {
+test("maintenance stays event driven while property and YouTube each have one daily refresh", () => {
   const vercel = readFileSync("vercel.ts", "utf8");
   const migration = readFileSync(".github/workflows/migration-drift.yml", "utf8");
   const properties = readFileSync(".github/workflows/property-sync-daily.yml", "utf8");
-  assert.match(vercel, /crons:\s*\[\s*\]/);
+  assert.deepEqual(vercelCrons, [{ path: "/api/youtube-sync", schedule: "0 19 * * *" }]);
   assert.doesNotMatch(migration, /^\s+schedule:/m);
   assert.match(properties, /^\s+schedule:/m);
   assert.match(properties, /cron: "17 20 \* \* \*"/);
