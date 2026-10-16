@@ -66,6 +66,10 @@ await build({
         replacement: resolve(root, "read-scenarios.ts"),
       },
       { find: /^@\/(auth|hooks\/use-neon-auth)$/, replacement: resolve(daily, "auth.ts") },
+      {
+        find: /^@\/lib\/youtube-sync\/youtube-status$/,
+        replacement: resolve(workspace, "scripts/browser-fixtures/youtube-sync-status.ts"),
+      },
       { find: "@", replacement: resolve(workspace, "src") },
     ],
   },

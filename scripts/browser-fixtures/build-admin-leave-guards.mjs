@@ -37,6 +37,10 @@ await build({
         replacement: resolve(root, "synthetic-api.ts"),
       },
       { find: /^@\/(auth|hooks\/use-neon-auth)$/, replacement: resolve(root, "auth.ts") },
+      {
+        find: /^@\/lib\/youtube-sync\/youtube-status$/,
+        replacement: resolve(workspace, "scripts/browser-fixtures/youtube-sync-status.ts"),
+      },
       { find: "@", replacement: resolve(workspace, "src") },
     ],
   },
