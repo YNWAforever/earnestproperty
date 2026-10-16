@@ -161,3 +161,16 @@ change. Keep the unrelated wake optimizations. No database rollback/migration
 is needed. Do not delete imported videos or rewind the checkpoint as a rollback;
 first reconcile exact IDs and publication decisions read-only, then request
 approval for any corrective data changes.
+
+## Draft PR deployment boundary
+
+The review branch `codex/youtube-daily-sync-20261016` has
+`git.deploymentEnabled` set to false in `vercel.ts`. This prevents Vercel's
+automatic branch/PR Preview deployment while the change is authorized for
+GitHub CI only. The exact branch rule does not match `main` or other branches.
+It does not enable the proposed cron or change existing project settings.
+Merge, deployment and any production sync/backfill still require separate approval.
+
+Official Git Configuration documentation (checked 2026-10-16) explicitly supports
+this branch rule in both `vercel.json` and `vercel.ts`:
+`https://vercel.com/docs/project-configuration/git-configuration`.

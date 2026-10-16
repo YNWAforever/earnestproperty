@@ -501,3 +501,26 @@ test("mortgage.php reaches the mortgage page", () => {
     location: "/mortgage",
   });
 });
+
+test("the review branch skips automatic deployments without changing main or the daily cron", () => {
+  const childEnv = { PATH: process.env.PATH };
+  if (process.env.SystemRoot) childEnv.SystemRoot = process.env.SystemRoot;
+  const config = JSON.parse(
+    execFileSync(
+      process.execPath,
+      [
+        "--experimental-strip-types",
+        "--no-warnings",
+        "--input-type=module",
+        "-e",
+        "import {config} from './vercel.ts'; console.log(JSON.stringify(config))",
+      ],
+      { cwd: process.cwd(), encoding: "utf8", env: childEnv },
+    ),
+  );
+  assert.deepEqual(config.git?.deploymentEnabled, {
+    "codex/youtube-daily-sync-20261016": false,
+  });
+  assert.equal(Object.hasOwn(config.git.deploymentEnabled, "main"), false);
+  assert.deepEqual(config.crons, [{ path: "/api/youtube-sync", schedule: "0 19 * * *" }]);
+});
