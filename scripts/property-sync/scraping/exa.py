@@ -4,6 +4,7 @@ import re
 import ssl
 from datetime import timezone
 from decimal import Decimal
+from email.utils import parsedate_to_datetime
 from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, Request, build_opener
 
@@ -28,6 +29,99 @@ class ExaError(ValueError):
 class _NoRedirect(HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
+
+
+def validated_limits(limits):
+    try:
+        if not isinstance(limits, dict) or not set(limits) <= set(DEFAULT_LIMITS):
+            raise ValueError
+        result = {**DEFAULT_LIMITS, **limits}
+        for name, maximum in DEFAULT_LIMITS.items():
+            value = result[name]
+            if name == "max_cost_usd":
+                if type(value) not in (str, int, Decimal):
+                    raise ValueError
+                amount = Decimal(value)
+                if not amount.is_finite() or not Decimal(0) < amount <= Decimal(maximum):
+                    raise ValueError
+                result[name] = format(amount, "f")
+            elif type(value) is not int or not 1 <= value <= maximum:
+                raise ValueError
+        return result
+    except (ValueError, TypeError, ArithmeticError):
+        raise ExaError("limits_invalid") from None
+
+
+class AttemptLedger:
+    def __init__(self, limits: dict, *, monotonic):
+        self.limits, self.monotonic = validated_limits(limits), monotonic
+        self.started = monotonic()
+        self.search_requests = self.contents_requests = 0
+        self.url_attempts, self.unique_urls = {}, set()
+        self.reserved = self.estimated = Decimal(0)
+        self.has_estimate, self.stop_reason = False, None
+        self.last_reservation = self.last_tariff = Decimal(0)
+
+    def remaining(self):
+        return self.limits["max_elapsed_seconds"] - (self.monotonic() - self.started)
+
+    def _stop(self, reason):
+        self.stop_reason = reason
+        raise ExaError(reason)
+
+    def reserve(self, operation: str, ids: tuple[str, ...]) -> None:
+        if self.stop_reason:
+            raise ExaError(self.stop_reason)
+        if self.remaining() <= 0:
+            self._stop("elapsed_budget_exhausted")
+        if self.search_requests + self.contents_requests >= self.limits["max_total_requests"]:
+            self._stop("total_request_limit")
+        cost = Decimal("0.007") if operation == "search" else Decimal("0.010")
+        if operation == "search":
+            if self.search_requests >= self.limits["max_search_requests"]:
+                self._stop("search_request_limit")
+        elif operation == "contents":
+            if self.contents_requests >= self.limits["max_contents_requests"]:
+                self._stop("contents_request_limit")
+            if not ids or len(ids) > self.limits["batch_size"] or len(set(ids)) != len(ids):
+                self._stop("contents_batch_limit")
+            if len(self.unique_urls | set(ids)) > self.limits["max_unique_urls"]:
+                self._stop("unique_url_limit")
+            if any(self.url_attempts.get(url, 0) >= self.limits["max_attempts"] for url in ids):
+                self._stop("url_attempt_limit")
+        else:
+            self._stop("operation_invalid")
+        if self.reserved + cost > Decimal(self.limits["max_cost_usd"]):
+            self._stop("cost_reservation_limit")
+        self.reserved += cost
+        self.last_reservation = cost
+        self.last_tariff = cost if operation == "search" else Decimal("0.001") * len(ids)
+        if operation == "search":
+            self.search_requests += 1
+        else:
+            self.contents_requests += 1
+            self.unique_urls.update(ids)
+            for url in ids:
+                self.url_attempts[url] = self.url_attempts.get(url, 0) + 1
+
+    def observe_cost(self, amount: Decimal | None) -> None:
+        if amount is None:
+            return
+        if type(amount) not in (int, Decimal) or not Decimal(amount).is_finite() or amount < 0:
+            self._stop("provider_cost_invalid")
+        self.estimated += Decimal(amount)
+        self.has_estimate = True
+        if (amount > self.last_reservation or amount > self.last_tariff
+                or self.estimated > Decimal(self.limits["max_cost_usd"])):
+            self._stop("provider_cost_exceeds_bound")
+
+    def snapshot(self) -> dict:
+        return {"search_requests": self.search_requests, "contents_requests": self.contents_requests,
+                "total_requests": self.search_requests + self.contents_requests,
+                "unique_detail_urls": len(self.unique_urls), "url_attempts": dict(sorted(self.url_attempts.items())),
+                "reserved_usd": format(self.reserved, "f"),
+                "provider_estimated_usd": format(self.estimated, "f") if self.has_estimate else None,
+                "stop_reason": self.stop_reason}
 
 
 def exa_http_request(endpoint: str, payload: bytes, token: str | None, *,
@@ -79,16 +173,18 @@ class ExaClient:
             raise ExaError("offline_transport_forbidden")
         self.request, self.now, self.monotonic, self.sleep = request, now, monotonic, sleep
         self.token, self.fixture_aliases, self.online = token, fixture_aliases, online
-        self.limits = {**DEFAULT_LIMITS, **limits}
+        self.ledger = AttemptLedger(limits, monotonic=monotonic)
+        self.limits = self.ledger.limits
         self.stop_reason = None
         self._last_error = None
+        self._current_attempt = 0
         self._metrics = {"search_requests": 0, "contents_requests": 0, "raw_results": 0,
                          "rejected_urls": 0, "queries_attempted": 0, "queries_completed": 0,
                          "pages_succeeded": 0, "pages_failed": 0}
 
     @property
     def metrics(self):
-        return dict(self._metrics)
+        return {**self._metrics, **self.ledger.snapshot(), "stop_reason": self.stop_reason}
 
     def _detail(self, url):
         return normalize_detail_url(url, fixture_aliases=self.fixture_aliases, online=self.online)
@@ -98,7 +194,8 @@ class ExaClient:
         try:
             status, headers, raw = self.request(
                 endpoint, json.dumps(payload, ensure_ascii=False).encode("utf-8"), self.token,
-                timeout_seconds=self.limits["timeout_seconds"], max_bytes=self.limits["max_response_bytes"],
+                timeout_seconds=min(self.limits["timeout_seconds"], self.ledger.remaining()),
+                max_bytes=self.limits["max_response_bytes"],
             )
         except OSError as error:
             if self.token and self.token in str(error):
@@ -121,17 +218,59 @@ class ExaClient:
         if (not isinstance(data, dict) or not isinstance(data.get("results"), list)
                 or (operation == "contents" and not isinstance(data.get("statuses"), list))):
             raise ExaError("provider_response_invalid")
+        if operation == "search" and len(data["results"]) > self.limits["max_results_per_search"]:
+            raise ExaError("provider_response_invalid")
+        cost = data.get("costDollars")
+        if cost is not None and (not isinstance(cost, dict) or "total" not in cost):
+            raise ExaError("provider_cost_invalid")
+        self.ledger.observe_cost(cost["total"] if cost is not None else None)
         return data, lowered
+
+    def _wait(self, retry_after, attempt):
+        try:
+            if retry_after is None:
+                delay = 2 ** attempt
+            elif isinstance(retry_after, str) and re.fullmatch(r"[0-9]+", retry_after):
+                delay = int(retry_after)
+            else:
+                target = parsedate_to_datetime(retry_after)
+                if target.tzinfo is None:
+                    raise ValueError
+                delay = max(0, (target - self.now()).total_seconds())
+            if delay > self.limits["max_retry_after_seconds"]:
+                raise ValueError
+        except (ValueError, TypeError, OverflowError):
+            self.stop_reason = "retry_deferred"
+            return False
+        if delay >= self.ledger.remaining():
+            self.stop_reason = "elapsed_budget_exhausted"
+            return False
+        if delay:
+            self.sleep(delay)
+        return True
 
     def _request(self, operation, payload):
         if self.stop_reason:
             return None
-        self._metrics[operation + "_requests"] += 1
-        try:
-            return self._call_once(operation, payload)
-        except ExaError as error:
-            self._last_error = self.stop_reason = error.code
-            return None
+        for attempt in range(1, self.limits["max_attempts"] + 1 if operation == "search" else 2):
+            try:
+                ids = tuple(payload["urls"]) if operation == "contents" else (payload["query"],)
+                self.ledger.reserve(operation, ids)
+                self._current_attempt = self.ledger.url_attempts[ids[0]] if operation == "contents" else attempt
+                self._last_error = None
+                return self._call_once(operation, payload)
+            except ExaError as error:
+                self._last_error = error
+                if not error.retryable:
+                    self.stop_reason = error.code
+                    return None
+                if operation == "contents":
+                    return None
+                if attempt == self.limits["max_attempts"]:
+                    self.stop_reason = error.code
+                elif not self._wait(error.retry_after, attempt):
+                    return None
+        return None
 
     def _metadata(self, data, headers, *, operation, document=None, status=None):
         document, status = document or {}, status or {}
@@ -145,7 +284,7 @@ class ExaClient:
             if isinstance(document.get("publishedDate"), str) else None,
             "provider_retrieval_time": None,
             "retrieved_at": self.now().astimezone(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "attempt": 1,
+            "attempt": self._current_attempt,
         }
         return provider, ["provider_request_id_mismatch"] if body_id and header_id and body_id != header_id else []
 
@@ -153,11 +292,12 @@ class ExaClient:
         validate_query_plan([scope], synthetic=not self.online)
         output = {"query_id": scope["query_id"], "results": [], "rejected_results": [],
                   "request_ids": [], "errors": []}
-        self._metrics["queries_attempted"] += 1
+        before = self.ledger.search_requests
         response = self._request("search", {
             "query": " ".join(scope["query_terms"]), "type": "fast",
             "includeDomains": ["property.hk"], "numResults": self.limits["max_results_per_search"],
         })
+        self._metrics["queries_attempted"] += int(self.ledger.search_requests > before)
         if response is None:
             output["errors"] = [self.stop_reason]
             return output
@@ -181,7 +321,7 @@ class ExaClient:
 
     def _failure(self, detail, reason, provider=None):
         return {"detail": detail, "status": "error", "text": None, "provider": provider or {},
-                "attempts": 1, "reasons": [reason]}
+                "attempts": self.ledger.url_attempts.get(detail["normalized_url"], 0), "reasons": [reason]}
 
     def _pages(self, details, data, headers):
         requested = {detail["normalized_url"]: detail for detail in details}
@@ -208,6 +348,7 @@ class ExaClient:
                 raise ExaError("provider_response_invalid")
             provider, reasons = self._metadata(data, headers, operation="contents",
                                                document=results[0] if len(results) == 1 else {}, status=state)
+            provider["attempt"] = self.ledger.url_attempts[url]
             if state["status"] == "error":
                 error = state.get("error") or {}
                 if not isinstance(error, dict):
@@ -222,13 +363,14 @@ class ExaClient:
                 if denied:
                     self.stop_reason = "source_access_denied"
                 failed = self._failure(detail, "source_access_denied" if denied else "contents_fetch_failed", provider)
-                failed["provider"].update(error_http_status=code, error_tag=_identifier(tag))
+                failed["provider"].update(error_http_status=code,
+                                          error_tag=(_identifier(tag) or "unrecognized") if tag is not None else None)
                 pages.append(failed)
             elif len(results) != 1 or not isinstance(results[0].get("text"), str) or not results[0]["text"].strip():
                 pages.append(self._failure(detail, "contents_result_integrity", provider))
             else:
                 pages.append({"detail": detail, "status": "success", "text": results[0]["text"],
-                              "provider": provider, "attempts": 1, "reasons": reasons})
+                              "provider": provider, "attempts": self.ledger.url_attempts[url], "reasons": reasons})
         return pages
 
     def contents(self, urls: list[str]) -> dict:
@@ -237,22 +379,52 @@ class ExaClient:
         details = {item["normalized_url"]: item for item in (self._detail(url) for url in urls)}
         if len(details) > self.limits["max_unique_urls"]:
             raise ExaError("unique_url_limit")
-        pages, request_ids = [], []
-        values = list(details.values())
-        for offset in range(0, len(values), self.limits["batch_size"]):
-            batch = values[offset:offset + self.limits["batch_size"]]
-            response = self._request("contents", {"urls": [x["normalized_url"] for x in batch],
-                                                  "text": True, "maxAgeHours": 0, "subpages": 0})
-            if response is None:
-                pages.extend(self._failure(x, self.stop_reason) for x in batch)
-                continue
-            data, headers = response
-            try:
-                pages.extend(self._pages(batch, data, headers))
-                request_ids.append(self._metadata(data, headers, operation="contents")[0])
-            except ExaError as error:
-                self.stop_reason = error.code
-                pages.extend(self._failure(x, error.code) for x in batch)
+        outcomes, request_ids, pending = {}, [], list(details.values())
+        for round_number in range(1, self.limits["max_attempts"] + 1):
+            next_pending, retry_headers = [], []
+            for offset in range(0, len(pending), self.limits["batch_size"]):
+                batch = pending[offset:offset + self.limits["batch_size"]]
+                response = self._request("contents", {"urls": [x["normalized_url"] for x in batch],
+                                                      "text": True, "maxAgeHours": 0, "subpages": 0})
+                if response is None:
+                    reason = self.stop_reason or self._last_error.code
+                    for item in batch:
+                        outcomes[item["normalized_url"]] = self._failure(item, reason)
+                    if not self.stop_reason and self._last_error.retryable:
+                        next_pending.extend(batch)
+                        retry_headers.append(self._last_error.retry_after)
+                    continue
+                data, headers = response
+                try:
+                    pages = self._pages(batch, data, headers)
+                    request_ids.append(self._metadata(data, headers, operation="contents")[0])
+                    for page in pages:
+                        outcomes[page["detail"]["normalized_url"]] = page
+                        provider = page["provider"]
+                        code = provider.get("error_http_status")
+                        if page["status"] == "error" and not provider.get("error_tag") and (
+                            code == 429 or isinstance(code, int) and 500 <= code < 600
+                        ):
+                            next_pending.append(page["detail"])
+                            retry_headers.append(headers.get("retry-after"))
+                except ExaError as error:
+                    self.stop_reason = error.code
+                    for item in batch:
+                        outcomes[item["normalized_url"]] = self._failure(item, error.code)
+            if self.stop_reason or not next_pending:
+                break
+            if round_number == self.limits["max_attempts"]:
+                self.stop_reason = "contents_retries_exhausted"
+                break
+            # Every failed batch's Retry-After must be honored; sequential waits are conservative.
+            for header in dict.fromkeys(retry_headers):
+                if not self._wait(header, round_number):
+                    break
+            if self.stop_reason:
+                break
+            pending = next_pending
+        pages = [outcomes.get(url, self._failure(detail, self.stop_reason or "contents_not_attempted"))
+                 for url, detail in details.items()]
         self._metrics["pages_succeeded"] += sum(x["status"] == "success" for x in pages)
         self._metrics["pages_failed"] += sum(x["status"] != "success" for x in pages)
         return {"pages": pages, "request_ids": request_ids, "stop_reason": self.stop_reason}
