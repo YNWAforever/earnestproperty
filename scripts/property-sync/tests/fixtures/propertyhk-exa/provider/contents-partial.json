@@ -1,0 +1,25 @@
+{
+  "synthetic": true,
+  "requestId": "synthetic-request",
+  "results": [
+    {
+      "id": "opaque-document-0",
+      "url": "https://www.property.hk/asking_detail/00101.html",
+      "text": "# Listing details\nEstate: Synthetic",
+      "publishedDate": "2026-10-01T00:00:00Z"
+    }
+  ],
+  "statuses": [
+    {
+      "id": "https://www.property.hk/asking_detail/00102.html",
+      "status": "error",
+      "error": {"httpStatusCode": 404}
+    },
+    {
+      "id": "https://www.property.hk/asking_detail/00101.html",
+      "status": "success",
+      "source": "crawled"
+    }
+  ],
+  "costDollars": {"total": 0.001}
+}
