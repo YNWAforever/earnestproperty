@@ -1,0 +1,21 @@
+# Listing details
+Advertisement ID: 00101
+Branch: SYNTHETIC-A
+Property number: SYN-P-01
+Agency reference: SYN-A-01
+Language: en
+Estate: Synthetic Gardens
+District: Synthetic District
+Sale price: HK$ 710 萬
+Rent: HK$ 22,000 / month
+Usable area: approx. 70 sq m
+Gross area: 900 sq ft
+Source updated: 2026-10-15
+Published: 2026-10-01
+Floor: high
+Contact: Synthetic Contact | +852 00000000 | agent
+# Transaction history
+Sale price: HK$ 100 萬
+Unit: FAKE-HISTORY
+# Related listings
+Advertisement ID: 999

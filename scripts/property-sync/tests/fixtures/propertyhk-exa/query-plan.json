@@ -1,0 +1,82 @@
+{
+  "kind": "propertyhk-exa-query-fixtures/v1",
+  "query_plan": [
+    {
+      "branch_id": "SYNTHETIC-A",
+      "branch_labels": [
+        "SYNTHETIC-A"
+      ],
+      "district_terms": [
+        "Synthetic District"
+      ],
+      "estate_terms": [
+        "Synthetic Gardens",
+        "Synthetic Shore",
+        "Synthetic Quay"
+      ],
+      "query_id": "q1",
+      "query_terms": [
+        "SYNTHETIC-A",
+        "Synthetic Gardens"
+      ]
+    },
+    {
+      "branch_id": "SYNTHETIC-A",
+      "branch_labels": [
+        "SYNTHETIC-A"
+      ],
+      "district_terms": [
+        "Synthetic District"
+      ],
+      "estate_terms": [
+        "Synthetic Gardens",
+        "Synthetic Shore",
+        "Synthetic Quay"
+      ],
+      "query_id": "q2",
+      "query_terms": [
+        "SYNTHETIC-A",
+        "Synthetic District"
+      ]
+    },
+    {
+      "branch_id": "SYNTHETIC-B",
+      "branch_labels": [
+        "SYNTHETIC-B"
+      ],
+      "district_terms": [
+        "Synthetic District"
+      ],
+      "estate_terms": [
+        "Synthetic Gardens",
+        "Synthetic Shore",
+        "Synthetic Quay"
+      ],
+      "query_id": "q3",
+      "query_terms": [
+        "SYNTHETIC-B",
+        "Synthetic Shore"
+      ]
+    },
+    {
+      "branch_id": "SYNTHETIC-A",
+      "branch_labels": [
+        "SYNTHETIC-A"
+      ],
+      "district_terms": [
+        "Synthetic District"
+      ],
+      "estate_terms": [
+        "Synthetic Gardens",
+        "Synthetic Shore",
+        "Synthetic Quay"
+      ],
+      "query_id": "q4",
+      "query_terms": [
+        "SYNTHETIC-A",
+        "Synthetic Quay"
+      ]
+    }
+  ],
+  "synthetic": true
+}

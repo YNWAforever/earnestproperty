@@ -1,0 +1,84 @@
+{
+  "kind": "propertyhk-exa-discovery-fixtures/v1",
+  "queries": [
+    {
+      "query": "SYNTHETIC-A Synthetic Gardens",
+      "query_id": "q1",
+      "response": {
+        "costDollars": {
+          "total": 0.007
+        },
+        "requestId": "synthetic-q1",
+        "results": [
+          {
+            "id": "synthetic-document-0",
+            "url": "https://www.property.hk/asking_detail/00101.html"
+          },
+          {
+            "id": "synthetic-document-1",
+            "url": "https://www.property.hk/asking_detail/00102.html"
+          },
+          {
+            "id": "synthetic-document-2",
+            "url": "https://www.property.hk/asking_detail/00103.html"
+          },
+          {
+            "id": "synthetic-document-3",
+            "url": "https://www.property.hk/asking_detail/00104.html"
+          },
+          {
+            "id": "synthetic-document-4",
+            "url": "https://www.property.hk/asking_detail/00105.html"
+          }
+        ]
+      }
+    },
+    {
+      "query": "SYNTHETIC-A Synthetic District",
+      "query_id": "q2",
+      "response": {
+        "costDollars": {
+          "total": 0.007
+        },
+        "requestId": "synthetic-q2",
+        "results": [
+          {
+            "id": "synthetic-document-0",
+            "url": "https://www.property.hk/asking_detail/00106.html"
+          },
+          {
+            "id": "synthetic-document-1",
+            "url": "https://www.property.hk/fixture-en/asking_detail/00101.html"
+          },
+          {
+            "id": "synthetic-document-2",
+            "url": "https://www.property.hk/asking_detail/00101.html"
+          }
+        ]
+      }
+    },
+    {
+      "query": "SYNTHETIC-B Synthetic Shore",
+      "query_id": "q3",
+      "response": {
+        "costDollars": {
+          "total": 0.007
+        },
+        "requestId": "synthetic-q3",
+        "results": []
+      }
+    },
+    {
+      "query": "SYNTHETIC-A Synthetic Quay",
+      "query_id": "q4",
+      "response": {
+        "costDollars": {
+          "total": 0.007
+        },
+        "requestId": "synthetic-q4",
+        "results": []
+      }
+    }
+  ],
+  "synthetic": true
+}

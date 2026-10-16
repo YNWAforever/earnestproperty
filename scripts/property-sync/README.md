@@ -142,3 +142,110 @@ only validated observations. Accepted snapshots and receipts are untouched.
 This command neither enables the scheduler nor claims a full ingestion receipt.
 
 `verify_propertyhk_index_evidence.py --manifest PRIVATE/capture-manifest.json --entries PRIVATE/approved-entry-urls.json --out PRIVATE/report.json` runs offline. It verifies exact raw bytes and contiguous published index pages, then checks the observed agent.php table contract. Approved entry URLs/SIDs and original HTML stay private. The inspector does not grant full-snapshot, detail, ID-scope, branch-scope, absence or publication authority; blocked details remain a provider gate. See `docs/reports/propertyhk-access-verification.md` for real evidence and remaining acceptance.
+
+## Exa-assisted Property.hk candidate review
+
+`review_propertyhk_exa.py` is a standalone operator workflow. It does not join
+the current sync schedule or call an ingestion/publication endpoint. The default
+is offline and reads neither `EXA_API_KEY` nor `DATABASE_URL`. No new dependency
+or credential is needed.
+
+From the repository root, using the existing Python environment:
+
+```powershell
+python scripts/property-sync/review_propertyhk_exa.py `
+  --config scripts/property-sync/propertyhk-exa.example.json `
+  --fixture-bundle scripts/property-sync/tests/fixtures/propertyhk-exa `
+  --known scripts/property-sync/tests/fixtures/propertyhk-exa/known.json `
+  --output .private-sync-evidence/propertyhk-exa-offline-example
+```
+
+Choose a new output directory for each run; an existing directory is refused.
+The bundled data is **synthetic**, including its timestamps, query scopes,
+source identities, contacts and provider responses. It demonstrates behavior;
+it does not verify live Property.hk layouts, real Exa retrieval or source rights.
+The historical 563-advertisement export is never loaded automatically.
+
+The pipeline separates discovery from contents, validates exact detail URLs,
+then parses a bounded labelled main listing block from provider text.
+Unsupported layouts stay unparsed. Only exact HTTPS `property.hk` /
+`www.property.hk` hosts and the approved native `asking_detail/<digits>.html`
+route are supported live. Fixture language aliases are offline-only and retain
+their own fetch URLs. Review identities are branch-scoped; query labels are
+not observed branch evidence. Advertisements, property numbers, agency custom
+references and provider document/request IDs remain separate.
+
+Outputs are `report.json`, `report.md`, exact provider text under
+`evidence/text/`, and a SHA-256/byte-length `evidence/manifest.json`. Field
+comparisons retain the old value, candidate value, raw fragments and evidence.
+Sale/rent offers and usable/gross areas remain separate. Missing values do not
+recommend clearing known fields. Source contacts never assign internal staff.
+
+The six exclusive primary groups are `new_candidates`, `known_candidates`,
+`field_differences`, `insufficient_data`, `identity_conflicts` and
+`fetch_failures`. Independent reason codes and all language observations remain
+available within each entry. Without `--known`, new means not matched against
+a supplied reference; it does not mean absent from production.
+Reference files use `propertyhk-exa-known/v1`, explicit provenance, branch-scoped
+`review_key` values, fields, timestamps and evidence. Artifact references must
+stay beneath the reference file's directory; duplicate/ambiguous identities fail.
+Observed branch labels must match the review key's branch or an explicit
+`branch_labels` list on that reference entry; this keeps human/source aliases
+separate from the stable branch identifier. Advertisement/property/custom ID
+fields cannot contradict the declared reference identity.
+Source evidence and references remain private. Only clearly synthetic samples
+may be committed.
+Fields present on only one side are labelled `candidate_only` or
+`reference_only`, with their raw evidence retained in `one_sided_fields`;
+they are not counted as confirmed changes or comparable fields. A complete
+sale/rent offer can keep a candidate reviewable while an optional offer/area
+remains unparsed. Actual field conflicts, missing identity and genuinely
+incomparable reference values still require review as insufficient/conflicting.
+
+Config keys are `kind`, `synthetic`, `query_plan`, `fixture_aliases`, `limits`
+and `approval_refs`. The example lists all bounds and four synthetic queries.
+Query terms must come from the configured branch/estate/district terms.
+Every API attempt, including retries and unknown outcomes, consumes capacity
+and cost reservation. Request limits are at most 4 searches, 20 unique URLs,
+5 URLs per contents batch, 3 attempts per operation/URL, 12 contents calls and
+16 total calls. The program reserves USD 0.007/search and USD 0.010/contents
+attempt, capped at USD 0.20. Provider estimates are separate from reservations
+and neither is an invoice guarantee. Timeout, bounded Retry-After, permissions,
+quota, budget and credential-echo errors stop or defer as documented in the
+design. Interrupting an HTTP attempt/backoff preserves reservations and prior
+successful observations; do not blindly resume an online run.
+
+Online operation is **not approved or enabled** by this deliverable. Source
+automated-access and content-reuse rights remain unverified; robots observations
+do not establish those rights or resolve historical detail 403s. Exa cannot be
+used to bypass access restrictions. `--online` requires separately confirmed
+rights/trial/query approvals, `synthetic=false`, no fixture aliases, the
+server-only switch `PROPERTYHK_EXA_ONLINE_ENABLED=true`, and an existing
+server-provided `EXA_API_KEY`. Each approval record names the exact source host,
+an external reference and literal `approved=true`; query/trial approvals bind
+the sorted compact JSON SHA-256 of the plan and effective limits. These records
+document external human/source approval; they cannot grant rights themselves.
+No account, key, recharge, schedule or production setting is configured here.
+Recheck official Exa Search, Contents and Pricing documentation before a
+separately approved trial. `maxAgeHours=0` requests fresh extraction; cached/
+crawled metadata or HTTP 200 does not verify an active listing.
+
+Reports always use `propertyhk-exa-review/v1`, `full_snapshot=false`,
+`ingestion_allowed=false`, `eligible_for_absence=false`, `publish_allowed=false`,
+`baseline_advanced=false` and `production_writes=0`. Search disappearance,
+403/404 and timeout never mean sold, withdrawn or zero inventory. Reports
+cannot satisfy native completeness, policy, count-drop, bootstrap or absence
+gates. A completed report may contain review/fetch issues (exit 0); invalid
+input/approval/output is exit 2; a global fetch/budget/access stop with partial
+evidence is exit 3. Console output contains counts and artifact paths.
+
+Offline verification:
+
+```powershell
+python -m pytest scripts/property-sync/tests -q
+npm run test:property-sync
+```
+
+Do not run `:db` suites for this feature. Offline functionality, real Exa
+retrieval, import authorization and production deployment are separate states;
+only offline functionality can be established by the fixture command.

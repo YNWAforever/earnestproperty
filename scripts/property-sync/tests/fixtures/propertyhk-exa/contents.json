@@ -1,0 +1,77 @@
+{
+  "kind": "propertyhk-exa-contents-fixtures/v1",
+  "pages": [
+    {
+      "provider_document_id": "synthetic-content-0",
+      "status": {
+        "id": "https://www.property.hk/asking_detail/00101.html",
+        "source": "crawled",
+        "status": "success"
+      },
+      "text_file": "text/00101.txt",
+      "url": "https://www.property.hk/asking_detail/00101.html"
+    },
+    {
+      "provider_document_id": "synthetic-content-1",
+      "status": {
+        "id": "https://www.property.hk/asking_detail/00102.html",
+        "source": "crawled",
+        "status": "success"
+      },
+      "text_file": "text/00102.txt",
+      "url": "https://www.property.hk/asking_detail/00102.html"
+    },
+    {
+      "provider_document_id": "synthetic-content-2",
+      "status": {
+        "id": "https://www.property.hk/asking_detail/00103.html",
+        "source": "crawled",
+        "status": "success"
+      },
+      "text_file": "text/00103.txt",
+      "url": "https://www.property.hk/asking_detail/00103.html"
+    },
+    {
+      "provider_document_id": "synthetic-content-3",
+      "status": {
+        "id": "https://www.property.hk/asking_detail/00104.html",
+        "source": "crawled",
+        "status": "success"
+      },
+      "text_file": "text/00104.txt",
+      "url": "https://www.property.hk/asking_detail/00104.html"
+    },
+    {
+      "provider_document_id": "synthetic-content-4",
+      "status": {
+        "id": "https://www.property.hk/asking_detail/00105.html",
+        "source": "crawled",
+        "status": "success"
+      },
+      "text_file": "text/00105.txt",
+      "url": "https://www.property.hk/asking_detail/00105.html"
+    },
+    {
+      "provider_document_id": "synthetic-content-5",
+      "status": {
+        "error": {
+          "httpStatusCode": 404
+        },
+        "id": "https://www.property.hk/asking_detail/00106.html",
+        "status": "error"
+      },
+      "url": "https://www.property.hk/asking_detail/00106.html"
+    },
+    {
+      "provider_document_id": "synthetic-content-6",
+      "status": {
+        "id": "https://www.property.hk/fixture-en/asking_detail/00101.html",
+        "source": "crawled",
+        "status": "success"
+      },
+      "text_file": "text/00101-en.txt",
+      "url": "https://www.property.hk/fixture-en/asking_detail/00101.html"
+    }
+  ],
+  "synthetic": true
+}
