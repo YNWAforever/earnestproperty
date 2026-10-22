@@ -880,6 +880,93 @@ test(
           assert.equal(afterA.district_slug, "test");
         },
       );
+      await t.test(
+        "saved patch authority survives a later ordinary secondary ingestion",
+        async () => {
+          await q("TRUNCATE properties,listing_sync_runs CASCADE");
+          await q(
+            "UPDATE mls_ingestion_policies SET config=config||'{\"absence_enabled\":false}'::jsonb WHERE source='28hse_agent_540'",
+          );
+          const original = row("709001", {
+            description: "Approved original description",
+            bathrooms: 2,
+            orientation: "East",
+          });
+          await ingestSnapshot(batch([original], "2026-09-07T08:00:00Z"), options);
+          const state = (
+            await q("SELECT * FROM mls_source_state WHERE external_listing_id='709001'")
+          )[0];
+          const saved = batch(
+            [
+              {
+                ...original,
+                description: "Unapproved saved description",
+                bathrooms: null,
+                orientation: null,
+                captured_at: "2026-09-07T08:01:00.123456Z",
+              },
+            ],
+            "2026-09-07T08:02:00Z",
+          );
+          saved.meta.eligible_for_absence = false;
+          saved.meta.controlled_patch = {
+            mode: "controlled",
+            record_count: 1,
+            absence_allowed: false,
+            evidence_mode: "saved-capture-v1",
+            projection_fields: ["price", "bathrooms", "orientation"],
+            expectations: [
+              {
+                external_id: "709001",
+                deal_type: "sale",
+                property_id: state.property_id,
+                observation_id: state.observation_id,
+                fields: { price: "5380000", bathrooms: 2, orientation: "East" },
+              },
+            ],
+          };
+          const before = (await q("SELECT * FROM properties WHERE id=$1", [state.property_id]))[0];
+          const patch = await ingestService(saved, { ...options, controlledPatch: true });
+          assert.equal(patch.full_snapshot, false);
+          const evidence = (
+            await q(
+              "SELECT o.payload FROM listing_source_observations o JOIN mls_source_state s ON s.observation_id=o.id WHERE s.external_listing_id='709001'",
+            )
+          )[0].payload;
+          assert.equal(evidence.fields.description, "Unapproved saved description");
+          const hk = row("secondary709001", {
+            branch_code: "EPW",
+            source_url: "https://www.property.hk/fixture/EPW/secondary709001",
+            description: "Unapproved secondary description",
+            bathrooms: null,
+            orientation: null,
+          });
+          await ingestSnapshot(batch([hk], "2026-09-07T08:03:00Z", "propertyhk"), options);
+          assert.equal(
+            (
+              await q(
+                "SELECT property_id FROM mls_source_state WHERE external_listing_id='secondary709001'",
+              )
+            )[0].property_id,
+            state.property_id,
+          );
+          let after = (await q("SELECT * FROM properties WHERE id=$1", [state.property_id]))[0];
+          assert.equal(after.description, before.description);
+          assert.equal(after.bathrooms, 2);
+          assert.equal(after.orientation, "East");
+          assert.equal(after.status, "draft");
+          // A separate normally authorized primary observation replaces partial authority.
+          await ingestSnapshot(
+            batch(
+              [{ ...original, description: "Fresh authorized primary description" }],
+              "2026-09-07T08:04:00Z",
+            ),
+            options,
+          );
+          after = (await q("SELECT * FROM properties WHERE id=$1", [state.property_id]))[0];
+          assert.equal(after.description, "Fresh authorized primary description");
+        },
+      );
       await t.test("controlled patch checks reviewed historical company identity", async (t) => {
         await q("TRUNCATE properties,listing_sync_runs CASCADE");
         await q(

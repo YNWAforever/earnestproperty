@@ -53,6 +53,7 @@ function memoryPort({
     },
     state: null,
     observation: null,
+    observationFetchedAt: null,
     receipt: null,
   };
   data.state = {
@@ -114,13 +115,15 @@ function memoryPort({
       else if (sql.includes("AS pending_review")) rows = [{ pending_review: openReview }];
       else if (sql.startsWith("SELECT estate_id,district_slug")) rows = [data.property];
       else if (sql.startsWith("SELECT * FROM properties")) rows = [structuredClone(data.property)];
-      else if (sql.startsWith("SELECT s.*,ip.config"))
+      else if (sql.startsWith("SELECT s.*,o.fetched_at,ip.config AS policy_config,"))
         rows = [
           {
             ...data.state,
-            hold_projection: "false",
+            fetched_at: data.observationFetchedAt ?? data.state?.captured_at,
+            hold_projection: String(data.observation?.holdProjection ?? false),
             fields: data.observation?.fields ?? {},
-            source_status_reason: null,
+            projection: data.observation?.projection ?? null,
+            source_status_reason: data.observation?.sourceStatusReason ?? null,
           },
           ...(secondaryConflict
             ? [
@@ -130,6 +133,8 @@ function memoryPort({
                   deal_type: "sale",
                   source_status: "active",
                   fields: { price: "1" },
+                  fetched_at: captured,
+                  projection: null,
                   observation_id: "other",
                 },
               ]
@@ -139,9 +144,10 @@ function memoryPort({
       else if (sql.startsWith("SELECT * FROM property_sync_state"))
         rows = [{ inactive_reason: "accepted_full_28hse_absence" }];
       else if (sql.startsWith("SELECT o.shared")) rows = [];
-      else if (sql.startsWith("INSERT INTO listing_source_observations"))
+      else if (sql.startsWith("INSERT INTO listing_source_observations")) {
         data.observation = JSON.parse(args[6]);
-      else if (sql.startsWith("INSERT INTO mls_source_state"))
+        data.observationFetchedAt = args[8];
+      } else if (sql.startsWith("INSERT INTO mls_source_state"))
         data.state = {
           ...data.state,
           source: args[0],
@@ -208,9 +214,19 @@ for (const [name, change] of [
   });
 
 test("real native writer preserves description, staff and images while applying only named fields", async () => {
-  const port = memoryPort();
-  const result = await applyIngestion(port.client, patch(), { controlledPatch: true });
+  const port = memoryPort(),
+    p = patch();
+  p.listings[0].description = "Saved description outside the reviewed projection";
+  const result = await applyIngestion(port.client, p, { controlledPatch: true });
   assert.equal(port.data.property.description, "Keep imported description");
+  assert.equal(
+    port.data.observation.fields.description,
+    "Saved description outside the reviewed projection",
+  );
+  assert.deepEqual(port.data.observation.projection, {
+    mode: "controlled-patch-v1",
+    fields: ["price"],
+  });
   assert.equal(port.data.property.price, "5380000");
   assert.equal(port.data.property.agent_id, "staff-original");
   assert.deepEqual(port.data.property.images, ["owned.jpg"]);
@@ -269,6 +285,66 @@ test("incoming source review cannot silently commit a projected value", async ()
   );
   assert.equal(port.data.observation, null);
 });
+
+for (const [order, reviewFirst] of [
+  ["clean then review", false],
+  ["review then clean", true],
+])
+  test("duplicate source review veto survives " + order, async () => {
+    const port = memoryPort(),
+      p = patch();
+    const clean = { ...p.listings[0], raw_payload: { source_conflicts: [] } };
+    const reviewed = {
+      ...p.listings[0],
+      raw_payload: {
+        source_conflicts: [
+          { field: "price", dom: 5380000, json_ld: 1, resolution: "dom", status: "review" },
+        ],
+      },
+    };
+    p.listings = reviewFirst ? [reviewed, clean] : [clean, reviewed];
+    const decoded = decodeSnapshot(p, { controlledPatch: true });
+    assert.equal(decoded.records.length, 1);
+    assert.equal(decoded.duplicates, 1);
+    assert.equal(decoded.records[0].sourceOccurrences.length, 2);
+    assert.deepEqual(
+      decoded.records[0].sourceOccurrences.map(
+        (occurrence) => occurrence.raw.raw_payload.source_conflicts[0]?.status ?? "clean",
+      ),
+      reviewFirst ? ["review", "clean"] : ["clean", "review"],
+    );
+    const before = structuredClone(port.data);
+    await assert.rejects(
+      () => applyIngestion(port.client, p, { controlledPatch: true }),
+      (e) => e.code === "patch_source_conflict_requires_review" && e.status === 409,
+    );
+    assert.deepEqual(port.data, before);
+    assert.ok(port.calls.some((call) => call.sql === "ROLLBACK"));
+    assert.equal(
+      port.calls.some((call) => call.sql === "COMMIT"),
+      false,
+    );
+    assert.equal(
+      port.calls.some((call) => call.sql.startsWith("INSERT INTO listing_source_observations")),
+      false,
+    );
+  });
+
+test("clean duplicate source occurrences remain accepted as one observation", async () => {
+  const port = memoryPort(),
+    p = patch();
+  p.listings.push(structuredClone(p.listings[0]));
+  const result = await applyIngestion(port.client, p, { controlledPatch: true });
+  assert.equal(result.summary.duplicate_count, 1);
+  assert.equal(port.data.property.price, "5380000");
+  assert.equal(port.data.observation.sourceOccurrences.length, 2);
+  assert.equal(
+    port.calls.filter((call) => call.sql.startsWith("INSERT INTO listing_source_observations"))
+      .length,
+    1,
+  );
+});
+
 test("new cross-source conflict rolls back even without a queued field review", async () => {
   const port = memoryPort({ secondaryConflict: true });
   await assert.rejects(

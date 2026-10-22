@@ -297,14 +297,22 @@ bridge, with `meta.controlled_patch.evidence_mode = "saved-capture-v1"`:
   dates remain separate. Saved captures cannot replace a newer current observation.
 - `projection_fields` is an explicit canonical-column allowlist; `[]` requests no canonical
   field projection. Description, staff, images and status are not permitted in it. A partial
-  patch never clears an absent value. Creating a new property still initializes a draft.
+  patch never clears an absent value. The observation persists this restriction so later
+  ordinary ingestion cannot reselect excluded saved fields, clear missing values or infer
+  lifecycle changes from that partial capture. Full page/identity evidence remains intact;
+  a separately accepted normal primary capture can replace the restricted observation.
+  Creating a new property still initializes a draft.
 - `expectations` freezes each source ID/deal, current observation ID, expected canonical
   ID (null for a new draft group), and reviewed prior field values. These are assertions,
   never alternate matching instructions. The native identity/company policy still decides
   the relationship. Drift aborts the transaction, including observations already staged.
 - Inactive/terminal sources, identity ambiguity, open reviews/conflicts or a newly required
   field review stop a controlled patch. Manual ownership/overrides remain authoritative.
+  Duplicate occurrences retain every source-conflict veto, regardless of input order.
   Neither `full_snapshot` nor absence inference can be enabled by this mode.
+
+Public source freshness and contact expiry use the observation's original `fetched_at`,
+not its later acceptance time. Accepting saved evidence is not evidence of a new fetch.
 
 Run `npm run test:property-sync` and `npm run test:property-sync:python` with no credentials
 and network blocked for offline regressions. The native bridge **without `--apply`** validates

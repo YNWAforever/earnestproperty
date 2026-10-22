@@ -66,6 +66,52 @@ const secondary = {
   source_status: "active",
   fields: { price: "5500000", description: "Secondary text", saleable_area: "520.5", bedrooms: 2 },
 };
+
+test("saved partial observations cannot widen fields, clear missing values or revive on later selection", () => {
+  const saved = {
+    ...primary,
+    fields: { price: "5380000", description: "Unapproved saved text", bathrooms: null },
+    projection: { mode: "controlled-patch-v1", fields: ["price", "bathrooms"] },
+  };
+  for (const sources of [[saved], [saved, secondary], [secondary, saved]]) {
+    const selected = selectSourceFields(sources);
+    assert.equal(selected.values.price, "5380000");
+    assert.equal(selected.values.description, undefined);
+    assert.equal(selected.values.saleable_area, undefined);
+    assert.deepEqual(selected.clearFields, []);
+    assert.equal(selected.lifecycle, null);
+  }
+  const renewed = selectSourceFields([primary, secondary]);
+  assert.equal(renewed.values.description, "Primary raw");
+  assert.equal(renewed.lifecycle, "active");
+});
+
+test("unrecognized saved projection metadata fails closed without downgrading to full authority", () => {
+  for (const projection of [
+    {},
+    { mode: "future" },
+    { mode: "controlled-patch-v1", fields: null },
+  ]) {
+    const selected = selectSourceFields([{ ...primary, projection }, secondary]);
+    assert.deepEqual(selected.values, {});
+    assert.deepEqual(selected.clearFields, []);
+    assert.equal(selected.lifecycle, null);
+  }
+});
+
+test("contact freshness uses capture, never acceptance of old saved evidence", () => {
+  const contact = { name: "Synthetic contact", phone: "12345678" };
+  const now = "2026-09-10T12:00:00Z";
+  const accepted = { ...primary, contact, last_accepted_at: now };
+  for (const fetched_at of ["2026-09-01T00:00:00Z", null, "invalid"]) {
+    assert.equal(selectWholeContact([{ ...accepted, fetched_at }], { now }), null);
+  }
+  const captured = "2026-09-10T11:00:00Z";
+  assert.equal(
+    selectWholeContact([{ ...accepted, fetched_at: captured }], { now }).observedAt,
+    captured,
+  );
+});
 test("T21 T22 primary conflict and narrow fallback preserve zero and raw description", () => {
   let s = selectSourceFields([primary, secondary]);
   assert.equal(s.values.price, "5380000");
@@ -91,11 +137,11 @@ test("secondary cannot replace missing primary identity or text and cannot reviv
 test("T23 contacts remain whole and inactive/stale contacts cannot win", () => {
   const contact = selectWholeContact(
     [
-      { ...primary, contact: { name: "A", phone: null }, last_accepted_at: "2026-09-07T00:00:00Z" },
+      { ...primary, contact: { name: "A", phone: null }, fetched_at: "2026-09-07T00:00:00Z" },
       {
         ...secondary,
         contact: { name: "B", phone: "12345678" },
-        last_accepted_at: "2026-09-07T00:00:00Z",
+        fetched_at: "2026-09-07T00:00:00Z",
       },
     ],
     { now: "2026-09-07T01:00:00Z", maxAgeHours: 48 },
@@ -108,7 +154,7 @@ test("T23 contacts remain whole and inactive/stale contacts cannot win", () => {
         {
           ...secondary,
           contact: { name: "B", phone: "12345678" },
-          last_accepted_at: "2020-01-01T00:00:00Z",
+          fetched_at: "2020-01-01T00:00:00Z",
         },
       ],
       { now: "2026-09-07T01:00:00Z", maxAgeHours: 48 },
@@ -156,7 +202,7 @@ test("review: lifecycle and contacts require recognized positive evidence", () =
           {
             ...item,
             source_status: "active",
-            last_accepted_at: "2026-09-07T00:00:00Z",
+            fetched_at: "2026-09-07T00:00:00Z",
             contact: { name: "A", phone: item.phone },
           },
         ],

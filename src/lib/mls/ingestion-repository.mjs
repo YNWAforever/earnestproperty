@@ -424,6 +424,18 @@ export async function applyIngestion(client, payload, options = {}) {
             identity: { ...record.identity, agency_property_no: record.agencyPropertyNo },
             publicationReasons: record.publicationReasons,
             holdProjection: relation.holdProjection,
+            projection:
+              options.controlledPatch === true
+                ? {
+                    mode: "controlled-patch-v1",
+                    fields: Object.keys(MAP).filter((field) =>
+                      (
+                        batch.meta.controlled_patch.projection_fields ??
+                        Object.values(MAP).filter((column) => column !== "description")
+                      ).includes(MAP[field]),
+                    ),
+                  }
+                : null,
             capturedAt: record.fetchedAt,
             acceptedEnvelopeAt: batch.scrapedAt,
           }),
@@ -593,7 +605,7 @@ export async function applyIngestion(client, payload, options = {}) {
     for (const propertyId of touched) {
       const property = (await q("SELECT * FROM properties WHERE id=$1", [propertyId]))[0];
       const sources = await q(
-        "SELECT s.*,ip.config AS policy_config,o.payload->'fields' AS fields,o.payload->>'sourceStatusReason' AS source_status_reason,o.payload->>'holdProjection' AS hold_projection,c.contact FROM mls_source_state s JOIN listing_source_observations o ON o.id=s.observation_id JOIN mls_ingestion_policies ip ON ip.source=s.source AND ip.scope_id=s.scope_id AND ip.policy_version=s.policy_version LEFT JOIN mls_source_contacts c ON c.source=s.source AND c.external_listing_id=s.external_listing_id AND c.deal_type=s.deal_type WHERE s.property_id=$1",
+        "SELECT s.*,o.fetched_at,ip.config AS policy_config,o.payload->'fields' AS fields,o.payload->'projection' AS projection,o.payload->>'sourceStatusReason' AS source_status_reason,o.payload->>'holdProjection' AS hold_projection,c.contact FROM mls_source_state s JOIN listing_source_observations o ON o.id=s.observation_id JOIN mls_ingestion_policies ip ON ip.source=s.source AND ip.scope_id=s.scope_id AND ip.policy_version=s.policy_version LEFT JOIN mls_source_contacts c ON c.source=s.source AND c.external_listing_id=s.external_listing_id AND c.deal_type=s.deal_type WHERE s.property_id=$1",
         [propertyId],
       );
       // Any changed source identity holds the entire projection until operator review.
@@ -632,7 +644,16 @@ export async function applyIngestion(client, payload, options = {}) {
           q,
           property,
           companyRule,
-          patchFields ?? [...Object.values(MAP), "status"],
+          patchFields ??
+            (sources.some((s) => s.projection != null)
+              ? [
+                  ...Object.keys(selected.values)
+                    .map((field) => MAP[field])
+                    .filter(Boolean),
+                  ...selected.clearFields.map((field) => MAP[field]).filter(Boolean),
+                  ...(selected.lifecycle ? ["status"] : []),
+                ]
+              : [...Object.values(MAP), "status"]),
           sources[0].observation_id,
         );
       const fields = await q("SELECT * FROM property_sync_fields WHERE property_id=$1", [

@@ -12,7 +12,7 @@ export async function readPublicSourceMetadata(
   if (schema?.available !== true) return empty;
   const rows = await query(
     `SELECT s.source,s.observation_id,s.source_status,o.payload->'holdProjection' AS projection_held,
- to_char(s.last_accepted_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS last_accepted_at,
+ to_char(o.fetched_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS fetched_at,
  c.observation_id AS contact_observation_id, c.contact, (p.config->'public_contacts_enabled' = 'true'::jsonb) AS contact_approved
  FROM mls_source_state s
  JOIN listing_source_observations o ON o.id=s.observation_id
@@ -36,7 +36,7 @@ export async function readPublicSourceMetadata(
       .filter((r) => r.projection_held !== true)
       .map((r) => ({
         source: r.source,
-        observed_at: r.last_accepted_at,
+        observed_at: r.fetched_at,
         status: r.source_status,
       })),
   };

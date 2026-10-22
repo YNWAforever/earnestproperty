@@ -8,6 +8,7 @@ const source = (name, phone, extra = {}) => ({
   contact_observation_id: "o1",
   source_status: "active",
   last_accepted_at: now,
+  fetched_at: now,
   contact: { name, phone },
   contact_approved: true,
   ...extra,
@@ -24,6 +25,21 @@ test("pre-migration reads remain compatible", async () => {
   );
   assert.equal(calls, 1);
   assert.deepEqual(result, { source_contact: null, source_freshness: [] });
+});
+
+test("accepting saved evidence does not refresh public capture time or stale contacts", async () => {
+  const fetched_at = "2026-09-01T00:00:00Z";
+  let calls = 0;
+  const result = await readPublicSourceMetadata(
+    async () =>
+      ++calls === 1 ? [{ available: true }] : [source("Synthetic", "12345678", { fetched_at })],
+    "p",
+    { now },
+  );
+  assert.equal(result.source_contact, null);
+  assert.deepEqual(result.source_freshness, [
+    { source: "28hse_agent_540", observed_at: fetched_at, status: "active" },
+  ]);
 });
 test("source contact stays distinct from staff profile and private raw identity", async () => {
   let calls = 0;
@@ -48,7 +64,7 @@ test("source contact stays distinct from staff profile and private raw identity"
 test("publication approval, freshness, inactivity and ambiguity gate contact transport", async () => {
   for (const rows of [
     [source("A", "12345678", { contact_approved: false })],
-    [source("A", "12345678", { last_accepted_at: "2026-09-01T00:00:00Z" })],
+    [source("A", "12345678", { fetched_at: "2026-09-01T00:00:00Z" })],
     [source("A", "12345678", { source_status: "delisted" })],
     [source("A", "12345678"), source("Other", "87654321")],
   ]) {

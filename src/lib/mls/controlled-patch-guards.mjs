@@ -9,7 +9,14 @@ function micros(value) {
 }
 
 export function assertPatchTarget({ record, state, relation, property, pendingReview }) {
-  if (record.raw.raw_payload?.source_conflicts?.some((conflict) => conflict.status === "review"))
+  if (
+    record.raw.raw_payload?.source_conflicts?.some((conflict) => conflict.status === "review") ||
+    record.sourceOccurrences?.some((occurrence) =>
+      occurrence.raw.raw_payload?.source_conflicts?.some(
+        (conflict) => conflict.status === "review",
+      ),
+    )
+  )
     throw new SnapshotError("patch_source_conflict_requires_review", 409);
   if (record.sourceStatus !== "active" || (state && state.source_status !== "active"))
     throw new SnapshotError("patch_source_lifecycle_requires_review", 409);
