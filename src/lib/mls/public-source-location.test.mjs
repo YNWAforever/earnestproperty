@@ -107,6 +107,73 @@ async function read(ids = [id]) {
   }
 }
 
+async function setFloorEvidence(value, previous = "", observed = "") {
+  await db.query(
+    "UPDATE mls_source_state SET raw_identity=jsonb_set(raw_identity,'{floor}',$1::jsonb)",
+    [JSON.stringify(previous)],
+  );
+  await db.query(
+    `UPDATE listing_source_observations SET payload=jsonb_set(
+      jsonb_set(payload,'{identity,floor}',$1::jsonb),'{fields,floor}',$2::jsonb)`,
+    [JSON.stringify(observed), JSON.stringify(value)],
+  );
+}
+
+for (const band of ["高層", "中層", "低層", "HIGH", "MID", "LOW"]) {
+  for (const unknown of [null, ""]) {
+    test(`${band} with ${JSON.stringify(unknown)} exact floor exposes only verified block/phase`, async () => {
+      await setFloorEvidence(band, unknown, unknown);
+      const before = (await db.query("SELECT payload FROM listing_source_observations")).rows;
+      assert.deepEqual(await read(), { block: "9", phase: "2A" });
+      assert.deepEqual(
+        (await db.query("SELECT payload FROM listing_source_observations")).rows,
+        before,
+      );
+    });
+  }
+}
+
+for (const [previous, observed] of [
+  [null, ""],
+  ["", null],
+]) {
+  test(`mixed ${JSON.stringify(previous)}/${JSON.stringify(observed)} unknown floors accept a display band`, async () => {
+    await setFloorEvidence("低層", previous, observed);
+    assert.deepEqual(await read(), { block: "9", phase: "2A" });
+  });
+}
+
+test("omitted exact floor keys remain unknown rather than rejecting a display band", async () => {
+  await setFloorEvidence("低層");
+  await db.exec(`UPDATE mls_source_state SET raw_identity=raw_identity-'floor';
+    UPDATE listing_source_observations SET payload=jsonb_set(payload,'{identity}',(payload->'identity')-'floor');`);
+  assert.deepEqual(await read(), { block: "9", phase: "2A" });
+});
+
+for (const [reason, value, previous, observed] of [
+  ["different exact floor in display fields", "12", "13", "13"],
+  ["different exact floor in saved identity", "13", "12", "13"],
+  ["unverified exact floor", "12", "", ""],
+  ["known saved floor with missing observation identity", "低層", "12", ""],
+  ["band cannot validate a known exact floor", "低層", "12", "12"],
+  ["band cannot validate a newly observed exact floor", "低層", "", "12"],
+  ["known conflicting floor identities behind a band", "低層", "12", "13"],
+  ["different saved band", "低層", "高層", ""],
+  ["unsupported floor description", "PENTHOUSE", "", ""],
+  ["range cannot imply an exact floor", "1-11/27", "", ""],
+  ["band with an unverified numeric suffix", "低層 12", "", ""],
+]) {
+  test(`${reason} still suppresses source location`, async () => {
+    await setFloorEvidence(value, previous, observed);
+    assert.equal(await read(), null);
+  });
+}
+
+test("matching exact floor remains eligible without changing its identity", async () => {
+  await setFloorEvidence("12", "12", "12");
+  assert.deepEqual(await read(), { block: "9", phase: "2A" });
+});
+
 test("accepted partial observations expose only block/phase without canonical columns or a new apply", async () => {
   assert.deepEqual(await read(), { block: "9", phase: "2A" });
   assert.equal(
@@ -172,6 +239,10 @@ for (const [reason, sql] of [
     `INSERT INTO mls_ingestion_conflicts VALUES('${id}','phase','unreviewed')`,
   ],
   [
+    "unreviewed floor conflict",
+    `INSERT INTO mls_ingestion_conflicts VALUES('${id}','floor','unreviewed')`,
+  ],
+  [
     "manual location field",
     `INSERT INTO property_sync_fields VALUES('${id}','block',true,'primary')`,
   ],
@@ -184,12 +255,20 @@ for (const [reason, sql] of [
     `INSERT INTO property_sync_fields VALUES('${id}','address',true,'manual_override')`,
   ],
   [
+    "manual floor",
+    `INSERT INTO property_sync_fields VALUES('${id}','floor',true,'manual_override')`,
+  ],
+  [
     "explicit empty shared override",
     `INSERT INTO admin_property_overrides VALUES('TEST100','{"block":null}','{}','{}')`,
   ],
   [
     "offer-specific override",
     `INSERT INTO admin_property_overrides VALUES('TEST100','{}','{"phase":"Manual"}','{}')`,
+  ],
+  [
+    "offer-specific floor override",
+    `INSERT INTO admin_property_overrides VALUES('TEST100','{}','{"floor":"Staff floor"}','{}')`,
   ],
   [
     "state versus observation identity",
@@ -204,11 +283,40 @@ for (const [reason, sql] of [
     await db.exec(sql);
     assert.equal(await read(), null);
   });
+  test(`${reason} still suppresses location with an unknown exact floor and a display band`, async () => {
+    await setFloorEvidence("低層");
+    await db.exec(sql);
+    assert.equal(await read(), null);
+  });
 }
 
 test("multi-ad ambiguity is held even before a durable conflict has been written", async () => {
   await addSource({ externalId: "1002", fields: { block: "8" } });
   assert.equal(await read(), null);
+});
+
+test("matching multi-ad floor bands do not create an exact floor identity", async () => {
+  await addSource({ externalId: "1002" });
+  await setFloorEvidence("低層");
+  assert.deepEqual(await read(), { block: "9", phase: "2A" });
+  await db.query(
+    "UPDATE listing_source_observations SET payload=jsonb_set(payload,'{fields,floor}',$1::jsonb) WHERE id='1002'",
+    [JSON.stringify("高層")],
+  );
+  assert.equal(await read(), null);
+});
+
+test("sale/rent display bands must still agree when exact floors are unknown", async () => {
+  await db.exec(`INSERT INTO properties VALUES('${peer}','active','rent','TEST100','no-hermes-v2','no-hermes-v2');
+    INSERT INTO property_public_members VALUES('${peer}','TEST100');`);
+  await addSource({ propertyId: peer, externalId: "1002", deal: "rent" });
+  await setFloorEvidence("低層");
+  assert.deepEqual(await read([id, peer]), { block: "9", phase: "2A" });
+  await db.query(
+    "UPDATE listing_source_observations SET payload=jsonb_set(payload,'{fields,floor}',$1::jsonb) WHERE id='1002'",
+    [JSON.stringify("高層")],
+  );
+  assert.equal(await read([id, peer]), null);
 });
 
 test("active sale/rent members must agree and must not inherit another public group's location", async () => {
@@ -260,6 +368,7 @@ test("missing phase stays null and floor ranges never become a phase or a block"
 });
 
 test("unrelated manual description and images remain untouched and do not veto location", async () => {
+  await setFloorEvidence("低層");
   await db.exec(`INSERT INTO property_sync_fields VALUES('${id}','description',true,'manual_override');
     INSERT INTO admin_property_overrides VALUES('TEST100','{"description":"Staff text","images":[]}','{}','{}');`);
   const before = (await db.query("SELECT * FROM admin_property_overrides")).rows;

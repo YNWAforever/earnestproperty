@@ -107,7 +107,14 @@ export async function readPublicSourceLocation(query, propertyId, offeringIds) {
       const value = row.fields?.[field];
       if (present(old) && present(observed) && identityText(old) !== identityText(observed))
         return null;
-      if (present(value) && identityText(value) !== identityText(observed)) return null;
+      // Display bands do not supply an exact floor. Never let one hide a known identity.
+      const unknownFloorBand =
+        field === "floor" &&
+        !present(old) &&
+        !present(observed) &&
+        /^(?:高層|中層|低層|HIGH|MID|LOW)$/.test(identityText(value));
+      if (present(value) && identityText(value) !== identityText(observed) && !unknownFloorBand)
+        return null;
     }
   }
   const locations = [];
