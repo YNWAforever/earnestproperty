@@ -502,7 +502,7 @@ test("mortgage.php reaches the mortgage page", () => {
   });
 });
 
-test("the review branch skips automatic deployments without changing main or the daily cron", () => {
+test("review branches skip automatic deployments without changing main or the daily cron", () => {
   const childEnv = { PATH: process.env.PATH };
   if (process.env.SystemRoot) childEnv.SystemRoot = process.env.SystemRoot;
   const config = JSON.parse(
@@ -520,6 +520,7 @@ test("the review branch skips automatic deployments without changing main or the
   );
   assert.deepEqual(config.git?.deploymentEnabled, {
     "codex/youtube-daily-sync-20261016": false,
+    "codex/fix-public-floor-band": false,
   });
   assert.equal(Object.hasOwn(config.git.deploymentEnabled, "main"), false);
   assert.deepEqual(config.crons, [{ path: "/api/youtube-sync", schedule: "0 19 * * *" }]);

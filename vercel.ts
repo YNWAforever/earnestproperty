@@ -53,7 +53,12 @@ function canonicalHostRedirects(env = process.env): VercelRedirect[] {
 export const config: VercelConfig = {
   buildCommand: "npm run build",
   // This review is authorized for GitHub CI only; keep Vercel previews disabled.
-  git: { deploymentEnabled: { "codex/youtube-daily-sync-20261016": false } },
+  git: {
+    deploymentEnabled: {
+      "codex/youtube-daily-sync-20261016": false,
+      "codex/fix-public-floor-band": false,
+    },
+  },
   headers: SECURITY_HEADERS,
   // Daily channel updates only; job lanes keep their demand-driven wakes.
   crons: [{ path: "/api/youtube-sync", schedule: "0 19 * * *" }],
