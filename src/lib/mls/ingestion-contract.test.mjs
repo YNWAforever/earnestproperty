@@ -154,6 +154,63 @@ test("exact 30 percent drop passes only structural gate", () => {
   const rows = Array.from({ length: 7 }, (_, i) => row(String(i + 1)));
   assert.equal(evaluateSnapshotGate(decodeSnapshot(batch(rows)), { fullCount: 10 }).allowed, true);
 });
+test("controlled patch may bypass count drop but remains partial and cannot infer absence", () => {
+  const payload = batch([row("1")], {
+    controlled_patch: { mode: "controlled", record_count: 1, absence_allowed: false },
+    eligible_for_absence: false,
+  });
+  const baseline = {
+    fullCount: 10,
+    fullReceiptId: "prior",
+    source: "28hse_agent_540",
+    scopeId: "agent:540",
+    policyVersion: "no-hermes-v2",
+    parserVersion: "fixture-v2",
+    applied: true,
+    full: true,
+  };
+  const decoded = decodeSnapshot(payload, { controlledPatch: true });
+  assert.equal(evaluateSnapshotGate(decoded, baseline).allowed, false);
+  const gate = evaluateSnapshotGate(
+    decoded,
+    baseline,
+    { absenceEnabled: true },
+    {
+      controlledPatch: true,
+    },
+  );
+  assert.equal(gate.allowed, true);
+  assert.equal(gate.full, false);
+  assert.equal(gate.inferAbsence, false);
+  assert.equal(gate.reasons.includes("count_drop_exceeds_30_percent"), false);
+});
+test("controlled patch rejects invalid count or absence authority", () => {
+  const payload = batch([row("1")], {
+    controlled_patch: { mode: "controlled", record_count: 2, absence_allowed: true },
+    eligible_for_absence: true,
+  });
+  assert.throws(
+    () => decodeSnapshot(payload, { controlledPatch: true }),
+    (error) => error.code === "invalid_controlled_patch",
+  );
+});
+test("controlled patch preserves complete page evidence", () => {
+  const payload = batch([row("1")], {
+    controlled_patch: { mode: "controlled", record_count: 1, absence_allowed: false },
+    eligible_for_absence: false,
+  });
+  payload.meta.pages[0].ids.push("999");
+  const gate = evaluateSnapshotGate(
+    decodeSnapshot(payload, { controlledPatch: true }),
+    null,
+    {},
+    {
+      controlledPatch: true,
+    },
+  );
+  assert.equal(gate.allowed, false);
+  assert.ok(gate.reasons.includes("unaccounted_discovered_ids"));
+});
 test("page evidence malformed types fail closed without throwing", () => {
   const b = batch();
   b.meta.pages = [null];

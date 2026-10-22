@@ -57,8 +57,12 @@ function districtSlug(raw, config, estate) {
   const value = estateMapping(estate, config)?.district_slug ?? config?.district_slugs?.[raw];
   return typeof value === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value) ? value : null;
 }
-function verifiedOptions(policy) {
-  if (policy.source !== "propertyhk") return { aliases: policy.config.aliases };
+function verifiedOptions(policy, options = {}) {
+  if (policy.source !== "propertyhk")
+    return {
+      aliases: policy.config.aliases,
+      controlledPatch: options.controlledPatch === true,
+    };
   const rule = policy.config.source_url_identity;
   if (
     !["global", "branch"].includes(policy.id_scope) ||
@@ -75,6 +79,7 @@ function verifiedOptions(policy) {
   return {
     idScope: policy.id_scope,
     aliases: policy.config.aliases,
+    controlledPatch: options.controlledPatch === true,
     verifySourceUrl: (record, url) => {
       const id = String(record.property_id).trim();
       if (!/^[A-Za-z0-9_-]+$/.test(id)) return false;
@@ -87,7 +92,10 @@ function verifiedOptions(policy) {
 }
 export async function applyIngestion(client, payload, options = {}) {
   const q = async (sql, params = []) => (await client.query(sql, params)).rows;
-  let batch = decodeSnapshot(payload, { idScope: "global" });
+  let batch = decodeSnapshot(payload, {
+    idScope: "global",
+    controlledPatch: options.controlledPatch === true,
+  });
   if (options.expectedSource && batch.source !== options.expectedSource)
     throw new SnapshotError("source_mismatch");
   const receipt = async () => {
@@ -126,7 +134,7 @@ export async function applyIngestion(client, payload, options = {}) {
     if (policy.parser_version !== batch.parserVersion)
       throw new SnapshotError("parser_policy_mismatch", 503);
     const companyRule = companyPolicy(policy);
-    batch = decodeSnapshot(payload, verifiedOptions(policy));
+    batch = decodeSnapshot(payload, verifiedOptions(policy, options));
     const unverified = batch.records.filter((record) => !record.urlIdentityVerified);
     if (unverified.length) {
       batch.rejects.push(
@@ -188,9 +196,14 @@ export async function applyIngestion(client, payload, options = {}) {
         ...Object.fromEntries(counts.map((r) => [r.branch, r.n])),
       };
     }
-    const gate = evaluateSnapshotGate(batch, baseline, {
-      absenceEnabled: policy.config.absence_enabled === true,
-    });
+    const gate = evaluateSnapshotGate(
+      batch,
+      baseline,
+      {
+        absenceEnabled: policy.config.absence_enabled === true,
+      },
+      { controlledPatch: options.controlledPatch === true },
+    );
     if (!gate.allowed)
       throw new SnapshotError("incomplete_snapshot", 422, { reasons: gate.reasons });
     if (!baseline && !policy.bootstrap_approved_at)

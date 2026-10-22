@@ -78,6 +78,24 @@ export function decodeSnapshot(input, options = {}) {
     !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(m.parser_version)
   )
     throw new SnapshotError("invalid_envelope");
+  const controlledPatch = options.controlledPatch === true;
+  const patchMeta = m.controlled_patch;
+  if (controlledPatch) {
+    if (
+      source !== "28hse_agent_540" ||
+      !patchMeta ||
+      typeof patchMeta !== "object" ||
+      patchMeta.mode !== "controlled" ||
+      !Number.isInteger(patchMeta.record_count) ||
+      patchMeta.record_count < 1 ||
+      patchMeta.record_count > 10000 ||
+      patchMeta.absence_allowed !== false ||
+      m.eligible_for_absence !== false
+    )
+      throw new SnapshotError("invalid_controlled_patch");
+  } else if (patchMeta !== undefined) {
+    throw new SnapshotError("controlled_patch_required");
+  }
   // Preserve all six PostgreSQL fractional digits; never round a receipt key via Date.
   // Bound clock skew so future evidence cannot advance the accepted-snapshot watermark.
   if (
@@ -305,6 +323,8 @@ export function decodeSnapshot(input, options = {}) {
     }
   }
   for (const entry of seen.values()) if (!entry.conflict) records.push(entry.record);
+  if (controlledPatch && (rejects.length > 0 || records.length !== patchMeta.record_count))
+    throw new SnapshotError("invalid_controlled_patch");
   return {
     source,
     wireSource: b.source,
