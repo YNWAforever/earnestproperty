@@ -1,5 +1,35 @@
 # Property source workers
 
+## Public block/phase display (read-only)
+
+Public property details may enrich `source_location.block` / `source_location.phase`
+from current accepted 28Hse observations. This is not a canonical property update:
+it does not replay a receipt, promote a draft, alter timestamps, advance a full
+snapshot baseline or infer absence. Listing cards and existing contact/freshness
+selection are unchanged. No migration or provider call is required.
+
+The detail reader uses only the page's selected active offers. Verified source
+links, current valid observations, approved agent:540 company identity and native
+source selection must agree. Held identities, open source reviews, unresolved
+location conflicts, differing physical identity across sale/rent, and manual
+location ownership/override keys suppress the enrichment. Missing fields remain
+unknown; the UI omits them and never infers an exact floor from a floor range.
+Manual description, images and all existing canonical fields remain unchanged.
+
+Offline coverage (synthetic in-memory SQL and rendered detail facts):
+
+```powershell
+npm run test:property-sync
+npm run test:property-experience
+npm run test:listing-search
+```
+
+These tests do not prove which live listings will pass the guards. Production
+readback, publication and deployment each need separate authorization. Do not
+repeat a controlled apply to make this display-only change visible.
+
+## Worker setup
+
 Python 3.11+; tested on Python 3.14.6. The isolated base requirements include BeautifulSoup 4.13.5 and pytest 8.4.2. No JS lockfile changes are required.
 
 ```powershell

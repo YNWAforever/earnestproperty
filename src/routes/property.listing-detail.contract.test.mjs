@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { Maximize, Bed, Bath, Building2, Calendar } from "lucide-react";
+import { readPublicSourceLocation } from "../lib/mls/public-source-location.mjs";
 
 // Plain data/logic module, no JSX -- importable directly under Node's native
 // type stripping (same approach src/content/castle-peak-road.test.mjs and
@@ -61,6 +65,68 @@ function transpileAndRun(snippet) {
   return exportsObj;
 }
 
+function renderPropertyFacts(sourceLocation) {
+  const start = routeSource.indexOf('<div className="mt-6 grid grid-cols-2');
+  assert.ok(start >= 0, "property facts grid exists");
+  const grid = routeSource.slice(start, routeSource.indexOf("</div>", start) + 6);
+  const specStart = routeSource.indexOf("function Spec(");
+  const spec = routeSource.slice(specStart, routeSource.indexOf("function SimilarCard", specStart));
+  const { outputText } = ts.transpileModule(
+    `${formatModuleSource}\n${spec}\n
+    function Facts({ property }) { const estate = property.estates; return (${grid}); }
+    exports.Facts = Facts;`,
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2022,
+        jsx: ts.JsxEmit.React,
+      },
+    },
+  );
+  const exports = {};
+  new Function("exports", "React", "Maximize", "Bed", "Bath", "Building2", "Calendar", outputText)(
+    exports,
+    React,
+    Maximize,
+    Bed,
+    Bath,
+    Building2,
+    Calendar,
+  );
+  return renderToStaticMarkup(
+    React.createElement(exports.Facts, {
+      property: {
+        source_location: sourceLocation,
+        floor: "LOW (1-11/27)",
+        bedrooms: 2,
+        bathrooms: 1,
+        estates: null,
+      },
+    }),
+  );
+}
+
+test("public detail facts render verified block and phase independently of the floor range", () => {
+  const html = renderPropertyFacts({ block: "9", phase: "2A" });
+  assert.match(html, />座數<\/p><p[^>]*>9<\/p>/);
+  assert.match(html, />期數<\/p><p[^>]*>2A<\/p>/);
+  assert.match(html, /LOW \(1-11\/27\)/);
+  assert.match(html, /房間<\/p><p[^>]*>2<\/p>/);
+  assert.match(html, /浴室<\/p><p[^>]*>1<\/p>/);
+});
+
+test("public detail omits unknown or held source location and escapes text", () => {
+  for (const location of [undefined, null, { block: null, phase: null }]) {
+    const html = renderPropertyFacts(location);
+    assert.doesNotMatch(html, /座數|期數/);
+  }
+  const partial = renderPropertyFacts({ block: "9", phase: null });
+  assert.match(partial, /座數/);
+  assert.doesNotMatch(partial, /期數/);
+  const escaped = renderPropertyFacts({ block: "<b>9</b>", phase: null });
+  assert.doesNotMatch(escaped, /<b>9<\/b>/);
+});
+
 // --- fetchPropertyByListingNo no longer hardcodes status = 'active' ------
 
 function extractServerFn(name, nextExportMarker) {
@@ -71,6 +137,69 @@ function extractServerFn(name, nextExportMarker) {
   assert.ok(end !== -1, `expected to find "${nextExportMarker}" after ${name}`);
   return serverSource.slice(start, end);
 }
+
+test("detail reader returns guarded source location for selected active offers without changing manual data", async () => {
+  const body = extractServerFn(
+    "fetchPropertyByListingNo",
+    "export async function fetchPropertyByLegacyDetailId",
+  )
+    .replace('await import("../mls/public-source-metadata.mjs")', "metadataModule")
+    .replace('await import("../mls/public-source-location.mjs")', "locationModule");
+  const { outputText } = ts.transpileModule(body, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  });
+  const exports = {};
+  const row = {
+    id: "representative",
+    status: "active",
+    description: "Manual description",
+    floor: "LOW",
+    images: ["synthetic-image"],
+    offerings: [
+      { id: "sale", status: "active" },
+      { id: "rent", status: "active" },
+    ],
+  };
+  const original = structuredClone(row);
+  const calls = [];
+  let queries = 0;
+  const query = async () => (++queries === 1 ? [row] : [{ available: false }]);
+  new Function(
+    "exports",
+    "sql",
+    "mapListingRow",
+    "detailListingColumns",
+    "publicAgentJoin",
+    "metadataModule",
+    "locationModule",
+    outputText,
+  )(
+    exports,
+    () => ({ query }),
+    (r) => r,
+    "unused",
+    "unused",
+    { readPublicSourceMetadata: async () => ({ source_contact: null, source_freshness: [] }) },
+    {
+      readPublicSourceLocation: async (q, propertyId, ids) => {
+        calls.push({ propertyId, ids });
+        assert.equal(
+          await readPublicSourceLocation(q, propertyId, ids),
+          null,
+          "pre-migration guard remains executable",
+        );
+        return { block: "9", phase: "2A" };
+      },
+    },
+  );
+  const result = await exports.fetchPropertyByListingNo({ listingNo: "ALIAS" });
+  assert.deepEqual(calls, [{ propertyId: "representative", ids: ["sale", "rent"] }]);
+  assert.deepEqual(result.source_location, { block: "9", phase: "2A" });
+  assert.deepEqual(row, original);
+  for (const field of ["description", "floor", "images", "status", "offerings"]) {
+    assert.deepEqual(result[field], original[field]);
+  }
+});
 
 test("detail lookup preserves aliases and unavailable-state selection", () => {
   const body = extractServerFn(
