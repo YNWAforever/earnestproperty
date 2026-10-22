@@ -1,5 +1,6 @@
 import type { VariantSet } from "../media/remote-variants.mjs";
 import type { PublicSourceMetadata } from "../mls/public-source-metadata.mjs";
+import type { PublicSourceLocation } from "../mls/public-source-location.mjs";
 export type NeonListingSort = "newest" | "price_asc" | "price_desc" | "area" | "psf";
 
 export type NeonListingFiltersInput = {
@@ -89,6 +90,7 @@ export type PropertyOffering = {
 };
 
 export type NeonPropertyRow = {
+  source_location?: PublicSourceLocation;
   source_contact?: PublicSourceMetadata["source_contact"];
   source_freshness?: PublicSourceMetadata["source_freshness"];
   id: string;

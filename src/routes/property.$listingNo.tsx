@@ -586,6 +586,12 @@ function PropertyPage() {
             label="樓層"
             value={property.floor ?? "—"}
           />
+          {property.source_location?.block && (
+            <Spec label="座數" value={property.source_location.block} />
+          )}
+          {property.source_location?.phase && (
+            <Spec label="期數" value={property.source_location.phase} />
+          )}
           <Spec label="建築面積" value={property.gross_area ? `${property.gross_area} 呎` : "—"} />
           <Spec label="座向" value={property.orientation ?? "—"} />
           <Spec label="管理費" value={formatHkd(property.management_fee) ?? "—"} />

@@ -33,15 +33,18 @@ async function importPublicDataServerWithInjectedQuery(query) {
   const dbUrl = dataUrl(
     "export const getSql = () => ({ query: (...args) => globalThis.__publicPerformanceDbQuery(...args) });",
   );
-  const executable = inlineRelativeImports(
+  let executable = inlineRelativeImports(
     transpile(read("src/lib/neon/public-data.server.ts"))
       .replace('import "@tanstack/react-start/server-only";', "")
       .replace('from "./db.server"', `from "${dbUrl}"`),
     "src/lib/neon",
-  ).replaceAll(
-    "../mls/public-source-metadata.mjs",
-    pathToFileURL(join(root, "src/lib/mls/public-source-metadata.mjs")).href,
   );
+  for (const module of ["public-source-metadata", "public-source-location"]) {
+    executable = executable.replaceAll(
+      `../mls/${module}.mjs`,
+      pathToFileURL(join(root, `src/lib/mls/${module}.mjs`)).href,
+    );
+  }
 
   return import(dataUrl(executable));
 }

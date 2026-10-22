@@ -46,6 +46,10 @@ async function importPublicDataServerWithInjectedQuery(query) {
       .replace(
         'import("../mls/public-source-metadata.mjs")',
         `import("${pathToFileURL(join(root, "src/lib/mls/public-source-metadata.mjs")).href}")`,
+      )
+      .replace(
+        'import("../mls/public-source-location.mjs")',
+        `import("${pathToFileURL(join(root, "src/lib/mls/public-source-location.mjs")).href}")`,
       ),
     "src/lib/neon",
   );

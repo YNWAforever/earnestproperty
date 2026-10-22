@@ -1030,7 +1030,16 @@ export async function fetchPropertyByListingNo(input: {
     (statement, params) => sql().query(statement, params),
     String(row.id),
   );
-  return { ...mapListingRow(row), ...sourceMetadata };
+  const property = mapListingRow(row);
+  const location = await import("../mls/public-source-location.mjs");
+  const sourceLocation = await location.readPublicSourceLocation(
+    (statement, params) => sql().query(statement, params),
+    property.id,
+    (property.offerings ?? [])
+      .filter((offer) => offer.status === "active")
+      .map((offer) => offer.id),
+  );
+  return { ...property, ...sourceMetadata, source_location: sourceLocation };
 }
 export async function fetchPropertyByLegacyDetailId(input: {
   oldId: string;
