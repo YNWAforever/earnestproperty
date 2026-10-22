@@ -24,6 +24,8 @@ export function canonicalJson(value) {
 export const hashPayload = (value) =>
   createHash("sha256").update(canonicalJson(value)).digest("hex");
 const text = (value) => (typeof value === "string" && value.trim() ? value.trim() : null);
+const utcOrder = (value) =>
+  value.slice(0, 19) + "." + (value.match(/\.(\d+)Z$/)?.[1] ?? "").padEnd(6, "0");
 export function normalizeDecimal(value) {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value !== "number" && typeof value !== "string") return null;
@@ -93,6 +95,28 @@ export function decodeSnapshot(input, options = {}) {
       m.eligible_for_absence !== false
     )
       throw new SnapshotError("invalid_controlled_patch");
+    if (
+      (patchMeta.evidence_mode !== undefined && patchMeta.evidence_mode !== "saved-capture-v1") ||
+      (patchMeta.projection_fields !== undefined &&
+        (!Array.isArray(patchMeta.projection_fields) ||
+          new Set(patchMeta.projection_fields).size !== patchMeta.projection_fields.length ||
+          patchMeta.projection_fields.some(
+            (field) =>
+              ![
+                "title_zh",
+                "district_slug",
+                "floor",
+                "price",
+                "rent",
+                "gross_area",
+                "saleable_area",
+                "bedrooms",
+                "bathrooms",
+                "orientation",
+              ].includes(field),
+          )))
+    )
+      throw new SnapshotError("invalid_controlled_patch_projection");
   } else if (patchMeta !== undefined) {
     throw new SnapshotError("controlled_patch_required");
   }
@@ -240,6 +264,27 @@ export function decodeSnapshot(input, options = {}) {
       )
         throw new SnapshotError("invalid_agency_property_no");
       const identity = exactUnitIdentity(r, options.aliases);
+      let fetchedAt = b.scraped_at;
+      const provider = r.raw_payload?.provider_provenance;
+      if (controlledPatch && patchMeta.evidence_mode === "saved-capture-v1") {
+        const stamp = r.captured_at;
+        if (
+          typeof stamp !== "string" ||
+          !/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,6})?Z$/.test(stamp) ||
+          !Number.isFinite(Date.parse(stamp)) ||
+          new Date(stamp).toISOString().slice(0, 19) !== stamp.slice(0, 19) ||
+          utcOrder(stamp) > utcOrder(b.scraped_at) ||
+          (provider &&
+            (provider.fetchedAt !== stamp ||
+              provider.resolvedUrl !== url.href ||
+              !/^[a-f0-9]{64}$/.test(provider.contentSha256 ?? "") ||
+              !/^[a-f0-9-]{36}$/i.test(provider.requestId ?? "")))
+        )
+          throw new SnapshotError("invalid_capture_timestamp");
+        fetchedAt = stamp;
+      } else if (controlledPatch && (r.captured_at !== undefined || provider?.fetchedAt)) {
+        throw new SnapshotError("saved_capture_mode_required");
+      }
       const key = JSON.stringify([source, externalId, r.deal_type]);
       const record = {
         key,
@@ -250,6 +295,7 @@ export function decodeSnapshot(input, options = {}) {
         sourceUrl: url.href,
         sourceStatus,
         sourceStatusReason,
+        fetchedAt,
         promotionTier: promotion.tier,
         promotionTierRaw: promotion.raw,
         propertyNo: null,
@@ -293,6 +339,7 @@ export function decodeSnapshot(input, options = {}) {
         sourceStatus,
         sourceStatusReason,
         contact: record.contact,
+        ...(controlledPatch ? { fetchedAt } : {}),
       });
       if (seen.has(key)) {
         const previous = seen.get(key);
@@ -323,6 +370,59 @@ export function decodeSnapshot(input, options = {}) {
     }
   }
   for (const entry of seen.values()) if (!entry.conflict) records.push(entry.record);
+  if (controlledPatch && patchMeta.evidence_mode === "saved-capture-v1") {
+    const expected = patchMeta.expectations;
+    if (
+      !Array.isArray(patchMeta.projection_fields) ||
+      !Array.isArray(expected) ||
+      expected.length !== records.length ||
+      new Set(expected.map((r) => JSON.stringify([r?.external_id, r?.deal_type]))).size !==
+        expected.length ||
+      expected.some(
+        (r) =>
+          !r ||
+          !records.some(
+            (record) => record.externalId === r.external_id && record.dealType === r.deal_type,
+          ) ||
+          !(
+            r.property_id === null ||
+            /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(r.property_id ?? "")
+          ) ||
+          !(
+            r.observation_id === null ||
+            (typeof r.observation_id === "string" &&
+              r.observation_id.length > 0 &&
+              r.observation_id.length <= 100)
+          ) ||
+          !r.fields ||
+          typeof r.fields !== "object" ||
+          Array.isArray(r.fields) ||
+          (r.property_id !== null &&
+            patchMeta.projection_fields.some(
+              (field) =>
+                !(field === "price" && r.deal_type === "rent") &&
+                !(field === "rent" && r.deal_type === "sale") &&
+                !Object.hasOwn(r.fields, field),
+            )) ||
+          Object.keys(r.fields).some(
+            (key) =>
+              ![
+                "title_zh",
+                "district_slug",
+                "floor",
+                "price",
+                "rent",
+                "gross_area",
+                "saleable_area",
+                "bedrooms",
+                "bathrooms",
+                "orientation",
+              ].includes(key),
+          ),
+      )
+    )
+      throw new SnapshotError("invalid_patch_expectations");
+  }
   if (controlledPatch && (rejects.length > 0 || records.length !== patchMeta.record_count))
     throw new SnapshotError("invalid_controlled_patch");
   return {

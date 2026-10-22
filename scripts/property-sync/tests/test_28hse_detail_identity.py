@@ -36,7 +36,9 @@ def test_modern_heading_with_agreeing_page_identity_parses_actual_amounts(deal, 
     assert result["property_id"] == record(deal)["property_id"]
     assert result["source_url"] == record(deal)["source_url"]
     assert result["unit"] is None
-    assert result["block"] is None
+    assert result["block"] == ("4" if deal == "sale" else "8")
+    assert result["phase"] == (None if deal == "sale" else "2A")
+    assert result["floor"] == ("\u9ad8\u5c64" if deal == "sale" else "\u4f4e\u5c64")
     assert result["agency_property_no"] is None
 
 

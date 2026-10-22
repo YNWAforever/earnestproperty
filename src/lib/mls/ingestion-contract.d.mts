@@ -16,6 +16,8 @@ export type SourceRecord = {
   sourceUrl: string;
   sourceStatus: "active" | "delisted";
   sourceStatusReason: "sold" | "rented" | null;
+  /** Capture time, independent of the saved-evidence envelope acceptance key. */
+  fetchedAt: string;
   propertyNo: null;
   agencyPropertyNo: string | null;
   identity: UnitIdentity;
@@ -69,6 +71,7 @@ export function decodeSnapshot(
   input: unknown,
   options?: {
     idScope?: string;
+    controlledPatch?: boolean;
     aliases?: Record<string, string>;
     verifySourceUrl?: (record: Record<string, unknown>, url: URL) => boolean;
   },
