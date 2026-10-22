@@ -33,6 +33,35 @@ test("dry run refuses invalid source and incomplete snapshots", async () => {
     (e) => e.status === 422,
   );
 });
+test("controlled patch dry run remains partial and never infers absence", async () => {
+  const { ingestSnapshot } = await import("./ingestion-service.mjs");
+  const payload = batch([row("1")]);
+  payload.meta.controlled_patch = {
+    mode: "controlled",
+    record_count: 1,
+    absence_allowed: false,
+  };
+  payload.meta.eligible_for_absence = false;
+  const result = await ingestSnapshot(payload, { controlledPatch: true });
+  assert.equal(result.status, "dry_run");
+  assert.equal(result.full_snapshot, false);
+  assert.equal(result.summary.advertisement_count, 1);
+  assert.equal(result.receipt_id, null);
+});
+test("controlled patch requires explicit writer mode", async () => {
+  const { ingestSnapshot } = await import("./ingestion-service.mjs");
+  const payload = batch([row("1")]);
+  payload.meta.controlled_patch = {
+    mode: "controlled",
+    record_count: 1,
+    absence_allowed: false,
+  };
+  payload.meta.eligible_for_absence = false;
+  await assert.rejects(
+    () => ingestSnapshot(payload),
+    (error) => error.code === "controlled_patch_required",
+  );
+});
 test("offline Property.hk branch-local preview counts branch identities separately", async () => {
   const { ingestSnapshot } = await import("./ingestion-service.mjs");
   const records = ["EPW", "EPS"].map((branch) =>

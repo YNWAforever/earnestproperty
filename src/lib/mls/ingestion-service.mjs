@@ -26,11 +26,19 @@ export async function ingestSnapshot(payload, options = {}) {
   // The initial pass validates the envelope, never establishes Property.hk matching authority.
   const batch = decodeSnapshot(payload, {
     idScope: options.apply !== true && payload?.id_scope === "branch" ? "branch" : "global",
+    controlledPatch: options.controlledPatch === true,
   });
   if (options.expectedSource && batch.source !== options.expectedSource)
     throw new SnapshotError("source_mismatch");
   if (options.apply !== true) {
-    const gate = evaluateSnapshotGate(batch, null);
+    const gate = evaluateSnapshotGate(
+      batch,
+      null,
+      {},
+      {
+        controlledPatch: options.controlledPatch === true,
+      },
+    );
     if (!gate.allowed)
       throw new SnapshotError("incomplete_snapshot", 422, { reasons: gate.reasons });
     return snapshotResponse(batch, gate);

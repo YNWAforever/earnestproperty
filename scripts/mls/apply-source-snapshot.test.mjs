@@ -53,6 +53,30 @@ test("apply accepts only collected 28hse payload and explicit switch", async () 
   );
   assert.equal(calls, 0);
 });
+test("controlled patch requires the explicit patch switch and forwards it", async () => {
+  let options;
+  const result = await runSnapshotBridge(["--payload", "patch.json", "--patch"], {
+    env: {},
+    readPayload: async () => '{"source":"28hse"}',
+    ingest: async (_payload, received) => {
+      options = received;
+      return { success: true, status: "dry_run" };
+    },
+  });
+  assert.equal(result.status, "dry_run");
+  assert.deepEqual(options, {
+    apply: false,
+    expectedSource: "28hse_agent_540",
+    controlledPatch: true,
+  });
+  await assert.rejects(
+    runSnapshotBridge(["--payload", "patch.json", "--patch", "--patch"], {
+      readPayload: async () => '{"source":"28hse"}',
+      ingest: () => assert.fail("duplicate patch flag must not reach ingest"),
+    }),
+    SnapshotError,
+  );
+});
 test("oversize/malformed frozen artifact never reaches ingestion", async () => {
   for (const content of ["{", " ".repeat(5 * 1024 * 1024 + 1)])
     await assert.rejects(

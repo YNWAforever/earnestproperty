@@ -1,7 +1,22 @@
 import { BRANCHES } from "./ingestion-contract.mjs";
-export function evaluateSnapshotGate(batch, baseline, policy = {}) {
+export function evaluateSnapshotGate(batch, baseline, policy = {}, mode = {}) {
   const m = batch.meta,
     reasons = [];
+  // Controlled patches are operator-authorized partial observations, never full snapshots.
+  const controlledPatch = mode.controlledPatch === true;
+  const patch = m.controlled_patch;
+  if (controlledPatch) {
+    if (
+      batch.source !== "28hse_agent_540" ||
+      !patch ||
+      patch.mode !== "controlled" ||
+      patch.record_count !== batch.advertisementCount ||
+      patch.absence_allowed !== false ||
+      m.eligible_for_absence !== false
+    )
+      reasons.push("invalid_controlled_patch");
+    if (batch.rejects.length > 0) reasons.push("controlled_patch_decoder_rejections");
+  }
   // Index observations retain useful quotes, but cannot establish detail,
   // branch scope or identity authority even inside a complete-looking envelope.
   if (
@@ -168,18 +183,20 @@ export function evaluateSnapshotGate(batch, baseline, policy = {}) {
     }
   }
   const previous = baseline?.fullCount;
-  if (previous > 0 && batch.advertisementCount * 10 < previous * 7)
+  if (!controlledPatch && previous > 0 && batch.advertisementCount * 10 < previous * 7)
     reasons.push("count_drop_exceeds_30_percent");
   if (batch.advertisementCount === 0) reasons.push("zero_inventory_requires_review");
   if (batch.source === "propertyhk" && (batch.rejects.length || m.worker_rejected_count))
     reasons.push("incomplete_branch_details");
   const allowed = reasons.length === 0;
-  const full = allowed && !batch.rejects.length && m.worker_rejected_count === 0;
+  const full =
+    !controlledPatch && allowed && !batch.rejects.length && m.worker_rejected_count === 0;
   return {
     allowed,
     full,
     reasons: [...new Set(reasons)],
     inferAbsence:
+      !controlledPatch &&
       full &&
       policy.absenceEnabled === true &&
       m.eligible_for_absence === true &&

@@ -31,13 +31,15 @@ export async function runSnapshotBridge(
 ) {
   let source,
     payloadPath,
-    apply = false;
+    apply = false,
+    controlledPatch = false;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--payload" && !payloadPath && args[i + 1] && !args[i + 1].startsWith("--"))
       payloadPath = args[++i];
     else if (args[i] === "--source" && !source && ["28hse", "propertyhk"].includes(args[i + 1]))
       source = args[++i];
     else if (args[i] === "--apply" && !apply) apply = true;
+    else if (args[i] === "--patch" && !controlledPatch) controlledPatch = true;
     else throw new SnapshotError("INVALID_ARGUMENTS", 400);
   }
   if (!payloadPath) throw new SnapshotError("PAYLOAD_REQUIRED", 400);
@@ -52,6 +54,7 @@ export async function runSnapshotBridge(
   source ??= "28hse";
   if (!payload || payload.source !== source) throw new SnapshotError("SOURCE_SCOPE_MISMATCH", 400);
   const options = { apply, expectedSource: source === "28hse" ? "28hse_agent_540" : "propertyhk" };
+  if (controlledPatch) options.controlledPatch = true;
   if (apply) {
     try {
       verifyDailyTarget(env.DATABASE_URL_UNPOOLED, env.PROPERTY_SYNC_EXPECTED_DATABASE_HOST);
