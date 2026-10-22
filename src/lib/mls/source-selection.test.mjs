@@ -99,6 +99,20 @@ test("unrecognized saved projection metadata fails closed without downgrading to
   }
 });
 
+test("later accepted full-snapshot absence still deactivates a saved-patched primary", () => {
+  const saved = {
+    ...primary,
+    source_status: "delisted",
+    projection: { mode: "controlled-patch-v1", fields: ["price"] },
+  };
+  for (const sources of [[saved], [saved, secondary]]) {
+    const selected = selectSourceFields(sources);
+    assert.equal(selected.lifecycle, "inactive");
+    assert.equal(selected.values.description, undefined);
+    assert.deepEqual(selected.clearFields, []);
+  }
+});
+
 test("contact freshness uses capture, never acceptance of old saved evidence", () => {
   const contact = { name: "Synthetic contact", phone: "12345678" };
   const now = "2026-09-10T12:00:00Z";

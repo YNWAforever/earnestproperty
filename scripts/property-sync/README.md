@@ -301,6 +301,8 @@ bridge, with `meta.controlled_patch.evidence_mode = "saved-capture-v1"`:
   ordinary ingestion cannot reselect excluded saved fields, clear missing values or infer
   lifecycle changes from that partial capture. Full page/identity evidence remains intact;
   a separately accepted normal primary capture can replace the restricted observation.
+  Independently accepted future full-snapshot absence still follows the existing lifecycle
+  policy; the saved patch itself never authorizes absence or inactive revival.
   Creating a new property still initializes a draft.
 - `expectations` freezes each source ID/deal, current observation ID, expected canonical
   ID (null for a new draft group), and reviewed prior field values. These are assertions,

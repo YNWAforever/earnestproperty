@@ -881,6 +881,93 @@ test(
         },
       );
       await t.test(
+        "accepted full absence still deactivates after a non-absence saved patch",
+        async () => {
+          await q("TRUNCATE properties,listing_sync_runs CASCADE");
+          await q(
+            "UPDATE mls_ingestion_policies SET config=config||'{\"absence_enabled\":true}'::jsonb WHERE source='28hse_agent_540'",
+          );
+          const rows = [
+            row("708001"),
+            row("708002", { unit: "02" }),
+            row("708003", { unit: "03" }),
+            row("708004", { unit: "04" }),
+          ];
+          await ingestSnapshot(batch(rows, "2026-09-07T07:00:00Z"), options);
+          const state = (
+            await q("SELECT * FROM mls_source_state WHERE external_listing_id='708001'")
+          )[0];
+          // Synthetic setup: model an already-public, sync-owned canonical status.
+          await q("BEGIN");
+          await q("SELECT set_config('app.admin_property_write','on',true)");
+          await q("UPDATE properties SET status='active' WHERE id=$1", [state.property_id]);
+          await q("COMMIT");
+          await q(
+            "INSERT INTO property_sync_fields(property_id,field_name,last_published_value,winning_observation_id,policy_version) VALUES($1,'status','\"active\"',$2,'no-hermes-v2')",
+            [state.property_id, state.observation_id],
+          );
+          const saved = batch(
+            [{ ...rows[0], captured_at: "2026-09-07T07:00:30Z" }],
+            "2026-09-07T07:01:00Z",
+          );
+          saved.meta.eligible_for_absence = false;
+          saved.meta.controlled_patch = {
+            mode: "controlled",
+            record_count: 1,
+            absence_allowed: false,
+            evidence_mode: "saved-capture-v1",
+            projection_fields: ["price"],
+            expectations: [
+              {
+                external_id: "708001",
+                deal_type: "sale",
+                property_id: state.property_id,
+                observation_id: state.observation_id,
+                fields: { price: "5380000" },
+              },
+            ],
+          };
+          const patch = await ingestService(saved, { ...options, controlledPatch: true });
+          assert.equal(patch.full_snapshot, false);
+          assert.ok(
+            (await q("SELECT source_status FROM mls_source_state")).every(
+              (s) => s.source_status === "active",
+            ),
+          );
+          assert.equal(
+            (await q("SELECT status FROM properties WHERE id=$1", [state.property_id]))[0].status,
+            "active",
+          );
+          const full = await ingestSnapshot(batch(rows.slice(1), "2026-09-07T07:02:00Z"), options);
+          assert.equal(full.full_snapshot, true);
+          assert.equal(
+            (
+              await q(
+                "SELECT source_status FROM mls_source_state WHERE external_listing_id='708001'",
+              )
+            )[0].source_status,
+            "delisted",
+          );
+          assert.equal(
+            (await q("SELECT status FROM properties WHERE id=$1", [state.property_id]))[0].status,
+            "inactive",
+          );
+          assert.equal(
+            (
+              await q("SELECT inactive_reason FROM property_sync_state WHERE property_id=$1", [
+                state.property_id,
+              ])
+            )[0].inactive_reason,
+            "accepted_full_28hse_absence",
+          );
+          await ingestSnapshot(batch(rows.slice(1), "2026-09-07T07:03:00Z"), options);
+          assert.equal(
+            (await q("SELECT status FROM properties WHERE id=$1", [state.property_id]))[0].status,
+            "inactive",
+          );
+        },
+      );
+      await t.test(
         "saved patch authority survives a later ordinary secondary ingestion",
         async () => {
           await q("TRUNCATE properties,listing_sync_runs CASCADE");

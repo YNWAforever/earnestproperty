@@ -261,10 +261,11 @@ export function selectSourceFields(sources) {
     conflicts,
     ambiguous: false,
     lifecycle:
-      (primary ?? secondary)?.projection != null
-        ? null
-        : primary?.source_status === "delisted"
-          ? "inactive"
+      // Source state can be delisted independently by a later accepted full snapshot.
+      primary?.source_status === "delisted"
+        ? "inactive"
+        : (primary ?? secondary)?.projection != null
+          ? null
           : (primary ?? secondary)?.source_status === "active"
             ? "active"
             : null,
