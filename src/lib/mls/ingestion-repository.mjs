@@ -491,7 +491,14 @@ export async function applyIngestion(client, payload, options = {}) {
           )
         )[0];
         if (protectedPatchFields) {
-          if (p.status !== "draft") throw new SnapshotError("patch_protected_fields_changed", 409);
+          // RETURNING can precede AFTER-trigger changes; never freeze those as approved state.
+          const stored = (await q("SELECT * FROM properties WHERE id=$1", [p.id]))[0];
+          if (
+            p.status !== "draft" ||
+            stored?.status !== "draft" ||
+            ["description", "images", "agent_id"].some((field) => !same(stored[field], p[field]))
+          )
+            throw new SnapshotError("patch_protected_fields_changed", 409);
           const initial = await readProtectedPatchFields(q, [p.id]);
           if (initial.length !== 1) throw new SnapshotError("patch_protected_fields_changed", 409);
           protectedPatchFields.push(...initial);

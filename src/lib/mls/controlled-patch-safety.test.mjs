@@ -50,6 +50,7 @@ function memoryPort({
   openReview = false,
   priorCapture = "2026-09-01T00:00:00Z",
   manualPrice = false,
+  unassignedPrice = false,
   newTarget = false,
   secondaryConflict = false,
 } = {}) {
@@ -89,7 +90,7 @@ function memoryPort({
     ? []
     : ["description", "price", "status"].map((field_name) => ({
         field_name,
-        winning_observation_id: "old",
+        winning_observation_id: field_name === "price" && unassignedPrice ? null : "old",
         last_published_value: data.property[field_name],
         selection_reason: field_name === "price" && manualPrice ? "manual_override" : "primary",
         active_override: false,
@@ -128,7 +129,13 @@ function memoryPort({
                     agent_id: data.property.agent_id,
                   }),
                   manual_fields: owned
-                    .filter((f) => f.active_override || f.selection_reason === "manual_override")
+                    .filter(
+                      (f) =>
+                        f.active_override ||
+                        f.selection_reason === "manual_override" ||
+                        (sql.includes("f.winning_observation_id IS NULL") &&
+                          f.winning_observation_id === null),
+                    )
                     .map((f) => ({
                       ...f,
                       ...(sql.includes("canonical_value_hash")
@@ -841,6 +848,64 @@ test("manual canonical value cannot change while its ownership row stays identic
       }),
     (e) => e.code === "patch_protected_fields_changed",
   );
+  assert.equal(port.data.property.price, 5000000);
+});
+
+for (const [field, changed] of [
+  ["status", "active"],
+  ["description", "Unexpected trigger description"],
+  ["images", ["unexpected.jpg"]],
+  ["agent_id", "unexpected-staff"],
+])
+  test("post-insert trigger cannot establish an altered draft baseline: " + field, async () => {
+    const port = memoryPort({ newTarget: true }),
+      p = patch(["title_zh", "district_slug", "price"]);
+    p.meta.controlled_patch.atomic_guards.canonicals = [];
+    Object.assign(p.meta.controlled_patch.expectations[0], {
+      property_id: null,
+      observation_id: null,
+      fields: {},
+    });
+    const base = port.client.query.bind(port.client);
+    port.client.query = async (sql, args) => {
+      const result = structuredClone(await base(sql, args));
+      if (sql.startsWith("INSERT INTO properties(")) port.data.property[field] = changed;
+      return result;
+    };
+    await assert.rejects(
+      () => applyIngestion(port.client, p, { controlledPatch: true }),
+      (e) => e.code === "patch_protected_fields_changed",
+    );
+    assert.equal(port.data.property, null);
+    assert.equal(
+      port.calls.some((c) => c.sql === "COMMIT"),
+      false,
+    );
+  });
+
+test("null-winning ownership value cannot change outside the projection mask", async () => {
+  const port = memoryPort({ unassignedPrice: true }),
+    p = patch(["floor"]);
+  p.meta.controlled_patch.expectations[0].fields = { floor: null };
+  await assert.rejects(
+    () =>
+      applyIngestion(port.client, p, {
+        controlledPatch: true,
+        beforeCommit() {
+          port.data.property.price = 123;
+        },
+      }),
+    (e) => e.code === "patch_protected_fields_changed",
+  );
+  assert.equal(port.data.property.price, 5000000);
+});
+
+test("unchanged null-winning ownership is not a false veto", async () => {
+  const port = memoryPort({ unassignedPrice: true }),
+    p = patch(["floor"]);
+  p.meta.controlled_patch.expectations[0].fields = { floor: null };
+  const result = await applyIngestion(port.client, p, { controlledPatch: true });
+  assert.equal(result.success, true);
   assert.equal(port.data.property.price, 5000000);
 });
 

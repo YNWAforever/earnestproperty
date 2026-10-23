@@ -80,7 +80,8 @@ export async function readProtectedPatchFields(q, ids) {
         'images',p.images,'agent_id',p.agent_id)::text) AS protected_hash,
       coalesce((SELECT jsonb_agg(to_jsonb(f) || jsonb_build_object(
         'canonical_value_hash',md5(coalesce((to_jsonb(p)->f.field_name)::text,''))) ORDER BY f.field_name) FROM property_sync_fields f
-        WHERE f.property_id=p.id AND (f.active_override OR f.selection_reason='manual_override')),
+        WHERE f.property_id=p.id AND (f.active_override OR f.selection_reason='manual_override'
+          OR f.winning_observation_id IS NULL)),
         '[]'::jsonb) AS manual_fields
     FROM properties p WHERE p.id=ANY($1::uuid[]) ORDER BY p.id`,
     [ids],
