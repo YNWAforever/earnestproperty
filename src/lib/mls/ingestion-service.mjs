@@ -27,6 +27,9 @@ export async function ingestSnapshot(payload, options = {}) {
   const batch = decodeSnapshot(payload, {
     idScope: options.apply !== true && payload?.id_scope === "branch" ? "branch" : "global",
     controlledPatch: options.controlledPatch === true,
+    // Only exact-hash receipt recovery may use a pre-guard saved payload. A new
+    // apply is strictly decoded again under the native transaction's locks.
+    allowLegacyPatchReplay: options.apply === true,
   });
   if (options.expectedSource && batch.source !== options.expectedSource)
     throw new SnapshotError("source_mismatch");

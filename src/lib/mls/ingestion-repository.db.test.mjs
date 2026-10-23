@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { batch, row } from "./ingestion-test-fixtures.mjs";
+import { readPatchBeforeImages } from "./controlled-patch-preconditions.mjs";
 import { ingestSnapshot as ingestService } from "./ingestion-service.mjs";
 import { onDbTarget, targetClientPorts } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 
@@ -29,6 +30,14 @@ test(
     };
     const options = { connectionString: url, apply: true, createClient };
     const q = async (sql, args = []) => (await c.query(sql, args)).rows;
+    const freezePatch = async (payload) => {
+      payload.meta.controlled_patch.atomic_guards = await readPatchBeforeImages(
+        q,
+        "28hse_agent_540",
+        payload.meta.controlled_patch.expectations,
+      );
+      return payload;
+    };
     // Simulate an hourly cadence without changing source scraped_at chronology.
     const ingestSnapshot = async (payload, opts) => {
       await q(
@@ -51,6 +60,7 @@ test(
         "20260906090000_canonical_property_identity.sql",
         "20260906120000_admin_property_management.sql",
         "20260907120000_propertyhk_ingestion_v2.sql",
+        "20260909120000_source_promotion_tiers.sql",
       ]) {
         await q("BEGIN");
         await q(readFileSync("neon/migrations/" + name, "utf8"));
@@ -927,7 +937,10 @@ test(
               },
             ],
           };
-          const patch = await ingestService(saved, { ...options, controlledPatch: true });
+          const patch = await ingestService(await freezePatch(saved), {
+            ...options,
+            controlledPatch: true,
+          });
           assert.equal(patch.full_snapshot, false);
           assert.ok(
             (await q("SELECT source_status FROM mls_source_state")).every(
@@ -1013,7 +1026,10 @@ test(
             ],
           };
           const before = (await q("SELECT * FROM properties WHERE id=$1", [state.property_id]))[0];
-          const patch = await ingestService(saved, { ...options, controlledPatch: true });
+          const patch = await ingestService(await freezePatch(saved), {
+            ...options,
+            controlledPatch: true,
+          });
           assert.equal(patch.full_snapshot, false);
           const evidence = (
             await q(
@@ -1119,6 +1135,7 @@ test(
         };
         const patchOptions = { ...options, controlledPatch: true };
         const selected = controlled(["4060439", "4062044"], "R076105", "2026-09-07T12:00:00Z");
+        await freezePatch(selected);
         const fingerprints = async () =>
           Promise.all(
             [
@@ -1165,7 +1182,7 @@ test(
           "open review for another company number does not block or establish identity",
           async () => {
             const other = controlled(["5060439", "5062044"], "R088888", "2026-09-07T11:00:00Z");
-            const result = await ingestService(other, patchOptions);
+            const result = await ingestService(await freezePatch(other), patchOptions);
             assert.equal(result.full_snapshot, false);
             assert.equal(result.summary.properties_created, 1);
             assert.equal(
@@ -1229,6 +1246,100 @@ test(
           },
         );
       });
+      const triggerPatch = (stamp, propertyId = null, observationId = null, fields = {}) => {
+        const payload = batch(
+          [row("987601", { agency_property_no: "A090901", captured_at: stamp })],
+          stamp,
+        );
+        payload.meta.eligible_for_absence = false;
+        payload.meta.controlled_patch = {
+          mode: "controlled",
+          record_count: 1,
+          absence_allowed: false,
+          evidence_mode: "saved-capture-v1",
+          projection_fields: propertyId ? ["floor"] : ["title_zh", "district_slug", "price"],
+          expectations: [
+            {
+              external_id: "987601",
+              deal_type: "sale",
+              property_id: propertyId,
+              observation_id: observationId,
+              fields,
+            },
+          ],
+        };
+        return payload;
+      };
+      await t.test("real AFTER INSERT activation cannot become a new draft baseline", async () => {
+        const payload = await freezePatch(triggerPatch("2026-09-09T09:00:00Z"));
+        await q(`CREATE FUNCTION ${schema}.alter_new_draft() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN UPDATE properties SET status='active' WHERE id=NEW.id; RETURN NEW; END $$`);
+        await q(`CREATE TRIGGER alter_new_draft AFTER INSERT ON properties
+          FOR EACH ROW EXECUTE FUNCTION ${schema}.alter_new_draft()`);
+        const before = await q("SELECT count(*)::int AS n FROM listing_source_observations");
+        try {
+          await assert.rejects(
+            () => ingestService(payload, { ...options, controlledPatch: true }),
+            (e) => e.code === "patch_protected_fields_changed",
+          );
+        } finally {
+          await q("DROP TRIGGER alter_new_draft ON properties");
+          await q(`DROP FUNCTION ${schema}.alter_new_draft()`);
+        }
+        assert.deepEqual(
+          await q("SELECT count(*)::int AS n FROM listing_source_observations"),
+          before,
+        );
+        assert.deepEqual(
+          await q("SELECT * FROM mls_source_state WHERE external_listing_id='987601'"),
+          [],
+        );
+      });
+      await t.test(
+        "real observation trigger cannot change a null-winning excluded field",
+        async () => {
+          const initial = await freezePatch(triggerPatch("2026-09-09T10:00:00Z"));
+          await ingestService(initial, { ...options, controlledPatch: true });
+          const state = (
+            await q("SELECT * FROM mls_source_state WHERE external_listing_id='987601'")
+          )[0];
+          await q(
+            "UPDATE property_sync_fields SET winning_observation_id=null,selection_reason='legacy_keep' WHERE property_id=$1 AND field_name='price'",
+            [state.property_id],
+          );
+          const before = (await q("SELECT * FROM properties WHERE id=$1", [state.property_id]))[0];
+          const payload = await freezePatch(
+            triggerPatch("2026-09-09T11:00:00Z", state.property_id, state.observation_id, {
+              floor: before.floor,
+            }),
+          );
+          await q(`CREATE FUNCTION ${schema}.alter_kept_price() RETURNS trigger LANGUAGE plpgsql AS $$
+          BEGIN UPDATE properties SET price=123 WHERE id='${state.property_id}'::uuid; RETURN NEW; END $$`);
+          await q(`CREATE TRIGGER alter_kept_price AFTER INSERT ON listing_source_observations
+          FOR EACH ROW EXECUTE FUNCTION ${schema}.alter_kept_price()`);
+          try {
+            await assert.rejects(
+              () => ingestService(payload, { ...options, controlledPatch: true }),
+              (e) => e.code === "patch_protected_fields_changed",
+            );
+          } finally {
+            await q("DROP TRIGGER alter_kept_price ON listing_source_observations");
+            await q(`DROP FUNCTION ${schema}.alter_kept_price()`);
+          }
+          assert.deepEqual(
+            (await q("SELECT * FROM properties WHERE id=$1", [state.property_id]))[0],
+            before,
+          );
+          assert.equal(
+            (
+              await q(
+                "SELECT observation_id FROM mls_source_state WHERE external_listing_id='987601'",
+              )
+            )[0].observation_id,
+            state.observation_id,
+          );
+        },
+      );
     } finally {
       await c.query("ROLLBACK");
       await c.query("RESET search_path");

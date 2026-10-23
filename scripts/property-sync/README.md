@@ -1,5 +1,57 @@
 # Property source workers
 
+## Controlled saved-capture patch preconditions (offline first)
+
+New controlled applies require `evidence_mode: "saved-capture-v1"`, the existing
+source/observation/field expectations, and `atomic_guards.version: "before-images-v1"`.
+There must be one source guard per deduplicated source ID/deal and one canonical
+guard per existing property UUID. A missing contact/promotion row is explicitly
+`null`, not an empty object. Existing rows retain their complete PostgreSQL JSON
+before-image (including observation and timestamps). Canonical guards pin the
+whole-row PostgreSQL `md5(to_jsonb(p)::text)`, field ownership, group/membership
+sets, and admin override row hashes. Description/images ownership values are
+redacted with their PostgreSQL JSON hashes; a hash is a concurrency fingerprint,
+not permission or cryptographic proof of source identity.
+
+Inside the same native writer transaction, controlled mode forces READ COMMITTED,
+then takes the existing properties-first lock and SHARE ROW EXCLUSIVE locks on
+the contact, promotion, ownership, group, review/conflict and source-binding
+tables. Table locks also protect absent-row slots and review insertions: merely
+locking existing rows is insufficient. Lock timeout is 3 seconds, statement and
+idle-in-transaction timeouts are 15 seconds; errors roll back without automatic
+retry. These are coarse locks and can briefly block other writes. No provider,
+image or external work belongs inside this transaction. Real PostgreSQL lock,
+trigger and commit acceptance must be separately authorized and verified.
+
+Before new observations or receipts are inserted, all before-images are compared.
+A nonempty source contact cannot be cleared by an empty incoming field. Existing
+identity, open historical company-number review, projection/manual ownership and
+draft gates remain in force. Immediately before COMMIT, draft/status, description,
+images, staff assignment and manually owned field rows are checked again. New
+promotion writes reference their native observation for receipt-bound rollback.
+Partial snapshots still cannot demote promotion tiers or infer absence. This
+does not authorize publication, clear reviews, or restore inactive listings.
+
+`readPatchBeforeImages` is an injected-query reader, not an importer or an approval
+mechanism. Freeze its result for review; never silently regenerate expectations
+at apply time to accept drift. Previously receipted payloads remain idempotently
+replayable; an unreceipted legacy controlled payload without these guards cannot
+write. Legacy codec-only dry-run support is not permission to apply.
+
+Offline validation (no `--apply`, no credentials, no database client connection):
+
+```powershell
+node --test src/lib/mls/controlled-patch-safety.test.mjs
+npm run test:property-sync
+node scripts/mls/apply-source-snapshot.mjs --source 28hse --patch --payload <private-preview.json>
+```
+
+The bridge dry-run validates schema/gates only, not production DB differences or
+permissions. Keep real before-images, source contact data and saved HTML private;
+only synthetic test data belongs in Git. Rollback still requires the actual
+forward receipt/observation IDs, committed after-images, concurrency checks and
+separate approval. A review preview alone is not an executable rollback.
+
 ## Public block/phase display (read-only)
 
 Public property details may enrich `source_location.block` / `source_location.phase`
