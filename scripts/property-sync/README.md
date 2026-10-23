@@ -279,3 +279,47 @@ npm run test:property-sync
 Do not run `:db` suites for this feature. Offline functionality, real Exa
 retrieval, import authorization and production deployment are separate states;
 only offline functionality can be established by the fixture command.
+## Reviewed saved-capture patches (offline preparation)
+
+`scraping.worker.parse_28_detail()` is still the detail-parser entry point. Its labelled
+location DOM supplies block/phase; a high/middle/low band or a range is not an exact
+floor/unit identity. Explicit room/bathroom DOM wins over conflicting JSON-LD, with
+the disagreement retained as evidence. No provider or schedule is enabled by this change.
+
+For a newly reviewed saved-HTML subset, use the existing native request and `--patch`
+bridge, with `meta.controlled_patch.evidence_mode = "saved-capture-v1"`:
+
+- Every record has `captured_at`, the original UTC capture time (up to six fractional
+  digits). Any supplied provider provenance must agree with that time and source URL.
+- `scraped_at` is the new acceptance-envelope/receipt key in this mode, not a new fetch.
+  Observations, source first-seen/link clocks and promotion evidence keep `captured_at`;
+  scope/source `last_accepted_at` retains its acceptance meaning. Site publication/update
+  dates remain separate. Saved captures cannot replace a newer current observation.
+- `projection_fields` is an explicit canonical-column allowlist; `[]` requests no canonical
+  field projection. Description, staff, images and status are not permitted in it. A partial
+  patch never clears an absent value. The observation persists this restriction so later
+  ordinary ingestion cannot reselect excluded saved fields, clear missing values or infer
+  lifecycle changes from that partial capture. Full page/identity evidence remains intact;
+  a separately accepted normal primary capture can replace the restricted observation.
+  Independently accepted future full-snapshot absence still follows the existing lifecycle
+  policy; the saved patch itself never authorizes absence or inactive revival.
+  Creating a new property still initializes a draft.
+- `expectations` freezes each source ID/deal, current observation ID, expected canonical
+  ID (null for a new draft group), and reviewed prior field values. These are assertions,
+  never alternate matching instructions. The native identity/company policy still decides
+  the relationship. Drift aborts the transaction, including observations already staged.
+- Inactive/terminal sources, identity ambiguity, open reviews/conflicts or a newly required
+  field review stop a controlled patch. Manual ownership/overrides remain authoritative.
+  Duplicate occurrences retain every source-conflict veto, regardless of input order.
+  Neither `full_snapshot` nor absence inference can be enabled by this mode.
+
+Public source freshness and contact expiry use the observation's original `fetched_at`,
+not its later acceptance time. Accepting saved evidence is not evidence of a new fetch.
+
+Run `npm run test:property-sync` and `npm run test:property-sync:python` with no credentials
+and network blocked for offline regressions. The native bridge **without `--apply`** validates
+format/completeness only; it does not calculate a production DB diff. SQL-port tests are not
+PostgreSQL trigger/constraint or production acceptance evidence. Before any separately approved
+execution, revalidate the named database/policy/baseline/quota and frozen IDs; publication,
+media and any receipt-bound rollback require their own explicit approval. Never use a fabricated
+sold/absence record or a restamped old capture as a rollback shortcut.

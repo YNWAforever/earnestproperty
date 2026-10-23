@@ -20,12 +20,12 @@ test(
       await client.query(`CREATE SCHEMA ${schema}`);
       await client.query(`SET search_path TO ${schema},pg_catalog`);
       await client.query(`CREATE TABLE property_public_members(property_id text,public_listing_no text);
- CREATE TABLE listing_source_observations(id text,source text,payload jsonb);
+ CREATE TABLE listing_source_observations(id text,source text,payload jsonb,fetched_at timestamptz);
  CREATE TABLE mls_source_state(source text,scope_id text,policy_version text,external_listing_id text,deal_type text,property_id text,observation_id text,source_status text,last_accepted_at timestamptz);
  CREATE TABLE mls_source_contacts(source text,external_listing_id text,deal_type text,observation_id text,contact jsonb);
  CREATE TABLE mls_ingestion_policies(source text,scope_id text,policy_version text,config jsonb);`);
       await client.query(`INSERT INTO property_public_members VALUES('representative','public-id'),('other-offering','public-id');
- INSERT INTO listing_source_observations VALUES('current','28hse_agent_540','{"holdProjection":false}');
+ INSERT INTO listing_source_observations VALUES('current','28hse_agent_540','{"holdProjection":false}','2026-09-07T12:00:00.123456Z');
  INSERT INTO mls_source_state VALUES('28hse_agent_540','agent:540','no-hermes-v2','123','sale','other-offering','current','active','2026-09-07T12:00:00.123456Z');
  INSERT INTO mls_source_contacts VALUES('28hse_agent_540','123','sale','old','{"name":"Old","phone":"12345678"}');
  INSERT INTO mls_ingestion_policies VALUES('28hse_agent_540','agent:540','no-hermes-v2','{"public_contacts_enabled":true}');`);
@@ -42,6 +42,15 @@ test(
       result = await read();
       assert.equal(result.source_contact.contact.name, "Current");
       assert.equal(result.source_contact.observationId, "current");
+      await client.query(
+        "UPDATE listing_source_observations SET fetched_at='2026-09-01T00:00:00.123456Z'",
+      );
+      result = await read();
+      assert.equal(result.source_contact, null);
+      assert.equal(result.source_freshness[0].observed_at, "2026-09-01T00:00:00.123456Z");
+      await client.query(
+        "UPDATE listing_source_observations SET fetched_at='2026-09-07T12:00:00.123456Z'",
+      );
       await client.query(
         `UPDATE listing_source_observations SET payload='{"holdProjection":true}'`,
       );

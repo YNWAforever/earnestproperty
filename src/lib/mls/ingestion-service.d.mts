@@ -2,6 +2,7 @@ import type { Client } from "@neondatabase/serverless";
 export interface IngestionOptions {
   connectionString?: string;
   apply?: boolean;
+  controlledPatch?: boolean;
   expectedSource?: "28hse_agent_540" | "propertyhk";
   /** Server-only test dependency; never populated from request JSON. */
   createClient?: (config: {

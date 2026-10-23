@@ -94,8 +94,8 @@ function primaryAdvertisement(sources) {
           secondaryValue: get(other) ?? null,
           primaryObservationId: first.observation_id,
           secondaryObservationId: other.observation_id,
-          primaryObservedAt: first.last_accepted_at,
-          secondaryObservedAt: other.last_accepted_at,
+          primaryObservedAt: first.fetched_at,
+          secondaryObservedAt: other.fetched_at,
           resolution: "hold_multi_ad",
         });
     }
@@ -215,8 +215,16 @@ export function selectSourceFields(sources) {
     conflicts = [],
     clearFields = [];
   for (const field of FIELDS) {
+    // A saved partial capture retains its reviewed authority on every future selection.
+    // An excluded primary field is not permission to fall back to another source.
+    const allowed = (source) =>
+      source?.projection == null ||
+      (source.projection.mode === "controlled-patch-v1" &&
+        Array.isArray(source.projection.fields) &&
+        source.projection.fields.includes(field));
+    if ((primary && !allowed(primary)) || (!primary && secondary && !allowed(secondary))) continue;
     const p = primary?.fields?.[field],
-      s = secondary?.fields?.[field];
+      s = allowed(secondary) ? secondary?.fields?.[field] : undefined;
     const winner = present(p)
       ? primary
       : (!primary || FILLABLE.has(field)) && present(s)
@@ -230,7 +238,7 @@ export function selectSourceFields(sources) {
         reason: winner === primary || !primary ? "primary" : "fill_missing",
       };
     }
-    if (!winner && NULLABLE_FIELDS.has(field)) {
+    if (!winner && NULLABLE_FIELDS.has(field) && !primary?.projection && !secondary?.projection) {
       clearFields.push(field);
       provenance[field] = { source: null, observationId: null, reason: "no_authorized_source" };
     }
@@ -241,8 +249,8 @@ export function selectSourceFields(sources) {
         secondaryValue: s,
         primaryObservationId: primary.observation_id,
         secondaryObservationId: secondary.observation_id,
-        primaryObservedAt: primary.last_accepted_at,
-        secondaryObservedAt: secondary.last_accepted_at,
+        primaryObservedAt: primary.fetched_at,
+        secondaryObservedAt: secondary.fetched_at,
         resolution: "keep_28hse",
       });
   }
@@ -253,11 +261,14 @@ export function selectSourceFields(sources) {
     conflicts,
     ambiguous: false,
     lifecycle:
+      // Source state can be delisted independently by a later accepted full snapshot.
       primary?.source_status === "delisted"
         ? "inactive"
-        : (primary ?? secondary)?.source_status === "active"
-          ? "active"
-          : null,
+        : (primary ?? secondary)?.projection != null
+          ? null
+          : (primary ?? secondary)?.source_status === "active"
+            ? "active"
+            : null,
   };
 }
 export function selectWholeContact(
@@ -268,7 +279,7 @@ export function selectWholeContact(
   if (!Number.isFinite(time) || !Number.isFinite(maxAgeHours) || maxAgeHours <= 0) return null;
   const usable = sources
     .filter((s) => {
-      const age = time - Date.parse(s.last_accepted_at);
+      const age = time - Date.parse(s.fetched_at);
       return (
         [PRIMARY, "propertyhk"].includes(s.source) &&
         s.source_status === "active" &&
@@ -284,13 +295,13 @@ export function selectWholeContact(
     .sort(
       (a, b) =>
         (a.source === PRIMARY ? 0 : 1) - (b.source === PRIMARY ? 0 : 1) ||
-        String(b.last_accepted_at).localeCompare(String(a.last_accepted_at)),
+        String(b.fetched_at).localeCompare(String(a.fetched_at)),
     );
   return usable.length
     ? {
         source: usable[0].source,
         observationId: usable[0].observation_id,
-        observedAt: usable[0].last_accepted_at,
+        observedAt: usable[0].fetched_at,
         contact: { ...usable[0].contact },
       }
     : null;

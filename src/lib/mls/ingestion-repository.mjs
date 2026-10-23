@@ -16,6 +16,7 @@ import {
 } from "./ingestion-contract.mjs";
 import { evaluateSnapshotGate } from "./source-snapshot-gates.mjs";
 import { chooseRelationship, selectSourceFields } from "./source-selection.mjs";
+import { assertPatchTarget, assertPatchExpectation } from "./controlled-patch-guards.mjs";
 const POLICY = "no-hermes-v2";
 const MAP = {
   title: "title_zh",
@@ -283,7 +284,7 @@ export async function applyIngestion(client, payload, options = {}) {
       const identityArgs = [record.source, record.externalId, record.dealType];
       const state = (
         await q(
-          "SELECT * FROM mls_source_state WHERE source=$1 AND external_listing_id=$2 AND deal_type=$3",
+          `SELECT s.*,to_char(o.fetched_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS captured_at FROM mls_source_state s LEFT JOIN listing_source_observations o ON o.id=s.observation_id WHERE s.source=$1 AND s.external_listing_id=$2 AND s.deal_type=$3`,
           identityArgs,
         )
       )[0];
@@ -334,15 +335,71 @@ export async function applyIngestion(client, payload, options = {}) {
         };
       relation = await companyRelationship(q, record, existing, relation, companyRule);
       const linkedProperty = relation.propertyId
-        ? (
-            await q("SELECT estate_id,district_slug FROM properties WHERE id=$1", [
-              relation.propertyId,
-            ])
-          )[0]
+        ? (await q("SELECT * FROM properties WHERE id=$1", [relation.propertyId]))[0]
         : null;
       const mappedDistrict =
         linkedProperty?.district_slug ??
         districtSlug(record.fields.district, policy.config, record.fields.estate);
+      if (options.controlledPatch === true) {
+        const pending = (
+          await q(
+            `WITH peers AS (
+            SELECT $4::uuid AS id UNION SELECT peer.property_id FROM property_public_members own
+            JOIN property_public_members peer ON peer.public_listing_no=own.public_listing_no
+            WHERE own.property_id=$4::uuid OR own.public_listing_no=$5::text
+          ) SELECT EXISTS(SELECT 1 FROM mls_ingestion_reviews r WHERE r.status='open' AND
+            ((r.source=$1 AND r.external_listing_id=$2 AND r.deal_type=$3) OR EXISTS(
+              SELECT 1 FROM mls_source_state s WHERE s.property_id IN(SELECT id FROM peers)
+              AND s.source=r.source AND s.external_listing_id=r.external_listing_id AND s.deal_type=r.deal_type)))
+            OR EXISTS(SELECT 1 FROM mls_ingestion_conflicts c WHERE c.review_status='unreviewed'
+              AND c.property_id IN(SELECT id FROM peers))
+            OR EXISTS(SELECT 1 FROM mls_ingestion_reviews r
+              JOIN listing_source_observations o ON o.id=r.observation_id AND o.source=r.source
+                AND o.external_listing_id=r.external_listing_id AND o.deal_type=r.deal_type
+              JOIN mls_ingestion_receipts receipt ON receipt.run_id=o.run_id AND receipt.source=o.source
+              WHERE r.status='open' AND r.reason='company_number_changed' AND r.source=$1
+                AND receipt.scope_id=$7 AND receipt.policy_version=$8
+                AND o.payload#>>'{identity,agency_property_no}'=$6::text) AS pending_review`,
+            [
+              ...identityArgs,
+              relation.propertyId ?? null,
+              relation.publicGroup ?? null,
+              // A reviewed proposed number can be absent from all current group bindings.
+              companyRule ? record.agencyPropertyNo : null,
+              batch.scopeId,
+              POLICY,
+            ],
+          )
+        )[0];
+        assertPatchTarget({
+          record,
+          state,
+          relation,
+          property: linkedProperty,
+          pendingReview: pending?.pending_review !== false,
+        });
+        if (batch.meta.controlled_patch.evidence_mode === "saved-capture-v1")
+          assertPatchExpectation({
+            record,
+            state,
+            relation,
+            property: linkedProperty,
+            created: newProperties,
+            expected: batch.meta.controlled_patch.expectations.find(
+              (r) => r.external_id === record.externalId && r.deal_type === record.dealType,
+            ),
+          });
+        if (!mappedDistrict || !record.offerValid || !record.fields.title)
+          throw new SnapshotError("patch_prerequisites_missing", 409);
+        const columns = batch.meta.controlled_patch.projection_fields ?? Object.values(MAP);
+        if (
+          !relation.propertyId &&
+          !["title_zh", "district_slug", record.dealType === "sale" ? "price" : "rent"].every((c) =>
+            columns.includes(c),
+          )
+        )
+          throw new SnapshotError("patch_creation_fields_required", 409);
+      }
       if (!mappedDistrict) record.publicationReasons.push("district_mapping_unverified");
       const observationId = randomUUID();
       await q(
@@ -367,9 +424,23 @@ export async function applyIngestion(client, payload, options = {}) {
             identity: { ...record.identity, agency_property_no: record.agencyPropertyNo },
             publicationReasons: record.publicationReasons,
             holdProjection: relation.holdProjection,
+            projection:
+              options.controlledPatch === true
+                ? {
+                    mode: "controlled-patch-v1",
+                    fields: Object.keys(MAP).filter((field) =>
+                      (
+                        batch.meta.controlled_patch.projection_fields ??
+                        Object.values(MAP).filter((column) => column !== "description")
+                      ).includes(MAP[field]),
+                    ),
+                  }
+                : null,
+            capturedAt: record.fetchedAt,
+            acceptedEnvelopeAt: batch.scrapedAt,
           }),
           hashPayload(record.raw),
-          batch.scrapedAt,
+          record.fetchedAt,
         ],
       );
       // Ambiguity and incomplete publication prerequisites stage a source record, never forge fields.
@@ -427,7 +498,7 @@ export async function applyIngestion(client, payload, options = {}) {
         );
       const propertyId = relation.propertyId;
       await q(
-        "INSERT INTO mls_source_state(source,external_listing_id,deal_type,scope_id,policy_version,observation_id,last_receipt_id,property_id,unit_key,source_status,first_seen_at,last_accepted_at,raw_identity) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$12,$10,$10,$11) ON CONFLICT(source,external_listing_id,deal_type) DO UPDATE SET observation_id=EXCLUDED.observation_id,last_receipt_id=EXCLUDED.last_receipt_id,property_id=EXCLUDED.property_id,unit_key=EXCLUDED.unit_key,source_status=EXCLUDED.source_status,last_accepted_at=EXCLUDED.last_accepted_at,raw_identity=EXCLUDED.raw_identity",
+        "INSERT INTO mls_source_state(source,external_listing_id,deal_type,scope_id,policy_version,observation_id,last_receipt_id,property_id,unit_key,source_status,first_seen_at,last_accepted_at,raw_identity) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$12,$13,$10,$11) ON CONFLICT(source,external_listing_id,deal_type) DO UPDATE SET observation_id=EXCLUDED.observation_id,last_receipt_id=EXCLUDED.last_receipt_id,property_id=EXCLUDED.property_id,unit_key=EXCLUDED.unit_key,source_status=EXCLUDED.source_status,last_accepted_at=EXCLUDED.last_accepted_at,raw_identity=EXCLUDED.raw_identity",
         [
           ...identityArgs,
           batch.scopeId,
@@ -453,6 +524,7 @@ export async function applyIngestion(client, payload, options = {}) {
                 },
           ),
           record.sourceStatus,
+          record.fetchedAt,
         ],
       );
       await q(
@@ -467,7 +539,7 @@ export async function applyIngestion(client, payload, options = {}) {
             ...identityArgs,
             relation.unitKey,
             relation.reason === "exact_unit_v2" ? "exact_unit_v2" : "source_id_v2",
-            batch.scrapedAt,
+            record.fetchedAt,
             runId,
           ],
         );
@@ -525,7 +597,7 @@ export async function applyIngestion(client, payload, options = {}) {
         dealType: record.dealType,
         promotionTier: record.promotionTier,
         promotionTierRaw: record.promotionTierRaw,
-        fetchedAt: batch.scrapedAt,
+        fetchedAt: record.fetchedAt,
       })),
       { snapshotComplete: Boolean(gate.full) },
     );
@@ -533,7 +605,7 @@ export async function applyIngestion(client, payload, options = {}) {
     for (const propertyId of touched) {
       const property = (await q("SELECT * FROM properties WHERE id=$1", [propertyId]))[0];
       const sources = await q(
-        "SELECT s.*,ip.config AS policy_config,o.payload->'fields' AS fields,o.payload->>'sourceStatusReason' AS source_status_reason,o.payload->>'holdProjection' AS hold_projection,c.contact FROM mls_source_state s JOIN listing_source_observations o ON o.id=s.observation_id JOIN mls_ingestion_policies ip ON ip.source=s.source AND ip.scope_id=s.scope_id AND ip.policy_version=s.policy_version LEFT JOIN mls_source_contacts c ON c.source=s.source AND c.external_listing_id=s.external_listing_id AND c.deal_type=s.deal_type WHERE s.property_id=$1",
+        "SELECT s.*,o.fetched_at,ip.config AS policy_config,o.payload->'fields' AS fields,o.payload->'projection' AS projection,o.payload->>'sourceStatusReason' AS source_status_reason,o.payload->>'holdProjection' AS hold_projection,c.contact FROM mls_source_state s JOIN listing_source_observations o ON o.id=s.observation_id JOIN mls_ingestion_policies ip ON ip.source=s.source AND ip.scope_id=s.scope_id AND ip.policy_version=s.policy_version LEFT JOIN mls_source_contacts c ON c.source=s.source AND c.external_listing_id=s.external_listing_id AND c.deal_type=s.deal_type WHERE s.property_id=$1",
         [propertyId],
       );
       // Any changed source identity holds the entire projection until operator review.
@@ -560,12 +632,28 @@ export async function applyIngestion(client, payload, options = {}) {
         }
       }
       const selected = selectSourceFields(sources);
+      if (options.controlledPatch === true && (selected.ambiguous || selected.conflicts.length))
+        throw new SnapshotError("patch_projection_requires_review", 409);
+      const patchFields =
+        options.controlledPatch === true
+          ? (batch.meta.controlled_patch.projection_fields ??
+            Object.values(MAP).filter((f) => f !== "description"))
+          : null;
       if (!selected.ambiguous && companyRule && !newProperties.has(propertyId))
         await adoptCompanyFields(
           q,
           property,
           companyRule,
-          [...Object.values(MAP), "status"],
+          patchFields ??
+            (sources.some((s) => s.projection != null)
+              ? [
+                  ...Object.keys(selected.values)
+                    .map((field) => MAP[field])
+                    .filter(Boolean),
+                  ...selected.clearFields.map((field) => MAP[field]).filter(Boolean),
+                  ...(selected.lifecycle ? ["status"] : []),
+                ]
+              : [...Object.values(MAP), "status"]),
           sources[0].observation_id,
         );
       const fields = await q("SELECT * FROM property_sync_fields WHERE property_id=$1", [
@@ -632,6 +720,8 @@ export async function applyIngestion(client, payload, options = {}) {
           }
         }
         const column = MAP[field];
+        // A partial patch neither clears missing values nor widens its reviewed field set.
+        if (patchFields && (rawValue === null || !patchFields.includes(column))) continue;
         if (
           !column ||
           (field === "price" && property.deal_type !== "sale") ||
@@ -710,8 +800,9 @@ export async function applyIngestion(client, payload, options = {}) {
       }
       // Drafts need a separate owned-media review; crawlers cannot promote them.
       if (
-        (selected.lifecycle === "inactive" && property.status === "active") ||
-        (selected.lifecycle === "active" && property.status === "inactive")
+        options.controlledPatch !== true &&
+        ((selected.lifecycle === "inactive" && property.status === "active") ||
+          (selected.lifecycle === "active" && property.status === "inactive"))
       ) {
         const owned = fields.find((f) => f.field_name === "status");
         if (!owned)
@@ -826,6 +917,8 @@ export async function applyIngestion(client, payload, options = {}) {
           );
       }
     }
+    if (options.controlledPatch === true && pendingReviews.length)
+      throw new SnapshotError("patch_projection_requires_review", 409);
     await writeReviewRows(q, pendingReviews);
     const response = {
       success: true,

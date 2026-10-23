@@ -470,6 +470,87 @@ def verify_28_detail_identity(s, record):
         raise WorkerError("detail_identity") from None
 
 
+def _json_ld_int(value):
+    if type(value) is int and value >= 0:
+        return value
+    if isinstance(value, str) and re.fullmatch(r"\d+", value.strip()):
+        return int(value)
+    return None
+
+
+def _json_ld_money(value):
+    if not isinstance(value, str):
+        return None
+    cleaned = re.sub(r"^(?:售|租)\s*", "", text(value))
+    cleaned = re.sub(r"\s*元$", "", cleaned)
+    try:
+        return number(cleaned, "money")
+    except WorkerError:
+        return None
+
+
+def extract_28_json_ld(s):
+    """Keep secondary JSON-LD evidence without allowing it to override DOM facts."""
+    result = {
+        "datePublished": None,
+        "dateModified": None,
+        "offers": {"price": None, "price_hkd": None, "priceCurrency": None},
+        "mainEntity": {"numberOfRooms": None, "floorSize": None},
+    }
+    for node in s.select('script[type="application/ld+json"]'):
+        try:
+            data = json.loads(node.string or node.get_text())
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        main = data.get("mainEntity")
+        if not isinstance(main, dict):
+            continue
+        offers = data.get("offers") if isinstance(data.get("offers"), dict) else {}
+        floor_size = main.get("floorSize")
+        result = {
+            "datePublished": data.get("datePublished"),
+            "dateModified": data.get("dateModified"),
+            "offers": {
+                "price": offers.get("price"),
+                "price_hkd": _json_ld_money(offers.get("price")),
+                "priceCurrency": offers.get("priceCurrency"),
+            },
+            "mainEntity": {
+                "numberOfRooms": _json_ld_int(main.get("numberOfRooms")),
+                "floorSize": floor_size if isinstance(floor_size, dict) else None,
+            },
+        }
+        break
+    return result
+
+
+def extract_28_layout_evidence(value):
+    """Expose explicit layout text for review without promoting it to exact identity."""
+    if not isinstance(value, str) or not value.strip():
+        return {
+            "phase": None,
+            "block": None,
+            "floor_band": None,
+            "floor_range": None,
+            "raw": None,
+        }
+    match = re.search(r"座數及單位:\s*(.*?)(?:\s+屋苑樓齡|$)", value)
+    raw = match.group(1).strip() if match else ""
+    phase = re.search(r"(?:第\s*)?([0-9A-Za-z]+)\s*期", raw)
+    block = re.search(r"(\d+)\s*座", raw)
+    floor_band = re.search(r"(低層|中層|高層)", raw)
+    floor_range = re.search(r"\(([^()]*?/\s*\d+\s*樓)\)", raw)
+    return {
+        "phase": phase.group(1) if phase else None,
+        "block": block.group(1) if block else None,
+        "floor_band": floor_band.group(1) if floor_band else None,
+        "floor_range": floor_range.group(1) if floor_range else None,
+        "raw": raw,
+    }
+
+
 def parse_28_detail(html, record, *, require_live_identity=False):
     s = soup_checked(html)
     roots = s.select("[data-listing-detail]")
@@ -513,6 +594,7 @@ def parse_28_detail(html, record, *, require_live_identity=False):
     }
     raw = {}
     lifecycle = set()
+    location_text = None
 
     def keep(field, value):
         if field in raw and raw[field] != value:
@@ -534,6 +616,7 @@ def parse_28_detail(html, record, *, require_live_identity=False):
             value = text(primary_value.get_text()) if primary_value else value
             label = text(cells[0].get_text())
             if label == '地區屋苑':
+                location_text = text(cells[1].get_text(" ", strip=True))
                 keep('estate', value)
                 sub = cells[1].select('.pairSubValue')
                 if sub:
@@ -569,19 +652,26 @@ def parse_28_detail(html, record, *, require_live_identity=False):
     if len(lifecycle) > 1 or lifecycle and next(iter(lifecycle)) != ('已售' if record['deal_type'] == 'sale' else '已租'):
         raise WorkerError('contradictory_source_status')
     reason = {'已售': 'sold', '已租': 'rented'}.get(next(iter(lifecycle), None))
+    json_ld = extract_28_json_ld(s)
+    layout_evidence = extract_28_layout_evidence(
+        location_text or raw.get("district") or raw.get("estate")
+    )
     r = {
         **record,
         "source_status": "delisted" if reason else "active",
         "source_status_reason": reason,
-        "block": None,
+        "block": layout_evidence["block"],
         "unit": None,
-        "phase": None,
+        "phase": layout_evidence["phase"],
         "estate": None,
         "agency_property_no": extract_28_company_number(html),
         "raw_payload": {
             "detail_fields": raw,
             "source_status_labels": sorted(lifecycle),
             "detail_identity": identity,
+            "json_ld": json_ld,
+            "layout_evidence": layout_evidence,
+            "source_conflicts": [],
         },
     }
     for k, v in raw.items():
@@ -594,6 +684,25 @@ def parse_28_detail(html, record, *, require_live_identity=False):
             r[k] = 0 if "開放式" in v else int(m[1]) if m else None
         else:
             r[k] = v
+    json_rooms = json_ld["mainEntity"].get("numberOfRooms")
+    if json_rooms is not None and r.get("bedrooms") is not None and json_rooms != r["bedrooms"]:
+        r["raw_payload"]["source_conflicts"].append({
+            "field": "bedrooms",
+            "dom": r["bedrooms"],
+            "json_ld": json_rooms,
+            "resolution": "dom",
+            "status": "review",
+        })
+    json_price = json_ld["offers"].get("price_hkd")
+    dom_price = r.get("price") if record["deal_type"] == "sale" else r.get("rent")
+    if json_price is not None and dom_price is not None and json_price != dom_price:
+        r["raw_payload"]["source_conflicts"].append({
+            "field": "price" if record["deal_type"] == "sale" else "rent",
+            "dom": dom_price,
+            "json_ld": json_price,
+            "resolution": "dom",
+            "status": "review",
+        })
     from .publication import publication_content
     r["publication"] = publication_content(html, r)
     return r

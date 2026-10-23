@@ -880,6 +880,355 @@ test(
           assert.equal(afterA.district_slug, "test");
         },
       );
+      await t.test(
+        "accepted full absence still deactivates after a non-absence saved patch",
+        async () => {
+          await q("TRUNCATE properties,listing_sync_runs CASCADE");
+          await q(
+            "UPDATE mls_ingestion_policies SET config=config||'{\"absence_enabled\":true}'::jsonb WHERE source='28hse_agent_540'",
+          );
+          const rows = [
+            row("708001"),
+            row("708002", { unit: "02" }),
+            row("708003", { unit: "03" }),
+            row("708004", { unit: "04" }),
+          ];
+          await ingestSnapshot(batch(rows, "2026-09-07T07:00:00Z"), options);
+          const state = (
+            await q("SELECT * FROM mls_source_state WHERE external_listing_id='708001'")
+          )[0];
+          // Synthetic setup: model an already-public, sync-owned canonical status.
+          await q("BEGIN");
+          await q("SELECT set_config('app.admin_property_write','on',true)");
+          await q("UPDATE properties SET status='active' WHERE id=$1", [state.property_id]);
+          await q("COMMIT");
+          await q(
+            "INSERT INTO property_sync_fields(property_id,field_name,last_published_value,winning_observation_id,policy_version) VALUES($1,'status','\"active\"',$2,'no-hermes-v2')",
+            [state.property_id, state.observation_id],
+          );
+          const saved = batch(
+            [{ ...rows[0], captured_at: "2026-09-07T07:00:30Z" }],
+            "2026-09-07T07:01:00Z",
+          );
+          saved.meta.eligible_for_absence = false;
+          saved.meta.controlled_patch = {
+            mode: "controlled",
+            record_count: 1,
+            absence_allowed: false,
+            evidence_mode: "saved-capture-v1",
+            projection_fields: ["price"],
+            expectations: [
+              {
+                external_id: "708001",
+                deal_type: "sale",
+                property_id: state.property_id,
+                observation_id: state.observation_id,
+                fields: { price: "5380000" },
+              },
+            ],
+          };
+          const patch = await ingestService(saved, { ...options, controlledPatch: true });
+          assert.equal(patch.full_snapshot, false);
+          assert.ok(
+            (await q("SELECT source_status FROM mls_source_state")).every(
+              (s) => s.source_status === "active",
+            ),
+          );
+          assert.equal(
+            (await q("SELECT status FROM properties WHERE id=$1", [state.property_id]))[0].status,
+            "active",
+          );
+          const full = await ingestSnapshot(batch(rows.slice(1), "2026-09-07T07:02:00Z"), options);
+          assert.equal(full.full_snapshot, true);
+          assert.equal(
+            (
+              await q(
+                "SELECT source_status FROM mls_source_state WHERE external_listing_id='708001'",
+              )
+            )[0].source_status,
+            "delisted",
+          );
+          assert.equal(
+            (await q("SELECT status FROM properties WHERE id=$1", [state.property_id]))[0].status,
+            "inactive",
+          );
+          assert.equal(
+            (
+              await q("SELECT inactive_reason FROM property_sync_state WHERE property_id=$1", [
+                state.property_id,
+              ])
+            )[0].inactive_reason,
+            "accepted_full_28hse_absence",
+          );
+          await ingestSnapshot(batch(rows.slice(1), "2026-09-07T07:03:00Z"), options);
+          assert.equal(
+            (await q("SELECT status FROM properties WHERE id=$1", [state.property_id]))[0].status,
+            "inactive",
+          );
+        },
+      );
+      await t.test(
+        "saved patch authority survives a later ordinary secondary ingestion",
+        async () => {
+          await q("TRUNCATE properties,listing_sync_runs CASCADE");
+          await q(
+            "UPDATE mls_ingestion_policies SET config=config||'{\"absence_enabled\":false}'::jsonb WHERE source='28hse_agent_540'",
+          );
+          const original = row("709001", {
+            description: "Approved original description",
+            bathrooms: 2,
+            orientation: "East",
+          });
+          await ingestSnapshot(batch([original], "2026-09-07T08:00:00Z"), options);
+          const state = (
+            await q("SELECT * FROM mls_source_state WHERE external_listing_id='709001'")
+          )[0];
+          const saved = batch(
+            [
+              {
+                ...original,
+                description: "Unapproved saved description",
+                bathrooms: null,
+                orientation: null,
+                captured_at: "2026-09-07T08:01:00.123456Z",
+              },
+            ],
+            "2026-09-07T08:02:00Z",
+          );
+          saved.meta.eligible_for_absence = false;
+          saved.meta.controlled_patch = {
+            mode: "controlled",
+            record_count: 1,
+            absence_allowed: false,
+            evidence_mode: "saved-capture-v1",
+            projection_fields: ["price", "bathrooms", "orientation"],
+            expectations: [
+              {
+                external_id: "709001",
+                deal_type: "sale",
+                property_id: state.property_id,
+                observation_id: state.observation_id,
+                fields: { price: "5380000", bathrooms: 2, orientation: "East" },
+              },
+            ],
+          };
+          const before = (await q("SELECT * FROM properties WHERE id=$1", [state.property_id]))[0];
+          const patch = await ingestService(saved, { ...options, controlledPatch: true });
+          assert.equal(patch.full_snapshot, false);
+          const evidence = (
+            await q(
+              "SELECT o.payload FROM listing_source_observations o JOIN mls_source_state s ON s.observation_id=o.id WHERE s.external_listing_id='709001'",
+            )
+          )[0].payload;
+          assert.equal(evidence.fields.description, "Unapproved saved description");
+          const hk = row("secondary709001", {
+            branch_code: "EPW",
+            source_url: "https://www.property.hk/fixture/EPW/secondary709001",
+            description: "Unapproved secondary description",
+            bathrooms: null,
+            orientation: null,
+          });
+          await ingestSnapshot(batch([hk], "2026-09-07T08:03:00Z", "propertyhk"), options);
+          assert.equal(
+            (
+              await q(
+                "SELECT property_id FROM mls_source_state WHERE external_listing_id='secondary709001'",
+              )
+            )[0].property_id,
+            state.property_id,
+          );
+          let after = (await q("SELECT * FROM properties WHERE id=$1", [state.property_id]))[0];
+          assert.equal(after.description, before.description);
+          assert.equal(after.bathrooms, 2);
+          assert.equal(after.orientation, "East");
+          assert.equal(after.status, "draft");
+          // A separate normally authorized primary observation replaces partial authority.
+          await ingestSnapshot(
+            batch(
+              [{ ...original, description: "Fresh authorized primary description" }],
+              "2026-09-07T08:04:00Z",
+            ),
+            options,
+          );
+          after = (await q("SELECT * FROM properties WHERE id=$1", [state.property_id]))[0];
+          assert.equal(after.description, "Fresh authorized primary description");
+        },
+      );
+      await t.test("controlled patch checks reviewed historical company identity", async (t) => {
+        await q("TRUNCATE properties,listing_sync_runs CASCADE");
+        await q(
+          `UPDATE mls_ingestion_policies SET config=config || '{"absence_enabled":false,"company_number_identity":{"approved":true,"version":"company-number-v1","approved_by":"synthetic-test"}}'::jsonb WHERE source='28hse_agent_540'`,
+        );
+        const historical = row("4024926", {
+          agency_property_no: "A055113",
+          estate: "Synthetic original estate",
+          description: "Synthetic protected description",
+        });
+        await ingestSnapshot(batch([historical], "2026-09-07T09:00:00Z"), options);
+        const oldProperty = (
+          await q("SELECT property_id FROM mls_source_state WHERE external_listing_id='4024926'")
+        )[0].property_id;
+        await ingestSnapshot(
+          batch(
+            [{ ...historical, agency_property_no: "R076105", estate: "Synthetic proposed estate" }],
+            "2026-09-07T09:01:00Z",
+          ),
+          options,
+        );
+        const review = (
+          await q(
+            "SELECT * FROM mls_ingestion_reviews WHERE external_listing_id='4024926' AND reason='company_number_changed' AND status='open'",
+          )
+        )[0];
+        assert.ok(review);
+        const binding = (
+          await q(
+            "SELECT s.raw_identity,o.payload->'identity' AS observed FROM mls_source_state s JOIN listing_source_observations o ON o.id=s.observation_id WHERE s.external_listing_id='4024926'",
+          )
+        )[0];
+        assert.equal(binding.raw_identity.agency_property_no, "A055113");
+        assert.equal(binding.observed.agency_property_no, "R076105");
+        const controlled = (ids, company, stamp) => {
+          const payload = batch(
+            ids.map((id) =>
+              row(id, {
+                agency_property_no: company,
+                floor: "中層",
+                unit: null,
+                captured_at: "2026-09-07T10:00:00.123456Z",
+              }),
+            ),
+            stamp,
+          );
+          payload.meta.eligible_for_absence = false;
+          payload.meta.controlled_patch = {
+            mode: "controlled",
+            record_count: ids.length,
+            absence_allowed: false,
+            evidence_mode: "saved-capture-v1",
+            projection_fields: ["title_zh", "district_slug", "price"],
+            expectations: ids.map((external_id) => ({
+              external_id,
+              deal_type: "sale",
+              property_id: null,
+              observation_id: null,
+              fields: {},
+            })),
+          };
+          return payload;
+        };
+        const patchOptions = { ...options, controlledPatch: true };
+        const selected = controlled(["4060439", "4062044"], "R076105", "2026-09-07T12:00:00Z");
+        const fingerprints = async () =>
+          Promise.all(
+            [
+              "properties",
+              "property_source_links",
+              "property_public_groups",
+              "property_public_members",
+              "property_sync_fields",
+              "property_sync_state",
+              "listing_source_observations",
+              "listing_sync_runs",
+              "mls_ingestion_receipts",
+              "mls_ingestion_scopes",
+              "mls_source_state",
+              "mls_source_contacts",
+              "mls_ingestion_reviews",
+            ].map(async (table) => ({
+              table,
+              ...(
+                await q(
+                  `SELECT count(*)::int AS n,md5(coalesce(string_agg(to_jsonb(r)::text,'|' ORDER BY to_jsonb(r)::text),'')) AS hash FROM ${table} r`,
+                )
+              )[0],
+            })),
+          );
+        await t.test("open proposed-number review rejects atomically before commit", async () => {
+          const before = await fingerprints();
+          let reachedCommit = false;
+          await assert.rejects(
+            () =>
+              ingestService(selected, {
+                ...patchOptions,
+                beforeCommit: () => {
+                  reachedCommit = true;
+                  throw Error("synthetic safety rollback after missed historical review");
+                },
+              }),
+            (e) => e.code === "patch_review_required",
+          );
+          assert.equal(reachedCommit, false);
+          assert.deepEqual(await fingerprints(), before);
+        });
+        await t.test(
+          "open review for another company number does not block or establish identity",
+          async () => {
+            const other = controlled(["5060439", "5062044"], "R088888", "2026-09-07T11:00:00Z");
+            const result = await ingestService(other, patchOptions);
+            assert.equal(result.full_snapshot, false);
+            assert.equal(result.summary.properties_created, 1);
+            assert.equal(
+              (
+                await q("SELECT status FROM mls_ingestion_reviews WHERE review_key=$1", [
+                  review.review_key,
+                ])
+              )[0].status,
+              "open",
+            );
+            const properties = await q(
+              "SELECT id,status FROM properties WHERE canonical_property_no='R088888'",
+            );
+            assert.equal(properties.length, 1);
+            assert.equal(properties[0].status, "draft");
+            assert.notEqual(properties[0].id, oldProperty);
+          },
+        );
+        await t.test(
+          "resolved synthetic review permits a separate draft without relinking historical source",
+          async () => {
+            const prior = (await q("SELECT * FROM properties WHERE id=$1", [oldProperty]))[0];
+            // This is synthetic test setup only; the writer must never resolve production reviews.
+            await q("UPDATE mls_ingestion_reviews SET status='resolved' WHERE review_key=$1", [
+              review.review_key,
+            ]);
+            const result = await ingestService(selected, patchOptions);
+            assert.equal(result.full_snapshot, false);
+            assert.equal(result.summary.properties_created, 1);
+            const properties = await q(
+              "SELECT id,status FROM properties WHERE canonical_property_no='R076105'",
+            );
+            assert.equal(properties.length, 1);
+            assert.equal(properties[0].status, "draft");
+            assert.notEqual(properties[0].id, oldProperty);
+            const sources = await q(
+              "SELECT property_id FROM mls_source_state WHERE external_listing_id IN('4060439','4062044')",
+            );
+            assert.equal(sources.length, 2);
+            assert.ok(sources.every((s) => s.property_id === properties[0].id));
+            assert.equal(
+              (
+                await q(
+                  "SELECT property_id FROM mls_source_state WHERE external_listing_id='4024926'",
+                )
+              )[0].property_id,
+              oldProperty,
+            );
+            assert.deepEqual(
+              (await q("SELECT * FROM properties WHERE id=$1", [oldProperty]))[0],
+              prior,
+            );
+            assert.equal(
+              (
+                await q(
+                  "SELECT raw_identity->>'agency_property_no' AS no FROM mls_source_state WHERE external_listing_id='4024926'",
+                )
+              )[0].no,
+              "A055113",
+            );
+          },
+        );
+      });
     } finally {
       await c.query("ROLLBACK");
       await c.query("RESET search_path");

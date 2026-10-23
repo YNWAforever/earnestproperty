@@ -1,0 +1,33 @@
+{
+  "originalAttachment": {
+    "filename": "貼上的文字(20261021-170043).txt",
+    "sha256": "15ac179c2a88fb91ca2fc87de94c43ba62ebcb29bd462d8c78f6304a511c8d0b",
+    "bytes": 263953,
+    "committed": false
+  },
+  "sanitizedFixture": {
+    "path": "scripts/property-sync/tests/fixtures/28hse-scrapingbee-4058953.sanitized.html",
+    "sha256": "eec20e97e7bbcfc7ae1cf872dc2d3aa9b77ea298dc949dcdf345823eb2a6594a",
+    "bytes": 2349,
+    "syntheticStatus": "SANITIZED_STRUCTURAL_RECONSTRUCTION",
+    "fullOriginalResponse": false
+  },
+  "preserved": [
+    "canonical/og/al URLs and listing ID",
+    "listing title and h1",
+    "DOM price and area rows with main/sub values",
+    "estate/district/floor-band evidence",
+    "rooms/bathrooms DOM row",
+    "agency property number",
+    "JSON-LD datePublished/dateModified",
+    "JSON-LD numberOfRooms=1 versus DOM 2 rooms/1 bathroom conflict",
+    "JSON-LD offers.price text"
+  ],
+  "removed": [
+    "agent personal/company contact blocks",
+    "phone, WhatsApp, WeChat and QRCode content",
+    "cookies, scripts, analytics and unrelated assets",
+    "mortgage, school, related-listing and marketing/footer content",
+    "images and gallery media"
+  ]
+}

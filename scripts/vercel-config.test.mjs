@@ -521,6 +521,7 @@ test("review branches skip automatic deployments without changing main or the da
   assert.deepEqual(config.git?.deploymentEnabled, {
     "codex/youtube-daily-sync-20261016": false,
     "codex/fix-public-floor-band": false,
+    "codex/parser-native-writer-safety-20261023": false,
   });
   assert.equal(Object.hasOwn(config.git.deploymentEnabled, "main"), false);
   assert.deepEqual(config.crons, [{ path: "/api/youtube-sync", schedule: "0 19 * * *" }]);
