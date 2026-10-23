@@ -1,6 +1,7 @@
 import { PROMOTION_TIERS, normalize28HsePromotionTier } from "./promotion-tier.mjs";
 import { createHash } from "node:crypto";
 import { exactUnitIdentity } from "./unit-identity.mjs";
+import { validAtomicGuards } from "./controlled-patch-preconditions.mjs";
 export const POLICY_VERSION = "no-hermes-v2";
 export const BRANCHES = Object.freeze(["EPW", "EPS", "EPT"]);
 export class SnapshotError extends Error {
@@ -422,6 +423,11 @@ export function decodeSnapshot(input, options = {}) {
       )
     )
       throw new SnapshotError("invalid_patch_expectations");
+    if (
+      !(options.allowLegacyPatchReplay === true && patchMeta.atomic_guards === undefined) &&
+      !validAtomicGuards(patchMeta)
+    )
+      throw new SnapshotError("invalid_patch_atomic_guards");
   }
   if (controlledPatch && (rejects.length > 0 || records.length !== patchMeta.record_count))
     throw new SnapshotError("invalid_controlled_patch");

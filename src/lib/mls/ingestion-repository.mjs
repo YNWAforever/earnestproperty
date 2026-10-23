@@ -17,6 +17,13 @@ import {
 import { evaluateSnapshotGate } from "./source-snapshot-gates.mjs";
 import { chooseRelationship, selectSourceFields } from "./source-selection.mjs";
 import { assertPatchTarget, assertPatchExpectation } from "./controlled-patch-guards.mjs";
+import {
+  configurePatchTransaction,
+  lockPatchPreconditions,
+  readProtectedPatchFields,
+  assertAtomicPatchPreconditions,
+  assertProtectedPatchFields,
+} from "./controlled-patch-preconditions.mjs";
 const POLICY = "no-hermes-v2";
 const MAP = {
   title: "title_zh",
@@ -96,6 +103,7 @@ export async function applyIngestion(client, payload, options = {}) {
   let batch = decodeSnapshot(payload, {
     idScope: "global",
     controlledPatch: options.controlledPatch === true,
+    allowLegacyPatchReplay: true,
   });
   if (options.expectedSource && batch.source !== options.expectedSource)
     throw new SnapshotError("source_mismatch");
@@ -114,7 +122,9 @@ export async function applyIngestion(client, payload, options = {}) {
   if (replay) return replay;
   await q("BEGIN");
   let committing = false;
+  let protectedPatchFields;
   try {
+    if (options.controlledPatch === true) await configurePatchTransaction(q);
     await q("SELECT pg_advisory_xact_lock(hashtext('earnestproperty:mls-sync'))");
     const replay = await receipt();
     if (replay) {
@@ -123,6 +133,7 @@ export async function applyIngestion(client, payload, options = {}) {
     }
     // Match the admin lock order before touching canonical rows or public groups.
     await q("LOCK TABLE properties IN SHARE ROW EXCLUSIVE MODE");
+    if (options.controlledPatch === true) await lockPatchPreconditions(q);
     await q("SELECT set_config('app.mls_writer_policy',$1,true)", [POLICY]);
     const policy = (
       await q(
@@ -230,6 +241,13 @@ export async function applyIngestion(client, payload, options = {}) {
     )[0];
     if (usage.n >= quota)
       throw new SnapshotError("quota_exceeded", 429, { retryAfter: usage.retry });
+    if (
+      options.controlledPatch === true &&
+      batch.meta.controlled_patch.evidence_mode !== "saved-capture-v1"
+    )
+      throw new SnapshotError("patch_atomic_guards_required", 409);
+    if (options.controlledPatch === true)
+      protectedPatchFields = await assertAtomicPatchPreconditions(q, batch);
     const runId = randomUUID(),
       receiptId = randomUUID();
     await q(
@@ -253,6 +271,7 @@ export async function applyIngestion(client, payload, options = {}) {
     const touched = new Set(),
       newProperties = new Set(),
       changedProperties = new Set();
+    const patchObservations = new Map();
     let fieldsChanged = 0;
     const pendingReviews = [];
     const review = async (record, reason, evidence, observationId) => {
@@ -402,6 +421,7 @@ export async function applyIngestion(client, payload, options = {}) {
       }
       if (!mappedDistrict) record.publicationReasons.push("district_mapping_unverified");
       const observationId = randomUUID();
+      patchObservations.set(record.key, observationId);
       await q(
         "INSERT INTO listing_source_observations(id,run_id,source,external_listing_id,deal_type,source_url,payload,content_hash,validation_state,discovered_at,fetched_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'valid',$9,$9)",
         [
@@ -470,6 +490,12 @@ export async function applyIngestion(client, payload, options = {}) {
             ],
           )
         )[0];
+        if (protectedPatchFields) {
+          if (p.status !== "draft") throw new SnapshotError("patch_protected_fields_changed", 409);
+          const initial = await readProtectedPatchFields(q, [p.id]);
+          if (initial.length !== 1) throw new SnapshotError("patch_protected_fields_changed", 409);
+          protectedPatchFields.push(...initial);
+        }
         await groupNewCompanyProperty(q, p, relation);
         relation.propertyId = p.id;
         newProperties.add(p.id);
@@ -598,6 +624,8 @@ export async function applyIngestion(client, payload, options = {}) {
         promotionTier: record.promotionTier,
         promotionTierRaw: record.promotionTierRaw,
         fetchedAt: record.fetchedAt,
+        observationId:
+          options.controlledPatch === true ? patchObservations.get(record.key) : undefined,
       })),
       { snapshotComplete: Boolean(gate.full) },
     );
@@ -969,6 +997,7 @@ export async function applyIngestion(client, payload, options = {}) {
       ],
     );
     await options.beforeCommit?.();
+    if (protectedPatchFields) await assertProtectedPatchFields(q, protectedPatchFields);
     committing = true;
     await q("COMMIT");
     return response;

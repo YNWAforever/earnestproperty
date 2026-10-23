@@ -1,6 +1,45 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { batch, row } from "./ingestion-test-fixtures.mjs";
+import { hashPayload } from "./ingestion-contract.mjs";
+
+test("legacy saved receipt recovery precedes new atomic guards without writes", async () => {
+  const { ingestSnapshot } = await import("./ingestion-service.mjs");
+  const payload = batch([row("1", { captured_at: "2026-09-07T00:00:00Z" })]);
+  payload.meta.eligible_for_absence = false;
+  payload.meta.controlled_patch = {
+    mode: "controlled",
+    record_count: 1,
+    absence_allowed: false,
+    evidence_mode: "saved-capture-v1",
+    projection_fields: ["price"],
+    expectations: [
+      { external_id: "1", deal_type: "sale", property_id: null, observation_id: null, fields: {} },
+    ],
+  };
+  const response = { success: true, receipt_id: "old", full_snapshot: false };
+  let queries = 0;
+  const createClient = () => ({
+    neonConfig: {},
+    async connect() {},
+    async end() {},
+    async query(sql) {
+      queries++;
+      assert.match(sql, /^SELECT payload_hash,response/);
+      return { rows: [{ payload_hash: hashPayload(payload), response }] };
+    },
+  });
+  assert.deepEqual(
+    await ingestSnapshot(payload, {
+      apply: true,
+      controlledPatch: true,
+      connectionString: "synthetic-no-network",
+      createClient,
+    }),
+    response,
+  );
+  assert.equal(queries, 1);
+});
 test("T28 dry run validates without accessing a database or connection factory", async () => {
   const module = await import("./ingestion-service.mjs").catch(() => ({}));
   assert.equal(typeof module.ingestSnapshot, "function", "atomic ingestion service must exist");

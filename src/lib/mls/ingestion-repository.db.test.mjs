@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { batch, row } from "./ingestion-test-fixtures.mjs";
+import { readPatchBeforeImages } from "./controlled-patch-preconditions.mjs";
 import { ingestSnapshot as ingestService } from "./ingestion-service.mjs";
 import { onDbTarget, targetClientPorts } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 
@@ -29,6 +30,14 @@ test(
     };
     const options = { connectionString: url, apply: true, createClient };
     const q = async (sql, args = []) => (await c.query(sql, args)).rows;
+    const freezePatch = async (payload) => {
+      payload.meta.controlled_patch.atomic_guards = await readPatchBeforeImages(
+        q,
+        "28hse_agent_540",
+        payload.meta.controlled_patch.expectations,
+      );
+      return payload;
+    };
     // Simulate an hourly cadence without changing source scraped_at chronology.
     const ingestSnapshot = async (payload, opts) => {
       await q(
@@ -51,6 +60,7 @@ test(
         "20260906090000_canonical_property_identity.sql",
         "20260906120000_admin_property_management.sql",
         "20260907120000_propertyhk_ingestion_v2.sql",
+        "20260909120000_source_promotion_tiers.sql",
       ]) {
         await q("BEGIN");
         await q(readFileSync("neon/migrations/" + name, "utf8"));
@@ -927,7 +937,10 @@ test(
               },
             ],
           };
-          const patch = await ingestService(saved, { ...options, controlledPatch: true });
+          const patch = await ingestService(await freezePatch(saved), {
+            ...options,
+            controlledPatch: true,
+          });
           assert.equal(patch.full_snapshot, false);
           assert.ok(
             (await q("SELECT source_status FROM mls_source_state")).every(
@@ -1013,7 +1026,10 @@ test(
             ],
           };
           const before = (await q("SELECT * FROM properties WHERE id=$1", [state.property_id]))[0];
-          const patch = await ingestService(saved, { ...options, controlledPatch: true });
+          const patch = await ingestService(await freezePatch(saved), {
+            ...options,
+            controlledPatch: true,
+          });
           assert.equal(patch.full_snapshot, false);
           const evidence = (
             await q(
@@ -1119,6 +1135,7 @@ test(
         };
         const patchOptions = { ...options, controlledPatch: true };
         const selected = controlled(["4060439", "4062044"], "R076105", "2026-09-07T12:00:00Z");
+        await freezePatch(selected);
         const fingerprints = async () =>
           Promise.all(
             [
@@ -1165,7 +1182,7 @@ test(
           "open review for another company number does not block or establish identity",
           async () => {
             const other = controlled(["5060439", "5062044"], "R088888", "2026-09-07T11:00:00Z");
-            const result = await ingestService(other, patchOptions);
+            const result = await ingestService(await freezePatch(other), patchOptions);
             assert.equal(result.full_snapshot, false);
             assert.equal(result.summary.properties_created, 1);
             assert.equal(
