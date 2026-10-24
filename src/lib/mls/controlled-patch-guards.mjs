@@ -1,4 +1,5 @@
 import { SnapshotError, canonicalJson, normalizeDecimal } from "./ingestion-contract.mjs";
+import { assertReviewPlanTarget, hasUnreviewedSourceConflict } from "./controlled-review-plan.mjs";
 
 function micros(value) {
   const text = value instanceof Date ? value.toISOString() : String(value);
@@ -8,15 +9,17 @@ function micros(value) {
   return BigInt(ms) * 1000n + BigInt(tail.padEnd(6, "0").slice(3, 6));
 }
 
-export function assertPatchTarget({ record, state, relation, property, pendingReview }) {
-  if (
-    record.raw.raw_payload?.source_conflicts?.some((conflict) => conflict.status === "review") ||
-    record.sourceOccurrences?.some((occurrence) =>
-      occurrence.raw.raw_payload?.source_conflicts?.some(
-        (conflict) => conflict.status === "review",
-      ),
-    )
-  )
+export function assertPatchTarget({
+  record,
+  state,
+  relation,
+  property,
+  pendingReview,
+  reviewPlan,
+  link,
+}) {
+  assertReviewPlanTarget(record, state, relation, property, reviewPlan, link);
+  if (hasUnreviewedSourceConflict(record, reviewPlan))
     throw new SnapshotError("patch_source_conflict_requires_review", 409);
   if (record.sourceStatus !== "active" || (state && state.source_status !== "active"))
     throw new SnapshotError("patch_source_lifecycle_requires_review", 409);

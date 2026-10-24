@@ -2,6 +2,124 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { runSnapshotBridge } from "./apply-source-snapshot.mjs";
 import { SnapshotError } from "../../src/lib/mls/ingestion-contract.mjs";
+import { reviewFixture } from "../../src/lib/mls/controlled-review-fixtures.mjs";
+
+test("explicit operator review plan and hash reach only the native patch options", async () => {
+  const f = reviewFixture();
+  let received;
+  await runSnapshotBridge(
+    [
+      "--payload",
+      "patch.json",
+      "--patch",
+      "--review-plan",
+      "plan.json",
+      "--review-plan-hash",
+      f.options.reviewPlanHash,
+    ],
+    {
+      env: new Proxy(
+        {},
+        {
+          get() {
+            assert.fail("offline must not load credentials");
+          },
+        },
+      ),
+      readPayload: async (name) => JSON.stringify(name === "patch.json" ? f.payload : f.plan),
+      ingest: async (_payload, options) => {
+        received = options;
+        return { status: "dry_run" };
+      },
+    },
+  );
+  assert.deepEqual(received.reviewPlan, f.plan);
+  assert.equal(received.reviewPlanHash, f.options.reviewPlanHash);
+  assert.equal(received.apply, false);
+});
+
+test("review plan hash mismatch fails before native ingest or credentials", async () => {
+  const f = reviewFixture();
+  await assert.rejects(
+    () =>
+      runSnapshotBridge(
+        [
+          "--payload",
+          "patch.json",
+          "--patch",
+          "--review-plan",
+          "plan.json",
+          "--review-plan-hash",
+          "e".repeat(64),
+        ],
+        {
+          env: new Proxy(
+            {},
+            {
+              get() {
+                assert.fail("no credentials");
+              },
+            },
+          ),
+          readPayload: async (n) => JSON.stringify(n === "patch.json" ? f.payload : f.plan),
+          ingest() {
+            assert.fail("no ingest");
+          },
+        },
+      ),
+    (e) => e.code === "patch_review_plan_hash_mismatch",
+  );
+});
+
+test("review flags require explicit patch mode, both sidecar flags and 28hse source", async () => {
+  const hash = "a".repeat(64);
+  for (const args of [
+    ["--payload", "p", "--review-plan", "r"],
+    ["--payload", "p", "--patch", "--review-plan-hash", hash],
+    ["--payload", "p", "--review-plan", "r", "--review-plan-hash", hash],
+    [
+      "--payload",
+      "p",
+      "--source",
+      "propertyhk",
+      "--patch",
+      "--review-plan",
+      "r",
+      "--review-plan-hash",
+      hash,
+    ],
+    [
+      "--payload",
+      "p",
+      "--patch",
+      "--review-plan",
+      "r",
+      "--review-plan",
+      "r",
+      "--review-plan-hash",
+      hash,
+    ],
+  ])
+    await assert.rejects(
+      () =>
+        runSnapshotBridge(args, {
+          readPayload: async () =>
+            JSON.stringify({ source: args.includes("propertyhk") ? "propertyhk" : "28hse" }),
+          ingest() {
+            assert.fail("no ingest");
+          },
+          env: new Proxy(
+            {},
+            {
+              get() {
+                assert.fail("no env");
+              },
+            },
+          ),
+        }),
+      (e) => e.code === "INVALID_ARGUMENTS",
+    );
+});
 test("T28 bridge defaults to dry run and never loads DB credentials", async () => {
   let options;
   const env = new Proxy(

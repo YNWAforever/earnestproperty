@@ -3,6 +3,7 @@ import { decodeSnapshot, SnapshotError } from "./ingestion-contract.mjs";
 import { evaluateSnapshotGate } from "./source-snapshot-gates.mjs";
 import { withMlsAdvisoryLock } from "./neon-lock.mjs";
 import { applyIngestion } from "./ingestion-repository.mjs";
+import { validateReviewPlan } from "./controlled-review-plan.mjs";
 export function snapshotResponse(batch, gate, receiptId = null) {
   return {
     success: true,
@@ -33,6 +34,7 @@ export async function ingestSnapshot(payload, options = {}) {
   });
   if (options.expectedSource && batch.source !== options.expectedSource)
     throw new SnapshotError("source_mismatch");
+  validateReviewPlan(batch, options);
   if (options.apply !== true) {
     const gate = evaluateSnapshotGate(
       batch,
