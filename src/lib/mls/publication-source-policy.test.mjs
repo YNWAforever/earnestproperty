@@ -146,7 +146,7 @@ test("publisher resolves protected source policy and scopes target SQL before me
   const result = await publishDaily(options);
   assert.equal(result.ready.length, 1);
   assert.equal(preparations, 0);
-  assert.deepEqual(targetArgs.slice(2), ["propertyhk", "branches:EPW,EPS,EPT"]);
+  assert.deepEqual(targetArgs.slice(2), ["propertyhk", "branches:EPW,EPS,EPT", []]);
   const blocked = {
     query: async (sql, args) =>
       sql.includes("SELECT * FROM mls_ingestion_policies")
@@ -158,4 +158,32 @@ test("publisher resolves protected source policy and scopes target SQL before me
     /SOURCE_PUBLICATION_POLICY_UNVERIFIED/,
   );
   assert.equal(preparations, 0);
+});
+
+test("publisher selects final policy-aware branch IDs rather than pre-policy records", async () => {
+  const payload = sourceBatch(
+    [{ ...raw, title: "Synthetic branch fixture" }],
+    "2026-10-01T01:00:00Z",
+    "propertyhk",
+  );
+  const expectedId = JSON.stringify(["EPW", "P1"]);
+  const result = await publishDaily({
+    payload,
+    client: {
+      query: async (sql, args) => {
+        if (sql.includes("SELECT r.id FROM mls_ingestion_receipts"))
+          return { rows: [{ id: "full-receipt" }] };
+        if (sql.includes("SELECT * FROM mls_ingestion_policies"))
+          return { rows: [{ ...policy, id_scope: "branch" }] };
+        if (sql.startsWith("SELECT p.*"))
+          return {
+            rows: args[0] === expectedId ? [{ ...p, external_listing_id: expectedId }] : [],
+          };
+        return { rows: [] };
+      },
+    },
+    now: () => Date.parse("2026-10-01T02:00:00Z"),
+  });
+  assert.equal(result.ready.length, 1);
+  assert.equal(result.ready[0].sourceId, expectedId);
 });
