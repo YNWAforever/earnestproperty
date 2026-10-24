@@ -4,9 +4,137 @@ import { readFileSync } from "node:fs";
 import { applyIngestion } from "./ingestion-repository.mjs";
 import { decodeSnapshot, hashPayload } from "./ingestion-contract.mjs";
 import { batch, row } from "./ingestion-test-fixtures.mjs";
+import { reviewFixture } from "./controlled-review-fixtures.mjs";
 
 const captured = "2026-09-07T00:00:00.123456Z";
 const accepted = "2026-09-08T00:00:00.654321Z";
+
+function reviewedMemoryPort({ directReview = false, manualPrice = false } = {}) {
+  const f = reviewFixture(),
+    port = memoryPort({ status: "draft", manualPrice });
+  port.data.property.canonical_property_no = "A123456";
+  const base = port.client.query.bind(port.client);
+  port.client.query = async (sql, args = []) => {
+    if (sql.startsWith("SELECT * FROM property_source_links")) {
+      port.calls.push({ sql, args });
+      return { rows: [f.link] };
+    }
+    if (sql.includes("controlled_patch_review_decisions")) {
+      assert.ok(
+        port.calls.some(
+          (c) => c.sql === "LOCK TABLE mls_ingestion_reviews IN SHARE ROW EXCLUSIVE MODE",
+        ),
+      );
+      port.calls.push({ sql, args });
+      return { rows: [f.historical] };
+    }
+    if (sql.includes("AS pending_review")) {
+      port.calls.push({ sql, args });
+      assert.ok(sql.includes("AND NOT(r.review_key=ANY($9::text[]))"));
+      return {
+        rows: [{ pending_review: directReview || !args[8].includes(f.historical.review_key) }],
+      };
+    }
+    return base(sql, args);
+  };
+  return { f, port };
+}
+
+test("native review plan applies one draft observation without clearing historical review or touching its binding", async () => {
+  const { f, port } = reviewedMemoryPort(),
+    oldDescription = port.data.property.description,
+    oldImages = structuredClone(port.data.property.images);
+  const result = await applyIngestion(port.client, f.payload, f.options);
+  assert.equal(result.full_snapshot, false);
+  assert.equal(result.summary.properties_created, 0);
+  assert.equal(port.data.property.status, "draft");
+  assert.equal(port.data.property.description, oldDescription);
+  assert.deepEqual(port.data.property.images, oldImages);
+  assert.equal(port.data.observation.raw.raw_payload.source_conflicts[0].status, "review");
+  assert.equal(port.data.observation.reviewAdjudication.planHash, f.options.reviewPlanHash);
+  assert.equal(port.data.observation.reviewAdjudication.formalReviewMutation, false);
+  assert.equal(f.historical.status, "open");
+  assert.equal(f.historical.held, true);
+  assert.equal(
+    port.calls.some((c) =>
+      /^UPDATE mls_ingestion_reviews|^DELETE FROM mls_ingestion_reviews/.test(c.sql),
+    ),
+    false,
+  );
+  assert.equal(
+    port.calls
+      .filter((c) => c.sql.startsWith("INSERT INTO mls_source_state"))
+      .every((c) => c.args[1] === "123"),
+    true,
+  );
+  const reads = port.calls.filter((c) =>
+    c.sql.includes("controlled_patch_review_decisions"),
+  ).length;
+  assert.deepEqual(await applyIngestion(port.client, f.payload, f.options), result);
+  assert.equal(
+    port.calls.filter((c) => c.sql.includes("controlled_patch_review_decisions")).length,
+    reads,
+  );
+});
+
+test("other native pending reviews are never excluded by a historical disposition", async () => {
+  const { f, port } = reviewedMemoryPort({ directReview: true });
+  await assert.rejects(
+    () => applyIngestion(port.client, f.payload, f.options),
+    (e) => e.code === "patch_review_required",
+  );
+  assert.equal(port.data.observation, null);
+  assert.equal(port.data.receipt, null);
+  assert.equal(f.historical.status, "open");
+});
+
+test("review-plan write failure rolls back observations and preserves draft", async () => {
+  const { f, port } = reviewedMemoryPort();
+  await assert.rejects(
+    () =>
+      applyIngestion(port.client, f.payload, {
+        ...f.options,
+        beforeCommit() {
+          throw Error("synthetic failure");
+        },
+      }),
+    /synthetic failure/,
+  );
+  assert.equal(port.data.observation, null);
+  assert.equal(port.data.receipt, null);
+  assert.equal(port.data.property.price, 5000000);
+  assert.equal(port.data.property.status, "draft");
+});
+
+test("review acknowledgement does not overwrite manual price", async () => {
+  const { f, port } = reviewedMemoryPort({ manualPrice: true });
+  await assert.rejects(
+    () => applyIngestion(port.client, f.payload, f.options),
+    (e) => e.code === "patch_projection_requires_review",
+  );
+  assert.equal(port.data.observation, null);
+  assert.equal(port.data.receipt, null);
+  assert.equal(port.data.property.price, 5000000);
+  assert.equal(port.data.property.status, "draft");
+});
+
+test("review plan cannot recreate a missing target source link", async () => {
+  const { f, port } = reviewedMemoryPort();
+  const base = port.client.query.bind(port.client);
+  port.client.query = (sql, args) =>
+    sql.startsWith("SELECT * FROM property_source_links") ? { rows: [] } : base(sql, args);
+  await assert.rejects(
+    () => applyIngestion(port.client, f.payload, f.options),
+    (e) => e.code === "patch_review_plan_target_changed",
+  );
+  assert.equal(port.data.observation, null);
+  assert.equal(port.data.receipt, null);
+  assert.equal(
+    port.calls.some((c) => c.sql.startsWith("INSERT INTO property_source_links")),
+    false,
+  );
+});
+
 const patch = (fields = ["price"]) => {
   const p = batch([row("123", { captured_at: captured })], accepted);
   p.meta.controlled_patch = {

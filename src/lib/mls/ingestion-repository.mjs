@@ -18,6 +18,11 @@ import { evaluateSnapshotGate } from "./source-snapshot-gates.mjs";
 import { chooseRelationship, selectSourceFields } from "./source-selection.mjs";
 import { assertPatchTarget, assertPatchExpectation } from "./controlled-patch-guards.mjs";
 import {
+  validateReviewPlan,
+  rejectedHistoricalReviewKeys,
+  reviewDecisionAudit,
+} from "./controlled-review-plan.mjs";
+import {
   configurePatchTransaction,
   lockPatchPreconditions,
   readProtectedPatchFields,
@@ -105,6 +110,7 @@ export async function applyIngestion(client, payload, options = {}) {
     controlledPatch: options.controlledPatch === true,
     allowLegacyPatchReplay: true,
   });
+  let reviewPlan = validateReviewPlan(batch, options);
   if (options.expectedSource && batch.source !== options.expectedSource)
     throw new SnapshotError("source_mismatch");
   const receipt = async () => {
@@ -147,6 +153,7 @@ export async function applyIngestion(client, payload, options = {}) {
       throw new SnapshotError("parser_policy_mismatch", 503);
     const companyRule = companyPolicy(policy);
     batch = decodeSnapshot(payload, verifiedOptions(policy, options));
+    reviewPlan = validateReviewPlan(batch, options);
     const unverified = batch.records.filter((record) => !record.urlIdentityVerified);
     if (unverified.length) {
       batch.rejects.push(
@@ -360,6 +367,16 @@ export async function applyIngestion(client, payload, options = {}) {
         linkedProperty?.district_slug ??
         districtSlug(record.fields.district, policy.config, record.fields.estate);
       if (options.controlledPatch === true) {
+        const rejectedHistoricalKeys = await rejectedHistoricalReviewKeys(
+          q,
+          batch,
+          record,
+          state,
+          relation,
+          linkedProperty,
+          reviewPlan,
+          link,
+        );
         const pending = (
           await q(
             `WITH peers AS (
@@ -378,7 +395,8 @@ export async function applyIngestion(client, payload, options = {}) {
               JOIN mls_ingestion_receipts receipt ON receipt.run_id=o.run_id AND receipt.source=o.source
               WHERE r.status='open' AND r.reason='company_number_changed' AND r.source=$1
                 AND receipt.scope_id=$7 AND receipt.policy_version=$8
-                AND o.payload#>>'{identity,agency_property_no}'=$6::text) AS pending_review`,
+                AND o.payload#>>'{identity,agency_property_no}'=$6::text
+                AND NOT(r.review_key=ANY($9::text[]))) AS pending_review`,
             [
               ...identityArgs,
               relation.propertyId ?? null,
@@ -387,6 +405,7 @@ export async function applyIngestion(client, payload, options = {}) {
               companyRule ? record.agencyPropertyNo : null,
               batch.scopeId,
               POLICY,
+              rejectedHistoricalKeys,
             ],
           )
         )[0];
@@ -396,6 +415,8 @@ export async function applyIngestion(client, payload, options = {}) {
           relation,
           property: linkedProperty,
           pendingReview: pending?.pending_review !== false,
+          reviewPlan,
+          link,
         });
         if (batch.meta.controlled_patch.evidence_mode === "saved-capture-v1")
           assertPatchExpectation({
@@ -444,6 +465,7 @@ export async function applyIngestion(client, payload, options = {}) {
             identity: { ...record.identity, agency_property_no: record.agencyPropertyNo },
             publicationReasons: record.publicationReasons,
             holdProjection: relation.holdProjection,
+            ...(reviewPlan ? { reviewAdjudication: reviewDecisionAudit(record, reviewPlan) } : {}),
             projection:
               options.controlledPatch === true
                 ? {

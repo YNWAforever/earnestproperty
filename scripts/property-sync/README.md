@@ -1,5 +1,46 @@
 # Property source workers
 
+## Exact controlled review plans (offline first)
+
+The optional operator sidecar `controlled-review-v1` is **not** a blanket review
+override or an instruction to resolve a formal review. It is limited to one
+already-bound draft target in one saved-capture controlled payload. The native
+writer retains all original review rows, raw conflict markers, source bindings,
+manual ownership, capture timestamps and publication gates.
+The target must have an existing active source link matching its source ID,
+offer and canonical; this mode cannot recreate a missing link or bind a new ID.
+
+- A `reject_reassignment` historical decision freezes one exact review key and
+  server-computed review-row MD5, its held source/previous agency/binding and the
+  different proposed agency/target. Under the existing native table locks it may
+  exclude only this rejected proposal from the historical-number check for that
+  target. Direct/peer reviews, field conflicts and held relations still veto.
+- `accept_dom` only acknowledges the exact bedrooms DOM/JSON-LD discrepancy. It
+  binds the full conflict-array SHA-256, original HTML SHA-256 and capture time,
+  and verifies every occurrence and normalized DOM value. It does not erase or
+  change `status: "review"` in raw evidence. Other conflict types remain blocked.
+- Canonical SHA-256 binds the complete sidecar to the frozen payload (computed
+  with `meta.controlled_patch.review_plan_hash` omitted), then binds the sidecar
+  hash back into that payload. Receipt identity includes that reference. The new
+  observation stores `reviewAdjudication`, including the plan hash, approval
+  reference, precise target/decisions and `formalReviewMutation: false`.
+- The payload reference alone cannot authorize anything. Server-only options
+  must provide the sidecar and matching operator-approved hash before a client
+  can be created. Existing HTTP endpoints do not populate those options.
+
+Offline schema/plan validation, **without `--apply`**, credentials or DB access:
+
+```powershell
+node scripts/mls/apply-source-snapshot.mjs --source 28hse --patch --payload <frozen-payload.json> --review-plan <operator-plan.json> --review-plan-hash <canonical-plan-sha256>
+```
+
+Both sidecar flags and `--patch` are required. The CLI is an operator trust
+boundary, not proof that production mutation has been approved. Dry-run is not
+a DB diff, review-row verification, ingestion permission or publication approval.
+Never invent row hashes or atomic before-images to make it pass. Use the
+synthetic `controlled-review-fixtures.mjs` and tests as the field-level format
+reference, not as real production evidence. No schema migration is required.
+
 ## Controlled saved-capture patch preconditions (offline first)
 
 New controlled applies require `evidence_mode: "saved-capture-v1"`, the existing

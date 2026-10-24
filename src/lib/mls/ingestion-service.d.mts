@@ -3,6 +3,9 @@ export interface IngestionOptions {
   connectionString?: string;
   apply?: boolean;
   controlledPatch?: boolean;
+  /** Server-only operator sidecar; never copied from request JSON. */
+  reviewPlan?: Record<string, unknown>;
+  reviewPlanHash?: string;
   expectedSource?: "28hse_agent_540" | "propertyhk";
   /** Server-only test dependency; never populated from request JSON. */
   createClient?: (config: {

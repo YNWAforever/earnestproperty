@@ -1,6 +1,6 @@
 import { open } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { SnapshotError } from "../../src/lib/mls/ingestion-contract.mjs";
+import { hashPayload, SnapshotError } from "../../src/lib/mls/ingestion-contract.mjs";
 import { verifyDailyTarget } from "./verify-daily-target.mjs";
 const MAX_BYTES = 5 * 1024 * 1024;
 async function readFrozen(path) {
@@ -31,6 +31,8 @@ export async function runSnapshotBridge(
 ) {
   let source,
     payloadPath,
+    reviewPlanPath,
+    reviewPlanHash,
     apply = false,
     controlledPatch = false;
   for (let i = 0; i < args.length; i++) {
@@ -40,6 +42,19 @@ export async function runSnapshotBridge(
       source = args[++i];
     else if (args[i] === "--apply" && !apply) apply = true;
     else if (args[i] === "--patch" && !controlledPatch) controlledPatch = true;
+    else if (
+      args[i] === "--review-plan" &&
+      !reviewPlanPath &&
+      args[i + 1] &&
+      !args[i + 1].startsWith("--")
+    )
+      reviewPlanPath = args[++i];
+    else if (
+      args[i] === "--review-plan-hash" &&
+      !reviewPlanHash &&
+      /^[a-f0-9]{64}$/.test(args[i + 1] ?? "")
+    )
+      reviewPlanHash = args[++i];
     else throw new SnapshotError("INVALID_ARGUMENTS", 400);
   }
   if (!payloadPath) throw new SnapshotError("PAYLOAD_REQUIRED", 400);
@@ -55,6 +70,22 @@ export async function runSnapshotBridge(
   if (!payload || payload.source !== source) throw new SnapshotError("SOURCE_SCOPE_MISMATCH", 400);
   const options = { apply, expectedSource: source === "28hse" ? "28hse_agent_540" : "propertyhk" };
   if (controlledPatch) options.controlledPatch = true;
+  if (reviewPlanPath || reviewPlanHash) {
+    if (!reviewPlanPath || !reviewPlanHash || !controlledPatch || source !== "28hse")
+      throw new SnapshotError("INVALID_ARGUMENTS", 400);
+    const rawPlan = await readPayload(reviewPlanPath);
+    if (Buffer.byteLength(rawPlan) > MAX_BYTES) throw new SnapshotError("PAYLOAD_TOO_LARGE", 413);
+    let plan;
+    try {
+      plan = JSON.parse(rawPlan);
+    } catch {
+      throw new SnapshotError("INVALID_JSON", 400);
+    }
+    if (hashPayload(plan) !== reviewPlanHash)
+      throw new SnapshotError("patch_review_plan_hash_mismatch", 409);
+    options.reviewPlan = plan;
+    options.reviewPlanHash = reviewPlanHash;
+  }
   if (apply) {
     try {
       verifyDailyTarget(env.DATABASE_URL_UNPOOLED, env.PROPERTY_SYNC_EXPECTED_DATABASE_HOST);
