@@ -1,5 +1,90 @@
 # Property source workers
 
+## Named native publication (offline implementation; separate live approval)
+
+The existing publisher accepts an optional **one-target** `named-publication-v1`
+operator sidecar. It does not create another importer or relax publication gates.
+The complete accepted payload is retained: selecting one source must not slice
+the batch or change its receipt hash. The current-full receipt, successful/current
+scope watermark, 36-hour batch and original capture freshness, source identity,
+draft, group/direct/peer review, staff ownership and owned-media checks still apply.
+Provider provenance requires matching `captured_at` / `fetchedAt`; a fresh acceptance
+envelope cannot hide a missing, contradictory or stale original capture.
+
+The sidecar has exactly `version`, `source`, `scope_id`, `policy_version`,
+`payload_hash`, `approval_ref` and a one-item `targets` array. A target contains:
+
+- `external_id`, `deal_type`, `property_id`, `agency_property_no`;
+- `observation_id`, `source_link_id`, PostgreSQL `canonical_row_hash`;
+- `dom_conflict` (null or exact hash/time-bound `accept_dom` evidence);
+- `historical` (zero or one exact held-row `reject_reassignment` decision).
+
+Only source `28hse_agent_540` / scope `agent:540` is supported in named mode.
+The plan binds the complete payload SHA-256 and has its own canonical SHA-256.
+Its non-null reference must start `PUBLICATION-`; this naming convention records
+an operator decision, not permission by itself. A controlled price-patch sidecar
+or its previous approval is never publication authority. A draft preview retains
+`approval_ref: null` and fails validation. Never fabricate hashes or mark an old
+partial receipt full to satisfy the schema.
+
+The operator CLI supports paired `--publication-plan` and
+`--publication-plan-hash` arguments. Missing/malformed/duplicate arguments reject
+before creating a client and never fall back to a broader batch. The legacy
+payload/report interface remains compatible. **Both CLI modes are LIVE (`apply=true`),
+not dry-runs; do not run either without a new explicit production approval.**
+Pure `validateNamedPublicationPlan` / publisher tests create no production client.
+
+Named selection runs after final policy-aware decoding. Only the selected
+source/deal can attempt media or canonical publication, even when the full batch
+contains other eligible records. Historical exclusions use the existing exact
+review-row/binding validator; direct/peer/group/manual holds are never excluded.
+Raw DOM conflicts remain `status: "review"`, and a DOM acknowledgement also requires
+the canonical bedroom value to agree. Rechecks run before media and again under
+bounded, properties-first native locks before COMMIT. A non-publication-column
+hash protects price and every other canonical field. The new scoped decision is
+recorded in publication audit; it never resolves a review or rewrites source links.
+Existing unnamed batches now also hold historical proposed-number reviews and
+unacknowledged raw source conflicts.
+
+Saved-HTML content proposals are separate **human-review artifacts**: deterministic
+facts and unselected photo URL metadata, with original hash/time and rights/visual
+identity unverified. Do not splice them into a receipt-backed payload. Images are
+not downloaded by preparing metadata; publication still requires approved content,
+at most six selected photos and valid owned assets. No DB migration is needed.
+
+Offline regressions (no `.db.test` files or credentials):
+
+```powershell
+npm run test:property-sync
+npm run test:property-sync:daily
+npm run test:property-sync:python
+```
+
+Use an OS-only environment and deny Node/Python sockets for these tests. Real SQL,
+concurrency, media upload, authenticated staff acceptance and publication require
+separate target-bound authorization; mock/offline PASS does not establish them.
+
+The named publisher also has a synthetic, full-schema PostgreSQL regression:
+
+```powershell
+npm run test:property-sync:publication:owned
+npm run test:property-sync:publication:owned:db
+```
+
+The first command is pure harness/cleanup unit testing. The second creates a new
+owned local Docker container using the repository's pinned, already-installed
+PostgreSQL image (`--pull never`), applies the current migrations, and exercises
+the native publisher with synthetic records and preseeded media metadata only.
+It accepts no database URL or provider credentials. Local Docker, container,
+loopback port and actual PostgreSQL server identity must pass before migrations
+or fixture writes; unavailable or unverifiable targets fail rather than skip or
+fall back. No production data, saved source HTML or image bytes are required.
+The launcher retains an atomic ownership handoff so that its parent can verify
+and remove only its own container if the test child times out. Cleanup errors
+remain failures, and retained synthetic output is identified in the test log.
+CI runs the units and the full-schema regression in its existing owned-DB job.
+These commands do not authorize or exercise real listing publication.
+
 ## Exact controlled review plans (offline first)
 
 The optional operator sidecar `controlled-review-v1` is **not** a blanket review

@@ -83,48 +83,50 @@ export function validateReviewPlan(batch, options = {}) {
       expected?.property_id !== target.property_id
     )
       fail("patch_review_plan_target_changed");
-    if (
-      target.dom_conflict !== null &&
-      (!keys(target.dom_conflict, [
-        "decision",
-        "captured_at",
-        "content_sha256",
-        "conflicts_hash",
-      ]) ||
-        target.dom_conflict.decision !== "accept_dom" ||
-        !hex(target.dom_conflict.content_sha256, 64) ||
-        !hex(target.dom_conflict.conflicts_hash, 64) ||
-        !domConflictReviewed(record, target))
-    )
-      fail("patch_review_plan_conflict_changed");
+    assertReviewEvidence(record, target);
     if (target.dom_conflict === null && target.historical.length === 0)
       fail("invalid_patch_review_plan");
-    for (const historical of target.historical) {
-      if (
-        !keys(historical, [
-          "review_key",
-          "row_hash",
-          "external_id",
-          "previous_agency_no",
-          "proposed_agency_no",
-          "bound_property_id",
-          "decision",
-        ]) ||
-        !hex(historical.review_key, 64) ||
-        !hex(historical.row_hash, 32) ||
-        !uuid(historical.bound_property_id) ||
-        !/^[0-9]+$/.test(historical.external_id ?? "") ||
-        historical.external_id === record.externalId ||
-        historical.bound_property_id === target.property_id ||
-        historical.decision !== "reject_reassignment" ||
-        !/^[A-Z][0-9]{6}$/.test(historical.previous_agency_no ?? "") ||
-        historical.previous_agency_no === target.agency_property_no ||
-        historical.proposed_agency_no !== target.agency_property_no
-      )
-        fail("invalid_patch_review_plan");
-    }
   }
   return plan;
+}
+
+// Shared evidence validation; publication has a separate plan/approval namespace.
+export function assertReviewEvidence(record, target) {
+  if (!Array.isArray(target.historical) || target.historical.length > 1)
+    fail("invalid_patch_review_plan");
+  if (
+    target.dom_conflict !== null &&
+    (!keys(target.dom_conflict, ["decision", "captured_at", "content_sha256", "conflicts_hash"]) ||
+      target.dom_conflict.decision !== "accept_dom" ||
+      !hex(target.dom_conflict.content_sha256, 64) ||
+      !hex(target.dom_conflict.conflicts_hash, 64) ||
+      !domConflictReviewed(record, target))
+  )
+    fail("patch_review_plan_conflict_changed");
+  for (const historical of target.historical) {
+    if (
+      !keys(historical, [
+        "review_key",
+        "row_hash",
+        "external_id",
+        "previous_agency_no",
+        "proposed_agency_no",
+        "bound_property_id",
+        "decision",
+      ]) ||
+      !hex(historical.review_key, 64) ||
+      !hex(historical.row_hash, 32) ||
+      !uuid(historical.bound_property_id) ||
+      !/^[0-9]+$/.test(historical.external_id ?? "") ||
+      historical.external_id === record.externalId ||
+      historical.bound_property_id === target.property_id ||
+      historical.decision !== "reject_reassignment" ||
+      !/^[A-Z][0-9]{6}$/.test(historical.previous_agency_no ?? "") ||
+      historical.previous_agency_no === target.agency_property_no ||
+      historical.proposed_agency_no !== target.agency_property_no
+    )
+      fail("invalid_patch_review_plan");
+  }
 }
 
 function domConflictReviewed(record, target) {

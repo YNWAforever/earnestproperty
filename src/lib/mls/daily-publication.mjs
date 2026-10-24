@@ -10,6 +10,17 @@ import { decodeSnapshot, normalizeDecimal, cleanSourceId } from "./ingestion-con
 import { prepareListingMedia } from "./media.mjs";
 import { createObservation } from "./source-contract.mjs";
 import { createSyncRepository } from "./sync-repository.mjs";
+import { hasUnreviewedSourceConflict, reviewDecisionAudit } from "./controlled-review-plan.mjs";
+import {
+  configurePatchTransaction,
+  lockPatchPreconditions,
+} from "./controlled-patch-preconditions.mjs";
+import {
+  validateNamedPublicationPlan,
+  publicationRecords,
+  sourceCaptureFresh,
+  assertNamedPublicationTarget,
+} from "./named-publication-plan.mjs";
 const POLICY = "daily-reviewed-publication-v1";
 const equal = (a, b) => normalizeDecimal(a) === normalizeDecimal(b);
 export function publicationDecision(raw, p, source = HSE_PUBLICATION_SOURCE) {
@@ -25,6 +36,7 @@ export function publicationDecision(raw, p, source = HSE_PUBLICATION_SOURCE) {
       ))
   )
     return "staff_or_source_review";
+  if (p.historical_review_pending) return "historical_review_required";
   if (source.source === "propertyhk") {
     const externalId = cleanSourceId(
       "propertyhk",
@@ -95,6 +107,7 @@ export function publicationDecision(raw, p, source = HSE_PUBLICATION_SOURCE) {
   return null;
 }
 const targetSql = `SELECT p.*,
+ md5(to_jsonb(p)::text) AS canonical_row_hash,
  (SELECT max(mr.created_at) FROM listing_media_records mr WHERE mr.property_id=p.id) AS last_media_attempt_at,
  s.observation_id,s.unit_key,s.external_listing_id,s.source_status,o.run_id,m.public_listing_no,
  (s.source='propertyhk' AND s.unit_key IS NOT NULL AND NOT EXISTS(SELECT 1 FROM mls_source_state x JOIN listing_source_observations xo ON xo.id=x.observation_id WHERE x.property_id=p.id AND x.source_status='active' AND (x.source<>s.source OR x.unit_key IS DISTINCT FROM s.unit_key OR x.deal_type<>s.deal_type OR xo.payload->'fields' IS DISTINCT FROM o.payload->'fields' OR xo.payload->>'sourceStatusReason' IS DISTINCT FROM o.payload->>'sourceStatusReason'))) AS equivalent_propertyhk_sources,
@@ -103,8 +116,18 @@ const targetSql = `SELECT p.*,
  OR EXISTS(SELECT 1 FROM properties other WHERE other.id<>p.id AND other.canonical_property_no=p.canonical_property_no AND other.deal_type=p.deal_type)
  OR EXISTS(SELECT 1 FROM admin_property_overrides a WHERE a.property_no=m.public_listing_no AND (a.shared<>'{}'::jsonb OR CASE p.deal_type::text WHEN 'sale' THEN a.sale ELSE a.rent END<>'{}'::jsonb))
  OR EXISTS(SELECT 1 FROM property_sync_fields f WHERE f.property_id=p.id AND (f.active_override OR f.selection_reason='manual_override'))
- OR EXISTS(SELECT 1 FROM mls_ingestion_conflicts c WHERE c.property_id=p.id AND c.review_status='unreviewed')
- OR EXISTS(SELECT 1 FROM mls_ingestion_reviews r WHERE r.source=s.source AND r.external_listing_id=s.external_listing_id AND r.deal_type=s.deal_type AND r.status='open')) AS blocked
+ OR EXISTS(SELECT 1 FROM property_public_groups g WHERE g.public_listing_no=m.public_listing_no AND g.review_required)
+ OR EXISTS(SELECT 1 FROM mls_ingestion_conflicts c WHERE c.review_status='unreviewed' AND c.property_id IN(SELECT peer.property_id FROM property_public_members peer WHERE peer.public_listing_no=m.public_listing_no))
+ OR EXISTS(SELECT 1 FROM mls_ingestion_reviews r WHERE r.status='open' AND ((r.source=s.source AND r.external_listing_id=s.external_listing_id AND r.deal_type=s.deal_type) OR EXISTS(
+   SELECT 1 FROM mls_source_state peer JOIN property_public_members pm ON pm.property_id=peer.property_id
+   WHERE pm.public_listing_no=m.public_listing_no AND peer.source=r.source AND peer.external_listing_id=r.external_listing_id AND peer.deal_type=r.deal_type)))) AS blocked,
+ (s.source='28hse_agent_540' AND EXISTS(SELECT 1 FROM mls_ingestion_reviews r
+   JOIN listing_source_observations old_o ON old_o.id=r.observation_id AND old_o.source=r.source AND old_o.external_listing_id=r.external_listing_id AND old_o.deal_type=r.deal_type
+   JOIN mls_ingestion_receipts old_receipt ON old_receipt.run_id=old_o.run_id AND old_receipt.source=old_o.source
+   WHERE r.status='open' AND r.reason='company_number_changed' AND r.source=s.source
+     AND old_receipt.scope_id=s.scope_id AND old_receipt.policy_version=s.policy_version
+     AND old_o.payload#>>'{identity,agency_property_no}'=p.canonical_property_no
+     AND NOT(r.review_key=ANY($5::text[])))) AS historical_review_pending
  FROM mls_source_state s JOIN properties p ON p.id=s.property_id JOIN property_public_members m ON m.property_id=p.id
  JOIN listing_source_observations o ON o.id=s.observation_id
  WHERE s.source=$3 AND s.scope_id=$4 AND s.external_listing_id=$1 AND s.deal_type=$2`;
@@ -116,6 +139,8 @@ export async function publishDaily({
   prepare = prepareListingMedia,
   now = Date.now,
   onReport = async () => {},
+  publicationPlan,
+  publicationPlanHash,
 }) {
   let batch = decodeSnapshot(payload, { idScope: "global" });
   if (
@@ -130,6 +155,13 @@ export async function publishDaily({
     Date.parse(batch.scrapedAt) > now() + 60000
   )
     throw Error("STALE_PUBLICATION_BATCH");
+  const namedPlan = validateNamedPublicationPlan(batch, { publicationPlan, publicationPlanHash });
+  if (
+    namedPlan &&
+    !publicationRecords(batch, namedPlan).every((record) => sourceCaptureFresh(record, now()))
+  )
+    throw Error("STALE_PUBLICATION_SOURCE");
+  const excludedHistoricalKeys = namedPlan?.targets[0].historical.map((h) => h.review_key) ?? [];
   const q = async (text, params = []) => (await client.query(text, params)).rows;
   const accepted = async () => {
     const r = await q(
@@ -156,6 +188,7 @@ export async function publishDaily({
       throw Error("INVALID_PUBLICATION_BATCH");
   }
 
+  const selectedRecords = publicationRecords(batch, namedPlan);
   const report = {
     receiptId,
     published: [],
@@ -172,26 +205,44 @@ export async function publishDaily({
   const repository = createSyncRepository({ client });
   let attempted = 0;
   try {
-    for (const record of batch.records) {
+    for (const record of selectedRecords) {
       const raw = record.raw;
+      const item = {
+        propertyNo: raw.agency_property_no,
+        sourceId: record.externalId,
+        dealType: record.dealType,
+      };
+      if (!sourceCaptureFresh(record, now()) || hasUnreviewedSourceConflict(record, namedPlan)) {
+        report.held.push({
+          ...item,
+          reason: sourceCaptureFresh(record, now())
+            ? "source_conflict_requires_review"
+            : "stale_source_capture",
+        });
+        continue;
+      }
       const targets = await q(targetSql, [
         record.externalId,
         record.dealType,
         batch.source,
         batch.scopeId,
+        excludedHistoricalKeys,
       ]);
+      if (namedPlan)
+        await assertNamedPublicationTarget(
+          q,
+          batch,
+          record,
+          targets.length === 1 ? targets[0] : null,
+          namedPlan,
+        );
       if (targets.length === 1 && targets[0].status === "active") {
         report.alreadyPublic++;
         continue;
       }
       const p = targets.length === 1 ? targets[0] : null;
       const reason = publicationDecision(raw, p, source);
-      const item = {
-        propertyNo: raw.agency_property_no,
-        sourceId: record.externalId,
-        dealType: record.dealType,
-        ...(p?.public_listing_no ? { publicListingNo: p.public_listing_no } : {}),
-      };
+      if (p?.public_listing_no) item.publicListingNo = p.public_listing_no;
       if (reason) {
         report.held.push({ ...item, reason });
         continue;
@@ -229,7 +280,7 @@ export async function publishDaily({
               raw,
               externalId: record.externalId,
               unitKey: p.unit_key,
-              fetchedAt: batch.scrapedAt,
+              fetchedAt: record.fetchedAt,
               aliases: source.aliases,
               verifySourceUrl: source.verifySourceUrl,
               images: missing,
@@ -241,7 +292,7 @@ export async function publishDaily({
               sourceUrl: raw.source_url,
               propertyNoRaw: raw.agency_property_no,
               fields: record.fields,
-              fetchedAt: batch.scrapedAt,
+              fetchedAt: record.fetchedAt,
               mediaCandidates: missing.map((url) => ({
                 url,
                 category: "listing_photo",
@@ -269,16 +320,31 @@ export async function publishDaily({
       await q("BEGIN");
       let commitSent = false;
       try {
-        await q("SET LOCAL lock_timeout='20s'");
+        await configurePatchTransaction(q);
         await q("SELECT pg_advisory_xact_lock(hashtext('earnestproperty:mls-sync'))");
         await q("LOCK TABLE properties IN SHARE ROW EXCLUSIVE MODE");
+        await lockPatchPreconditions(q);
+        if (
+          now() - Date.parse(batch.scrapedAt) > 36 * 3600000 ||
+          !sourceCaptureFresh(record, now())
+        )
+          throw Error("STALE_PUBLICATION_SOURCE");
         await accepted();
         const current = await q(targetSql, [
           record.externalId,
           record.dealType,
           batch.source,
           batch.scopeId,
+          excludedHistoricalKeys,
         ]);
+        if (namedPlan)
+          await assertNamedPublicationTarget(
+            q,
+            batch,
+            record,
+            current.length === 1 ? current[0] : null,
+            namedPlan,
+          );
         if (
           current.length !== 1 ||
           current[0].id !== p.id ||
@@ -286,6 +352,12 @@ export async function publishDaily({
           publicationDecision(raw, current[0], source)
         )
           throw Error("PUBLICATION_TARGET_CHANGED");
+        const unchangedSql = `SELECT /* publication_unchanged_fields */ md5((to_jsonb(p)-'status'-'description'-'images'-'source_url'-'updated_at')::text) AS unchanged_hash FROM properties p WHERE id=$1`;
+        const unchangedBefore = namedPlan
+          ? (await q(unchangedSql, [p.id]))[0]?.unchanged_hash
+          : null;
+        if (namedPlan && !/^[a-f0-9]{32}$/.test(unchangedBefore ?? ""))
+          throw Error("PUBLICATION_PROTECTED_FIELDS_CHANGED");
         const assets = await q(
           `SELECT mr.source_url,a.url FROM listing_media_records mr JOIN media_assets a ON a.id=mr.owned_media_asset_id
         WHERE mr.property_id=$1 AND mr.observation_id=$2 AND mr.source_url=ANY($3::text[]) AND mr.eligibility='eligible'
@@ -334,9 +406,18 @@ export async function publishDaily({
           );
         }
         await q(
-          `INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) SELECT NULL,$2,'property',id,jsonb_build_object('receiptId',$3::text,'payloadHash',$4::text,'before',$5::jsonb,'after',to_jsonb(p)) FROM properties p WHERE id=$1`,
-          [p.id, POLICY, receiptId, batch.hash, JSON.stringify(before)],
+          `INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) SELECT NULL,$2,'property',id,jsonb_build_object('receiptId',$3::text,'payloadHash',$4::text,'before',$5::jsonb,'after',to_jsonb(p),'publicationReview',$6::jsonb) FROM properties p WHERE id=$1`,
+          [
+            p.id,
+            POLICY,
+            receiptId,
+            batch.hash,
+            JSON.stringify(before),
+            JSON.stringify(namedPlan ? reviewDecisionAudit(record, namedPlan) : null),
+          ],
         );
+        if (namedPlan && (await q(unchangedSql, [p.id]))[0]?.unchanged_hash !== unchangedBefore)
+          throw Error("PUBLICATION_PROTECTED_FIELDS_CHANGED");
         commitSent = true;
         await q("COMMIT");
         report.published.push(item);
