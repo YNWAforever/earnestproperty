@@ -1,7 +1,8 @@
-name: Daily property collection
+name: Daily owner-capture publication
 "on":
   schedule:
-    - cron: "17 20 * * *"
+    # 09:00 Asia/Hong_Kong. Actions cron is UTC. This schedule does not collect 28hse.
+    - cron: "0 1 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -12,6 +13,8 @@ name: Daily property collection
           - replay-shadow
           - replay-apply
           - publication-only
+          - owner-publication
+          - owner-publication-dry-run
         default: shadow
       scope:
         default: agent:540
@@ -37,12 +40,16 @@ permissions:
 env:
   GH_TOKEN: ${{ secrets.PROPERTY_SYNC_EVIDENCE_TOKEN || github.token }}
   GH_REPO: ${{ vars.PROPERTY_SYNC_EVIDENCE_REPO || github.repository }}
-  MODE: ${{ inputs.mode || 'apply' }}
+  MODE: ${{ inputs.mode || 'owner-publication' }}
   SCOPE: ${{ inputs.scope || 'agent:540' }}
   EXPECTED_BRANCH: ${{ vars.PROPERTY_SYNC_EXPECTED_BRANCH }}
   POLICY_APPROVED: ${{ vars.PROPERTY_SYNC_POLICY_APPROVED }}
-  APPLY_ENABLED: ${{ vars.PROPERTY_SYNC_DAILY_ENABLED }}
   MANUAL_APPLY_ENABLED: ${{ vars.PROPERTY_SYNC_MANUAL_APPLY_ENABLED }}
+  OWNER_DAILY_ENABLED: ${{ vars.OWNER_PUBLICATION_DAILY_ENABLED }}
+  OWNER_MANUAL_ENABLED: ${{ vars.OWNER_PUBLICATION_MANUAL_APPLY_ENABLED }}
+  OWNER_INPUT_SHA256: ${{ vars.OWNER_PUBLICATION_INPUT_SHA256 }}
+  OWNER_CAPTURE_ASSET: ${{ vars.OWNER_PUBLICATION_CAPTURE_ASSET }}
+  OWNER_CHOICES: ${{ vars.OWNER_PUBLICATION_CHOICES }}
   REPLAY_ASSET: ${{ inputs.replay_asset }}
   BOOTSTRAP: ${{ inputs.bootstrap || 'false' }}
 jobs:
@@ -91,15 +98,30 @@ jobs:
            shadow|replay-shadow) ;;
            apply|replay-apply|publication-only)
             case "$GITHUB_EVENT_NAME" in
-             schedule) test "$APPLY_ENABLED" = true ;;
+             schedule) exit 1 ;;
              workflow_dispatch) test "$MANUAL_APPLY_ENABLED" = true ;;
              *) exit 1 ;;
             esac
             test "$POLICY_APPROVED" = python-v2.2 ;;
+           owner-publication|owner-publication-dry-run)
+            case "$MODE" in
+             owner-publication)
+              case "$GITHUB_EVENT_NAME" in
+               schedule) test "$OWNER_DAILY_ENABLED" = true ;;
+               workflow_dispatch) test "$OWNER_MANUAL_ENABLED" = true ;;
+               *) exit 1 ;;
+              esac
+              ;;
+             owner-publication-dry-run) test "$GITHUB_EVENT_NAME" = workflow_dispatch ;;
+            esac
+            [[ "$OWNER_INPUT_SHA256" =~ ^[a-f0-9]{64}$ ]]
+            [[ "$OWNER_CAPTURE_ASSET" == "owner-capture-${OWNER_INPUT_SHA256}.tar.gz" ]]
+            ;;
            *) exit 1 ;;
           esac
         id: evidence-gate
       - name: Reconcile private baseline against read-only current database receipt
+        if: env.MODE != 'owner-publication' && env.MODE != 'owner-publication-dry-run'
         shell: bash
         run: >-
           set -euo pipefail
@@ -140,6 +162,8 @@ jobs:
       started_at: ${{ steps.execution-start.outputs.at }}
       finished_at: ${{ steps.execution-finish.outputs.at }}
   collect:
+    # Manual HTTP collection only. The 09:00 Asia/Hong_Kong schedule never enters this job
+    # and does not use Firecrawl or PROPERTY_SYNC_28HSE_TRANSPORT.
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
@@ -270,6 +294,7 @@ jobs:
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" >> "$GITHUB_OUTPUT"
     needs:
       - preflight
+    if: needs.preflight.result == 'success' && github.event_name != 'schedule' && inputs.mode != 'owner-publication' && inputs.mode != 'owner-publication-dry-run'
     env:
       BASELINE_ASSET: ${{ needs.preflight.outputs.baseline }}
     outputs:
@@ -382,7 +407,7 @@ jobs:
       - collect
     env:
       HANDOFF_ASSET: ${{ needs.collect.outputs.handoff }}
-    if: needs.collect.result == 'success' && inputs.mode != 'publication-only'
+    if: needs.collect.result == 'success' && inputs.mode != 'publication-only' && github.event_name != 'schedule' && inputs.mode != 'owner-publication' && inputs.mode != 'owner-publication-dry-run'
     outputs:
       started_at: ${{ steps.execution-start.outputs.at }}
       finished_at: ${{ steps.execution-finish.outputs.at }}
@@ -470,9 +495,121 @@ jobs:
       HANDOFF_ASSET: ${{ needs.collect.outputs.handoff }}
     if: >-
       always() && needs.preflight.result == 'success' && needs.collect.result == 'success' &&
-      (needs.ingest.result == 'success' || inputs.mode == 'publication-only') && (github.event_name
-      == 'schedule' || inputs.mode == 'apply' || inputs.mode == 'replay-apply' || inputs.mode ==
+      (needs.ingest.result == 'success' || inputs.mode == 'publication-only') && github.event_name
+      != 'schedule' && (inputs.mode == 'apply' || inputs.mode == 'replay-apply' || inputs.mode ==
       'publication-only')
+    outputs:
+      started_at: ${{ steps.execution-start.outputs.at }}
+      finished_at: ${{ steps.execution-finish.outputs.at }}
+  owner-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    needs:
+      - preflight
+    if: needs.preflight.result == 'success' && (github.event_name == 'schedule' || inputs.mode == 'owner-publication' || inputs.mode == 'owner-publication-dry-run')
+    steps:
+      - id: execution-start
+        shell: bash
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install locked publication dependencies
+        shell: bash
+        run: |-
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Download the approved owner-capture bundle
+        shell: bash
+        run: |-
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && [ "$MODE" != owner-publication ]; then
+           echo OWNER_SCHEDULE_MODE_REQUIRED >&2
+           exit 1
+          fi
+          mkdir -p owner-capture-download owner-capture
+          gh release download property-sync-evidence --pattern "$OWNER_CAPTURE_ASSET" --dir owner-capture-download
+          python - <<'PY'
+          import os, sys, tarfile
+          path = os.path.join("owner-capture-download", os.environ["OWNER_CAPTURE_ASSET"])
+          with tarfile.open(path, "r:gz") as archive:
+              for member in archive.getmembers():
+                  name = member.name
+                  if member.issym() or member.islnk() or name.startswith("/") or ".." in name.split("/"):
+                      sys.exit("OWNER_CAPTURE_PATH_REJECTED")
+              archive.extractall("owner-capture", filter="data")
+          PY
+          test -f owner-capture/import_ready.frozen.json
+          test -d owner-capture/photos
+          actual=$(sha256sum owner-capture/import_ready.frozen.json | awk '{print $1}')
+          test "$actual" = "$OWNER_INPUT_SHA256"
+          if [ -n "${OWNER_CHOICES:-}" ]; then
+           [[ "$OWNER_CHOICES" =~ ^[A-Z][0-9]{6}=[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(,[A-Z][0-9]{6}=[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})*$ ]]
+          fi
+      - name: Publish owner capture into site listings
+        if: env.MODE == 'owner-publication'
+        shell: bash
+        env:
+          IMPORT_TARGET_ENV: ${{ vars.IMPORT_TARGET_ENV }}
+          IMPORT_BLOB_TARGET_ENV: ${{ vars.IMPORT_BLOB_TARGET_ENV }}
+          IMPORT_DATABASE_URL: ${{ secrets.IMPORT_DATABASE_URL }}
+          IMPORT_BLOB_READ_WRITE_TOKEN: ${{ secrets.IMPORT_BLOB_READ_WRITE_TOKEN }}
+          IMPORT_BLOB_STORE_ID: ${{ vars.IMPORT_BLOB_STORE_ID }}
+          IMPORT_BLOB_HOST: ${{ vars.IMPORT_BLOB_HOST }}
+        run: |-
+          set -euo pipefail
+          mkdir -p owner-output
+          choose_args=()
+          if [ -n "${OWNER_CHOICES:-}" ]; then
+           IFS=',' read -ra pairs <<< "$OWNER_CHOICES"
+           for pair in "${pairs[@]}"; do choose_args+=(--choose "$pair"); done
+          fi
+          status=0
+          node scripts/mls/owner-publication.mjs --apply --driver=neon-ws --input owner-capture/import_ready.frozen.json --confirm-production="$OWNER_INPUT_SHA256" --report owner-output/owner-publication "${choose_args[@]}" || status=$?
+          if [ "$status" -eq 1 ]; then exit 1; fi
+          if [ "$status" -gt 2 ]; then exit "$status"; fi
+          node --input-type=module -e 'import { readFileSync } from "node:fs"; const report = JSON.parse(readFileSync(process.argv[1], "utf8")); if (report.mode !== "APPLY" || !report.result) throw new Error("OWNER_PUBLICATION_REPORT_INVALID"); const published = report.result.published?.length ?? 0; const current = report.result.alreadyPublished?.length ?? 0; const unknown = report.result.unknown?.length ?? 0; const held = report.result.held?.length ?? 0; if (unknown || published + current < 1) throw new Error("OWNER_PUBLICATION_WROTE_NOTHING"); console.log(JSON.stringify({ published, alreadyPublished: current, held }));' owner-output/owner-publication.json >> "$GITHUB_STEP_SUMMARY"
+          if [ "$status" -eq 2 ]; then echo "Owner policy held some rows. Eligible listings were created, updated, or already current. The private report lists the holds." >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Read owner capture without writing
+        if: env.MODE == 'owner-publication-dry-run'
+        shell: bash
+        env:
+          IMPORT_TARGET_ENV: ${{ vars.IMPORT_TARGET_ENV }}
+          IMPORT_BLOB_TARGET_ENV: ${{ vars.IMPORT_BLOB_TARGET_ENV }}
+          IMPORT_DATABASE_URL: ${{ secrets.IMPORT_DATABASE_URL }}
+        run: |-
+          set -euo pipefail
+          mkdir -p owner-output
+          choose_args=()
+          if [ -n "${OWNER_CHOICES:-}" ]; then
+           IFS=',' read -ra pairs <<< "$OWNER_CHOICES"
+           for pair in "${pairs[@]}"; do choose_args+=(--choose "$pair"); done
+          fi
+          status=0
+          node scripts/mls/owner-publication.mjs --driver=neon-ws --input owner-capture/import_ready.frozen.json --confirm-production="$OWNER_INPUT_SHA256" --report owner-output/owner-publication "${choose_args[@]}" || status=$?
+          if [ "$status" -eq 1 ]; then exit 1; fi
+          if [ "$status" -gt 2 ]; then exit "$status"; fi
+          echo "Owner publication dry-run wrote no listings. Exit ${status}." >> "$GITHUB_STEP_SUMMARY"
+      - name: Pin private owner-publication report
+        if: always()
+        shell: bash
+        run: |-
+          set -euo pipefail
+          if [ -f owner-output/owner-publication.json ]; then
+           cp owner-output/owner-publication.json "owner-publication-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.json"
+           gh release upload property-sync-evidence "owner-publication-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT.json"
+          fi
+      - id: execution-finish
+        if: always()
+        shell: bash
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" >> "$GITHUB_OUTPUT"
     outputs:
       started_at: ${{ steps.execution-start.outputs.at }}
       finished_at: ${{ steps.execution-finish.outputs.at }}
@@ -513,7 +650,11 @@ jobs:
           set -euo pipefail
 
           echo "Source:28Hse Scope:agent:540 Collection:$COLLECTION_RESULT
-          Ingestion:$INGESTION_RESULT Publication:$PUBLICATION_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          Ingestion:$INGESTION_RESULT Publication:$PUBLICATION_RESULT
+          OwnerPublication:$OWNER_RESULT" >> "$GITHUB_STEP_SUMMARY"
+
+          echo 'Scheduled 09:00 Asia/Hong_Kong runs use owner-capture publication only. They do not
+          collect 28hse and do not use Firecrawl.' >> "$GITHUB_STEP_SUMMARY"
 
           echo 'Failed or unknown stages preserve existing inventory. Replay the verified frozen
           handoff; publication-only does not collect or ingest.' >> "$GITHUB_STEP_SUMMARY"
@@ -531,10 +672,12 @@ jobs:
       - collect
       - ingest
       - publish
+      - owner-publish
     env:
       COLLECTION_RESULT: ${{ needs.collect.result }}
       INGESTION_RESULT: ${{ needs.ingest.result }}
       PUBLICATION_RESULT: ${{ needs.publish.result }}
+      OWNER_RESULT: ${{ needs.owner-publish.result }}
     outputs:
       public_verified: ${{ steps.public-verify.outputs.public_verified }}
       started_at: ${{ steps.execution-start.outputs.at }}
@@ -542,7 +685,7 @@ jobs:
     if: always() && needs.preflight.result == 'success'
 
   record:
-    if: always() && vars.PROPERTY_SYNC_OBSERVABILITY_ENABLED == 'true'
+    if: always() && vars.PROPERTY_SYNC_OBSERVABILITY_ENABLED == 'true' && github.event_name != 'schedule' && inputs.mode != 'owner-publication' && inputs.mode != 'owner-publication-dry-run'
     needs: [preflight, collect, ingest, publish, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 10

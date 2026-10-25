@@ -234,7 +234,6 @@ For an uncertain Property.hk response, run `sync_propertyhk.py --payload <origin
 
 Crawl-only CLIs accept `--output <csv>`; diff_agent540.py accepts `--old`, `--new`, `--output`. Existing outputs fail rather than being overwritten. Locks are exclusive local lock files; after a crashed process an operator must confirm it is stopped before removing a stale lock. No scheduler, production configuration, source terms authorization, live selectors or notification service is created here.
 
-
 Live adapter verification (2026-09-07): the authorized agent 540 response uses the full bilingual company heading, matching C-018613 licence, same-origin absolute listing links and `table.tablePair` detail fields. Sanitized sale/rent structure excerpts are regression fixtures. Legacy detail headings bind source ID and offer type. Modern headings use the additional page-URL checks below. Main price/area values are separated from per-foot prices, and conflicting duplicate fields reject the page. Exact units are never inferred from floor bands. Full collection evidence remains a separate run result; these fixture tests alone do not attest to every live page.
 
 ## Optional 28Hse Firecrawl basic transport
@@ -295,10 +294,11 @@ count-drop, baseline scope/version, receipt and absence rules remain in force.
 Dry-run cannot submit, publish or advance a baseline. The optional transport
 does not turn a few successful pages into a complete snapshot.
 
-
 ## Daily inventory recovery (2026-10-01)
 
-The property workflow runs at 04:17 Asia/Hong_Kong (20:17 UTC), subject to GitHub scheduling delays. It remains disabled unless `PROPERTY_SYNC_DAILY_ENABLED=true`. Keep `PROPERTY_SYNC_EXPECTED_BRANCH=main`, `PROPERTY_SYNC_POLICY_APPROVED=python-v2.2`, and the exact verified direct Neon database host in `PROPERTY_SYNC_EXPECTED_DATABASE_HOST`.
+The property workflow runs at 09:00 Asia/Hong_Kong (`0 1 * * *` UTC), subject to GitHub scheduling delays. The schedule publishes an operator-approved owner-capture bundle through `owner-publication-v1`. It does not run `run_28hse_sync.py` and does not read `PROPERTY_SYNC_28HSE_TRANSPORT` or Firecrawl. It stays inactive unless `PROPERTY_SYNC_DAILY_ENABLED=true` and `OWNER_PUBLICATION_DAILY_ENABLED=true`. Keep `PROPERTY_SYNC_EXPECTED_BRANCH=main`. Manual HTTP shadow/apply/replay still requires `PROPERTY_SYNC_POLICY_APPROVED=python-v2.2` and the exact verified direct Neon database host in `PROPERTY_SYNC_EXPECTED_DATABASE_HOST`. Those manual modes are not the 09:00 schedule. See `docs/deployment/property-sync-daily.md`.
+
+The paragraphs below describe the manual HTTP collector, its private baseline, and the 20-draft publication cap. They are not the steps for the 09:00 owner-capture write.
 
 For a public code repository, set `PROPERTY_SYNC_EVIDENCE_REPO=owner/private-evidence-repository` and its restricted `PROPERTY_SYNC_EVIDENCE_TOKEN` with contents read/write for that repository. Create its private `property-sync-evidence` release and transfer the **latest accepted** baseline there with its exact request/receipt/hash intact before enabling collection. Never bootstrap over an existing production baseline just to make the job run. An existing private code repository can retain the default destination and GitHub token. The workflow checks destination privacy before collection or database access and fails closed. These variables, secrets, release and baseline are operational prerequisites; this change does not provision them.
 
@@ -457,6 +457,7 @@ npm run test:property-sync
 Do not run `:db` suites for this feature. Offline functionality, real Exa
 retrieval, import authorization and production deployment are separate states;
 only offline functionality can be established by the fixture command.
+
 ## Reviewed saved-capture patches (offline preparation)
 
 `scraping.worker.parse_28_detail()` is still the detail-parser entry point. Its labelled

@@ -72,6 +72,8 @@ jobs:
       - run: npm run test:mls
       - run: npm run test:property-sync
       - run: npm run test:property-sync:daily
+      - run: npm run test:28hse-import
+      - run: npm run test:owner-publication
       - run: npm run test:property-sync:admin
       - run: npm run test:property-sync:withdrawal
       - run: npm run test:property-sync:release
@@ -149,7 +151,7 @@ jobs:
       - run: npm run test:analytics
   no-link-local-postgres:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     permissions:
       contents: read
     steps:
@@ -186,6 +188,8 @@ jobs:
       - run: npm run test:crm:db
       - run: npm run test:woztell:db
       - run: npm run test:property-sync:db
+      - run: npm run test:28hse-import:db
+      - run: npm run test:owner-publication:db
       - run: npm run test:property-sync:publication:owned:db
       - run: npm run test:whatsapp-enquiries:db
       - run: npm run test:cms:db

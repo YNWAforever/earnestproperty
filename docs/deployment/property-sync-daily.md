@@ -1,8 +1,62 @@
 # Daily 28hse collection operations
 
-The checked-in workflow is inactive until repository variables are deliberately configured. It collects agent:540 at 04:17 Hong Kong time (20:17 UTC) on a standard Linux runner using Python 3.14 and Node 24. It does not run the application build, AI or a browser. Property.hk remains disabled.
+## Scheduled path from 2026-10-25: 09:00 Hong Kong owner-capture publication
+
+The workflow file is still `.github/workflows/property-sync-daily.yml`. Its cron is `0 1 * * *` (09:00 Asia/Hong_Kong; Actions cron is UTC and can start late). A scheduled run does **not** call `run_28hse_sync.py`, does **not** read `PROPERTY_SYNC_28HSE_TRANSPORT`, and does **not** use Firecrawl. Plain GitHub runners receive `SOURCE_ROBOTS_HTTP_403` from 28hse `robots.txt`. This schedule does not try to unblock that collector.
+
+The scheduled job downloads one private release asset and runs `scripts/mls/owner-publication.mjs --apply --driver=neon-ws`. That is the same owner-capture writer as `npm run import:28hse-owner`. It creates a missing ref+deal listing and updates a matching draft or inactive row, sets the row active, and stores every validated captured photo on the configured Blob host. It does not install `scripts/mls/sql/prepare-28hse-saved-import-policy.sql` and it does not advance the python-v2.2 full-snapshot receipt. The 08:15 Hong Kong watchdog still reads that full receipt, so it can report the HTTP snapshot as stale; it does not unpublish owner-capture listings.
+
+Owner rules that the job does not bypass:
+
+- Sold source `4028435` is skipped.
+- Ambiguous ref+deal rows stay held unless `OWNER_PUBLICATION_CHOICES` supplies `REF=<property-uuid>` for a candidate of that ref and deal.
+- A changed active row that is not already owner-published for this exact input hash is held, not overwritten.
+- Unresolved districts stay held, except the approved empty district for source ids `4044249` and `4062592`.
+- Unmatched estates stay `NULL`. Manual overrides and unreviewed conflicts stay held.
+- An unchanged retry uploads nothing and writes no extra audit.
+
+The schedule starts only when `PROPERTY_SYNC_DAILY_ENABLED=true`. It writes only when `OWNER_PUBLICATION_DAILY_ENABLED=true` and the capture hash, asset, and `IMPORT_*` settings below agree. Leave both false until the private asset and secrets are in place. Manual HTTP `apply` / `replay-apply` / `publication-only` remain workflow_dispatch-only behind `PROPERTY_SYNC_MANUAL_APPLY_ENABLED` and `PROPERTY_SYNC_POLICY_APPROVED=python-v2.2`. They are not the 09:00 path.
+
+### Operator settings (GitHub repository variables and Actions secrets)
+
+Set these in GitHub settings. Do not put the secret values in Vercel or in git.
+
+| Name                                     | Kind     | Required value                                                                            |
+| ---------------------------------------- | -------- | ----------------------------------------------------------------------------------------- |
+| `PROPERTY_SYNC_DAILY_ENABLED`            | variable | `true` to arm the 09:00 schedule                                                          |
+| `PROPERTY_SYNC_EXPECTED_BRANCH`          | variable | `main`                                                                                    |
+| `OWNER_PUBLICATION_DAILY_ENABLED`        | variable | `true` to allow the scheduled write                                                       |
+| `OWNER_PUBLICATION_MANUAL_APPLY_ENABLED` | variable | `true` only for a manual `owner-publication` dispatch                                     |
+| `OWNER_PUBLICATION_INPUT_SHA256`         | variable | SHA-256 of `import_ready.frozen.json`                                                     |
+| `OWNER_PUBLICATION_CAPTURE_ASSET`        | variable | `owner-capture-<that same sha256>.tar.gz`                                                 |
+| `OWNER_PUBLICATION_CHOICES`              | variable | optional `B047469=<uuid>,A074799=<uuid>` with no spaces                                   |
+| `IMPORT_TARGET_ENV`                      | variable | `production`                                                                              |
+| `IMPORT_BLOB_TARGET_ENV`                 | variable | `production`                                                                              |
+| `IMPORT_BLOB_STORE_ID`                   | variable | store id inside the blob token                                                            |
+| `IMPORT_BLOB_HOST`                       | variable | `<store-id-lowercase>.public.blob.vercel-storage.com`                                     |
+| `IMPORT_DATABASE_URL`                    | secret   | Neon **direct** URL, `sslmode=require` (or verify-ca / verify-full), not a `-pooler` host |
+| `IMPORT_BLOB_READ_WRITE_TOKEN`           | secret   | Blob read/write token whose store id matches `IMPORT_BLOB_STORE_ID`                       |
+
+`PROPERTY_SYNC_EVIDENCE_REPO` and `PROPERTY_SYNC_EVIDENCE_TOKEN` stay as they are for the private `property-sync-evidence` release. The owner job does not receive `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `BLOB_READ_WRITE_TOKEN`, or `FIRECRAWL_API_KEY`. The importer rejects an `IMPORT_*` value that is simultaneously present under those ordinary names, and it rejects a pooler URL.
+
+Pack the bundle from the capture directory that contains `import_ready.frozen.json` and `photos/<source-id>/`:
+
+```bash
+HASH=$(sha256sum import_ready.frozen.json | awk '{print $1}')
+tar -czf "owner-capture-${HASH}.tar.gz" import_ready.frozen.json photos
+```
+
+Upload that exact asset to the private `property-sync-evidence` release, then set the two hash variables to match. A manual `owner-publication-dry-run` dispatch reads the database and writes nothing. A manual `owner-publication` dispatch uses the same `--apply` path as the schedule and needs `OWNER_PUBLICATION_MANUAL_APPLY_ENABLED=true`.
+
+The job fails if it neither publishes nor finds the capture already current. Policy holds on other rows do not fail a run that did publish or confirm current rows; the private `owner-publication-<run>-<attempt>.json` report lists them. Exit 2 from the CLI is that hold signal. Unknown commit outcome fails the job. Rerun only the same frozen bytes after a dry-run.
+
+## Historical HTTP collector
+
+The checked-in workflow is inactive until repository variables are deliberately configured. Older revisions collected agent:540 at 04:17 Hong Kong time (20:17 UTC) on a standard Linux runner using Python 3.14 and Node 24. Manual dispatch can still select those HTTP modes. The workflow does not run the application build, AI or a browser. Property.hk remains disabled.
 
 ## Activation prerequisites
+
+These steps are for the manual HTTP collector. They do not pack an owner-capture bundle. Setting `PROPERTY_SYNC_DAILY_ENABLED=true` now arms the 09:00 owner-capture schedule, which still writes nothing until `OWNER_PUBLICATION_DAILY_ENABLED` and the `IMPORT_*` settings above are in place.
 
 1. Merge the reviewed implementation to the intended protected branch. Set `PROPERTY_SYNC_EXPECTED_BRANCH` to that exact branch (normally `main`). Branch validation applies to manual shadow runs too.
 2. Provision a private evidence repository release with tag `property-sync-evidence`, restricted to authorized repository readers. GitHub release assets inherit repository access; this implementation intentionally rejects public repositories. Use PROPERTY_SYNC_EVIDENCE_REPO and a separately managed PROPERTY_SYNC_EVIDENCE_TOKEN restricted to evidence contents read/write. Code workflow tokens stay contents-read; protect workflow changes and verify upload/download readback. Do not enable a public mirror of these files.
@@ -50,8 +104,6 @@ The company rule requires approved=true, version=company-number-v1 and approved_
 
 The v2 migration was applied to production on 2026-09-07 with all1,067 properties and public memberships unchanged. Source writer activation is a distinct gate: publish_enabled is the ingestion write permission, not permission to make new draft inventory public. The2026-10-01 disposable branch rehearsal now passes with synthetic schema-local fixture approvals; it is separate from production first apply. Do not enable the daily apply until the rehearsal, first receipt/baseline and runner checks succeed.
 
-
-
 ## 2026-10-01 staged implementation / private handoff
 
 The authoritative plan and per-task evidence are in `docs/superpowers/plans/2026-10-01-full-property-sync.md` and `docs/reports/2026-10-01-full-sync-implementation-status.md`. Historical activation prose above is not evidence of current operational readiness.
@@ -64,7 +116,6 @@ Ingestion canonical payload hashes and raw byte SHA256 are separate. `authority`
 
 Production destination credential/release and baseline recovery remain BLOCKED_EXTERNAL; no private assets were uploaded or removed by local tests.
 
-
 ### Phase jobs / retry / watchdog
 
 Jobs use separate runner environments: preflight read-only target+current receipt reconciliation; collect120m; ingest20m; publish45m; verification/report10m. These are initial caps, not measured SLAs. Collect lacks DB/Blob secrets. Downstream jobs download and verify the exact private handoff instead of collecting. The workflow-level agent540 concurrency fence covers the whole chain and does not cancel an active transaction.
@@ -75,7 +126,6 @@ The independent08:15HK watchdog reads authority only and writes an internal Acti
 
 Code repo GitHub token remains contents-read. Configure PROPERTY_SYNC_EVIDENCE_TOKEN for contents read/write restricted to the private evidence repository (even when the evidence repository happens to be the private code repo). Automatic approval review rejected widening the code repo token; absent managed write capability fails closed. No raw evidence Actions artifact is created in a public code repository. All ready request/raw assets are downloaded after upload for byte/size checks; missing checkpoints after a hard runner termination stay missing evidence.
 
-
 ### Reviewed private-release cleanup
 
 `python scripts/property-sync/evidence_retention.py --out PRIVATE/retention-preview.json` performs read-only paginated inventory checks against GH_REPO and rejects a public destination, missing push capability, partial uploads, duplicate metadata or unversioned accepted baselines. Preview expires after1h. A separate operator can review exact asset IDs and use `--apply-reviewed PRIVATE/retention-preview.json --selected ID ... --out PRIVATE/retention-result.json` only with managed `PROPERTY_SYNC_EVIDENCE_RETENTION_APPROVED=true` after explicit cleanup approval. This session ran synthetic ports only; it did not delete/upload release assets.
@@ -83,7 +133,6 @@ Code repo GitHub token remains contents-read. Configure PROPERTY_SYNC_EVIDENCE_T
 This conservative initial policy pins supporting raw/compact/request objects for ALL accepted baseline archives, ready handoffs and unresolved runs, plus explicit `--pin NAME` exceptions.7-day raw and90-day compact/request ages apply only to unpinned orphan/abandoned objects. Accepted history therefore can grow; review storage separately. No automatic cron cleanup or accepted-history purge is enabled. Pause new source dispatch while reviewing cleanup, then use one approved operator. Each selected object is checked again against current private inventory/pins immediately before deletion. A failed request stops remaining deletes, persists UNKNOWN first, and requires read-only `--reconcile-report PRIVATE/retention-result.json --out PRIVATE/reconciled.json`. Use a new output file; no blind repeat with the old preview. Remote DELETE acknowledgement is separate from confirmed absence readback.
 
 See `../runbooks/property-source-daily-recovery.md` for current stage recovery, exact migration/activation gates, manual withdrawal and rollback; historical dates above are retained as audit context.
-
 
 ## 2026-10-02 manual canary 與每日開關
 
