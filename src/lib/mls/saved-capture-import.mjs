@@ -58,18 +58,34 @@ const decimal = (value) =>
 const room = (value) =>
   value === "開放式" ? 0 : /^\d+$/.test(String(value ?? "")) ? Number(value) : null;
 
-export function assertImportTarget(env) {
+export function assertImportTarget(env, { confirmationHash, inputSha256 } = {}) {
   if (!env.IMPORT_DATABASE_URL) throw Error("IMPORT_DATABASE_URL_REQUIRED");
-  if (env.IMPORT_TARGET_ENV !== "development" || env.VERCEL_ENV === "production")
+  const production = env.IMPORT_TARGET_ENV === "production";
+  if (production) {
+    if (env.IMPORT_BLOB_TARGET_ENV !== "production")
+      throw Error("IMPORT_PRODUCTION_ENV_MARKERS_REQUIRED");
+    if (!/^[a-f0-9]{64}$/.test(confirmationHash ?? "") || !/^[a-f0-9]{64}$/.test(inputSha256 ?? ""))
+      throw Error("IMPORT_PRODUCTION_CONFIRMATION_REQUIRED");
+    if (confirmationHash !== inputSha256) throw Error("IMPORT_PRODUCTION_CONFIRMATION_MISMATCH");
+  } else if (env.IMPORT_TARGET_ENV !== "development" || env.VERCEL_ENV === "production")
     throw Error("development_target_required");
   const url = new URL(env.IMPORT_DATABASE_URL);
-  if (
-    !["postgres:", "postgresql:"].includes(url.protocol) ||
-    !["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
-  )
-    throw Error("local_loopback_database_required");
-  if ([...url.searchParams.keys()].some((key) => !["sslmode", "application_name"].includes(key)))
+  if (!["postgres:", "postgresql:"].includes(url.protocol))
+    throw Error("IMPORT_DATABASE_PROTOCOL_INVALID");
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (!production && !loopback) throw Error("local_loopback_database_required");
+  const allowed = production
+    ? ["sslmode", "application_name", "channel_binding"]
+    : ["sslmode", "application_name"];
+  if ([...url.searchParams.keys()].some((key) => !allowed.includes(key)))
     throw Error("database_target_parameters_rejected");
+  if (
+    production &&
+    (loopback ||
+      url.hostname.includes("-pooler.") ||
+      !["require", "verify-ca", "verify-full"].includes(url.searchParams.get("sslmode")))
+  )
+    throw Error("IMPORT_PRODUCTION_DIRECT_TLS_TARGET_REQUIRED");
   if (
     [env.DATABASE_URL, env.DATABASE_URL_UNPOOLED]
       .filter(Boolean)
@@ -77,6 +93,24 @@ export function assertImportTarget(env) {
   )
     throw Error("production_fallback_credentials_rejected");
   return url;
+}
+
+export function assertImportBlobTarget(env) {
+  const mode = env.IMPORT_TARGET_ENV;
+  const token = env.IMPORT_BLOB_READ_WRITE_TOKEN;
+  const storeId = env.IMPORT_BLOB_STORE_ID;
+  if (
+    !["production", "development"].includes(mode) ||
+    env.IMPORT_BLOB_TARGET_ENV !== mode ||
+    !token ||
+    !storeId ||
+    token.split("_")[3] !== storeId ||
+    token === env.BLOB_READ_WRITE_TOKEN ||
+    env.IMPORT_BLOB_HOST !== `${storeId.toLowerCase()}.public.blob.vercel-storage.com` ||
+    !/^[a-z0-9-]+\.public\.blob\.vercel-storage\.com$/.test(env.IMPORT_BLOB_HOST ?? "")
+  )
+    throw Error("IMPORT_DEDICATED_BLOB_CREDENTIALS_REQUIRED");
+  return { token, host: env.IMPORT_BLOB_HOST };
 }
 
 export async function buildSavedImportPlan(

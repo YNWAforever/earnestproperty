@@ -1,13 +1,15 @@
-import { readFile, writeFile, stat } from "node:fs/promises";
+import { writeFile, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import pg from "pg";
 import {
   buildSavedImportPlan,
-  inspectSavedImport,
   applySavedImport,
   assertImportTarget,
+  assertImportBlobTarget,
 } from "../../src/lib/mls/saved-capture-import.mjs";
+import { readFrozenImportInput } from "./frozen-import-input.mjs";
+import { inspectImportReadOnly } from "../../src/lib/mls/saved-capture-preflight.mjs";
 import { createVercelBlobStore } from "../../src/lib/media/vercel-blob.mjs";
 
 function parseArgs(args) {
@@ -18,7 +20,12 @@ function parseArgs(args) {
   };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--apply" && !result.apply) result.apply = true;
-    else if (
+    else if (args[i] === "--preflight" && !result.preflight) result.preflight = true;
+    else if (args[i].startsWith("--confirm-production=") && !result.confirmationHash) {
+      result.confirmationHash = args[i].slice("--confirm-production=".length);
+      if (!/^[a-f0-9]{64}$/.test(result.confirmationHash))
+        throw Error("IMPORT_INVALID_CONFIRMATION_HASH");
+    } else if (
       ["--input", "--report"].includes(args[i]) &&
       args[i + 1] &&
       !args[i + 1].startsWith("--")
@@ -26,6 +33,9 @@ function parseArgs(args) {
       result[args[i].slice(2)] = resolve(args[++i]);
     else throw Error("IMPORT_INVALID_ARGUMENTS");
   }
+  if (result.apply && result.preflight) throw Error("IMPORT_PREFLIGHT_CANNOT_APPLY");
+  if (result.preflight && !args.includes("--report"))
+    result.report = "/workspace/28hse_capture/import_preflight.md";
   if (result.input === result.report || result.input === result.report + ".json")
     throw Error("IMPORT_REPORT_MUST_NOT_OVERWRITE_INPUT");
   return result;
@@ -33,19 +43,30 @@ function parseArgs(args) {
 
 export function importMarkdown(
   plan,
-  { input, apply = false, result = null, target = null, issues = [] } = {},
+  {
+    input,
+    inputSha256,
+    targetEnv,
+    preflight = null,
+    preflightOnly = false,
+    apply = false,
+    result = null,
+    target = null,
+    issues = [],
+  } = {},
 ) {
   const active = plan.rows.filter((row) => row.action !== "skip");
   const lines = [
     "# Saved capture import review",
     "",
-    `Mode: **${apply ? "APPLY (development only)" : "DRY-RUN — no database or Blob writes"}**`,
+    `Mode: **${apply ? `APPLY (${targetEnv})` : preflightOnly ? "PREFLIGHT — read-only database inspection" : "DRY-RUN — no database or Blob writes"}**`,
     "",
     `Input: ${input}`,
+    `Frozen input SHA-256: ${inputSha256 ?? "not recorded"}`,
     `Planned: **${active.filter((r) => r.action === "create").length} creates + ${active.filter((r) => r.action === "update").length} updates**, ${plan.rows.length - active.length} skipped.`,
     `Photos: ${plan.totalPhotoReferences} input references; ${active.reduce((n, row) => n + row.inputPhotoCount, 0)} references on selected flats, ${active.reduce((n, row) => n + row.photos.length, 0)} after repeated source-photo URLs are merged.`,
     "",
-    `Database inspection: ${target ?? "not requested; target policy, estate mapping, existing IDs and conflicts require a guarded development DB preflight"}.`,
+    `Database inspection: ${target ?? "not requested; target policy, estate mapping, existing IDs and conflicts require a guarded read-only DB preflight"}.`,
     "",
     "Owner decisions: watermarked _large photos approved as-is; main photo first. Skip sold 4028435. Update 4029337/B059801, 4034694/R068782 and 4015403/B048068 in place; preserve public URLs. Agency references are the public listing numbers. Same agency reference with sale and rent shares the existing public grouping model.",
     "",
@@ -74,17 +95,44 @@ export function importMarkdown(
     ...(issues.length
       ? issues.map((v) => `- ${v}`)
       : ["- Database-specific checks have not been waived; see per-row validation above."]),
-    "- Apply is restricted to a loopback development database via IMPORT_DATABASE_URL. It never falls back to DATABASE_URL/DATABASE_URL_UNPOOLED and rejects production mode.",
+    "- Development remains loopback-only. Production DB access requires both production markers and --confirm-production matching the frozen input SHA-256. Only dedicated IMPORT_DATABASE_URL is used; ordinary database credentials are never a fallback.",
     "- The existing source policy must already be bootstrapped/enabled with the approved company-number policy and exact estate/district mappings. This importer does not enable policies or alter estate mappings.",
-    "- Apply needs a separately selected development Blob token/store/host. Never supply production credentials. Production apply is deliberately blocked and requires a separately reviewed, explicitly authorized release workflow.",
+    "- Production apply additionally requires dedicated IMPORT_BLOB_READ_WRITE_TOKEN / IMPORT_BLOB_STORE_ID / IMPORT_BLOB_HOST, all matching the production marker. Preflight and DB dry-run never create a Blob client and always roll back their verified READ ONLY transaction.",
     "- No source redirects or external source-brand UI are added; normal DB listings use /property/<agency-reference>. Watermarks remain in owner-approved photos.",
   );
+  if (preflight) {
+    lines.push(
+      "",
+      "## Read-only target preflight",
+      "",
+      `Ready: ${preflight.ready}; READ ONLY verified: ${preflight.readOnly}; full DB dry-run: ${preflight.fullDryRun}`,
+      "",
+      ...preflight.missingItems.map((item) => `- ${item.code}: ${item.detail}`),
+    );
+    lines.push(
+      "",
+      "### Estate mappings",
+      "",
+      ...preflight.estateMappings.map(
+        (mapping) =>
+          `- ${mapping.label}: ${mapping.valid ? `${mapping.estateId} / ${mapping.districtSlug}` : "MISSING / INVALID"}`,
+      ),
+    );
+    lines.push(
+      "",
+      "### Owner-approved update targets",
+      "",
+      ...preflight.ownerTargets.map(
+        (owner) => `- ${owner.ref}: ${owner.valid ? owner.propertyId : owner.reasons.join(", ")}`,
+      ),
+    );
+  }
   if (result)
     lines.push("", "## Apply result", "", "```json", JSON.stringify(result, null, 2), "```");
   return lines.join("\n") + "\n";
 }
 
-export async function runSavedImport(args, { env = process.env } = {}) {
+export async function runSavedImport(args, { env = process.env, ports = {} } = {}) {
   const options = parseArgs(args);
   let input = options.input,
     fallback = false;
@@ -94,36 +142,60 @@ export async function runSavedImport(args, { env = process.env } = {}) {
     if (
       error.code !== "ENOENT" ||
       options.apply ||
+      options.preflight ||
+      env.IMPORT_DATABASE_URL ||
       input !== "/workspace/28hse_capture/import_ready.json"
     )
       throw Error("IMPORT_INPUT_UNAVAILABLE");
     input = "/workspace/28hse_capture/full_new_listings.json";
     fallback = true;
   }
-  const bytes = await readFile(input);
-  if (bytes.length > 20 * 1024 * 1024) throw Error("IMPORT_INPUT_TOO_LARGE");
-  const rows = JSON.parse(bytes.toString("utf8"));
+  const frozen = await readFrozenImportInput(input);
+  const requiresDb = Boolean(options.preflight || options.apply || env.IMPORT_DATABASE_URL);
+  // All production authorizations are checked before a client can be constructed.
+  const databaseTarget = requiresDb
+    ? assertImportTarget(env, {
+        confirmationHash: options.confirmationHash,
+        inputSha256: frozen.inputSha256,
+      })
+    : null;
+  const blobAuthorization = options.apply ? assertImportBlobTarget(env) : null;
+  if (options.confirmationHash && env.IMPORT_TARGET_ENV !== "production")
+    throw Error("IMPORT_CONFIRMATION_REQUIRES_PRODUCTION_MARKER");
+  const rows = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(frozen.bytes));
   const plan = await buildSavedImportPlan(rows, {
     captureRoot: dirname(input),
-    capturedAt: (await stat(input)).mtime.toISOString(),
+    capturedAt: frozen.capturedAt,
   });
   const issues = fallback
     ? [
         "import_ready.json missing; sample-only mapping, full detail and photo validation unavailable",
       ]
     : [];
-  let client, target, result;
+  let client, target, result, preflight;
   const persist = async () => {
     await writeFile(
       options.report,
-      importMarkdown(plan, { input, apply: options.apply, result, target, issues }),
+      importMarkdown(plan, {
+        input,
+        inputSha256: frozen.inputSha256,
+        targetEnv: env.IMPORT_TARGET_ENV,
+        preflight,
+        preflightOnly: options.preflight,
+        apply: options.apply,
+        result,
+        target,
+        issues,
+      }),
     );
     await writeFile(
       options.report + ".json",
       JSON.stringify(
         {
           input,
-          mode: options.apply ? "apply" : "dry-run",
+          inputSha256: frozen.inputSha256,
+          preflight,
+          mode: options.apply ? "apply" : options.preflight ? "preflight" : "dry-run",
           issues,
           result,
           rows: plan.rows.map(
@@ -154,40 +226,24 @@ export async function runSavedImport(args, { env = process.env } = {}) {
   };
   await persist();
   try {
-    if (env.IMPORT_DATABASE_URL || options.apply) {
-      const db = assertImportTarget(env);
-      client = new pg.Client({
+    if (requiresDb) {
+      client = (ports.createClient ?? ((config) => new pg.Client(config)))({
         connectionString: env.IMPORT_DATABASE_URL,
         connectionTimeoutMillis: 10000,
         statement_timeout: 30000,
       });
+      target = `${databaseTarget.hostname}/${databaseTarget.pathname.slice(1)} (${env.IMPORT_TARGET_ENV})`;
       await client.connect();
-      target = `${db.hostname}/${db.pathname.slice(1)} (development only)`;
-      await client.query("BEGIN READ ONLY");
-      try {
-        const inspected = await inspectSavedImport(client, plan);
-        issues.push(...inspected.issues);
-        await client.query("COMMIT");
-      } catch (error) {
-        await client.query("ROLLBACK");
-        throw error;
-      }
+      preflight = await inspectImportReadOnly(client, plan, { fullDryRun: !options.preflight });
+      issues.push(...preflight.missingItems.map((item) => `${item.code}: ${item.detail}`));
     }
     await persist();
     if (options.apply) {
       if (issues.length || plan.rows.some((row) => row.action !== "skip" && row.failures.length))
         throw Error("IMPORT_VALIDATION_FAILED");
-      const token = env.IMPORT_BLOB_READ_WRITE_TOKEN;
-      if (
-        env.IMPORT_BLOB_TARGET_ENV !== "development" ||
-        !token ||
-        !env.IMPORT_BLOB_STORE_ID ||
-        token.split("_")[3] !== env.IMPORT_BLOB_STORE_ID ||
-        token === env.BLOB_READ_WRITE_TOKEN ||
-        !/^[a-z0-9-]+\.public\.blob\.vercel-storage\.com$/.test(env.IMPORT_BLOB_HOST ?? "")
-      )
-        throw Error("IMPORT_DEVELOPMENT_BLOB_CREDENTIALS_REQUIRED");
-      const store = createVercelBlobStore({ token });
+      const store = (ports.createBlobStore ?? createVercelBlobStore)({
+        token: blobAuthorization.token,
+      });
       const blobStore = {
         put: async (value) => {
           const asset = await store.put(value);
@@ -196,7 +252,7 @@ export async function runSavedImport(args, { env = process.env } = {}) {
           return asset;
         },
       };
-      result = await applySavedImport(client, plan, {
+      result = await (ports.apply ?? applySavedImport)(client, plan, {
         blobStore,
         onProgress: async (progress) => {
           result = progress;
@@ -207,7 +263,9 @@ export async function runSavedImport(args, { env = process.env } = {}) {
       await persist();
     }
     return {
-      mode: options.apply ? "apply" : "dry-run",
+      mode: options.apply ? "apply" : options.preflight ? "preflight" : "dry-run",
+      inputSha256: frozen.inputSha256,
+      preflight,
       creates: plan.rows.filter((r) => r.action === "create").length,
       updates: plan.rows.filter((r) => r.action === "update").length,
       skipped: plan.rows.filter((r) => r.action === "skip").length,
@@ -228,7 +286,9 @@ export async function runSavedImport(args, { env = process.env } = {}) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {
-    console.log(JSON.stringify(await runSavedImport(process.argv.slice(2)), null, 2));
+    const result = await runSavedImport(process.argv.slice(2));
+    console.log(JSON.stringify(result, null, 2));
+    if (result.preflight && !result.preflight.ready) process.exitCode = 2;
   } catch (error) {
     console.error(
       /^[A-Za-z0-9_]+$/.test(error.message) ? error.message : "IMPORT_FAILED_SEE_REPORT",

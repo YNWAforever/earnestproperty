@@ -126,7 +126,7 @@ test("apply is restricted to an explicitly selected loopback database, never pro
         IMPORT_DATABASE_URL: "postgres://u:p@localhost/db",
         IMPORT_TARGET_ENV: "production",
       }),
-    /development/,
+    /development|PRODUCTION|CONFIRMATION/,
   );
   assert.throws(
     () =>
