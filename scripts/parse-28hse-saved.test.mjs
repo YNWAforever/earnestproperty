@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync } from "node:fs";
-import { parseSavedDetail, parseSavedIndex } from "./parse-28hse-saved.mjs";
+import { parseSavedDetail, parseSavedIndex, selectNewListings } from "./parse-28hse-saved.mjs";
 
 test("saved cards keep missing fields null and ignore unrelated links", () => {
   const html = `<div class="property_item"><a class="detail_page" href="https://www.28hse.com/buy/apartment/property-123"></a><div class="header"><a>Title</a></div><div class="extra"><span class="red label">售 $460 萬元</span></div></div>`;
@@ -26,15 +26,48 @@ test("rent price and visible bedroom table override inconsistent structured room
   assert.equal(row.main_image_url, null);
 });
 
-test("committed fixture has unique records and precise saved coverage", () => {
+test("allowlist excludes existing and uncertain matches and merges explicit duplicates", () => {
+  const card = (id) => ({
+    id,
+    source_url: `https://www.28hse.com/buy/apartment/property-${id}`,
+    main_image_url: null,
+  });
+  const entry = (id, status = "NEW") => ({
+    hse_id: id,
+    status,
+    deal_type: "sale",
+    source_url: card(id).source_url,
+  });
+  const rows = selectNewListings(
+    [
+      { ...entry("1"), duplicate_of_28hse_ids: "2" },
+      { ...entry("2"), duplicate_of_28hse_ids: "1" },
+      entry("3", "ALREADY_ON_SITE"),
+      entry("4", "UNSURE"),
+      { ...entry("5"), match_listing_no: "A123" },
+    ],
+    [card("1"), card("2")],
+  );
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].id, "1");
+  assert.deepEqual(rows[0].duplicate_source_ids, ["2"]);
+  assert.equal(rows[0].price, null);
+  assert.throws(() => selectNewListings([entry("6")], []), /Missing saved card/);
+});
+
+test("committed fixture contains only the five approved new flats", () => {
   const { listings } = JSON.parse(
     readFileSync(new URL("../src/content/28hse-preview.json", import.meta.url)),
   );
-  assert.equal(listings.length, 18);
-  assert.equal(new Set(listings.map((row) => row.id)).size, 18);
-  assert.equal(listings.filter((row) => row.deal_type === "sale").length, 15);
-  assert.equal(listings.filter((row) => row.deal_type === "rent").length, 3);
-  assert.equal(listings.find((row) => row.id === "4064528").rent, 18600);
-  assert.equal(listings.find((row) => row.id === "4068791").bedrooms, null);
-  assert.ok(listings.every((row) => (row.price ?? row.rent) > 0 && row.main_image_url));
+  assert.deepEqual(
+    listings.map((row) => row.id),
+    ["4068170", "4063699", "4061626", "4060450", "4060439"],
+  );
+  assert.deepEqual(
+    listings.map((row) => row.estate),
+    ["OMA OMA", "OMA by the Sea", "黃金海灣", "縉皇居", "飛揚"],
+  );
+  assert.equal(listings.filter((row) => row.deal_type === "rent").length, 0);
+  assert.deepEqual(listings[0].duplicate_source_ids, ["4067425"]);
+  assert.ok(listings.every((row) => row.price > 0 && row.main_image_url));
 });

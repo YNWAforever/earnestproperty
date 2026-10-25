@@ -3,6 +3,13 @@ import { Bed, Maximize, MapPin } from "lucide-react";
 import fixture from "@/content/28hse-preview.json";
 import { AppImage } from "@/components/media/AppImage";
 
+function formatPreviewPrice(amount: number | null, deal: string) {
+  if (amount === null) return "價格未提供";
+  return deal === "sale"
+    ? `$${(amount / 10000).toLocaleString("zh-HK")} 萬`
+    : `$${amount.toLocaleString("zh-HK")} / 月`;
+}
+
 export function SavedListingsPreview() {
   const [deal, setDeal] = useState("sale");
   const listings = fixture.listings.filter((listing) => listing.deal_type === deal);
@@ -14,7 +21,7 @@ export function SavedListingsPreview() {
           最新放盤
         </h2>
         <p className="mt-3 text-sm text-muted-foreground">
-          已儲存樓盤資料示範，並非即時盤源。租盤僅包括 3 個已儲存詳情頁。
+          只展示比對後的 5 個新增售盤，已合併重複盤，並非即時盤源。
         </p>
         <div className="mt-6 flex gap-2" role="tablist" aria-label="買樓或租樓">
           {[
@@ -57,6 +64,11 @@ export function SavedListingsPreview() {
           aria-labelledby={`saved-tab-${deal}`}
           className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3"
         >
+          {listings.length === 0 ? (
+            <p className="col-span-full rounded-xl border border-border bg-card p-8 text-sm text-muted-foreground">
+              本次比對未有新增租盤。
+            </p>
+          ) : null}
           {listings.map((listing) => (
             <article
               key={listing.id}
@@ -90,11 +102,7 @@ export function SavedListingsPreview() {
                   </a>
                 </h3>
                 <p className="mt-3 text-2xl font-bold text-coral">
-                  {(deal === "sale" ? listing.price : listing.rent) == null
-                    ? "價格未提供"
-                    : deal === "sale"
-                      ? `$${(listing.price! / 10000).toLocaleString("zh-HK")} 萬`
-                      : `$${listing.rent!.toLocaleString("zh-HK")} / 月`}
+                  {formatPreviewPrice(deal === "sale" ? listing.price : listing.rent, deal)}
                 </p>
                 <div className="mt-4 flex gap-5 border-t border-border pt-4 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1">

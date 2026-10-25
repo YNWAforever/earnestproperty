@@ -14,17 +14,20 @@ The explicit flag replaces the homepage latest-listings area with static buy/ren
 
 The existing `parse28HseDetail` requires a normalized `[data-listing-detail]` template absent from these raw captures. The small offline adapter therefore reuses the repository money/room normalizers and snake_case field convention while extracting actual saved card/table selectors. It makes no network requests. Raw HTML is kept outside Git.
 
-18 unique source listing IDs: 15 sale cards from buy_p1.html (3 enriched by saved detail pages), plus exactly 3 rent details. Distinct source listing IDs remain separate even when they appear to advertise the same unit. There is no rent-index coverage. Source filenames and URLs are preserved per record. Bedroom count for sale listing 4068791 is missing and remains null; inactive-deal price/rent fields are null by design. All other requested fields were parsed. Visible bedroom tables take precedence over inconsistent JSON-LD numberOfRooms values.
+The supplied `new_listings.json` is the only listing allowlist. Its six NEW source rows represent five flats: OMA OMA (4068170, duplicate 4067425 merged), OMA by the Sea (4063699), 黃金海灣 (4061626), 縉皇居 (4060450), 飛揚 (4060439). The comparison CSV contains 4 ALREADY_ON_SITE, 8 UNSURE, and 6 NEW source rows. Both existing and uncertain rows are excluded. No DB comparison is rerun and no DB is accessed.
+
+Requested fields come from the supplied JSON; cover image URLs are matched by exact source ID against saved buy_p1.html. All requested fields are present for the five flats; rent is null because all five are for sale. There are no new rentals in the supplied allowlist, so the rent tab shows an explicit empty state. Duplicate source IDs remain recorded for provenance. The old 18-listing fixture is replaced entirely.
 
 The fixture is a saved snapshot, not a claim of currently available inventory. Remote image URLs can expire or fail; cards use the existing image fallback.
 
 Screenshot: `/workspace/28hse_capture/homepage_preview.png`.
 
-## Validation
+## Validation of the five-flat update
 
-- `npm run lint`: exit 0 (9 existing warnings, no errors).
-- `npm run typecheck`: exit 0.
-- `VITE_28HSE_PREVIEW=true npm run build`: exit 0; existing dependency deprecation/chunk warnings.
-- `npm run test:28hse-preview`: 3 tests pass; existing 28hse parser test file also passes.
-- Chrome: 15 sale cards, 3 rent cards, HK$18,600 rent readback, keyboard tab switching, all 15 sale images loaded; no page errors. Mobile width 390px has no horizontal overflow.
-- Additional screenshots: `homepage_preview_rent.png`, `homepage_preview_mobile.png`, and `homepage_preview_listings.png` alongside the requested full homepage capture.
+- Full lint: exit 0 (9 existing warnings); changed parser/component lint: exit 0.
+- Typecheck: exit 0 after using a price formatter that accepts nullable amounts.
+- Parser/selection tests: 4 pass, including exclusion of existing/uncertain rows and explicit duplicate merging.
+- Offline cross-check: all five fixture rows have NEW status in compare.csv and match requested fields in new_listings.json exactly.
+- Chrome: exactly 5 sale cards, OMA OMA once, all 5 images loaded, zero rental cards with an explicit empty state, working keyboard tabs, and no page errors or mobile horizontal overflow.
+- Full homepage screenshot refreshed at the requested path; additional listings, rental empty-state, and mobile screenshots remain beside it.
+- Final `VITE_28HSE_PREVIEW=true npm run build`: exit 0 (existing dependency/chunk warnings).

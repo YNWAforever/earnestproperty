@@ -89,29 +89,55 @@ export function parseSavedDetail(html, sourceUrl, filename) {
   };
 }
 
+// The supplied comparison is authoritative: never infer new inventory from HTML.
+export function selectNewListings(entries, savedCards) {
+  const cards = new Map(savedCards.map((row) => [row.id, row]));
+  const seen = new Set();
+  const listings = [];
+  for (const entry of entries) {
+    if (entry.status !== "NEW" || entry.match_listing_no || entry.match_url) continue;
+    if (entry.deal_type !== "sale") throw new Error("Expected new for-sale flats only");
+    const sourceId = String(entry.hse_id);
+    if (seen.has(sourceId)) continue;
+    const duplicateIds = String(entry.duplicate_of_28hse_ids ?? "")
+      .split(/[,;\s]+/)
+      .filter(Boolean);
+    const aliases = [sourceId, ...duplicateIds];
+    if (aliases.some((alias) => seen.has(alias))) continue;
+    const card = cards.get(sourceId);
+    if (!card || card.source_url !== entry.source_url)
+      throw new Error(`Missing saved card for ${sourceId}`);
+    for (const alias of aliases) seen.add(alias);
+    listings.push({
+      id: sourceId,
+      deal_type: entry.deal_type,
+      title_zh: entry.title ?? null,
+      estate: entry.estate ?? null,
+      district: entry.district ?? null,
+      unit_desc: entry.unit_desc ?? null,
+      price: entry.price ?? null,
+      rent: entry.rent ?? null,
+      saleable_area: entry.saleable_area ?? null,
+      bedrooms: entry.bedrooms ?? null,
+      main_image_url: card.main_image_url,
+      source_url: entry.source_url,
+      source_files: ["new_listings.json", "buy_p1.html"],
+      duplicate_source_ids: duplicateIds,
+    });
+  }
+  return listings;
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const capture = resolve(process.argv[2] ?? "/workspace/28hse_capture");
-  const rows = new Map(
-    parseSavedIndex(readFileSync(resolve(capture, "buy_p1.html"), "utf8")).map((row) => [
-      row.id,
-      row,
-    ]),
-  );
-  for (const line of readFileSync(resolve(capture, "urls.txt"), "utf8").split("\n")) {
-    const [filename, url] = line.trim().split(/\s+/);
-    if (!/^detail_(buy|rent)_\d+\.html$/.test(filename ?? "")) continue;
-    const detail = parseSavedDetail(
-      readFileSync(resolve(capture, filename), "utf8"),
-      url,
-      filename,
-    );
-    const previous = rows.get(detail.id);
-    rows.set(detail.id, { ...detail, source_files: [...(previous?.source_files ?? []), filename] });
-  }
-  const listings = [...rows.values()];
+  const entries = JSON.parse(readFileSync(resolve(capture, "new_listings.json"), "utf8"));
+  const cards = parseSavedIndex(readFileSync(resolve(capture, "buy_p1.html"), "utf8"));
+  const listings = selectNewListings(entries, cards);
   const fixture = {
-    source: "Saved 28hse HTML; preview only, not live inventory",
-    rent_coverage: "Three saved detail pages only; rent index was not captured",
+    source: "Only NEW entries from supplied new_listings.json; saved HTML supplies images only",
+    comparison:
+      "compare.csv: existing and uncertain matches excluded; explicit duplicate IDs merged",
+    rent_coverage: "No new rental listings in the supplied allowlist",
     listings,
   };
   writeFileSync(resolve("src/content/28hse-preview.json"), JSON.stringify(fixture, null, 2) + "\n");
@@ -119,16 +145,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     JSON.stringify(
       {
         count: listings.length,
-        sale: listings.filter((x) => x.deal_type === "sale").length,
-        rent: listings.filter((x) => x.deal_type === "rent").length,
-        missing: listings
-          .map((x) => ({
-            id: x.id,
-            fields: Object.keys(x).filter(
-              (key) => x[key] === null && key !== (x.deal_type === "sale" ? "rent" : "price"),
-            ),
-          }))
-          .filter((x) => x.fields.length),
+        estates: listings.map((row) => row.estate),
+        missing: listings.flatMap((row) =>
+          Object.entries(row)
+            .filter(([key, value]) => value === null && key !== "rent")
+            .map(([key]) => `${row.id}:${key}`),
+        ),
       },
       null,
       2,
