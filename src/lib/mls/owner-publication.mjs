@@ -145,23 +145,24 @@ export function ownerDecision(row, snapshot, resolution, choices = {}, inputSha2
     reason = "group_review_requires_choice";
   if (snapshot.links.some((l) => !target || l.property_id !== target.id))
     reason = "owner_provenance_collision";
-  const done =
-    target &&
-    target.status === "active" &&
-    target.public_listing_no === ref &&
-    reviews.length === 0 &&
-    snapshot.audits.some(
-      (a) =>
-        a.subject_id === target.id &&
-        a.metadata.input_sha256 === inputSha256 &&
-        a.metadata.capture_fingerprint === row.fingerprint &&
-        a.metadata.after_row_hash === target.row_hash,
-    );
-  if (target?.status === "active" && !done)
+  // Same frozen input and capture fingerprint is already published, even if staff
+  // later set the row inactive or draft. A new hash is a new publication.
+  const sameCapture =
+    Boolean(target) &&
+    snapshot.audits.some((audit) => {
+      const metadata =
+        typeof audit.metadata === "string" ? JSON.parse(audit.metadata) : (audit.metadata ?? {});
+      return (
+        audit.subject_id === target.id &&
+        metadata.input_sha256 === inputSha256 &&
+        metadata.capture_fingerprint === row.fingerprint
+      );
+    });
+  if (target?.status === "active" && !sameCapture)
     reason = reason ?? "active_row_changed_or_not_owner_published";
   return {
     ...decision,
-    action: reason ? "held" : done ? "already-published" : decision.action,
+    action: reason ? "held" : sameCapture ? "already-published" : decision.action,
     reason,
     snapshot,
     resolution,

@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decideOwnerTarget, ownerValues } from "../../src/lib/mls/owner-publication.mjs";
+import {
+  decideOwnerTarget,
+  ownerDecision,
+  ownerValues,
+} from "../../src/lib/mls/owner-publication.mjs";
 const row = {
   id: "123",
   deal: "sale",
@@ -24,6 +28,75 @@ test("matches company ref plus deal and requires explicit ambiguity choices", ()
   assert.equal(decideOwnerTarget(row, { candidates: [] }, {}).action, "create");
   assert.equal(decideOwnerTarget({ ...row, id: "4028435" }, { candidates }, {}).action, "skip");
 });
+test("same capture hash stays published after staff sets the listing inactive or draft", () => {
+  const hash = "a".repeat(64);
+  const target = {
+    id: "00000000-0000-4000-8000-000000000001",
+    status: "inactive",
+    canonical_property_no: "B047469",
+    public_listing_no: "B047469",
+    row_hash: "staff-changed",
+  };
+  const captured = {
+    ...row,
+    fingerprint: "f".repeat(64),
+    failures: [],
+  };
+  const snapshot = {
+    candidates: [target],
+    groups: [],
+    overrides: [],
+    fields: [],
+    conflicts: [],
+    reviews: [],
+    links: [],
+    audits: [
+      {
+        subject_id: target.id,
+        metadata: {
+          input_sha256: hash,
+          capture_fingerprint: captured.fingerprint,
+          after_row_hash: "published-row",
+        },
+      },
+    ],
+  };
+  const resolution = {
+    status: "unmatched-left-null",
+    estate_id: null,
+    district_slug: "sham-tseng",
+  };
+  for (const status of ["inactive", "draft", "active"]) {
+    const decision = ownerDecision(
+      captured,
+      { ...snapshot, candidates: [{ ...target, status }] },
+      resolution,
+      {},
+      hash,
+    );
+    assert.equal(decision.action, "already-published", status);
+  }
+  const nextBundle = ownerDecision(captured, snapshot, resolution, {}, "b".repeat(64));
+  assert.equal(nextBundle.action, "update");
+  const changedActive = ownerDecision(
+    captured,
+    { ...snapshot, candidates: [{ ...target, status: "active" }] },
+    resolution,
+    {},
+    "b".repeat(64),
+  );
+  assert.equal(changedActive.action, "held");
+  assert.equal(changedActive.reason, "active_row_changed_or_not_owner_published");
+  const firstPublication = ownerDecision(
+    captured,
+    { ...snapshot, candidates: [{ ...target, status: "draft" }], audits: [] },
+    resolution,
+    {},
+    hash,
+  );
+  assert.equal(firstPublication.action, "update");
+});
+
 test("owner values preserve unmatched estates and explicitly blank unresolved districts", () => {
   const values = ownerValues(row, { estate_id: null, district_slug: null }, [
     "https://owned.invalid/one",

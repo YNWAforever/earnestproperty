@@ -421,6 +421,15 @@ test("scheduled runs publish the approved owner capture and do not collect or us
   const dry = owner.steps.find((step) => step.name === "Read owner capture without writing");
   assert.equal(dry.if, "env.MODE == 'owner-publication-dry-run'");
   assert.doesNotMatch(dry.run, /--apply/);
+  const apply = owner.steps.find(
+    (step) => step.name === "Publish owner capture into site listings",
+  );
+  for (const step of [apply, dry]) {
+    assert.match(step.run, /owner-publication\.mjs\b[\s\S]*?>\/dev\/null/);
+    assert.doesNotMatch(step.run, /\bcat\b|\btee\b/);
+  }
+  assert.match(apply.run, /published, alreadyPublished: current, held/);
+  assert.doesNotMatch(apply.run, /report\.items|candidates|price/);
   assert.ok(!dry.env.IMPORT_BLOB_READ_WRITE_TOKEN);
   const gate = w.jobs.preflight.steps.find((step) => step.id === "evidence-gate");
   const hash = "a".repeat(64);

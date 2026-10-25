@@ -524,3 +524,132 @@ test("owner capture: 22 drafts + 8 inactive in place,23 creates,2 choices,sold/s
       await rm(root, { recursive: true, force: true });
     }
   }));
+
+test("same owner-capture bundle does not reactivate a listing staff turned off", async () =>
+  local(async (client) => {
+    const schema = "takedown_" + randomUUID().replaceAll("-", ""),
+      root = await mkdtemp(join(tmpdir(), "owner-takedown-"));
+    const q = async (sql, p = []) => (await client.query(sql, p)).rows;
+    try {
+      await q(`CREATE SCHEMA ${schema}`);
+      await q(`SET search_path TO ${schema},public`);
+      for (const file of [
+        "20260622060000_public_content.sql",
+        "20260623090000_neon_admin_crm_whatsapp.sql",
+        "20260709090000_cms_videos.sql",
+        "20260711090000_cms_content_revisions.sql",
+        "20260817120000_dual_source_listing_sync.sql",
+        "20260830130000_estate_expansion.sql",
+        "20260906040000_property_public_identity.sql",
+        "20260906090000_canonical_property_identity.sql",
+        "20260906120000_admin_property_management.sql",
+        "20260907120000_propertyhk_ingestion_v2.sql",
+        "20260909120000_source_promotion_tiers.sql",
+      ])
+        await q(await readFile(new URL("../../neon/migrations/" + file, import.meta.url), "utf8"));
+      await q("SELECT set_config('app.mls_writer_policy','no-hermes-v2',false)");
+      await q(
+        "INSERT INTO mls_ingestion_policies(source,scope_id,policy_version,parser_version,owner,publish_enabled,bootstrap_approved_at,bootstrap_approved_by) VALUES('28hse_agent_540','agent:540','no-hermes-v2','python-v2.2','no-hermes-v2',true,now(),'synthetic-owner')",
+      );
+      const sourceId = "5100001";
+      const dir = join(root, "photos", sourceId);
+      await mkdir(dir, { recursive: true });
+      const photo = join(dir, "01.png");
+      await writeFile(
+        photo,
+        await sharp({
+          create: { width: 400, height: 300, channels: 3, background: "#2255aa" },
+        })
+          .png()
+          .toBuffer(),
+      );
+      const entry = {
+        source: "28hse",
+        source_id: sourceId,
+        agent_listing_ref: "A510001",
+        deal_type: "sale",
+        title: "Owner latest",
+        description: "Latest captured details",
+        district: "深井",
+        estate: "not matched",
+        price_hkd: 4680000,
+        saleable_area_sqft: 500,
+        bedrooms: "2",
+        bathrooms: "1",
+        source_url: `https://www.28hse.com/buy/apartment/property-${sourceId}`,
+        photos: [
+          {
+            local_path: photo,
+            original_url: "https://i1.28hse.com/5100001-0.png",
+            is_main: true,
+          },
+        ],
+      };
+      const plan = await buildSavedImportPlan([entry], { captureRoot: root });
+      assert.deepEqual(plan.rows[0].failures, []);
+      let puts = 0;
+      const store = {
+        put: async ({ pathname, body, contentType }) => {
+          puts++;
+          return { url: `https://${host}/${pathname}`, pathname, contentType, size: body.length };
+        },
+      };
+      const published = await applyOwnerPublication(
+        client,
+        await inspectOwnerPublication(client, plan, { inputSha256 }),
+        {
+          inputSha256,
+          blobStore: store,
+          expectedHost: host,
+          onFailure: async (error) => {
+            throw error;
+          },
+        },
+      );
+      assert.equal(published.published.length, 1, JSON.stringify(published.held));
+      const propertyId = published.published[0].propertyId;
+      const publishedRow = (
+        await q("SELECT status, images FROM properties WHERE id=$1", [propertyId])
+      )[0];
+      assert.equal(publishedRow.status, "active");
+      assert.equal(publishedRow.images.length, 1);
+      for (const status of ["inactive", "draft"]) {
+        await q("UPDATE properties SET status=$2::property_status WHERE id=$1", [
+          propertyId,
+          status,
+        ]);
+        const uploads = puts;
+        const audits = (await q("SELECT count(*)::int AS n FROM audit_logs"))[0].n;
+        const replay = await applyOwnerPublication(
+          client,
+          await inspectOwnerPublication(client, plan, { inputSha256 }),
+          { inputSha256, blobStore: store, expectedHost: host },
+        );
+        assert.deepEqual(
+          replay.alreadyPublished.map((item) => item.propertyId),
+          [propertyId],
+          status,
+        );
+        assert.equal(replay.published.length, 0, status);
+        const kept = (
+          await q("SELECT status, images FROM properties WHERE id=$1", [propertyId])
+        )[0];
+        assert.equal(kept.status, status);
+        assert.deepEqual(kept.images, publishedRow.images);
+        assert.equal(puts, uploads, status);
+        assert.equal((await q("SELECT count(*)::int AS n FROM audit_logs"))[0].n, audits, status);
+      }
+      const nextHash = "d".repeat(64);
+      const fresh = await inspectOwnerPublication(client, plan, { inputSha256: nextHash });
+      assert.equal(fresh[0].action, "update");
+      assert.equal(
+        (await q("SELECT status FROM properties WHERE id=$1", [propertyId]))[0].status,
+        "draft",
+      );
+    } finally {
+      await q("ROLLBACK").catch(() => {});
+      await q("SET search_path TO public");
+      await q(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+      await rm(root, { recursive: true, force: true });
+    }
+  }));

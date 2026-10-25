@@ -14,6 +14,8 @@ Owner rules that the job does not bypass:
 - Unresolved districts stay held, except the approved empty district for source ids `4044249` and `4062592`.
 - Unmatched estates stay `NULL`. Manual overrides and unreviewed conflicts stay held.
 - An unchanged retry uploads nothing and writes no extra audit.
+- A listing that already has an `owner-publication-v1` audit for this exact input hash stays as staff left it, including `inactive` or `draft`. A different capture hash can update it.
+- Photo files are read from `photos/<source-id>/<filename>` inside the extracted archive. Absolute paths stored in the frozen JSON are not opened, and the JSON is not rewritten.
 
 The schedule starts only when `PROPERTY_SYNC_DAILY_ENABLED=true`. It writes only when `OWNER_PUBLICATION_DAILY_ENABLED=true` and the capture hash, asset, and `IMPORT_*` settings below agree. Leave both false until the private asset and secrets are in place. Manual HTTP `apply` / `replay-apply` / `publication-only` remain workflow_dispatch-only behind `PROPERTY_SYNC_MANUAL_APPLY_ENABLED` and `PROPERTY_SYNC_POLICY_APPROVED=python-v2.2`. They are not the 09:00 path.
 

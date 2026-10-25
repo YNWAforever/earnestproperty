@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -95,9 +96,103 @@ test("maps saved details and local media without guessing missing fields or maki
       ],
       { captureRoot: dir },
     );
-    assert.ok(escaped.rows[0].failures.includes("photo_outside_listing_directory"));
+    assert.equal(escaped.rows[0].photos.length, 0);
+    assert.ok(escaped.rows[0].failures.includes("photo_file_missing_or_invalid"));
   } finally {
     await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("a moved bundle is read from its new photos directory, not the frozen absolute path", async () => {
+  const origin = await mkdtemp(join(tmpdir(), "earnest-capture-origin-"));
+  const relocated = await mkdtemp(join(tmpdir(), "earnest-capture-moved-"));
+  const packed = await mkdtemp(join(tmpdir(), "earnest-capture-packed-"));
+  let renamed = "";
+  try {
+    const id = "9000001";
+    const realBytes = await sharp({
+      create: { width: 400, height: 300, channels: 3, background: "#112233" },
+    })
+      .png()
+      .toBuffer();
+    const decoyBytes = await sharp({
+      create: { width: 400, height: 300, channels: 3, background: "#abcdef" },
+    })
+      .png()
+      .toBuffer();
+    const realHash = createHash("sha256").update(realBytes).digest("hex");
+    await mkdir(join(origin, "photos", id), { recursive: true });
+    const storedPath = join(origin, "photos", id, "01.png");
+    await writeFile(storedPath, decoyBytes);
+    await mkdir(join(relocated, "photos", id), { recursive: true });
+    await writeFile(join(relocated, "photos", id, "01.png"), realBytes);
+    const absolute = await buildSavedImportPlan(
+      [
+        sampleRow(id, {
+          photos: [
+            {
+              local_path: storedPath,
+              original_url: "https://i1.28hse.com/test.png",
+              is_main: true,
+            },
+          ],
+        }),
+      ],
+      { captureRoot: relocated },
+    );
+    assert.deepEqual(absolute.rows[0].failures, []);
+    assert.equal(absolute.rows[0].photos[0].hash, realHash);
+    assert.equal(
+      absolute.rows[0].photos[0].path,
+      await realpath(join(relocated, "photos", id, "01.png")),
+    );
+    const relative = await buildSavedImportPlan(
+      [
+        sampleRow(id, {
+          photos: [
+            {
+              local_path: `photos/${id}/01.png`,
+              original_url: "https://i1.28hse.com/test.png",
+              is_main: true,
+            },
+          ],
+        }),
+      ],
+      { captureRoot: relocated },
+    );
+    assert.deepEqual(relative.rows[0].failures, []);
+    assert.equal(relative.rows[0].photos[0].hash, realHash);
+    await mkdir(join(packed, "photos", id), { recursive: true });
+    const packedFile = join(packed, "photos", id, "01.png");
+    await writeFile(packedFile, realBytes);
+    renamed = join(tmpdir(), `earnest-capture-renamed-${Date.now()}`);
+    await rename(packed, renamed);
+    const moved = await buildSavedImportPlan(
+      [
+        sampleRow(id, {
+          photos: [
+            {
+              local_path: packedFile,
+              original_url: "https://i1.28hse.com/test.png",
+              is_main: true,
+            },
+          ],
+        }),
+      ],
+      { captureRoot: renamed },
+    );
+    assert.deepEqual(moved.rows[0].failures, []);
+    assert.equal(moved.rows[0].photos[0].hash, realHash);
+    assert.equal(
+      moved.rows[0].photos[0].path,
+      await realpath(join(renamed, "photos", id, "01.png")),
+    );
+    assert.notEqual(moved.rows[0].photos[0].path, storedPath);
+  } finally {
+    await rm(origin, { recursive: true, force: true });
+    await rm(relocated, { recursive: true, force: true });
+    await rm(packed, { recursive: true, force: true });
+    if (renamed) await rm(renamed, { recursive: true, force: true });
   }
 });
 

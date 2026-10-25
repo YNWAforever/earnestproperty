@@ -1,7 +1,7 @@
 import { savedCaptureParserApproved } from "./saved-capture-policy.mjs";
 import { resolveSavedEstate, readSavedEstateCatalog } from "./saved-capture-estates.mjs";
 import { readFile, realpath, stat } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { basename, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { getYouTubeVideoId } from "../youtube-video-url.js";
@@ -115,6 +115,13 @@ export function assertImportBlobTarget(env) {
   return { token, host: env.IMPORT_BLOB_HOST };
 }
 
+// Frozen captures pin absolute paths from the machine that saved them. Read the
+// filename from the extracted bundle instead of that path or the repo checkout.
+export function savedCapturePhotoPath(captureRoot, sourceId, localPath) {
+  const name = basename(String(localPath ?? ""));
+  if (!name || name === "." || name === "..") throw Error("photo_outside_listing_directory");
+  return resolve(captureRoot, "photos", sourceId, name);
+}
 export async function buildSavedImportPlan(
   entries,
   { captureRoot = "/workspace/28hse_capture", capturedAt = new Date().toISOString() } = {},
@@ -219,15 +226,15 @@ export async function buildSavedImportPlan(
       try {
         if (!/^\d+$/.test(id)) throw Error("invalid_source_identity");
         const listingRoot = await realpath(resolve(captureRoot, "photos", id));
-        const path = await realpath(photo.local_path);
+        const photoPath = await realpath(savedCapturePhotoPath(captureRoot, id, photo.local_path));
         const allowedRoot = await realpath(resolve(captureRoot, "photos"));
         if (
           listingRoot !== resolve(allowedRoot, id) ||
           !listingRoot.startsWith(allowedRoot + sep) ||
-          !path.startsWith(listingRoot + sep)
+          !photoPath.startsWith(listingRoot + sep)
         )
           throw Error("photo_outside_listing_directory");
-        const details = await stat(path);
+        const details = await stat(photoPath);
         if (!details.isFile() || details.size < 1 || details.size > MAX_IMAGE_BYTES)
           throw Error("photo_size_invalid");
         const url = new URL(photo.original_url);
@@ -240,7 +247,7 @@ export async function buildSavedImportPlan(
           url.hash
         )
           throw Error("photo_source_url_invalid");
-        const bytes = await readFile(path);
+        const bytes = await readFile(photoPath);
         const mime = detectImageMime(bytes);
         if (!mime) throw Error("photo_type_invalid");
         const metadata = await sharp(bytes, {
@@ -264,7 +271,7 @@ export async function buildSavedImportPlan(
         }
         byUrl.set(url.href, hash);
         photos.push({
-          path,
+          path: photoPath,
           url: url.href,
           hash,
           mime,
