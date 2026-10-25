@@ -89,55 +89,59 @@ export function parseSavedDetail(html, sourceUrl, filename) {
   };
 }
 
-// The supplied comparison is authoritative: never infer new inventory from HTML.
-export function selectNewListings(entries, savedCards) {
-  const cards = new Map(savedCards.map((row) => [row.id, row]));
+// The supplied full comparison is authoritative; never discover extra inventory here.
+export function selectNewListings(entries) {
   const seen = new Set();
-  const listings = [];
-  for (const entry of entries) {
-    if (entry.status !== "NEW" || entry.match_listing_no || entry.match_url) continue;
-    if (entry.deal_type !== "sale") throw new Error("Expected new for-sale flats only");
-    const sourceId = String(entry.hse_id);
-    if (seen.has(sourceId)) continue;
-    const duplicateIds = String(entry.duplicate_of_28hse_ids ?? "")
-      .split(/[,;\s]+/)
-      .filter(Boolean);
-    const aliases = [sourceId, ...duplicateIds];
-    if (aliases.some((alias) => seen.has(alias))) continue;
-    const card = cards.get(sourceId);
-    if (!card || card.source_url !== entry.source_url)
-      throw new Error(`Missing saved card for ${sourceId}`);
-    for (const alias of aliases) seen.add(alias);
-    listings.push({
-      id: sourceId,
-      deal_type: entry.deal_type,
-      title_zh: entry.title ?? null,
-      estate: entry.estate ?? null,
-      district: entry.district ?? null,
-      unit_desc: entry.unit_desc ?? null,
-      price: entry.price ?? null,
-      rent: entry.rent ?? null,
-      saleable_area: entry.saleable_area ?? null,
-      bedrooms: entry.bedrooms ?? null,
-      main_image_url: card.main_image_url,
-      source_url: entry.source_url,
-      source_files: ["new_listings.json", "buy_p1.html"],
-      duplicate_source_ids: duplicateIds,
+  return entries
+    .filter(
+      (entry) =>
+        entry["類別 status"] === "NEW" && !entry["網站盤號 site_no"] && !entry["網站連結 site_url"],
+    )
+    .map((entry) => {
+      const sourceId = String(entry["28hse編號 hse_id"]);
+      if (!/^\d+$/.test(sourceId) || seen.has(sourceId))
+        throw new Error(`Duplicate or invalid canonical ID: ${sourceId}`);
+      seen.add(sourceId);
+      const deal = entry["買/租 deal"];
+      if (!["sale", "rent"].includes(deal)) throw new Error(`Invalid deal for ${sourceId}`);
+      const sourceUrl = entry["28hse連結 source_url"];
+      if (
+        sourceUrl !==
+        `https://www.28hse.com/${deal === "sale" ? "buy" : "rent"}/apartment/property-${sourceId}`
+      )
+        throw new Error(`Invalid source URL for ${sourceId}`);
+      return {
+        id: sourceId,
+        deal_type: deal,
+        title_zh: entry["標題 title"] ?? null,
+        estate: entry["屋苑 estate"] ?? null,
+        district: entry["地區 district"] ?? null,
+        unit_desc: entry["座數/層數 unit"] ?? null,
+        price: entry["售價 price"] ?? null,
+        rent: entry["月租 rent"] ?? null,
+        saleable_area: entry["實用面積 saleable_sqft"] ?? null,
+        bedrooms: entry["房 bedrooms"] ?? null,
+        main_image_url: image(entry["圖片 image_url"]),
+        source_url: sourceUrl,
+        posted: entry["28hse刊登 posted"] ?? null,
+        source_files: ["full_new_listings.json"],
+        duplicate_source_ids: String(entry["重複28hse編號 duplicate_ids"] ?? "")
+          .split(/[,;\s]+/)
+          .filter(Boolean),
+      };
     });
-  }
-  return listings;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const capture = resolve(process.argv[2] ?? "/workspace/28hse_capture");
-  const entries = JSON.parse(readFileSync(resolve(capture, "new_listings.json"), "utf8"));
-  const cards = parseSavedIndex(readFileSync(resolve(capture, "buy_p1.html"), "utf8"));
-  const listings = selectNewListings(entries, cards);
+  const entries = JSON.parse(readFileSync(resolve(capture, "full_new_listings.json"), "utf8"));
+  const listings = selectNewListings(entries);
   const fixture = {
-    source: "Only NEW entries from supplied new_listings.json; saved HTML supplies images only",
-    comparison:
-      "compare.csv: existing and uncertain matches excluded; explicit duplicate IDs merged",
-    rent_coverage: "No new rental listings in the supplied allowlist",
+    source:
+      "Only NEW entries from full_new_listings.json; reposts already merged by supplied comparison",
+    comparison: "full_compare.csv: ALREADY_ON_SITE, ON_SITE_PRICE_CHANGED and UNSURE excluded",
+    ordering:
+      "Supplied relative posting times first (newest first); missing posting times use descending 28hse ID, not an inferred date",
     listings,
   };
   writeFileSync(resolve("src/content/28hse-preview.json"), JSON.stringify(fixture, null, 2) + "\n");
@@ -145,11 +149,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     JSON.stringify(
       {
         count: listings.length,
-        estates: listings.map((row) => row.estate),
+        sale: listings.filter((row) => row.deal_type === "sale").length,
+        rent: listings.filter((row) => row.deal_type === "rent").length,
         missing: listings.flatMap((row) =>
-          Object.entries(row)
-            .filter(([key, value]) => value === null && key !== "rent")
-            .map(([key]) => `${row.id}:${key}`),
+          ["title_zh", "estate", "district", "saleable_area", "bedrooms", "main_image_url"]
+            .filter((key) => row[key] === null)
+            .map((key) => `${row.id}:${key}`),
         ),
       },
       null,
