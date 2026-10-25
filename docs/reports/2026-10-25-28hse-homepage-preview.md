@@ -11,7 +11,7 @@ npm run test:28hse-preview
 VITE_28HSE_PREVIEW=true npm run dev -- --host 0.0.0.0 --port 3000
 ```
 
-Local URL: `http://localhost:3000/`. The explicit flag replaces the homepage latest-listings area and bypasses its database loader and enquiry resolver. Without the flag, the existing homepage remains active. No credentials are needed. Cards link to their original 28hse URLs without enquiry tracking or agent contact data.
+Local URL: `http://localhost:3000/`. The section replaces the homepage latest-listings area and bypasses its database loader and enquiry resolver when VITE_28HSE_PREVIEW=true or the Vercel deployment is preview. Local/development and production retain the existing homepage unless explicitly enabled. No credentials are needed. Cards link to their original 28hse URLs without enquiry tracking or agent contact data.
 
 ## Full input and exclusions
 
@@ -43,3 +43,15 @@ Ordering uses the supplied relative posting times where available, newest first.
 - Chrome: both tabs have exactly 9 expected cards and 9 loaded images; keyboard switching works. The all-listings link opens 56 unique source links (38 sale + 18 rent), including listings beyond both homepage slices. Mobile at 390px has no horizontal overflow. No page errors.
 - Screenshot visually inspected: `/workspace/28hse_capture/homepage_preview.png`. Additional captures: `homepage_preview_listings.png`, `homepage_preview_rent.png`, `homepage_preview_mobile.png`, `homepage_preview_all.png` in the same directory.
 - Final `VITE_28HSE_PREVIEW=true npm run build`: exit 0 (existing dependency deprecation and chunk warnings).
+
+## PR #276 CI and Vercel preview fixes
+
+- Removed the component's price formatter and inline currency formatting. Both sale and rent now call the repository's shared `formatPrice` from `src/lib/format.ts`, retaining `價格未提供` for missing amounts. Display follows the shared conventions, e.g. `HK$468萬` and `HK$16,000／月`.
+- Vite exposes only the public deployment label as `import.meta.env.VITE_VERCEL_ENV`, identically for client and SSR. `VERCEL_ENV` is authoritative over the optional `VITE_VERCEL_ENV` hint. No database credentials or server environment object are exposed.
+- Automatic enablement: Vercel preview is on without `VITE_28HSE_PREVIEW`. Production/development/local stay off unless `VITE_28HSE_PREVIEW === "true"`. In production a stale public preview hint is overridden by `VERCEL_ENV=production`.
+- Format CI regression reproduced first (38 passed, 1 failed), then all 39 format tests passed with the shared formatter. Preview tests now include three compiled-gate/environment tests alongside the six inventory/catalog tests.
+- Actual local Vite servers verified automatic VERCEL_ENV=preview activation with the explicit flag unset; the compiled production gate is false even with a stale preview hint. Only the production flag module was requested, never the database-backed production homepage.
+- Existing site-origin tests: 3 passed using bundled Node 24 (their TypeScript stripping option requires modern Node).
+- Browser verified nine cards per tab, shared sale/rent formatting, and all 56 catalog cards. Homepage screenshot refreshed at `/workspace/28hse_capture/homepage_preview.png`.
+- Final checks: `npm run test:format` 39 passed; `npm run test:28hse-preview` 9 passed; `npm run lint` exit 0 (same 9 existing warnings); `npm run typecheck` exit 0.
+- Local preview build with VITE_28HSE_PREVIEW unset and VITE_VERCEL_ENV=preview: `npm run build` exit 0. Actual VERCEL_ENV=preview activation was separately verified through a dedicated local Vite server. Contact prebuild guards and contact configuration remain unchanged.

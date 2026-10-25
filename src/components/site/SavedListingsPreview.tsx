@@ -2,15 +2,9 @@ import { useRef, useState } from "react";
 import { Bed, Maximize, MapPin } from "lucide-react";
 import fixture from "@/content/28hse-preview.json";
 import { AppImage } from "@/components/media/AppImage";
+import { formatPrice } from "@/lib/format";
 
 import { PREVIEW_HOME_LIMIT, previewListingsForDeal } from "@/lib/saved-preview-catalog.js";
-
-function formatPreviewPrice(amount: number | null, deal: string) {
-  if (amount === null) return "價格未提供";
-  return deal === "sale"
-    ? `$${(amount / 10000).toLocaleString("zh-HK")} 萬`
-    : `$${amount.toLocaleString("zh-HK")} / 月`;
-}
 
 export function SavedListingsPreview() {
   const [deal, setDeal] = useState("sale");
@@ -158,10 +152,9 @@ function SavedListingCard({ listing }: { listing: (typeof fixture.listings)[numb
           </a>
         </h3>
         <p className="mt-3 text-2xl font-bold text-coral">
-          {formatPreviewPrice(
-            listing.deal_type === "sale" ? listing.price : listing.rent,
-            listing.deal_type,
-          )}
+          {formatPrice(listing.deal_type === "sale" ? listing.price : listing.rent, {
+            dealType: listing.deal_type === "rent" ? "rent" : "sale",
+          }) ?? "價格未提供"}
         </p>
         <div className="mt-4 flex gap-5 border-t border-border pt-4 text-sm text-muted-foreground">
           <span className="flex items-center gap-1">
