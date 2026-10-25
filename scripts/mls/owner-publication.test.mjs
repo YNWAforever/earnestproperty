@@ -1,9 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   decideOwnerTarget,
   ownerDecision,
+  ownerReportItems,
   ownerValues,
+  sameField,
 } from "../../src/lib/mls/owner-publication.mjs";
 const row = {
   id: "123",
@@ -95,6 +99,68 @@ test("same capture hash stays published after staff sets the listing inactive or
     hash,
   );
   assert.equal(firstPublication.action, "update");
+});
+
+test("source_updated_at uses the local calendar day, including east of UTC", () => {
+  const day = new Date(2026, 9, 25);
+  assert.equal(sameField(day, "2026-10-25", "source_updated_at"), true);
+  assert.equal(sameField("2026-10-25", "2026-10-25", "source_updated_at"), true);
+  assert.equal(sameField(null, null, "source_updated_at"), true);
+  assert.equal(sameField(day, "2026-10-24", "source_updated_at"), false);
+  const script = `
+    import { sameField } from ${JSON.stringify(fileURLToPath(new URL("../../src/lib/mls/owner-publication.mjs", import.meta.url)))};
+    const day = new Date(2026, 9, 25);
+    const utcDay = day.toISOString().slice(0, 10);
+    if (utcDay === "2026-10-25") {
+      console.error("Asia/Hong_Kong did not move local midnight to the previous UTC day");
+      process.exit(2);
+    }
+    if (!sameField(day, "2026-10-25", "source_updated_at")) {
+      console.error("expected local 2026-10-25, UTC day was " + utcDay);
+      process.exit(1);
+    }
+  `;
+  const result = spawnSync(process.execPath, ["--input-type=module", "-e", script], {
+    env: { ...process.env, TZ: "Asia/Hong_Kong" },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+});
+
+test("already-published report keeps the status staff left in place", () => {
+  const item = {
+    action: "already-published",
+    reason: null,
+    target: {
+      id: "00000000-0000-4000-8000-000000000001",
+      status: "inactive",
+      listing_no: "SYNC-1",
+      public_listing_no: "B047469",
+      price: 4000000,
+      rent: null,
+      images: ["https://owned.example/one"],
+    },
+    row: {
+      id: "4065990",
+      deal: "sale",
+      record: { agency_property_no: "B047469", price: 5000000, rent: null, title: "Latest" },
+      photos: [{}, {}],
+      extras: { address: null, features: [] },
+      warnings: [],
+      failures: [],
+    },
+    reviews: [],
+    snapshot: { candidates: [] },
+    resolution: { estate_id: null, district_slug: "sham-tseng" },
+  };
+  const report = ownerReportItems([item])[0];
+  assert.equal(report.after.status, "inactive");
+  assert.equal(report.after.photo_count, 1);
+  assert.equal(report.after.images, "unchanged");
+  const update = ownerReportItems([
+    { ...item, action: "update", target: { ...item.target, status: "draft" } },
+  ])[0];
+  assert.equal(update.after.status, "active");
 });
 
 test("owner values preserve unmatched estates and explicitly blank unresolved districts", () => {

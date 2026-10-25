@@ -229,13 +229,23 @@ export function ownerReportItems(items) {
       : null,
     after: ["skip", "held"].includes(item.action)
       ? null
-      : {
-          ...ownerValues(item.row, item.resolution, []),
-          internal_listing_no: item.target?.listing_no ?? "SYNC-<generated UUID>",
-          public_listing_no: item.row.record.agency_property_no,
-          photo_count: item.row.photos.length,
-          images: "ALL validated captured photos -> owned Blob URLs",
-        },
+      : item.action === "already-published"
+        ? {
+            status: item.target?.status ?? null,
+            internal_listing_no: item.target?.listing_no ?? null,
+            public_listing_no: item.target?.public_listing_no ?? null,
+            price: item.target?.price ?? null,
+            rent: item.target?.rent ?? null,
+            photo_count: item.target?.images?.length ?? 0,
+            images: "unchanged",
+          }
+        : {
+            ...ownerValues(item.row, item.resolution, []),
+            internal_listing_no: item.target?.listing_no ?? "SYNC-<generated UUID>",
+            public_listing_no: item.row.record.agency_property_no,
+            photo_count: item.row.photos.length,
+            images: "ALL validated captured photos -> owned Blob URLs",
+          },
     saved_map_open_review_count: item.reported_open_reviews ?? null,
     reviews_resolved: (["create", "update"].includes(item.action) ? (item.reviews ?? []) : []).map(
       (r) => ({
@@ -258,11 +268,29 @@ export function ownerReportItems(items) {
     validation_failures: item.row.failures,
   }));
 }
-function sameField(actual, expected, field) {
+// node-pg builds a DATE as local midnight. Local calendar fields stay on that
+// day; toISOString() moves it to the previous UTC day east of UTC.
+export function sourceCalendarDay(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const month = String(value.getMonth() + 1).padStart(2, "0");
+    const day = String(value.getDate()).padStart(2, "0");
+    return `${value.getFullYear()}-${month}-${day}`;
+  }
+  if (typeof value === "string") {
+    const match = /^(\d{4}-\d{2}-\d{2})/.exec(value);
+    if (match) return match[1];
+  }
+  return null;
+}
+export function sameField(actual, expected, field) {
   if (["price", "rent", "saleable_area", "gross_area", "bedrooms", "bathrooms"].includes(field))
     return normalizeDecimal(actual) === normalizeDecimal(expected);
-  if (field === "source_updated_at" && actual instanceof Date)
-    return actual.toISOString().slice(0, 10) === expected;
+  if (field === "source_updated_at") {
+    if (actual == null && expected == null) return true;
+    const left = sourceCalendarDay(actual);
+    const right = sourceCalendarDay(expected);
+    return left !== null && left === right;
+  }
   return hashPayload(actual ?? null) === hashPayload(expected ?? null);
 }
 // Media registration is buffered: no DB writes, even temporary ones, before upload succeeds.
