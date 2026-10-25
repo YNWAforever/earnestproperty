@@ -1,7 +1,7 @@
 import { writeFile, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import pg from "pg";
+import { createSavedImportClient } from "./saved-import-driver.mjs";
 import {
   buildSavedImportPlan,
   applySavedImport,
@@ -17,9 +17,13 @@ function parseArgs(args) {
     input: "/workspace/28hse_capture/import_ready.json",
     report: "/workspace/28hse_capture/import_dry_run.md",
     apply: false,
+    driver: "pg",
   };
   for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--apply" && !result.apply) result.apply = true;
+    if (args[i].startsWith("--driver=")) {
+      result.driver = args[i].slice("--driver=".length);
+      if (!["pg", "neon-ws"].includes(result.driver)) throw Error("IMPORT_DRIVER_INVALID");
+    } else if (args[i] === "--apply" && !result.apply) result.apply = true;
     else if (args[i] === "--preflight" && !result.preflight) result.preflight = true;
     else if (args[i].startsWith("--confirm-production=") && !result.confirmationHash) {
       result.confirmationHash = args[i].slice("--confirm-production=".length);
@@ -96,7 +100,7 @@ export function importMarkdown(
       ? issues.map((v) => `- ${v}`)
       : ["- Database-specific checks have not been waived; see per-row validation above."]),
     "- Development remains loopback-only. Production DB access requires both production markers and --confirm-production matching the frozen input SHA-256. Only dedicated IMPORT_DATABASE_URL is used; ordinary database credentials are never a fallback.",
-    "- The existing source policy must already be bootstrapped/enabled with the approved company-number policy and exact estate/district mappings. This importer does not enable policies or alter estate mappings.",
+    "- The existing source policy must already be bootstrapped/enabled with owner-approved company identity and saved-capture parser approval. Estates resolve by exact name/alias plus district; unmatched labels remain NULL. The importer never creates estates or alters policy mappings.",
     "- Production apply additionally requires dedicated IMPORT_BLOB_READ_WRITE_TOKEN / IMPORT_BLOB_STORE_ID / IMPORT_BLOB_HOST, all matching the production marker. Preflight and DB dry-run never create a Blob client and always roll back their verified READ ONLY transaction.",
     "- No source redirects or external source-brand UI are added; normal DB listings use /property/<agency-reference>. Watermarks remain in owner-approved photos.",
   );
@@ -115,7 +119,7 @@ export function importMarkdown(
       "",
       ...preflight.estateMappings.map(
         (mapping) =>
-          `- ${mapping.label}: ${mapping.valid ? `${mapping.estateId} / ${mapping.districtSlug}` : "MISSING / INVALID"}`,
+          `- ${mapping.label}: ${mapping.status}: ${mapping.estate_id ?? "NULL"} / ${mapping.district_slug ?? "UNRESOLVED"}`,
       ),
     );
     lines.push(
@@ -199,11 +203,22 @@ export async function runSavedImport(args, { env = process.env, ports = {} } = {
           issues,
           result,
           rows: plan.rows.map(
-            ({ id, action, deal, record, photos, failures, warnings, existing }) => ({
+            ({
+              id,
+              action,
+              deal,
+              record,
+              photos,
+              failures,
+              warnings,
+              existing,
+              estateResolution,
+            }) => ({
               id,
               action,
               deal,
               listingNo: existing?.public_listing_no ?? record.agency_property_no,
+              estateResolution,
               fields: record,
               photos: photos.map(({ path, url, hash, pathname, width, height, size }) => ({
                 path,
@@ -227,11 +242,15 @@ export async function runSavedImport(args, { env = process.env, ports = {} } = {
   await persist();
   try {
     if (requiresDb) {
-      client = (ports.createClient ?? ((config) => new pg.Client(config)))({
-        connectionString: env.IMPORT_DATABASE_URL,
-        connectionTimeoutMillis: 10000,
-        statement_timeout: 30000,
-      });
+      client = await (ports.createClient ?? createSavedImportClient)(
+        {
+          connectionString: env.IMPORT_DATABASE_URL,
+          connectionTimeoutMillis: 10000,
+          statement_timeout: 30000,
+          query_timeout: 30000,
+        },
+        options.driver,
+      );
       target = `${databaseTarget.hostname}/${databaseTarget.pathname.slice(1)} (${env.IMPORT_TARGET_ENV})`;
       await client.connect();
       preflight = await inspectImportReadOnly(client, plan, { fullDryRun: !options.preflight });

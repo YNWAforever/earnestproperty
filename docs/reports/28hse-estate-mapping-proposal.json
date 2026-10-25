@@ -3,612 +3,1295 @@
   "auto_apply": false,
   "stats": {
     "labels": 35,
-    "high_confidence": 8,
-    "medium_confidence": 4,
-    "unknown": 23,
-    "blank_estate_ids": 35,
-    "approved": 0
+    "matched": 5,
+    "ambiguous": 0,
+    "unmatched_left_null": 30,
+    "district_unresolved_records": 2
   },
   "mappings": [
     {
       "captured_label": "OMA OMA",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "Oma Oma",
-      "suggested_slug": "oma-oma",
-      "suggested_district_slug": "castle-peak-road",
-      "estate_id": "",
-      "confidence": 1,
-      "match_basis": "exact repository name/alias",
-      "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)",
-        "/workspace/ep_site/live_listings.json (local saved snapshot; not fetched)"
+      "label": "OMA OMA",
+      "districtLabel": "屯門(青山公路)",
+      "status": "matched",
+      "estate_id": "f9987051-d49b-45ce-b53e-8a953085ca9c",
+      "slug": "oma-oma",
+      "district_slug": "castle-peak-road",
+      "candidates": [
+        {
+          "id": "f9987051-d49b-45ce-b53e-8a953085ca9c",
+          "slug": "oma-oma"
+        }
       ],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "reason": "exact_name_or_alias_and_district",
+      "confidence": 1,
+      "approved": false,
+      "rows": [
+        {
+          "source_id": "4068170",
+          "label": "OMA OMA",
+          "districtLabel": "屯門(青山公路)",
+          "status": "matched",
+          "estate_id": "f9987051-d49b-45ce-b53e-8a953085ca9c",
+          "slug": "oma-oma",
+          "district_slug": "castle-peak-road",
+          "candidates": [
+            {
+              "id": "f9987051-d49b-45ce-b53e-8a953085ca9c",
+              "slug": "oma-oma"
+            }
+          ],
+          "reason": "exact_name_or_alias_and_district"
+        },
+        {
+          "source_id": "4051837",
+          "label": "OMA OMA",
+          "districtLabel": "屯門(青山公路)",
+          "status": "matched",
+          "estate_id": "f9987051-d49b-45ce-b53e-8a953085ca9c",
+          "slug": "oma-oma",
+          "district_slug": "castle-peak-road",
+          "candidates": [
+            {
+              "id": "f9987051-d49b-45ce-b53e-8a953085ca9c",
+              "slug": "oma-oma"
+            }
+          ],
+          "reason": "exact_name_or_alias_and_district"
+        }
       ]
     },
     {
       "captured_label": "OMA by the Sea",
       "captured_records": 5,
       "selected_records": 5,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "OMA by the Sea",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4050794",
+          "label": "OMA by the Sea",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4030683",
+          "label": "OMA by the Sea",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4063699",
+          "label": "OMA by the Sea",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4044034",
+          "label": "OMA by the Sea",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4033510",
+          "label": "OMA by the Sea",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "THE CARMEL 大廈",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "The Carmel",
-      "suggested_slug": "the-carmel",
-      "suggested_district_slug": "castle-peak-road",
-      "estate_id": "",
-      "confidence": 1,
-      "match_basis": "exact repository name/alias",
+      "label": "THE CARMEL 大廈",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
+      "confidence": 0,
       "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)",
-        "/workspace/ep_site/live_listings.json (local saved snapshot; not fetched)"
-      ],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4034357",
+          "label": "THE CARMEL 大廈",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4044250",
+          "label": "THE CARMEL 大廈",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "上源",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "上源",
-      "suggested_slug": "seong-yuen",
-      "suggested_district_slug": "castle-peak-road",
-      "estate_id": "",
-      "confidence": 1,
-      "match_basis": "exact repository name/alias",
-      "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)",
-        "/workspace/ep_site/live_listings.json (local saved snapshot; not fetched)"
+      "label": "上源",
+      "districtLabel": "屯門(青山公路)",
+      "status": "matched",
+      "estate_id": "10f75cd1-331a-4ab2-b9b9-da9d8b8f990f",
+      "slug": "seong-yuen",
+      "district_slug": "castle-peak-road",
+      "candidates": [
+        {
+          "id": "10f75cd1-331a-4ab2-b9b9-da9d8b8f990f",
+          "slug": "seong-yuen"
+        }
       ],
-      "notes": [
-        "Saved site rows disagree on district; verify estates table.",
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "reason": "exact_name_or_alias_and_district",
+      "confidence": 1,
+      "approved": false,
+      "rows": [
+        {
+          "source_id": "4035957",
+          "label": "上源",
+          "districtLabel": "屯門(青山公路)",
+          "status": "matched",
+          "estate_id": "10f75cd1-331a-4ab2-b9b9-da9d8b8f990f",
+          "slug": "seong-yuen",
+          "district_slug": "castle-peak-road",
+          "candidates": [
+            {
+              "id": "10f75cd1-331a-4ab2-b9b9-da9d8b8f990f",
+              "slug": "seong-yuen"
+            }
+          ],
+          "reason": "exact_name_or_alias_and_district"
+        },
+        {
+          "source_id": "4067230",
+          "label": "上源",
+          "districtLabel": "屯門(青山公路)",
+          "status": "matched",
+          "estate_id": "10f75cd1-331a-4ab2-b9b9-da9d8b8f990f",
+          "slug": "seong-yuen",
+          "district_slug": "castle-peak-road",
+          "candidates": [
+            {
+              "id": "10f75cd1-331a-4ab2-b9b9-da9d8b8f990f",
+              "slug": "seong-yuen"
+            }
+          ],
+          "reason": "exact_name_or_alias_and_district"
+        }
       ]
     },
     {
       "captured_label": "凱旋門",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "凱旋門",
+      "districtLabel": "九龍站",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": null,
+      "candidates": [],
+      "reason": "district_unresolved",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4062592",
+          "label": "凱旋門",
+          "districtLabel": "九龍站",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": null,
+          "candidates": [],
+          "reason": "district_unresolved"
+        }
       ]
     },
     {
       "captured_label": "南岸",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "南岸",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4045588",
+          "label": "南岸",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4049550",
+          "label": "南岸",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "富麗花園",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "富麗花園",
+      "districtLabel": "荃灣",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": null,
+      "candidates": [],
+      "reason": "district_unresolved",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4044249",
+          "label": "富麗花園",
+          "districtLabel": "荃灣",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": null,
+          "candidates": [],
+          "reason": "district_unresolved"
+        }
       ]
     },
     {
       "captured_label": "帝御 帝御‧嵐天",
       "captured_records": 2,
       "selected_records": 1,
-      "suggested_name": "帝御",
-      "suggested_slug": "tai-yu",
-      "suggested_district_slug": "castle-peak-road",
-      "estate_id": "",
-      "confidence": 0.85,
-      "match_basis": "repository parent-estate prefix; phase/building needs review",
+      "label": "帝御 帝御‧嵐天",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
+      "confidence": 0,
       "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)"
-      ],
-      "notes": [
-        "Parent/phase suggestion only; confirm whether target stores this phase separately.",
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4053634",
+          "label": "帝御 帝御‧嵐天",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4028435",
+          "label": "帝御 帝御‧嵐天",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "星堤 大廈",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "星堤",
-      "suggested_slug": "sing-tai",
-      "suggested_district_slug": "castle-peak-road",
-      "estate_id": "",
-      "confidence": 1,
-      "match_basis": "exact repository name/alias",
+      "label": "星堤 大廈",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
+      "confidence": 0,
       "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)",
-        "/workspace/ep_site/live_listings.json (local saved snapshot; not fetched)"
-      ],
-      "notes": [
-        "Saved site rows disagree on district; verify estates table.",
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4050707",
+          "label": "星堤 大廈",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4054884",
+          "label": "星堤 大廈",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "星岸 大廈",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "星岸 大廈",
+      "districtLabel": "深井(荃灣)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "sham-tseng",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4065990",
+          "label": "星岸 大廈",
+          "districtLabel": "深井(荃灣)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "sham-tseng",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "春和海景花園",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "春和海景花園",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4028649",
+          "label": "春和海景花園",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "浪翠園",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "浪翠園",
-      "suggested_slug": "sea-crest-villa",
-      "suggested_district_slug": "sham-tseng",
-      "estate_id": "",
-      "confidence": 1,
-      "match_basis": "exact repository name/alias",
-      "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)",
-        "/workspace/ep_site/live_listings.json (local saved snapshot; not fetched)"
+      "label": "浪翠園",
+      "districtLabel": "深井(荃灣)",
+      "status": "matched",
+      "estate_id": "7255ca72-00d2-44a3-9705-c364c41c8e72",
+      "slug": "sea-crest-villa",
+      "district_slug": "sham-tseng",
+      "candidates": [
+        {
+          "id": "7255ca72-00d2-44a3-9705-c364c41c8e72",
+          "slug": "sea-crest-villa"
+        }
       ],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "reason": "exact_name_or_alias_and_district",
+      "confidence": 1,
+      "approved": false,
+      "rows": [
+        {
+          "source_id": "4036963",
+          "label": "浪翠園",
+          "districtLabel": "深井(荃灣)",
+          "status": "matched",
+          "estate_id": "7255ca72-00d2-44a3-9705-c364c41c8e72",
+          "slug": "sea-crest-villa",
+          "district_slug": "sham-tseng",
+          "candidates": [
+            {
+              "id": "7255ca72-00d2-44a3-9705-c364c41c8e72",
+              "slug": "sea-crest-villa"
+            }
+          ],
+          "reason": "exact_name_or_alias_and_district"
+        },
+        {
+          "source_id": "4068818",
+          "label": "浪翠園",
+          "districtLabel": "深井(荃灣)",
+          "status": "matched",
+          "estate_id": "7255ca72-00d2-44a3-9705-c364c41c8e72",
+          "slug": "sea-crest-villa",
+          "district_slug": "sham-tseng",
+          "candidates": [
+            {
+              "id": "7255ca72-00d2-44a3-9705-c364c41c8e72",
+              "slug": "sea-crest-villa"
+            }
+          ],
+          "reason": "exact_name_or_alias_and_district"
+        }
       ]
     },
     {
       "captured_label": "海慧花園 洋房",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "海慧花園 洋房",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4046208",
+          "label": "海慧花園 洋房",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "海景花園",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "海景花園",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4059474",
+          "label": "海景花園",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "海濤花園",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "海濤花園",
+      "districtLabel": "荃灣",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "ting-kau",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4042934",
+          "label": "海濤花園",
+          "districtLabel": "荃灣",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "ting-kau",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "海韻花園",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "海韻花園",
-      "suggested_slug": "rhine-garden",
-      "suggested_district_slug": "sham-tseng",
-      "estate_id": "",
-      "confidence": 1,
-      "match_basis": "exact repository name/alias",
-      "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)",
-        "/workspace/ep_site/live_listings.json (local saved snapshot; not fetched)"
+      "label": "海韻花園",
+      "districtLabel": "深井(荃灣)",
+      "status": "matched",
+      "estate_id": "050a8a69-9d4b-4e75-a5d6-f6cda0641ebf",
+      "slug": "rhine-garden",
+      "district_slug": "sham-tseng",
+      "candidates": [
+        {
+          "id": "050a8a69-9d4b-4e75-a5d6-f6cda0641ebf",
+          "slug": "rhine-garden"
+        }
       ],
-      "notes": [
-        "Historical DB slug sea-pearl-garden; verify current slug/UUID on target.",
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "reason": "exact_name_or_alias_and_district",
+      "confidence": 1,
+      "approved": false,
+      "rows": [
+        {
+          "source_id": "4058101",
+          "label": "海韻花園",
+          "districtLabel": "深井(荃灣)",
+          "status": "matched",
+          "estate_id": "050a8a69-9d4b-4e75-a5d6-f6cda0641ebf",
+          "slug": "rhine-garden",
+          "district_slug": "sham-tseng",
+          "candidates": [
+            {
+              "id": "050a8a69-9d4b-4e75-a5d6-f6cda0641ebf",
+              "slug": "rhine-garden"
+            }
+          ],
+          "reason": "exact_name_or_alias_and_district"
+        }
       ]
     },
     {
       "captured_label": "瑜翠園",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "瑜翠園",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4063247",
+          "label": "瑜翠園",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4040071",
+          "label": "瑜翠園",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "緹岸 第1期(大廈)",
       "captured_records": 3,
       "selected_records": 3,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "緹岸 第1期(大廈)",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4035765",
+          "label": "緹岸 第1期(大廈)",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4053270",
+          "label": "緹岸 第1期(大廈)",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4012876",
+          "label": "緹岸 第1期(大廈)",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "緹岸 第2期",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "緹岸 第2期",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4033614",
+          "label": "緹岸 第2期",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "縉皇居",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "縉皇居",
-      "suggested_slug": "chun-wong-kui",
-      "suggested_district_slug": "sham-tseng",
-      "estate_id": "",
-      "confidence": 1,
-      "match_basis": "exact repository name/alias",
-      "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)",
-        "/workspace/ep_site/live_listings.json (local saved snapshot; not fetched)"
+      "label": "縉皇居",
+      "districtLabel": "深井(荃灣)",
+      "status": "matched",
+      "estate_id": "625e2e69-6048-45d2-b20f-61aa0f3daa58",
+      "slug": "chun-wong-kui",
+      "district_slug": "sham-tseng",
+      "candidates": [
+        {
+          "id": "625e2e69-6048-45d2-b20f-61aa0f3daa58",
+          "slug": "chun-wong-kui"
+        }
       ],
-      "notes": [
-        "Saved site rows disagree on district; verify estates table.",
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "reason": "exact_name_or_alias_and_district",
+      "confidence": 1,
+      "approved": false,
+      "rows": [
+        {
+          "source_id": "4060450",
+          "label": "縉皇居",
+          "districtLabel": "深井(荃灣)",
+          "status": "matched",
+          "estate_id": "625e2e69-6048-45d2-b20f-61aa0f3daa58",
+          "slug": "chun-wong-kui",
+          "district_slug": "sham-tseng",
+          "candidates": [
+            {
+              "id": "625e2e69-6048-45d2-b20f-61aa0f3daa58",
+              "slug": "chun-wong-kui"
+            }
+          ],
+          "reason": "exact_name_or_alias_and_district"
+        },
+        {
+          "source_id": "4015403",
+          "label": "縉皇居",
+          "districtLabel": "深井(荃灣)",
+          "status": "matched",
+          "estate_id": "625e2e69-6048-45d2-b20f-61aa0f3daa58",
+          "slug": "chun-wong-kui",
+          "district_slug": "sham-tseng",
+          "candidates": [
+            {
+              "id": "625e2e69-6048-45d2-b20f-61aa0f3daa58",
+              "slug": "chun-wong-kui"
+            }
+          ],
+          "reason": "exact_name_or_alias_and_district"
+        }
       ]
     },
     {
       "captured_label": "翠濤居",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "翠濤居",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4045648",
+          "label": "翠濤居",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "蟠龍半島 獨立屋",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "蟠龍半島 獨立屋",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "3996535",
+          "label": "蟠龍半島 獨立屋",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "豪景花園 第三期",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "豪景花園",
-      "suggested_slug": "hong-kong-garden",
-      "suggested_district_slug": "sham-tseng",
-      "estate_id": "",
-      "confidence": 0.85,
-      "match_basis": "repository parent-estate prefix; phase/building needs review",
+      "label": "豪景花園 第三期",
+      "districtLabel": "深井(荃灣)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "sham-tseng",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
+      "confidence": 0,
       "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)"
-      ],
-      "notes": [
-        "Parent/phase suggestion only; confirm whether target stores this phase separately.",
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4029337",
+          "label": "豪景花園 第三期",
+          "districtLabel": "深井(荃灣)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "sham-tseng",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "逸璟龍灣",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "逸璟龍灣",
+      "districtLabel": "深井(荃灣)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "sham-tseng",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4033461",
+          "label": "逸璟龍灣",
+          "districtLabel": "深井(荃灣)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "sham-tseng",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4053663",
+          "label": "逸璟龍灣",
+          "districtLabel": "深井(荃灣)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "sham-tseng",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "雅德苑",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "雅德苑",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4060617",
+          "label": "雅德苑",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "青山別墅",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "青山別墅",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4051997",
+          "label": "青山別墅",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "青榕臺",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "青榕臺",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4058947",
+          "label": "青榕臺",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "青麗灣別墅",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "青麗灣別墅",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4049628",
+          "label": "青麗灣別墅",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "青龍頭村",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "青龍頭村",
+      "districtLabel": "深井(荃灣)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "sham-tseng",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4046348",
+          "label": "青龍頭村",
+          "districtLabel": "深井(荃灣)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "sham-tseng",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "飛揚 1期",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "飛揚 1期",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4034694",
+          "label": "飛揚 1期",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4058299",
+          "label": "飛揚 1期",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "飛揚 2期",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "飛揚 2期",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4060439",
+          "label": "飛揚 2期",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "香港黃金海岸",
       "captured_records": 3,
       "selected_records": 3,
-      "suggested_name": "香港黃金海岸",
-      "suggested_slug": "wong-gam-hoi-ngon",
-      "suggested_district_slug": "castle-peak-road",
-      "estate_id": "",
-      "confidence": 1,
-      "match_basis": "exact repository name/alias",
+      "label": "香港黃金海岸",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
+      "confidence": 0,
       "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)"
-      ],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4057974",
+          "label": "香港黃金海岸",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4050795",
+          "label": "香港黃金海岸",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4034693",
+          "label": "香港黃金海岸",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "黃金海灣 黃金海灣意嵐",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "黃金海灣",
-      "suggested_slug": "wong-gam-hoi-waan",
-      "suggested_district_slug": "castle-peak-road",
-      "estate_id": "",
-      "confidence": 0.85,
-      "match_basis": "repository parent-estate prefix; phase/building needs review",
+      "label": "黃金海灣 黃金海灣意嵐",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
+      "confidence": 0,
       "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)"
-      ],
-      "notes": [
-        "Parent/phase suggestion only; confirm whether target stores this phase separately.",
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4035759",
+          "label": "黃金海灣 黃金海灣意嵐",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4061626",
+          "label": "黃金海灣 黃金海灣意嵐",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "黃金海灣 黃金海灣珀岸",
       "captured_records": 2,
       "selected_records": 2,
-      "suggested_name": "黃金海灣",
-      "suggested_slug": "wong-gam-hoi-waan",
-      "suggested_district_slug": "castle-peak-road",
-      "estate_id": "",
-      "confidence": 0.85,
-      "match_basis": "repository parent-estate prefix; phase/building needs review",
+      "label": "黃金海灣 黃金海灣珀岸",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
+      "confidence": 0,
       "approved": false,
-      "evidence": [
-        "src/content/estate-registry.ts (repository aliases/identity)"
-      ],
-      "notes": [
-        "Parent/phase suggestion only; confirm whether target stores this phase separately.",
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4040895",
+          "label": "黃金海灣 黃金海灣珀岸",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        },
+        {
+          "source_id": "4033913",
+          "label": "黃金海灣 黃金海灣珀岸",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     },
     {
       "captured_label": "龍珠島花園",
       "captured_records": 1,
       "selected_records": 1,
-      "suggested_name": "",
-      "suggested_slug": "",
-      "suggested_district_slug": "",
-      "estate_id": "",
+      "label": "龍珠島花園",
+      "districtLabel": "屯門(青山公路)",
+      "status": "unmatched-left-null",
+      "estate_id": null,
+      "slug": null,
+      "district_slug": "castle-peak-road",
+      "candidates": [],
+      "reason": "no_exact_estate_in_district",
       "confidence": 0,
-      "match_basis": "unknown",
       "approved": false,
-      "evidence": [],
-      "notes": [
-        "Estate UUID intentionally blank: property IDs in live_listings.json are NOT estate IDs. Verify via read-only target preflight."
+      "rows": [
+        {
+          "source_id": "4045561",
+          "label": "龍珠島花園",
+          "districtLabel": "屯門(青山公路)",
+          "status": "unmatched-left-null",
+          "estate_id": null,
+          "slug": null,
+          "district_slug": "castle-peak-road",
+          "candidates": [],
+          "reason": "no_exact_estate_in_district"
+        }
       ]
     }
   ],
-  "input_sha256": "4f871030287abb25c55b87326c22a897f3e0c12462f7bd4853baee9f1317e88f"
+  "input_sha256": "4f871030287abb25c55b87326c22a897f3e0c12462f7bd4853baee9f1317e88f",
+  "snapshot_sha256": "50272670449cffcd240afd0f119d64d659fd29bda3bdd3efa9560cea9dd05e21",
+  "evidence": "/workspace/28hse_capture/prod_estates_snapshot.json"
 }

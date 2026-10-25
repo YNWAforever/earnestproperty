@@ -1,3 +1,5 @@
+import { savedCaptureParserApproved } from "./saved-capture-policy.mjs";
+import { resolveSavedEstate, readSavedEstateCatalog } from "./saved-capture-estates.mjs";
 import { readFile, realpath, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
@@ -297,13 +299,11 @@ export async function buildSavedImportPlan(
         ? raw.feature_tags.filter((v) => typeof v === "string")
         : [],
       video_url: videoId ? `https://www.youtube.com/watch?v=${videoId}` : null,
-      source_updated_at: /^\d{4}-\d{2}-\d{2}$/.test(raw.updated_date ?? "")
-        ? raw.updated_date
-        : null,
     };
     const aliases = (raw.merged_repost_ids ?? []).map(String);
     if (aliases.some((alias) => !/^\d+$/.test(alias) || alias === id))
       failures.push("invalid_repost_id");
+    record.saved_capture_address = extras.address;
     const fingerprint = hashPayload({
       record: { ...record, captured_at: undefined },
       extras,
@@ -448,8 +448,9 @@ export async function inspectSavedImport(client, plan) {
     !policy.bootstrap_approved_at
   )
     issues.push("ingestion_policy_or_bootstrap_not_approved");
-  if (policy && policy.parser_version !== SAVED_IMPORT_PARSER_VERSION)
+  if (policy && !savedCaptureParserApproved(policy))
     issues.push("saved_import_parser_not_approved");
+  const catalog = await readSavedEstateCatalog(client.query.bind(client));
   for (const row of plan.rows) {
     const links = await q(
       "SELECT l.property_id,l.external_listing_id,p.status,m.public_listing_no,o.payload#>>'{raw,saved_import_hash}' AS import_hash,s.observation_id FROM property_source_links l JOIN properties p ON p.id=l.property_id LEFT JOIN property_public_members m ON m.property_id=p.id LEFT JOIN mls_source_state s ON s.source=l.source AND s.external_listing_id=l.external_listing_id AND s.deal_type=l.deal_type LEFT JOIN listing_source_observations o ON o.id=s.observation_id WHERE l.source=$1 AND l.external_listing_id=ANY($2::text[]) AND l.deal_type=$3 AND l.status='active'",
@@ -474,16 +475,14 @@ export async function inspectSavedImport(client, plan) {
         row.failures.push("owner_update_target_missing_or_ambiguous");
       else row.updateTarget = targets[0];
     }
-    const mapping = policy?.config?.estate_mappings?.[row.record.estate];
-    if (!mapping?.estate_id || !mapping?.district_slug)
-      row.failures.push("estate_mapping_unverified");
-    else {
-      const estate = (
-        await q("SELECT id,district_slug FROM estates WHERE id=$1", [mapping.estate_id])
-      )[0];
-      if (!estate || estate.district_slug !== mapping.district_slug)
-        row.failures.push("estate_mapping_mismatch");
-    }
+    row.estateResolution = resolveSavedEstate(
+      row.record,
+      row.extras,
+      catalog.estates,
+      catalog.districts,
+    );
+    if (!row.estateResolution.district_slug) row.failures.push("district_unresolved");
+    if (row.estateResolution.status === "ambiguous") row.failures.push("estate_match_ambiguous");
     const company = policy?.config?.company_number_identity;
     if (company?.approved !== true || company.version !== "company-number-v1")
       row.failures.push("company_identity_policy_not_approved");
@@ -532,6 +531,7 @@ export async function applySavedImport(
       await applyIngestion(client, payload, {
         controlledPatch: true,
         expectedSource: SOURCE_28HSE,
+        savedCaptureImport: true,
       });
     }
     const repository = createSyncRepository({ client });
@@ -671,7 +671,18 @@ export async function applySavedImport(
             [source.id, row.deal],
           );
         }
-        const mapping = policy.config.estate_mappings[row.record.estate];
+        // Resolve again under the write lock; never create estates or change policy mappings.
+        const catalog = await readSavedEstateCatalog(client.query.bind(client));
+        const mapping = resolveSavedEstate(
+          row.record,
+          row.extras,
+          catalog.estates,
+          catalog.districts,
+        );
+        if (!mapping.district_slug || mapping.status === "ambiguous")
+          throw Error("IMPORT_ESTATE_RESOLUTION_CHANGED");
+        if (hashPayload(mapping) !== hashPayload(row.estateResolution))
+          throw Error("IMPORT_ESTATE_RESOLUTION_CHANGED");
         const values = {
           title_zh: row.record.title,
           deal_type: row.deal,
@@ -689,7 +700,6 @@ export async function applySavedImport(
           images: media.images,
           address: row.extras.address,
           features: row.extras.features,
-          source_updated_at: row.extras.source_updated_at,
           video_url: row.extras.video_url,
           floorplan_url: null,
           status: "active",
@@ -716,8 +726,6 @@ export async function applySavedImport(
           Object.entries(values).some(([field, value]) => {
             const actual = effective?.[field] ?? null;
             if (numeric.has(field)) return normalizeDecimal(actual) !== normalizeDecimal(value);
-            if (field === "source_updated_at" && actual instanceof Date)
-              return actual.toISOString().slice(0, 10) !== value;
             return hashPayload(actual) !== hashPayload(value ?? null);
           })
         )

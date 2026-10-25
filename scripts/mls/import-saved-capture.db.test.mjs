@@ -13,6 +13,9 @@ import {
   assertImportTarget,
   OWNER_REPLACEMENTS,
 } from "../../src/lib/mls/saved-capture-import.mjs";
+import { inspectImportReadOnly } from "../../src/lib/mls/saved-capture-preflight.mjs";
+import { applyIngestion } from "../../src/lib/mls/ingestion-repository.mjs";
+import { batch as dailyBatch } from "../../src/lib/mls/ingestion-test-fixtures.mjs";
 import { buildOwnedMediaPathname, sha256 } from "../../src/lib/mls/media.mjs";
 
 async function withLocalClient(run) {
@@ -53,7 +56,10 @@ test("local PostgreSQL: 52 creates + 3 in-place updates, sold skipped, owned pho
       for (const migration of [
         "20260622060000_public_content.sql",
         "20260623090000_neon_admin_crm_whatsapp.sql",
+        "20260709090000_cms_videos.sql",
+        "20260711090000_cms_content_revisions.sql",
         "20260817120000_dual_source_listing_sync.sql",
+        "20260830130000_estate_expansion.sql",
         "20260906040000_property_public_identity.sql",
         "20260906090000_canonical_property_identity.sql",
         "20260906120000_admin_property_management.sql",
@@ -69,14 +75,29 @@ test("local PostgreSQL: 52 creates + 3 in-place updates, sold skipped, owned pho
           throw new Error(`Migration ${migration}: ${error.message}`, { cause: error });
         }
       }
+      // Exercise only the review-only schema guard in an isolated schema, not the owner policy seed.
+      const preparedSql = await readFile(
+        new URL("./sql/prepare-28hse-saved-import-policy.sql", import.meta.url),
+        "utf8",
+      );
+      const guardDdl = preparedSql
+        .split("-- BEGIN PARSER GUARD DDL (also exercised only in disposable-schema tests)\n")[1]
+        .split("-- END PARSER GUARD DDL")[0];
+      await q(guardDdl);
       const estate = (
         await q(
           "INSERT INTO estates(slug,name_zh,district_slug) VALUES('saved-test-estate','測試屋苑','test-district') RETURNING id",
         )
       )[0];
+      await q("INSERT INTO districts(slug,name_zh) VALUES('test-district','測試區')");
       const config = {
+        saved_capture_import: {
+          parser_version: "saved-capture-import-v1",
+          approved: true,
+          approved_by: "synthetic-owner",
+        },
         absence_enabled: false,
-        estate_mappings: { 測試屋苑: { estate_id: estate.id, district_slug: "test-district" } },
+        estate_mappings: {},
         district_slugs: { 測試區: "test-district" },
         company_number_identity: {
           approved: true,
@@ -85,7 +106,7 @@ test("local PostgreSQL: 52 creates + 3 in-place updates, sold skipped, owned pho
         },
       };
       await q(
-        "INSERT INTO mls_ingestion_policies(source,scope_id,policy_version,parser_version,owner,publish_enabled,bootstrap_approved_at,bootstrap_approved_by,config) VALUES('28hse_agent_540','agent:540','no-hermes-v2','saved-capture-import-v1','no-hermes-v2',true,now(),'synthetic-owner',$1)",
+        "INSERT INTO mls_ingestion_policies(source,scope_id,policy_version,parser_version,owner,publish_enabled,bootstrap_approved_at,bootstrap_approved_by,config) VALUES('28hse_agent_540','agent:540','no-hermes-v2','python-v2.2','no-hermes-v2',true,now(),'synthetic-owner',$1)",
         [config],
       );
       const entries = Array.from({ length: 52 }, (_, i) => ({
@@ -185,11 +206,34 @@ test("local PostgreSQL: 52 creates + 3 in-place updates, sold skipped, owned pho
         });
       }
       entries[0].merged_repost_ids = ["8800000"];
+      entries[1].estate = "沒有此屋苑"; // valid district, no estate: normal active listing
       const plan = await buildSavedImportPlan(entries, { captureRoot: root });
       assert.deepEqual(
         plan.rows.flatMap((row) => row.failures),
         [],
       );
+      const originalFull = (
+        await q(
+          "INSERT INTO mls_ingestion_receipts(source,scope_id,policy_version,parser_version,scraped_at,payload_hash,run_id,response,full_snapshot) VALUES('28hse_agent_540','agent:540','no-hermes-v2','python-v2.2',now()-interval '2 days',repeat('a',64),$1,jsonb_build_object('summary',jsonb_build_object('advertisement_count',55)),true) RETURNING id",
+          [legacyRun],
+        )
+      )[0].id;
+      await q(
+        "INSERT INTO mls_ingestion_scopes(source,scope_id,policy_version,last_accepted_at,full_receipt_id,full_count) VALUES('28hse_agent_540','agent:540','no-hermes-v2',now()-interval '2 days',$1,55)",
+        [originalFull],
+      );
+      await q("UPDATE mls_ingestion_receipts SET accepted_at=now()-interval '2 days' WHERE id=$1", [
+        originalFull,
+      ]);
+      const readonlyBefore = await inspectImportReadOnly(client, plan, { fullDryRun: true });
+      assert.equal(readonlyBefore.ready, true, JSON.stringify(readonlyBefore.missingItems));
+      const observedColumns = (
+        await q(
+          "SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='listing_source_observations'",
+          [schema],
+        )
+      ).map((row) => row.column_name);
+      assert.ok(!observedColumns.includes("source_updated_at"));
       let puts = 0;
       const store = {
         put: async ({ pathname, body, contentType }) => {
@@ -203,6 +247,15 @@ test("local PostgreSQL: 52 creates + 3 in-place updates, sold skipped, owned pho
         },
       };
       const result = await applySavedImport(client, plan, { blobStore: store });
+      assert.equal(
+        (
+          await q(
+            "SELECT p.estate_id,p.status FROM properties p JOIN property_source_links l ON l.property_id=p.id WHERE l.source='28hse_agent_540' AND l.external_listing_id=$1",
+            [entries[1].source_id],
+          )
+        )[0].estate_id,
+        null,
+      );
       assert.equal(result.created.length, 52);
       assert.equal(result.updated.length, 3);
       assert.deepEqual(result.held, []);
@@ -247,15 +300,18 @@ test("local PostgreSQL: 52 creates + 3 in-place updates, sold skipped, owned pho
         beforeUnrelated,
       );
       assert.equal(
-        (await q("SELECT bool_or(full_snapshot) AS any_full FROM mls_ingestion_receipts"))[0]
-          .any_full,
+        (
+          await q(
+            "SELECT bool_or(full_snapshot) AS any_full FROM mls_ingestion_receipts WHERE parser_version='saved-capture-import-v1'",
+          )
+        )[0].any_full,
         false,
       );
       assert.equal(
         (
           await q("SELECT full_receipt_id FROM mls_ingestion_scopes WHERE source='28hse_agent_540'")
         )[0].full_receipt_id,
-        null,
+        originalFull,
       );
       assert.equal(
         (
@@ -388,6 +444,56 @@ test("local PostgreSQL: 52 creates + 3 in-place updates, sold skipped, owned pho
       )[0].row;
       assert.deepEqual(afterJournalRace, beforeJournalRace);
       assert.equal(afterJournalRace.status, "draft");
+      assert.equal(
+        (
+          await q(
+            "SELECT parser_version FROM mls_ingestion_policies WHERE source='28hse_agent_540'",
+          )
+        )[0].parser_version,
+        "python-v2.2",
+      );
+      assert.equal(
+        (
+          await q("SELECT full_receipt_id FROM mls_ingestion_scopes WHERE source='28hse_agent_540'")
+        )[0].full_receipt_id,
+        originalFull,
+      );
+      // The normal daily parser still accepts a full snapshot against its original baseline.
+      const daily = dailyBatch(
+        plan.rows.filter((row) => row.action !== "skip").map((row) => row.record),
+        new Date(Date.now() + 60000).toISOString(),
+      );
+      daily.meta.parser_version = "python-v2.2";
+      await applyIngestion(client, daily);
+      const fullReceipt = (
+        await q(
+          "SELECT r.parser_version,r.full_snapshot FROM mls_ingestion_scopes s JOIN mls_ingestion_receipts r ON r.id=s.full_receipt_id WHERE s.source='28hse_agent_540'",
+        )
+      )[0];
+      assert.equal(fullReceipt.parser_version, "python-v2.2");
+      assert.equal(fullReceipt.full_snapshot, true);
+      // The DB exception itself requires operator context and can NEVER authorize a full capture.
+      for (const full of [false, true]) {
+        await q("BEGIN");
+        try {
+          if (full)
+            await q("SELECT set_config('app.saved_capture_import','saved-capture-import-v1',true)");
+          await q(
+            "INSERT INTO mls_ingestion_receipts(source,scope_id,policy_version,parser_version,scraped_at,payload_hash,run_id,response,full_snapshot) SELECT source,scope_id,policy_version,'saved-capture-import-v1',now()+interval '5 minutes',payload_hash,run_id,'{}',$2 FROM mls_ingestion_receipts WHERE id=$1",
+            [originalFull, full],
+          );
+          await assert.rejects(() => q("COMMIT"), /MLS_RECEIPT_PARSER_NOT_APPROVED/);
+        } finally {
+          await q("ROLLBACK");
+        }
+      }
+      await assert.rejects(
+        () =>
+          q(
+            "UPDATE mls_ingestion_policies SET parser_version='other' WHERE source='28hse_agent_540'",
+          ),
+        /MLS_PRIMARY_PARSER_HAS_RECEIPTS/,
+      );
     } finally {
       await q("ROLLBACK");
       await q("SET search_path TO public");

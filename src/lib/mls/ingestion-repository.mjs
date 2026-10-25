@@ -1,3 +1,5 @@
+import { isApprovedSavedCapture } from "./saved-capture-policy.mjs";
+import { resolveSavedEstate, readSavedEstateCatalog } from "./saved-capture-estates.mjs";
 import { savePromotionTiers } from "./promotion-tier-repository.mjs";
 import { writeSyncFields, writeReviewRows } from "./ingestion-batch-writes.mjs";
 import {
@@ -149,9 +151,15 @@ export async function applyIngestion(client, payload, options = {}) {
     )[0];
     if (!policy || policy.owner !== POLICY || !policy.publish_enabled)
       throw new SnapshotError("publishing_disabled", 503);
-    if (policy.parser_version !== batch.parserVersion)
+    const savedCapture = isApprovedSavedCapture(policy, batch, options);
+    if (policy.parser_version !== batch.parserVersion && !savedCapture)
       throw new SnapshotError("parser_policy_mismatch", 503);
+    if (savedCapture)
+      await q("SELECT set_config('app.saved_capture_import','saved-capture-import-v1',true)");
     const companyRule = companyPolicy(policy);
+    const savedCatalog = savedCapture
+      ? await readSavedEstateCatalog(client.query.bind(client))
+      : null;
     batch = decodeSnapshot(payload, verifiedOptions(policy, options));
     reviewPlan = validateReviewPlan(batch, options);
     const unverified = batch.records.filter((record) => !record.urlIdentityVerified);
@@ -217,7 +225,7 @@ export async function applyIngestion(client, payload, options = {}) {
     }
     const gate = evaluateSnapshotGate(
       batch,
-      baseline,
+      savedCapture && baseline ? { ...baseline, parserVersion: batch.parserVersion } : baseline,
       {
         absenceEnabled: policy.config.absence_enabled === true,
       },
@@ -363,9 +371,20 @@ export async function applyIngestion(client, payload, options = {}) {
       const linkedProperty = relation.propertyId
         ? (await q("SELECT * FROM properties WHERE id=$1", [relation.propertyId]))[0]
         : null;
-      const mappedDistrict =
-        linkedProperty?.district_slug ??
-        districtSlug(record.fields.district, policy.config, record.fields.estate);
+      const savedEstate = savedCapture
+        ? resolveSavedEstate(
+            record.fields,
+            { address: record.raw.saved_capture_address },
+            savedCatalog.estates,
+            savedCatalog.districts,
+          )
+        : null;
+      if (savedCapture && (!savedEstate.district_slug || savedEstate.status === "ambiguous"))
+        throw new SnapshotError("saved_capture_estate_unresolved", 409);
+      const mappedDistrict = savedCapture
+        ? savedEstate.district_slug
+        : (linkedProperty?.district_slug ??
+          districtSlug(record.fields.district, policy.config, record.fields.estate));
       if (options.controlledPatch === true) {
         const rejectedHistoricalKeys = await rejectedHistoricalReviewKeys(
           q,
@@ -508,7 +527,9 @@ export async function applyIngestion(client, payload, options = {}) {
               mappedDistrict,
               POLICY,
               relation.companyNumber ?? null,
-              estateMapping(record.fields.estate, policy.config)?.estate_id ?? null,
+              savedCapture
+                ? savedEstate.estate_id
+                : (estateMapping(record.fields.estate, policy.config)?.estate_id ?? null),
             ],
           )
         )[0];

@@ -1,3 +1,5 @@
+import { savedCaptureParserApproved } from "./saved-capture-policy.mjs";
+import { resolveSavedEstate, readSavedEstateCatalog } from "./saved-capture-estates.mjs";
 import {
   OWNER_REPLACEMENTS,
   SAVED_IMPORT_PARSER_VERSION,
@@ -30,7 +32,6 @@ export const REQUIRED_IMPORT_SCHEMA = Object.freeze({
     "address",
     "source_site",
     "source_url",
-    "source_updated_at",
     "last_seen_at",
     "last_scraped_at",
     "updated_at",
@@ -41,7 +42,8 @@ export const REQUIRED_IMPORT_SCHEMA = Object.freeze({
     "ingestion_owner",
     "ingestion_identity_policy",
   ],
-  estates: ["id", "slug", "name_zh", "district_slug"],
+  estates: ["id", "slug", "name_zh", "name_en", "aliases", "district_slug"],
+  districts: ["id", "slug", "name_zh", "name_en"],
   property_public_groups: [
     "public_listing_no",
     "canonical_property_no",
@@ -77,7 +79,6 @@ export const REQUIRED_IMPORT_SCHEMA = Object.freeze({
     "property_no_normalized",
     "media_candidates",
     "quarantine_reasons",
-    "source_updated_at",
     "discovered_at",
     "fetched_at",
   ],
@@ -251,7 +252,29 @@ export const REQUIRED_IMPORT_TRIGGERS = Object.freeze([
   "assign_property_public_identity_after_insert",
   "revalidate_property_public_identity_after_update",
   "admin_property_protect_source",
+  "mls_saved_capture_receipt_parser_guard",
+  "mls_primary_parser_preserve",
 ]);
+
+export function normalizeIndexColumns(value) {
+  if (Array.isArray(value)) return value.map(String);
+  if (typeof value !== "string") return [];
+  if (value.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(value);
+      return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+      return [];
+    }
+  }
+  // All required schema column names are simple identifiers; both drivers may return name[] text.
+  return value.startsWith("{") && value.endsWith("}")
+    ? value
+        .slice(1, -1)
+        .split(",")
+        .map((name) => name.replace(/^"|"$/g, ""))
+    : [];
+}
 
 async function inspectReadOnlyBody(client, plan, { fullDryRun }) {
   const missingItems = [],
@@ -272,7 +295,7 @@ async function inspectReadOnlyBody(client, plan, { fullDryRun }) {
       if (!columns.some((row) => row.table_name === table && row.column_name === column))
         add("schema_column_missing", `${table}.${column}`);
   const keys = await q(
-    "SELECT /* import_preflight_keys */ requested.name AS table_name,ARRAY(SELECT a.attname FROM unnest(i.indkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,(i.indisvalid AND i.indisready) AS valid FROM unnest($1::text[]) requested(name) JOIN pg_index i ON i.indrelid=to_regclass(requested.name) WHERE i.indisunique",
+    "SELECT /* import_preflight_keys */ requested.name AS table_name,ARRAY(SELECT a.attname::text FROM unnest(i.indkey) WITH ORDINALITY k(attnum,ord) JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum ORDER BY k.ord) AS columns,(i.indisvalid AND i.indisready) AS valid FROM unnest($1::text[]) requested(name) JOIN pg_index i ON i.indrelid=to_regclass(requested.name) WHERE i.indisunique",
     [Object.keys(REQUIRED_IMPORT_SCHEMA)],
   );
   for (const [table, required] of REQUIRED_IMPORT_KEYS)
@@ -281,12 +304,12 @@ async function inspectReadOnlyBody(client, plan, { fullDryRun }) {
         (row) =>
           row.table_name === table &&
           row.valid &&
-          JSON.stringify(row.columns) === JSON.stringify(required),
+          JSON.stringify(normalizeIndexColumns(row.columns)) === JSON.stringify(required),
       )
     )
       add("schema_unique_key_missing", `${table}(${required.join(",")})`);
   const triggers = await q(
-    "SELECT /* import_preflight_triggers */ t.tgname AS trigger_name,(t.tgenabled IN('O','A')) AS enabled FROM pg_trigger t WHERE t.tgrelid=to_regclass('properties') AND NOT t.tgisinternal",
+    "SELECT /* import_preflight_triggers */ t.tgname AS trigger_name,(t.tgenabled IN('O','A')) AS enabled FROM pg_trigger t WHERE t.tgrelid IN(to_regclass('properties'),to_regclass('mls_ingestion_receipts'),to_regclass('mls_ingestion_policies')) AND NOT t.tgisinternal",
   );
   for (const name of REQUIRED_IMPORT_TRIGGERS)
     if (!triggers.some((row) => row.trigger_name === name && row.enabled))
@@ -313,7 +336,7 @@ async function inspectReadOnlyBody(client, plan, { fullDryRun }) {
       add("ingestion_publication_disabled", "publish_enabled must be owner-approved");
     if (!policy.bootstrap_approved_at || !policy.bootstrap_approved_by)
       add("ingestion_bootstrap_unapproved", "bootstrap owner approval required");
-    if (policy.parser_version !== SAVED_IMPORT_PARSER_VERSION)
+    if (!savedCaptureParserApproved(policy))
       add("saved_import_parser_not_approved", SAVED_IMPORT_PARSER_VERSION);
   }
   const identity = policy?.config?.company_number_identity;
@@ -327,30 +350,30 @@ async function inspectReadOnlyBody(client, plan, { fullDryRun }) {
       "company_identity_policy_unapproved",
       "config.company_number_identity requires company-number-v1, approved=true and an approver",
     );
-  const labels = [...new Set(plan.rows.map((row) => row.record.estate).filter(Boolean))].sort();
-  const ids = labels
-    .map((label) => policy?.config?.estate_mappings?.[label]?.estate_id)
-    .filter((id) => /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id ?? ""));
-  const estates = ids.length
-    ? await q(
-        "SELECT /* import_preflight_estates */ id,slug,name_zh,district_slug FROM estates WHERE id=ANY($1::uuid[])",
-        [ids],
-      )
-    : [];
-  for (const label of labels) {
-    const mapping = policy?.config?.estate_mappings?.[label];
-    const found =
-      mapping &&
-      estates.find((estate) => estate.id.toLowerCase() === String(mapping.estate_id).toLowerCase());
-    const valid = Boolean(found && mapping.district_slug === found.district_slug);
-    estateMappings.push({
-      label,
-      estateId: found?.id ?? null,
-      slug: found?.slug ?? null,
-      districtSlug: found?.district_slug ?? null,
-      valid,
-    });
-    if (!valid) add("estate_mapping_missing_or_invalid", label);
+  const catalog = await readSavedEstateCatalog(qProxy(q));
+  const seen = new Set();
+  for (const row of plan.rows) {
+    const resolution = resolveSavedEstate(
+      row.record,
+      row.extras,
+      catalog.estates,
+      catalog.districts,
+    );
+    row.estateResolution = resolution;
+    const key = JSON.stringify([
+      resolution.label,
+      resolution.districtLabel,
+      resolution.district_slug,
+    ]);
+    if (!seen.has(key)) {
+      estateMappings.push(resolution);
+      seen.add(key);
+    }
+    if (row.action === "skip") continue;
+    if (!resolution.district_slug)
+      add("district_unresolved", `${row.id}: ${resolution.districtLabel}`);
+    if (resolution.status === "ambiguous")
+      add("estate_match_ambiguous", `${row.id}: ${resolution.label}`);
   }
   const expectedOwners = Object.entries(OWNER_REPLACEMENTS).map(([sourceId, ref]) => ({
     sourceId,
