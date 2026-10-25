@@ -1,3 +1,5 @@
+import { savedListingsPreview } from "@/lib/saved-listings-preview";
+import { SavedListingsPreview } from "@/components/site/SavedListingsPreview";
 import {
   publicPropertyNo,
   propertyPriceSummary,
@@ -102,6 +104,20 @@ const HOME_VIDEO_COUNT = 3;
 
 export const Route = createFileRoute("/")({
   loader: async () => {
+    // Offline preview bypasses homepage DB reads and enquiry resolution entirely.
+    if (savedListingsPreview)
+      return {
+        estates: [],
+        castlePeakRoadDbEstates: [],
+        featured: [],
+        featuredEnquiryActions: [],
+        faqs: [],
+        corridorFaqs: [],
+        counts: {},
+        agents: [],
+        homeVideos: [],
+      };
+
     // `fetchCmsVideos` reads the small curated cms_videos table. Deliberately NOT
     // `fetchVideosPageData()` (what /videos uses) -- that also runs a 36-row
     // searchListings pass to find listing videos, and the homepage can derive
@@ -343,52 +359,56 @@ function HomePage() {
         </div>
       </section>
 
+      {savedListingsPreview ? <SavedListingsPreview /> : null}
+
       {/* FEATURED LISTINGS — 最新放盤置頂 (client p2): live stock is the first
           thing after the hero, ahead of the evergreen estate directory. The
           district-stats strip that used to sit above this was removed at the
           client's request; bg-muted/40 still reads as a band against the hero
           above and the plain estates section below. */}
-      <section className="bg-muted/40">
-        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-            <SectionHeader title="最新放盤" className="text-left" />
-            <Link to="/listings" className="text-sm font-medium text-primary hover:underline">
-              所有放盤 →
-            </Link>
-          </div>
-
-          {featured.length === 0 ? (
-            <EmptyState
-              className="mt-8"
-              icon={Building2}
-              title="暫時未有公開放盤"
-              description="請稍後再試，或直接 WhatsApp 我哋查詢最新盤源。"
-              action={
-                <a
-                  href={whatsappUrl("你好，想查詢深井、青山公路最新放盤")}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="outline">
-                    <MessageCircle className="h-4 w-4" />
-                    WhatsApp 查詢
-                  </Button>
-                </a>
-              }
-            />
-          ) : (
-            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {featured.map((p: FeaturedProperty) => (
-                <PropertyCard
-                  key={p.id}
-                  property={p}
-                  enquiryAction={featuredEnquiryActions.find((a) => a.propertyId === p.id)}
-                />
-              ))}
+      {!savedListingsPreview && (
+        <section className="bg-muted/40">
+          <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+            <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+              <SectionHeader title="最新放盤" className="text-left" />
+              <Link to="/listings" className="text-sm font-medium text-primary hover:underline">
+                所有放盤 →
+              </Link>
             </div>
-          )}
-        </div>
-      </section>
+
+            {featured.length === 0 ? (
+              <EmptyState
+                className="mt-8"
+                icon={Building2}
+                title="暫時未有公開放盤"
+                description="請稍後再試，或直接 WhatsApp 我哋查詢最新盤源。"
+                action={
+                  <a
+                    href={whatsappUrl("你好，想查詢深井、青山公路最新放盤")}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Button variant="outline">
+                      <MessageCircle className="h-4 w-4" />
+                      WhatsApp 查詢
+                    </Button>
+                  </a>
+                }
+              />
+            ) : (
+              <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+                {featured.map((p: FeaturedProperty) => (
+                  <PropertyCard
+                    key={p.id}
+                    property={p}
+                    enquiryAction={featuredEnquiryActions.find((a) => a.propertyId === p.id)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       {/* FEATURED VIDEOS — sits directly after 最新放盤 so a buyer who just
           scanned the live stock can immediately see the same listings walked

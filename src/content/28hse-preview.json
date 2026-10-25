@@ -1,0 +1,297 @@
+{
+  "source": "Saved 28hse HTML; preview only, not live inventory",
+  "rent_coverage": "Three saved detail pages only; rent index was not captured",
+  "listings": [
+    {
+      "id": "4068944",
+      "deal_type": "sale",
+      "title_zh": "香港黃金海岸 2房 實用476呎 售$460萬 | 屯門(青山公路)",
+      "estate": "香港黃金海岸",
+      "district": "屯門(青山公路)",
+      "price": 4600000,
+      "rent": null,
+      "saleable_area": 476,
+      "bedrooms": 2,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610251233574343864_large.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4068944",
+      "source_files": [
+        "buy_p1.html",
+        "detail_buy_1.html"
+      ]
+    },
+    {
+      "id": "4068800",
+      "deal_type": "sale",
+      "title_zh": "香港黃金海岸 2房 實用476呎 售$460萬 | 屯門(青山公路)",
+      "estate": "香港黃金海岸",
+      "district": "屯門(青山公路)",
+      "price": 4600000,
+      "rent": null,
+      "saleable_area": 476,
+      "bedrooms": 2,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610250926413175656_large.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4068800",
+      "source_files": [
+        "buy_p1.html",
+        "detail_buy_2.html"
+      ]
+    },
+    {
+      "id": "4068792",
+      "deal_type": "sale",
+      "title_zh": "碧堤半島 2房 實用575呎 售$645萬 | 深井(荃灣)",
+      "estate": "碧堤半島",
+      "district": "深井(荃灣)",
+      "price": 6450000,
+      "rent": null,
+      "saleable_area": 575,
+      "bedrooms": 2,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610250848343291145_large.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4068792",
+      "source_files": [
+        "buy_p1.html",
+        "detail_buy_3.html"
+      ]
+    },
+    {
+      "id": "4068791",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產全部真盤） 《連2車位》 高層全海泳池景！有邨巴出荃灣！",
+      "estate": "浪濤灣",
+      "district": "屯門(青山公路)",
+      "price": 9600000,
+      "rent": null,
+      "saleable_area": 929,
+      "bedrooms": null,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610250843383330561_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4068791",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4068733",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產筍盤推介) 《有匙》1期高層青馬橋海景！對流窗通爽！樓下巴士小巴總站！",
+      "estate": "浪翠園",
+      "district": "深井(荃灣)",
+      "price": 5180000,
+      "rent": null,
+      "saleable_area": 467,
+      "bedrooms": 2,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610242357206995124_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4068733",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4068461",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產全部真盤) 《連車位》 有匙即看！高層有遠海景！3房套工！",
+      "estate": "愛琴海岸",
+      "district": "屯門(青山公路)",
+      "price": 8280000,
+      "rent": null,
+      "saleable_area": 733,
+      "bedrooms": 4,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610241836505006744_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4068461",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4068170",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產全部真盤) 《有匙即看》 2房開放式廚房！雙露台！樓下巴士總站！",
+      "estate": "OMA OMA",
+      "district": "屯門(青山公路)",
+      "price": 4200000,
+      "rent": null,
+      "saleable_area": 450,
+      "bedrooms": 2,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610241639141977141_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4068170",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4068169",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產全部真盤) 《連車位》 有匙即看！高層有遠海景！3房套工！",
+      "estate": "愛琴海岸",
+      "district": "屯門(青山公路)",
+      "price": 8280000,
+      "rent": null,
+      "saleable_area": 733,
+      "bedrooms": 4,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610241638377549967_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4068169",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4067425",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產全部真盤) 《有匙即看》 2房開放式廚房！雙露台！樓下巴士總站！",
+      "estate": "OMA OMA",
+      "district": "屯門(青山公路)",
+      "price": 4200000,
+      "rent": null,
+      "saleable_area": 450,
+      "bedrooms": 2,
+      "main_image_url": "https://i1.28hse.com/2026/10/20261024085842612624_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4067425",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4067224",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產全部真盤) 《有匙即看》2房開放式廚房！大型會所有餐廳！樓下巴士總站！",
+      "estate": "上源",
+      "district": "屯門(青山公路)",
+      "price": 4600000,
+      "rent": null,
+      "saleable_area": 470,
+      "bedrooms": 2,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610232033057583385_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4067224",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4064496",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產獨家代理) 2期高層汀九橋海景！大兩房有露台！靚盤！",
+      "estate": "碧堤半島",
+      "district": "深井(荃灣)",
+      "price": 7900000,
+      "rent": null,
+      "saleable_area": 576,
+      "bedrooms": 2,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610212019243290424_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4064496",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4063699",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產全部真盤) 《2房連平台》 震撼的4XX萬收票！有匙即看！青公路邊！",
+      "estate": "OMA by the Sea",
+      "district": "屯門(青山公路)",
+      "price": 4500000,
+      "rent": null,
+      "saleable_area": 456,
+      "bedrooms": 2,
+      "main_image_url": "https://i1.28hse.com/2026/10/20261021132549360452_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4063699",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4061626",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產YouTube實景) 有匙即看！平價2房青公地標《誠邀各業主委託放盤》",
+      "estate": "黃金海灣",
+      "district": "屯門(青山公路)",
+      "price": 5300000,
+      "rent": null,
+      "saleable_area": 439,
+      "bedrooms": 2,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610192033205958240_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4061626",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4060450",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產筍盤推介) 《連車位》 極高陳東南汀九橋海景！未係底價！有票盡傾！",
+      "estate": "縉皇居",
+      "district": "深井(荃灣)",
+      "price": 9500000,
+      "rent": null,
+      "saleable_area": 784,
+      "bedrooms": 4,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610191950031025830_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4060450",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4060439",
+      "deal_type": "sale",
+      "title_zh": "(晉誠地產全部真盤) 《最新減價》 實用1房！青公大型半新屋苑！開揚泳池景！",
+      "estate": "飛揚",
+      "district": "屯門(青山公路)",
+      "price": 3380000,
+      "rent": null,
+      "saleable_area": 281,
+      "bedrooms": 1,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610181907271363390_thumb.jpg",
+      "source_url": "https://www.28hse.com/buy/apartment/property-4060439",
+      "source_files": [
+        "buy_p1.html"
+      ]
+    },
+    {
+      "id": "4064528",
+      "deal_type": "rent",
+      "title_zh": "香港黃金海岸 3房 實用680呎 租$18,600 | 屯門(青山公路)",
+      "estate": "香港黃金海岸",
+      "district": "屯門(青山公路)",
+      "price": null,
+      "rent": 18600,
+      "saleable_area": 680,
+      "bedrooms": 3,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610212106308698672_large.jpg",
+      "source_url": "https://www.28hse.com/rent/apartment/property-4064528",
+      "source_files": [
+        "detail_rent_1.html"
+      ]
+    },
+    {
+      "id": "4060654",
+      "deal_type": "rent",
+      "title_zh": "香港黃金海岸 3房 實用680呎 租$18,800 | 屯門(青山公路)",
+      "estate": "香港黃金海岸",
+      "district": "屯門(青山公路)",
+      "price": null,
+      "rent": 18800,
+      "saleable_area": 680,
+      "bedrooms": 3,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610222212575076960_large.jpg",
+      "source_url": "https://www.28hse.com/rent/apartment/property-4060654",
+      "source_files": [
+        "detail_rent_2.html"
+      ]
+    },
+    {
+      "id": "4048371",
+      "deal_type": "rent",
+      "title_zh": "香港黃金海岸 3房 實用680呎 租$18,600 | 屯門(青山公路)",
+      "estate": "香港黃金海岸",
+      "district": "屯門(青山公路)",
+      "price": null,
+      "rent": 18600,
+      "saleable_area": 680,
+      "bedrooms": 3,
+      "main_image_url": "https://i1.28hse.com/2026/10/202610092158336275376_large.jpg",
+      "source_url": "https://www.28hse.com/rent/apartment/property-4048371",
+      "source_files": [
+        "detail_rent_3.html"
+      ]
+    }
+  ]
+}
