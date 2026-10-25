@@ -8,7 +8,6 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { nitro } from "nitro/vite";
 
 import { resolveSiteOrigin } from "./scripts/site-origin.mjs";
-import { previewDeploymentDefines } from "./scripts/28hse-preview-env.mjs";
 
 // The production origin (canonicals, sitemap, robots, og:image, JSON-LD) is
 // resolved once at build time: VITE_SITE_URL if set, else Vercel's own
@@ -22,9 +21,6 @@ export default defineConfig({
   // F-01: pin the Nitro Vercel function itself (.vc-config.json) next to Neon.
   plugins: [nitro({ vercel: { functions: { regions: ["sin1"] } } })],
   vite: {
-    define: {
-      ...(siteOrigin ? { "import.meta.env.VITE_SITE_URL": JSON.stringify(siteOrigin) } : {}),
-      ...previewDeploymentDefines(),
-    },
+    define: siteOrigin ? { "import.meta.env.VITE_SITE_URL": JSON.stringify(siteOrigin) } : {},
   },
 });

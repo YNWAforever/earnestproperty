@@ -55,6 +55,7 @@ jobs:
       # Added during P1 (design-system foundation): src/lib/format.ts,
       # src/components/layout/*, src/components/media/AppImage.tsx, and
       # src/styles.css didn't exist at P0 baseline.
+      - run: npm run test:28hse-import
       - run: npm run test:format
       - run: npm run test:layout
       - run: npm run test:media
@@ -162,6 +163,7 @@ jobs:
       # Full-schema golden uses only a new loopback container, synthetic data and
       # fake provider ports. No DATABASE_URL or provider secret is supplied.
       - run: docker pull pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0
+      - run: npm run test:28hse-import:db
       - run: npm run test:no-link:local-postgres
       - run: npm run test:admin-golden:db
       - run: npm run test:lead-integrity:db

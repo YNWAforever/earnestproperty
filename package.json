@@ -147,7 +147,9 @@
     "test:lead-alert:owned:db": "node --experimental-test-module-mocks --test --test-concurrency=1 src/lib/whatsapp-enquiries/lead-alert.owned.db.test.mjs src/lib/whatsapp-enquiries/staff-notifications.db.test.mjs src/lib/whatsapp-enquiries/staff-reference.db.test.mjs",
     "test:admin-golden:db": "node --experimental-test-module-mocks --test scripts/acceptance/admin-golden-journeys.test.mjs",
     "test:admin-overview:db": "node --experimental-test-module-mocks --test src/lib/neon/admin-overview-owned.db.test.mjs src/lib/neon/staff-checklist.owned.db.test.mjs",
-    "test:28hse-preview": "node --test scripts/parse-28hse-saved.test.mjs scripts/28hse-preview-env.test.mjs"
+    "test:28hse-import": "node --test scripts/mls/import-saved-capture.test.mjs",
+    "test:28hse-import:db": "node --test scripts/mls/import-saved-capture.db.test.mjs",
+    "import:28hse-saved": "node scripts/mls/import-saved-capture.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1115.0",

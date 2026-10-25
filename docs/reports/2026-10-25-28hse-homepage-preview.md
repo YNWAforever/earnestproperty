@@ -1,57 +1,101 @@
-# Full saved 28hse homepage preview
+# Saved-capture backend importer (supersedes the fixture preview)
 
-Local preview only on `feat/28hse-homepage-preview` (existing PR #276). No push, merge, deployment, database connection, or ingestion.
+Branch: `feat/28hse-homepage-preview`, existing PR #276. No push, merge or deployment. No production database or production Blob access was used. The real captured data has only been dry-run; writes were exercised on a disposable loopback PostgreSQL cluster with synthetic records/photos and a fake Blob adapter.
 
-## Run
+## Result for the supplied capture
+
+Input: `/workspace/28hse_capture/import_ready.json`, 56 source records / 985 photo references.
+
+- **52 creates + 3 updates**, **1 skipped**, **0 input-validation failures**.
+- Skip sold source ID `4028435` (`R067756`), including its 13 photos.
+- Update the existing rows/public identities for `4029337 → B059801`, `4034694 → R068782`, and `4015403 → B048068`. Their deal types, active-deal amounts, details and owned photos become the captured source values; the inactive-deal amount is cleared. The existing row IDs and public URLs are preserved.
+- 55 selected records have 972 photo references. Six exact repeated source-photo URLs are merged, leaving 966 gallery entries / unique file contents. Main photo first. Owner-approved watermarks remain as-is in the original `_large` bytes.
+- Agency references are the public listing numbers. Three pairs among the new rows share an agency reference across sale/rent; the repository's normal public grouping retains both offerings under that one agency reference. “52 creates” counts new offering rows, not 52 distinct public URLs.
+- Five explicit `開放式` bedroom values become 0. `5+` for `4065990` and `4042934` remains null because it is not an exact count. `4040071` has null saleable area. No values are guessed.
+
+Review files (not committed with private capture data):
+
+- `/workspace/28hse_capture/import_dry_run.md`
+- `/workspace/28hse_capture/import_dry_run.md.json` — field mappings, byte hashes, local paths, owned pathnames, row validation and warnings.
+
+This offline count follows the owner's supplied classification. Actual source IDs, target IDs, approved mappings, bootstrap/parser policy and manual conflicts are rechecked against the selected development target before any apply. Production has not been inspected or changed.
+
+## Commands
+
+Run from the repository root, with installed dependencies. Use Node 24 as in CI.
+
+Default offline dry-run needs **no DB or Blob credentials**, ignores ordinary `DATABASE_URL`, `DATABASE_URL_UNPOOLED` and `BLOB_READ_WRITE_TOKEN`, and performs no network requests:
 
 ```sh
-npm ci --ignore-scripts
-node scripts/parse-28hse-saved.mjs /workspace/28hse_capture
-npm run test:28hse-preview
-VITE_28HSE_PREVIEW=true npm run dev -- --host 0.0.0.0 --port 3000
+npm run import:28hse-saved -- --input /workspace/28hse_capture/import_ready.json --report /workspace/28hse_capture/import_dry_run.md
 ```
 
-Local URL: `http://localhost:3000/`. The section replaces the homepage latest-listings area and bypasses its database loader and enquiry resolver when VITE_28HSE_PREVIEW=true or the Vercel deployment is preview. Local/development and production retain the existing homepage unless explicitly enabled. No credentials are needed. Cards link to their original 28hse URLs without enquiry tracking or agent contact data.
+For an additional **read-only development DB preflight**, export `IMPORT_TARGET_ENV=development` and `IMPORT_DATABASE_URL` for the disposable loopback database, then run the same dry-run command. Its DB transaction is explicitly read-only.
 
-## Full input and exclusions
+To apply later **to a development target only**, export all six variables:
 
-The sole inventory input is `/workspace/28hse_capture/full_new_listings.json`, containing 56 canonical NEW flats: **38 sale + 18 rent**. Supplied reposts are already merged; duplicate IDs are retained only as provenance, never expanded into extra cards. This fixture replaces the earlier five-flat preview.
+| Variable                       | Required value                                                                                                                        |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `IMPORT_TARGET_ENV`            | `development`                                                                                                                         |
+| `IMPORT_DATABASE_URL`          | Explicit PostgreSQL connection string to `127.0.0.1`, `localhost` or `::1`; never a production URL or forwarding tunnel to production |
+| `IMPORT_BLOB_TARGET_ENV`       | `development`                                                                                                                         |
+| `IMPORT_BLOB_READ_WRITE_TOKEN` | Dedicated development Vercel Blob read/write token; provided securely, never put in a report or Git                                   |
+| `IMPORT_BLOB_STORE_ID`         | Exact development store ID matching that token                                                                                        |
+| `IMPORT_BLOB_HOST`             | Exact `<development-store-host>.public.blob.vercel-storage.com` host expected in upload metadata                                      |
 
-`full_compare.csv` has 56 NEW, 78 ALREADY_ON_SITE, 13 ON_SITE_PRICE_CHANGED, and 26 UNSURE canonical rows. The generated fixture has exactly the CSV's NEW ID set and no IDs from the other three statuses. The generator accepts only NEW entries without a site match, validates deal/source URL/unique canonical ID, and keeps all supplied requested fields and image URLs. The comparison is not rerun against the production database. Input JSON/CSV and raw HTML stay outside Git.
+Then run:
 
-The earlier saved HTML helpers remain for parser regression coverage; fixture generation now reads the full supplied JSON directly. No network requests or additional HTML discovery are performed by the generator.
+```sh
+npm run import:28hse-saved -- --apply --input /workspace/28hse_capture/import_ready.json --report /workspace/28hse_capture/import_apply.md
+```
 
-## Homepage and complete catalog
+There is no fallback to ordinary database/Blob credentials. Apply rejects non-loopback DBs, production mode, connection parameters that can redirect the target, and a token equal to the ordinary `BLOB_READ_WRITE_TOKEN`. Actual returned Blob host metadata must match `IMPORT_BLOB_HOST`. `--apply` was **not** run on production or on the real capture in this task.
 
-Each buy/rent tab shows up to **9 cards**. The visible tab counts show all 38 sale and 18 rent flats. `查看全部新盤` opens the `#all-new-listings` preview section on the same homepage, containing all **56** cards grouped into sale and rent; it does not navigate to the live DB listings page. The full section is collapsed until opened and can also be opened with its native keyboard-accessible summary.
+## Existing schema and pipeline reuse
 
-Ordering uses the supplied relative posting times where available, newest first. The 52 entries without a posting time use descending 28hse ID as a deterministic fallback, not an inferred date. The homepage states this limitation. Missing fields are displayed as unavailable, without guessing studio status or area.
+Implementation: `scripts/mls/import-saved-capture.mjs` and `src/lib/mls/saved-capture-import.mjs`. No new tables, migrations or public listing model were introduced.
 
-## Missing fields
+1. Normalize the supplied fields into the existing snake_case listing contract. `agent_listing_ref` is `agency_property_no`; `source='28hse'` maps to existing internal source `28hse_agent_540`, with `source_id` stored as `external_listing_id` in the source-state/link journals. Broad floor labels do not become invented exact-unit identities.
+2. Freeze a per-record hash over normalized listing fields, source URLs, ordered photo hashes and merged repost IDs. Validate real paths beneath `photos/<source_id>/`, file sizes, detected MIME, full image decoding and pixel/dimension limits. Photo headers are never trusted instead of actual bytes.
+3. Use `decodeSnapshot`, `evaluateSnapshotGate`, exact unit identity and `applyIngestion` with the existing `saved-capture-v1` controlled-patch guards. This is an operator-selected partial import: **never a full stock snapshot, never eligible for absence inference, never a baseline reset**. Before-images are checked by the existing writer. The importer uses its own explicit parser identity, `saved-capture-import-v1`; it does not impersonate the live crawler parser.
+4. Standard ingestion assigns internal `SYNC-<uuid>` row keys and the existing approved company-number/public-group mechanism issues the agency-reference public numbers. For the three replacements, standard unpublished staging offers are folded into the exact owner-selected existing rows only in the final locked publication transaction, after media preparation. There are no additional active/public duplicates. A failed media operation leaves the original active listing unchanged and a resumable unpublished staging offer.
+5. Reuse `prepareListingMedia`, `createSyncRepository`, `buildOwnedMediaPathname` and `createVercelBlobStore`. The shared media pipeline receives only frozen local bytes through a closed URL-to-local-file transport; it never fetches the source website. Originals retain the existing content-addressed `mls/<hash-prefix>/<sha256>.<extension>` storage layout, hash dedupe, `media_assets` registration and `listing_media_records` evidence. Optional responsive variants use the existing pipeline. Original photo bytes and watermarks are not edited.
+6. Publication re-locks and checks the property row, source-state/link journal, observation fingerprint and public identity after uploads. Concurrent source changes or staff overrides/reviews prevent stale publication. Conditional source rebinding must affect exactly one row. The effective stored field values are verified before commit. Public changes and source/alias links commit atomically per listing with field ownership and change-event evidence.
+7. Exact repeat runs skip already completed records and upload nothing. Interrupted draft publication resumes using registered hashes. Changed inputs for an existing source are held for review rather than silently overwriting a later edit. Superseded opposite-deal links on the three owner-approved replacements are retained as rejected historical evidence.
 
-- Bedrooms are null for 4030683, 4035765, 4035759, 4033510, 4028435, 4065990, and 4042934.
-- Saleable area is null for 4040071.
-- Posting time is null for 52 flats; inactive-deal price/rent is null by design.
-- All titles, estate/district, active-deal prices, main image URLs, and source URLs are present. Remote images may expire; the existing image fallback remains available.
+The ingestion receipt records staging activity; the import's own apply report records the final business outcome (52 new rows and 3 existing-row updates). These are separate stages, not duplicate public listings.
 
-## Validation
+## Field coverage and first-party UI
 
-- Six parser/selection/catalog tests pass. Updated selection tests first failed against the five-flat implementation, then passed after the full-input adapter was implemented.
-- Tests cover all three excluded statuses, rows with existing site matches, unique canonical IDs, duplicate provenance, invalid source URLs, exact 56/38/18 counts, nullable fields, nine-card limits, full catalog counts, ordering, and no input mutation.
-- Offline JSON/CSV cross-check confirms exact allowlist equality and equality of every supplied requested field, image URL, and posting value.
-- Full lint: exit 0 (9 existing warnings, no errors). Typecheck: exit 0.
-- Chrome: both tabs have exactly 9 expected cards and 9 loaded images; keyboard switching works. The all-listings link opens 56 unique source links (38 sale + 18 rent), including listings beyond both homepage slices. Mobile at 390px has no horizontal overflow. No page errors.
-- Screenshot visually inspected: `/workspace/28hse_capture/homepage_preview.png`. Additional captures: `homepage_preview_listings.png`, `homepage_preview_rent.png`, `homepage_preview_mobile.png`, `homepage_preview_all.png` in the same directory.
-- Final `VITE_28HSE_PREVIEW=true npm run build`: exit 0 (existing dependency deprecation and chunk warnings).
+Prices/rents, areas, rooms, floor/orientation, title, estate/district, address, description, feature tags, source update date and supported agency YouTube video go into the existing property fields. Parsed unit, kitchen, fee-inclusion, school-net, developer, estate/parking and management details are appended as labelled text in the existing description field. Unsupported/external VR pages, remote estate floorplans, contact/QR assets and source advertising grades are not imported as gallery images or redirects.
 
-## PR #276 CI and Vercel preview fixes
+The JSON fixture, preview component/catalog, feature flag and preview-only Vite environment hook have been removed. Homepage `最新放盤`, `/listings`, and `/property/<agency-reference>` use the ordinary DB feed/model and existing first-party card links. No new public 28hse links or source-label UI remain; source URLs are retained only as internal provenance. Owner-approved photo watermarks are the stated exception. Existing production rows are not replaced by a preview fixture.
 
-- Removed the component's price formatter and inline currency formatting. Both sale and rent now call the repository's shared `formatPrice` from `src/lib/format.ts`, retaining `價格未提供` for missing amounts. Display follows the shared conventions, e.g. `HK$468萬` and `HK$16,000／月`.
-- Vite exposes only the public deployment label as `import.meta.env.VITE_VERCEL_ENV`, identically for client and SSR. `VERCEL_ENV` is authoritative over the optional `VITE_VERCEL_ENV` hint. No database credentials or server environment object are exposed.
-- Automatic enablement: Vercel preview is on without `VITE_28HSE_PREVIEW`. Production/development/local stay off unless `VITE_28HSE_PREVIEW === "true"`. In production a stale public preview hint is overridden by `VERCEL_ENV=production`.
-- Format CI regression reproduced first (38 passed, 1 failed), then all 39 format tests passed with the shared formatter. Preview tests now include three compiled-gate/environment tests alongside the six inventory/catalog tests.
-- Actual local Vite servers verified automatic VERCEL_ENV=preview activation with the explicit flag unset; the compiled production gate is false even with a stale preview hint. Only the production flag module was requested, never the database-backed production homepage.
-- Existing site-origin tests: 3 passed using bundled Node 24 (their TypeScript stripping option requires modern Node).
-- Browser verified nine cards per tab, shared sale/rent formatting, and all 56 catalog cards. Homepage screenshot refreshed at `/workspace/28hse_capture/homepage_preview.png`.
-- Final checks: `npm run test:format` 39 passed; `npm run test:28hse-preview` 9 passed; `npm run lint` exit 0 (same 9 existing warnings); `npm run typecheck` exit 0.
-- Local preview build with VITE_28HSE_PREVIEW unset and VITE_VERCEL_ENV=preview: `npm run build` exit 0. Actual VERCEL_ENV=preview activation was separately verified through a dedicated local Vite server. Contact prebuild guards and contact configuration remain unchanged.
+## Target prerequisites / production blockers
+
+The importer does not enable policies, apply migrations, infer estate aliases or clear staff overrides. The selected disposable/development DB must already have the deployed ingestion/media schema and:
+
+- `mls_ingestion_policies`: source `28hse_agent_540`, scope `agent:540`, policy `no-hermes-v2`, owner `no-hermes-v2`, publication and bootstrap approved, parser `saved-capture-import-v1` explicitly approved.
+- Approved `company-number-v1` identity policy with an approver, plus exact `estate_mappings` from each captured estate label to an existing estate UUID and matching district slug. Captured phase/building variants need explicit mappings; they are not guessed.
+- The three agency references resolve to the unambiguous existing target IDs. Unexpected existing source bindings, conflicting public groups, open reviews or staff overrides require resolution before publication.
+- A dedicated development Blob store/token/host. No production Blob credentials were used in tests; the fake adapter retains the same upload metadata contract without making a network call.
+
+**Production apply is deliberately blocked by the target guard.** A production import is a separate release operation requiring explicit authorization, reviewed target configuration and verified policy/mapping/identity evidence. This branch does not silently unlock production access. Until such an import is separately performed, the captured flats are not live on the production site.
+
+## Verification
+
+- Offline dry-run on the actual supplied manifest: 52 creates, 3 updates, 1 sold exclusion, no local validation failures.
+- Unit tests cover mapping/nulls, owner-approved watermarks, path validation, duplicate source IDs, target rejection, fixed owner replacement references, sold exclusion, retired fixture UI and network-free default dry-run even when ordinary production credential variables are present.
+- Real disposable PostgreSQL test applies relevant repository migrations, then exercises 52 synthetic creates + 3 same-ID replacements, source/deal/price/detail replacement, main-photo ordering, media ownership, repost links, no sold import, unchanged unrelated stock, partial-snapshot receipts, duplicate-free second run with no uploads, changed-input rejection and concurrent source-journal changes during upload. Blob writes are fake; no production/provider access.
+- The source-journal race test first failed against the pre-review implementation and then passed after transaction-time journal/observation/link locking and fingerprint verification.
+- Existing ingestion regression suite, format tests, lint, typecheck and build are recorded with final results below. No DB integration assertion is represented as a skipped pass.
+
+Local integration invocation used in this task (the test database is temporary, not a production endpoint):
+
+```sh
+IMPORT_TEST_DATABASE_URL='postgresql://<local-test-user>:<local-test-password>@127.0.0.1:<owned-port>/<disposable-db>' npm run test:28hse-import:db
+```
+
+In CI with no URL supplied, the suite creates its own owned Docker Postgres using the repository harness. Neither test path accepts a remote target.
+
+Final results: **6 unit tests**, **1 real PostgreSQL end-to-end suite** (including the concurrency regression), **331 existing ingestion tests**, and **39 format tests** passed. Lint passed with the same 9 existing warnings; typecheck and build passed. Independent code review reported no remaining findings after the source-journal fix. Test data/schema were disposable and the Blob adapter was fake.
