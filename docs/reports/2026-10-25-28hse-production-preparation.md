@@ -1,3 +1,5 @@
+> Superseded for this capture by [owner-publication preparation](2026-10-25-owner-publication.md): match by agency ref + deal type, preserve existing drafts/inactive rows, never follow reused ad IDs. Do not use the old create/update counts as publication authority.
+
 # Saved capture production preparation — corrected against saved production schema
 
 This revision supersedes the earlier strict estate-mapping/parser assumptions. All work in this revision was local. No production connection, Vercel CLI/env pull, real Blob write, push or deployment. The owner supplied read-only production reports/snapshot; no new production checks were attempted here.

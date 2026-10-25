@@ -1,3 +1,4 @@
+import { isOwnerKeptField } from "./owner-review-resolution.mjs";
 import { isApprovedSavedCapture } from "./saved-capture-policy.mjs";
 import { resolveSavedEstate, readSavedEstateCatalog } from "./saved-capture-estates.mjs";
 import { savePromotionTiers } from "./promotion-tier-repository.mjs";
@@ -104,6 +105,27 @@ function verifiedOptions(policy, options = {}) {
       return url.pathname === path && !url.search && !url.hash;
     },
   };
+}
+// Shared normal saved/ingested draft creation. The caller owns its transaction and identity grouping.
+export async function createImportedDraft(
+  q,
+  { id = randomUUID(), record, districtSlug, estateId = null, companyNumber = null },
+) {
+  return (
+    await q(
+      "INSERT INTO properties(id,listing_no,title_zh,deal_type,district_slug,status,ingestion_owner,ingestion_identity_policy,canonical_property_no,estate_id) VALUES($1,$2,$3,$4,$5,'draft',$6,$6,$7,$8) RETURNING *",
+      [
+        id,
+        "SYNC-" + id,
+        record.fields.title,
+        record.dealType,
+        districtSlug,
+        POLICY,
+        companyNumber,
+        estateId,
+      ],
+    )
+  )[0];
 }
 export async function applyIngestion(client, payload, options = {}) {
   const q = async (sql, params = []) => (await client.query(sql, params)).rows;
@@ -516,23 +538,15 @@ export async function applyIngestion(client, payload, options = {}) {
         mappedDistrict
       ) {
         const id = randomUUID();
-        const p = (
-          await q(
-            "INSERT INTO properties(id,listing_no,title_zh,deal_type,district_slug,status,ingestion_owner,ingestion_identity_policy,canonical_property_no,estate_id) VALUES($1,$2,$3,$4,$5,'draft',$6,$6,$7,$8) RETURNING *",
-            [
-              id,
-              "SYNC-" + id,
-              record.fields.title,
-              record.dealType,
-              mappedDistrict,
-              POLICY,
-              relation.companyNumber ?? null,
-              savedCapture
-                ? savedEstate.estate_id
-                : (estateMapping(record.fields.estate, policy.config)?.estate_id ?? null),
-            ],
-          )
-        )[0];
+        const p = await createImportedDraft(q, {
+          id,
+          record,
+          districtSlug: mappedDistrict,
+          estateId: savedCapture
+            ? savedEstate.estate_id
+            : (estateMapping(record.fields.estate, policy.config)?.estate_id ?? null),
+          companyNumber: relation.companyNumber ?? null,
+        });
         if (protectedPatchFields) {
           // RETURNING can precede AFTER-trigger changes; never freeze those as approved state.
           const stored = (await q("SELECT * FROM properties WHERE id=$1", [p.id]))[0];
@@ -843,6 +857,7 @@ export async function applyIngestion(client, payload, options = {}) {
           owned?.active_override ||
           (owned && (owned.selection_reason === "manual_override" || !owned.winning_observation_id))
         ) {
+          if (isOwnerKeptField(owned, property[column])) continue;
           await review(
             reviewRecord,
             "manual_override",
