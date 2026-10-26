@@ -274,7 +274,7 @@ export const estateSeo: Record<string, EstateSeo> = {
         title: item.seoTitle,
         description: item.seoDescription,
         intro: item.overview[0],
-        fit: item.watchout,
+        fit: item.buyerFit.join(" "),
       },
     ]),
   ),
