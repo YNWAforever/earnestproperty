@@ -353,19 +353,17 @@ function HomePage() {
         </div>
       </section>
 
-      {/* FEATURED LISTINGS — two bands replace the single 最新放盤 feed.
-          黃金必走盤 is 28hse 黃金置頂 and 置頂盤. 荀盤推介 is 宅谷 (Property.hk).
-          Live stock stays the first thing after the hero, ahead of the
-          evergreen estate directory. */}
+      {/* FEATURED LISTINGS — two title-only bands replace the single 最新放盤
+          feed. Source names stay off the page. Live stock stays the first
+          thing after the hero, ahead of the evergreen estate directory. */}
       <section className="bg-muted/40">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <HomepageListingBand
             title="黃金必走盤"
-            desc="28hse 黃金置頂同置頂盤。"
             listings={goldSticky}
             enquiryActions={listingEnquiryActions}
-            emptyTitle="暫時未有黃金置頂或置頂盤"
-            emptyDescription="請稍後再試，或直接 WhatsApp 我哋查詢黃金必走盤。"
+            emptyTitle="暫時未有黃金必走盤"
+            emptyDescription="請稍後再試，或直接 WhatsApp 我哋查詢。"
             whatsappMessage="你好，想查詢黃金必走盤"
           />
         </div>
@@ -374,12 +372,11 @@ function HomePage() {
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <HomepageListingBand
             title="荀盤推介"
-            desc="宅谷最新樓盤。"
             listings={propertyHkPromo}
             enquiryActions={listingEnquiryActions}
-            emptyTitle="暫時未有宅谷推介"
-            emptyDescription="請稍後再試，或直接 WhatsApp 我哋查詢宅谷樓盤。"
-            whatsappMessage="你好，想查詢宅谷荀盤"
+            emptyTitle="暫時未有荀盤推介"
+            emptyDescription="請稍後再試，或直接 WhatsApp 我哋查詢。"
+            whatsappMessage="你好，想查詢荀盤推介"
           />
         </div>
       </section>
@@ -743,7 +740,6 @@ function HomePage() {
 
 function HomepageListingBand({
   title,
-  desc,
   listings,
   enquiryActions,
   emptyTitle,
@@ -751,7 +747,6 @@ function HomepageListingBand({
   whatsappMessage,
 }: {
   title: string;
-  desc: string;
   listings: FeaturedProperty[];
   enquiryActions: Array<PublicWaAction & { propertyId: string }>;
   emptyTitle: string;
@@ -761,7 +756,7 @@ function HomepageListingBand({
   return (
     <div>
       <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-        <SectionHeader title={title} desc={desc} className="text-left" />
+        <SectionHeader title={title} className="text-left" />
         <Link to="/listings" className="text-sm font-medium text-primary hover:underline">
           所有放盤 →
         </Link>

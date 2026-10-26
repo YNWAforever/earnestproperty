@@ -116,4 +116,6 @@ test("the homepage listing bands are 黃金必走盤 and 荀盤推介", () => {
   assert.doesNotMatch(home, /title="最新放盤"/);
   assert.doesNotMatch(home, /隨時 WhatsApp 查詢及預約睇樓/, "the removed subtitle is back");
   assert.doesNotMatch(home, /按最新上架排序/, "the removed subtitle is back");
+  // Titles only. Source names and grade labels must not appear as page copy.
+  assert.doesNotMatch(home, /28hse|黃金置頂|置頂盤|宅谷|Property\.hk|最新樓盤/i);
 });
