@@ -13,7 +13,7 @@ async function workflow() {
 }
 test("daily property workflow retains gated scheduling, privacy, branch and policy checks", async () => {
   const w = await workflow();
-  assert.deepEqual(w.on.schedule, [{ cron: "17 20 * * *" }]);
+  assert.deepEqual(w.on.schedule, [{ cron: "0 1 * * *" }]);
   assert.equal(w.concurrency.group, "property-sync-agent-540");
   assert.equal(w.concurrency["cancel-in-progress"], false);
   assert.match(w.jobs.preflight.if, /PROPERTY_SYNC_DAILY_ENABLED/);
@@ -263,7 +263,7 @@ test("manual canary and scheduled apply require their own operator gates", async
       ["schedule", "apply", "false", "true", "python-v2.2", false],
       ["workflow_dispatch", "apply", "true", "false", "python-v2.2", false],
       ["workflow_dispatch", "apply", "false", "", "python-v2.2", false],
-      ["schedule", "apply", "true", "false", "python-v2.2", true],
+      ["schedule", "apply", "true", "false", "python-v2.2", false],
       ["workflow_dispatch", "apply", "false", "true", "unapproved", false],
       ["pull_request", "apply", "true", "true", "python-v2.2", false],
       ["workflow_dispatch", "shadow", "false", "false", "", true],
@@ -297,7 +297,10 @@ test("manual canary and scheduled apply require their own operator gates", async
       );
     }
     assert.equal(w.env.MANUAL_APPLY_ENABLED, "${{ vars.PROPERTY_SYNC_MANUAL_APPLY_ENABLED }}");
-    assert.equal(w.env.APPLY_ENABLED, "${{ vars.PROPERTY_SYNC_DAILY_ENABLED }}");
+    assert.equal(w.env.APPLY_ENABLED, undefined);
+    assert.equal(w.env.MODE, "${{ inputs.mode || 'owner-publication' }}");
+    assert.equal(w.env.OWNER_DAILY_ENABLED, "${{ vars.OWNER_PUBLICATION_DAILY_ENABLED }}");
+    assert.equal(w.env.OWNER_CAPTURE_ASSET, "${{ vars.OWNER_PUBLICATION_CAPTURE_ASSET }}");
     assert.equal(
       w.jobs.preflight.if,
       "github.event_name == 'workflow_dispatch' || vars.PROPERTY_SYNC_DAILY_ENABLED == 'true'",
@@ -391,6 +394,103 @@ test("actual collection shell exports safe diagnostics while preserving failed e
     assert.equal(step.id, "collection");
   } finally {
     assert.ok(directory.startsWith(join(tmpdir(), "property-sync-collection-")));
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("scheduled runs publish the approved owner capture and do not collect or use Firecrawl", async () => {
+  const w = await workflow();
+  assert.deepEqual(w.on.schedule, [{ cron: "0 1 * * *" }]);
+  assert.ok(w.on.workflow_dispatch.inputs.mode.options.includes("owner-publication"));
+  assert.ok(w.on.workflow_dispatch.inputs.mode.options.includes("owner-publication-dry-run"));
+  for (const name of ["collect", "ingest", "publish", "record"])
+    assert.match(w.jobs[name].if, /github\.event_name != 'schedule'/, name);
+  const owner = w.jobs["owner-publish"];
+  assert.equal(owner["timeout-minutes"], 90);
+  assert.match(owner.if, /github\.event_name == 'schedule'/);
+  const text = JSON.stringify(owner);
+  assert.match(text, /scripts\/mls\/owner-publication\.mjs --apply --driver=neon-ws/);
+  assert.match(text, /--confirm-production=/);
+  assert.match(text, /OWNER_PUBLICATION_WROTE_NOTHING/);
+  assert.match(text, /secrets\.IMPORT_DATABASE_URL/);
+  assert.match(text, /secrets\.IMPORT_BLOB_READ_WRITE_TOKEN/);
+  assert.doesNotMatch(
+    text,
+    /secrets\.DATABASE_URL|secrets\.BLOB_READ_WRITE_TOKEN|FIRECRAWL|run_28hse_sync|PROPERTY_SYNC_28HSE_TRANSPORT/,
+  );
+  const dry = owner.steps.find((step) => step.name === "Read owner capture without writing");
+  assert.equal(dry.if, "env.MODE == 'owner-publication-dry-run'");
+  assert.doesNotMatch(dry.run, /--apply/);
+  const apply = owner.steps.find(
+    (step) => step.name === "Publish owner capture into site listings",
+  );
+  for (const step of [apply, dry]) {
+    assert.match(step.run, /owner-publication\.mjs\b[\s\S]*?>\/dev\/null/);
+    assert.doesNotMatch(step.run, /\bcat\b|\btee\b/);
+  }
+  assert.match(apply.run, /published, alreadyPublished: current, held/);
+  assert.doesNotMatch(apply.run, /report\.items|candidates|price/);
+  assert.ok(!dry.env.IMPORT_BLOB_READ_WRITE_TOKEN);
+  const gate = w.jobs.preflight.steps.find((step) => step.id === "evidence-gate");
+  const hash = "a".repeat(64);
+  const asset = `owner-capture-${hash}.tar.gz`;
+  const directory = mkdtempSync(join(tmpdir(), "property-sync-owner-gate-"));
+  const bash =
+    [process.env.PROPERTY_SYNC_TEST_BASH, "C:/Program Files/Git/bin/bash.exe"]
+      .filter(Boolean)
+      .find((candidate) => existsSync(candidate)) ?? "bash";
+  try {
+    for (const [event, mode, daily, manual, capture, allowed] of [
+      ["schedule", "owner-publication", "true", "false", asset, true],
+      ["schedule", "owner-publication", "false", "true", asset, false],
+      [
+        "schedule",
+        "owner-publication",
+        "true",
+        "true",
+        `owner-capture-${"b".repeat(64)}.tar.gz`,
+        false,
+      ],
+      ["schedule", "owner-publication-dry-run", "true", "true", asset, false],
+      ["schedule", "apply", "true", "true", asset, false],
+      ["workflow_dispatch", "owner-publication", "false", "true", asset, true],
+      ["workflow_dispatch", "owner-publication", "true", "false", asset, false],
+      ["workflow_dispatch", "owner-publication-dry-run", "false", "false", asset, true],
+      ["pull_request", "owner-publication", "true", "true", asset, false],
+    ]) {
+      const result = spawnSync(
+        bash,
+        ["-c", "python() { return 0; }; gh() { return 0; };\n" + gate.run],
+        {
+          cwd: directory,
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            BASH_ENV: "",
+            GITHUB_EVENT_NAME: event,
+            MODE: mode,
+            OWNER_DAILY_ENABLED: daily,
+            OWNER_MANUAL_ENABLED: manual,
+            OWNER_INPUT_SHA256: hash,
+            OWNER_CAPTURE_ASSET: capture,
+            MANUAL_APPLY_ENABLED: "true",
+            POLICY_APPROVED: "python-v2.2",
+            SCOPE: "agent:540",
+            GITHUB_REF: "refs/heads/main",
+            EXPECTED_BRANCH: "main",
+            GH_REPO: "private-evidence",
+          },
+        },
+      );
+      assert.ifError(result.error);
+      assert.equal(
+        result.status === 0,
+        allowed,
+        `${event}/${mode} daily=${daily} manual=${manual}: ${result.stderr}`,
+      );
+    }
+  } finally {
+    assert.ok(directory.startsWith(join(tmpdir(), "property-sync-owner-gate-")));
     rmSync(directory, { recursive: true, force: true });
   }
 });

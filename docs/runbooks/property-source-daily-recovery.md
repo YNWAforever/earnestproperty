@@ -1,6 +1,8 @@
 # 每日盤源同步：恢復、啟用及回退
 
 > 2026-10-02 release 更新：PR207/208/209 已合併；28Hse 已暫停，原 baseline 已核對，50個歷史證據已私有回讀並清除公開副本，兩個盤源及追加10個 webhook migration已套用，正式81/81。其後部署／shadow／canary／token 狀態以 [release 執行紀錄](../reports/2026-10-02-full-sync-release.md) 為準；下列 2026-10-01 操作敘述屬歷史。
+>
+> 2026-10-25 schedule：每日排程改為香港 09:00（UTC `0 1 * * *`），走 owner-capture publication，不跑 HTTP collector，也不使用 Firecrawl。啟用變數與打包方式見 [property-sync-daily.md](../deployment/property-sync-daily.md)。下文 04:17 與 collect→ingest→publish 步驟是舊 HTTP 路徑的歷史操作，不是現在的 schedule。
 
 本手冊對應 codex/full-property-sync-20261001；程式準備完成不代表正式啟用。正式修改只由獲本 session 明確授權的 release operator 執行。2026-10-01 本 session 正式操作只有 read-only：核對 GitHub、DB host/policy/full receipt、首頁 HTTP 與一次 Property.hk 正常存取；未執行正式 migration、apply、排程 dispatch、config、撤盤、訊息或 merge。
 

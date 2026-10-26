@@ -115,7 +115,7 @@ test("maintenance stays event driven while property and YouTube each have one da
   assert.deepEqual(vercelCrons, [{ path: "/api/youtube-sync", schedule: "0 19 * * *" }]);
   assert.doesNotMatch(migration, /^\s+schedule:/m);
   assert.match(properties, /^\s+schedule:/m);
-  assert.match(properties, /cron: "17 20 \* \* \*"/);
+  assert.match(properties, /cron: "0 1 \* \* \*"/);
   assert.match(properties, /vars\.PROPERTY_SYNC_DAILY_ENABLED == 'true'/);
   assert.match(migration, /workflow_dispatch:/);
   assert.match(migration, /neon\/migrations\/\*\*/);

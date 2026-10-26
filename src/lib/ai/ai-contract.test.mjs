@@ -184,10 +184,13 @@ function assertBrowserSafeSource(scanRoot = root) {
       !file.includes(".server.") &&
       !file.includes(".test.") &&
       !file.startsWith("src/routes/api.") &&
-      // Both are only ever imported from scripts/mls/*.mjs (run via `node
-      // scripts/...`, never bundled for the browser) plus their own test file.
+      // Operator CLIs and the Neon sync helpers. They are run via `node scripts/...`
+      // and are not bundled for the browser. saved-capture-import.mjs names
+      // IMPORT_* and the ordinary DATABASE_URL / BLOB_READ_WRITE_TOKEN only to
+      // reject using those app credentials as a fallback.
       file !== "src/lib/mls/neon-db.mjs" &&
-      file !== "src/lib/mls/neon-lock.mjs",
+      file !== "src/lib/mls/neon-lock.mjs" &&
+      file !== "src/lib/mls/saved-capture-import.mjs",
   );
 
   for (const file of browserSafeFiles) {
@@ -201,6 +204,19 @@ function assertBrowserSafeSource(scanRoot = root) {
 
 test("AI, Neon, Woztell, and Blob secret names stay out of browser-safe source", () => {
   assertBrowserSafeSource();
+});
+
+test("the owner-capture importer is not imported by application source", () => {
+  const allowed = new Set([
+    "src/lib/mls/saved-capture-import.mjs",
+    "src/lib/mls/saved-capture-preflight.mjs",
+    "src/lib/mls/owner-publication.mjs",
+  ]);
+  const importers = sourceFiles("src").filter((file) => {
+    if (file.includes(".test.") || allowed.has(file)) return false;
+    return read(file).includes("saved-capture-import.mjs");
+  });
+  assert.deepEqual(importers, []);
 });
 
 test("client secret scan rejects a real source sentinel for every protected secret", () => {
