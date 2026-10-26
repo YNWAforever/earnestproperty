@@ -24,8 +24,6 @@ test("renders an independent labelled EPRC section with dates, location, price, 
   const $ = render("bellagio");
   const section = $("section[aria-labelledby='market-registered-transactions-heading']");
   expect(section.find("h2").text()).toBe("市場註冊成交");
-  expect(section.text()).toContain("EPRC 註冊成交");
-  expect(section.text()).toContain("2026-10-27");
   expect(section.text()).toContain("13 筆");
   expect(section.text()).toContain("8 筆");
   expect(section.find("tbody tr")).toHaveLength(8);
@@ -61,19 +59,35 @@ test("missing gross figures render as unavailable, never as zero; floors and nat
   expect($("tbody tr").last().text()).toContain("P-ASP");
 });
 
-test("known empty estates still display the market section and source; uncovered estates render nothing", () => {
+test("known empty estates still display the market section; uncovered estates render nothing", () => {
   const empty = Object.entries(snapshot.byEstate).filter(([, rows]) => rows.length === 0);
   expect(empty).toHaveLength(6);
   for (const [slug] of empty) {
     const $ = render(slug);
     expect($("h2").text()).toBe("市場註冊成交");
     expect($("section").text()).toContain("本次資料未有此屋苑的市場註冊成交紀錄");
-    expect($("section").text()).toContain("EPRC 註冊成交");
     expect($("tbody tr")).toHaveLength(0);
   }
   expect(renderToStaticMarkup(createElement(EstateRegisteredTransactions, { market: null }))).toBe(
     "",
   );
+});
+
+test("all covered estates omit the source, update date and registration disclaimer", () => {
+  for (const slug of Object.keys(snapshot.byEstate)) {
+    const text = render(slug)("section").text();
+    for (const copy of [
+      "資料來源",
+      "EPRC 註冊成交",
+      "更新於",
+      "2026-10-27",
+      "此為註冊資料快照",
+      "並非即時或完整市場成交",
+      "同一單位可能有不同文書性質的註冊紀錄",
+    ]) {
+      expect(text).not.toContain(copy);
+    }
+  }
 });
 
 test("a missing floor/unit/price or area does not create a fabricated value", () => {
