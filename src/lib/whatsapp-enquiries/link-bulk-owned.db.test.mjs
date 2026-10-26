@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 import { randomUUID } from "node:crypto";
+import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
 import { withOwnedPostgres } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import {
   batchResultCsv,
@@ -20,7 +21,7 @@ test(
     });
     try {
       await withOwnedPostgres(async ({ query, migrationCount }) => {
-        assert.equal(migrationCount, 93);
+        assert.equal(migrationCount, MIGRATION_VERSIONS.length);
         const {
           previewWhatsappLinkBatch: preview,
           commitWhatsappLinkChunk: commit,

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
+import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
 import {
   withOwnedPostgres,
   mockOwnedServerDb,
@@ -13,7 +14,7 @@ test(
       throw new Error("Provider/network request forbidden in owned quality acceptance");
     });
     await withOwnedPostgres(async ({ query, transaction, migrationCount, pool }) => {
-      assert.equal(migrationCount, 93);
+      assert.equal(migrationCount, MIGRATION_VERSIONS.length);
       let beforeRead = null;
       const readQuery = async (sql, params) => {
         if (beforeRead) await beforeRead(sql, params);
