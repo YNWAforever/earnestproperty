@@ -25,9 +25,9 @@ const TITLE_BUDGET_WITH_SUFFIX = 50;
 
 const reviewArticles = blogArticles.filter((article) => article.category === "屋苑開箱");
 
-test("the section is populated: 50 屋苑開箱 articles, one per estate plus the multi-estate set", () => {
-  assert.equal(estateReviewArticles.length, 50);
-  assert.equal(reviewArticles.length, 50, "all 50 must reach blogArticles with the right category");
+test("the section is populated: 90 屋苑開箱 articles, one per estate plus the multi-estate set", () => {
+  assert.equal(estateReviewArticles.length, 90);
+  assert.equal(reviewArticles.length, 90, "all 90 must reach blogArticles with the right category");
 
   // Every estate with a detail page gets its own 開箱, so a new estate cannot
   // land with no article pointing at it.
@@ -38,7 +38,7 @@ test("the section is populated: 50 屋苑開箱 articles, one per estate plus th
       `${entry.slug} has a detail page but no 屋苑開箱 article`,
     );
   }
-  assert.equal(published.length, 22);
+  assert.equal(published.length, 62);
 });
 
 test("屋苑開箱 is a real blog category, not a string only this page queries", () => {
@@ -143,7 +143,7 @@ test("sentence lists never render a doubled delimiter", () => {
       article.answerSummary,
       ...article.sections.flatMap((section) => section.paragraphs),
     ].join("\n");
-    for (const artifact of ["。；", "。、", "；。", "、。", "，。", "：。"]) {
+    for (const artifact of ["。；", "。、", "；。", "、。", "，。", "：。", "。。", "；；"]) {
       assert.ok(!body.includes(artifact), `${article.slug} renders "${artifact}"`);
     }
   }
@@ -260,8 +260,8 @@ const scheduledArticles = estateReviewArticles
   .slice()
   .sort((a, b) => a.publishedAt.localeCompare(b.publishedAt));
 
-test("the 22 single-estate articles all launch together", () => {
-  assert.equal(singleEstateArticles.length, 22);
+test("the 62 single-estate articles all launch together", () => {
+  assert.equal(singleEstateArticles.length, 62);
   const dates = new Set(singleEstateArticles.map((article) => article.publishedAt));
   assert.equal(dates.size, 1, "the launch batch must share one date");
   assert.ok(
@@ -311,9 +311,9 @@ test("the daily run alternates between the three kinds", () => {
 
 test("publishedBlogArticles gates on the clock, so a scheduled article is not live early", () => {
   const launchDay = publishedBlogArticles(new Date("2026-09-07T12:00:00.000Z"));
-  // 22 estate 開箱 + the two flagship guides.
-  assert.equal(launchDay.length, 24);
-  assert.equal(launchDay.filter((article) => article.category === "屋苑開箱").length, 22);
+  // 62 estate 開箱 + the two flagship guides.
+  assert.equal(launchDay.length, 64);
+  assert.equal(launchDay.filter((article) => article.category === "屋苑開箱").length, 62);
 
   const firstScheduled = scheduledArticles[0];
   const justBefore = new Date(Date.parse(firstScheduled.publishedAt) - 1000);
