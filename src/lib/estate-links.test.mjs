@@ -14,6 +14,9 @@ const flatten = (source) => source.replace(/\s+/g, " ");
 const listingSource = flatten(
   await readFile(new URL("../routes/property.$listingNo.tsx", import.meta.url), "utf8"),
 );
+const listingCopySource = flatten(
+  await readFile(new URL("../components/property/PropertyDetailCopy.tsx", import.meta.url), "utf8"),
+);
 const directorySource = flatten(
   await readFile(new URL("../components/site/EstateDirectory.tsx", import.meta.url), "utf8"),
 );
@@ -42,21 +45,27 @@ test("estatePath keeps every real registry slug's href unchanged", () => {
 });
 
 test("the listing page builds estate links only through estatePath", () => {
-  assert.ok(!listingSource.includes("`/estate/${estate.slug}`"));
-  assert.ok(!listingSource.includes("`${SITE_URL}/estate/${estate.slug}`"));
+  for (const source of [listingSource, listingCopySource]) {
+    assert.ok(!source.includes("`/estate/${estate.slug}`"));
+    assert.ok(!source.includes("`${SITE_URL}/estate/${estate.slug}`"));
+  }
+  assert.match(listingSource, /<PropertyDetailCopy [^>]*estate=\{estate\}/);
 
-  // The 「查看屋苑詳情 →」 link sits inside a block that tests estatePath(, and
-  // keeps its route, params and text.
-  const linkAt = listingSource.indexOf('to="/estate/$slug"');
+  // PropertyDetailCopy owns the detail link after extraction. Its href guard
+  // must still come from estatePath; the route owns breadcrumbs and JSON-LD.
+  const linkAt = listingCopySource.indexOf('to="/estate/$slug"');
   assert.ok(linkAt > 0, "listing page still links to the estate page");
-  const guardAt = listingSource.lastIndexOf("estatePath(", linkAt);
-  assert.ok(guardAt > 0, "estate link is guarded by estatePath");
+  assert.ok(
+    listingCopySource.includes("const estateHref = estate ? estatePath(estate.slug) : null;"),
+  );
+  const guardAt = listingCopySource.lastIndexOf("{estateHref ? (", linkAt);
+  assert.ok(guardAt > 0, "estate detail link requires the validated href");
   assert.equal(
-    listingSource.slice(guardAt, linkAt),
-    'estatePath(estate.slug) && ( <div className="mt-4"> <Link ',
+    listingCopySource.slice(guardAt, linkAt),
+    '{estateHref ? ( <div className="mt-4"> <Link ',
   );
   assert.match(
-    listingSource.slice(linkAt, linkAt + 200),
+    listingCopySource.slice(linkAt, linkAt + 200),
     /^to="\/estate\/\$slug" params=\{\{ slug: estate\.slug \}\} [^>]*> 查看屋苑詳情 → <\/Link>/,
   );
 

@@ -218,6 +218,19 @@ test("estate encyclopedia stays out of the unit description", async () => {
   assert.deepEqual(row.extras.features, ["有露台", "望海景"]);
 });
 
+test("ordinary rental terms survive the saved-capture import", async () => {
+  const description = "租金包括：管理費及差餉。可即時入住。\n管理費：已包括。";
+  const plan = await buildSavedImportPlan([
+    sampleRow("9000002", {
+      description,
+      developer: "新鴻基地產",
+      occupation_date: "1999",
+      estate_units: "856伙",
+    }),
+  ]);
+  assert.equal(plan.rows[0].record.description, description);
+});
+
 test("invalid and duplicate source IDs are reported before any writes", async () => {
   const plan = await buildSavedImportPlan([sampleRow(), sampleRow(), sampleRow("../../bad")], {
     captureRoot: "/tmp",

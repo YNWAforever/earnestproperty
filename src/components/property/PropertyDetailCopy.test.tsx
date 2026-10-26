@@ -72,6 +72,20 @@ describe("PropertyDetailCopy", () => {
     expect(card.text()).not.toContain("有露台");
   });
 
+  test("an unusable estate slug keeps the estate card without a detail link", () => {
+    for (const slug of ["", " ", "null", "undefined", " tai-tou-waan "]) {
+      const $ = render({
+        description: "單位近海",
+        features: ["有露台"],
+        estate: { ...taiTouWaan, slug },
+      });
+      const card = $("[data-property-estate-card]");
+      expect(card.find("h2").text()).toBe("屋苑資料");
+      expect(card.find("a")).toHaveLength(0);
+      expect($("h2").text()).not.toContain("物業特點");
+    }
+  });
+
   test("without an estate row, feature chips remain and 屋苑資料 is absent", () => {
     const $ = render({
       description: "單位近海",

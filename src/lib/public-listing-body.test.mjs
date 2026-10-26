@@ -25,6 +25,69 @@ test("a linked listing's short description is left untouched", () => {
   assert.equal(stripCapturedListingFacts(`  ${A049264}  `), A049264);
 });
 
+test("ordinary rental terms and management fees remain in the description", () => {
+  for (const description of [
+    "租金包括：管理費及差餉。可即時入住。",
+    "管理費：每月 $1,200。可即時入住。",
+    "開揚海景。 租金包括：管理費及差餉。可即時入住。",
+    "租金包括：差餉\n管理費：每月 $1,200\n可即時入住。",
+    "發展商：新鴻基地產。單位新裝修。",
+    "小學校網：62校網\n中學校網：荃灣區。可即時入住。",
+  ]) {
+    assert.equal(stripCapturedListingFacts(description), description);
+  }
+});
+
+test("rental terms before a confirmed capture appendix are preserved", () => {
+  const description = "租金包括：管理費及差餉。可即時入住。\n管理費：已包括。";
+  const appendix = "座數及單位：1座\n發展商：新鴻基地產\n入伙日期：1999\n屋苑單位數目：856伙";
+  assert.equal(stripCapturedListingFacts(`${description}\n${appendix}`), description);
+  assert.equal(
+    stripCapturedListingFacts(`${description}\n${appendix}`.replace(/\s+/g, " ")),
+    description.replace(/\s+/g, " "),
+  );
+});
+
+test("estate facts outside the saved-capture order are not treated as an appendix", () => {
+  const description = "屋苑單位數目：856伙\n入伙日期：1999\n發展商：新鴻基地產。可即時入住。";
+  assert.equal(stripCapturedListingFacts(description), description);
+});
+
+test("rental terms after estate labels are not swallowed as appendix values", () => {
+  for (const separator of ["\n", " "]) {
+    const description = [
+      "座數及單位：海琴軒3座中層",
+      "小學校網：71校網",
+      "中學校網：屯門區",
+      "租金包括：管理費及差餉。可即時入住。",
+    ].join(separator);
+    assert.equal(stripCapturedListingFacts(description), description);
+  }
+});
+
+test("unit copy before a capture appendix is not absorbed through earlier estate labels", () => {
+  for (const separator of ["\n", " "]) {
+    const description = ["座數及單位：海琴軒3座中層", "管理費：已包括。可即時入住。"].join(
+      separator,
+    );
+    const appendix = ["發展商：新鴻基地產", "入伙日期：1999", "屋苑單位數目：856伙"].join(
+      separator,
+    );
+    assert.equal(stripCapturedListingFacts(`${description}${separator}${appendix}`), description);
+  }
+});
+
+test("rental and fee boundaries also protect prose immediately after Chinese punctuation", () => {
+  for (const label of ["租金包括", "管理費"]) {
+    const terms = `${label}：已包括差餉。可即時入住。`;
+    const description = `座數及單位：海琴軒3座中層\n小學校網：71校網\n中學校網：屯門區。${terms}`;
+    assert.equal(stripCapturedListingFacts(description), description);
+    const prefix = `座數及單位：海琴軒3座中層。${terms}`;
+    const appendix = "發展商：新鴻基地產\n入伙日期：1999\n屋苑單位數目：856伙";
+    assert.equal(stripCapturedListingFacts(`${prefix}\n${appendix}`), prefix);
+  }
+});
+
 test("captured estate encyclopedia is removed from the unit description and not returned as facts", () => {
   assert.equal(
     stripCapturedListingFacts(STUFFED),

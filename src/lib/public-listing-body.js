@@ -9,24 +9,21 @@
  * Plain JS so node --test can import it without a build.
  */
 
-// Longer labels first. None is a prefix of another; the order still keeps a
-// future shorter label from winning an alternation at the same index.
-const CAPTURED_LISTING_FACT_LABELS = Object.freeze([
-  "廚房煮食模式",
-  "屋苑單位數目",
+// Estate rows in the order used by the saved-capture importer. Rental terms,
+// management fees and kitchen details are ordinary unit copy, not evidence
+// that a description contains an encyclopedia appendix.
+const CAPTURED_ESTATE_FACT_LABELS = Object.freeze([
   "座數及單位",
   "小學校網",
   "中學校網",
+  "發展商",
   "管理公司",
+  "樓齡",
   "入伙日期",
   "屋苑介紹",
+  "屋苑單位數目",
   "屋苑座數",
   "屋苑車位",
-  "廚房類型",
-  "租金包括",
-  "管理費",
-  "發展商",
-  "樓齡",
 ]);
 
 function escapeRegExp(value) {
@@ -34,9 +31,12 @@ function escapeRegExp(value) {
 }
 
 // The importer joined these lines with newlines. sanitizeListingText then
-// collapses that whitespace, so the appendix is a space plus "標籤：".
-const CAPTURED_FACT_APPENDIX = new RegExp(
-  `(?:^|\\s)(?:${CAPTURED_LISTING_FACT_LABELS.map(escapeRegExp).join("|")})：`,
+// collapses that whitespace. A single label is not enough to identify a
+// capture; require at least three distinct estate rows in capture order.
+// Unit-term boundaries also match immediately after Chinese punctuation.
+const CAPTURED_FACT_ROW = new RegExp(
+  `(?:^|\\s)(${CAPTURED_ESTATE_FACT_LABELS.map(escapeRegExp).join("|")})：|(?:廚房類型|廚房煮食模式|租金包括|管理費)：`,
+  "g",
 );
 
 /**
@@ -49,13 +49,19 @@ const CAPTURED_FACT_APPENDIX = new RegExp(
  */
 export function stripCapturedListingFacts(value) {
   if (typeof value !== "string") return null;
-  const match = CAPTURED_FACT_APPENDIX.exec(value);
-  if (!match) {
-    const trimmed = value.trim();
-    return trimmed || null;
+  const rows = [...value.matchAll(CAPTURED_FACT_ROW)];
+  let start = rows.length - 1;
+  while (
+    start > 0 &&
+    // Unit terms break the estate appendix, even when whitespace collapsed.
+    CAPTURED_ESTATE_FACT_LABELS.indexOf(rows[start - 1][1]) >= 0 &&
+    CAPTURED_ESTATE_FACT_LABELS.indexOf(rows[start - 1][1]) <
+      CAPTURED_ESTATE_FACT_LABELS.indexOf(rows[start][1])
+  ) {
+    start -= 1;
   }
-  const head = value.slice(0, match.index).trim();
-  return head || null;
+  const description = rows.length - start >= 3 ? value.slice(0, rows[start].index) : value;
+  return description.trim() || null;
 }
 
 /**
