@@ -7,7 +7,7 @@ Base: `79024081206320bcc8fb1e6ede9b4c458be56fdd` (current main, includes #287). 
 - All 40 production rows are published and have nonblank description, hero_image, seo_title and seo_description. Read-only production ledger confirms the original migration was applied at 2026-10-26T20:38:12.783Z.
 - Fresh HTTP retrievals returned 200 with an estate hero element on all 40 pages. No empty or 404 estate page was found.
 - All 40 had the same editorial weakness: the opening paragraph doubled as the hero and sole benefit; each had one generic buyer profile and an address/repeated-introduction FAQ. SEO met width budgets but emphasized location/cautions rather than the estate proposition.
-- Thirteen introductions were especially short (81–105 non-whitespace characters): 蒙地卡羅別墅、逸璟．龍灣、星岸、海濤花園、麗海別墅、均富花園、富安新邨、容龍居、屯門閣、雅翠苑、龍珠島平房、龍珠花園、珀居.
+- Thirteen introductions were especially short (80–104 non-whitespace characters): 蒙地卡羅別墅、逸璟．龍灣、星岸、海濤花園、麗海別墅、均富花園、富安新邨、容龍居、屯門閣、雅翠苑、龍珠島平房、龍珠花園、珀居.
 
 ## Content and photographs
 
