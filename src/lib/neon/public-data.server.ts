@@ -816,6 +816,46 @@ const PROMOTION_TIER_RANK_JOIN = `LEFT JOIN LATERAL (
 const PROMOTION_TIER_RANK_EXPRESSION = "COALESCE(promotion.rank, 3)";
 
 /**
+ * 黃金必走盤. 28hse stores the grade on mls_source_promotion_tiers, joined
+ * through the active property_source_links row (source 28hse_agent_540).
+ * gold is the 黃金 badge (黃金置頂); pinned is the 置頂 badge (置頂盤).
+ * Ordinary and unobserved 28hse rows are not this section.
+ */
+const PAID_28HSE_PLACEMENT_SQL = `EXISTS (
+  SELECT 1
+  FROM property_source_links psl
+  JOIN mls_source_promotion_tiers t
+    ON t.source = psl.source
+   AND t.external_listing_id = psl.external_listing_id
+   AND t.deal_type = psl.deal_type
+  WHERE psl.property_id = p.id
+    AND psl.status = 'active'
+    AND psl.source = '28hse_agent_540'
+    AND t.promotion_tier IN ('gold', 'pinned')
+)`;
+
+/**
+ * 荀盤推介. 宅谷 is Property.hk (EPW / EPS / EPT) in this product, stored as
+ * source propertyhk on property_source_links. source_site is often
+ * dual-source-mls after a merge, so the link is the selector, not source_site.
+ */
+const PROPERTYHK_LISTING_SQL = `EXISTS (
+  SELECT 1
+  FROM property_source_links psl
+  WHERE psl.property_id = p.id
+    AND psl.status = 'active'
+    AND psl.source = 'propertyhk'
+)`;
+
+export type HomepageFeedSelection = "28hse-paid" | "propertyhk";
+
+function readHomepageFeedSelection(value: unknown): HomepageFeedSelection | undefined {
+  if (value == null) return undefined;
+  if (value === "28hse-paid" || value === "propertyhk") return value;
+  throw new TypeError("INVALID_PUBLIC_SCOPE");
+}
+
+/**
  * Whether mls_source_promotion_tiers exists yet.
  *
  * Postgres rejects a query naming a missing relation at parse time, so the
@@ -859,15 +899,23 @@ async function promotionTierTableAvailable(): Promise<boolean> {
  * not the source's publication date. Re-fetches never bump that timestamp.
  * Scope, current-offering withdrawal suppression and publication gates apply
  * in both modes. No paid-placement lookup is needed for the newest feed.
+ *
+ * selection narrows that same feed for the two homepage bands:
+ * - 28hse-paid: 黃金必走盤, gold then pinned, empty if the tier table is absent
+ * - propertyhk: 荀盤推介 (宅谷). A unit that is also 黃金必走盤 is left in that
+ *   band so the homepage does not repeat the card. The exclusion needs the
+ *   tier table; without it, 宅谷 still renders and simply cannot see grades.
  */
 export async function fetchFeaturedProperties(input: {
   limit: number;
   order?: "newest" | "promotion";
+  selection?: HomepageFeedSelection;
   districtSlugs?: string[];
   estateSlugs?: string[];
   textAliases?: string[];
   outOfScopeTextAliases?: string[];
 }): Promise<NeonPropertyRow[]> {
+  const selection = readHomepageFeedSelection(input.selection);
   const pageSize = boundedPublicCount(input.limit, 6, 100);
   const scope = normalizeCorridorInventoryInput({
     districtSlugs: input.districtSlugs ?? [],
@@ -878,18 +926,33 @@ export async function fetchFeaturedProperties(input: {
   });
 
   const newest = input.order === "newest";
-  const ranked = !newest && (await promotionTierTableAvailable());
+  const paid28hse = selection === "28hse-paid";
+  const propertyHk = selection === "propertyhk";
+  const needsTierTable = paid28hse || propertyHk || (!selection && !newest);
+  const tableAvailable = needsTierTable ? await promotionTierTableAvailable() : false;
+  // A missing grade table must not be filled with ordinary listings under a
+  // 黃金必走盤 heading, and must not 500 the page.
+  if (paid28hse && !tableAvailable) return [];
+  const ranked = paid28hse || (!selection && !newest && tableAvailable);
+  const excludePaid28hse = propertyHk && tableAvailable;
 
   const params: unknown[] = [];
   // With no scope terms the feed stays exactly as broad as it was before the
   // region predicate moved into SQL -- every active listing, with the caller's
   // own filter still applied afterwards as defense in depth.
-  const where = hasCorridorAliases(scope) ? corridorWhere(scope, params) : "p.status = 'active'";
+  let where = hasCorridorAliases(scope) ? corridorWhere(scope, params) : "p.status = 'active'";
+  if (paid28hse) where += ` AND ${PAID_28HSE_PLACEMENT_SQL}`;
+  if (propertyHk) {
+    where += ` AND ${PROPERTYHK_LISTING_SQL}`;
+    if (excludePaid28hse) where += ` AND NOT ${PAID_28HSE_PLACEMENT_SQL}`;
+  }
   // Before the migration lands there is no tier to rank on, so the feed keeps
-  // its previous freshness order rather than erroring.
-  const candidateOrder = newest ? LATEST_ADVERT_ORDER : LISTING_NEWEST_ORDER;
+  // its previous freshness order rather than erroring. The two homepage bands
+  // order by first-seen advert time; gold still sorts ahead of pinned.
+  const candidateOrder =
+    paid28hse || propertyHk || newest ? LATEST_ADVERT_ORDER : LISTING_NEWEST_ORDER;
   const order = ranked
-    ? `${PROMOTION_TIER_RANK_EXPRESSION} ASC, ${LISTING_NEWEST_ORDER}`
+    ? `${PROMOTION_TIER_RANK_EXPRESSION} ASC, ${paid28hse ? LATEST_ADVERT_ORDER : LISTING_NEWEST_ORDER}`
     : candidateOrder;
   const limitParam = addParam(params, pageSize);
 

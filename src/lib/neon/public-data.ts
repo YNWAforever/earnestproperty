@@ -50,6 +50,7 @@ export const fetchNeonFeaturedProperties = createServerFn({ method: "GET" })
     (data: {
       limit: number;
       order?: "newest" | "promotion";
+      selection?: "28hse-paid" | "propertyhk";
       districtSlugs?: string[];
       estateSlugs?: string[];
       textAliases?: string[];

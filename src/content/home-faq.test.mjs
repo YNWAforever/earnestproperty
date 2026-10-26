@@ -105,12 +105,17 @@ test("the homepage renders both FAQ sections under one FAQPage", () => {
   assert.match(home, /corridorRows\.length > 0 \? corridorRows : \[\.\.\.castlePeakRoadHomeFaqs\]/);
 });
 
-test("the 最新放盤 section header carries no subtitle", () => {
-  // #133/#134 renamed this section from 精選筍盤 to 最新放盤 and gave it the
-  // subtitle 「按最新上架排序，隨時 WhatsApp 查詢及預約睇樓。」; the rename stays,
-  // the subtitle was dropped at the client's request.
+test("the homepage listing bands are 黃金必走盤 and 荀盤推介", () => {
+  // The single 最新放盤 block is now two bands. The subtitle that used to sit
+  // under 最新放盤 stays gone.
   const home = read("src/routes/index.tsx");
-  assert.match(home, /title="最新放盤"/, "the section itself must stay");
+  const gold = home.indexOf('title="黃金必走盤"');
+  const promo = home.indexOf('title="荀盤推介"');
+  assert.ok(gold > -1, "黃金必走盤 must be a section title");
+  assert.ok(promo > gold, "荀盤推介 must follow 黃金必走盤");
+  assert.doesNotMatch(home, /title="最新放盤"/);
   assert.doesNotMatch(home, /隨時 WhatsApp 查詢及預約睇樓/, "the removed subtitle is back");
   assert.doesNotMatch(home, /按最新上架排序/, "the removed subtitle is back");
+  // Titles only. Source names and grade labels must not appear as page copy.
+  assert.doesNotMatch(home, /28hse|黃金置頂|置頂盤|宅谷|Property\.hk|最新樓盤/i);
 });

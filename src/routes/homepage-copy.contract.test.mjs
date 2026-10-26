@@ -12,7 +12,7 @@ const gridModuleSource = await readFile(
 );
 
 test("homepage uses Chinese-only large headings for the requested sections", () => {
-  for (const title of ["最新放盤", "精選樓盤影片", "深井核心屋苑", "為何選晉誠"]) {
+  for (const title of ["黃金必走盤", "荀盤推介", "精選樓盤影片", "深井核心屋苑", "為何選晉誠"]) {
     assert.match(source, new RegExp(`title=\\"${title}\\"`));
   }
 
@@ -78,7 +78,9 @@ test("featured-listings empty state uses the shared EmptyState component", () =>
     source.indexOf("{/* FEATURED LISTINGS"),
     source.indexOf("{/* FEATURED VIDEOS"),
   );
-  assert.match(featuredSection, /<EmptyState/);
+  assert.match(featuredSection, /<HomepageListingBand/);
+  const band = source.slice(source.indexOf("function HomepageListingBand("));
+  assert.match(band, /<EmptyState/);
 });
 
 // P3 plan acceptance criterion: CoreEstateGrid already correctly renders an
@@ -354,7 +356,7 @@ test("the loader returns homeVideos and never cmsVideos", () => {
   assert.doesNotMatch(source.slice(source.indexOf("function HomePage")), /cmsVideos/);
 });
 
-test("hero, 最新放盤 and 精選樓盤影片 sections are not deferred", () => {
+test("hero, listing bands and 精選樓盤影片 sections are not deferred", () => {
   const start = source.indexOf("function HomePage");
   const body = source.slice(start);
   const cut = body.indexOf("{/* CORE ESTATES */}");
