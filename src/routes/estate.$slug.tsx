@@ -22,6 +22,7 @@ import {
   type EstateComparisonRow,
 } from "@/components/site/EstateComparisonTable";
 import { EstateMarketSnapshot } from "@/components/site/EstateMarketSnapshot";
+import { EstateRegisteredTransactions } from "@/components/site/EstateRegisteredTransactions";
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import { PageHero } from "@/components/site/PageHero";
@@ -30,6 +31,8 @@ import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { estateRegistry, findComparableEstates } from "@/content/estate-registry";
+import type { EprcEstateTransactions } from "@/content/eprc-transactions";
+import { getEstateRegisteredTransactions } from "@/content/eprc-transactions-snapshot";
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
 import { getSchoolNet, schoolNetCodeForDistrict } from "@/content/school-nets";
 import { SITE_URL, authored, canonicalLink, estateSeo } from "@/content/seo";
@@ -123,6 +126,7 @@ export const Route = createFileRoute("/estate/$slug")({
       faqs,
       latestListings,
       transactions,
+      marketTransactions: getEstateRegisteredTransactions(estate.slug),
       comparableEstates,
       relatedAgents,
       relatedVideos,
@@ -222,6 +226,7 @@ function EstatePage() {
     faqs,
     latestListings,
     transactions,
+    marketTransactions,
     comparableEstates,
     relatedAgents,
     relatedVideos,
@@ -231,6 +236,7 @@ function EstatePage() {
     faqs: FaqItem[];
     latestListings: ListingRow[];
     transactions: EstateTransaction[];
+    marketTransactions: EprcEstateTransactions | null;
     comparableEstates: EstateComparisonRow[];
     relatedAgents: NeonPublicAgentProfile[];
     relatedVideos: CmsVideo[];
@@ -447,6 +453,8 @@ function EstatePage() {
         listings={latestListings}
         transactions={transactions}
       />
+
+      <EstateRegisteredTransactions market={marketTransactions} />
 
       <Container className="py-8">
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
