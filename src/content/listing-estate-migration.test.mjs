@@ -9,6 +9,10 @@ const migrationUrl = new URL(
   import.meta.url,
 );
 const evidenceUrl = new URL("./fixtures/listing-estate-expansion-20261026.json", import.meta.url);
+const ownershipMigrationUrl = new URL(
+  "../../neon/migrations/20260907120000_propertyhk_ingestion_v2.sql",
+  import.meta.url,
+);
 
 test("estate content migration is scoped, preserves authored data and links only unchanged active evidence", async () => {
   assert.ok(existsSync(migrationUrl), "reviewable estate migration must exist");
@@ -22,7 +26,8 @@ test("estate content migration is scoped, preserves authored data and links only
         district_slug text,district_id uuid,aliases text[],address text,description text,hero_image text,
         seo_title text,seo_description text,published boolean DEFAULT false,updated_at timestamptz DEFAULT now());
       CREATE TABLE properties(listing_no text PRIMARY KEY,title_zh text,address text,source_url text,
-        status text,estate_id uuid REFERENCES estates(id));`);
+        status text,estate_id uuid REFERENCES estates(id),agent_id uuid,
+        ingestion_owner text DEFAULT 'legacy',ingestion_identity_policy text DEFAULT 'legacy');`);
     await db.query(`INSERT INTO estates(slug,name_zh,district_slug,aliases,description,hero_image)
       VALUES('napa','NAPA','castle-peak-road',ARRAY['custom alias'],'Authored introduction','https://example.test/authored.jpg'),
       ('lung-chu-island-garden','龍珠島花園','castle-peak-road',ARRAY['龍珠島別墅'],null,null),
@@ -34,12 +39,11 @@ test("estate content migration is scoped, preserves authored data and links only
     );
     assert.ok(reviewed.length > 30, "exercise the reviewed backfill set");
     for (const item of reviewed) {
-      await db.query(`INSERT INTO properties VALUES($1,$2,$3,$4,'active',null)`, [
-        item.listingNo,
-        item.titleZh,
-        item.address,
-        item.sourceUrl,
-      ]);
+      await db.query(
+        `INSERT INTO properties(listing_no,title_zh,address,source_url,status,estate_id)
+        VALUES($1,$2,$3,$4,'active',null)`,
+        [item.listingNo, item.titleZh, item.address, item.sourceUrl],
+      );
     }
     // Guard cases start from real evidence and change exactly one safety boundary.
     const [explicit, inactive, edited, moved] = reviewed;
@@ -58,7 +62,25 @@ test("estate content migration is scoped, preserves authored data and links only
       [moved.listingNo],
     );
     await db.query(
-      "INSERT INTO properties VALUES('outside','比較 NAPA 及其他屋苑','不在本次名單','https://example.test','active',null)",
+      "INSERT INTO properties(listing_no,title_zh,address,source_url,status,estate_id) VALUES('outside','比較 NAPA 及其他屋苑','不在本次名單','https://example.test','active',null)",
+    );
+    const ingestionOwned = reviewed.find((item) => item.slug === "pearl-garden");
+    assert.ok(ingestionOwned, "reviewed ingestion-owned listing must be linkable");
+    // Seed ownership before installing the real fence; never grant the v2 writer policy.
+    await db.query(
+      "UPDATE properties SET ingestion_owner='no-hermes-v2',ingestion_identity_policy='no-hermes-v2' WHERE listing_no=$1",
+      [ingestionOwned.listingNo],
+    );
+    const ownershipFence = readFileSync(ownershipMigrationUrl, "utf8").match(
+      /CREATE OR REPLACE FUNCTION mls_ingestion_owner_fence_fn\(\)[\s\S]*?FOR EACH ROW EXECUTE FUNCTION mls_ingestion_owner_fence_fn\(\);/,
+    );
+    assert.ok(ownershipFence, "install the production ownership fence function and trigger");
+    await db.exec(ownershipFence[0]);
+    await assert.rejects(
+      db.query("UPDATE properties SET estate_id=estate_id WHERE listing_no=$1", [
+        ingestionOwned.listingNo,
+      ]),
+      /MLS_INGESTION_OWNERSHIP_CONFLICT/,
     );
     const sql = readFileSync(migrationUrl, "utf8");
     await db.exec(sql);
@@ -95,6 +117,17 @@ test("estate content migration is scoped, preserves authored data and links only
     }
     const { rows: links } = await db.query(
       "SELECT p.*,e.slug FROM properties p LEFT JOIN estates e ON e.id=p.estate_id ORDER BY listing_no",
+    );
+    const ownedLink = links.find((row) => row.listing_no === ingestionOwned.listingNo);
+    assert.equal(ownedLink.slug, "pearl-garden", "admin flag permits the reviewed estate link");
+    assert.equal(ownedLink.ingestion_owner, "no-hermes-v2");
+    assert.equal(ownedLink.ingestion_identity_policy, "no-hermes-v2");
+    await assert.rejects(
+      db.query("UPDATE properties SET estate_id=null WHERE listing_no=$1", [
+        ingestionOwned.listingNo,
+      ]),
+      /MLS_INGESTION_OWNERSHIP_CONFLICT/,
+      "migration must not leave the admin write flag enabled",
     );
     for (const item of reviewed) {
       const row = links.find((r) => r.listing_no === item.listingNo);
