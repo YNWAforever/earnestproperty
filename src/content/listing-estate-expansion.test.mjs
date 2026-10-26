@@ -32,6 +32,14 @@ test("all 40 active listing estates have complete public content, a labelled pho
     assert.ok(estateSeo[slug]?.description, slug);
     const content = getEstatePageContent(slug);
     assert.equal(content?.overview.length, 2, slug);
+    assert.equal(content.buyerFit.length, 3, `${slug}: distinct buyer needs`);
+    assert.equal(content.pros.length, 3, `${slug}: specific estate benefits`);
+    assert.equal(content.watchouts.length, 3, `${slug}: practical viewing considerations`);
+    assert.notEqual(content.heroPositioning, content.overview[0], `${slug}: concise hero copy`);
+    assert.ok(
+      !content.pros.includes(content.overview[0]),
+      `${slug}: benefits are not repeated prose`,
+    );
     assert.ok(content?.transportLifestyle, slug);
     assert.ok(content?.watchouts.length, slug);
     assert.ok(

@@ -66,25 +66,17 @@ export const estatePageContent = {
         item.slug,
         {
           ...identity,
-          heroPositioning: item.overview[0],
+          heroPositioning: item.heroPositioning,
           overview: item.overview,
-          buyerFit: [
-            `重視${entry.locationLabelZh}生活圈，希望比較${identity.nameZh}實際單位、交通及保養的買家或租客。`,
-          ],
-          pros: [item.overview[0]],
-          watchouts: [item.watchout],
+          buyerFit: item.buyerFit,
+          pros: item.pros,
+          watchouts: item.watchouts,
           transportLifestyle: item.transport,
-          marketNote: `比較${identity.nameZh}時，應按住宅類型、座別、樓層及單位狀況分開看；個別放盤相片及條件只供該單位參考。`,
+          marketNote: item.marketNote,
           saleCta: `想買${identity.nameZh}？講低預算、房數及睇樓要求，代理幫你配盤。`,
           rentCta: `想租${identity.nameZh}？講低月租及入住日期，代理幫你搵合適單位。`,
           valuationCta: `${identity.nameZh}業主可查詢同類單位的放售及放租估值。`,
-          faqs: [
-            {
-              question: `${identity.nameZh}位於哪裏？`,
-              answer: `${identity.nameZh}位於${item.address}。${item.overview[0]}`,
-            },
-            { question: `${identity.nameZh}睇樓要留意甚麼？`, answer: item.watchout },
-          ],
+          faqs: item.faqs,
           relatedLinks: [
             {
               href: entry.districtHref ?? "/castle-peak-road",

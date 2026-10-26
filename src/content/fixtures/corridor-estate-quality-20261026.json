@@ -1,0 +1,2593 @@
+{
+  "auditedAt": "2026-10-26T20:45:48.000Z",
+  "baseSha": "79024081206320bcc8fb1e6ede9b4c458be56fdd",
+  "productionProject": "dawn-meadow-79190048",
+  "productionBranch": "br-polished-sea-aom4i1ct",
+  "method": "Read-only production estates SELECT plus fresh Vercel HTTP HTML retrieval for all 40 singular /estate/<slug> URLs; compared with Bellagio and Lido Garden code and public pages.",
+  "limitations": [
+    "No native browser or binary image-load verification was available.",
+    "All photos remain labelled individual agency listing/unit/view reference photos, not estate exterior photography."
+  ],
+  "summary": {
+    "estates": 40,
+    "http200": 40,
+    "emptyPages": 0,
+    "missingHeroMarkup": 0,
+    "thinEditorialPages": 40,
+    "shortIntroductions": 13,
+    "heroReferences": 40,
+    "listingPhotoReferences": 102
+  },
+  "estates": [
+    {
+      "slug": "bayview-terrace",
+      "nameZh": "碧翠花園",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/bayview-terrace",
+      "httpStatus": 200,
+      "descriptionChars": 162,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "碧翠花園位於三聖一帶的青山公路青山灣段，是同時提供分層住宅與洋房的私人屋苑。選盤時宜先確定住宅類型，再比較客飯廳、睡房及戶外空間的安排，避免把兩類物業直接作同一標準比較。\n\n公開屋苑資料列有泳池、網球場及兒童遊樂設施，日常康樂配套也是看樓重點。分層單位與洋房的出入口、景觀及管理安排各有不同，適合連同家庭活動和泊車需要一起考慮。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/5/f/8/58bf4c9fa5c25874c54c4ffe0e70d341.jpg",
+        "seoTitle": "碧翠花園｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "碧翠花園位於青山公路青山灣段107號。同苑兼有洋房及分層住宅，須按實際門牌核對花園、平台與車位是否屬該物業。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/5/f/8/58bf4c9fa5c25874c54c4ffe0e70d341.jpg",
+        "listingNo": "C004447-6823280-S",
+        "sourceUrl": "https://www.property.hk/asking_detail/ept/king/6823280.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/5/f/8/58bf4c9fa5c25874c54c4ffe0e70d341.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/5/f/8/58bf4c9fa5c25874c54c4ffe0e70d341.jpg",
+          "alt": "碧翠花園 售盤 #C004447"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E7%A2%A7%E7%BF%A0%E8%8A%B1%E5%9C%92/2-ZMDLTHDVHN",
+          "status": "retrieved",
+          "observations": [
+            "Exa成功讀取屋苑頁，確認Bayview Terrace、三聖及青山公路青山灣段107號。",
+            "資料明列分層樓宇與洋房，設施包括室外泳池、網球場、健身室及兒童遊樂場。"
+          ],
+          "limitations": [
+            "不引用即時價格或頁面泛用的鐵路鄰近程度宣傳。設施現況及個別戶外空間權益仍需確認。"
+          ]
+        },
+        {
+          "url": "https://www.property.hk/asking_detail/ept/king/6823280.html",
+          "status": "existing-evidence",
+          "observations": ["輸入列為晉誠放盤，地址使用青山公路18咪半的舊式描述。"],
+          "limitations": [
+            "本次未重新讀取該放盤；保留屋苑權威地址青山公路青山灣段107號，不以里程地址覆蓋。"
+          ]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "碧翠花園｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "碧翠花園位於青山公路青山灣段107號。同苑兼有洋房及分層住宅，須按實際門牌核對花園、平台與車位是否屬該物業。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "castle-peak-villas",
+      "nameZh": "青山別墅",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/castle-peak-villas",
+      "httpStatus": 200,
+      "descriptionChars": 160,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "青山別墅位於小欖樂翠街，屬分層住宅屋苑，名稱中的「別墅」不代表每個單位都是獨立屋。屋苑的座名及單位布局各有分別，尋找家庭居所時可重點比較客飯廳、房間和露台的實際連接方式。\n\n現有放盤可見連露台及車位的選擇，適合把室內空間、戶外活動和駕車安排一併評估。看樓時亦宜留意樓宇及公用部分的保養，並向代理確認車位是否包含在租售條件內。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/38/384abf198c6ca47ef656ca788e1976edacc32c1082a7a9e8ab8270c8d2091128.jpg",
+        "seoTitle": "青山別墅｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "青山別墅位於樂翠街19號。應以樂翠街門牌及座名核對物業；個別來源把地址簡寫為青山公路，不能據此判斷實際入口。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/38/384abf198c6ca47ef656ca788e1976edacc32c1082a7a9e8ab8270c8d2091128.jpg",
+        "listingNo": "SYNC-854e06d4-8908-49c5-9b96-458b26540a60",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4051997",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/38/384abf198c6ca47ef656ca788e1976edacc32c1082a7a9e8ab8270c8d2091128.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/1/2/2/9e9de3abb2ab8e4238181e42e3c29695.jpg",
+          "alt": "青山別墅 F座 海濤閣 放盤 #A048636"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/1/5/b/2a773319a92f689db01ec49972c6ea80.jpg",
+          "alt": "青山別墅 C座 海景閣 售盤 #R063140"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/0/1/b/c557861ea4f98e5686b7dc28254447ae.jpg",
+          "alt": "青山別墅 售盤 #T032104"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E9%9D%92%E5%B1%B1%E5%88%A5%E5%A2%85/2-SUDCFROXRJ",
+          "status": "retrieved",
+          "observations": [
+            "確認Castle Peak Villas、小欖樂翠街19號及分座分層成交地址。",
+            "實用面積資料為1320至1681平方呎，支持較大面積家庭住宅定位。"
+          ],
+          "limitations": [
+            "來源列102個單位；28Hse同頁屋苑介紹列102、表格列108，故新文案不刊單位總數。"
+          ]
+        },
+        {
+          "url": "https://www.28hse.com/rent/apartment/property-4051997",
+          "status": "retrieved",
+          "observations": [
+            "晉誠F座中層放盤明列4房、臨海露台、連2車位及樂翠街19號。",
+            "交通欄列小欖新村及小欖村青山公路站點；文案未採用估算步行分鐘。"
+          ],
+          "limitations": [
+            "露台、景觀及車位屬個別單位條件，不推廣為全苑標準。輸入另有放盤寫青山公路大欖段19號，與權威地址有差異；保持樂翠街19號不變。"
+          ]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "青山別墅｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "青山別墅位於樂翠街19號。應以樂翠街門牌及座名核對物業；個別來源把地址簡寫為青山公路，不能據此判斷實際入口。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "ching-lai-waan-villas",
+      "nameZh": "青麗灣別墅",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/ching-lai-waan-villas",
+      "httpStatus": 200,
+      "descriptionChars": 154,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "青麗灣別墅座落小欖樂翠街，是以洋房為主的低密度私人住宅。屋內分層與花園、天台的銜接，是這類物業與一般分層住宅的主要分別，適合按家庭成員的活動習慣逐層看樓。\n\n現有放盤介紹包括私家車房及前後花園的選擇，可把泊車、種植和戶外休憩需要一併考慮。各幢洋房的朝向及配置未必相同，海景、戶外空間和車房條件均應按實際單位確認。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/35/35b60726094f0c3abcbc1d21e9554d2390a13dc80950e5d7b8a635dadf8b289d.jpg",
+        "seoTitle": "青麗灣別墅｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "青麗灣別墅位於樂翠街6–18號。洋房的前後花園、天台和車房須逐項核對契約範圍，並實測樓梯對長幼成員是否合用。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/35/35b60726094f0c3abcbc1d21e9554d2390a13dc80950e5d7b8a635dadf8b289d.jpg",
+        "listingNo": "SYNC-454cffb5-f42c-408d-aab4-e1022a5d7c10",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4049628",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/35/35b60726094f0c3abcbc1d21e9554d2390a13dc80950e5d7b8a635dadf8b289d.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/35/35b60726094f0c3abcbc1d21e9554d2390a13dc80950e5d7b8a635dadf8b289d.jpg",
+          "alt": "《私家車房》 向南海景！前後花園天台！低密度小欖路邊洋房！"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E9%9D%92%E9%BA%97%E7%81%A3%E5%88%A5%E5%A2%85/2-SUCJFROORJ",
+          "status": "retrieved",
+          "observations": [
+            "確認The Castle Bay及小欖樂翠街6-18號。",
+            "屋苑資料及成交紀錄支持洋房、三至四房及較大實用面積的定位。"
+          ],
+          "limitations": ["不由屋苑層級資料推論每幢花園、車房或景觀條件。"]
+        },
+        {
+          "url": "https://www.28hse.com/buy/apartment/property-4049628",
+          "status": "retrieved",
+          "observations": [
+            "晉誠全幢洋房放盤明列前後花園、天台、私家車房及向南海景。",
+            "交通欄列小欖新村與小欖村站點。"
+          ],
+          "limitations": ["上述特色只表述為個別放盤；不採用網站估算步行時間及廣告售價。"]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "青麗灣別墅｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "青麗灣別墅位於樂翠街6–18號。洋房的前後花園、天台和車房須逐項核對契約範圍，並實測樓梯對長幼成員是否合用。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "ching-yung-toi",
+      "nameZh": "青榕臺",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/ching-yung-toi",
+      "httpStatus": 200,
+      "descriptionChars": 144,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "青榕臺位於青榕街，是三聖一帶的分層私人住宅屋苑。屋苑提供家庭型單位，可按客飯廳尺度、睡房位置及收納需要比較不同座數與戶型，而非只看樓盤照片中的裝修。\n\n公開屋苑資料列有泳池、會所及運動設施，並有巴士、小巴交通資訊。看樓時可同時了解住宅大堂、康樂設施與出入口之間的路程，再衡量日常使用是否方便。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/b4/b4f12661f6db2c1cccdd354f8a32f1ee64cd257ba270dabf5065756bf8a88155.jpg",
+        "seoTitle": "青榕臺｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "青榕臺位於青榕街8號。青榕街上不同樓層及座向的開揚程度會有分別，宜在室內核對景觀、採光與窗外遮擋。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/b4/b4f12661f6db2c1cccdd354f8a32f1ee64cd257ba270dabf5065756bf8a88155.jpg",
+        "listingNo": "SYNC-638c3de5-dd56-4a7f-bc38-593ab4d53363",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4058947",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/b4/b4f12661f6db2c1cccdd354f8a32f1ee64cd257ba270dabf5065756bf8a88155.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/b4/b4f12661f6db2c1cccdd354f8a32f1ee64cd257ba270dabf5065756bf8a88155.jpg",
+          "alt": "《速車位》 高層全海景！一梯兩伙有露台！半山空氣好！"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/8/a/8/3717927743216682a9f3c51363993e73.jpg",
+          "alt": "青榕台 第04座 售盤 #A044667"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/e/1/a/cabe4b3d562f1ac59d02475438de220d.jpg",
+          "alt": "青榕台 售盤 #A064297"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/8/3/f/c25c109d326a38718bc853fe373bdf7d.jpeg",
+          "alt": "青榕台 第03座 放盤 #T031325"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/d/1/8/13921279cc31ede8682369e3684055e1.jpeg",
+          "alt": "青榕台 租盤 #T033887"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/a/a/4/b8b81bf7e6d1c9740f19a12c3589187d.jpeg",
+          "alt": "青榕台 第02座 租盤 #C005594"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B0%8F%E6%AC%96-%E6%8E%83%E7%AE%A1%E7%AC%8F-%E9%9D%92%E5%B1%B1%E7%81%A3-%E9%9D%92%E6%A6%95%E5%8F%B0-E00088",
+          "status": "retrieved",
+          "observations": [
+            "確認Tsing Yung Terrace、青榕街8號及三至四房間隔。",
+            "明列會所、泳池、兒童及運動設施，交通優點列小巴及巴士。"
+          ],
+          "limitations": [
+            "來源中文寫青榕台，沿用登記名稱青榕臺；不把區內汽車充電站宣傳寫成屋苑專屬設施。"
+          ]
+        },
+        {
+          "url": "https://www.28hse.com/buy/apartment/property-4058947",
+          "status": "existing-evidence",
+          "observations": ["輸入晉誠放盤標題提及高層海景、一梯兩伙及露台。"],
+          "limitations": ["本次未重讀該放盤；僅以個別放盤描述露台及海景，不推論全苑每層戶數。"]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "青榕臺｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "青榕臺位於青榕街8號。青榕街上不同樓層及座向的開揚程度會有分別，宜在室內核對景觀、採光與窗外遮擋。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "chui-king-garden",
+      "nameZh": "翠景花園",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/chui-king-garden",
+      "httpStatus": 200,
+      "descriptionChars": 148,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "翠景花園位於青泰路，是由洋房組成的低密度住宅，公開資料以歐陸式排屋設計作介紹。尋找較多室內外活動空間的家庭，可把屋內樓層分布、花園使用及泊車動線作為看樓主線。\n\n現有放盤以花園洋房作介紹，實際可用範圍和維護安排值得仔細比較。屋苑規模與一般大型分層社區不同，宜一併了解公用部分管理、保養分工及相關費用。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1edce3beba410ed109e4fb4d0db5551f46f50df57e56a9c9eb163772c9750243.webp",
+        "seoTitle": "翠景花園｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "翠景花園位於青泰路20號。花園是此類洋房的主要比較項目，須核對界線、排水及維護責任，而不只憑放盤面積描述。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1edce3beba410ed109e4fb4d0db5551f46f50df57e56a9c9eb163772c9750243.webp",
+        "listingNo": "SYNC-df4cb509-fab3-4df5-9000-882b876b17c4",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4004523",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1edce3beba410ed109e4fb4d0db5551f46f50df57e56a9c9eb163772c9750243.webp",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1edce3beba410ed109e4fb4d0db5551f46f50df57e56a9c9eb163772c9750243.webp",
+          "alt": "連超過1400呎大花園!環境清幽洋房!極少放盤!"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.hkp.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B1%AF%E9%96%80-%E7%BF%A0%E6%99%AF%E8%8A%B1%E5%9C%92-E11840",
+          "status": "retrieved",
+          "observations": [
+            "確認Jade View Villa及青泰路20號。",
+            "來源列獨立屋、歐陸式設計排屋、低密度別墅及兩層物業。"
+          ],
+          "limitations": ["不將全苑車位總數解讀成每幢隨附泊車權；保安宣傳未轉寫為保證。"]
+        },
+        {
+          "url": "https://www.28hse.com/buy/apartment/property-4004523",
+          "status": "existing-evidence",
+          "observations": ["輸入晉誠放盤標題明列花園洋房。"],
+          "limitations": ["本次未重讀放盤，不採用花園面積、極少放盤或價值判斷。"]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "翠景花園｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "翠景花園位於青泰路20號。花園是此類洋房的主要比較項目，須核對界線、排水及維護責任，而不只憑放盤面積描述。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "chun-wo-sea-view-garden",
+      "nameZh": "春和海景花園",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/chun-wo-sea-view-garden",
+      "httpStatus": 200,
+      "descriptionChars": 145,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "春和海景花園位於青山公路青山灣段，屬掃管笏一帶的分層私人住宅。屋苑提供家庭型單位，現有放盤亦有露台及連車位的選擇，可按室內空間、戶外活動和駕車需要逐項比較。\n\n公開屋苑資料列有泳池、網球及壁球設施，康樂配套可與單位布局一起考慮。個別放盤以沙灘海景作介紹，景觀仍須按座數、樓層及室內實際視線核對。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/3d/3dab39f1fedbe804e074e8d35d439f2172895f10d37e89a222b30af49a4c7a85.jpg",
+        "seoTitle": "春和海景花園｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "春和海景花園位於青山公路青山灣段33號。看樓時應分別站在客飯廳及露台確認景觀，同時了解臨青山公路一側的開窗環境。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/3d/3dab39f1fedbe804e074e8d35d439f2172895f10d37e89a222b30af49a4c7a85.jpg",
+        "listingNo": "A043099-6679648-S",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4028649",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/3d/3dab39f1fedbe804e074e8d35d439f2172895f10d37e89a222b30af49a4c7a85.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/3d/3dab39f1fedbe804e074e8d35d439f2172895f10d37e89a222b30af49a4c7a85.jpg",
+          "alt": "《可泊2車》 黃金地段沙灘海景！高樓底有露台！有匙即看！"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E6%98%A5%E5%92%8C%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92/2-SUOVFROYRD",
+          "status": "retrieved",
+          "observations": [
+            "確認Spring Seaview Terrace、青山公路青山灣段33號、三座樓宇及較大實用面積選擇。"
+          ],
+          "limitations": [
+            "中原列81戶，28Hse列82戶，文案不採用單位總數。保留權威完整地址，不改用放盤簡寫青山公路青山灣33號。"
+          ]
+        },
+        {
+          "url": "https://www.28hse.com/buy/apartment/property-4028649",
+          "status": "retrieved",
+          "observations": [
+            "晉誠A座放盤提及沙灘海景、高樓底、露台及可泊2車。",
+            "屋苑介紹列家庭間隔、會所、泳池及運動設施，交通欄列黃金泳灘站。"
+          ],
+          "limitations": [
+            "未把個別單位的樓底、車位或海景推廣為全苑；不採用估算步行分鐘與廣告價格。"
+          ]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "春和海景花園｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "春和海景花園位於青山公路青山灣段33號。看樓時應分別站在客飯廳及露台確認景觀，同時了解臨青山公路一側的開窗環境。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "chung-yuet-waan",
+      "nameZh": "棕月灣",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/chung-yuet-waan",
+      "httpStatus": 200,
+      "descriptionChars": 142,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "棕月灣位於青山公路青山灣段，屬掃管笏一帶的私人住宅。屋苑以家庭型單位為主，現有放盤包括複式選擇，適合把公共活動空間與睡房分層的安排納入比較。\n\n屋苑資料列有泳池、健身室和兒童遊樂設施，可連同日常家庭活動需要一起評估。複式與一般分層單位的生活動線不同，看樓時宜逐層了解房間、浴室及收納配置。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/0e/0e34d2bf93186ff756e2db1fbbde1ece2a36f6a1cfac0994fe9c67472a23fb1b.webp",
+        "seoTitle": "棕月灣｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "棕月灣位於青山公路青山灣段，屬掃管笏一帶的私人住宅。屋苑以家庭型單位為主，現有放盤包括複式選擇，適合把公共活動空間與睡房分層的安排納入比較。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/0e/0e34d2bf93186ff756e2db1fbbde1ece2a36f6a1cfac0994fe9c67472a23fb1b.webp",
+        "listingNo": "SYNC-85e20f43-7e40-4938-8eaa-c684db6ef5db",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3997966",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/0e/0e34d2bf93186ff756e2db1fbbde1ece2a36f6a1cfac0994fe9c67472a23fb1b.webp",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/0e/0e34d2bf93186ff756e2db1fbbde1ece2a36f6a1cfac0994fe9c67472a23fb1b.webp",
+          "alt": "全幢覆式!黃金地段!連車位!"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/4/3/6/ac1cc79e84a2f73293aaba1102859421.jpeg",
+          "alt": "棕月灣 第02座 售盤 #C003079"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E6%A3%95%E6%9C%88%E7%81%A3/2-KEPPWPPYPG",
+          "status": "retrieved",
+          "observations": [
+            "確認Palm Beach、青山灣段28號、兩座住宅及較大面積單位。",
+            "設施列室外泳池、兒童嬉水池、兒童遊樂場及健身室。"
+          ],
+          "limitations": ["歷史成交欄有極低金額個案，未確定交易性質，不採用其價格或推論全苑市價。"]
+        },
+        {
+          "url": "https://www.28hse.com/buy/apartment/property-3997966",
+          "status": "retrieved",
+          "observations": ["晉誠1座低層放盤明列複式、連車位、套房及海景，交通欄列黃金泳灘站。"],
+          "limitations": [
+            "標題稱全幢覆式，但頁面同時列1座低層；新文案只稱複式選擇，不推論整座或整幢獨立業權。保留完整青山灣段28號地址。"
+          ]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "棕月灣｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "棕月灣位於青山公路青山灣段，屬掃管笏一帶的私人住宅。屋苑以家庭型單位為主，現有放盤包括複式選擇，適合把公共活動空間與睡房分層的安排納入比較。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "fei-yeung",
+      "nameZh": "飛揚",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/fei-yeung",
+      "httpStatus": 200,
+      "descriptionChars": 147,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "飛揚位於青山公路大欖段，是分期發展的分層私人住宅屋苑。不同期數、座數與戶型提供不同空間選擇，尋找自住單位時可先確認所需間隔，再比較客飯廳形狀及睡房尺度。\n\n屋苑包含由較精簡至家庭型的戶型，家具擺位和收納安排對實際居住感受尤其重要。看樓時宜按具體期數及單位平面圖，逐一核對廚房、浴室與生活空間的比例。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/b/f/c/e8f252c0a4992f4c2192d8e4459b43a8.jpg",
+        "seoTitle": "飛揚｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "飛揚位於青山公路大欖段170號。必須核對放盤所屬期數和座數；不同戶型的間隔、外望方向及出入口路程不能互相套用。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/b/f/c/e8f252c0a4992f4c2192d8e4459b43a8.jpg",
+        "listingNo": "R068782-6712362-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6712362.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/b/f/c/e8f252c0a4992f4c2192d8e4459b43a8.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/f9/f979495f8408d9b5f72c30763dd04adb3d89ae08c0501674bbae3f1bdcce01f3.jpg",
+          "alt": "《最新減價》 實用1房！青公大型半新屋苑！開揚泳池景！"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/c1/c15bfbf8ec820cd9dd5826ceb56b8aa6e2ba5b87d1c026466c8e76793efd221d.jpg",
+          "alt": "《高層有海景》2房梗廚！青公半新樓！"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/f3/f344f02416e270633a0a6b86faa7a1c3c6431768f20ac0a6281972337ca524ab.jpg",
+          "alt": "《高層全海景》實用3房套梗廚！靚裝修！青公路邊半新樓！"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/58/58a86c2d6bbda9899aa95d7db8fd941b4928fd85ce981866d53fd0a233acf866.webp",
+          "alt": "3房套+工人房!明廁全部有窗!全新未住!可加車位!"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/9d/9d86c5ad07414b390c50a5c293c5a9da111079d3ed1e2a51d3b377f3c8828b93.webp",
+          "alt": "2房梗廚半新樓!青公路邊!有匙即看!"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/6/8/9/7156a321332e051c1af4e46043e59dae.jpg",
+          "alt": "飛揚 第03座 售盤 #R071729"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.house730.com/estate-39981/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E9%A3%9B%E6%8F%9A/",
+          "status": "retrieved",
+          "observations": ["確認Grand Jete、青山公路大欖段170號、兩期發展及一至三房。"],
+          "limitations": [
+            "頁面結構欄列4座，簡介卻稱2座，故不刊座數總量。未新增未列明的會所或交通服務。"
+          ]
+        },
+        {
+          "url": "https://www.28hse.com/buy/apartment/property-4060439",
+          "status": "existing-evidence",
+          "observations": ["輸入晉誠放盤為飛揚2期一房，標題提及泳池景。"],
+          "limitations": ["本次未重讀放盤，景觀僅指個別單位，不採用最新減價或投資回報宣傳。"]
+        },
+        {
+          "url": "https://www.28hse.com/buy/apartment/property-4058299",
+          "status": "existing-evidence",
+          "observations": ["輸入晉誠放盤為飛揚1期兩房梗廚。"],
+          "limitations": ["廚房形式須按具體戶型確認，不推論所有兩房相同。"]
+        },
+        {
+          "url": "https://www.28hse.com/rent/apartment/property-4034694",
+          "status": "existing-evidence",
+          "observations": ["輸入晉誠放盤為飛揚1期三房套梗廚，標題提及海景。"],
+          "limitations": ["本次未重讀放盤，不以該單位條件代表全苑。"]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "飛揚｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "飛揚位於青山公路大欖段170號。必須核對放盤所屬期數和座數；不同戶型的間隔、外望方向及出入口路程不能互相套用。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "hoi-ching-hin",
+      "nameZh": "海澄軒",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/hoi-ching-hin",
+      "httpStatus": 200,
+      "descriptionChars": 142,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "海澄軒位於小欖青發街，是分層私人住宅屋苑，與其他地區的同名物業須清楚區分。現有放盤包括連車位的家庭型選擇，可把房間分布、客飯廳和泊車需要一起考慮。\n\n公開屋苑資料列有泳池、健身室、壁球場及園林花園，屋內外活動空間可一併比較。各座與不同樓層的景觀、採光及出入動線仍有差別，宜按實際單位看樓。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1b/1b335c3abf6400edd5f2561e9ad05fb3d18553c173a397a718712b057f500d80.webp",
+        "seoTitle": "海澄軒｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "海澄軒位於青發街8號。應先確認是小欖青發街的 Villa Sapphire，並核對連車位條款及大堂至停車位置的動線。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1b/1b335c3abf6400edd5f2561e9ad05fb3d18553c173a397a718712b057f500d80.webp",
+        "listingNo": "SYNC-c40013f9-6fb7-475a-a747-76d19915563e",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3984304",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1b/1b335c3abf6400edd5f2561e9ad05fb3d18553c173a397a718712b057f500d80.webp",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1b/1b335c3abf6400edd5f2561e9ad05fb3d18553c173a397a718712b057f500d80.webp",
+          "alt": "《連車位》 平價4房套!環境清靜!"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/6/d/7/b23de41644789566ade81139052c23a0.jpg",
+          "alt": "海澄軒 第02座 售盤 #T034061"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E6%B5%B7%E6%BE%84%E8%BB%92/2-KEEAWPSXPD",
+          "status": "retrieved",
+          "observations": [
+            "確認Villa Sapphire、小欖青發街8號及兩座住宅。",
+            "明列泳池、健身室、壁球場、園林花園及兒童遊樂設施；面積資料涵蓋普通與較大單位。"
+          ],
+          "limitations": ["不以屋苑設施清單保證目前開放狀況，不採用即時叫價。"]
+        },
+        {
+          "url": "https://www.28hse.com/buy/apartment/property-3984304",
+          "status": "existing-evidence",
+          "observations": ["輸入晉誠放盤標題為連車位四房套。"],
+          "limitations": ["本次未重新讀取，不採用平價或環境清靜的廣告比較判斷。"]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "海澄軒｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "海澄軒位於青發街8號。應先確認是小欖青發街的 Villa Sapphire，並核對連車位條款及大堂至停車位置的動線。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "hoi-king-garden",
+      "nameZh": "海景花園",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/hoi-king-garden",
+      "httpStatus": 200,
+      "descriptionChars": 149,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "海景花園位於三聖青榕街，是由多座住宅大廈組成的私人屋苑。屋苑有不同間隔選擇，家庭可按睡房數目、客飯廳布局及收納需要比較單位，並留意座數與外望方向的分別。\n\n公開屋苑資料列有室外泳池、網球場、羽毛球及兒童遊樂設施，適合把康樂配套納入日常生活考慮。屋苑名稱包含「海景」，但每個單位的視野仍須在實際樓層確認。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/f/8/5/08afcca7aaada5af73483caa275d1fab.jpg",
+        "seoTitle": "海景花園｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "海景花園位於青榕街1號。不同座向的海景及遮擋情況可能不同，應在客廳和睡房分別確認視野，而非只憑屋苑名稱。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/f/8/5/08afcca7aaada5af73483caa275d1fab.jpg",
+        "listingNo": "A072841-6718458-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6718458.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/f/8/5/08afcca7aaada5af73483caa275d1fab.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/f/8/5/08afcca7aaada5af73483caa275d1fab.jpg",
+          "alt": "海景花園 放盤 #A072841"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92/2-KEBAGPYXPB",
+          "status": "retrieved",
+          "observations": [
+            "確認Seaview Garden、三聖青榕街1號及多座住宅。",
+            "頁面有兩房、三房分類，設施列泳池、壁球、網球、羽毛球及兒童遊樂。"
+          ],
+          "limitations": ["不推論全苑海景，不引用即時成交及叫價。"]
+        },
+        {
+          "url": "https://www.earnestproperty.com/property-detail/6718458.html",
+          "status": "existing-evidence",
+          "observations": ["輸入含晉誠海景花園租售放盤及一致青榕街1號地址。"],
+          "limitations": ["本次未重讀該放盤，不新增該單位房數、景觀或可用狀態。"]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "海景花園｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "海景花園位於青榕街1號。不同座向的海景及遮擋情況可能不同，應在客廳和睡房分別確認視野，而非只憑屋苑名稱。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "hoi-wai-garden",
+      "nameZh": "海慧花園",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/hoi-wai-garden",
+      "httpStatus": 200,
+      "descriptionChars": 141,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "海慧花園位於三聖青茵街，是兼有分層住宅與洋房的私人屋苑。不同住宅類型的室內分布、戶外空間及出入口各有特色，可先按生活方式選定類型，再比較具體放盤。\n\n現有放盤涵蓋洋房選擇，公用康樂資料亦列有泳池及運動設施。看樓時宜把單位、停車位置和公用部分串連成日常動線，了解實際使用是否符合家庭需要。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d1/d17aaef525ccba8aef3715c2d34cf13a655aa203e295814b72c7bf0070307166.jpg",
+        "seoTitle": "海慧花園｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "海慧花園位於青茵街8號。同苑的分層住宅與洋房不可直接套用相同條件；花園、平台及車位權益須按個別物業核對。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d1/d17aaef525ccba8aef3715c2d34cf13a655aa203e295814b72c7bf0070307166.jpg",
+        "listingNo": "C003992-6715362-S",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4046208",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d1/d17aaef525ccba8aef3715c2d34cf13a655aa203e295814b72c7bf0070307166.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/1/9/f/df30d3d29dd01b9adbfec3e4e9482802.jpg",
+          "alt": "海慧花園 放盤 #A046737"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/1/d/4/2176f346fcd1d670b0e3516d44f0dd58.jpg",
+          "alt": "海慧花園 售盤 #B053826"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d1/d17aaef525ccba8aef3715c2d34cf13a655aa203e295814b72c7bf0070307166.jpg",
+          "alt": "向南臨海花園洋房！獨立車房！豪華靚裝！歐陸情懷！歡迎參觀！"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.wepropertyhk.com/estate-detail/759d4f57-5532-4fb6-aecc-66da22caff3b",
+          "status": "retrieved",
+          "observations": ["確認三聖青茵街8號，簡介明列分層樓宇與洋房。"],
+          "limitations": ["不採用泛用鐵路鄰近程度或頁面即時成交中位數。"]
+        },
+        {
+          "url": "https://www.28hse.com/buy/apartment/property-4046208",
+          "status": "retrieved",
+          "observations": [
+            "晉誠全幢洋房放盤列花園、天台、平台、獨立車房及向南海景。",
+            "屋苑介紹列會所、泳池、兒童與運動設施，交通欄列碧翠花園及海景花園站點。"
+          ],
+          "limitations": [
+            "頁面屋苑座數欄與簡介有不同合計方式，且入伙月份與WeProperty有差異，故不刊座數及入伙月份。戶外與車房特色只指個別洋房。"
+          ]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "海慧花園｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "海慧花園位於青茵街8號。同苑的分層住宅與洋房不可直接套用相同條件；花園、平台及車位權益須按個別物業核對。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "hoi-yu",
+      "nameZh": "海譽",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/hoi-yu",
+      "httpStatus": 200,
+      "descriptionChars": 145,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "海譽位於三聖青榕街，是單幢式私人住宅。與多座式屋苑相比，選盤時可更集中比較同一大廈內不同樓層及座向，並按房間位置、客飯廳比例及採光挑選合用單位。\n\n公開屋苑資料列有泳池、健身室及閱讀空間，現有放盤亦以海景和車位選配作介紹。景觀與泊車條件均應逐項確認，並把大堂、車庫與住宅之間的日常動線納入考慮。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae65106225cd33e3cba9bd939a30e2f5e1972ab8f793112753fbed9c0355d94c.webp",
+        "seoTitle": "海譽｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "海譽位於青榕街3號。現有放盤提及可配車位，須確認是另租、另購還是包含在條件內，並實地核對海景視線。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae65106225cd33e3cba9bd939a30e2f5e1972ab8f793112753fbed9c0355d94c.webp",
+        "listingNo": "SYNC-9cea4fe5-c3d4-4d53-81bf-3c9bbe4242f8",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3993979",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae65106225cd33e3cba9bd939a30e2f5e1972ab8f793112753fbed9c0355d94c.webp",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae65106225cd33e3cba9bd939a30e2f5e1972ab8f793112753fbed9c0355d94c.webp",
+          "alt": "《有匙即看》 全海景!可平配車位!青榕街樓齡最新!"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/9/2/1/409b84c5e9e0158b9b59689350722e88.jpeg",
+          "alt": "海譽 售盤 #A061940"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.ricacorp.com/zh-hk/property/estate/%E6%B5%B7%E8%AD%BD-single-%E4%B8%89%E8%81%96-hma-hk",
+          "status": "retrieved",
+          "observations": ["確認青榕街3號及單幢住宅。", "設施明列室外泳池、健身室及閱讀室。"],
+          "limitations": ["不以來源即時放盤數或成交缺項推論可用供應。"]
+        },
+        {
+          "url": "https://www.oneday.com.hk/zh_HK/buildings/crown-by-the-sea/",
+          "status": "retrieved",
+          "observations": [
+            "確認Crown By The Sea及青榕街3號身份。",
+            "交通欄列海景花園、碧翠花園及青榕街候車點。"
+          ],
+          "limitations": ["樓齡欄有過時數值，交通欄可能未更新；不刊樓齡、路線號碼、距離或班次。"]
+        },
+        {
+          "url": "https://www.28hse.com/buy/apartment/property-3993979",
+          "status": "existing-evidence",
+          "observations": ["輸入晉誠放盤標題提及海景及可配車位。"],
+          "limitations": ["本次未重讀放盤，不採用全海景保證、平配或區內樓齡最新的比較宣傳。"]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "海譽｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "海譽位於青榕街3號。現有放盤提及可配車位，須確認是另租、另購還是包含在條件內，並實地核對海景視線。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "kwan-lun",
+      "nameZh": "琨崙",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/kwan-lun",
+      "httpStatus": 200,
+      "descriptionChars": 143,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "琨崙位於小欖青發里，是結合分層、複式及洋房設計的低密度私人住宅。不同組別和戶型的垂直動線與戶外空間各有分別，選盤前宜先確認是分層單位還是全幢洋房。\n\n公開屋苑資料列有會所、泳池及兒童設施，現有放盤亦可見金琥珀等組別名稱。看樓時宜按實際組別與單位圖則，逐層比較生活、睡房和戶外活動空間的安排。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/b/5/1/464f55ec15fb07fa1daa36fad11b8d07.jpeg",
+        "seoTitle": "琨崙｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "琨崙位於青發里8號。放盤可能使用洋房組別名稱描述分層或複式單位，須核對樓層範圍及是否包含全幢物業。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/b/5/1/464f55ec15fb07fa1daa36fad11b8d07.jpeg",
+        "listingNo": "A049791-6772048-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6772048.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/b/5/1/464f55ec15fb07fa1daa36fad11b8d07.jpeg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/5/3/0/28c2336d49ddff9b79d6690f8dce1e6f.jpg",
+          "alt": "琨崙 青玥琳 洋房 放盤 #A062602"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/b/5/1/464f55ec15fb07fa1daa36fad11b8d07.jpeg",
+          "alt": "琨崙 金琥珀 洋房 售盤 #A049791"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/d/d/8/3041e8971099a02ffd7f535f406e937e.jpg",
+          "alt": "琨崙 金琥珀 洋房 售盤 #A060071"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/8/8/9/d7ae7086fbcea50c94e0acab85cba572.jpeg",
+          "alt": "琨崙 金琥珀 洋房 售盤 #A052224"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.hkp.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B1%AF%E9%96%80-%E7%90%A8%E5%B4%99-E000014030",
+          "status": "retrieved",
+          "observations": [
+            "確認Jade Grove、青發里8號、分層樓宇及獨立屋並存。",
+            "明列低密度、複式及洋房設計，會所、泳池及兒童設施；成交地址可見上下層室號。"
+          ],
+          "limitations": ["組別含洋房字眼未必代表全幢交易，不將全苑停車位總量套用個別物業。"]
+        },
+        {
+          "url": "https://hk.centanet.com/estate/%E7%90%A8%E5%B4%99/1-KESPWDPSPG",
+          "status": "retrieved",
+          "observations": ["確認小欖青發里8號、Jade Grove身份及較大面積定位。"],
+          "limitations": ["未由整體座數或面積範圍推論具體放盤權益。"]
+        },
+        {
+          "url": "https://www.earnestproperty.com/property-detail/6772048.html",
+          "status": "existing-evidence",
+          "observations": ["輸入晉誠放盤使用金琥珀組別。"],
+          "limitations": ["本次未重讀放盤，不推論全幢或花園權益。"]
+        },
+        {
+          "url": "https://www.property.hk/asking_detail/ept/tommyyiu/6819098.html",
+          "status": "existing-evidence",
+          "observations": ["輸入晉誠放盤使用青玥琳組別。"],
+          "limitations": ["本次未重讀放盤，不推論全幢或車位已包括。"]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "琨崙｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "琨崙位於青發里8號。放盤可能使用洋房組別名稱描述分層或複式單位，須核對樓層範圍及是否包含全幢物業。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "kwun-hoi-villas",
+      "nameZh": "觀海別墅",
+      "districtSlug": "ting-kau",
+      "url": "https://www.earnestproperty.com/estate/kwun-hoi-villas",
+      "httpStatus": 200,
+      "descriptionChars": 140,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "觀海別墅位於青山公路汀九段，屬汀九／油柑頭一帶的私人住宅。公開屋苑資料及成交紀錄可見複式選擇，適合希望把起居與睡房分層安排的家庭按實際圖則比較。\n\n此處的生活範圍應按汀九及荃灣方向規劃。看樓時可把屋內樓梯、入口與停車安排一併了解，並留意樓宇及公用部分的保養，衡量是否符合日常使用習慣。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/b/b/0/70a74c8ec7bd8c429dc7f4c59e963c7c.jpg",
+        "seoTitle": "觀海別墅｜油柑頭／汀九屋苑資料、租售放盤",
+        "seoDescription": "觀海別墅位於青山公路汀九段386號。汀九地址不可與屯門同類海濱屋苑混淆；複式單位應逐層檢視樓梯、採光和室內保養。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/b/b/0/70a74c8ec7bd8c429dc7f4c59e963c7c.jpg",
+        "listingNo": "T034250-6765816-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6765816.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/b/b/0/70a74c8ec7bd8c429dc7f4c59e963c7c.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/b/b/0/70a74c8ec7bd8c429dc7f4c59e963c7c.jpg",
+          "alt": "觀海別墅 售盤 #T034250"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E8%A7%80%E6%B5%B7%E5%88%A5%E5%A2%85/2-AADKGPWXPE",
+          "status": "retrieved",
+          "observations": ["確認Vista Del Mar、汀九段386號及較大實用面積定位。"],
+          "limitations": [
+            "中原列1座，美聯列3座，故新文案不刊座數。兩來源均指向同一汀九地址，未改動權威地址。"
+          ]
+        },
+        {
+          "url": "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E9%BA%97%E5%9F%8E-%E6%B1%80%E4%B9%9D-%E8%A7%80%E6%B5%B7%E5%88%A5%E5%A2%85-E09072",
+          "status": "retrieved",
+          "observations": [
+            "確認汀九段386號、成熟住宅及大面積範圍。",
+            "成交欄有明列複式的單位，且註有特殊成交個案。"
+          ],
+          "limitations": [
+            "不採用特殊成交作一般估值，不引用來源的泳灘步行分鐘或區內充電站作屋苑設施。"
+          ]
+        },
+        {
+          "url": "https://www.earnestproperty.com/property-detail/6765816.html",
+          "status": "existing-evidence",
+          "observations": ["輸入晉誠放盤地址與汀九段386號一致。"],
+          "limitations": ["本次未重讀，不新增該單位樓層、景觀、車位或即時可用狀態。"]
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "觀海別墅｜油柑頭／汀九屋苑資料、租售放盤",
+      "renderedSeoDescription": "觀海別墅位於青山公路汀九段386號。汀九地址不可與屯門同類海濱屋苑混淆；複式單位應逐層檢視樓梯、採光和室內保養。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "lung-chu-island-garden",
+      "nameZh": "龍珠島花園",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/lung-chu-island-garden",
+      "httpStatus": 200,
+      "descriptionChars": 144,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "龍珠島花園位於青龍路，是龍珠島一帶由低層住宅組成的私人屋苑。公開屋苑資料可見家庭型間隔，部分成交紀錄亦涉及花園或天台，可按樓層與戶外空間需要比較單位。\n\n屋苑設有泳池，日常康樂與單位內部空間可一併考慮。不同樓層的出入方式、採光及戶外使用條件未必相同，看樓時宜由入口走到單位，完整體驗日常路程。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8e/8ebd6372f460076ae63aaf5e630aae6081ed36b7ec724ad4a7907b06155a2861.jpg",
+        "seoTitle": "龍珠島花園｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "龍珠島花園位於青龍路11號。看樓前應確認上落樓層方式；花園、天台及平台是否專用和隨物業轉讓，須逐項核對。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8e/8ebd6372f460076ae63aaf5e630aae6081ed36b7ec724ad4a7907b06155a2861.jpg",
+        "listingNo": "SYNC-55aa821d-ff30-4410-bc61-b1cfbc59bea6",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4045561",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8e/8ebd6372f460076ae63aaf5e630aae6081ed36b7ec724ad4a7907b06155a2861.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/1/c/b/ac9ada811dc0f78880c4b2f38300aaca.jpg",
+          "alt": "龍珠島花園 放盤 #B057799"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ff/ffd102ec6bcf95a1fbb68a7043a1b549d1deb694048b690de251958c44a4b0ff.webp",
+          "alt": "平租開放式!環境清幽!有穿巴出屯門!"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/7b/7bd6184d2843728ac55d48801254f4c84e7c5879e6cd5583f41d36521ed35982.webp",
+          "alt": "《連車位》3房套全海景!有邨巴!世外桃源!"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/b/9/d/f631a3d2e6d10506561574e2139a8820.jpeg",
+          "alt": "龍珠島花園 第07座 租盤 #A049210"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.hkp.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B1%AF%E9%96%80-%E9%BE%8D%E7%8F%A0%E5%B3%B6%E8%8A%B1%E5%9C%92-E00301",
+          "observations": [
+            "確認青龍路11號、低層樓宇及泳池。",
+            "成交紀錄列有家庭型間隔及個別花園、天台、平台、車位組合。"
+          ],
+          "limitation": "成交紀錄屬個別物業，不代表每戶享有戶外空間或車位；未核實現行接駁班次。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "龍珠島花園｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "龍珠島花園位於青龍路11號。看樓前應確認上落樓層方式；花園、天台及平台是否專用和隨物業轉讓，須逐項核對。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "nam-ngon",
+      "nameZh": "南岸",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/nam-ngon",
+      "httpStatus": 200,
+      "descriptionChars": 149,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "南岸位於三聖一帶的青山公路青山灣段，是單幢式分層私人住宅。屋苑以家庭型間隔為主，公開資料介紹有獨立廚房、露台及工作平台，可按煮食、收納和家庭活動需要比較。\n\n屋苑資料列有泳池、健身室、兒童設施及燒烤空間，住宅與康樂配套可一併評估。不同座向的單位面向景觀有所分別，宜在客飯廳、睡房及露台逐一確認實際視野。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/04/04d8c87b1df833e08daf623c83d49617d34e3e3488192af9a11e5d0ef553209f.jpg",
+        "seoTitle": "南岸｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "南岸位於青山公路青山灣段116號。須在室內核對青山灣方向的視野及遮擋，並檢查露台、工作平台與客飯廳的使用動線。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/04/04d8c87b1df833e08daf623c83d49617d34e3e3488192af9a11e5d0ef553209f.jpg",
+        "listingNo": "SYNC-ccf8f4a6-8696-4ad3-869c-fc1852857135",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4045588",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/04/04d8c87b1df833e08daf623c83d49617d34e3e3488192af9a11e5d0ef553209f.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/4/5/4/7313817dd45bb161baeeb2c125071d25.jpeg",
+          "alt": "南岸 放盤 #A056275"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/e3/e34f698bdcd0d4ab7c24662cb4f775ae902d583af232af5f8f62cb3b630a3177.jpg",
+          "alt": "《3房套連內置樓梯上天台》向海連車位！有匙即看！"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/c/6/b/a825f4cac91cfa84537b69460fb86e89.jpg",
+          "alt": "南岸 售盤 #B048806"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.house730.com/estate-23769/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E5%8D%97%E5%B2%B8/",
+          "observations": [
+            "確認南岸 South Crest 及青山公路青山灣段116號。",
+            "資料介紹三房、獨立廚房、露台、工作平台、泳池與健身及兒童設施，並區分不同座向景觀。"
+          ],
+          "limitation": "頁面樓層計算有不同表述，未採用樓層總數；交通班次和個別單位視野仍需實地核實。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "南岸｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "南岸位於青山公路青山灣段116號。須在室內核對青山灣方向的視野及遮擋，並檢查露台、工作平台與客飯廳的使用動線。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "napa",
+      "nameZh": "NAPA",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/napa",
+      "httpStatus": 200,
+      "descriptionChars": 143,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "NAPA位於掃管笏路，是同時提供分層住宅與洋房的私人屋苑。兩類物業在樓層分布、戶外空間及出入動線上各有特色，可先確定家庭需要，再比較具體座數與單位。\n\n公開屋苑資料列有會所、泳池及娛樂設施，康樂活動可連同居住空間一起考慮。看樓時宜由實際住宅入口走到公用設施及停車位置，了解日常路程是否合用。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/8/2/9/7c6b63e09c39928784f20d761c23bd89.jpg",
+        "seoTitle": "NAPA｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "NAPA位於掃管笏路88號。分層與洋房放盤的花園、天台和車位條件各有不同，必須按個別單位圖則及租售條款核對。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/8/2/9/7c6b63e09c39928784f20d761c23bd89.jpg",
+        "listingNo": "A063817-6761032-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6761032.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/8/2/9/7c6b63e09c39928784f20d761c23bd89.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/5/7/f/9a523fda422d305a56664e54020819f7.jpeg",
+          "alt": "NAPA TWR 01 放盤 #B054537"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/f/1/2/720634634571731b07c9b67a277e78d5.jpg",
+          "alt": "NAPA TWR 06 售盤 #A054710"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/49/49c5452ef8324b1038d22a7180fad7db681a2507f5433edd1b09fd57c01a2c48.webp",
+          "alt": "《有匙即看》 2房梗廚房!有村巴出屯門市中心!"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/2d/2d5f30264a1af83c2de095b8e95eb06461fa7e28c85c4e91e59e5c9f58f5e314.webp",
+          "alt": "4房2套!連大平台內置梯上天台!"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/8/2/9/7c6b63e09c39928784f20d761c23bd89.jpg",
+          "alt": "掃管笏路88號, 屯門, #A063817 售盤 #A063817"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/9/3/9/85dd3427ed049ed5b3100feab9fd23d7.jpg",
+          "alt": "NAPA HSE 售盤 #A069372"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/en/Napa/1-KEEPWWPOPG",
+          "observations": [
+            "確認NAPA、掃管笏路88號及分層住宅與洋房並存。",
+            "公開成交與放盤分類可見不同房數和住宅類型。"
+          ],
+          "limitation": "本次中原頁面摘錄未列會所細項；泳池及休閒設施沿用輸入的既有來源支持內容，未宣稱開放時間或接駁班次已核實。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "NAPA｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "NAPA位於掃管笏路88號。分層與洋房放盤的花園、天台和車位條件各有不同，必須按個別單位圖則及租售條款核對。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "nga-tak-yuen",
+      "nameZh": "雅德苑",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/nga-tak-yuen",
+      "httpStatus": 200,
+      "descriptionChars": 141,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "雅德苑位於三聖青榕街，是分層私人住宅屋苑。公開屋苑資料所列單位以較寬敞的家庭空間為特色，選盤時可仔細比較客飯廳形狀、睡房分布，以及實際家具擺位。\n\n屋苑資料列有室外泳池及日光浴空間，可連同家庭的休閒習慣一起評估。看樓時亦宜了解公用部分與單位內部的保養，並比較不同座數和樓層的採光及外望。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/59/5992dd4bc265744fd9e4d96156c41241afc9c4daf5c09f67a29af9fb643732f8.jpg",
+        "seoTitle": "雅德苑｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "雅德苑位於青榕街6號。大戶型應按家具尺寸實測客飯廳與房間，並檢查窗邊、浴室和公用部分的保養狀況。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/59/5992dd4bc265744fd9e4d96156c41241afc9c4daf5c09f67a29af9fb643732f8.jpg",
+        "listingNo": "SYNC-2d0f3053-0873-4de0-92b3-9becf16b01f5",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4060617",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/59/5992dd4bc265744fd9e4d96156c41241afc9c4daf5c09f67a29af9fb643732f8.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/2/d/d/cfa0bad31ef0feb73b22060cdbd4308a.jpg",
+          "alt": "雅德苑 第02座 放盤 #C010698"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.house730.com/estate-23775/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E9%9B%85%E5%BE%B7%E8%8B%91/",
+          "observations": ["確認青榕街6號、兩座住宅及大面積單位成交紀錄。"],
+          "limitation": "本頁管理公司寫信和，與HomeDash寫富城不同，正文不採用管理公司名稱。"
+        },
+        {
+          "url": "https://www.homedash.hk/zh-cn/estate-Faraday-House-2-ZMHLTHDEHN",
+          "observations": ["確認三聖位置、1,751至1,761平方呎面積範圍、室外泳池及日光浴場。"],
+          "limitation": "管理公司與House730不一致，應由管理處確認現任安排；未沿用平台評分及通勤時間估算。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "雅德苑｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "雅德苑位於青榕街6號。大戶型應按家具尺寸實測客飯廳與房間，並檢查窗邊、浴室和公用部分的保養狀況。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "ocean-camino",
+      "nameZh": "緹岸",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/ocean-camino",
+      "httpStatus": 200,
+      "descriptionChars": 142,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "緹岸位於掃管笏管翠路，是分期發展、兼有分層住宅與洋房的私人屋苑。戶型由較精簡單位至家庭型住宅皆有，選盤時宜先釐清期數、座數及住宅類型，再比較間隔。\n\n公開屋苑資料列有會所、泳池及娛樂設施，可連同屋內活動空間一起考慮。各期大廈與洋房的出入口及步行路線不同，應由實際單位出發了解日常使用動線。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/5d/5d85da6a8de8c28c54b5e2b36d3cbf06119908de5d0ddbfc64915afcf7f407b1.jpg",
+        "seoTitle": "緹岸｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "緹岸位於管翠路8號。須核對第幾期、座數及分層或洋房類型，並按實際平面圖評估睡房、收納及家具擺位。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/5d/5d85da6a8de8c28c54b5e2b36d3cbf06119908de5d0ddbfc64915afcf7f407b1.jpg",
+        "listingNo": "SYNC-668a72af-2a38-4dac-bf2f-ac512e2c9466",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4053270",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/5d/5d85da6a8de8c28c54b5e2b36d3cbf06119908de5d0ddbfc64915afcf7f407b1.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2025/3/8/9/8815460b69cd407f8b858dbc2737b34e.jpg",
+          "alt": "緹岸 第03A座 售盤 #A061909"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/d/8/f/5ef623426b4a41c0e2369b71f46f852b.jpg",
+          "alt": "緹岸 第02座 租盤 #A058742"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/8/f/c/4686132e5732d9f83757700340a2cbd6.jpg",
+          "alt": "緹岸 第05座 租盤 #A060144"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/4/a/b/e072e69ea9d89dac14d55e14edde5916.jpg",
+          "alt": "緹岸 第03A座 售盤 #A066460"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/8/b/1/846b2323970e2e84744702aa80527732.jpg",
+          "alt": "緹岸 第03A座 售盤 #A060426"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/3e/3ece4541414092b75e75586ef110530c4b5fdbf1ca51815a7079f6a7a2529c6c.jpg",
+          "alt": "平租開放式！豪華會所有餐廳！"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E7%B7%B9%E5%B2%B8/3-KESPWPPAPG",
+          "observations": [
+            "確認緹岸 Ocean Camino、管翠路8號及分兩期發展。",
+            "屋苑資料及成交紀錄確認住宅大廈、洋房、開放式、一房及多房類型。"
+          ],
+          "limitation": "未依頁面價量製作即時市場結論；本次摘錄未確認康樂設施細項，正文不新增設施名稱。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "緹岸｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "緹岸位於管翠路8號。須核對第幾期、座數及分層或洋房類型，並按實際平面圖評估睡房、收納及家具擺位。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "oi-kam-waan",
+      "nameZh": "愛琴灣",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/oi-kam-waan",
+      "httpStatus": 200,
+      "descriptionChars": 142,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "愛琴灣位於小欖青發街，提供分層、複式及獨立屋等住宅選擇。不同類型的樓層安排與戶外空間各有特色，可按家庭對上下樓、室內面積分布及戶外活動的需要選盤。\n\n屋苑資料列有泳池、健身室、兒童遊樂及桑拿等設施，可把康樂配套與居住空間一併比較。現有放盤出現不同組別名稱，宜按實際門牌及圖則辨認單位類型。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/d/a/9/d118a89a3ac63d2afa96c9b06b05a0f3.jpg",
+        "seoTitle": "愛琴灣｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "愛琴灣位於青發街2號。應核對組別名稱對應的是分層、複式還是獨立屋，避免把天台或花園條件套用至其他戶型。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/d/a/9/d118a89a3ac63d2afa96c9b06b05a0f3.jpg",
+        "listingNo": "A061213-6757498-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6757498.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/d/a/9/d118a89a3ac63d2afa96c9b06b05a0f3.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/5b/5b56d39bfa1ecbecec9c0286e46ca520cc2913e4e1114581bafebeef47e19831.webp",
+          "alt": "《有匙即看》4房靚裝修洋房!特多空間!連車位!"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/55/55c29ff46b28920119d905075a76efce6c34a53418c7559be493eed9b7fe4b17.webp",
+          "alt": "《連車位》有露台向南開揚!環境清靜!青公路邊!即約即睇!"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/d/a/9/d118a89a3ac63d2afa96c9b06b05a0f3.jpg",
+          "alt": "愛琴灣 SANTORINI 售盤 #A061213"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.house730.com/estate-23793/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E6%84%9B%E7%90%B4%E7%81%A3/",
+          "observations": [
+            "確認The Aegean、青發街2號及分層、複式、獨立屋類型。",
+            "資料列泳池、健身室及兒童活動設施。"
+          ],
+          "limitation": "屋苑整體車位數不代表每個放盤包含車位；未採用即時叫價。"
+        },
+        {
+          "url": "https://www.newtohk.com/estates/the-aegean",
+          "observations": ["地址及中英文身份與輸入一致。"],
+          "limitation": "平台交通及步行估算未獨立核實，正文不採用時間、路線編號及校網推算。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "愛琴灣｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "愛琴灣位於青發街2號。應核對組別名稱對應的是分層、複式還是獨立屋，避免把天台或花園條件套用至其他戶型。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "oma-by-the-sea",
+      "nameZh": "OMA by the Sea",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/oma-by-the-sea",
+      "httpStatus": 200,
+      "descriptionChars": 150,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "OMA by the Sea位於青山公路大欖段，是以分層住宅為主的私人屋苑。官方項目資料以海濱生活及園林設計作介紹，選盤時可把單位的室內布局、露台安排與實際外望一起比較。\n\n項目介紹設有園林及泳池等康樂空間，可納入家庭日常休閒需要。各單位樓層和座向不同，官方網站亦說明景觀會受周邊環境影響，宜以現場視線作判斷。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/78/7889533d3eea8d8dea6718bc2c140466d853544aeee4f6868eca2953a0d4cd75.jpg",
+        "seoTitle": "OMA by the Sea｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "OMA by the Sea位於青山公路大欖段166號。看樓時須在客飯廳、睡房及露台確認實際景觀，並了解周邊環境對採光及開窗感受的影響。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/78/7889533d3eea8d8dea6718bc2c140466d853544aeee4f6868eca2953a0d4cd75.jpg",
+        "listingNo": "SYNC-63cf5a75-a546-4777-a60f-e67998714471",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4050794",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/78/7889533d3eea8d8dea6718bc2c140466d853544aeee4f6868eca2953a0d4cd75.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/3/e/4/2ddae62c87b16c7d5f82629b95a28c72.jpg",
+          "alt": "OMA BY THE SEA TWR 02 售盤 #A060488"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/c/b/7/6266f50ada7fd3aad829432216d6231b.jpg",
+          "alt": "OMA BY THE SEA 售盤 #A064710"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/61/6152342fb1738f0ab0f5efe7460bcea77c66a1595742ea81f82f76942a22d856.jpg",
+          "alt": "《高質素高層向南海景》 靚裝有Closet位！銀行估到價！"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/9e/9ea96ca4731486deea7dbdfc87f5735e739be07cd687bb788e408df002bb6aa2.jpg",
+          "alt": "《有匙即看》 特大開放式！可間一房！青公路邊半新樓！"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/e3/e3df8e2ca1382dccb9306dc042b010e36c2771dda05ea3dfd798226386e541a4.jpg",
+          "alt": "《2房連平台》 震撼的4XX萬收票！有匙即看！青公路邊！"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d9/d98f6e8245fc9a3ca6683d53335745a2b48d8c970d3f4f4284eb18fdba24e2ba.webp",
+          "alt": "2房向南有海景!開放式廚房!青公路邊半新樓!"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.omabythesea.com/en/",
+          "observations": [
+            "官方頁確認青山公路大欖段166號。",
+            "官方介紹Swiss Wooden-Chalet建築意象、Senses Garden及Rain Forest Pool。",
+            "網站明示圖片經處理、景觀受樓層座向及環境影響，設施使用受規則與可能收費限制。"
+          ],
+          "limitation": "官方部分區域基建資料採較早資料日期，正文未當作現行交通或未來落成承諾。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "OMA by the Sea｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "OMA by the Sea位於青山公路大欖段166號。看樓時須在客飯廳、睡房及露台確認實際景觀，並了解周邊環境對採光及開窗感受的影響。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "palm-cove",
+      "nameZh": "翠濤居",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/palm-cove",
+      "httpStatus": 200,
+      "descriptionChars": 145,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "翠濤居位於三聖青山公路青山灣段，是由多座住宅大廈組成的私人屋苑。屋苑提供不同家庭型間隔，可按睡房數目、客飯廳形狀及日常收納需要，比較座數與戶型。\n\n公開屋苑資料列有泳池、網球場、桌球及兒童遊樂設施，康樂配套可連同單位空間一起考慮。看樓時宜比較大廈與公用設施之間的路程，以及不同樓層的採光與景觀。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8f/8f628dbfe5852a4d770602ea64a9f46751534a19aade4ee06cc48db414e20f81.jpg",
+        "seoTitle": "翠濤居｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "翠濤居位於青山公路青山灣段168號。應按實際座數及樓層確認外望方向，並檢查客飯廳及睡房的家具擺位是否符合家庭需要。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8f/8f628dbfe5852a4d770602ea64a9f46751534a19aade4ee06cc48db414e20f81.jpg",
+        "listingNo": "A066108-6743094-S",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4045648",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8f/8f628dbfe5852a4d770602ea64a9f46751534a19aade4ee06cc48db414e20f81.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/a/f/4/75a13b437695a15d1aa3120f1c65fa6b.jpg",
+          "alt": "翠濤居 售盤 #A040864"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/0/6/1/b55ae9e66fa1af564b33e7c902785a30.jpg",
+          "alt": "翠濤居 第03座 租盤 #A049547"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8f/8f628dbfe5852a4d770602ea64a9f46751534a19aade4ee06cc48db414e20f81.jpg",
+          "alt": "《有匙即看》 向南少海景靚則！近三聖靜中帶旺！"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E7%BF%A0%E6%BF%A4%E5%B1%85/2-KEPPWPPEPB",
+          "observations": [
+            "確認Palm Cove、三聖位置及青山公路青山灣段168號。",
+            "戶型及成交紀錄見兩房、三房；設施列泳池、網球、桌球及兒童活動空間。"
+          ],
+          "limitation": "設施的現行開放及收費未確認；未以頁面放盤價量作趨勢判斷。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "翠濤居｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "翠濤居位於青山公路青山灣段168號。應按實際座數及樓層確認外望方向，並檢查客飯廳及睡房的家具擺位是否符合家庭需要。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "pun-lung-bun-do",
+      "nameZh": "蟠龍半島",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/pun-lung-bun-do",
+      "httpStatus": 200,
+      "descriptionChars": 144,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "蟠龍半島位於掃管笏瑜翠街，是兼有洋房與分層式選擇的低密度私人住宅。不同屋型的室內分布與戶外空間各異，尋找家庭居所時宜先確認屋型及是否包含全幢物業。\n\n屋苑資料列有泳池、運動及兒童設施，現有放盤亦有花園和私家車房的選擇。看樓時可把屋內樓層、戶外休憩及泊車動線串連起來，衡量是否合乎家庭生活習慣。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae8688aeef547cba5a65a0574fc829f5136abab059a9fac3973ccd382d9a9cb3.jpg",
+        "seoTitle": "蟠龍半島｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "蟠龍半島位於瑜翠街2號。必須分清獨立屋與分層洋房；花園、車房、天台及共用地方的範圍應按契約核對。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae8688aeef547cba5a65a0574fc829f5136abab059a9fac3973ccd382d9a9cb3.jpg",
+        "listingNo": "A064056-6604092-S",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3996535",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae8688aeef547cba5a65a0574fc829f5136abab059a9fac3973ccd382d9a9cb3.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d9/d9df143a22cb4b90be56a11aff0aa6c84c215d211d7315cc9e1320e694b39918.webp",
+          "alt": "《有匙即看》低密度向南全海景有露台!連車位!地段矜貴!"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/f/5/5/58f36ff8f1c92336bdc6486c65592f9a.jpg",
+          "alt": "蟠龍半島 放盤 #C009961"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae8688aeef547cba5a65a0574fc829f5136abab059a9fac3973ccd382d9a9cb3.jpg",
+          "alt": "大蟠龍A型獨立屋！全海景大花園獨立車房！有YouTube！"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/6/3/e/1c29efa9c139167f146ebea3d39fe239.jpg",
+          "alt": "蟠龍半島 D型 售盤 #A067118"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hohomehk.com/wiki/estate-wiki-beaulieupeninsula/",
+          "observations": [
+            "確認Beaulieu Peninsula及瑜翠街2號。",
+            "資料與放盤分類同時列分層洋房、獨立屋，並列泳池、網球及兒童設施。"
+          ],
+          "limitation": "資料屬第三方屋苑百科，未沿用其距離估算、學校排名或市場概覽；花園及車房僅沿用輸入中個別放盤證據。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "蟠龍半島｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "蟠龍半島位於瑜翠街2號。必須分清獨立屋與分層洋房；花園、車房、天台及共用地方的範圍應按契約核對。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "royal-cove-tower",
+      "nameZh": "帝灣居",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/royal-cove-tower",
+      "httpStatus": 200,
+      "descriptionChars": 147,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "帝灣居位於掃管笏嘉和里山路，是同時提供分層住宅與洋房的私人項目。分層單位與洋房的房間分布、樓梯及戶外空間各有不同，適合按家庭的日常活動和上下樓需要比較。\n\n公開資料介紹分層單位設有套房及儲物空間，而洋房則有較多分層安排。選盤時宜先核對所屬住宅類型，再把客飯廳、廚房和輔助空間逐一落實到實際家具擺位。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/b/c/e/180ec74c4fd0be97d1d241f51e40bbec.jpg",
+        "seoTitle": "帝灣居｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "帝灣居位於嘉和里山路2號。不能因網址或放盤簡稱含大廈便推斷住宅類型；應核對是分層單位還是洋房及其入口。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/b/c/e/180ec74c4fd0be97d1d241f51e40bbec.jpg",
+        "listingNo": "A065874-6795702-S",
+        "sourceUrl": "https://www.property.hk/asking_detail/ept/king/6795702.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/b/c/e/180ec74c4fd0be97d1d241f51e40bbec.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/b/c/e/180ec74c4fd0be97d1d241f51e40bbec.jpg",
+          "alt": "帝灣居 售盤 #A065874"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.uplhk.com/eng/firsthand_detail.php?id=319",
+          "observations": [
+            "確認帝灣居 Royal Cove及嘉和里山路2號。",
+            "資料明列分層住宅與洋房；分層有套房、儲物室連廁，洋房有多房、雙套房與書房配置。"
+          ],
+          "limitation": "來源為較早一手介紹，未當作現行供應或設施營運資料；具體戶型與用途須核對個別圖則。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "帝灣居｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "帝灣居位於嘉和里山路2號。不能因網址或放盤簡稱含大廈便推斷住宅類型；應核對是分層單位還是洋房及其入口。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "royal-dragon-villa",
+      "nameZh": "嘉御龍庭",
+      "districtSlug": "ting-kau",
+      "url": "https://www.earnestproperty.com/estate/royal-dragon-villa",
+      "httpStatus": 200,
+      "descriptionChars": 145,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "嘉御龍庭位於青山公路汀九段，是汀九／油柑頭一帶的低密度洋房屋苑。住宅以全屋分層使用為主要特色，選盤時可按家庭成員的起居安排，比較各層房間與公共活動空間。\n\n公開屋苑資料列有會所、泳池及健身等設施，可與洋房本身的戶外空間一起考慮。看樓時宜完整走過各層及停車動線，同時了解屋苑管理和物業保養的安排。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/d/4/5/252dcfeffb5ea212f047b5220026a47f.jpeg",
+        "seoTitle": "嘉御龍庭｜油柑頭／汀九屋苑資料、租售放盤",
+        "seoDescription": "嘉御龍庭位於青山公路汀九段321號。應按汀九而非屯門規劃生活圈，並逐層核對洋房內部樓梯、戶外空間及停車安排。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/d/4/5/252dcfeffb5ea212f047b5220026a47f.jpeg",
+        "listingNo": "C014535-6707160-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6707160.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/d/4/5/252dcfeffb5ea212f047b5220026a47f.jpeg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2025/1/4/7/8ac0aae8da3c0974cfdd08c3bfa04539.jpg",
+          "alt": "嘉御龍庭 售盤 #B042359"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/d/4/5/252dcfeffb5ea212f047b5220026a47f.jpeg",
+          "alt": "嘉御龍庭 放盤 #C014535"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.house730.com/estate-23652/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E5%98%89%E5%BE%A1%E9%BE%8D%E5%BA%AD/",
+          "observations": ["確認嘉御龍庭 Royal Dragon Villa、汀九段321號及小型住宅規模。"],
+          "limitation": "House730設施欄未提供資料，不以其空白推斷設施不存在。"
+        },
+        {
+          "url": "https://www.homedash.hk/estate-Royal-Dragon-Villa-2-DDMNZHXYHM",
+          "observations": [
+            "確認油柑頭／汀九地區身份及低密度洋房定位。",
+            "列有會所、泳池與健身室等配套。"
+          ],
+          "limitation": "未採用平台交通時間、評分、所有住戶均有花園天台等泛化說法；設施現況仍需管理處核實。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "嘉御龍庭｜油柑頭／汀九屋苑資料、租售放盤",
+      "renderedSeoDescription": "嘉御龍庭位於青山公路汀九段321號。應按汀九而非屯門規劃生活圈，並逐層核對洋房內部樓梯、戶外空間及停車安排。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "seaside-castle",
+      "nameZh": "畔海",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/seaside-castle",
+      "httpStatus": 200,
+      "descriptionChars": 142,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "畔海位於小欖澄麗路，是由獨立洋房組成的私人住宅項目。住宅以多房及套房安排為特色，可按家庭成員、訪客和工作空間需要，逐層比較起居與睡房的分布。\n\n這類全幢洋房的使用感受與一般分層住宅不同，室內樓梯、戶外空間和泊車動線都值得一併考察。看樓時宜了解各層的實際採光、私隱及保養，而非只比較總面積。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/d/c/3/4dd478d18530ede031cbf003e2521312.jpg",
+        "seoTitle": "畔海｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "畔海位於小欖澄麗路，是由獨立洋房組成的私人住宅項目。住宅以多房及套房安排為特色，可按家庭成員、訪客和工作空間需要，逐層比較起居與睡房的分布。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/d/c/3/4dd478d18530ede031cbf003e2521312.jpg",
+        "listingNo": "B069223-6848480-S",
+        "sourceUrl": "https://www.property.hk/asking_detail/ept/mon/6848480.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/d/c/3/4dd478d18530ede031cbf003e2521312.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/d/c/3/4dd478d18530ede031cbf003e2521312.jpg",
+          "alt": "畔海 售盤 #B069223"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.house730.com/new-property-7532/%E7%95%94%E6%B5%B7/",
+          "observations": [
+            "確認Seaside Castle、澄麗路9號及獨立洋房項目。",
+            "項目介紹列四房三套房至五房五套房等間隔。"
+          ],
+          "limitation": "頁面屬新盤追蹤，未把在售狀態或預計日期當作即時承諾；整體車位數不代表個別洋房獲分配數目。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "畔海｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "畔海位於小欖澄麗路，是由獨立洋房組成的私人住宅項目。住宅以多房及套房安排為特色，可按家庭成員、訪客和工作空間需要，逐層比較起居與睡房的分布。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "yu-chui-yuen",
+      "nameZh": "瑜翠園",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/yu-chui-yuen",
+      "httpStatus": 200,
+      "descriptionChars": 147,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition."
+      ],
+      "before": {
+        "description": "瑜翠園位於掃管笏瑜翠街，是分層私人住宅屋苑。不同座數的樓層配置有別，家庭可按睡房布局、客飯廳形狀及外望方向比較，並以實際家具尺寸確認空間是否合用。\n\n公開屋苑資料列有泳池、網球、壁球、健身及兒童遊樂等設施，可把屋內空間與日常康樂需要一併考慮。看樓時宜同時查看公用部分的保養和由大堂往設施的步行動線。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/77/770eccf3710c9adc09f63132b37230f95f0b5711b79b6ed400f31148d18043c1.jpg",
+        "seoTitle": "瑜翠園｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "瑜翠園位於瑜翠街9號。應按實際座數及樓層確認採光與外望，並了解公用地方、窗戶及浴室的維修保養狀況。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/77/770eccf3710c9adc09f63132b37230f95f0b5711b79b6ed400f31148d18043c1.jpg",
+        "listingNo": "SYNC-eb3d6aea-79c7-40e8-9816-d85d41c6cd29",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4063247",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/77/770eccf3710c9adc09f63132b37230f95f0b5711b79b6ed400f31148d18043c1.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/2/a/5/2597ec8791bfdd53b810a32637c576b8.jpeg",
+          "alt": "瑜翠園 售盤 #C004343"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/77/770eccf3710c9adc09f63132b37230f95f0b5711b79b6ed400f31148d18043c1.jpg",
+          "alt": "《有匙即看》高層沙灘全海景！一梯兩伙露台！靚裝修！"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/c1/c1560c94dd6a8157514f1555681247514b53933056b278cac2f9c42218dd74cb.jpg",
+          "alt": "《連車位》 有匙！高層有海景！有小路出青山公路！"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/f2/f2d14670f8d51c6a0b7379e990bffd91b85bfbade9d1d8d2e7b2eaf9cc9f682d.webp",
+          "alt": "《連車位》 有VR!一梯兩伙!靚則向南露台!前臨沙灘!"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/20/20c0cd0d4a6a26ae0a38516cfd2d90d93546fec4caa3ea8d76f0854833014cbf.webp",
+          "alt": "《連車位》 海景連429呎天台!特高樓底教堂玻璃!罕有!"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/8/5/8/88e9adf696fd902861a297cb64947e72.jpg",
+          "alt": "瑜翠園 售盤 #A035863"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.house730.com/zh-cn/estate-23848/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E7%91%9C%E7%BF%A0%E5%9B%AD/",
+          "observations": [
+            "確認Peridot Court、瑜翠街9號及各座高度不一。",
+            "設施列泳池、網球、壁球、健身及兒童活動；成交紀錄呈現不同面積戶型。"
+          ],
+          "limitation": "未把整體面積範圍套用為每座都有相同戶型；海景、露台及天台只沿用輸入的個別放盤證據。"
+        },
+        {
+          "url": "https://www.newtohk.com/estates/peridot-court",
+          "observations": ["確認掃管笏位置及中英文身份。"],
+          "limitation": "第三方頁的校網及步行估算有混雜，正文未採用；小路通行現況需現場核實。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "瑜翠園｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "瑜翠園位於瑜翠街9號。應按實際座數及樓層確認採光與外望，並了解公用地方、窗戶及浴室的維修保養狀況。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "monte-carlo-villas",
+      "nameZh": "蒙地卡羅別墅",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/monte-carlo-villas",
+      "httpStatus": 200,
+      "descriptionChars": 95,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "蒙地卡羅別墅（Monte Carlo Villas）位於青山公路青山灣段25號，是掃管笏及青山灣一帶的私人住宅項目。\n\n屋苑由洋房組成。比較放盤時可一併核對屋號、室內間隔，以及花園和車位等附連範圍。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1ebc954d2ced6db1cff3b7fd69d1eef380216bbf85e717e22b1ce828019139e2.webp",
+        "seoTitle": "蒙地卡羅別墅｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "蒙地卡羅別墅（Monte Carlo Villas）位於青山公路青山灣段25號，是掃管笏及青山灣一帶的私人住宅項目。比較蒙地卡羅別墅租售單位及睇樓條件。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1ebc954d2ced6db1cff3b7fd69d1eef380216bbf85e717e22b1ce828019139e2.webp",
+        "listingNo": "SYNC-8262b471-9232-4e40-ab9b-af57dd493e87",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3992791",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1ebc954d2ced6db1cff3b7fd69d1eef380216bbf85e717e22b1ce828019139e2.webp",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1ebc954d2ced6db1cff3b7fd69d1eef380216bbf85e717e22b1ce828019139e2.webp",
+          "alt": "兩層靚則獨立大屋!連千五呎大花園!黃金地段!罕有放盤!"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/en/Monte-Carlo-Villas/1-SURVFROXVD",
+          "observations": "已讀中原屋苑頁；核實青山公路青山灣段25號、20幢20伙及2,044至2,216呎。未核實各屋的花園、車位權益或現行管理安排，正文均按個別放盤條件處理。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "蒙地卡羅別墅｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "蒙地卡羅別墅（Monte Carlo Villas）位於青山公路青山灣段25號，是掃管笏及青山灣一帶的私人住宅項目。比較蒙地卡羅別墅租售單位及睇樓條件。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "l-aquatique",
+      "nameZh": "逸璟．龍灣",
+      "districtSlug": "tsing-lung-tau",
+      "url": "https://www.earnestproperty.com/estate/l-aquatique",
+      "httpStatus": 200,
+      "descriptionChars": 90,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "逸璟．龍灣（L'Aquatique）位於青龍頭青山公路青龍頭段108號，是區內的私人住宅屋苑。\n\n項目由兩座住宅大廈組成。選盤時可按座別、樓層及座向比較，實際景觀及採光宜在睇樓時確認。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/7/8/b/b6740003588d99f67968a649e9fba067.jpg",
+        "seoTitle": "逸璟．龍灣｜青龍頭屋苑資料、租售放盤",
+        "seoDescription": "逸璟．龍灣（L'Aquatique）位於青龍頭青山公路青龍頭段108號，是區內的私人住宅屋苑。比較逸璟．龍灣租售單位及睇樓條件。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/7/8/b/b6740003588d99f67968a649e9fba067.jpg",
+        "listingNo": "B070102-6757228-R",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6757228.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/7/8/b/b6740003588d99f67968a649e9fba067.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2025/3/8/a/f9599471ca6bc3ccfe360ba240d18653.jpg",
+          "alt": "逸璟龍灣 第02座 售盤 #R070029"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/0/f/a/776b8d5849058d4a097aed8561fb73c4.jpg",
+          "alt": "逸璟龍灣 售盤 #B068657"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/db/db4f9946b3976d0999dcfa3a958ffd013dd2a6493af1b553e9c4ce41bef2147a.jpg",
+          "alt": "向南青馬橋海景！3房套！深井區最新樓齡屋苑！"
+        },
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/15/155320f1a8fca461712629f55bfe34c01ea41be8728562907ed8c7a0be5ee2f8.jpg",
+          "alt": "青馬橋海景！深井區樓齡最新！樓底高自設閣仔！"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/0/7/b/00870d6becd6167017d773b7dceefa21.jpg",
+          "alt": "逸璟龍灣 第02座 售盤 #B065160"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/7/8/b/b6740003588d99f67968a649e9fba067.jpg",
+          "alt": "逸璟龍灣 第01座 租盤 #B070102"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E9%80%B8%E7%92%9F%EF%BC%8E%E9%BE%8D%E7%81%A3/2-AKPPWPPEPP",
+          "observations": "已讀中原屋苑頁；核實108號、兩座198伙及面積跨度。頁內入伙月份正文與比較表不同，未把年份月份寫入本次文案。"
+        },
+        {
+          "url": "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E6%B7%B1%E4%BA%95-%E9%9D%92%E9%BE%8D%E9%A0%AD-%E9%80%B8%E7%92%9F-%E9%BE%8D%E7%81%A3-E000016130",
+          "observations": "已讀美聯屋苑頁；核實一至四房、會所及泳池。未沿用頁面所列步行分鐘、即時價格或全部特色標籤；開放安排未作現場核實。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "逸璟．龍灣｜青龍頭屋苑資料、租售放盤",
+      "renderedSeoDescription": "逸璟．龍灣（L&#x27;Aquatique）位於青龍頭青山公路青龍頭段108號，是區內的私人住宅屋苑。比較逸璟．龍灣租售單位及睇樓條件。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "deauville",
+      "nameZh": "星岸",
+      "districtSlug": "ting-kau",
+      "url": "https://www.earnestproperty.com/estate/deauville",
+      "httpStatus": 200,
+      "descriptionChars": 89,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "星岸（Deauville）位於青山公路汀九段380號，屬油柑頭及汀九一帶的私人住宅項目。\n\n項目包括分層住宅及洋房。瀏覽放盤時，宜先分清物業類型，再比較各單位的樓層、戶外空間及景觀。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/56/56abcc171952c57c6cedb1b91fa48a7c415347bd3637a3159147907d3653a4f2.jpg",
+        "seoTitle": "星岸｜油柑頭／汀九屋苑資料、租售放盤",
+        "seoDescription": "星岸（Deauville）位於青山公路汀九段380號，屬油柑頭及汀九一帶的私人住宅項目。比較星岸租售單位及睇樓條件。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/56/56abcc171952c57c6cedb1b91fa48a7c415347bd3637a3159147907d3653a4f2.jpg",
+        "listingNo": "B047469-6727964-S",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4065990",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/56/56abcc171952c57c6cedb1b91fa48a7c415347bd3637a3159147907d3653a4f2.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/56/56abcc171952c57c6cedb1b91fa48a7c415347bd3637a3159147907d3653a4f2.jpg",
+          "alt": "新地星級豪宅！前後花園覆式！向南汀九橋海！連2車位！"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.house730.com/estate-23666/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E6%98%9F%E5%B2%B8/",
+          "observations": "已讀House730屋苑頁；核實380號、油柑頭／汀九位置、33伙及住宅與獨立屋並存的樓層資料與成交分類。未把不同類型合併估值，未沿用即時售價。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "星岸｜油柑頭／汀九屋苑資料、租售放盤",
+      "renderedSeoDescription": "星岸（Deauville）位於青山公路汀九段380號，屬油柑頭及汀九一帶的私人住宅項目。比較星岸租售單位及睇樓條件。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "long-beach-gardens",
+      "nameZh": "海濤花園",
+      "districtSlug": "ting-kau",
+      "url": "https://www.earnestproperty.com/estate/long-beach-gardens",
+      "httpStatus": 200,
+      "descriptionChars": 100,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "海濤花園（Long Beach Gardens）位於青山公路汀九段103號，是油柑頭及汀九一帶的私人住宅屋苑。\n\n屋苑由兩座住宅大廈組成。比較放盤時可一併核對座別、樓層、間隔及室內保養，景觀則以單位現場為準。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/24/241e4ed6a8f6913ebc420e9a13badeced4b3b752c796980f429a35e300f40f37.jpg",
+        "seoTitle": "海濤花園｜油柑頭／汀九屋苑資料、租售放盤",
+        "seoDescription": "海濤花園（Long Beach Gardens）位於青山公路汀九段103號，是油柑頭及汀九一帶的私人住宅屋苑。即睇海濤花園放盤。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/24/241e4ed6a8f6913ebc420e9a13badeced4b3b752c796980f429a35e300f40f37.jpg",
+        "listingNo": "SYNC-8a0920bd-e9c7-41e3-a21e-7f0273f7bde9",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4042934",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/24/241e4ed6a8f6913ebc420e9a13badeced4b3b752c796980f429a35e300f40f37.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/24/241e4ed6a8f6913ebc420e9a13badeced4b3b752c796980f429a35e300f40f37.jpg",
+          "alt": "臨海4房高層！一梯兩伙有露台！連車位！極少放盤！"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E6%B5%B7%E6%BF%A4%E8%8A%B1%E5%9C%92/2-AEPPPPSXPA",
+          "observations": "已讀中原屋苑頁；列兩座50伙及1,319至2,128呎。保留既有對樓宇數據口徑的提醒，不將頁面面積當作個別放盤保證。"
+        },
+        {
+          "url": "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E9%BA%97%E5%9F%8E-%E6%B1%80%E4%B9%9D-%E6%B5%B7%E6%BF%A4%E8%8A%B1%E5%9C%92-E12029",
+          "observations": "已讀美聯屋苑頁；本次同樣列兩座50伙，並列會所及泳池。樓層編號、特色戶及車位仍須個別核對，未把區內充電站寫成屋苑設施。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "海濤花園｜油柑頭／汀九屋苑資料、租售放盤",
+      "renderedSeoDescription": "海濤花園（Long Beach Gardens）位於青山公路汀九段103號，是油柑頭及汀九一帶的私人住宅屋苑。即睇海濤花園放盤。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "riviera",
+      "nameZh": "麗海別墅",
+      "districtSlug": "ting-kau",
+      "url": "https://www.earnestproperty.com/estate/riviera",
+      "httpStatus": 200,
+      "descriptionChars": 93,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "麗海別墅（Riviera）位於青山公路汀九段369號，屬油柑頭及汀九一帶的私人住宅。\n\n麗海別墅為單幢住宅。睇樓時可重點比較單位間隔、實際採光及公共部分保養，並核對車位是否包含在放盤條件內。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/a/5/2/61b9e3267ef9e369eea3236791ad2d53.jpg",
+        "seoTitle": "麗海別墅｜油柑頭／汀九屋苑資料、租售放盤",
+        "seoDescription": "麗海別墅（Riviera）位於青山公路汀九段369號，屬油柑頭及汀九一帶的私人住宅。比較麗海別墅租售單位及睇樓條件。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/a/5/2/61b9e3267ef9e369eea3236791ad2d53.jpg",
+        "listingNo": "C015931-6707290-R",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6707290.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/a/5/2/61b9e3267ef9e369eea3236791ad2d53.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/a/5/2/61b9e3267ef9e369eea3236791ad2d53.jpg",
+          "alt": "麗海別墅 租盤 #C015931"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/麗海別墅/2-DDTLTHIAHM",
+          "observations": "已讀中原屋苑頁；核實369號、單幢9伙及1,304至1,842呎，1964年起入伙。正文以成熟樓宇及逾千呎描述，不把名稱解作獨立屋，未核實現行維修或車位安排。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "麗海別墅｜油柑頭／汀九屋苑資料、租售放盤",
+      "renderedSeoDescription": "麗海別墅（Riviera）位於青山公路汀九段369號，屬油柑頭及汀九一帶的私人住宅。比較麗海別墅租售單位及睇樓條件。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "both-wealth-garden",
+      "nameZh": "均富花園",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/both-wealth-garden",
+      "httpStatus": 200,
+      "descriptionChars": 88,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "均富花園（Both Wealth Garden）位於掃管笏村第一區，是掃管笏一帶的住宅項目。\n\n晉誠現有放盤以期數標示物業。搜尋及睇樓時宜一併核對期數、座別與完整地址，以分清不同單位。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/1/8/e/7a6e8678e0447977e58ff48c0500499d.jpg",
+        "seoTitle": "均富花園｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "均富花園（Both Wealth Garden）位於掃管笏村第一區，是掃管笏一帶的住宅項目。即睇均富花園放盤。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/1/8/e/7a6e8678e0447977e58ff48c0500499d.jpg",
+        "listingNo": "A055347-6702630-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6702630.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/1/8/e/7a6e8678e0447977e58ff48c0500499d.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/1/8/e/7a6e8678e0447977e58ff48c0500499d.jpg",
+          "alt": "均富花園 第01期 售盤 #A055347"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E5%9D%87%E5%AF%8C%E8%8A%B1%E5%9C%92/2-KEPPWPPAPD",
+          "observations": "已讀中原頁，列掃管笏村第一區109至123號、21座57伙，類型為其他。為保留既有地址權威及原有範圍差異警示，本稿維持「掃管笏村第一區」，不擴寫精確門牌或推定洋房／村屋法定類型。"
+        },
+        {
+          "url": "https://www.ricacorp.com/zh-hk/property/estate/%E5%9D%87%E5%AF%8C%E8%8A%B1%E5%9C%92-estate-%E6%8E%83%E7%AE%A1%E7%AC%8F-hma-hk",
+          "observations": "已讀利嘉閣頁，本次同樣列109至123號及21座57伙。未取得各期數與座別對照，故把此點列作個別物業核對事項；沒有聲稱已完成正式地址核查。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "均富花園｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "均富花園（Both Wealth Garden）位於掃管笏村第一區，是掃管笏一帶的住宅項目。即睇均富花園放盤。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "fiona-garden",
+      "nameZh": "富安新邨",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/fiona-garden",
+      "httpStatus": 200,
+      "descriptionChars": 85,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "富安新邨（Fiona Garden）位於青泰路28號，屬小欖及大欖一帶的住宅項目。\n\n屋苑以洋房住宅為主，現有放盤亦使用「富安新村」名稱。比較單位時，宜核對獨立門牌及戶外範圍。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/1/8/1/fdf6b5d2e4d5eb76b684e938434a2f26.jpeg",
+        "seoTitle": "富安新邨｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "富安新邨（Fiona Garden）位於青泰路28號，屬小欖及大欖一帶的住宅項目。比較富安新邨租售單位及睇樓條件。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/1/8/1/fdf6b5d2e4d5eb76b684e938434a2f26.jpeg",
+        "listingNo": "C005670-6708552-R",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6708552.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/1/8/1/fdf6b5d2e4d5eb76b684e938434a2f26.jpeg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/6/b/f/520387d91f45c582933d98b8bf514f30.jpg",
+          "alt": "富安新村 租盤 #A064980"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/1/8/1/fdf6b5d2e4d5eb76b684e938434a2f26.jpeg",
+          "alt": "富安新村 租盤 #C005670"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.house730.com/estate-23822/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E5%AF%8C%E5%AE%89%E6%96%B0%E9%82%A8/",
+          "observations": "已讀House730屋苑頁；核實青泰路28號、22座22伙，成交分類有洋房。既有晉誠放盤及內容提供「富安新村」同址寫法；未把戶外或車位視作全屋苑保證。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "富安新邨｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "富安新邨（Fiona Garden）位於青泰路28號，屬小欖及大欖一帶的住宅項目。比較富安新邨租售單位及睇樓條件。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "dragon-inn-court",
+      "nameZh": "容龍居",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/dragon-inn-court",
+      "httpStatus": 200,
+      "descriptionChars": 90,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "容龍居（Dragon Inn Court）位於三聖青霞里9號，是青山灣及三聖一帶的私人住宅屋苑。\n\n屋苑由四座住宅大廈組成。選盤時可按座別、樓層與間隔比較，並實地了解單位及公共部分的保養。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/7/5/2/17ceacec2610f8161e6b97186f470ef6.jpeg",
+        "seoTitle": "容龍居｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "容龍居（Dragon Inn Court）位於三聖青霞里9號，是青山灣及三聖一帶的私人住宅屋苑。比較容龍居租售單位及睇樓條件。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/7/5/2/17ceacec2610f8161e6b97186f470ef6.jpeg",
+        "listingNo": "C020026-6733828-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6733828.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/7/5/2/17ceacec2610f8161e6b97186f470ef6.jpeg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/7/5/2/17ceacec2610f8161e6b97186f470ef6.jpeg",
+          "alt": "容龍居 第04座 售盤 #C020026"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/d/1/7/d517baeae769cb39a0047a509f85bb51.jpeg",
+          "alt": "容龍居 第01座 售盤 #T024719"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.28hse.com/estate/detail/%E5%AE%B9%E9%BE%8D%E5%B1%85-4511",
+          "observations": "已讀28Hse屋苑頁；核實青霞里9號、四座192伙、列兒童遊樂及網球等設施。面積列692至970呎；車位出現在個別成交，未推定全屋苑必連車位。"
+        },
+        {
+          "url": "https://www.house730.com/estate-23783/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E5%AE%B9%E9%BE%8D%E5%B1%85/",
+          "observations": "已讀House730頁；同樣列四座192伙，面積上限則為977呎，與28Hse有差異。本稿不發布精確面積範圍，保留個別文件核對提示；設施運作狀況未現場核實。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "容龍居｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "容龍居（Dragon Inn Court）位於三聖青霞里9號，是青山灣及三聖一帶的私人住宅屋苑。比較容龍居租售單位及睇樓條件。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "tuen-mun-court",
+      "nameZh": "屯門閣",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/tuen-mun-court",
+      "httpStatus": 200,
+      "descriptionChars": 87,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "屯門閣（Tuen Mun Court）位於三聖青榕街2號，是青榕街一帶的私人住宅大廈。\n\n屯門閣屬單幢住宅，與鄰近青榕街4號的雅翠苑為不同物業。比較放盤時宜核對大廈名稱、門牌及樓層。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/1/0/2/05d18e188a23b68f3eb743f154514631.jpg",
+        "seoTitle": "屯門閣｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "屯門閣（Tuen Mun Court）位於三聖青榕街2號，是青榕街一帶的私人住宅大廈。比較屯門閣租售單位及睇樓條件。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/1/0/2/05d18e188a23b68f3eb743f154514631.jpg",
+        "listingNo": "B075534-6757916-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6757916.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/1/0/2/05d18e188a23b68f3eb743f154514631.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/1/0/2/05d18e188a23b68f3eb743f154514631.jpg",
+          "alt": "屯門閣 售盤 #B075534"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.28hse.com/estate/detail/屯門閣-4514",
+          "observations": "已讀28Hse屋苑頁；核實青榕街2號、單幢84伙及1,245至1,465呎。部分成交明列連車位，但未核實各放盤是否包含車位，正文保留個別確認。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "屯門閣｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "屯門閣（Tuen Mun Court）位於三聖青榕街2號，是青榕街一帶的私人住宅大廈。比較屯門閣租售單位及睇樓條件。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "elegant-villa",
+      "nameZh": "雅翠苑",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/elegant-villa",
+      "httpStatus": 200,
+      "descriptionChars": 80,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "雅翠苑（Elegant Villa）位於三聖青榕街4號，是青榕街一帶的私人住宅。\n\n雅翠苑與青榕街2號的屯門閣為不同物業。搜尋或安排睇樓時，宜一併確認屋苑名稱及門牌。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/3/7/6/cd96f59acb42cbb327d4bf070a9a9a3a.jpg",
+        "seoTitle": "雅翠苑｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "雅翠苑（Elegant Villa）位於三聖青榕街4號，是青榕街一帶的私人住宅。比較雅翠苑租售單位及睇樓條件。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/3/7/6/cd96f59acb42cbb327d4bf070a9a9a3a.jpg",
+        "listingNo": "A074399-6778974-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6778974.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/3/7/6/cd96f59acb42cbb327d4bf070a9a9a3a.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/3/7/6/cd96f59acb42cbb327d4bf070a9a9a3a.jpg",
+          "alt": "雅翠苑 售盤 #A074399"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/5/d/4/57f97075dcb37e3e8d066498ff9a3879.jpg",
+          "alt": "雅翠苑 售盤 #B055175"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/%E9%9B%85%E7%BF%A0%E8%8B%91/2-ZMSSTHDXHN",
+          "observations": "已讀中原屋苑頁；核實青榕街4號、單幢50伙及1,349呎；成交欄部分記四房，未將四房概括為所有現有單位。未核實現況改裝、車位或維修安排。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "雅翠苑｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "雅翠苑（Elegant Villa）位於三聖青榕街4號，是青榕街一帶的私人住宅。比較雅翠苑租售單位及睇樓條件。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "pearl-island-bungalow",
+      "nameZh": "龍珠島平房",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/pearl-island-bungalow",
+      "httpStatus": 200,
+      "descriptionChars": 102,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "龍珠島平房（Pearl Island Bungalow）又稱龍珠島別墅，位於青龍路9號，是龍珠島上的住宅項目。\n\n現有放盤包括F1及F5座。它與青龍路11號的龍珠島花園為不同屋苑，選盤時應按名稱、門牌及座別分辨。",
+        "heroImage": "https://imgs.property.hk/largePhotos/2026/a/5/e/534dfb816d73e407eaaa1878c96d485e.jpg",
+        "seoTitle": "龍珠島平房｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "龍珠島平房（Pearl Island Bungalow）又稱龍珠島別墅，位於青龍路9號，是龍珠島上的住宅項目。比較龍珠島平房租售單位及睇樓條件。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/a/5/e/534dfb816d73e407eaaa1878c96d485e.jpg",
+        "listingNo": "T025199-6711696-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6711696.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://imgs.property.hk/largePhotos/2026/a/5/e/534dfb816d73e407eaaa1878c96d485e.jpg",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/a/5/e/534dfb816d73e407eaaa1878c96d485e.jpg",
+          "alt": "龍珠島平房 F1座 售盤 #T025199"
+        },
+        {
+          "src": "https://imgs.property.hk/largePhotos/2026/5/6/4/0bdb28c55059909f3abe119622483c09.jpg",
+          "alt": "龍珠島平房 F5座 售盤 #A070076"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.midland.com.hk/en/estate/New-Territories-Siu-Lam-So-Kwun-Wat-Castle-Peak-Bay-Pearl-Island-Bungalow-E00850",
+          "observations": "已讀美聯英文屋苑頁；列Pearl Island Bungalow／龍珠島別墅、9 Tsing Lung Road、七幢224伙，樓層欄為四層。支持低層多座住宅描述，不將名稱解作獨立屋。F1及F5來自本組既有晉誠放盤證據，未宣稱重新核實其現時供應。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "龍珠島平房｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "龍珠島平房（Pearl Island Bungalow）又稱龍珠島別墅，位於青龍路9號，是龍珠島上的住宅項目。比較龍珠島平房租售單位及睇樓條件。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "pearl-garden",
+      "nameZh": "龍珠花園",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/pearl-garden",
+      "httpStatus": 200,
+      "descriptionChars": 100,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "龍珠花園（Pearl Garden）位於掃管笏青龍路7號，是龍珠島一帶的私人住宅屋苑。\n\n屋苑由四座住宅大廈組成，與青龍路9號的龍珠島平房及11號的龍珠島花園均為不同物業。搜尋放盤時宜按正式名稱及門牌分辨。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d2/d26242b165dd439bb04e3052ff65994f07ed2652a0d570a3ec450167616c8557.webp",
+        "seoTitle": "龍珠花園｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "龍珠花園（Pearl Garden）位於掃管笏青龍路7號，是龍珠島一帶的私人住宅屋苑。即睇龍珠花園放盤。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d2/d26242b165dd439bb04e3052ff65994f07ed2652a0d570a3ec450167616c8557.webp",
+        "listingNo": "SYNC-1b53747f-7898-4cb8-b588-0dab41741d03",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3993236",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d2/d26242b165dd439bb04e3052ff65994f07ed2652a0d570a3ec450167616c8557.webp",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d2/d26242b165dd439bb04e3052ff65994f07ed2652a0d570a3ec450167616c8557.webp",
+          "alt": "《連車位》 低密度全海有露台!一梯兩伙!極少放盤!有邨巴!"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://hk.centanet.com/estate/zh-cn/龙珠花园/2-SUDDURUXRJ",
+          "observations": "已讀中原簡體屋苑頁；核實青龍路7號、四座45伙、679至1,159呎。本稿以繁體中文原創改寫；未把既有個別放盤所提車位、露台、邨巴概括為全屋苑現行保證。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "龍珠花園｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "龍珠花園（Pearl Garden）位於掃管笏青龍路7號，是龍珠島一帶的私人住宅屋苑。即睇龍珠花園放盤。晉誠地產 C-018613。"
+    },
+    {
+      "slug": "peak-castle",
+      "nameZh": "珀居",
+      "districtSlug": "castle-peak-road",
+      "url": "https://www.earnestproperty.com/estate/peak-castle",
+      "httpStatus": 200,
+      "descriptionChars": 104,
+      "findings": [
+        "Hero positioning and the only benefit repeat the first overview paragraph.",
+        "One generic buyer profile; needs estate-specific buyer guidance and FAQs.",
+        "SEO copy emphasizes location/cautions rather than the estate proposition.",
+        "Short introduction: fewer than 110 non-whitespace characters."
+      ],
+      "before": {
+        "description": "珀居（Peak Castle）位於小欖冠發街，正式門牌包括8A至8H、8J、10、12、16、18、20及22號。\n\n項目由洋房組成。選盤時宜核對各洋房的獨立門牌，以及花園、天台、泳池及車位等範圍是否屬於放盤條件。",
+        "heroImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/62/62051f93d6f782391f0e9ba95514217b5c68afd32ba746f5e3f5a531c6824c55.webp",
+        "seoTitle": "珀居｜小欖至三聖屋苑資料、租售放盤",
+        "seoDescription": "珀居（Peak Castle）位於小欖冠發街，正式門牌包括8A至8H、8J、10、12、16、18、20及22號。比較珀居租售單位及睇樓條件。晉誠地產 C-018613。",
+        "published": true
+      },
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/62/62051f93d6f782391f0e9ba95514217b5c68afd32ba746f5e3f5a531c6824c55.webp",
+        "listingNo": "SYNC-b72b4dd0-6c4c-42d7-98ff-b2a3443f2c68",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4002400",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+        "action": "Retain existing agency listing image; scraped hero matches the production field.",
+        "observedUrl": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/62/62051f93d6f782391f0e9ba95514217b5c68afd32ba746f5e3f5a531c6824c55.webp",
+        "verification": "Present in live HTML. Binary availability and visual quality not tested."
+      },
+      "scrapedListingPhotos": [
+        {
+          "src": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/62/62051f93d6f782391f0e9ba95514217b5c68afd32ba746f5e3f5a531c6824c55.webp",
+          "alt": "《有匙即看》 兩層靚則獨立屋!大花園!蝕讓三千多萬!"
+        }
+      ],
+      "sourceChecks": [
+        {
+          "url": "https://www.peakcastle.com/zh-hk",
+          "observations": "已讀珀居官方網站；核實正式門牌為冠發街8A至8H、8J、10、12、16、18、20及22號，與既有地址一致。網站提醒宣傳圖像不等於現場，未取用圖片或將其當現況證據。"
+        },
+        {
+          "url": "https://www.house730.com/buy-property-9249791/青山公路-珀居/",
+          "observations": "已讀House730晉誠A055656放盤；文字提獨立泳池及雙車位，屬該放盤描述。本文僅作個別放盤方向，未推定全項目共有同樣設施，亦未採用價格或售價降幅。"
+        }
+      ],
+      "changes": [
+        "Two substantive overview paragraphs",
+        "Distinct hero positioning",
+        "Three buyer profiles, benefits and viewing considerations",
+        "Two estate-specific FAQs and market comparison guidance",
+        "Descriptive rent/sale SEO with Chinese/English identity"
+      ],
+      "renderedTitle": "珀居｜小欖至三聖屋苑資料、租售放盤",
+      "renderedSeoDescription": "珀居（Peak Castle）位於小欖冠發街，正式門牌包括8A至8H、8J、10、12、16、18、20及22號。比較珀居租售單位及睇樓條件。晉誠地產 C-018613。"
+    }
+  ]
+}
