@@ -105,6 +105,7 @@ const SHAM_TSENG_GROUP: ClientAreaGroup = {
     { slug: "chun-wong-kui" },
     { slug: "rhine-garden" },
     { slug: "hoi-wan-toi", presentationLabel: "海韻台" },
+    { slug: "l-aquatique" },
   ],
   secondary: [],
   unresolved: [{ label: "逸璟瓏灣", tier: "primary", rank: 1 }],
@@ -118,9 +119,8 @@ const SHAM_TSENG_GROUP: ClientAreaGroup = {
  * 黃金海岸 (canonical 香港黃金海岸, slug wong-gam-hoi-ngon) and 黃金海灣
  * (wong-gam-hoi-waan) are two different estates and stay two entries.
  *
- * NAPA / 緹岸 / 飛揚 / 翠濤居 / 棕月灣 / 愛琴灣 now have unpublished production
- * rows (2026-10-26 snapshot) and registry entries. They stay off these cards:
- * `published: false` does not promote them into primary or secondary.
+ * Listing-evidenced additions follow the existing secondary order. Their
+ * cards render once the scoped content migration publishes their DB rows.
  * 凱和山 still has no row and stays unresolved. 棕月灣 is its own slug
  * (chung-yuet-waan), not a rename of another estate.
  */
@@ -147,24 +147,61 @@ const CASTLE_PEAK_ROAD_WEST_GROUP: ClientAreaGroup = {
     { slug: "the-carmel" },
     { slug: "lin-shan" },
     { slug: "long-tou-waan" },
+    { slug: "bayview-terrace" },
+    { slug: "castle-peak-villas" },
+    { slug: "ching-lai-waan-villas" },
+    { slug: "ching-yung-toi" },
+    { slug: "chui-king-garden" },
+    { slug: "chun-wo-sea-view-garden" },
+    { slug: "chung-yuet-waan" },
+    { slug: "fei-yeung" },
+    { slug: "hoi-ching-hin" },
+    { slug: "hoi-king-garden" },
+    { slug: "hoi-wai-garden" },
+    { slug: "hoi-yu" },
+    { slug: "kwan-lun" },
+    { slug: "lung-chu-island-garden" },
+    { slug: "nam-ngon" },
+    { slug: "napa" },
+    { slug: "nga-tak-yuen" },
+    { slug: "ocean-camino" },
+    { slug: "oi-kam-waan" },
+    { slug: "oma-by-the-sea" },
+    { slug: "palm-cove" },
+    { slug: "pun-lung-bun-do" },
+    { slug: "royal-cove-tower" },
+    { slug: "seaside-castle" },
+    { slug: "yu-chui-yuen" },
+    { slug: "monte-carlo-villas" },
+    { slug: "both-wealth-garden" },
+    { slug: "fiona-garden" },
+    { slug: "dragon-inn-court" },
+    { slug: "tuen-mun-court" },
+    { slug: "elegant-villa" },
+    { slug: "pearl-island-bungalow" },
+    { slug: "pearl-garden" },
+    { slug: "peak-castle" },
   ],
   unresolved: [{ label: "凱和山", tier: "primary", rank: 10 }],
 };
 
 /**
  * docx p1 names this group; p4's 主要屋苑 complaint applies to it too. The
- * group has no canonical presentation members and renders an honest empty
- * state. 觀海別墅 and 嘉御龍庭 are unpublished production rows
- * (kwun-hoi-villas, royal-dragon-villa) and stay off these cards. 汀九別墅
- * is still not an estates row. Inventing cards to balance three columns is
- * out of scope.
+ * group now includes the five verified estates named in active listings.
+ * 汀九別墅 remains a place/search term without a verified estate identity.
  */
 const YAU_KOM_TAU_TING_KAU_GROUP: ClientAreaGroup = {
   key: "yau-kom-tau-ting-kau",
   label: "油柑頭汀九",
   href: "/castle-peak-road/ting-kau",
   districtSlugs: ["ting-kau", "yau-kom-tau"],
-  primary: [],
+  primary: [
+    { slug: "kwun-hoi-villas" },
+    { slug: "royal-dragon-villa" },
+    { slug: "deauville" },
+    { slug: "long-beach-gardens" },
+    { slug: "riviera" },
+  ],
   secondary: [],
   unresolved: [],
 };

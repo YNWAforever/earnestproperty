@@ -1,4 +1,5 @@
 import { getEstateEntry } from "./estate-registry.ts";
+import { listingEstateContent } from "./listing-estate-content.ts";
 
 /**
  * Production origin. Every canonical, og:image, sitemap <loc>, robots.txt
@@ -265,6 +266,18 @@ function estateSeoIdentity(slug: string) {
 }
 
 export const estateSeo: Record<string, EstateSeo> = {
+  ...Object.fromEntries(
+    listingEstateContent.map((item) => [
+      item.slug,
+      {
+        ...estateSeoIdentity(item.slug),
+        title: item.seoTitle,
+        description: item.seoDescription,
+        intro: item.overview[0],
+        fit: item.watchout,
+      },
+    ]),
+  ),
   bellagio: {
     ...estateSeoIdentity("bellagio"),
     developer: "會德豐 / 九龍倉",

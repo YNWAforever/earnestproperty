@@ -118,12 +118,8 @@ test("unresolved client names are only those still absent from production", () =
       `${label} must appear in the requirement ledger as an open question`,
     );
   }
-  for (const label of ["逸璟龍灣", "星岸"]) {
-    assert.ok(
-      !estateRegistry.some((entry) => entry.nameZh === label || entry.slug === label),
-      `${label} is not in the production snapshot`,
-    );
-  }
+  assert.ok(getEstateEntry("l-aquatique").aliases.includes("逸璟龍灣"));
+  assert.equal(getEstateEntry("deauville").nameZh, "星岸");
 });
 
 test("棕月灣 and 愛琴灣 are not silently resolved to similarly-named estates", () => {

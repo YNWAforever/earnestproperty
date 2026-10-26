@@ -14,10 +14,9 @@
  * render time by CoreEstateGrid, exactly as core-estates.ts's own entries are
  * -- hardcoding them would let the card drift from the estate page.
  *
- * 凱和山 still has no verified identity and stays an `unresolved` entry in
- * client-area-presentation.ts. NAPA, 緹岸, 飛揚, 翠濤居, 棕月灣 and 愛琴灣 now
- * have unpublished production rows; they are registry entries with
- * `published: false` and are still absent from both card arrays below.
+ * 凱和山 stays unresolved in client-area-presentation.ts. The 2026-10-26
+ * listing-evidenced additions follow the existing 其他 sequence and receive
+ * photos and public content through the scoped estate data migration.
  * See docs/client-feedback-20260907-ledger.md.
  */
 import { type CoreEstate, coreEstatesFromRefs } from "./core-estates.ts";

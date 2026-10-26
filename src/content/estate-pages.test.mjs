@@ -113,8 +113,8 @@ test("Estate Expansion 17: every relatedLinks /estate/{slug} cross-reference tar
   }
 });
 
-test("Estate Expansion 17: estatePageContent has exactly 22 entries (5 original + 17 new)", () => {
-  assert.equal(Object.keys(estatePageContent).length, 22);
+test("Estate Expansion 17: estatePageContent has 62 entries (22 original + 40 listing-evidenced additions)", () => {
+  assert.equal(Object.keys(estatePageContent).length, 62);
 });
 
 test("transport copy requires an exact estate corridor match", () => {

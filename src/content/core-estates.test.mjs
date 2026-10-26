@@ -29,7 +29,7 @@ const CLIENT_ORDER = [
 test("the client's 2026-09-07 深井 / 青龍頭 order ships exactly, in order", () => {
   assert.deepEqual(
     coreEstates.map((estate) => estate.name),
-    CLIENT_ORDER,
+    [...CLIENT_ORDER, "逸璟．龍灣"],
   );
 });
 
@@ -102,6 +102,10 @@ test("estates with a detail page keep their figures in the database", () => {
 test("every declared photo exists on disk", () => {
   for (const estate of coreEstates) {
     if (!estate.photo) continue;
+    if (estate.photo.startsWith("https://")) {
+      assert.match(estate.photoCredit, /放盤參考照片/);
+      continue;
+    }
     assert.ok(
       existsSync(new URL(`../../public${estate.photo}`, import.meta.url)),
       `${estate.name} photo ${estate.photo} must exist — a missing file 404s silently`,

@@ -126,16 +126,15 @@ test("其他 is an accessible button wired to a real region, not a hover menu", 
   expect(button.text()).toContain("其他");
 });
 
-test("其他 reveals exactly the client's four resolved secondary estates, in order", () => {
+test("其他 preserves the four original secondary cards and includes listing-backed additions", () => {
   const $ = renderWest();
   // Scoped to the revealed grid, not the region: the region's own
   // "其他 4 個屋苑" heading is an <h3> too, and is not an estate card.
-  expect(cardNames($, "#castle-peak-road-other-estates > div")).toEqual([
-    "Oma Oma",
-    "The Carmel",
-    "漣山",
-    "浪濤灣",
-  ]);
+  const names = cardNames($, "#castle-peak-road-other-estates > div");
+  expect(names).toHaveLength(castlePeakRoadOtherEstates.length);
+  expect(names).toContain("NAPA");
+  expect(names).toContain("龍珠島平房");
+  expect(names.slice(0, 4)).toEqual(["Oma Oma", "The Carmel", "漣山", "浪濤灣"]);
 });
 
 test("no estate is rendered in both tiers", () => {
@@ -187,6 +186,7 @@ test("the 深井 / 青龍頭 cards render in the client's exact order, 帝華軒
     "縉皇居",
     "海韻花園",
     "海韻台",
+    "逸璟．龍灣",
   ]);
 });
 
