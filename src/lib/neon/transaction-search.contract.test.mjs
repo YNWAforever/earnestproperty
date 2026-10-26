@@ -260,6 +260,9 @@ test("fetchEstateTransactions filters on published=true AND verification_state='
   assert.match(call.text, /published = true/);
   assert.match(call.text, /verification_state = 'verified'/);
   assert.match(call.text, /deal_type = 'sale'/);
+  assert.match(call.text, /FROM transactions\b/);
+  assert.doesNotMatch(call.text, /eprc|market_registered|UNION/i);
+  assert.deepEqual(call.params, ["estate-1", 8]);
 });
 
 test("estate transactions bound direct caller row limits", async () => {
