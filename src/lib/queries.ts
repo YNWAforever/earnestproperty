@@ -261,7 +261,9 @@ function homepageListingQuery(
     // estates here. This is what lets 香港黃金海岸 stock through a place-name
     // gate that rejects the literal string 黃金海岸 -- an explicit,
     // per-estate allowance, not a widening of 屯門 or 大欖涌.
-    estateSlugs: [...corridorEstateSlugsForFeed(), ...approvedPresentationEstateSlugs],
+    estateSlugs: Array.from(
+      new Set([...corridorEstateSlugsForFeed(), ...approvedPresentationEstateSlugs]),
+    ),
     textAliases: corridorRegionScope.textAliases,
     outOfScopeTextAliases: corridorRegionScope.outOfScopeTextAliases,
   };

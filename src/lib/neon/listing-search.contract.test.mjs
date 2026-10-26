@@ -197,10 +197,18 @@ test("oversized public scope arrays are rejected before SQL", async () => {
   await assert.rejects(
     server.fetchCorridorInventory({
       ...scope,
-      districtSlugs: Array.from({ length: 30 }, (_, index) => "district-" + index),
-      estateSlugs: Array.from({ length: 30 }, (_, index) => "estate-" + index),
-      textAliases: Array.from({ length: 30 }, (_, index) => "alias-" + index),
-      outOfScopeTextAliases: Array.from({ length: 30 }, (_, index) => "exclude-" + index),
+      districtSlugs: Array.from({ length: 48 }, (_, index) => "district-" + index),
+      estateSlugs: Array.from({ length: 64 }, (_, index) => "estate-" + index),
+      textAliases: Array.from({ length: 48 }, (_, index) => "alias-" + index),
+      outOfScopeTextAliases: Array.from({ length: 48 }, (_, index) => "exclude-" + index),
+    }),
+    /INVALID_PUBLIC_SCOPE/,
+  );
+  await assert.rejects(
+    server.fetchCorridorInventory({
+      ...scope,
+      textAliases: [],
+      estateSlugs: Array.from({ length: 129 }, (_, index) => "estate-" + index),
     }),
     /INVALID_PUBLIC_SCOPE/,
   );

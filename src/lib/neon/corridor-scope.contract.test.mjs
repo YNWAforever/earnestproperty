@@ -25,6 +25,30 @@ import { getCastlePeakRoadSegment } from "../../content/castle-peak-road.ts";
 // that logic in the test.
 
 const root = process.cwd();
+
+test("homepage feeds accept the expanded estate registry with deduplicated SQL scope", async () => {
+  const calls = [];
+  const queries = await loadQueriesForFixtureCorridorRows([], calls);
+  for (const name of [
+    "fetchGoldStickyProperties",
+    "fetchPropertyHkPromoProperties",
+    "fetchFeaturedProperties",
+  ]) {
+    assert.deepEqual(await queries[name](), []);
+  }
+  const feeds = calls.filter(({ text }) => text.includes("JOIN canonical c ON c.id=p.id"));
+  assert.equal(feeds.length, 3, "each homepage feed reaches its listing query");
+  for (const { text, params } of feeds) {
+    const slugs = params.find((value) => Array.isArray(value) && value.includes("bellagio"));
+    assert.ok(slugs.length > 48, "exercise the estate expansion that caused the outage");
+    assert.equal(slugs.length, new Set(slugs).size);
+    assert.ok(slugs.includes("l-aquatique"), "keep newly approved estates in scope");
+    assert.ok(slugs.includes("tai-wah-hin"), "keep existing approved estates");
+    assert.match(text, /p.status = 'active'/);
+    assert.ok(params.some((value) => Array.isArray(value) && value.includes("屯門")));
+    assert.equal(params.at(-1), 6);
+  }
+});
 const read = (path) => readFileSync(join(root, path), "utf8");
 
 const dataUrl = (source) => `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
@@ -82,7 +106,6 @@ const UNUSED_PUBLIC_DATA_EXPORTS = [
   "fetchNeonEstates",
   "fetchNeonEstatesBySlugs",
   "fetchNeonFaqs",
-  "fetchNeonFeaturedProperties",
   "fetchNeonListingCountsByEstate",
   "fetchNeonListingsForAgent",
   "fetchNeonListingsForEstate",
@@ -110,6 +133,7 @@ const UNUSED_PUBLIC_DATA_EXPORTS = [
 async function loadQueriesForFixtureCorridorRows(fixtureRows, queryLog = null) {
   const query = async (text, params) => {
     queryLog?.push({ text, params });
+    if (text.includes("to_regclass('mls_source_promotion_tiers')")) return [{ available: true }];
     if (/GROUP BY p\.deal_type/.test(text)) {
       const totals = new Map();
       for (const row of fixtureRows) {
@@ -128,6 +152,10 @@ async function loadQueriesForFixtureCorridorRows(fixtureRows, queryLog = null) {
   const { url: serverUrl } = await loadPublicDataServer(query);
 
   const publicDataStubSource = `
+    export async function fetchNeonFeaturedProperties({ data }) {
+      const server = await import(${JSON.stringify(serverUrl)});
+      return server.fetchFeaturedProperties(data);
+    }
     export async function fetchNeonCorridorInventory({ data }) {
       const server = await import(${JSON.stringify(serverUrl)});
       return server.fetchCorridorInventory(data);
