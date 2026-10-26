@@ -12,8 +12,8 @@ import { estateRegistry, getEstateEntry } from "./estate-registry.ts";
  * The client's 2026-09-07 primary order (網頁07092026.docx p2) restricted to
  * the names with a verified canonical identity in this repo. Their list is
  * 帝濤灣 / 愛琴海岸 / 黃金海岸 / 滿名山 / 黃金海灣 / 帝御系列 / 星堤 / NAPA /
- * 上源 / 凱和山 / 緹岸 / 飛揚, then the 其他 tile. NAPA, 凱和山, 緹岸 and 飛揚
- * resolve to nothing here and are carried as unresolved names.
+ * 上源 / 凱和山 / 緹岸 / 飛揚, then the 其他 tile. 凱和山 is still unresolved.
+ * NAPA, 緹岸 and 飛揚 exist as unpublished registry rows and are not cards.
  */
 const PRIMARY_ORDER = [
   "帝濤灣",
@@ -106,11 +106,11 @@ test("the client's spellings stay searchable as aliases", () => {
   }
 });
 
-test("the seven unresolved client names are carried verbatim, never substituted", () => {
+test("凱和山 stays unresolved; the six production-backed names are unpublished and not cards", () => {
   const group = getClientAreaGroup("castle-peak-road-west");
   assert.deepEqual(
     group.unresolved.map((entry) => entry.label),
-    ["NAPA", "凱和山", "緹岸", "飛揚", "翠濤居", "棕月灣", "愛琴灣"],
+    ["凱和山"],
   );
   const rendered = [...castlePeakRoadEstates, ...castlePeakRoadOtherEstates].map(
     (estate) => estate.name,
@@ -124,6 +124,20 @@ test("the seven unresolved client names are carried verbatim, never substituted"
       !estateRegistry.some((registryEntry) => registryEntry.nameZh === entry.label),
       `${entry.label} must not have been invented as a registry entry`,
     );
+  }
+  for (const [label, slug] of [
+    ["NAPA", "napa"],
+    ["緹岸", "ocean-camino"],
+    ["飛揚", "fei-yeung"],
+    ["翠濤居", "palm-cove"],
+    ["棕月灣", "chung-yuet-waan"],
+    ["愛琴灣", "oi-kam-waan"],
+  ]) {
+    assert.ok(!rendered.includes(label), `${label} must not render as a card while unpublished`);
+    const entry = getEstateEntry(slug);
+    assert.equal(entry.nameZh, label);
+    assert.equal(entry.published, false);
+    assert.equal(entry.hasPage, false);
   }
 });
 

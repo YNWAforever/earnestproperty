@@ -79,7 +79,7 @@ export async function proposeEstateMappings({
       "",
       JSON.stringify(proposal.stats),
       "",
-      "Exact name/alias AND district only. No fuzzy/parent/phase guesses; unmatched labels keep estate_id NULL. Ambiguous matches and unresolved districts block apply. No estates or districts are created automatically. Target catalog is read again on preflight/apply; this snapshot is evidence, not write authority.",
+      "Exact name/alias AND district, plus CAPTURE_ESTATE_MAPPINGS (意嵐/珀岸 → wong-gam-hoi-waan, 嵐天/星濤 → tai-yu, including the production doubled alias forms). Other phase text stays unmatched. Unmatched labels keep estate_id NULL. Ambiguous matches and unresolved districts block apply. No estates or districts are created automatically. Target catalog is read again on preflight/apply; this snapshot is evidence, not write authority.",
       "",
       "| Captured label | Status | Estate slug | Estate UUID | District |",
       "|---|---|---|---|---|",

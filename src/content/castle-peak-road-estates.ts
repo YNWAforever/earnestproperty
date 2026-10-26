@@ -14,11 +14,11 @@
  * render time by CoreEstateGrid, exactly as core-estates.ts's own entries are
  * -- hardcoding them would let the card drift from the estate page.
  *
- * Seven of the client's names (NAPA, 凱和山, 緹岸, 飛揚, 翠濤居, 棕月灣, 愛琴灣)
- * have no verified canonical identity in this repo. They are carried forward
- * verbatim as `unresolved` entries in client-area-presentation.ts rather than
- * being mapped onto similarly-named estates, and so are absent from both
- * arrays below. See docs/client-feedback-20260907-ledger.md.
+ * 凱和山 still has no verified identity and stays an `unresolved` entry in
+ * client-area-presentation.ts. NAPA, 緹岸, 飛揚, 翠濤居, 棕月灣 and 愛琴灣 now
+ * have unpublished production rows; they are registry entries with
+ * `published: false` and are still absent from both card arrays below.
+ * See docs/client-feedback-20260907-ledger.md.
  */
 import { type CoreEstate, coreEstatesFromRefs } from "./core-estates.ts";
 import { getClientAreaGroup } from "./client-area-presentation.ts";

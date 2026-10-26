@@ -377,6 +377,58 @@ test("estate resolution is exact, district-scoped, nullable, alias-aware and det
   );
   assert.equal(proposal.stats.matched, 1);
   assert.equal(proposal.stats.unmatched_left_null, 1);
+  const phaseDistricts = [{ slug: "castle-peak-road", name_zh: "青山公路" }];
+  const phaseEstates = [
+    {
+      id: "wg",
+      slug: "wong-gam-hoi-waan",
+      name_zh: "黃金海灣",
+      district_slug: "castle-peak-road",
+      aliases: [
+        "黃金海灣 黃金海灣意嵐",
+        "黃金海灣黃金海灣意嵐",
+        "黃金海灣 黃金海灣珀岸",
+        "黃金海灣黃金海灣珀岸",
+      ],
+    },
+    {
+      id: "ty",
+      slug: "tai-yu",
+      name_zh: "帝御",
+      district_slug: "castle-peak-road",
+      aliases: ["帝御 帝御‧嵐天", "帝御帝御‧嵐天", "帝御 帝御‧星濤", "帝御帝御‧星濤"],
+    },
+  ];
+  for (const [label, slug, id] of [
+    ["意嵐", "wong-gam-hoi-waan", "wg"],
+    ["黃金海灣意嵐", "wong-gam-hoi-waan", "wg"],
+    ["珀岸", "wong-gam-hoi-waan", "wg"],
+    ["黃金海灣珀岸", "wong-gam-hoi-waan", "wg"],
+    ["黃金海灣 黃金海灣意嵐", "wong-gam-hoi-waan", "wg"],
+    ["黃金海灣黃金海灣意嵐", "wong-gam-hoi-waan", "wg"],
+    ["嵐天", "tai-yu", "ty"],
+    ["帝御‧嵐天", "tai-yu", "ty"],
+    ["帝御嵐天", "tai-yu", "ty"],
+    ["星濤", "tai-yu", "ty"],
+    ["帝御‧星濤", "tai-yu", "ty"],
+    ["帝御 帝御‧嵐天", "tai-yu", "ty"],
+    ["帝御帝御‧嵐天", "tai-yu", "ty"],
+  ]) {
+    const resolved = resolveSavedEstate(
+      { estate: label, district: "青山公路" },
+      {},
+      phaseEstates,
+      phaseDistricts,
+    );
+    assert.equal(resolved.slug, slug, label);
+    assert.equal(resolved.estate_id, id, label);
+    assert.equal(resolved.status, "matched", label);
+  }
+  assert.equal(
+    resolveSavedEstate({ estate: "意嵐", district: "青山公路" }, {}, [], phaseDistricts).estate_id,
+    null,
+    "a capture label must not invent an estate missing from the catalog",
+  );
   assert.deepEqual(
     proposal,
     buildEstateMappingProposal(
