@@ -77,7 +77,8 @@ import {
   fetchCmsVideos,
   fetchEstates,
   fetchEstatesForAreaGroup,
-  fetchFeaturedProperties,
+  fetchGoldStickyProperties,
+  fetchPropertyHkPromoProperties,
   fetchFaqs,
   fetchListingCountsByEstate,
   type EstateSummary,
@@ -105,11 +106,12 @@ export const Route = createFileRoute("/")({
     // `fetchCmsVideos` reads the small curated cms_videos table. Deliberately NOT
     // `fetchVideosPageData()` (what /videos uses) -- that also runs a 36-row
     // searchListings pass to find listing videos, and the homepage can derive
-    // those for free from `featured`, which already selects `video_url`.
+    // those for free from the two listing bands, which already select `video_url`.
     const [
       estates,
       castlePeakRoadDbEstates,
-      featured,
+      goldSticky,
+      propertyHkPromo,
       faqs,
       corridorFaqs,
       counts,
@@ -123,7 +125,8 @@ export const Route = createFileRoute("/")({
       // single district_slug, so an approved estate whose DB district differs
       // from its commercial grouping still reaches the homepage.
       fetchEstatesForAreaGroup("castle-peak-road-west"),
-      fetchFeaturedProperties(),
+      fetchGoldStickyProperties(),
+      fetchPropertyHkPromoProperties(),
       fetchFaqs("district:sham-tseng"),
       // Nothing seeds a 青山公路 scope (20260622060000_public_content.sql
       // seeds only district:sham-tseng), so this is normally empty and the
@@ -136,7 +139,12 @@ export const Route = createFileRoute("/")({
       // must not take down the whole homepage.
       fetchCmsVideos().catch(() => []),
     ]);
-    const offers = featured
+    const seenListingIds = new Set(goldSticky.map((property) => property.id));
+    const homepageListings = [
+      ...goldSticky,
+      ...propertyHkPromo.filter((property) => !seenListingIds.has(property.id)),
+    ];
+    const offers = homepageListings
       .filter((p) => publicPropertyNo(p))
       .map((p) => ({
         propertyId: p.id,
@@ -144,7 +152,7 @@ export const Route = createFileRoute("/")({
         dealType: p.deal_type === "rent" ? ("rent" as const) : ("sale" as const),
         title: publicPropertyTitle(p),
       }));
-    const featuredEnquiryActions = await resolveWhatsappLinks({ data: { offers } })
+    const listingEnquiryActions = await resolveWhatsappLinks({ data: { offers } })
       .then((result) => result.actions)
       .catch((error) => {
         console.error("WA_TRACKING_RESOLVER_FAILED", error);
@@ -153,8 +161,9 @@ export const Route = createFileRoute("/")({
     return {
       estates,
       castlePeakRoadDbEstates,
-      featured,
-      featuredEnquiryActions,
+      goldSticky,
+      propertyHkPromo,
+      listingEnquiryActions,
       faqs,
       corridorFaqs,
       counts: Object.fromEntries(counts),
@@ -162,7 +171,7 @@ export const Route = createFileRoute("/")({
       // Three trimmed cards, not every channel video: YouTube descriptions were
       // ~80 KB of the dehydrated loader data for a section that shows titles.
       homeVideos: toHomeVideos(
-        featured
+        homepageListings
           .filter((p: FeaturedProperty) => isYouTubeVideoUrl(p.video_url))
           .map((p: FeaturedProperty) => ({
             key: `listing-${p.id}`,
@@ -218,8 +227,9 @@ function HomePage() {
   const {
     estates,
     castlePeakRoadDbEstates,
-    featured,
-    featuredEnquiryActions,
+    goldSticky,
+    propertyHkPromo,
+    listingEnquiryActions,
     faqs: faqRows,
     corridorFaqs: corridorFaqRows,
     counts,
@@ -343,57 +353,41 @@ function HomePage() {
         </div>
       </section>
 
-      {/* FEATURED LISTINGS — 最新放盤置頂 (client p2): live stock is the first
-          thing after the hero, ahead of the evergreen estate directory. The
-          district-stats strip that used to sit above this was removed at the
-          client's request; bg-muted/40 still reads as a band against the hero
-          above and the plain estates section below. */}
+      {/* FEATURED LISTINGS — two bands replace the single 最新放盤 feed.
+          黃金必走盤 is 28hse 黃金置頂 and 置頂盤. 荀盤推介 is 宅谷 (Property.hk).
+          Live stock stays the first thing after the hero, ahead of the
+          evergreen estate directory. */}
       <section className="bg-muted/40">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
-          <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
-            <SectionHeader title="最新放盤" className="text-left" />
-            <Link to="/listings" className="text-sm font-medium text-primary hover:underline">
-              所有放盤 →
-            </Link>
-          </div>
-
-          {featured.length === 0 ? (
-            <EmptyState
-              className="mt-8"
-              icon={Building2}
-              title="暫時未有公開放盤"
-              description="請稍後再試，或直接 WhatsApp 我哋查詢最新盤源。"
-              action={
-                <a
-                  href={whatsappUrl("你好，想查詢深井、青山公路最新放盤")}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <Button variant="outline">
-                    <MessageCircle className="h-4 w-4" />
-                    WhatsApp 查詢
-                  </Button>
-                </a>
-              }
-            />
-          ) : (
-            <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {featured.map((p: FeaturedProperty) => (
-                <PropertyCard
-                  key={p.id}
-                  property={p}
-                  enquiryAction={featuredEnquiryActions.find((a) => a.propertyId === p.id)}
-                />
-              ))}
-            </div>
-          )}
+          <HomepageListingBand
+            title="黃金必走盤"
+            desc="28hse 黃金置頂同置頂盤。"
+            listings={goldSticky}
+            enquiryActions={listingEnquiryActions}
+            emptyTitle="暫時未有黃金置頂或置頂盤"
+            emptyDescription="請稍後再試，或直接 WhatsApp 我哋查詢黃金必走盤。"
+            whatsappMessage="你好，想查詢黃金必走盤"
+          />
+        </div>
+      </section>
+      <section className="border-t border-border bg-muted/40">
+        <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
+          <HomepageListingBand
+            title="荀盤推介"
+            desc="宅谷最新樓盤。"
+            listings={propertyHkPromo}
+            enquiryActions={listingEnquiryActions}
+            emptyTitle="暫時未有宅谷推介"
+            emptyDescription="請稍後再試，或直接 WhatsApp 我哋查詢宅谷樓盤。"
+            whatsappMessage="你好，想查詢宅谷荀盤"
+          />
         </div>
       </section>
 
-      {/* FEATURED VIDEOS — sits directly after 最新放盤 so a buyer who just
-          scanned the live stock can immediately see the same listings walked
-          through on video. Hidden entirely when neither the CMS videos nor any
-          featured listing has a video, rather than shipping an empty band. */}
+      {/* FEATURED VIDEOS — sits directly after the two listing bands so a buyer
+          who just scanned the live stock can immediately see the same listings
+          walked through on video. Hidden entirely when neither the CMS videos
+          nor either band has a video, rather than shipping an empty band. */}
       {homeVideos.length > 0 ? (
         <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
@@ -743,6 +737,62 @@ function HomePage() {
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function HomepageListingBand({
+  title,
+  desc,
+  listings,
+  enquiryActions,
+  emptyTitle,
+  emptyDescription,
+  whatsappMessage,
+}: {
+  title: string;
+  desc: string;
+  listings: FeaturedProperty[];
+  enquiryActions: Array<PublicWaAction & { propertyId: string }>;
+  emptyTitle: string;
+  emptyDescription: string;
+  whatsappMessage: string;
+}) {
+  return (
+    <div>
+      <div className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+        <SectionHeader title={title} desc={desc} className="text-left" />
+        <Link to="/listings" className="text-sm font-medium text-primary hover:underline">
+          所有放盤 →
+        </Link>
+      </div>
+
+      {listings.length === 0 ? (
+        <EmptyState
+          className="mt-8"
+          icon={Building2}
+          title={emptyTitle}
+          description={emptyDescription}
+          action={
+            <a href={whatsappUrl(whatsappMessage)} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline">
+                <MessageCircle className="h-4 w-4" />
+                WhatsApp 查詢
+              </Button>
+            </a>
+          }
+        />
+      ) : (
+        <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {listings.map((property) => (
+            <PropertyCard
+              key={property.id}
+              property={property}
+              enquiryAction={enquiryActions.find((action) => action.propertyId === property.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

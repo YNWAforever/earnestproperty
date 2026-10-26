@@ -231,26 +231,52 @@ export async function fetchFaqs(scope: string): Promise<FaqItem[]> {
 const FEATURED_DISPLAY_LIMIT = 6;
 
 /**
- * Homepage 最新放盤: request the newest accepted active source adverts.
- * Scope and canonical deduplication run in SQL before the six-card limit;
- * this final scope check and dedupe remain defensive checks for legacy rows.
+ * Homepage listing bands share the old 最新放盤 scope: corridor estates,
+ * six cards, canonical dedupe. SQL chooses which inventory each band is.
  */
 export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
-  const rows = (await fetchNeonFeaturedProperties({
-    data: {
-      limit: FEATURED_DISPLAY_LIMIT,
-      order: "newest",
-      districtSlugs: corridorRegionScope.districtSlugs,
-      // The client's approved presentation estates join the corridor's own
-      // estates here. This is what lets 香港黃金海岸 stock through a place-name
-      // gate that rejects the literal string 黃金海岸 -- an explicit,
-      // per-estate allowance, not a widening of 屯門 or 大欖涌.
-      estateSlugs: [...corridorEstateSlugsForFeed(), ...approvedPresentationEstateSlugs],
-      textAliases: corridorRegionScope.textAliases,
-      outOfScopeTextAliases: corridorRegionScope.outOfScopeTextAliases,
-    },
-  })) as FeaturedProperty[];
+  return loadHomepageListings(homepageListingQuery(undefined, "newest"));
+}
 
+/** 黃金必走盤: 28hse 黃金置頂 (gold) and 置頂盤 (pinned) only. */
+export async function fetchGoldStickyProperties(): Promise<FeaturedProperty[]> {
+  return loadHomepageListings(homepageListingQuery("28hse-paid", "promotion"));
+}
+
+/** 荀盤推介: 宅谷 (Property.hk) active listings, newest first. */
+export async function fetchPropertyHkPromoProperties(): Promise<FeaturedProperty[]> {
+  return loadHomepageListings(homepageListingQuery("propertyhk", "newest"));
+}
+
+function homepageListingQuery(
+  selection: "28hse-paid" | "propertyhk" | undefined,
+  order: "newest" | "promotion",
+) {
+  return {
+    limit: FEATURED_DISPLAY_LIMIT,
+    order,
+    selection,
+    districtSlugs: corridorRegionScope.districtSlugs,
+    // The client's approved presentation estates join the corridor's own
+    // estates here. This is what lets 香港黃金海岸 stock through a place-name
+    // gate that rejects the literal string 黃金海岸 -- an explicit,
+    // per-estate allowance, not a widening of 屯門 or 大欖涌.
+    estateSlugs: [...corridorEstateSlugsForFeed(), ...approvedPresentationEstateSlugs],
+    textAliases: corridorRegionScope.textAliases,
+    outOfScopeTextAliases: corridorRegionScope.outOfScopeTextAliases,
+  };
+}
+
+async function loadHomepageListings(
+  data: ReturnType<typeof homepageListingQuery>,
+): Promise<FeaturedProperty[]> {
+  const rows = (await fetchNeonFeaturedProperties({ data })) as FeaturedProperty[];
+  // Scope and canonical deduplication run in SQL before the six-card limit;
+  // this final scope check and dedupe remain defensive checks for legacy rows.
+  return selectHomepageListings(rows);
+}
+
+function selectHomepageListings(rows: FeaturedProperty[]): FeaturedProperty[] {
   return dedupeListings(
     rows.filter((row) =>
       isWithinCorridorRegion({

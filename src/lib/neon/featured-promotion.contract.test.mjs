@@ -169,6 +169,8 @@ test("deduplication still happens before the limit counts rows", async () => {
 test("publication and delisting rules are unchanged", async () => {
   const { text } = await captureFeaturedQuery({ limit: 6 });
   assert.match(text, /p\.status = 'active'/);
+  assert.doesNotMatch(text, /28hse_agent_540/);
+  assert.doesNotMatch(text, /source = 'propertyhk'/);
 });
 
 test("the region scope is applied in the same query, including the exclusion list", async () => {
@@ -285,6 +287,147 @@ test("homepage newest feed ranks new source adverts before old promoted inventor
       ["RELIST", "NEW"],
     );
     assert.ok(!six.some((x) => ["TWIN", "W1", "W2"].includes(x.listing_no)));
+  } finally {
+    await db.close();
+  }
+});
+
+test("黃金必走盤 keeps only active 28hse gold and pinned placements", async () => {
+  const { text, params } = await captureFeaturedQuery({ limit: 6, selection: "28hse-paid" });
+  assert.match(text, /psl\.source = '28hse_agent_540'/);
+  assert.match(text, /t\.promotion_tier IN \('gold', 'pinned'\)/);
+  assert.match(text, /psl\.status = 'active'/);
+  assert.match(text, /JOIN mls_source_promotion_tiers t/);
+  assert.match(text, /WHEN 'gold' THEN 0/);
+  assert.match(text, /WHEN 'pinned' THEN 1/);
+  assert.doesNotMatch(text, /source = 'propertyhk'/);
+  const orderIndex = text.indexOf("ORDER BY COALESCE(promotion.rank, 3) ASC");
+  const limitIndex = text.lastIndexOf("LIMIT");
+  assert.ok(orderIndex > -1, "gold sorts ahead of pinned");
+  assert.ok(limitIndex > orderIndex, "LIMIT must come after the grade order");
+  assert.ok(params.includes(6));
+});
+
+test("黃金必走盤 is empty until the promotion table exists", async () => {
+  const calls = [];
+  const server = await loadPublicDataServer(async (text) => {
+    if (text.includes("to_regclass('mls_source_promotion_tiers')")) return [{ available: false }];
+    calls.push(text);
+    return [];
+  });
+  assert.deepEqual(await server.fetchFeaturedProperties({ limit: 6, selection: "28hse-paid" }), []);
+  assert.equal(calls.length, 0, "ordinary listings must not fill a 黃金必走盤 heading");
+});
+
+test("荀盤推介 is active Property.hk inventory and omits 28hse paid placements", async () => {
+  const { text } = await captureFeaturedQuery({ limit: 6, selection: "propertyhk" });
+  assert.match(text, /psl\.source = 'propertyhk'/);
+  assert.match(text, /psl\.status = 'active'/);
+  assert.match(text, /AND NOT EXISTS \(/);
+  assert.match(text, /psl\.source = '28hse_agent_540'/);
+  assert.match(text, /t\.promotion_tier IN \('gold', 'pinned'\)/);
+  assert.match(text, /SELECT max\(fresh\.first_seen_at\)/);
+  assert.doesNotMatch(text, /promotion\.rank/);
+});
+
+test("荀盤推介 does not reference promotion tiers before that table exists", async () => {
+  const { text } = await captureFeaturedQuery(
+    { limit: 6, selection: "propertyhk" },
+    { tableAvailable: false },
+  );
+  assert.match(text, /psl\.source = 'propertyhk'/);
+  assert.match(text, /psl\.status = 'active'/);
+  assert.doesNotMatch(text, /mls_source_promotion_tiers/);
+  assert.doesNotMatch(text, /28hse_agent_540/);
+});
+
+test("an unknown homepage selection never reaches SQL", async () => {
+  const calls = [];
+  const server = await loadPublicDataServer(async (text) => {
+    calls.push(text);
+    return [];
+  });
+  await assert.rejects(
+    server.fetchFeaturedProperties({ limit: 6, selection: "all" }),
+    /INVALID_PUBLIC_SCOPE/,
+  );
+  assert.equal(calls.length, 0);
+});
+
+test("homepage bands select gold then pinned, and 宅谷 without repeating paid 28hse", async () => {
+  const db = new PGlite();
+  try {
+    await db.exec(`CREATE TABLE properties (
+      id text PRIMARY KEY, listing_no text, canonical_property_no text, title_zh text,
+      deal_type text NOT NULL DEFAULT 'sale', source_updated_at timestamp,
+      last_seen_at timestamp, updated_at timestamp, created_at timestamp NOT NULL,
+      status text NOT NULL DEFAULT 'active', featured boolean NOT NULL DEFAULT false,
+      estate_id text, district_slug text, address text, price numeric, rent numeric,
+      saleable_area numeric, bedrooms numeric, bathrooms numeric, features text[],
+      images text[], video_url text, source_site text
+    );
+    CREATE TABLE property_public_members(property_id text, public_listing_no text);
+    CREATE TABLE estates(id text, name_zh text, slug text, district_slug text);
+    CREATE TABLE property_source_links(property_id text, source text, external_listing_id text,
+      deal_type text, status text, first_seen_at timestamp, last_seen_at timestamp);
+    CREATE TABLE mls_source_state(property_id text, first_seen_at timestamp, source_status text, last_accepted_at timestamp, source text, external_listing_id text, deal_type text);
+    CREATE TABLE mls_source_promotion_tiers(source text, external_listing_id text, deal_type text, promotion_tier text);
+    INSERT INTO properties(id,listing_no,created_at,status) VALUES
+      ('gold-new','GOLD-NEW','2026-10-01','active'),
+      ('gold-old','GOLD-OLD','2026-08-01','active'),
+      ('pinned','PINNED','2026-09-01','active'),
+      ('normal-28','NORMAL','2026-09-20','active'),
+      ('hk-new','HK-NEW','2026-09-25','active'),
+      ('hk-old','HK-OLD','2026-07-01','active'),
+      ('hk-normal','HK-NORMAL','2026-09-28','active'),
+      ('hk-inactive','HK-OFF','2026-10-02','inactive'),
+      ('hk-proposed','HK-PROP','2026-10-03','active'),
+      ('gold-dead-link','GOLD-DEAD','2026-10-04','active');
+    INSERT INTO property_public_members VALUES
+      ('gold-new','P-GOLD-NEW'),('gold-old','P-GOLD-OLD'),('pinned','P-PINNED'),
+      ('normal-28','P-NORMAL'),('hk-new','P-HK-NEW'),('hk-old','P-HK-OLD'),
+      ('hk-normal','P-HK-NORMAL'),('hk-inactive','P-HK-OFF'),('hk-proposed','P-HK-PROP'),
+      ('gold-dead-link','P-GOLD-DEAD');
+    INSERT INTO property_source_links(property_id,source,external_listing_id,deal_type,status) VALUES
+      ('gold-new','28hse_agent_540','g1','sale','active'),
+      ('gold-old','28hse_agent_540','g2','sale','active'),
+      ('gold-old','propertyhk','g2','sale','active'),
+      ('pinned','28hse_agent_540','p1','sale','active'),
+      ('normal-28','28hse_agent_540','n1','sale','active'),
+      ('hk-new','propertyhk','h1','sale','active'),
+      ('hk-old','propertyhk','h2','sale','active'),
+      ('hk-normal','propertyhk','h3','sale','active'),
+      ('hk-normal','28hse_agent_540','n2','sale','active'),
+      ('hk-inactive','propertyhk','h4','sale','active'),
+      ('hk-proposed','propertyhk','h5','sale','proposed'),
+      ('gold-dead-link','28hse_agent_540','g3','sale','rejected');
+    INSERT INTO mls_source_promotion_tiers(source,external_listing_id,deal_type,promotion_tier) VALUES
+      ('28hse_agent_540','g1','sale','gold'),
+      ('28hse_agent_540','g2','sale','gold'),
+      ('28hse_agent_540','p1','sale','pinned'),
+      ('28hse_agent_540','n1','sale','normal'),
+      ('28hse_agent_540','n2','sale','normal'),
+      ('28hse_agent_540','g3','sale','gold');`);
+    const server = await loadPublicDataServer(async (text, params) => {
+      return (await db.query(text, params)).rows;
+    });
+    const paid = await server.fetchFeaturedProperties({ limit: 6, selection: "28hse-paid" });
+    assert.deepEqual(
+      paid.map((row) => row.listing_no),
+      ["GOLD-NEW", "GOLD-OLD", "PINNED"],
+      "gold before pinned; ordinary, 宅谷-only, inactive and dead links stay out",
+    );
+    const zaakGu = await server.fetchFeaturedProperties({ limit: 6, selection: "propertyhk" });
+    assert.deepEqual(
+      zaakGu.map((row) => row.listing_no),
+      ["HK-NORMAL", "HK-NEW", "HK-OLD"],
+      "宅谷 newest first, without the gold listing that also has a Property.hk link",
+    );
+    const capped = await server.fetchFeaturedProperties({ limit: 2, selection: "propertyhk" });
+    assert.deepEqual(
+      capped.map((row) => row.listing_no),
+      ["HK-NORMAL", "HK-NEW"],
+    );
   } finally {
     await db.close();
   }
