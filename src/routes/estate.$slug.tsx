@@ -110,7 +110,7 @@ export const Route = createFileRoute("/estate/$slug")({
       return {
         slug: entry.slug,
         nameZh: entry.nameZh,
-        hasPage: entry.hasPage,
+        hasPage: entry.hasPage && Boolean(record),
         avgPsf: record ? Number(record.avg_saleable_psf ?? 0) || null : null,
         totalUnits: record?.total_units ?? null,
         yearCompleted: record?.year_completed ?? null,

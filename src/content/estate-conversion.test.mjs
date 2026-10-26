@@ -620,12 +620,12 @@ test("estate.$slug.tsx wires findComparableEstates + EstateComparisonTable (P4 T
   assert.match(route, /const comparableEntries = findComparableEstates\(estate\.slug, 2\);/);
 
   // A `null` DB record for a comparable (no row, or an unpublished row)
-  // still keeps its registry name/hasPage and simply renders every fact as
+  // still keeps its registry name without a page link and renders every fact as
   // "—" -- it is not dropped from the "up to 2" slots or backfilled with a
   // third candidate.
   assert.match(route, /const record = comparableRecords\[index\];/);
   assert.match(route, /nameZh: entry\.nameZh,/);
-  assert.match(route, /hasPage: entry\.hasPage,/);
+  assert.match(route, /hasPage: entry\.hasPage && Boolean\(record\),/);
 
   // The current estate's own column uses the same avgPsf conversion
   // EstateMarketSnapshot already gets below it, so a non-numeric/zero DB

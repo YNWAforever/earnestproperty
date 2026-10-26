@@ -46,30 +46,45 @@ test("the registry still holds every estate the client's new order dropped", () 
   assert.ok(!coreEstates.some((estate) => estate.slug === "lung-tang-kok"));
 });
 
-test("the curated detail-page set stays 22, and the production snapshot adds the unpublished rows", () => {
-  assert.equal(estateRegistry.filter((entry) => entry.hasPage).length, 22);
-  assert.equal(estateRegistry.length, 51);
+test("the original pages plus 40 listing-evidenced additions have unique identities", () => {
+  assert.equal(estateRegistry.filter((entry) => entry.hasPage).length, 62);
+  assert.equal(estateRegistry.length, 63);
   const slugs = estateRegistry.map((entry) => entry.slug);
   assert.equal(new Set(slugs).size, slugs.length, "no duplicate slugs in the registry");
 });
 
-test("registry identity matches the 2026-10-26 production estates snapshot", () => {
+test("registry preserves the production snapshot plus reviewed publication and identity changes", () => {
   const snapshot = JSON.parse(read("src/content/fixtures/prod-estates-20261026.json"));
   assert.equal(snapshot.length, 51);
   const bySlug = new Map(estateRegistry.map((entry) => [entry.slug, entry]));
-  assert.deepEqual([...bySlug.keys()].sort(), snapshot.map((row) => row.slug).sort());
+  const additions = new Set(
+    JSON.parse(read("src/content/fixtures/listing-estate-expansion-20261026.json")).estates.map(
+      (estate) => estate.slug,
+    ),
+  );
+  assert.ok(
+    snapshot.every((row) => bySlug.has(row.slug)),
+    "all historical identities survive",
+  );
+  assert.ok(
+    [...bySlug.keys()].every(
+      (slug) => snapshot.some((row) => row.slug === slug) || additions.has(slug),
+    ),
+    "new identities need listing evidence",
+  );
   for (const row of snapshot) {
     const entry = bySlug.get(row.slug);
     assert.equal(entry.districtSlug, row.district_slug, row.slug);
-    assert.equal(entry.published, row.published, row.slug);
+    assert.equal(entry.published, row.published || additions.has(row.slug), row.slug);
     assert.ok(
       entry.nameZh === row.name_zh || entry.aliases.includes(row.name_zh),
       `${row.slug} must keep production name_zh ${row.name_zh}`,
     );
     for (const alias of row.aliases ?? []) {
+      if (row.slug === "lung-chu-island-garden" && alias === "龍珠島別墅") continue; // Verified 9號 / 11號 identity correction.
       assert.ok(entry.aliases.includes(alias), `${row.slug} missing production alias ${alias}`);
     }
-    if (!row.published) {
+    if (!row.published && !additions.has(row.slug)) {
       assert.equal(entry.hasPage, false, `${row.slug} must not grow a detail page`);
       assert.equal(entry.homepageDistrict, null, `${row.slug} must not become a homepage card`);
     }
@@ -77,7 +92,8 @@ test("registry identity matches the 2026-10-26 production estates snapshot", () 
   for (const slug of ["fei-yeung", "ocean-camino", "lung-chu-island-garden"]) {
     assert.equal(estateRegistry.filter((entry) => entry.slug === slug).length, 1);
   }
-  assert.ok(!estateRegistry.some((entry) => /逸璟|星岸/.test(entry.nameZh)));
+  assert.ok(getEstateEntry("l-aquatique").aliases.includes("逸璟龍灣"));
+  assert.equal(getEstateEntry("deauville").nameZh, "星岸");
 });
 
 test("core-estates.ts's photo/district/hasPage fields are exactly the registry's", () => {
@@ -282,9 +298,9 @@ test("Estate Expansion 17 (2026-09-01 data pack): all 17 estates have hasPage:tr
       assert.equal(entry.photo, null, `${slug} has no supplied photo yet`);
     }
   }
-  // The original 22 keep detail pages. Snapshot rows with published=false do not.
-  assert.equal(estatesWithPage.length, 22);
-  assert.equal(estateRegistry.filter((entry) => !entry.hasPage).length, estateRegistry.length - 22);
+  // The original 22 and 40 evidenced additions have content; the unreferenced placeholder stays hidden.
+  assert.equal(estatesWithPage.length, 62);
+  assert.equal(estateRegistry.filter((entry) => !entry.hasPage).length, estateRegistry.length - 62);
 });
 
 test("Estate Expansion 17: corridorSegment stays null for all 17 estates (regression guard -- this task must never silently pull any of them into corridor listing-search scope)", () => {
@@ -447,7 +463,7 @@ test("findComparableEstates matches tai-wah-hin to lung-tang-kok, the only other
   assert.equal(entry.corridorSegment, null);
   assert.deepEqual(
     findComparableEstates("tai-wah-hin", 5).map((e) => e.slug),
-    ["lung-tang-kok"],
+    ["lung-tang-kok", "l-aquatique"],
   );
 });
 

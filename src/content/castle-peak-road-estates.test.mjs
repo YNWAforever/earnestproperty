@@ -38,7 +38,7 @@ test("the client's primary western order ships exactly, in order", () => {
 
 test("the 其他 group ships the client's secondary order, in order", () => {
   assert.deepEqual(
-    castlePeakRoadOtherEstates.map((estate) => estate.name),
+    castlePeakRoadOtherEstates.slice(0, 4).map((estate) => estate.name),
     OTHER_ORDER,
   );
   assert.equal(CASTLE_PEAK_ROAD_OTHER_LABEL, "其他");
@@ -106,7 +106,7 @@ test("the client's spellings stay searchable as aliases", () => {
   }
 });
 
-test("凱和山 stays unresolved; the six production-backed names are unpublished and not cards", () => {
+test("凱和山 stays unresolved; six listing-backed estates now have published cards", () => {
   const group = getClientAreaGroup("castle-peak-road-west");
   assert.deepEqual(
     group.unresolved.map((entry) => entry.label),
@@ -133,11 +133,14 @@ test("凱和山 stays unresolved; the six production-backed names are unpublishe
     ["棕月灣", "chung-yuet-waan"],
     ["愛琴灣", "oi-kam-waan"],
   ]) {
-    assert.ok(!rendered.includes(label), `${label} must not render as a card while unpublished`);
+    assert.ok(
+      rendered.includes(label),
+      `${label} must render after the reviewed content migration`,
+    );
     const entry = getEstateEntry(slug);
     assert.equal(entry.nameZh, label);
-    assert.equal(entry.published, false);
-    assert.equal(entry.hasPage, false);
+    assert.equal(entry.published, true);
+    assert.equal(entry.hasPage, true);
   }
 });
 

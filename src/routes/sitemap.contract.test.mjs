@@ -96,7 +96,11 @@ test("estateSeo's entry count matches exactly estate-registry.ts's hasPage:true 
   // estate-registry.ts entries have shipped `hasPage: true` since the
   // 2026-09-01 Estate Expansion 17 data pack (see that file's own comment);
   // Task 3 (src/content/seo.ts) brought estateSeo's count up to match.
-  assert.equal(seoSlugs.length, 22, "all 22 registry estates should have a live detail page today");
+  assert.equal(
+    seoSlugs.length,
+    62,
+    "62 estates have content; live published state still gates the sitemap",
+  );
 });
 
 test("simulating fetchSitemapTimestamps' publish filter against estateSeo never includes a slug the simulated published set excludes", () => {
@@ -132,8 +136,8 @@ test("simulating fetchSitemapTimestamps' publish filter against estateSeo never 
     Object.keys(estateSeo).map((slug) => [slug, "2026-01-01"]),
   );
   const allPaths = simulateSitemapEstatePaths(allEstatesPublished);
-  assert.equal(allPaths.length, 22);
-  assert.equal(new Set(allPaths).size, 22, "no duplicate estate paths");
+  assert.equal(allPaths.length, 62);
+  assert.equal(new Set(allPaths).size, 62, "no duplicate estate paths");
 });
 
 test("a hasPage:false registry estate never gets an estateSeo entry", () => {

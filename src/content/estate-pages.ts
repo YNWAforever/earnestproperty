@@ -1,5 +1,6 @@
 import { estateRegistry, getEstateEntry } from "./estate-registry.ts";
 import { getCastlePeakRoadSegment } from "./castle-peak-road.ts";
+import { listingEstateContent } from "./listing-estate-content.ts";
 
 export type EstateContentLink = {
   href: string;
@@ -57,6 +58,51 @@ function estatePageIdentity(slug: string) {
 }
 
 export const estatePageContent = {
+  ...Object.fromEntries(
+    listingEstateContent.map((item) => {
+      const identity = estatePageIdentity(item.slug);
+      const entry = getEstateEntry(item.slug);
+      return [
+        item.slug,
+        {
+          ...identity,
+          heroPositioning: item.overview[0],
+          overview: item.overview,
+          buyerFit: [
+            `重視${entry.locationLabelZh}生活圈，希望比較${identity.nameZh}實際單位、交通及保養的買家或租客。`,
+          ],
+          pros: [item.overview[0]],
+          watchouts: [item.watchout],
+          transportLifestyle: item.transport,
+          marketNote: `比較${identity.nameZh}時，應按住宅類型、座別、樓層及單位狀況分開看；個別放盤相片及條件只供該單位參考。`,
+          saleCta: `想買${identity.nameZh}？講低預算、房數及睇樓要求，代理幫你配盤。`,
+          rentCta: `想租${identity.nameZh}？講低月租及入住日期，代理幫你搵合適單位。`,
+          valuationCta: `${identity.nameZh}業主可查詢同類單位的放售及放租估值。`,
+          faqs: [
+            {
+              question: `${identity.nameZh}位於哪裏？`,
+              answer: `${identity.nameZh}位於${item.address}。${item.overview[0]}`,
+            },
+            { question: `${identity.nameZh}睇樓要留意甚麼？`, answer: item.watchout },
+          ],
+          relatedLinks: [
+            {
+              href: entry.districtHref ?? "/castle-peak-road",
+              label: `${entry.locationLabelZh}地區資料`,
+            },
+            {
+              href: `/listings?deal=sale&estate=${item.slug}`,
+              label: `${identity.nameZh}出售放盤`,
+            },
+            {
+              href: `/listings?deal=rent&estate=${item.slug}`,
+              label: `${identity.nameZh}出租放盤`,
+            },
+          ],
+        } satisfies EstatePageContent,
+      ];
+    }),
+  ),
   bellagio: {
     ...estatePageIdentity("bellagio"),
     heroPositioning: "深井地標海景屋苑，適合重視會所、海景和屋苑規模的家庭。",

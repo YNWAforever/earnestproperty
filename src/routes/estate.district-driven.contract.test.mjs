@@ -4,6 +4,28 @@ import { readFileSync } from "node:fs";
 
 const source = readFileSync(new URL("./estate.$slug.tsx", import.meta.url), "utf8");
 
+test("comparison links wait for a published estate record during migration rollout", () => {
+  // Exercise the route's real projection without importing its live DB loader/JSX.
+  const start = source.indexOf("comparableEntries.map((entry, index) => {");
+  const end = source.indexOf("\n    return {\n      estate,", start);
+  assert.ok(start > 0 && end > start);
+  const expression = source.slice(start, end).trim().replace(/;$/, "");
+  const project = new Function("comparableEntries", "comparableRecords", `return ${expression};`);
+  const [pending, published, placeholder] = project(
+    [
+      { slug: "l-aquatique", nameZh: "逸璟．龍灣", hasPage: true },
+      { slug: "lung-tang-kok", nameZh: "龍騰閣", hasPage: true },
+      { slug: "placeholder", nameZh: "未有內容", hasPage: false },
+    ],
+    [null, { total_units: 20 }, { total_units: 10 }],
+  );
+  assert.equal(pending.hasPage, false, "an uncreated/unpublished DB estate must not link to a 404");
+  assert.equal(pending.totalUnits, null);
+  assert.equal(published.hasPage, true);
+  assert.equal(published.totalUnits, 20);
+  assert.equal(placeholder.hasPage, false);
+});
+
 test("estate.$slug.tsx no longer hardcodes a 深井-only hero eyebrow", () => {
   assert.ok(
     !source.includes('"深井屋苑獨立 SEO 頁"'),

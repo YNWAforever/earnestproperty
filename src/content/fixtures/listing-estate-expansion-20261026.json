@@ -1,0 +1,1830 @@
+{
+  "asOf": "2026-10-26",
+  "baseline": "8351e1e8238b1912a29f1896f2c59687c6e6676a",
+  "inventoryPolicy": "Public canonical winner per public_listing_no + deal_type, status=active. Read-only production snapshot.",
+  "estates": [
+    {
+      "slug": "bayview-terrace",
+      "nameZh": "碧翠花園",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E7%A2%A7%E7%BF%A0%E8%8A%B1%E5%9C%92/2-ZMDLTHDVHN",
+        "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B0%8F%E6%AC%96-%E6%8E%83%E7%AE%A1%E7%AC%8F-%E9%9D%92%E5%B1%B1%E7%81%A3-%E7%A2%A7%E7%BF%A0%E8%8A%B1%E5%9C%92-E00630",
+        "https://www.property.hk/asking_detail/ept/king/6823280.html"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/5/f/8/58bf4c9fa5c25874c54c4ffe0e70d341.jpg",
+        "listingNo": "C004447-6823280-S",
+        "sourceUrl": "https://www.property.hk/asking_detail/ept/king/6823280.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "C004447",
+          "listingNo": "C004447-6823280-S",
+          "titleZh": "碧翠花園 售盤 #C004447",
+          "address": "青山公路18咪半 碧翠花園",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/king/6823280.html",
+          "needsBackfill": false
+        }
+      ]
+    },
+    {
+      "slug": "castle-peak-villas",
+      "nameZh": "青山別墅",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E9%9D%92%E5%B1%B1%E5%88%A5%E5%A2%85/2-SUDCFROXRJ",
+        "https://www.28hse.com/estate/detail/%E9%9D%92%E5%B1%B1%E5%88%A5%E5%A2%85-4509",
+        "https://www.28hse.com/rent/apartment/property-4051997"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/38/384abf198c6ca47ef656ca788e1976edacc32c1082a7a9e8ab8270c8d2091128.jpg",
+        "listingNo": "SYNC-854e06d4-8908-49c5-9b96-458b26540a60",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4051997",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A048636",
+          "listingNo": "A048636-6833746-S",
+          "titleZh": "青山別墅 F座 海濤閣 售盤 #A048636",
+          "address": "青山公路大欖段19號 青山別墅 F座 海濤閣",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/lee/6833746.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A048636",
+          "listingNo": "SYNC-854e06d4-8908-49c5-9b96-458b26540a60",
+          "titleZh": "(晉誠地產租盤推介) 《連2車位》 有匙即看！臨海大露台！大廳大房實用！",
+          "address": "新界屯門(青山公路)青山別墅 樂翠街19號",
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4051997",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "R063140",
+          "listingNo": "R063140-6774804-S",
+          "titleZh": "青山別墅 C座 海景閣 售盤 #R063140",
+          "address": "樂翠街19號 青山別墅 C座 海景閣",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6774804.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "T032104",
+          "listingNo": "T032104-6714430-S",
+          "titleZh": "青山別墅 售盤 #T032104",
+          "address": "青山公路大欖段19號 青山別墅",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6714430.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "ching-lai-waan-villas",
+      "nameZh": "青麗灣別墅",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E9%9D%92%E9%BA%97%E7%81%A3%E5%88%A5%E5%A2%85/2-SUCJFROORJ",
+        "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B0%8F%E6%AC%96-%E6%8E%83%E7%AE%A1%E7%AC%8F-%E9%9D%92%E5%B1%B1%E7%81%A3-%E9%9D%92%E9%BA%97%E7%81%A3%E5%88%A5%E5%A2%85-E00667",
+        "https://www.28hse.com/buy/apartment/property-4049628"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/35/35b60726094f0c3abcbc1d21e9554d2390a13dc80950e5d7b8a635dadf8b289d.jpg",
+        "listingNo": "SYNC-454cffb5-f42c-408d-aab4-e1022a5d7c10",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4049628",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "C003847",
+          "listingNo": "SYNC-454cffb5-f42c-408d-aab4-e1022a5d7c10",
+          "titleZh": "(晉誠地產洋房推介) 《私家車房》 向南海景！前後花園天台！低密度小欖路邊洋房！",
+          "address": "新界屯門(青山公路)青麗灣別墅 樂翠街6-18號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4049628",
+          "needsBackfill": false
+        }
+      ]
+    },
+    {
+      "slug": "ching-yung-toi",
+      "nameZh": "青榕臺",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B0%8F%E6%AC%96-%E6%8E%83%E7%AE%A1%E7%AC%8F-%E9%9D%92%E5%B1%B1%E7%81%A3-%E9%9D%92%E6%A6%95%E5%8F%B0-E00088",
+        "https://www.squarefoot.com.hk/cn/estate/detail/%E9%9D%92%E6%A6%95%E5%8F%B0-4506",
+        "https://www.28hse.com/buy/apartment/property-4058947"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/b4/b4f12661f6db2c1cccdd354f8a32f1ee64cd257ba270dabf5065756bf8a88155.jpg",
+        "listingNo": "SYNC-638c3de5-dd56-4a7f-bc38-593ab4d53363",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4058947",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A044667",
+          "listingNo": "A044667-6779378-S",
+          "titleZh": "青榕台 第04座 售盤 #A044667",
+          "address": "青榕街8號 青榕台 第04座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6779378.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A068319",
+          "listingNo": "SYNC-638c3de5-dd56-4a7f-bc38-593ab4d53363",
+          "titleZh": "(晉誠地產全部真盤) 《速車位》 高層全海景！一梯兩伙有露台！半山空氣好！",
+          "address": "新界屯門(青山公路)青榕臺 青榕街8號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4058947",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "T031325",
+          "listingNo": "T031325-6733870-S",
+          "titleZh": "青榕台 第03座 售盤 #T031325",
+          "address": "青榕街8號 青榕台 第03座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6733870.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A064297",
+          "listingNo": "A064297-6759950-S",
+          "titleZh": "青榕台 售盤 #A064297",
+          "address": "青榕街8號 青榕台",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6759950.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "C005594",
+          "listingNo": "C005594-6708230-R",
+          "titleZh": "青榕台 第02座 租盤 #C005594",
+          "address": "青榕街8號 青榕台 第02座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6708230.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "T031325",
+          "listingNo": "T031325-6733870-R",
+          "titleZh": "青榕台 第03座 租盤 #T031325",
+          "address": "青榕街8號 青榕台 第03座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6733870.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "T033887",
+          "listingNo": "T033887-6707408-R",
+          "titleZh": "青榕台 租盤 #T033887",
+          "address": "青榕街8號 青榕台",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6707408.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "chui-king-garden",
+      "nameZh": "翠景花園",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.hkp.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B1%AF%E9%96%80-%E7%BF%A0%E6%99%AF%E8%8A%B1%E5%9C%92-E11840",
+        "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B0%8F%E6%AC%96-%E6%8E%83%E7%AE%A1%E7%AC%8F-%E9%9D%92%E5%B1%B1%E7%81%A3-%E7%BF%A0%E6%99%AF%E8%8A%B1%E5%9C%92-E11840",
+        "https://www.28hse.com/buy/apartment/property-4004523"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1edce3beba410ed109e4fb4d0db5551f46f50df57e56a9c9eb163772c9750243.webp",
+        "listingNo": "SYNC-df4cb509-fab3-4df5-9000-882b876b17c4",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4004523",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "C019572",
+          "listingNo": "SYNC-df4cb509-fab3-4df5-9000-882b876b17c4",
+          "titleZh": "(晉誠地產豪宅推介) 連超過1400呎大花園!環境清幽洋房!極少放盤!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4004523",
+          "needsBackfill": false
+        }
+      ]
+    },
+    {
+      "slug": "chun-wo-sea-view-garden",
+      "nameZh": "春和海景花園",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E6%98%A5%E5%92%8C%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92/2-SUOVFROYRD",
+        "https://www.squarefoot.com.hk/cn/estate/detail/%E6%98%A5%E5%92%8C%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9B%AD-4516",
+        "https://www.28hse.com/buy/apartment/property-4028649"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/3d/3dab39f1fedbe804e074e8d35d439f2172895f10d37e89a222b30af49a4c7a85.jpg",
+        "listingNo": "A043099-6679648-S",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4028649",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A043099",
+          "listingNo": "A043099-6679648-S",
+          "titleZh": "(晉誠地產全部真盤) 《可泊2車》 黃金地段沙灘海景！高樓底有露台！有匙即看！",
+          "address": "新界屯門(青山公路)春和海景花園 青山公路青山灣33號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4028649",
+          "needsBackfill": false
+        }
+      ]
+    },
+    {
+      "slug": "chung-yuet-waan",
+      "nameZh": "棕月灣",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E6%A3%95%E6%9C%88%E7%81%A3/2-KEPPWPPYPG",
+        "https://www.squarefoot.com.hk/cn/estate/detail/%E6%A3%95%E6%9C%88%E6%B9%BE-4518",
+        "https://www.28hse.com/buy/apartment/property-3997966"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/0e/0e34d2bf93186ff756e2db1fbbde1ece2a36f6a1cfac0994fe9c67472a23fb1b.webp",
+        "listingNo": "SYNC-85e20f43-7e40-4938-8eaa-c684db6ef5db",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3997966",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "C014154",
+          "listingNo": "SYNC-85e20f43-7e40-4938-8eaa-c684db6ef5db",
+          "titleZh": "(晉誠地產全部真盤) 全幢覆式!黃金地段!連車位!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3997966",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C003079",
+          "listingNo": "C003079-6767962-S",
+          "titleZh": "棕月灣 第02座 售盤 #C003079",
+          "address": "青山公路28號青山灣段 棕月灣 第02座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6767962.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "fei-yeung",
+      "nameZh": "飛揚",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/zh-cn/%E9%A3%9E%E6%89%AC/3-KESPWPPHPD",
+        "https://www.house730.com/estate-39981/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E9%A3%9B%E6%8F%9A/",
+        "https://www.28hse.com/buy/apartment/property-4060439"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/b/f/c/e8f252c0a4992f4c2192d8e4459b43a8.jpg",
+        "listingNo": "R068782-6712362-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6712362.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A074761",
+          "listingNo": "A074761-6765670-R",
+          "titleZh": "飛揚 第01座 租盤 #A074761",
+          "address": "青山公路170號大欖段 飛揚 第01座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6765670.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "R068782",
+          "listingNo": "R068782-6712362-S",
+          "titleZh": "飛揚 第01座 售盤 #R068782",
+          "address": "青山公路170號大欖段 飛揚 第01座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6712362.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "R076105",
+          "listingNo": "SYNC-0d29c92b-de85-4759-9425-333ec9bd4e31",
+          "titleZh": "(晉誠地產全部真盤) 《最新減價》 實用1房！青公大型半新屋苑！開揚泳池景！",
+          "address": "新界屯門(青山公路)飛揚2期 青山公路大欖段170號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4060439",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B075542",
+          "listingNo": "SYNC-435e92ea-6c5d-4d67-a785-9cebb7c80a0d",
+          "titleZh": "(晉誠地產租盤推介) 3房套+工人房!明廁全部有窗!全新未住!可加車位!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-3998335",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "R068782",
+          "listingNo": "SYNC-a5a4e2d9-7a68-4244-8ced-42dc1ebc87ce",
+          "titleZh": "(晉誠地產全部真盤) 《高層全海景》實用3房套梗廚！靚裝修！青公路邊半新樓！",
+          "address": "新界屯門(青山公路)飛揚1期 青山公路大欖段170號",
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4034694",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A071415",
+          "listingNo": "SYNC-b4a237a3-0fe7-4a9d-9f2b-8e65a92531ce",
+          "titleZh": "(晉誠地產全部真盤） 《高層有海景》2房梗廚！青公半新樓！",
+          "address": "新界屯門(青山公路)飛揚1期 青山公路大欖段170號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4058299",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A067229",
+          "listingNo": "SYNC-bd561def-48a6-499c-add2-60ef5890140b",
+          "titleZh": "(晉誠地產租盤推介) 2房梗廚半新樓!青公路邊!有匙即看!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-3996645",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A071622",
+          "listingNo": "A071622-6760346-R",
+          "titleZh": "飛揚 租盤 #A071622",
+          "address": "青山公路170號大欖段 飛揚",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6760346.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "A071622",
+          "listingNo": "A071622-6760346-S",
+          "titleZh": "飛揚 售盤 #A071622",
+          "address": "青山公路170號大欖段 飛揚",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6760346.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "R071729",
+          "listingNo": "R071729-6769464-S",
+          "titleZh": "飛揚 第03座 售盤 #R071729",
+          "address": "青山公路170號大欖段 飛揚 第03座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6769464.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "hoi-ching-hin",
+      "nameZh": "海澄軒",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E6%B5%B7%E6%BE%84%E8%BB%92/2-KEEAWPSXPD",
+        "https://www.28hse.com/buy/apartment/property-3984304"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1b/1b335c3abf6400edd5f2561e9ad05fb3d18553c173a397a718712b057f500d80.webp",
+        "listingNo": "SYNC-c40013f9-6fb7-475a-a747-76d19915563e",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3984304",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "T034062",
+          "listingNo": "SYNC-c40013f9-6fb7-475a-a747-76d19915563e",
+          "titleZh": "(晉誠地產全部真盤) 《連車位》 平價4房套!環境清靜!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3984304",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "T034061",
+          "listingNo": "T034061-6754444-S",
+          "titleZh": "海澄軒 第02座 售盤 #T034061",
+          "address": "青發街8號 海澄軒 第02座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6754444.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "hoi-king-garden",
+      "nameZh": "海景花園",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92/2-KEBAGPYXPB",
+        "https://www.earnestproperty.com/property-detail/6718458.html"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/f/8/5/08afcca7aaada5af73483caa275d1fab.jpg",
+        "listingNo": "A072841-6718458-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6718458.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A072841",
+          "listingNo": "A072841-6718458-S",
+          "titleZh": "海景花園 售盤 #A072841",
+          "address": "青榕街1號 海景花園",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6718458.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A072841",
+          "listingNo": "A072841-6718458-R",
+          "titleZh": "海景花園 租盤 #A072841",
+          "address": "青榕街1號 海景花園",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6718458.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "hoi-wai-garden",
+      "nameZh": "海慧花園",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "http://ww.manywells.com.hk/info/AQUAMARINEGARDEN",
+        "https://www.wepropertyhk.com/estate-detail/759d4f57-5532-4fb6-aecc-66da22caff3b",
+        "https://www.hkestatelab.com/estate/aquamarine-garden-kepegpyhpb",
+        "https://www.28hse.com/buy/apartment/property-4046208"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d1/d17aaef525ccba8aef3715c2d34cf13a655aa203e295814b72c7bf0070307166.jpg",
+        "listingNo": "C003992-6715362-S",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4046208",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A046737",
+          "listingNo": "A046737-6803934-S",
+          "titleZh": "海慧花園 售盤 #A046737",
+          "address": "青茵街8號 海慧花園",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/lee/6803934.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C003992",
+          "listingNo": "C003992-6715362-S",
+          "titleZh": "(晉誠地產豪宅推介) 向南臨海花園洋房！獨立車房！豪華靚裝！歐陸情懷！歡迎參觀！",
+          "address": "新界屯門(青山公路)海慧花園洋房 青茵街8號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4046208",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A046737",
+          "listingNo": "SYNC-7f7254c2-1c81-491f-9195-556725d102c1",
+          "titleZh": "(晉誠地產租盤推介) 向海董事大屋!大花園!私家車庫《此物業經本公司購入》",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-3990261",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B053826",
+          "listingNo": "B053826-6766052-S",
+          "titleZh": "海慧花園 售盤 #B053826",
+          "address": "青茵街8號 海慧花園",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6766052.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "hoi-yu",
+      "nameZh": "海譽",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.ricacorp.com/zh-hk/property/estate/%E6%B5%B7%E8%AD%BD-single-%E4%B8%89%E8%81%96-hma-hk",
+        "https://www.oneday.com.hk/zh_HK/buildings/crown-by-the-sea/",
+        "https://www.28hse.com/buy/apartment/property-3993979"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae65106225cd33e3cba9bd939a30e2f5e1972ab8f793112753fbed9c0355d94c.webp",
+        "listingNo": "SYNC-9cea4fe5-c3d4-4d53-81bf-3c9bbe4242f8",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3993979",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "R075780",
+          "listingNo": "SYNC-9cea4fe5-c3d4-4d53-81bf-3c9bbe4242f8",
+          "titleZh": "(晉誠地產YouTube ) 《有匙即看》 全海景!可平配車位!青榕街樓齡最新!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3993979",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A061940",
+          "listingNo": "A061940-6759146-S",
+          "titleZh": "海譽 售盤 #A061940",
+          "address": "青榕街3號 海譽",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6759146.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "kwan-lun",
+      "nameZh": "琨崙",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.hkp.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B1%AF%E9%96%80-%E7%90%A8%E5%B4%99-E000014030",
+        "https://www.ricacorp.com/zh-hk/property/estate/%E7%90%A8%E5%B4%99-estate-%E5%B0%8F%E6%AC%96-hma-hk",
+        "https://hk.centanet.com/estate/%E7%90%A8%E5%B4%99/1-KESPWDPSPG",
+        "https://www.28hse.com/buy/apartment/property-3945768"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/b/5/1/464f55ec15fb07fa1daa36fad11b8d07.jpeg",
+        "listingNo": "A049791-6772048-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6772048.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A049791",
+          "listingNo": "A049791-6772048-S",
+          "titleZh": "琨崙 金琥珀 洋房 售盤 #A049791",
+          "address": "青發里8號 琨崙 金琥珀 洋房",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6772048.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A062602",
+          "listingNo": "A062602-6819098-R",
+          "titleZh": "琨崙 青玥琳 洋房 租盤 #A062602",
+          "address": "青發里8號 琨崙 青玥琳 洋房",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/tommyyiu/6819098.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A062602",
+          "listingNo": "SYNC-018b4d1d-f1a8-4a71-b15c-e32592c06049",
+          "titleZh": "(晉誠地產豪宅推介) 低密度覆式大宅!戶戶大則!連車位!呎價吸引!隨時約睇!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3945768",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A052224",
+          "listingNo": "A052224-6728266-S",
+          "titleZh": "琨崙 金琥珀 洋房 售盤 #A052224",
+          "address": "青發里8號 琨崙 金琥珀 洋房",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6728266.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "A060071",
+          "listingNo": "A060071-6772058-S",
+          "titleZh": "琨崙 金琥珀 洋房 售盤 #A060071",
+          "address": "青發里8號 琨崙 金琥珀 洋房",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6772058.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "kwun-hoi-villas",
+      "nameZh": "觀海別墅",
+      "districtSlug": "ting-kau",
+      "sources": [
+        "https://hk.centanet.com/estate/%E8%A7%80%E6%B5%B7%E5%88%A5%E5%A2%85/2-AADKGPWXPE",
+        "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E9%BA%97%E5%9F%8E-%E6%B1%80%E4%B9%9D-%E8%A7%80%E6%B5%B7%E5%88%A5%E5%A2%85-E09072",
+        "https://www.earnestproperty.com/property-detail/6765816.html"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/b/b/0/70a74c8ec7bd8c429dc7f4c59e963c7c.jpg",
+        "listingNo": "T034250-6765816-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6765816.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "T034250",
+          "listingNo": "T034250-6765816-S",
+          "titleZh": "觀海別墅 售盤 #T034250",
+          "address": "青山公路汀九段386號 觀海別墅",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6765816.html",
+          "needsBackfill": false
+        }
+      ]
+    },
+    {
+      "slug": "lung-chu-island-garden",
+      "nameZh": "龍珠島花園",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.hkp.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B1%AF%E9%96%80-%E9%BE%8D%E7%8F%A0%E5%B3%B6%E8%8A%B1%E5%9C%92-E00301",
+        "https://www.squarefoot.com.hk/cn/estate/detail/%E9%BE%99%E7%8F%A0%E5%B2%9B%E8%8A%B1%E5%9B%AD-4519",
+        "https://www.28hse.com/rent/apartment/property-4045561"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8e/8ebd6372f460076ae63aaf5e630aae6081ed36b7ec724ad4a7907b06155a2861.jpg",
+        "listingNo": "SYNC-55aa821d-ff30-4410-bc61-b1cfbc59bea6",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4045561",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "B057799",
+          "listingNo": "B057799-6844576-S",
+          "titleZh": "龍珠島花園 售盤 #B057799",
+          "address": "青龍路11號 龍珠島花園",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/tommyyiu/6844576.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B057799",
+          "listingNo": "SYNC-55aa821d-ff30-4410-bc61-b1cfbc59bea6",
+          "titleZh": "(晉誠地產租盤推介) 《全海景連花園》 3房套靚裝修！連車位！有邨巴出入！",
+          "address": "新界屯門(青山公路)龍珠島花園 掃管笏青龍路",
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4045561",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A047407",
+          "listingNo": "SYNC-5ddd2d72-d39c-40f9-9316-5d3783908030",
+          "titleZh": "(晉誠地產租盤推介) 平租開放式!環境清幽!有穿巴出屯門!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-3996640",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C008446",
+          "listingNo": "SYNC-8598047a-b684-499b-bc19-ac2b06730403",
+          "titleZh": "(晉誠地產全部真盤) 《連車位》3房套全海景!有邨巴!世外桃源!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3934873",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A049210",
+          "listingNo": "A049210-6773962-R",
+          "titleZh": "龍珠島花園 第07座 租盤 #A049210",
+          "address": "青龍路11號 龍珠島花園 第07座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6773962.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "nam-ngon",
+      "nameZh": "南岸",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.homedash.hk/zh-cn/estate-South-Crest-2-KESPWWPEWB",
+        "https://www.house730.com/estate-23769/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E5%8D%97%E5%B2%B8/",
+        "https://www.28hse.com/buy/apartment/property-4049550"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/04/04d8c87b1df833e08daf623c83d49617d34e3e3488192af9a11e5d0ef553209f.jpg",
+        "listingNo": "SYNC-ccf8f4a6-8696-4ad3-869c-fc1852857135",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4045588",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A056275",
+          "listingNo": "A056275-6788500-S",
+          "titleZh": "南岸 售盤 #A056275",
+          "address": "青山公路116號青山灣段 南岸",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/lee/6788500.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A061917",
+          "listingNo": "SYNC-00b32134-ce1a-4c3d-9d02-ec1e85f96434",
+          "titleZh": "(晉誠地產YouTube實景) 《3房套連內置樓梯上天台》向海連車位！有匙即看！",
+          "address": "新界屯門(青山公路)南岸 青山公路青山灣段116號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4049550",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A061917",
+          "listingNo": "SYNC-ccf8f4a6-8696-4ad3-869c-fc1852857135",
+          "titleZh": "(晉誠地產YouTube 實景) 《3房套內置樓梯上天台》連車位！向海！有匙即看",
+          "address": "新界屯門(青山公路)南岸 青山公路青山灣段116號",
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4045588",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A056275",
+          "listingNo": "SYNC-e1959a8f-81f7-41b2-82c7-2b7b16d9a340",
+          "titleZh": "(晉誠地產租盤推介) 《連2車位》 3房套有露台!少海景!青公路邊!有匙即看!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-3993904",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B048806",
+          "listingNo": "B048806-6574040-S",
+          "titleZh": "南岸 售盤 #B048806",
+          "address": "青山公路116號青山灣段 南岸",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6574040.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "napa",
+      "nameZh": "NAPA",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/en/Napa/1-KEEPWWPOPG",
+        "https://www.hkp.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B1%AF%E9%96%80-NAPA-E000015623",
+        "https://www.28hse.com/rent/apartment/property-3985456"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/8/2/9/7c6b63e09c39928784f20d761c23bd89.jpg",
+        "listingNo": "A063817-6761032-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6761032.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A054710",
+          "listingNo": "A054710-6818756-S",
+          "titleZh": "NAPA TWR 06 售盤 #A054710",
+          "address": "掃管笏路88號 NAPA TWR 06",
+          "sourceUrl": "https://www.property.hk/asking_detail/eps/wendy/6818756.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A063817",
+          "listingNo": "A063817-6761032-S",
+          "titleZh": "掃管笏路88號, 屯門, #A063817 售盤 #A063817",
+          "address": "掃管笏路88號",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6761032.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B054537",
+          "listingNo": "B054537-6828624-R",
+          "titleZh": "NAPA TWR 01 租盤 #B054537",
+          "address": "掃管笏路88號 NAPA TWR 01",
+          "sourceUrl": "https://www.property.hk/asking_detail/eps/wendy/6828624.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A053336",
+          "listingNo": "SYNC-36e520af-5fbd-47c6-b7db-752650037dc2",
+          "titleZh": "(晉誠地產租盤推介) 《有匙即看》 2房梗廚房!有村巴出屯門市中心!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-3985456",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A062798",
+          "listingNo": "SYNC-8885a822-8dba-49ac-ac7b-b1b16ec91be5",
+          "titleZh": "(晉誠地產VR豪宅租盤) 4房2套!連大平台內置梯上天台!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4001554",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A069372",
+          "listingNo": "A069372-6761036-S",
+          "titleZh": "NAPA HSE 售盤 #A069372",
+          "address": "掃管笏路88號 NAPA HSE",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6761036.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "B054537",
+          "listingNo": "B054537-6757956-S",
+          "titleZh": "NAPA TWR 01 售盤 #B054537",
+          "address": "掃管笏路88號 NAPA TWR 01",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6757956.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "nga-tak-yuen",
+      "nameZh": "雅德苑",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.homedash.hk/zh-cn/estate-Faraday-House-2-ZMHLTHDEHN",
+        "https://www.house730.com/estate-23775/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E9%9B%85%E5%BE%B7%E8%8B%91/",
+        "https://www.28hse.com/rent/apartment/property-4060617"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/59/5992dd4bc265744fd9e4d96156c41241afc9c4daf5c09f67a29af9fb643732f8.jpg",
+        "listingNo": "SYNC-2d0f3053-0873-4de0-92b3-9becf16b01f5",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4060617",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "C010698",
+          "listingNo": "C010698-6842312-S",
+          "titleZh": "雅德苑 第02座 售盤 #C010698",
+          "address": "青榕街6號 雅德苑 第02座",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/lee/6842312.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C010698",
+          "listingNo": "SYNC-2d0f3053-0873-4de0-92b3-9becf16b01f5",
+          "titleZh": "(晉誠地產租盤推介) 《連天台連2車位》 平價大則！一梯兩伙！有匙即看！",
+          "address": "新界屯門(青山公路)雅德苑 青榕街6號",
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4060617",
+          "needsBackfill": false
+        }
+      ]
+    },
+    {
+      "slug": "ocean-camino",
+      "nameZh": "緹岸",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E7%B7%B9%E5%B2%B8/3-KESPWPPAPG",
+        "https://www.hkp.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B1%AF%E9%96%80-%E7%B7%B9%E5%B2%B8-E000016894",
+        "https://www.28hse.com/buy/apartment/property-4012876"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/5d/5d85da6a8de8c28c54b5e2b36d3cbf06119908de5d0ddbfc64915afcf7f407b1.jpg",
+        "listingNo": "SYNC-668a72af-2a38-4dac-bf2f-ac512e2c9466",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4053270",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A058742",
+          "listingNo": "A058742-6840082-R",
+          "titleZh": "緹岸 第02座 租盤 #A058742",
+          "address": "管翠路8號 緹岸 第02座",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/shadow/6840082.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A060144",
+          "listingNo": "A060144-6840384-R",
+          "titleZh": "緹岸 第05座 租盤 #A060144",
+          "address": "管翠路8號 緹岸 第05座",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/shadow/6840384.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A060426",
+          "listingNo": "A060426-6794778-S",
+          "titleZh": "緹岸 第03A座 售盤 #A060426",
+          "address": "管翠路8號 緹岸 第03A座",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/tommyyiu/6794778.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A061909",
+          "listingNo": "A061909-6812514-S",
+          "titleZh": "緹岸 第03A座 售盤 #A061909",
+          "address": "管翠路8號 緹岸 第03A座",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/tommyyiu/6812514.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A066460",
+          "listingNo": "A066460-6822052-S",
+          "titleZh": "緹岸 第03A座 售盤 #A066460",
+          "address": "管翠路8號 緹岸 第03A座",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/tommyyiu/6822052.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B069572",
+          "listingNo": "B069572-6735574-S",
+          "titleZh": "緹岸 售盤 #B069572",
+          "address": "管翠路8號 緹岸",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4012876",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A059949",
+          "listingNo": "SYNC-600d274a-7bb5-4ba3-9513-592fd1201e40",
+          "titleZh": "(晉誠地產全部真盤) 平價一房半新樓！大型會所有餐廳！$100印花稅！",
+          "address": "新界屯門(青山公路)緹岸第2期 管翠路8號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4033614",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A058952",
+          "listingNo": "SYNC-668a72af-2a38-4dac-bf2f-ac512e2c9466",
+          "titleZh": "(晉誠地產全部真盤) 《有匙》 1房銀主盤急走！歡迎還價！",
+          "address": "新界屯門(青山公路)緹岸第1期(大廈) 管翠路8號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4053270",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A059306",
+          "listingNo": "SYNC-87fa80ea-b56d-4362-b0e3-aef5d8e20902",
+          "titleZh": "(晉誠地產全部真盤) 《有匙即看》 收租$8XXX!$100厘印!市區車位價錢!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3973080",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A059086",
+          "listingNo": "SYNC-ab1fc68f-81c4-4f60-a5e9-3568c2c8d367",
+          "titleZh": "(晉誠地產租盤推介) 平租開放式！豪華會所有餐廳！",
+          "address": "新界屯門(青山公路)緹岸第1期(大廈) 管翠路8號",
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4035765",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A073250",
+          "listingNo": "SYNC-b49703b2-a1a2-4f05-ab44-3fa85ad1df51",
+          "titleZh": "(晉誠地產YouTube實景) 4房4套獨立屋!連2車位!歡迎參觀!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3924297",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "R066142",
+          "listingNo": "R066142-6769412-R",
+          "titleZh": "緹岸 第02座 租盤 #R066142",
+          "address": "管翠路8號 緹岸 第02座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6769412.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "oi-kam-waan",
+      "nameZh": "愛琴灣",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.ricacorp.com/zh-cn/property/estate/%E7%88%B1%E7%90%B4%E6%B9%BE-estate-%E5%B0%8F%E6%A6%84-hma-cn",
+        "https://www.newtohk.com/estates/the-aegean",
+        "https://www.house730.com/estate-23793/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E6%84%9B%E7%90%B4%E7%81%A3/",
+        "https://www.28hse.com/rent/apartment/property-3998405"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/d/a/9/d118a89a3ac63d2afa96c9b06b05a0f3.jpg",
+        "listingNo": "A061213-6757498-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6757498.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A061213",
+          "listingNo": "A061213-6757498-S",
+          "titleZh": "愛琴灣 SANTORINI 售盤 #A061213",
+          "address": "青發街2號 愛琴灣 SANTORINI",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6757498.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C016812",
+          "listingNo": "SYNC-84f19944-07a7-4281-aea3-1491394933fa",
+          "titleZh": "(晉誠地產租盤推介) 《有匙即看》4房靚裝修洋房!特多空間!連車位!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-3998405",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C016812",
+          "listingNo": "SYNC-ba370e68-5eba-45b7-875c-0459d1a7099c",
+          "titleZh": "(晉誠地產洋房推介) 《有匙即看》4房靚裝修洋房!特多空間!獨立車房!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4002957",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C028004",
+          "listingNo": "SYNC-f62d0573-84aa-4e37-af07-7ff12091b16e",
+          "titleZh": "(晉誠地產全部真盤) 《連車位》有露台向南開揚!環境清靜!青公路邊!即約即睇!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3968640",
+          "needsBackfill": false
+        }
+      ]
+    },
+    {
+      "slug": "oma-by-the-sea",
+      "nameZh": "OMA by the Sea",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.omabythesea.com/en/",
+        "https://www.28hse.com/buy/apartment/property-4033510"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/78/7889533d3eea8d8dea6718bc2c140466d853544aeee4f6868eca2953a0d4cd75.jpg",
+        "listingNo": "SYNC-63cf5a75-a546-4777-a60f-e67998714471",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4050794",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A060488",
+          "listingNo": "A060488-6832334-S",
+          "titleZh": "OMA BY THE SEA TWR 02 售盤 #A060488",
+          "address": "青山公路166號大欖段 OMA BY THE SEA TWR 02",
+          "sourceUrl": "https://www.property.hk/asking_detail/epw/mike/6832334.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A064710",
+          "listingNo": "A064710-6846118-S",
+          "titleZh": "OMA BY THE SEA 售盤 #A064710",
+          "address": "青山公路166號大欖段 OMA BY THE SEA",
+          "sourceUrl": "https://www.property.hk/asking_detail/epw/george/6846118.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A060921",
+          "listingNo": "SYNC-23b1d0e6-eba6-4020-b78d-48ac0b880008",
+          "titleZh": "(晉誠地產租盤推介) 《有匙即看》 特大開放式！可間一房！青公路邊半新樓！",
+          "address": "新界屯門(青山公路)OMA by the Sea 青山公路大欖段166號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4033510",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A060489",
+          "listingNo": "SYNC-37d40689-6487-496d-b894-eed797b7dfc2",
+          "titleZh": "(晉誠地產全部真盤) 2房向南有海景!開放式廚房!青公路邊半新樓!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3940217",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B073748",
+          "listingNo": "SYNC-63cf5a75-a546-4777-a60f-e67998714471",
+          "titleZh": "（晉誠地產租盤推介) 《高層向南海景》 靚裝修有Closet位！高質素租盤！",
+          "address": "新界屯門(青山公路)OMA by the Sea 青山公路大欖段166號",
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4050794",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B073748",
+          "listingNo": "SYNC-75cad45e-e993-4938-9fab-8e1166ebb379",
+          "titleZh": "（晉誠地產全部真盤) 《高質素高層向南海景》 靚裝有Closet位！銀行估到價！",
+          "address": "新界屯門(青山公路)OMA by the Sea 青山公路大欖段166號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4044034",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A060921",
+          "listingNo": "SYNC-816a25af-4b06-44b8-8731-4ae3b8627028",
+          "titleZh": "(晉誠地產租盤推介) 《有匙即看》 特大開放式！可間一房！",
+          "address": "新界屯門(青山公路)OMA by the Sea 青山公路大欖段166號",
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4030683",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A065827",
+          "listingNo": "SYNC-85c27deb-2a2e-441b-89ee-98d84a63ca1d",
+          "titleZh": "(晉誠地產YouTube實景) 《有匙即看》 3房2廁半新樓!青公路邊!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4001427",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A060757",
+          "listingNo": "SYNC-cd5f9890-ddca-45ac-afca-9f2c84007698",
+          "titleZh": "(晉誠地產全部真盤) 《連入契大平台》可間1房!BBQ、養寵物、儲物一流!有匙!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4001447",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B068404",
+          "listingNo": "B068404-6586494-S",
+          "titleZh": "OMA BY THE SEA TWR 02 售盤 #B068404",
+          "address": "青山公路166號大欖段 OMA BY THE SEA TWR 02",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6586494.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "B061065",
+          "listingNo": "SYNC-b0966755-13df-41e4-b572-7fbdb50124cd",
+          "titleZh": "(晉誠地產全部真盤) 《2房連平台》 震撼的4XX萬收票！有匙即看！青公路邊！",
+          "address": "新界屯門(青山公路)OMA by the Sea 青山公路大欖段166號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4063699",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "palm-cove",
+      "nameZh": "翠濤居",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E7%BF%A0%E6%BF%A4%E5%B1%85/2-KEPPWPPEPB",
+        "https://www.hkp.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B1%AF%E9%96%80-%E7%BF%A0%E6%BF%A4%E5%B1%85-E12854",
+        "https://www.28hse.com/buy/apartment/property-4045648"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8f/8f628dbfe5852a4d770602ea64a9f46751534a19aade4ee06cc48db414e20f81.jpg",
+        "listingNo": "A066108-6743094-S",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4045648",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A040864",
+          "listingNo": "A040864-6813270-S",
+          "titleZh": "翠濤居 售盤 #A040864",
+          "address": "青山公路168號青山灣段 翠濤居",
+          "sourceUrl": "https://www.property.hk/asking_detail/eps/wendy/6813270.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A066108",
+          "listingNo": "A066108-6743094-S",
+          "titleZh": "(晉誠地產YouTube實景) 《有匙即看》 向南少海景靚則！近三聖靜中帶旺！",
+          "address": "新界屯門(青山公路)翠濤居 青山公路168號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4045648",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A049547",
+          "listingNo": "A049547-6750654-R",
+          "titleZh": "翠濤居 第03座 租盤 #A049547",
+          "address": "青山公路168號青山灣段 翠濤居 第03座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6750654.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "pun-lung-bun-do",
+      "nameZh": "蟠龍半島",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hohomehk.com/wiki/estate-wiki-beaulieupeninsula/",
+        "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B0%8F%E6%AC%96-%E6%8E%83%E7%AE%A1%E7%AC%8F-%E9%9D%92%E5%B1%B1%E7%81%A3-%E8%9F%A0%E9%BE%8D%E5%8D%8A%E5%B3%B6-E00631",
+        "https://www.28hse.com/buy/apartment/property-3996535"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae8688aeef547cba5a65a0574fc829f5136abab059a9fac3973ccd382d9a9cb3.jpg",
+        "listingNo": "A064056-6604092-S",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3996535",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A064056",
+          "listingNo": "A064056-6604092-S",
+          "titleZh": "(晉誠地產豪宅推介) 大蟠龍A型獨立屋！全海景大花園獨立車房！有YouTube！",
+          "address": "新界屯門(青山公路)蟠龍半島獨立屋 瑜翠街2號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3996535",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C009961",
+          "listingNo": "C009961-6767114-S",
+          "titleZh": "蟠龍半島 售盤 #C009961",
+          "address": "瑜翠街2號 蟠龍半島",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6767114.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B055385",
+          "listingNo": "SYNC-10381539-5c06-4af4-81c6-319af174f056",
+          "titleZh": "(晉誠地產租盤推介) 《有匙即看》低密度向南全海景有露台!連車位!地段矜貴!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4001468",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A067118",
+          "listingNo": "A067118-6708936-S",
+          "titleZh": "蟠龍半島 D型 售盤 #A067118",
+          "address": "瑜翠街2號 蟠龍半島 D型",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6708936.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "C009961",
+          "listingNo": "C009961-6776748-R",
+          "titleZh": "蟠龍半島 租盤 #C009961",
+          "address": "瑜翠街2號 蟠龍半島",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6776748.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "royal-cove-tower",
+      "nameZh": "帝灣居",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E5%B8%9D%E7%81%A3%E5%B1%85/2-KESPWPPYPG",
+        "https://www.uplhk.com/eng/firsthand_detail.php?id=319",
+        "https://www.property.hk/asking_detail/ept/king/6795702.html"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/b/c/e/180ec74c4fd0be97d1d241f51e40bbec.jpg",
+        "listingNo": "A065874-6795702-S",
+        "sourceUrl": "https://www.property.hk/asking_detail/ept/king/6795702.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A065874",
+          "listingNo": "A065874-6795702-S",
+          "titleZh": "帝灣居 售盤 #A065874",
+          "address": "嘉和里山路2號 帝灣居",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/king/6795702.html",
+          "needsBackfill": false
+        }
+      ]
+    },
+    {
+      "slug": "royal-dragon-villa",
+      "nameZh": "嘉御龍庭",
+      "districtSlug": "ting-kau",
+      "sources": [
+        "https://www.house730.com/estate-23652/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E5%98%89%E5%BE%A1%E9%BE%8D%E5%BA%AD/",
+        "https://www.homedash.hk/estate-Royal-Dragon-Villa-2-DDMNZHXYHM",
+        "https://www.property.hk/asking_detail/ept/king/6825488.html"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/d/4/5/252dcfeffb5ea212f047b5220026a47f.jpeg",
+        "listingNo": "C014535-6707160-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6707160.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "B042359",
+          "listingNo": "B042359-6825488-S",
+          "titleZh": "嘉御龍庭 售盤 #B042359",
+          "address": "青山公路321號汀九段 嘉御龍庭",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/king/6825488.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C014535",
+          "listingNo": "C014535-6707160-S",
+          "titleZh": "嘉御龍庭 售盤 #C014535",
+          "address": "青山公路321號汀九段 嘉御龍庭",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6707160.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C014535",
+          "listingNo": "C014535-6707160-R",
+          "titleZh": "嘉御龍庭 租盤 #C014535",
+          "address": "青山公路321號汀九段 嘉御龍庭",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6707160.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "seaside-castle",
+      "nameZh": "畔海",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.house730.com/new-property-7532/%E7%95%94%E6%B5%B7/",
+        "https://www.28hse.com/new-properties/%E7%95%94%E6%B5%B7",
+        "https://www.property.hk/asking_detail/ept/mon/6848480.html"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/d/c/3/4dd478d18530ede031cbf003e2521312.jpg",
+        "listingNo": "B069223-6848480-S",
+        "sourceUrl": "https://www.property.hk/asking_detail/ept/mon/6848480.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "B069223",
+          "listingNo": "B069223-6848480-S",
+          "titleZh": "畔海 售盤 #B069223",
+          "address": "澄麗路9號 畔海",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/mon/6848480.html",
+          "needsBackfill": false
+        }
+      ]
+    },
+    {
+      "slug": "yu-chui-yuen",
+      "nameZh": "瑜翠園",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.house730.com/zh-cn/estate-23848/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E7%91%9C%E7%BF%A0%E5%9B%AD/",
+        "https://www.newtohk.com/estates/peridot-court",
+        "https://www.28hse.com/buy/apartment/property-3991530"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/77/770eccf3710c9adc09f63132b37230f95f0b5711b79b6ed400f31148d18043c1.jpg",
+        "listingNo": "SYNC-eb3d6aea-79c7-40e8-9816-d85d41c6cd29",
+        "sourceUrl": "https://www.28hse.com/rent/apartment/property-4063247",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "B065045",
+          "listingNo": "B065045-6770098-S",
+          "titleZh": "瑜翠園 第05座 售盤 #B065045",
+          "address": "瑜翠街9號 瑜翠園 第05座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6770098.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C003097",
+          "listingNo": "C003097-6766602-S",
+          "titleZh": "瑜翠園 售盤 #C003097",
+          "address": "瑜翠街9號 瑜翠園",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6766602.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "C004343",
+          "listingNo": "C004343-6852952-S",
+          "titleZh": "瑜翠園 售盤 #C004343",
+          "address": "瑜翠街9號 瑜翠園",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/joeyuen/6852952.html",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A046200",
+          "listingNo": "SYNC-3dd733e0-cf8f-4109-b725-977b2094e46c",
+          "titleZh": "(晉誠地產經濟日報介紹) 《連車位》 有VR!一梯兩伙!靚則向南露台!前臨沙灘!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3991530",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "B047405",
+          "listingNo": "SYNC-52d68caa-83e8-4a10-a454-4b76449ca98a",
+          "titleZh": "(晉誠地產全部真盤) 《連車位》 海景連429呎天台!特高樓底教堂玻璃!罕有!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3984191",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A067336",
+          "listingNo": "SYNC-eb3d6aea-79c7-40e8-9816-d85d41c6cd29",
+          "titleZh": "(晉誠地產租盤推介) 《有匙即看》高層沙灘全海景！一梯兩伙露台！靚裝修！",
+          "address": "新界屯門(青山公路)瑜翠園 瑜翠街9號",
+          "sourceUrl": "https://www.28hse.com/rent/apartment/property-4063247",
+          "needsBackfill": false
+        },
+        {
+          "publicListingNo": "A035863",
+          "listingNo": "A035863-6773180-S",
+          "titleZh": "瑜翠園 售盤 #A035863",
+          "address": "瑜翠街9號 瑜翠園",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6773180.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "A053166",
+          "listingNo": "A053166-6708202-S",
+          "titleZh": "瑜翠園 第03座 售盤 #A053166",
+          "address": "瑜翠街9號 瑜翠園 第03座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6708202.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "B056049",
+          "listingNo": "B056049-6767470-S",
+          "titleZh": "瑜翠園 第02座 售盤 #B056049",
+          "address": "瑜翠街9號 瑜翠園 第02座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6767470.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "B065045",
+          "listingNo": "B065045-6770098-R",
+          "titleZh": "瑜翠園 第05座 租盤 #B065045",
+          "address": "瑜翠街9號 瑜翠園 第05座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6770098.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "C004331",
+          "listingNo": "C004331-6726116-S",
+          "titleZh": "瑜翠園 第06座 售盤 #C004331",
+          "address": "瑜翠街9號 瑜翠園 第06座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6726116.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "C019238",
+          "listingNo": "C019238-6708914-S",
+          "titleZh": "瑜翠園 第03座 售盤 #C019238",
+          "address": "瑜翠街9號 瑜翠園 第03座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6708914.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "T025239",
+          "listingNo": "SYNC-0906f14c-d125-4344-9d84-3aa4a2a37f73",
+          "titleZh": "(晉誠地產YouTube實景） 《連車位》 有匙！高層有海景！有小路出青山公路！",
+          "address": "新界屯門(青山公路)瑜翠園 瑜翠街9號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4040071",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "monte-carlo-villas",
+      "nameZh": "蒙地卡羅別墅",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/en/Monte-Carlo-Villas/1-SURVFROXVD",
+        "https://www.midland.com.hk/en/estate/New-Territories-Tuen-Mun-Monte-Carlo-Villas-E06401",
+        "https://www.house730.com/buy-property-9252573/青山公路-蒙地卡羅別墅/"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1ebc954d2ced6db1cff3b7fd69d1eef380216bbf85e717e22b1ce828019139e2.webp",
+        "listingNo": "SYNC-8262b471-9232-4e40-ab9b-af57dd493e87",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3992791",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "C017925",
+          "listingNo": "SYNC-8262b471-9232-4e40-ab9b-af57dd493e87",
+          "titleZh": "(晉誠地產豪宅推介) 兩層靚則獨立大屋!連千五呎大花園!黃金地段!罕有放盤!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3992791",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "l-aquatique",
+      "nameZh": "逸璟．龍灣",
+      "districtSlug": "tsing-lung-tau",
+      "sources": [
+        "https://hk.centanet.com/estate/%E9%80%B8%E7%92%9F%EF%BC%8E%E9%BE%8D%E7%81%A3/2-AKPPWPPEPP",
+        "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E6%B7%B1%E4%BA%95-%E9%9D%92%E9%BE%8D%E9%A0%AD-%E9%80%B8%E7%92%9F-%E9%BE%8D%E7%81%A3-E000016130"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/7/8/b/b6740003588d99f67968a649e9fba067.jpg",
+        "listingNo": "B070102-6757228-R",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6757228.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "B057492",
+          "listingNo": "B057492-6733958-S",
+          "titleZh": "逸璟龍灣 第02座 售盤 #B057492",
+          "address": "青山公路108號青龍頭段 逸璟龍灣 第02座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6733958.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "B064381",
+          "listingNo": "B064381-6741282-R",
+          "titleZh": "逸璟龍灣 租盤 #B064381",
+          "address": "青山公路108號青龍頭段 逸璟龍灣",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6741282.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "B065160",
+          "listingNo": "B065160-6776144-S",
+          "titleZh": "逸璟龍灣 第02座 售盤 #B065160",
+          "address": "青山公路108號青龍頭段 逸璟龍灣 第02座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6776144.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "B068657",
+          "listingNo": "B068657-6795338-S",
+          "titleZh": "逸璟龍灣 售盤 #B068657",
+          "address": "青山公路108號青龍頭段 逸璟龍灣",
+          "sourceUrl": "https://www.property.hk/asking_detail/eps/wendy/6795338.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "B070102",
+          "listingNo": "B070102-6757228-R",
+          "titleZh": "逸璟龍灣 第01座 租盤 #B070102",
+          "address": "青山公路108號青龍頭段 逸璟龍灣 第01座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6757228.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "R070029",
+          "listingNo": "R070029-6805460-S",
+          "titleZh": "逸璟龍灣 第02座 售盤 #R070029",
+          "address": "青山公路108號青龍頭段 逸璟龍灣 第02座",
+          "sourceUrl": "https://www.property.hk/asking_detail/ept/lee/6805460.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "B064507",
+          "listingNo": "SYNC-394cee68-14bf-42c4-b415-a4ea815d3502",
+          "titleZh": "(晉誠地產筍盤推介) 青馬橋海景！深井區樓齡最新！樓底高自設閣仔！",
+          "address": "新界深井(荃灣)逸璟龍灣 青山公路青龍頭段108 號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4033461",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "A069665",
+          "listingNo": "SYNC-8a937a3d-2522-402c-8979-a11867139dc2",
+          "titleZh": "（晉誠地產筍盤推介) 向南青馬橋海景！3房套！深井區最新樓齡屋苑！",
+          "address": "新界深井(荃灣)逸璟龍灣 青山公路青龍頭段108 號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4053663",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "deauville",
+      "nameZh": "星岸",
+      "districtSlug": "ting-kau",
+      "sources": [
+        "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E9%BA%97%E5%9F%8E-%E6%B1%80%E4%B9%9D-%E6%98%9F%E5%B2%B8-E000015312",
+        "https://www.house730.com/estate-23666/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E6%98%9F%E5%B2%B8/"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/56/56abcc171952c57c6cedb1b91fa48a7c415347bd3637a3159147907d3653a4f2.jpg",
+        "listingNo": "B047469-6727964-S",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4065990",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "B047469",
+          "listingNo": "B047469-6727964-S",
+          "titleZh": "（晉誠地產VR實景) 新地星級豪宅！前後花園覆式！向南汀九橋海！連2車位！",
+          "address": "新界深井(荃灣)星岸大廈 青山公路汀九段380號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4065990",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "long-beach-gardens",
+      "nameZh": "海濤花園",
+      "districtSlug": "ting-kau",
+      "sources": [
+        "https://hk.centanet.com/estate/%E6%B5%B7%E6%BF%A4%E8%8A%B1%E5%9C%92/2-AEPPPPSXPA",
+        "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E9%BA%97%E5%9F%8E-%E6%B1%80%E4%B9%9D-%E6%B5%B7%E6%BF%A4%E8%8A%B1%E5%9C%92-E12029"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/24/241e4ed6a8f6913ebc420e9a13badeced4b3b752c796980f429a35e300f40f37.jpg",
+        "listingNo": "SYNC-8a0920bd-e9c7-41e3-a21e-7f0273f7bde9",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4042934",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "T008348",
+          "listingNo": "SYNC-8a0920bd-e9c7-41e3-a21e-7f0273f7bde9",
+          "titleZh": "(晉誠地產筍盤推介) 臨海4房高層！一梯兩伙有露台！連車位！極少放盤！",
+          "address": "新界荃灣海濤花園 青山公路汀九段103號",
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4042934",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "riviera",
+      "nameZh": "麗海別墅",
+      "districtSlug": "ting-kau",
+      "sources": [
+        "https://hk.centanet.com/estate/麗海別墅/2-DDTLTHIAHM",
+        "https://www.ricacorp.com/zh-hk/property/estate/麗海別墅-single-汀九-hma-hk"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/a/5/2/61b9e3267ef9e369eea3236791ad2d53.jpg",
+        "listingNo": "C015931-6707290-R",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6707290.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "C015931",
+          "listingNo": "C015931-6707290-R",
+          "titleZh": "麗海別墅 租盤 #C015931",
+          "address": "青山公路369號汀九段 麗海別墅",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6707290.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "both-wealth-garden",
+      "nameZh": "均富花園",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/%E5%9D%87%E5%AF%8C%E8%8A%B1%E5%9C%92/2-KEPPWPPAPD",
+        "https://www.ricacorp.com/zh-hk/property/estate/%E5%9D%87%E5%AF%8C%E8%8A%B1%E5%9C%92-estate-%E6%8E%83%E7%AE%A1%E7%AC%8F-hma-hk"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/1/8/e/7a6e8678e0447977e58ff48c0500499d.jpg",
+        "listingNo": "A055347-6702630-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6702630.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A055347",
+          "listingNo": "A055347-6702630-S",
+          "titleZh": "均富花園 第01期 售盤 #A055347",
+          "address": "掃管笏村 均富花園 第01期",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6702630.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "fiona-garden",
+      "nameZh": "富安新邨",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.midland.com.hk/zh-hk/estate/%E6%96%B0%E7%95%8C-%E5%B0%8F%E6%AC%96-%E6%8E%83%E7%AE%A1%E7%AC%8F-%E9%9D%92%E5%B1%B1%E7%81%A3-%E5%AF%8C%E5%AE%89%E6%96%B0%E9%82%A8-E000000015",
+        "https://www.house730.com/estate-23822/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E5%AF%8C%E5%AE%89%E6%96%B0%E9%82%A8/"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/1/8/1/fdf6b5d2e4d5eb76b684e938434a2f26.jpeg",
+        "listingNo": "C005670-6708552-R",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6708552.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A064980",
+          "listingNo": "A064980-6781174-R",
+          "titleZh": "富安新村 租盤 #A064980",
+          "address": "青泰路28號 富安新村",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6781174.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "C005670",
+          "listingNo": "C005670-6708552-R",
+          "titleZh": "富安新村 租盤 #C005670",
+          "address": "青山公路大欖段 富安新村",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6708552.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "dragon-inn-court",
+      "nameZh": "容龍居",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.house730.com/estate-23783/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E5%AE%B9%E9%BE%8D%E5%B1%85/",
+        "https://www.ricacorp.com/zh-hk/property/estate/%E5%AE%B9%E9%BE%8D%E5%B1%85-estate-%E4%B8%89%E8%81%96-hma-hk",
+        "https://www.28hse.com/estate/detail/%E5%AE%B9%E9%BE%8D%E5%B1%85-4511"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/7/5/2/17ceacec2610f8161e6b97186f470ef6.jpeg",
+        "listingNo": "C020026-6733828-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6733828.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "C020026",
+          "listingNo": "C020026-6733828-S",
+          "titleZh": "容龍居 第04座 售盤 #C020026",
+          "address": "青霞里9號 容龍居 第04座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6733828.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "T024719",
+          "listingNo": "T024719-6575866-S",
+          "titleZh": "容龍居 第01座 售盤 #T024719",
+          "address": "青霞里9號 容龍居 第01座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6575866.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "tuen-mun-court",
+      "nameZh": "屯門閣",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.28hse.com/estate/detail/屯門閣-4514",
+        "https://www.midland.com.hk/zh-hk/estate/新界-小欖-掃管笏-青山灣-屯門閣-E08756",
+        "https://www.manyw.com/info/TUENMUNCOURT"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/1/0/2/05d18e188a23b68f3eb743f154514631.jpg",
+        "listingNo": "B075534-6757916-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6757916.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "B075534",
+          "listingNo": "B075534-6757916-S",
+          "titleZh": "屯門閣 售盤 #B075534",
+          "address": "青榕街2號 屯門閣",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6757916.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "elegant-villa",
+      "nameZh": "雅翠苑",
+      "districtSlug": "castle-peak-road",
+      "sources": ["https://hk.centanet.com/estate/%E9%9B%85%E7%BF%A0%E8%8B%91/2-ZMSSTHDXHN"],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/3/7/6/cd96f59acb42cbb327d4bf070a9a9a3a.jpg",
+        "listingNo": "A074399-6778974-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6778974.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A074399",
+          "listingNo": "A074399-6778974-S",
+          "titleZh": "雅翠苑 售盤 #A074399",
+          "address": "青榕街4號 雅翠苑",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6778974.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "B055175",
+          "listingNo": "B055175-6757962-S",
+          "titleZh": "雅翠苑 售盤 #B055175",
+          "address": "青榕街4號 雅翠苑",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6757962.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "pearl-island-bungalow",
+      "nameZh": "龍珠島平房",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.earnestproperty.com/property-detail/6711696.html",
+        "https://www.earnestproperty.com/property-detail/6711694.html",
+        "https://www.midland.com.hk/en/estate/New-Territories-Siu-Lam-So-Kwun-Wat-Castle-Peak-Bay-Pearl-Island-Bungalow-E00850",
+        "https://hk.centanet.com/centaestimate/estate-龍珠島別墅-F1座_1-SUQQURUYRJ?tab=history",
+        "https://www.property.hk/sc/asking_detail/6718044.html"
+      ],
+      "photo": {
+        "url": "https://imgs.property.hk/largePhotos/2026/a/5/e/534dfb816d73e407eaaa1878c96d485e.jpg",
+        "listingNo": "T025199-6711696-S",
+        "sourceUrl": "https://www.earnestproperty.com/property-detail/6711696.html",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A070076",
+          "listingNo": "A070076-6711694-S",
+          "titleZh": "龍珠島平房 F5座 售盤 #A070076",
+          "address": "青龍路9號 龍珠島平房 F5座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6711694.html",
+          "needsBackfill": true
+        },
+        {
+          "publicListingNo": "T025199",
+          "listingNo": "T025199-6711696-S",
+          "titleZh": "龍珠島平房 F1座 售盤 #T025199",
+          "address": "青龍路 龍珠島平房 F1座",
+          "sourceUrl": "https://www.earnestproperty.com/property-detail/6711696.html",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "pearl-garden",
+      "nameZh": "龍珠花園",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://hk.centanet.com/estate/zh-cn/龙珠花园/2-SUDDURUXRJ",
+        "https://www.house730.com/buy-property-9244086/青山公路-龍珠花園/"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d2/d26242b165dd439bb04e3052ff65994f07ed2652a0d570a3ec450167616c8557.webp",
+        "listingNo": "SYNC-1b53747f-7898-4cb8-b588-0dab41741d03",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-3993236",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A048415",
+          "listingNo": "SYNC-1b53747f-7898-4cb8-b588-0dab41741d03",
+          "titleZh": "(晉誠地產全部真盤) 《連車位》 低密度全海有露台!一梯兩伙!極少放盤!有邨巴!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-3993236",
+          "needsBackfill": true
+        }
+      ]
+    },
+    {
+      "slug": "peak-castle",
+      "nameZh": "珀居",
+      "districtSlug": "castle-peak-road",
+      "sources": [
+        "https://www.peakcastle.com/zh-hk",
+        "https://www.house730.com/buy-property-9249791/青山公路-珀居/",
+        "https://www.28hse.com/buy/apartment/property-4001685"
+      ],
+      "photo": {
+        "url": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/62/62051f93d6f782391f0e9ba95514217b5c68afd32ba746f5e3f5a531c6824c55.webp",
+        "listingNo": "SYNC-b72b4dd0-6c4c-42d7-98ff-b2a3443f2c68",
+        "sourceUrl": "https://www.28hse.com/buy/apartment/property-4002400",
+        "caption": "晉誠地產放盤參考照片（個別單位／景觀）"
+      },
+      "listings": [
+        {
+          "publicListingNo": "A055656",
+          "listingNo": "SYNC-b72b4dd0-6c4c-42d7-98ff-b2a3443f2c68",
+          "titleZh": "(晉誠地產豪宅推介) 《有匙即看》 兩層靚則獨立屋!大花園!蝕讓三千多萬!",
+          "address": null,
+          "sourceUrl": "https://www.28hse.com/buy/apartment/property-4002400",
+          "needsBackfill": true
+        }
+      ]
+    }
+  ]
+}

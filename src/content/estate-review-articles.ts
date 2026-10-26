@@ -196,7 +196,8 @@ function readerCopy(text: string): string {
 /** buyerFit entries already end in 。, so joining them with 、 or ； produced
  * 「…自住客。；在深井…」. */
 function joinSentences(items: readonly string[]): string {
-  return items.map((item) => item.replace(/。\s*$/, "")).join("；") + "。";
+  const clauses = items.map((item) => item.trim().replace(/[。；、，]+$/, "")).filter(Boolean);
+  return clauses.length ? clauses.join("；") + "。" : "";
 }
 
 function faqParagraphs(faqs: EstatePageContent["faqs"]): string[] {
@@ -257,8 +258,8 @@ function singleEstateArticle(slug: string): EstateReviewArticle {
     // positioning and then lists only what to watch out for reads as a warning
     // notice. Both halves are estate-specific, so either tail stays unique.
     excerpt: excerptWithOptionalTail(
-      `${displayName(slug)}${c.heroPositioning}開箱睇${c.pros.join("、")}。`,
-      `睇樓前要留意${c.watchouts.join("、")}。`,
+      `${displayName(slug)}${c.heroPositioning}開箱睇${joinSentences(c.pros)}`,
+      `睇樓前要留意${joinSentences(c.watchouts)}`,
     ),
     category: "屋苑開箱",
     readingMinutes: 6,
@@ -267,8 +268,10 @@ function singleEstateArticle(slug: string): EstateReviewArticle {
       `呎價、單位數、落成年份及發展商實時來自本網站屋苑資料庫，與屋苑專頁同一來源；` +
       `校網只列教育局校網編號，不列小學名單。`,
     answerSummary:
-      `${c.nameZh}${c.heroPositioning}買家最常比較嘅係${c.pros.join("、")}，` +
-      `而要留意嘅係${c.watchouts[0]}。實際呎價、單位數同落成年份請睇下方實時比較表 —— ` +
+      `${c.nameZh}${c.heroPositioning}${joinSentences([
+        `買家最常比較嘅係${joinSentences(c.pros)}`,
+        `而要留意嘅係${c.watchouts[0]}`,
+      ])}實際呎價、單位數同落成年份請睇下方實時比較表 —— ` +
       `呢啲數字同 /estate/${slug} 同一個資料庫，唔會過時。`,
     sections: [
       {
@@ -285,8 +288,8 @@ function singleEstateArticle(slug: string): EstateReviewArticle {
       {
         heading: "優點同要留意位",
         paragraphs: [
-          `公開屋苑資料同屋苑定位歸納出三個賣點：${c.pros.join("、")}。`,
-          `同時要留意：${c.watchouts.join("、")}。呢幾點都要睇樓時親身核實，唔好只靠圖片同平面圖。`,
+          `公開屋苑資料同屋苑定位歸納出三個賣點：${joinSentences(c.pros)}`,
+          `同時要留意：${joinSentences(c.watchouts)}呢幾點都要睇樓時親身核實，唔好只靠圖片同平面圖。`,
         ],
       },
       {
@@ -358,7 +361,7 @@ function groupArticle(spec: GroupSpec): EstateReviewArticle {
         heading: "逐個屋苑定位",
         paragraphs: slugs.map((slug) => {
           const c = content(slug);
-          return `${displayName(slug)}：${c.heroPositioning}賣點係${c.pros.join("、")}；要留意${c.watchouts[0]}。`;
+          return `${displayName(slug)}：${c.heroPositioning}賣點係${joinSentences([...c.pros, `要留意${c.watchouts[0]}`])}`;
         }),
       },
       {

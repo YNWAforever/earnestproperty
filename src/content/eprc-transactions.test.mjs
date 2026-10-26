@@ -19,13 +19,14 @@ test("all 107 supplied rows map through registry names/aliases; list any unmappe
     `Unmapped EstateQuery values: ${snapshot.unmappedEstateQueries.join(", ")}`,
   );
   assert.equal(Object.values(snapshot.byEstate).flat().length, 107);
-  assert.deepEqual(
-    Object.keys(snapshot.byEstate).sort(),
-    estateRegistry
-      .filter((estate) => estate.hasPage)
-      .map((estate) => estate.slug)
-      .sort(),
-  );
+  // This versioned export covers 22 estates, independent of later registry additions.
+  assert.equal(Object.keys(snapshot.byEstate).length, 22);
+  for (const slug of Object.keys(snapshot.byEstate)) {
+    assert.ok(
+      estateRegistry.some((estate) => estate.slug === slug && estate.hasPage),
+      slug,
+    );
+  }
   const expected = {
     碧堤半島: 13,
     浪翠園: 6,
@@ -66,6 +67,8 @@ test("the six estates without deals retain empty sections, with no invented rows
   }
   assert.equal(getEprcEstateTransactions(snapshot, "not-a-covered-estate"), null);
   assert.equal(getEprcEstateTransactions(snapshot, "toString"), null);
+  assert.ok(estateRegistry.find((estate) => estate.slug === "riviera")?.hasPage);
+  assert.equal(getEprcEstateTransactions(snapshot, "riviera"), null);
 });
 
 test("registry aliases handle 帝御/黃金海岸; unknown EstateQuery is excluded and reported", () => {

@@ -126,10 +126,15 @@ test(
           try {
             await knowledge.rebuildAiKnowledgeIndex();
             const before = await knowledge.searchPublicKnowledge({ query: "碧堤半島" });
-            assert.ok(before.filter((r) => r.source_type === "estate").length >= 1);
+            const isBellagio = (r) => r.source_type === "estate" && r.estate_slug === "bellagio";
+            assert.ok(before.some(isBellagio), "the target estate is indexed before unpublishing");
             await query("UPDATE estates SET published=false WHERE slug='bellagio'");
             const after = await knowledge.searchPublicKnowledge({ query: "碧堤半島" });
-            assert.equal(after.filter((r) => r.source_type === "estate").length, 0);
+            assert.equal(after.filter(isBellagio).length, 0);
+            // Fallback token search may still find another published estate sharing 半島.
+            assert.ok(
+              after.some((r) => r.source_type === "estate" && r.estate_slug === "pun-lung-bun-do"),
+            );
           } finally {
             await query("UPDATE estates SET published=true WHERE slug='bellagio'");
           }

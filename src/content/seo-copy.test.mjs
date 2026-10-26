@@ -68,7 +68,7 @@ test("the sweep actually covers the whole content layer", () => {
   // A guard that silently stops covering things is worse than no guard. If an
   // entry is added or removed, this number moves deliberately.
   assert.equal(Object.keys(pageSeo).length, 16, "pageSeo entry count changed");
-  assert.equal(Object.keys(estateSeo).length, 22, "estateSeo entry count changed");
+  assert.equal(Object.keys(estateSeo).length, 62, "estateSeo entry count changed");
   assert.equal(castlePeakRoadSegments.length, 2, "corridor segment count changed");
   assert.ok(pairs.length >= 41, `expected the sweep to cover 41+ pairs, got ${pairs.length}`);
 });
