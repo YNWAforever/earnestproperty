@@ -136,14 +136,11 @@ test("simulating fetchSitemapTimestamps' publish filter against estateSeo never 
   assert.equal(new Set(allPaths).size, 22, "no duplicate estate paths");
 });
 
-test("a hasPage:false registry estate (none exist today) would never get an estateSeo entry to begin with", () => {
-  // estateSeoIdentity() (seo.ts) is only ever called for the 22 hasPage:true
-  // slugs -- a hasPage:false estate has no estateSeo entry at all, so it's
-  // structurally impossible for it to reach the sitemap regardless of the
-  // publish-state filter tested above. This is a live canary, not a stale
-  // pin: today estateRegistry has zero hasPage:false entries, but if a
-  // future estate is added as a placeholder again, this proves it still
-  // can't leak into estateSeo (and therefore the sitemap) by construction.
+test("a hasPage:false registry estate never gets an estateSeo entry", () => {
+  // estateSeoIdentity() (seo.ts) is only called for the 22 hasPage:true
+  // slugs. The 2026-10-26 unpublished production rows are hasPage:false and
+  // must not reach the sitemap. This is a live canary: a placeholder estate
+  // cannot leak into estateSeo (and therefore the sitemap) by construction.
   const unpublishedRegistrySlugs = estateRegistry
     .filter((entry) => !entry.hasPage)
     .map((entry) => entry.slug);

@@ -118,10 +118,11 @@ const SHAM_TSENG_GROUP: ClientAreaGroup = {
  * 黃金海岸 (canonical 香港黃金海岸, slug wong-gam-hoi-ngon) and 黃金海灣
  * (wong-gam-hoi-waan) are two different estates and stay two entries.
  *
- * NAPA / 凱和山 / 緹岸 / 飛揚 / 翠濤居 / 棕月灣 / 愛琴灣 have no registry entry,
- * alias or verified row in this repo. They are recorded verbatim in
- * `unresolved` with their client-list positions; none is substituted with a
- * similarly-named estate (in particular 棕月灣 is not resolved to anything).
+ * NAPA / 緹岸 / 飛揚 / 翠濤居 / 棕月灣 / 愛琴灣 now have unpublished production
+ * rows (2026-10-26 snapshot) and registry entries. They stay off these cards:
+ * `published: false` does not promote them into primary or secondary.
+ * 凱和山 still has no row and stays unresolved. 棕月灣 is its own slug
+ * (chung-yuet-waan), not a rename of another estate.
  */
 const CASTLE_PEAK_ROAD_WEST_GROUP: ClientAreaGroup = {
   key: "castle-peak-road-west",
@@ -147,25 +148,16 @@ const CASTLE_PEAK_ROAD_WEST_GROUP: ClientAreaGroup = {
     { slug: "lin-shan" },
     { slug: "long-tou-waan" },
   ],
-  unresolved: [
-    { label: "NAPA", tier: "primary", rank: 8 },
-    { label: "凱和山", tier: "primary", rank: 10 },
-    { label: "緹岸", tier: "primary", rank: 11 },
-    { label: "飛揚", tier: "primary", rank: 12 },
-    { label: "翠濤居", tier: "secondary", rank: 5 },
-    { label: "棕月灣", tier: "secondary", rank: 6 },
-    { label: "愛琴灣", tier: "secondary", rank: 7 },
-  ],
+  unresolved: [{ label: "凱和山", tier: "primary", rank: 10 }],
 };
 
 /**
- * docx p1 names this group; p4's 主要屋苑 complaint applies to it too. No
- * registry entry carries districtSlug "ting-kau" or "yau-kom-tau" today, so
- * this group has no canonical members and renders an honest empty state.
- * Inventing estates to balance three columns is explicitly out of scope --
- * the segment's real, curated 觀海別墅 / 嘉御龍庭 / 汀九別墅 names live in
- * castle-peak-road.ts's `featuredEstates` as free text precisely because they
- * are not DB-backed estates.
+ * docx p1 names this group; p4's 主要屋苑 complaint applies to it too. The
+ * group has no canonical presentation members and renders an honest empty
+ * state. 觀海別墅 and 嘉御龍庭 are unpublished production rows
+ * (kwun-hoi-villas, royal-dragon-villa) and stay off these cards. 汀九別墅
+ * is still not an estates row. Inventing cards to balance three columns is
+ * out of scope.
  */
 const YAU_KOM_TAU_TING_KAU_GROUP: ClientAreaGroup = {
   key: "yau-kom-tau-ting-kau",

@@ -1,10 +1,45 @@
-// Exact names/aliases only; no parent/phase or fuzzy estate identities.
+// Exact names/aliases, plus the approved capture labels below. No fuzzy
+// parent/phase guessing: a phase string that is not an alias and not in
+// CAPTURE_ESTATE_MAPPINGS stays unmatched.
 const normalize = (value) =>
   String(value ?? "")
     .normalize("NFKC")
     .trim()
     .toUpperCase()
     .replace(/\s+/g, " ");
+
+// 28hse card labels for phase-merged production estates. The estates.aliases
+// values are the doubled portal forms ("黃金海灣 黃金海灣意嵐" /
+// "黃金海灣黃金海灣意嵐", "帝御 帝御‧嵐天" / "帝御帝御‧嵐天", and the 珀岸 / 星濤
+// parallels). Capture text uses the short form ("黃金海灣意嵐", "意嵐",
+// "帝御‧嵐天", "嵐天"). Keys are already normalize()'d. A label maps only when
+// that slug is present in the catalog with the same district_slug.
+const phase = (slug) => ({ slug, district_slug: "castle-peak-road" });
+export const CAPTURE_ESTATE_MAPPINGS = {
+  黃金海灣意嵐: phase("wong-gam-hoi-waan"),
+  意嵐: phase("wong-gam-hoi-waan"),
+  黃金海灣珀岸: phase("wong-gam-hoi-waan"),
+  珀岸: phase("wong-gam-hoi-waan"),
+  "黃金海灣 黃金海灣意嵐": phase("wong-gam-hoi-waan"),
+  黃金海灣黃金海灣意嵐: phase("wong-gam-hoi-waan"),
+  "黃金海灣 黃金海灣珀岸": phase("wong-gam-hoi-waan"),
+  黃金海灣黃金海灣珀岸: phase("wong-gam-hoi-waan"),
+  "帝御‧嵐天": phase("tai-yu"),
+  嵐天: phase("tai-yu"),
+  帝御嵐天: phase("tai-yu"),
+  "帝御‧星濤": phase("tai-yu"),
+  星濤: phase("tai-yu"),
+  帝御星濤: phase("tai-yu"),
+  "帝御 帝御‧嵐天": phase("tai-yu"),
+  "帝御帝御‧嵐天": phase("tai-yu"),
+  "帝御 帝御‧星濤": phase("tai-yu"),
+  "帝御帝御‧星濤": phase("tai-yu"),
+};
+
+export function captureEstateMapping(rawLabel) {
+  return CAPTURE_ESTATE_MAPPINGS[normalize(rawLabel)] ?? null;
+}
+
 export function resolveSavedEstate(record, extras, estates, districts) {
   const rawDistrict = normalize(record.district);
   let candidates = districts.filter((d) =>
@@ -23,11 +58,15 @@ export function resolveSavedEstate(record, extras, estates, districts) {
   }
   const district = candidates.length === 1 ? candidates[0] : null;
   const label = normalize(record.estate);
-  const named = estates.filter((e) =>
-    [e.name_zh, e.name_en, ...(Array.isArray(e.aliases) ? e.aliases : [])].some(
+  const mapped = CAPTURE_ESTATE_MAPPINGS[label] ?? null;
+  const named = estates.filter((e) => {
+    const exact = [e.name_zh, e.name_en, ...(Array.isArray(e.aliases) ? e.aliases : [])].some(
       (n) => n && normalize(n) === label,
-    ),
-  );
+    );
+    const approved =
+      mapped !== null && e.slug === mapped.slug && e.district_slug === mapped.district_slug;
+    return exact || approved;
+  });
   const matches = district ? named.filter((e) => e.district_slug === district.slug) : [];
   return {
     label: record.estate ?? null,

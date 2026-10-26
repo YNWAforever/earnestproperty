@@ -46,10 +46,38 @@ test("the registry still holds every estate the client's new order dropped", () 
   assert.ok(!coreEstates.some((estate) => estate.slug === "lung-tang-kok"));
 });
 
-test("P4 Task 2 added exactly 12 net-new entries on top of the original 10 (17 named, 5 already present)", () => {
-  assert.equal(estateRegistry.length, 22);
+test("the curated detail-page set stays 22, and the production snapshot adds the unpublished rows", () => {
+  assert.equal(estateRegistry.filter((entry) => entry.hasPage).length, 22);
+  assert.equal(estateRegistry.length, 51);
   const slugs = estateRegistry.map((entry) => entry.slug);
   assert.equal(new Set(slugs).size, slugs.length, "no duplicate slugs in the registry");
+});
+
+test("registry identity matches the 2026-10-26 production estates snapshot", () => {
+  const snapshot = JSON.parse(read("src/content/fixtures/prod-estates-20261026.json"));
+  assert.equal(snapshot.length, 51);
+  const bySlug = new Map(estateRegistry.map((entry) => [entry.slug, entry]));
+  assert.deepEqual([...bySlug.keys()].sort(), snapshot.map((row) => row.slug).sort());
+  for (const row of snapshot) {
+    const entry = bySlug.get(row.slug);
+    assert.equal(entry.districtSlug, row.district_slug, row.slug);
+    assert.equal(entry.published, row.published, row.slug);
+    assert.ok(
+      entry.nameZh === row.name_zh || entry.aliases.includes(row.name_zh),
+      `${row.slug} must keep production name_zh ${row.name_zh}`,
+    );
+    for (const alias of row.aliases ?? []) {
+      assert.ok(entry.aliases.includes(alias), `${row.slug} missing production alias ${alias}`);
+    }
+    if (!row.published) {
+      assert.equal(entry.hasPage, false, `${row.slug} must not grow a detail page`);
+      assert.equal(entry.homepageDistrict, null, `${row.slug} must not become a homepage card`);
+    }
+  }
+  for (const slug of ["fei-yeung", "ocean-camino", "lung-chu-island-garden"]) {
+    assert.equal(estateRegistry.filter((entry) => entry.slug === slug).length, 1);
+  }
+  assert.ok(!estateRegistry.some((entry) => /逸璟|星岸/.test(entry.nameZh)));
 });
 
 test("core-estates.ts's photo/district/hasPage fields are exactly the registry's", () => {
@@ -254,12 +282,9 @@ test("Estate Expansion 17 (2026-09-01 data pack): all 17 estates have hasPage:tr
       assert.equal(entry.photo, null, `${slug} has no supplied photo yet`);
     }
   }
-  // Every registry entry (5 original + 17 new) is hasPage:true after this task.
-  assert.equal(
-    estateRegistry.every((entry) => entry.hasPage),
-    true,
-  );
-  assert.equal(estatesWithPage.length, estateRegistry.length);
+  // The original 22 keep detail pages. Snapshot rows with published=false do not.
+  assert.equal(estatesWithPage.length, 22);
+  assert.equal(estateRegistry.filter((entry) => !entry.hasPage).length, estateRegistry.length - 22);
 });
 
 test("Estate Expansion 17: corridorSegment stays null for all 17 estates (regression guard -- this task must never silently pull any of them into corridor listing-search scope)", () => {
@@ -306,8 +331,8 @@ test("Estate Expansion 17: tai-wah-hin.parentEstateSlug is sea-crest-villa; ever
   }
 });
 
-test("Estate Expansion 17: every one of the 22 estates has non-null heroEyebrow/districtHref/locationLabelZh (regression guard for the original-5 backfill)", () => {
-  for (const entry of estateRegistry) {
+test("Estate Expansion 17: every detail-page estate has non-null heroEyebrow/districtHref/locationLabelZh (regression guard for the original-5 backfill)", () => {
+  for (const entry of estateRegistry.filter((item) => item.hasPage)) {
     assert.notEqual(entry.heroEyebrow, null, `${entry.slug} must have a heroEyebrow`);
     assert.notEqual(entry.districtHref, null, `${entry.slug} must have a districtHref`);
     assert.notEqual(entry.locationLabelZh, null, `${entry.slug} must have a locationLabelZh`);

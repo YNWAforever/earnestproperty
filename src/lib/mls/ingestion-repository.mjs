@@ -1,6 +1,10 @@
 import { isOwnerKeptField } from "./owner-review-resolution.mjs";
 import { isApprovedSavedCapture } from "./saved-capture-policy.mjs";
-import { resolveSavedEstate, readSavedEstateCatalog } from "./saved-capture-estates.mjs";
+import {
+  resolveSavedEstate,
+  readSavedEstateCatalog,
+  captureEstateMapping,
+} from "./saved-capture-estates.mjs";
 import { savePromotionTiers } from "./promotion-tier-repository.mjs";
 import { writeSyncFields, writeReviewRows } from "./ingestion-batch-writes.mjs";
 import {
@@ -59,6 +63,18 @@ const same = (a, b, numeric = false) =>
     ? normalizeDecimal(a) === normalizeDecimal(b)
     : canonicalJson(a ?? null) === canonicalJson(b ?? null);
 const json = (value) => JSON.stringify(value ?? null);
+async function approvedCaptureEstateId(q, source, estateLabel) {
+  if (source !== "28hse_agent_540") return null;
+  const mapped = captureEstateMapping(estateLabel);
+  if (!mapped) return null;
+  const row = (
+    await q(
+      "SELECT /* capture_estate_mapping */ id FROM estates WHERE slug=$1 AND district_slug=$2",
+      [mapped.slug, mapped.district_slug],
+    )
+  )[0];
+  return row?.id ?? null;
+}
 function estateMapping(estate, config) {
   const mapped = config?.estate_mappings?.[estate];
   return mapped &&
@@ -544,7 +560,8 @@ export async function applyIngestion(client, payload, options = {}) {
           districtSlug: mappedDistrict,
           estateId: savedCapture
             ? savedEstate.estate_id
-            : (estateMapping(record.fields.estate, policy.config)?.estate_id ?? null),
+            : (estateMapping(record.fields.estate, policy.config)?.estate_id ??
+              (await approvedCaptureEstateId(q, batch.source, record.fields.estate))),
           companyNumber: relation.companyNumber ?? null,
         });
         if (protectedPatchFields) {

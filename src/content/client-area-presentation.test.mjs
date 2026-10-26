@@ -105,18 +105,9 @@ test("the allowance is per estate, and does not admit unrelated stock", () => {
   assert.equal(isApprovedPresentationEstate(null), false);
 });
 
-test("every unresolved client name is carried verbatim and never invented into the registry", () => {
+test("unresolved client names are only those still absent from production", () => {
   const labels = unresolvedClientEstateLabels.map((entry) => entry.label);
-  assert.deepEqual(labels, [
-    "逸璟瓏灣",
-    "NAPA",
-    "凱和山",
-    "緹岸",
-    "飛揚",
-    "翠濤居",
-    "棕月灣",
-    "愛琴灣",
-  ]);
+  assert.deepEqual(labels, ["逸璟瓏灣", "凱和山"]);
   for (const label of labels) {
     assert.ok(
       !estateRegistry.some((entry) => entry.nameZh === label || entry.nameEn === label),
@@ -125,6 +116,12 @@ test("every unresolved client name is carried verbatim and never invented into t
     assert.ok(
       ledger.includes(label),
       `${label} must appear in the requirement ledger as an open question`,
+    );
+  }
+  for (const label of ["逸璟龍灣", "星岸"]) {
+    assert.ok(
+      !estateRegistry.some((entry) => entry.nameZh === label || entry.slug === label),
+      `${label} is not in the production snapshot`,
     );
   }
 });
