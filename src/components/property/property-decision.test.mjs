@@ -229,8 +229,11 @@ test("property.$listingNo.tsx sanitizes title/description/address before renderi
     /sanitizeListingText\(publicPropertyTitle\(property\)\) \?\? property\.title_zh/,
   );
   // A missing/malformed description must show a real fallback, not a blank
-  // paragraph or the literal word "null".
-  assert.match(route, /safeDescription \?\? "暫無詳細描述"/);
+  // paragraph or the literal word "null". The detail copy component owns
+  // that fallback; the route passes the already-sanitized description.
+  assert.match(route, /description=\{safeDescription\}/);
+  const copy = readFileSync(new URL("./PropertyDetailCopy.tsx", import.meta.url), "utf8");
+  assert.match(copy, /description \?\? "暫無詳細描述"/);
 });
 
 test("the payload carries a valid listing number and drops an invalid one", async () => {

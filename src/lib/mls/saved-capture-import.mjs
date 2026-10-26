@@ -5,6 +5,7 @@ import { basename, resolve, sep } from "node:path";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { getYouTubeVideoId } from "../youtube-video-url.js";
+import { stripCapturedListingFacts } from "../public-listing-body.js";
 import {
   decodeSnapshot,
   hashPayload,
@@ -154,31 +155,10 @@ export async function buildSavedImportPlan(
       raw.sold_label === true
     )
       failures.push("not_active_new_listing");
-    const detailLabels = {
-      block_unit: "座數及單位",
-      kitchen_type: "廚房類型",
-      kitchen_cooking_mode: "廚房煮食模式",
-      rent_includes: "租金包括",
-      management_fee: "管理費",
-      primary_school_net: "小學校網",
-      secondary_school_net: "中學校網",
-      developer: "發展商",
-      management_company: "管理公司",
-      building_age: "樓齡",
-      occupation_date: "入伙日期",
-      estate_intro: "屋苑介紹",
-      estate_units: "屋苑單位數目",
-      estate_blocks: "屋苑座數",
-      estate_parking: "屋苑車位",
-    };
-    const description = [
-      text(raw.description),
-      ...Object.entries(detailLabels).flatMap(([field, label]) =>
-        text(raw[field]) ? [`${label}：${text(raw[field])}`] : [],
-      ),
-    ]
-      .filter(Boolean)
-      .join("\n");
+    // Estate encyclopedia (發展商, 校網, 屋苑介紹, 入伙日期, 單位數目, …)
+    // stays off the listing description. The public page reads those fields
+    // from the linked estate row and must not invent them from this capture.
+    const description = stripCapturedListingFacts(text(raw.description));
     const record = {
       property_id: id,
       deal_type: deal,

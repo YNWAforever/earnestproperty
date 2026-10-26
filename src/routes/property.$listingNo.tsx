@@ -78,6 +78,8 @@ import { SITE_CONTACT, resolvePropertyBranchContact } from "@/config/site";
 import { resolveEstateTransport } from "@/content/estate-pages";
 import { estatePath } from "@/lib/estate-links";
 import { listingSeo } from "@/lib/listing-seo";
+import { stripCapturedListingFacts } from "@/lib/public-listing-body.js";
+import { PropertyDetailCopy } from "@/components/property/PropertyDetailCopy";
 import { resolveOldSearchCode } from "@/lib/old-search-code";
 import { jsonLdScript } from "@/lib/schema";
 import { shareUrl } from "@/lib/share";
@@ -222,7 +224,12 @@ export const Route = createFileRoute("/property/$listingNo")({
     // wins, exactly as estate.$slug.tsx does with `estates.seo_title`. See
     // src/lib/listing-seo.ts for why the previous `.slice(0, 150)` of the body
     // copy had to go.
-    const { title, description: desc } = listingSeo(p);
+    // Drop the saved-capture encyclopedia appendix before SEO filler can
+    // quote it. 發展商 / 入伙年份 / 總單位 come from the linked estate.
+    const { title, description: desc } = listingSeo({
+      ...p,
+      description: stripCapturedListingFacts(p.description),
+    });
     // Scrapers reject a relative og:image outright (see index.tsx); listing
     // photos come from the CMS/blob store and are normally absolute already,
     // but a site-relative path must be absolutised here, not passed through.
@@ -316,8 +323,12 @@ function PropertyPage() {
   // shows a fully blank title; description/address can legitimately end up
   // null and are guarded at their render sites instead.
   const safeTitle = sanitizeListingText(publicPropertyTitle(property)) ?? property.title_zh;
-  const safeDescription = sanitizeListingText(property.description);
-  const offeringDescription = sanitizeListingText(selectedOffering?.description);
+  // Saved-capture rows appended 校網 / 發展商 / 屋苑介紹 onto the unit
+  // description. That appendix is not shown; 屋苑資料 reads the estate row.
+  const safeDescription = stripCapturedListingFacts(sanitizeListingText(property.description));
+  const offeringDescription = stripCapturedListingFacts(
+    sanitizeListingText(selectedOffering?.description),
+  );
   const safeOfferingDescription =
     offeringDescription !== safeDescription ? offeringDescription : null;
   const safeAddress = sanitizeListingText(property.address);
@@ -799,69 +810,16 @@ function PropertyPage() {
         }
         details={
           <>
-            {/* Description -- always renders a fallback so a malformed or
-                missing description never leaves a bare heading or the
-                literal word "null"/"NaN". */}
-            <section className="mt-6">
-              <h2 className="text-xl font-semibold">物業描述</h2>
-              <p className="mt-3 whitespace-pre-line text-muted-foreground">
-                {safeDescription ?? "暫無詳細描述"}
-              </p>
-            </section>
-
-            {safeOfferingDescription && (
-              <section className="mt-6">
-                <h2 className="text-xl font-semibold">
-                  {property.deal_type === "rent" ? "出租補充資料" : "出售補充資料"}
-                </h2>
-                <p className="mt-3 whitespace-pre-line text-muted-foreground">
-                  {safeOfferingDescription}
-                </p>
-              </section>
-            )}
-            {/* Features */}
-            {(property.features?.length ?? 0) > 0 && (
-              <section className="mt-6">
-                <h2 className="text-xl font-semibold">物業特點</h2>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(property.features ?? []).map((f: string) => (
-                    <Badge key={f} variant="secondary">
-                      {f}
-                    </Badge>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Estate info */}
-            {estate && (
-              <Card className="mt-6">
-                <CardHeader>
-                  <CardTitle as="h2" className="text-base">
-                    屋苑資料
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                    <Spec label="屋苑" value={estate.name_zh} />
-                    <Spec label="發展商" value={estate.developer ?? "—"} />
-                    <Spec label="入伙年份" value={estate.year_completed ?? "—"} />
-                    <Spec label="總單位" value={estate.total_units ?? "—"} />
-                  </div>
-                  {estatePath(estate.slug) && (
-                    <div className="mt-4">
-                      <Link
-                        to="/estate/$slug"
-                        params={{ slug: estate.slug }}
-                        className="text-sm text-primary underline"
-                      >
-                        查看屋苑詳情 →
-                      </Link>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            {/* Description falls back inside PropertyDetailCopy so a missing
+                description never leaves a bare heading or the literal word
+                "null"/"NaN". Estate facts come from the linked estate row. */}
+            <PropertyDetailCopy
+              description={safeDescription}
+              offeringDescription={safeOfferingDescription}
+              offeringTitle={property.deal_type === "rent" ? "出租補充資料" : "出售補充資料"}
+              features={property.features}
+              estate={estate}
+            />
 
             {/* Exact estate mapping controls curated corridor copy. Other estates
                 receive a neutral guide link while their transport detail is checked. */}
