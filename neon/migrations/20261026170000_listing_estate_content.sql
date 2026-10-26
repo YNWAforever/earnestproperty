@@ -674,6 +674,8 @@ WHERE current.district_slug=EXCLUDED.district_slug AND current.name_zh=EXCLUDED.
 
 -- Exact reviewed source records only. Do not infer from descriptions or bare
 -- addresses, replace explicit foreign keys, or link inactive/edited records.
+SELECT set_config('app.admin_property_write','on',true);
+
 WITH reviewed AS (
  SELECT * FROM jsonb_to_recordset($reviewed_links$
 [
@@ -1209,6 +1211,8 @@ WHERE p.listing_no=r.listing_no AND p.status='active' AND p.estate_id IS NULL
  AND p.title_zh IS NOT DISTINCT FROM r.title_zh
  AND p.address IS NOT DISTINCT FROM r.address
  AND p.source_url IS NOT DISTINCT FROM r.source_url;
+
+SELECT set_config('app.admin_property_write','',true);
 
 -- Existing intake resolves canonical names/aliases from estates. In particular,
 -- 龍珠島別墅 belongs only to Pearl Island Bungalow (9 青龍路), not Garden (11號).
