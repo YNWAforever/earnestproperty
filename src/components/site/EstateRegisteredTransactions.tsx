@@ -1,10 +1,5 @@
 import { Container } from "@/components/layout/Container";
-import { DataNote } from "@/components/layout/DataNote";
-import {
-  EPRC_SOURCE_LABEL,
-  EPRC_SNAPSHOT_DATE,
-  type EprcEstateTransactions,
-} from "@/content/eprc-transactions";
+import type { EprcEstateTransactions } from "@/content/eprc-transactions";
 
 function AreaFigure({ area, psf }: { area: number | null; psf: number | null }) {
   if (area === null && psf === null) return <>—</>;
@@ -105,14 +100,6 @@ export function EstateRegisteredTransactions({
             </table>
           </div>
         )}
-        <DataNote
-          className="mt-4"
-          source={EPRC_SOURCE_LABEL}
-          asOf={EPRC_SNAPSHOT_DATE}
-          caveat="此為註冊資料快照，並非即時或完整市場成交。同一單位可能有不同文書性質的註冊紀錄。"
-        >
-          售價單位：百萬港元（$M）；面積：平方呎；呎價：港元／平方呎。註冊紀錄與本行成交分開展示。
-        </DataNote>
       </section>
     </Container>
   );
