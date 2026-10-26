@@ -515,7 +515,10 @@ function listingOrderBy(sort: NeonListingSort): string {
 }
 
 const MAX_PUBLIC_SCOPE_TERMS_PER_LIST = 48;
-const MAX_PUBLIC_SCOPE_TERMS_TOTAL = 96;
+// The homepage includes every approved estate (61 after the content expansion).
+// Keep aliases/districts at 48 while allowing a bounded canonical estate set.
+const MAX_PUBLIC_SCOPE_ESTATE_SLUGS = 128;
+const MAX_PUBLIC_SCOPE_TERMS_TOTAL = 192;
 const MAX_PUBLIC_SCOPE_TERM_LENGTH = 160;
 
 function cleanTerms(values: string[], maxEntries = MAX_PUBLIC_SCOPE_TERMS_PER_LIST) {
@@ -543,7 +546,7 @@ function normalizeCorridorInventoryInput(
 ): NeonCorridorInventoryInput {
   if (!input) throw new TypeError("INVALID_PUBLIC_SCOPE");
   const districtSlugs = cleanTerms(input.districtSlugs);
-  const estateSlugs = cleanTerms(input.estateSlugs);
+  const estateSlugs = cleanTerms(input.estateSlugs, MAX_PUBLIC_SCOPE_ESTATE_SLUGS);
   const textAliases = cleanTerms(input.textAliases);
   const outOfScopeTextAliases = cleanTerms(input.outOfScopeTextAliases);
   if (
