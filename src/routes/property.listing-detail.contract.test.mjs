@@ -52,6 +52,7 @@ const inlineModule = async (relativePath) =>
 const formatModuleSource = await inlineModule("../lib/format.ts");
 const seoBudgetSource = await inlineModule("../content/seo-budget.js");
 const listingSeoSource = await inlineModule("../lib/listing-seo.ts");
+const listingBodySource = await inlineModule("../lib/public-listing-body.js");
 
 function transpileAndRun(snippet) {
   const { outputText } = ts.transpileModule(snippet, {
@@ -433,6 +434,7 @@ ${formatModuleSource}
 ${publicHelperSource}
 ${seoBudgetSource}
 ${listingSeoSource}
+${listingBodySource}
 function head({ loaderData }) {
   ${body}
 }
@@ -706,7 +708,7 @@ test("selected sale and rent retain shared page copy and separate sanitized note
     await readFile(new URL("../lib/format.ts", import.meta.url), "utf8")
   ).replace(/export /g, "");
   const { project } = transpileAndRun(
-    `${formatSource}\n${publicHelperSource}\nfunction project(baseProperty,search){${routeSource.slice(start, end)}\nreturn {property,safeDescription,safeOfferingDescription:typeof safeOfferingDescription==='undefined'?null:safeOfferingDescription};}\nexports.project=project;`,
+    `${formatSource}\n${publicHelperSource}\n${listingBodySource}\nfunction project(baseProperty,search){${routeSource.slice(start, end)}\nreturn {property,safeDescription,safeOfferingDescription:typeof safeOfferingDescription==='undefined'?null:safeOfferingDescription};}\nexports.project=project;`,
   );
   const sale = {
     id: "sale",
@@ -745,8 +747,65 @@ test("selected sale and rent retain shared page copy and separate sanitized note
     null,
     "malformed note is suppressed",
   );
-  assert.match(routeSource, /safeOfferingDescription\s*&&/);
-  assert.match(routeSource, /\{safeOfferingDescription\}/);
+  const stuffed = project(
+    {
+      ...base,
+      description:
+        "帝濤灣 海琴軒，中層。\n座數及單位：1座\n發展商：新鴻基地產\n入伙日期：1999\n屋苑單位數目：856伙",
+    },
+    { deal: "sale" },
+  );
+  assert.equal(stuffed.safeDescription, "帝濤灣 海琴軒，中層。");
+  assert.match(routeSource, /offeringDescription=\{safeOfferingDescription\}/);
+  const copySource = await readFile(
+    new URL("../components/property/PropertyDetailCopy.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(copySource, /\{offeringDescription\}/);
+});
+
+test("a linked estate shows 屋苑資料 and does not put feature chips in that slot", async () => {
+  const copySource = await readFile(
+    new URL("../components/property/PropertyDetailCopy.tsx", import.meta.url),
+    "utf8",
+  );
+  const featuresStart = copySource.indexOf("Feature chips are not an estate record");
+  const estateStart = copySource.indexOf("data-property-estate-card");
+  assert.ok(featuresStart > 0 && estateStart > featuresStart);
+  const featuresBlock = copySource.slice(featuresStart, estateStart);
+  assert.match(featuresBlock, /showListingFeatureChips\(estate\)/);
+  assert.match(featuresBlock, /物業特點/);
+  assert.match(
+    routeSource,
+    /stripCapturedListingFacts\(sanitizeListingText\(property\.description\)\)/,
+  );
+  assert.match(routeSource, /stripCapturedListingFacts\(p\.description\)/);
+  assert.match(routeSource, /<PropertyDetailCopy[\s\S]*estate=\{estate\}/);
+  for (const label of ["屋苑", "發展商", "入伙年份", "總單位"]) {
+    assert.match(copySource, new RegExp(`<Spec label="${label}"`));
+  }
+  assert.match(copySource, /查看屋苑詳情 →/);
+});
+
+test("head description does not quote the captured estate encyclopedia", () => {
+  const result = buildHead()({
+    loaderData: {
+      property: {
+        status: "active",
+        listing_no: "A049264",
+        title_zh: "帝濤灣 海琴軒",
+        deal_type: "sale",
+        price: null,
+        rent: null,
+        description:
+          "帝濤灣 海琴軒，中層。 發展商：新鴻基地產 入伙日期：1999 屋苑介紹：不應進入摘要的屋苑長文",
+        estates: { name_zh: "帝濤灣", district_slug: "castle-peak-road" },
+      },
+    },
+  });
+  const description = result.meta.find((meta) => meta.name === "description")?.content ?? "";
+  assert.match(description, /帝濤灣/);
+  assert.doesNotMatch(description, /新鴻基地產|屋苑介紹|不應進入摘要/);
 });
 
 test("tracking resolver failure retains public listing and uses company contact fallback", async () => {

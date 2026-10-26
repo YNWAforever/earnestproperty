@@ -196,6 +196,41 @@ test("a moved bundle is read from its new photos directory, not the frozen absol
   }
 });
 
+test("estate encyclopedia stays out of the unit description", async () => {
+  const plan = await buildSavedImportPlan([
+    sampleRow("9000002", {
+      description: "帝濤灣 海琴軒，中層，實用面積 670 平方呎，3 房，1 浴室。",
+      block_unit: "1座 中層",
+      primary_school_net: "62校網(荃灣區)",
+      developer: "新鴻基地產",
+      management_company: "新鴻基地產物業",
+      occupation_date: "1999",
+      estate_intro: "屋苑介紹長文",
+      estate_units: "856伙",
+      estate_blocks: "9座",
+      feature_tags: ["有露台", "望海景"],
+      photos: [],
+    }),
+  ]);
+  const row = plan.rows[0];
+  assert.equal(row.record.description, "帝濤灣 海琴軒，中層，實用面積 670 平方呎，3 房，1 浴室。");
+  assert.doesNotMatch(row.record.description, /發展商|屋苑介紹|小學校網|座數及單位/);
+  assert.deepEqual(row.extras.features, ["有露台", "望海景"]);
+});
+
+test("ordinary rental terms survive the saved-capture import", async () => {
+  const description = "租金包括：管理費及差餉。可即時入住。\n管理費：已包括。";
+  const plan = await buildSavedImportPlan([
+    sampleRow("9000002", {
+      description,
+      developer: "新鴻基地產",
+      occupation_date: "1999",
+      estate_units: "856伙",
+    }),
+  ]);
+  assert.equal(plan.rows[0].record.description, description);
+});
+
 test("invalid and duplicate source IDs are reported before any writes", async () => {
   const plan = await buildSavedImportPlan([sampleRow(), sampleRow(), sampleRow("../../bad")], {
     captureRoot: "/tmp",
