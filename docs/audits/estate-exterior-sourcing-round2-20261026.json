@@ -1,0 +1,1029 @@
+{
+  "baselineTip": "2618c7349c02edd9861dc2dcfa70b0275e45d2d9",
+  "prUrl": "https://github.com/YNWAforever/earnestproperty/pull/289",
+  "scope": "The exact 40 published corridor estates missing an exterior at the baseline tip. No publication or DB state is changed.",
+  "method": "Bounded research of all 40 using primary Wikimedia Commons file/category pages, English/Chinese and alias queries, relevant street categories, and author/CC alternatives. Incidental property-portal search results were excluded and no competitor image was fetched or copied.",
+  "verificationLimits": [
+    "Author, date, own-work license, exact estate subject and selected thumbnail URL checked against primary file pages.",
+    "A thumbnail open returned only a text ImageDisplayed marker and its URL, not image pixels. Image-response observation does not establish pixel composition, browser/social-crawler loading, or native visual verification.",
+    "Category membership alone did not qualify generic road/neighbourhood photos. Bayview Terrace remains missing pending actual composition review.",
+    "Missing means no qualifying image found in this bounded pass, not that none exists."
+  ],
+  "summary": {
+    "missingSetSize": 40,
+    "beforeVerifiedExteriorsInMissingSet": 0,
+    "afterVerifiedExteriorsInMissingSet": 4,
+    "beforeMissing": 40,
+    "afterMissing": 36,
+    "overallPublishedCorridor": 61,
+    "overallBeforeExteriors": 21,
+    "overallAfterExteriors": 25,
+    "overallAfterMissing": 36,
+    "listingHeroFallbacksBefore": 0,
+    "listingHeroFallbacksAfter": 0,
+    "newPanoramaClaims": 0
+  },
+  "estates": [
+    {
+      "slug": "tai-yu",
+      "nameZh": "帝御",
+      "result": "still-missing",
+      "researchStatus": "rejected",
+      "searches": [
+        "site:commons.wikimedia.org \"The Royale\" Hong Kong Seacoast Skypoint",
+        "site:commons.wikimedia.org \"Starfront Royale\"",
+        "site:commons.wikimedia.org \"Seacoast Royale\" -Construction"
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:The_Royale_(Hong_Kong)",
+        "https://commons.wikimedia.org/wiki/Category:Skypoint_Royale,_Tuen_Mun_帝御_嵐天",
+        "https://commons.wikimedia.org/wiki/Category:Buildings_in_Tuen_Mun"
+      ],
+      "reason": "The Royale category had one road-sign file; Skypoint Royale category had three advertising/promotional images from Nathan/Hennessy Roads. The only additional named exterior located was explicitly under construction in November 2020.",
+      "rejectedCandidates": [
+        {
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Seacoast_Royale_Under_Construction_In_November_2020.jpg",
+          "author": "Prosperity Horizons",
+          "captureDate": "2020-11",
+          "year": 2020,
+          "source": "Own work",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "rejectionReasons": [
+            "Explicit construction-state filename.",
+            "File page also carries Facebook/YouTube/Twitter exclusion boilerplate."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "wong-gam-hoi-waan",
+      "nameZh": "黃金海灣",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Gold Coast Bay\"",
+        "site:commons.wikimedia.org \"黃金海灣\"",
+        "site:commons.wikimedia.org \"The Uppland\"",
+        "Wikimedia Commons original photo file Gold Coast Bay The Uppland The Reserve 黃金海灣 屯門"
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun_District",
+        "https://www.goldcoastbay.hk/",
+        "https://www.goldcoastbay.hk/zh-hk/the-uppland/",
+        "https://www.goldcoastbay.hk/zh-hk/the-reserve/"
+      ],
+      "reason": "No matching Commons completed-exterior file found. Exa returned the official development website, whose results describe renderings/retouched promotion photographs and no explicit free license. Official developer material was not treated as reusable photography."
+    },
+    {
+      "slug": "oma-oma",
+      "nameZh": "Oma Oma",
+      "result": "still-missing",
+      "researchStatus": "rejected",
+      "searches": [
+        "site:commons.wikimedia.org \"OMA OMA\"",
+        "\"OMA OMA\" \"2023\" \"commons.wikimedia\"",
+        "\"OMA OMA\" \"completed\" Wikimedia Commons Flickr CC",
+        "site:flickr.com \"OMA OMA\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:OMA_OMA",
+        "https://commons.wikimedia.org/wiki/File:OMA_OMA_Removing_Scaffold_In_November_2020.jpg"
+      ],
+      "reason": "The category still lists three promotional-vehicle/street-promotion images and an April 2020 construction photo. A separately indexed November 2020 scaffold-removal photo also depicts construction-state work. Searches for newer completed exteriors did not locate a freely licensed match.",
+      "rejectedCandidates": [
+        {
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:OMA_OMA_Removing_Scaffold_In_November_2020.jpg",
+          "author": "Prosperity Horizons",
+          "captureDate": "2020-11",
+          "year": 2020,
+          "source": "Own work",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "rejectionReasons": [
+            "Construction/scaffold-removal state.",
+            "File page also carries Facebook/YouTube/Twitter exclusion boilerplate."
+          ]
+        }
+      ]
+    },
+    {
+      "slug": "lin-shan",
+      "nameZh": "漣山",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"The Hillgrove\"",
+        "Wikimedia Commons File 漣山 Hillgrove Tuen Mun exterior",
+        "site:commons.wikimedia.org \"漣山\"",
+        "\"The Hillgrove\" \"Tuen Mun\" \"Flickr\"",
+        "site:flickr.com \"漣山\" \"Hillgrove\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun_District",
+        "https://commons.wikimedia.org/wiki/Category:Buildings_in_Tuen_Mun"
+      ],
+      "reason": "No matching freely licensed estate photo found; search returned unrelated Hillgrove places, a design portfolio and property-agent listings. Agent listings were not fetched or used."
+    },
+    {
+      "slug": "bayview-terrace",
+      "nameZh": "碧翠花園",
+      "result": "still-missing",
+      "researchStatus": "candidate_requires_visual_review",
+      "searches": [
+        "site:commons.wikimedia.org \"Bayview Terrace\"",
+        "\"Bayview Terrace, Hong Kong 碧翠花園\"",
+        "\"HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 27.jpg\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Bayview_Terrace,_Hong_Kong_碧翠花園",
+        "https://commons.wikimedia.org/wiki/Category:Residential_buildings_in_Tuen_Mun_District",
+        "https://commons.wikimedia.org/wiki/File:HK_屯門_Tuen_Mun_青山公路_Peak_Castle_Road_青山灣段_Peak_Castle_Bay_Nov_2019_SS2_24.jpg",
+        "https://commons.wikimedia.org/wiki/File:HK_屯門_Tuen_Mun_青山公路_Peak_Castle_Road_青山灣段_Peak_Castle_Bay_Nov_2019_SS2_26.jpg",
+        "https://commons.wikimedia.org/wiki/File:HK_屯門_Tuen_Mun_青山公路_Peak_Castle_Road_青山灣段_Peak_Castle_Bay_Nov_2019_SS2_27.jpg",
+        "https://commons.wikimedia.org/wiki/File:HK_屯門_Tuen_Mun_青山公路_Peak_Castle_Road_青山灣段_Peak_Castle_Bay_Nov_2019_SS2_30.jpg",
+        "https://commons.wikimedia.org/wiki/File:HK_屯門_Tuen_Mun_青山公路_Peak_Castle_Road_青山灣段_Peak_Castle_Bay_Nov_2019_SS2_31.jpg",
+        "https://commons.wikimedia.org/wiki/File:HK_屯門_Tuen_Mun_青山公路_Peak_Castle_Road_青山灣段_Peak_Castle_Bay_Nov_2019_SS2_32.jpg"
+      ],
+      "reason": "Six file pages checked. Files 24 (landscape) and 26 (portrait) are plausible building/exterior leads with explicit estate category and unrestricted CC BY-SA 4.0 own-work metadata. Actual composition could not be seen. Files 27/30/31/32 include bus/road/street-sign subject categories and were not promoted as estate exteriors.",
+      "conditionalCandidates": [
+        {
+          "filename": "HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 24.jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:HK_屯門_Tuen_Mun_青山公路_Peak_Castle_Road_青山灣段_Peak_Castle_Bay_Nov_2019_SS2_24.jpg",
+          "thumbnailUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/dd/HK_%E5%B1%AF%E9%96%80_Tuen_Mun_%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF_Peak_Castle_Road_%E9%9D%92%E5%B1%B1%E7%81%A3%E6%AE%B5_Peak_Castle_Bay_Nov_2019_SS2_24.jpg/1280px-HK_%E5%B1%AF%E9%96%80_Tuen_Mun_%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF_Peak_Castle_Road_%E9%9D%92%E5%B1%B1%E7%81%A3%E6%AE%B5_Peak_Castle_Bay_Nov_2019_SS2_24.jpg?utm_campaign=index&utm_content=thumbnail&utm_source=commons.wikimedia.org",
+          "author": "Jsimcum Goa",
+          "captureDate": "2019-11-01T11:59:38",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "subjectEvidence": "The FILE page explicitly places this photograph in Bayview Terrace, Hong Kong 碧翠花園. Its description names Castle Peak Road / Castle Peak Bay rather than the estate. Unlike files 27, 30, 31 and 32 in this set, its file page has no road-sign or bus-stop-sign subject category.",
+          "exactFileDescription": "English: HK 屯門 Tuen Mun zh:青山公路 Peak Castle Road 青山灣段 Peak Castle Bay in November 2019",
+          "visualVerificationObtained": false
+        },
+        {
+          "filename": "HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 26.jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:HK_屯門_Tuen_Mun_青山公路_Peak_Castle_Road_青山灣段_Peak_Castle_Bay_Nov_2019_SS2_26.jpg",
+          "thumbnailUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/73/HK_%E5%B1%AF%E9%96%80_Tuen_Mun_%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF_Peak_Castle_Road_%E9%9D%92%E5%B1%B1%E7%81%A3%E6%AE%B5_Peak_Castle_Bay_Nov_2019_SS2_26.jpg/960px-HK_%E5%B1%AF%E9%96%80_Tuen_Mun_%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF_Peak_Castle_Road_%E9%9D%92%E5%B1%B1%E7%81%A3%E6%AE%B5_Peak_Castle_Bay_Nov_2019_SS2_26.jpg?utm_campaign=index&utm_content=thumbnail&utm_source=commons.wikimedia.org",
+          "author": "Jsimcum Goa",
+          "captureDate": "2019-11-01T12:00:22",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "subjectEvidence": "The FILE page explicitly places this photograph in Bayview Terrace, Hong Kong 碧翠花園. Its description names Castle Peak Road / Castle Peak Bay rather than the estate. Unlike files 27, 30, 31 and 32 in this set, its file page has no road-sign or bus-stop-sign subject category.",
+          "exactFileDescription": "English: HK 屯門 Tuen Mun zh:青山公路 Peak Castle Road 青山灣段 Peak Castle Bay in November 2019",
+          "visualVerificationObtained": false
+        }
+      ]
+    },
+    {
+      "slug": "castle-peak-villas",
+      "nameZh": "青山別墅",
+      "result": "still-missing",
+      "researchStatus": "rejected",
+      "searches": [
+        "site:commons.wikimedia.org \"Castle Peak Villas\"",
+        "site:commons.wikimedia.org \"Siu Lam viewed from the sea 02.jpg\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Castle_Peak_Villas",
+        "https://commons.wikimedia.org/wiki/File:Siu_Lam_BBQ_Beach.jpg",
+        "https://commons.wikimedia.org/wiki/File:Siu_Lam_Oveview_201406.jpg",
+        "https://commons.wikimedia.org/wiki/File:Siu_Lam_viewed_from_the_sea_01.jpg",
+        "https://commons.wikimedia.org/wiki/File:Siu_Lam_viewed_from_the_sea_02.jpg"
+      ],
+      "reason": "All four category files are broader Siu Lam beach/neighbourhood/sea views. Some have explicit estate annotations, but the estate is a small annotated background portion and no image block was available to verify a usable estate-focused composition. Rejected as generic-neighbourhood hero substitutes.",
+      "rejectedCandidates": [
+        {
+          "filename": "Siu Lam viewed from the sea 02.jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Siu_Lam_viewed_from_the_sea_02.jpg",
+          "thumbnailUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bc/Siu_Lam_viewed_from_the_sea_02.jpg/1280px-Siu_Lam_viewed_from_the_sea_02.jpg?utm_campaign=index&utm_content=thumbnail&utm_source=commons.wikimedia.org",
+          "author": "Underwaterbuffalo",
+          "captureDate": "2016",
+          "year": 2016,
+          "source": "Own work",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "subjectEvidence": "FILE page annotation identifies Castle Peak Villas inside a 616 by 161 box of a 4608 by 3456 Siu Lam panorama.",
+          "imageResponseConfirmed": false
+        },
+        {
+          "filename": "Siu Lam Oveview 201406.jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Siu_Lam_Oveview_201406.jpg",
+          "thumbnailUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a8/Siu_Lam_Oveview_201406.jpg/1280px-Siu_Lam_Oveview_201406.jpg?utm_campaign=index&utm_content=thumbnail&utm_source=commons.wikimedia.org",
+          "author": "Wpcpey",
+          "captureDate": "2014-06-23",
+          "year": 2014,
+          "source": "Own work",
+          "license": "CC BY 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by/3.0",
+          "subjectEvidence": "Description identifies the broad Siu Lam overview, not an estate-focused photograph.",
+          "imageResponseConfirmed": false
+        },
+        {
+          "filename": "Siu Lam BBQ Beach.jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Siu_Lam_BBQ_Beach.jpg",
+          "author": "Yuyu",
+          "captureDate": "2009-10-25",
+          "year": 2009,
+          "source": "Own work",
+          "license": "CC BY-SA 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0",
+          "subjectEvidence": "Description identifies barbecue beach; Castle Peak Villas appears as a small annotation in the background."
+        }
+      ]
+    },
+    {
+      "slug": "ching-lai-waan-villas",
+      "nameZh": "青麗灣別墅",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"The Castle Bay\"",
+        "site:commons.wikimedia.org \"青麗灣別墅\"",
+        "site:commons.wikimedia.org \"The Castle Bay\" OR \"青麗灣別墅\" OR \"Tsing Yung Terrace\" OR \"青榕臺\"",
+        "\"The Castle Bay\" \"creative commons\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Lok_Chui_Street",
+        "https://commons.wikimedia.org/wiki/Category:Siu_Lam",
+        "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun_District"
+      ],
+      "reason": "No estate-specific free-license photo found. The Lok Chui Street category contains Castle Peak Villas, Murray Bay and Villa De Mer, not this estate. Same-name Scottish village/boat matches were rejected."
+    },
+    {
+      "slug": "ching-yung-toi",
+      "nameZh": "青榕臺",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Tsing Yung Terrace\"",
+        "site:commons.wikimedia.org \"青榕臺\"",
+        "\"青榕臺\" \"Wikimedia\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Tsing_Yung_Street",
+        "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun_District"
+      ],
+      "reason": "No estate-specific free-license exterior found. The street category only surfaced Crown By The Sea and Seaview Garden. Cheung Ching Estate Ching Yung House is a different place and was rejected."
+    },
+    {
+      "slug": "chui-king-garden",
+      "nameZh": "翠景花園",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Jade View Villa\"",
+        "\"翠景花園\" \"Wikimedia\"",
+        "site:commons.wikimedia.org \"Jade View Villa\" OR \"翠景花園\" OR \"Villa Sapphire\" OR \"海澄軒\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Park_View_Garden",
+        "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun_District"
+      ],
+      "reason": "No free-license exterior of Jade View Villa at 20 Tsing Tai Road found. Commons Park View Garden is 翠景花園 at 8 Pik Tin Street in Tai Wai, a name collision; rejected."
+    },
+    {
+      "slug": "chun-wo-sea-view-garden",
+      "nameZh": "春和海景花園",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Spring Seaview Terrace\"",
+        "\"春和海景花園\" \"Wikimedia\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun_District",
+        "https://commons.wikimedia.org/wiki/Category:Castle_Peak_Road_-_Castle_Peak_Bay"
+      ],
+      "reason": "No estate-specific Commons/free-license exterior located. Search found only estate-list text and unrelated Seaview Terrace matches."
+    },
+    {
+      "slug": "chung-yuet-waan",
+      "nameZh": "棕月灣",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Palm Beach\" \"Tuen Mun\"",
+        "\"棕月灣\" \"Wikimedia\"",
+        "site:commons.wikimedia.org \"Palm Beach\" \"棕月灣\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun_District",
+        "https://commons.wikimedia.org/wiki/Category:Castle_Peak_Road_-_Castle_Peak_Bay"
+      ],
+      "reason": "No specific Hong Kong estate photo under a free license found. Palm Beach Florida/Aruba and public-beach photos are unrelated and were rejected."
+    },
+    {
+      "slug": "hoi-ching-hin",
+      "nameZh": "海澄軒",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Villa Sapphire\"",
+        "site:commons.wikimedia.org \"海澄軒\" \"青發\"",
+        "\"海澄軒\" \"Villa Sapphire\" \"Commons\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Tsing_Fat_Street",
+        "https://mapcarta.com/W378405316",
+        "https://commons.wikimedia.org/wiki/Category:Horizon_Suite_Hotel"
+      ],
+      "reason": "No estate-specific free-license exterior found. Mapcarta identifies Villa Sapphire at 8 Tsing Fat Street but provides no reusable estate photograph. Horizon Suite Hotel also uses 海澄軒 but is in Ma On Shan and was rejected. Street photos cannot be relabeled as this estate without identifying evidence."
+    },
+    {
+      "slug": "hoi-wai-garden",
+      "nameZh": "海慧花園",
+      "result": "still-missing",
+      "researchStatus": "rejected",
+      "searches": [
+        "site:commons.wikimedia.org \"Aquamarine Garden\"",
+        "\"海慧花園\" \"Wikimedia\"",
+        "site:commons.wikimedia.org \"Aquamarine Garden\" \"Tsing Yan\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Tsing_Yan_Street",
+        "https://commons.wikimedia.org/wiki/File:HK_屯門_Tuen_Mun_青山公路_Peak_Castle_Road_青山灣段_Peak_Castle_Bay_Nov_2019_SS2_32.jpg",
+        "https://commons.wikimedia.org/wiki/Category:Aquamarine_Garden,_Tsing_Yan_Street_海慧花園",
+        "https://mapcarta.com/W378311532"
+      ],
+      "reason": "One file was found through Bayview Terrace file-page categories: SS2 32. It is also categorized as a road-sign photograph and associated with both Bayview Terrace and Aquamarine Garden. No image block allowed distinguishing estate prominence. The Aquamarine Garden category description page is absent; its preview lists only this file. Kadoorie Beach photos were not substituted.",
+      "rejectedCandidates": [
+        {
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:HK_屯門_Tuen_Mun_青山公路_Peak_Castle_Road_青山灣段_Peak_Castle_Bay_Nov_2019_SS2_32.jpg",
+          "author": "Jsimcum Goa",
+          "captureDate": "2019-11-01",
+          "year": 2019,
+          "source": "Own work",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+          "subjectEvidence": "FILE page categories include Aquamarine Garden, Tsing Yan Street 海慧花園 and 102 (road sign, Hong Kong).",
+          "imageResponseConfirmed": false
+        }
+      ]
+    },
+    {
+      "slug": "hoi-yu",
+      "nameZh": "海譽",
+      "result": "still-missing",
+      "researchStatus": "rejected",
+      "searches": [
+        "site:commons.wikimedia.org \"Crown By The Sea\"",
+        "\"Crown By The Sea\" \"creative commons\""
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Crown_By_The_Sea",
+        "https://commons.wikimedia.org/wiki/File:Crown_By_The_Sea.jpg",
+        "https://commons.wikimedia.org/wiki/File:Crown_By_The_Sea_South.jpg"
+      ],
+      "reason": "Both estate-specific Commons files carry the Facebook/YouTube/Twitter exclusion boilerplate despite a CC BY-SA 4.0 license. No unambiguous unrestricted alternative found.",
+      "rejectedCandidates": [
+        {
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Crown_By_The_Sea.jpg",
+          "author": "Prosperity Horizons",
+          "captureDate": "2018",
+          "year": 2018,
+          "source": "Own work",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+        },
+        {
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Crown_By_The_Sea_South.jpg",
+          "author": "Prosperity Horizons",
+          "captureDate": "2020",
+          "year": 2020,
+          "source": "Own work",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+        }
+      ]
+    },
+    {
+      "slug": "kwan-lun",
+      "nameZh": "琨崙",
+      "result": "still-missing",
+      "researchStatus": "rejected",
+      "searches": [
+        "site:commons.wikimedia.org \"Jade Grove\" \"Tuen Mun\"",
+        "\"Jade Grove\" \"creative commons\" -site:commons.wikimedia.org"
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Jade_Grove",
+        "https://commons.wikimedia.org/wiki/File:Jade_Grove.jpg",
+        "https://commons.wikimedia.org/wiki/File:Jade_Grove_(blue_sky).jpg"
+      ],
+      "reason": "The category contains only two files, both with the social-use exclusion boilerplate identified in the task. No unambiguous unrestricted alternative found.",
+      "rejectedCandidates": [
+        {
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Jade_Grove.jpg",
+          "author": "Exploringlife",
+          "captureDate": "2015-11-26T15:07:07",
+          "year": 2015,
+          "source": "Own work",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+        },
+        {
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Jade_Grove_(blue_sky).jpg",
+          "author": "Prosperity Horizons",
+          "captureDate": "2018",
+          "year": 2018,
+          "source": "Own work",
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0"
+        }
+      ]
+    },
+    {
+      "slug": "kwun-hoi-villas",
+      "nameZh": "觀海別墅",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "Commons exact English estate name, followed by Chinese/alias, Flickr/CC and relevant local categories"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate image with a clear free license was found; unrelated name collisions, broad scenes and protected property-portal images were excluded."
+    },
+    {
+      "slug": "lung-chu-island-garden",
+      "nameZh": "龍珠島花園",
+      "result": "added-licensed-exterior",
+      "researchStatus": "metadata_verified_candidate",
+      "searches": [
+        "site:commons.wikimedia.org \"Pearl Island Garden\"",
+        "Commons Pearl Island Garden category and each promising file page",
+        "English Wikipedia Pearl Island exact caption/image link and Commons 1280px thumbnail click"
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/File:Pearl_Island_Apartment_20150617.jpg",
+        "https://en.wikipedia.org/wiki/Pearl_Island_(Hong_Kong)",
+        "https://commons.wikimedia.org/wiki/Category:Pearl_Island_Garden",
+        "https://zh.wikipedia.org/wiki/%E9%BE%8D%E7%8F%A0%E5%B3%B6"
+      ],
+      "reason": "Exact estate subject and free-license metadata checked; selected with the disclosed pixel-verification limit.",
+      "photo": {
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/Pearl_Island_Apartment_20150617.jpg/1280px-Pearl_Island_Apartment_20150617.jpg",
+        "label": "屋苑外觀（2015年）",
+        "credit": "Wikipedia user -Wpcpey (Wing1990hk) / Wikimedia Commons, CC BY 3.0",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Pearl_Island_Apartment_20150617.jpg",
+        "licenseUrl": "https://creativecommons.org/licenses/by/3.0/"
+      },
+      "provenance": {
+        "filename": "Pearl Island Apartment 20150617.jpg",
+        "captureDate": "2015-06-17",
+        "year": 2015,
+        "author": "Wikipedia user -Wpcpey (file author field: Wing1990hk)",
+        "source": "Own work",
+        "license": "CC BY 3.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+        "identityEvidenceUrl": "https://en.wikipedia.org/wiki/Pearl_Island_(Hong_Kong)",
+        "subjectEvidence": "English Wikipedia Pearl Island article explicitly captions this exact image as Pearl Island Garden / 龍珠島花園. Clicking that captioned image resolves to Pearl_Island_Apartment_20150617.jpg. Commons file is own work and is categorized Pearl Island Garden. Chinese article uses the same file with generic 龍珠島住宅 caption; it does not contradict the English estate-specific caption. No file annotation identifies only a tiny target. Exact 1280px thumbnail observed through Commons category-to-file navigation.",
+        "imageResponseConfirmed": true,
+        "pixelVisualInspection": false,
+        "rawImageBlockReceived": false,
+        "identityEvidenceUrls": [
+          "https://en.wikipedia.org/wiki/Pearl_Island_(Hong_Kong)",
+          "https://commons.wikimedia.org/wiki/Category:Pearl_Island_Garden",
+          "https://zh.wikipedia.org/wiki/%E9%BE%8D%E7%8F%A0%E5%B3%B6"
+        ]
+      },
+      "rejectedCandidates": [
+        {
+          "filename": "2022年9月-龍珠島.jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:2022年9月-龍珠島.jpg",
+          "author": "建園春秋",
+          "captureDate": "2022-09-10",
+          "license": "CC BY-SA 4.0",
+          "reason": "Description identifies the western side of the island in an aerial view; no file-page evidence isolates the estate at No.11."
+        },
+        {
+          "filename": "Pearl Island Apartment.JPG",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Pearl_Island_Apartment.JPG",
+          "author": "圍棋一級",
+          "captureDate": "2011-05",
+          "license": "CC BY-SA 3.0",
+          "reason": "Description is generic Pearl Island residences; exact estate at No.11 is unverified."
+        },
+        {
+          "filename": "Pearl Island, Tsing Lung Road (Hong Kong).jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Pearl_Island,_Tsing_Lung_Road_(Hong_Kong).jpg",
+          "author": "Mk2010",
+          "captureDate": "2012-10-22",
+          "license": "CC BY-SA 3.0",
+          "reason": "Road connecting two developments is the described subject. Garden is on right, Beaulieu on left; generic shared scene not a dedicated No.11 estate hero."
+        }
+      ]
+    },
+    {
+      "slug": "monte-carlo-villas",
+      "nameZh": "蒙地卡羅別墅",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Monte Carlo Villas\"",
+        "site:commons.wikimedia.org \"蒙地卡羅別墅\"",
+        "site:commons.wikimedia.org \"蒙地卡羅\"",
+        "Exa exact-estate free-license/Flickr exterior search"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No primary free-license exact estate file found; search-result property listings and an interior design project were excluded without fetching."
+    },
+    {
+      "slug": "nam-ngon",
+      "nameZh": "南岸",
+      "result": "added-licensed-exterior",
+      "researchStatus": "metadata_verified_candidate",
+      "searches": [
+        "Commons South Crest category; exact file metadata via Exa fetch and web category click; 960px thumbnail click"
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/File:South_Crest_in_January_2023.jpg",
+        "https://commons.wikimedia.org/wiki/Category:South_Crest,_Hong_Kong"
+      ],
+      "reason": "Exact estate subject and free-license metadata checked; selected with the disclosed pixel-verification limit.",
+      "photo": {
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/16/South_Crest_in_January_2023.jpg/960px-South_Crest_in_January_2023.jpg",
+        "label": "屋苑外觀（2023年）",
+        "credit": "姒姓賢寧 / Wikimedia Commons, CC BY-SA 4.0",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:South_Crest_in_January_2023.jpg",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      },
+      "provenance": {
+        "filename": "South Crest in January 2023.jpg",
+        "captureDate": "2023-01-14T16:56:59",
+        "year": 2023,
+        "author": "姒姓賢寧",
+        "source": "Own work",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "identityEvidenceUrl": "https://commons.wikimedia.org/wiki/Category:South_Crest,_Hong_Kong",
+        "subjectEvidence": "Exact file description identifies South Crest; Commons category labels it 南岸 and locates it on Castle Peak Road - Castle Peak Bay. File page, attribution, date and chosen 960px resolution were observed directly by navigating from the category.",
+        "imageResponseConfirmed": true,
+        "pixelVisualInspection": false,
+        "rawImageBlockReceived": false,
+        "identityEvidenceUrls": [
+          "https://commons.wikimedia.org/wiki/Category:South_Crest,_Hong_Kong"
+        ]
+      }
+    },
+    {
+      "slug": "nga-tak-yuen",
+      "nameZh": "雅德苑",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Faraday House\" \"Tuen\"",
+        "site:commons.wikimedia.org \"雅德苑\"",
+        "Exa exact-estate/English/Chinese/address/free-license searches",
+        "Commons Tsing Yung Street category"
+      ],
+      "sourcesReviewed": [],
+      "reason": "Wrong building: file page location is 51.519612,-0.121552 (London), not Hong Kong.",
+      "rejectedCandidates": [
+        {
+          "filename": "Faraday House (6266008325).jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Faraday_House_(6266008325).jpg",
+          "author": "Tony Hisgett",
+          "captureDate": "2011-10-19",
+          "license": "CC BY 2.0",
+          "reason": "Wrong building: file page location is 51.519612,-0.121552 (London), not Hong Kong."
+        }
+      ]
+    },
+    {
+      "slug": "ocean-camino",
+      "nameZh": "緹岸",
+      "result": "added-licensed-exterior",
+      "researchStatus": "metadata_verified_candidate",
+      "searches": [
+        "site:commons.wikimedia.org \"Ocean Camino\"",
+        "site:commons.wikimedia.org \"緹岸\"",
+        "Commons Emerald Bay category and exact Tower3 file",
+        "Official Ocean Camino current-name/address search"
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/File:Emerald_Bay_Tower3.jpg",
+        "https://commons.wikimedia.org/wiki/Category:Emerald_Bay,_So_Kwun_Wat",
+        "https://www.emeraldbay.com.hk/",
+        "https://www.emeraldbay.com.hk/ph1/filemanager/news/tc/upload/3/675/Ocean_Camino_Phase_1_260915_WEB.pdf",
+        "https://zh.wikipedia.org/wiki/%E7%B7%B9%E5%B2%B8"
+      ],
+      "reason": "Exact estate subject and free-license metadata checked; selected with the disclosed pixel-verification limit.",
+      "photo": {
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/53/Emerald_Bay_Tower3.jpg/1280px-Emerald_Bay_Tower3.jpg",
+        "label": "屋苑外觀（2021年，第3座）",
+        "credit": "Johnkoo002 / Wikimedia Commons, CC BY-SA 4.0",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Emerald_Bay_Tower3.jpg",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      },
+      "provenance": {
+        "filename": "Emerald Bay Tower3.jpg",
+        "captureDate": "2021-09-20T17:25:00",
+        "year": 2021,
+        "author": "Johnkoo002",
+        "source": "Own work",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "identityEvidenceUrl": "https://commons.wikimedia.org/wiki/Category:Emerald_Bay,_So_Kwun_Wat",
+        "subjectEvidence": "File description explicitly identifies 珺瓏灣Tower 3; Commons category identifies 恆大·珺瓏灣 at 管翠路8號, and file usage links 緹岸. Official emeraldbay.com.hk homepage is now titled 緹岸 | Ocean Camino; official brochure search result confirms No.8 Kwun Chui Road. Wikipedia rename/completion context says phase 2 was completed/occupied September 2021. Photo date is 20 September 2021.",
+        "imageResponseConfirmed": true,
+        "pixelVisualInspection": false,
+        "rawImageBlockReceived": false,
+        "identityEvidenceUrls": [
+          "https://commons.wikimedia.org/wiki/Category:Emerald_Bay,_So_Kwun_Wat",
+          "https://www.emeraldbay.com.hk/",
+          "https://www.emeraldbay.com.hk/ph1/filemanager/news/tc/upload/3/675/Ocean_Camino_Phase_1_260915_WEB.pdf",
+          "https://zh.wikipedia.org/wiki/%E7%B7%B9%E5%B2%B8"
+        ]
+      },
+      "rejectedCandidates": [
+        {
+          "filename": "Emerald Bay under construction in June 2019.jpg",
+          "reason": "Construction; excluded."
+        },
+        {
+          "filename": "Emerald Bay Tuen Mun 27April.jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Emerald_Bay_Tuen_Mun_27April.jpg",
+          "captureDate": "2020-04-27",
+          "author": "Sakat26",
+          "license": "CC BY-SA 4.0",
+          "reason": "Before documented completion; do not use for completed-exterior requirement."
+        },
+        {
+          "filename": "Emerald Bay So Kwun Wat Hong Kong, 4 Jan 2021.jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Emerald_Bay_So_Kwun_Wat_Hong_Kong,_4_Jan_2021.jpg",
+          "captureDate": "2021-01-04",
+          "author": "Heman Pong",
+          "license": "CC BY-SA 4.0 (or GFDL)",
+          "reason": "Source field is not explicitly own work; photo predates described phase completion. Prefer September 2021 Tower3 candidate."
+        },
+        {
+          "filename": "Emerald Bay Gym Room.jpg",
+          "reason": "Interior; excluded."
+        },
+        {
+          "filename": "Emerald Bay swimming pool.jpg",
+          "reason": "Amenity rather than requested estate exterior hero; excluded."
+        }
+      ]
+    },
+    {
+      "slug": "oi-kam-waan",
+      "nameZh": "愛琴灣",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"The Aegean\" \"Hong Kong\"",
+        "site:commons.wikimedia.org \"愛琴灣\"",
+        "Exa exact-estate/address/Flickr/free-license search",
+        "Commons Tsing Fat Street category"
+      ],
+      "sourcesReviewed": [],
+      "reason": "Different estate: Aegean Coast/愛琴海岸 is not The Aegean/愛琴灣.; Street category has generic street views, Aqua Blue and light public housing; no exact The Aegean free-license estate photo identified.",
+      "rejectedCandidates": [
+        {
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:HK_Gold_Coast_Mall_Roof_01_Aegean_Coast_Towers.JPG",
+          "reason": "Different estate: Aegean Coast/愛琴海岸 is not The Aegean/愛琴灣."
+        },
+        {
+          "identityEvidenceUrl": "https://commons.wikimedia.org/wiki/Category:Tsing_Fat_Street",
+          "reason": "Street category has generic street views, Aqua Blue and light public housing; no exact The Aegean free-license estate photo identified."
+        }
+      ]
+    },
+    {
+      "slug": "oma-by-the-sea",
+      "nameZh": "OMA by the Sea",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"OMA by the Sea\"",
+        "Exa completed exterior 2023/2024/2025 free-license search",
+        "Commons OMA By The Sea category and nearby Tai Lam road category"
+      ],
+      "sourcesReviewed": [],
+      "reason": "Commons category currently has only four files: two explicit construction images, one construction-neighbour image and an advertisement scene. No completed estate exterior found under a verified free license.",
+      "rejectedCandidates": [
+        {
+          "filename": "OMA By The Sea under construction in May 2020.jpg",
+          "reason": "Construction; excluded."
+        },
+        {
+          "filename": "OMA By The Sea Under Construction In November 2020.jpg",
+          "reason": "Construction; excluded."
+        },
+        {
+          "filename": "HK Tuen Mun 掃管笏 So Kwun Wat 青山公路 欖段 168 Castle Peak Road Tai Lam 永泰亞洲 WingTaiAsia construction site The Carmel October 2018 IX2 02.jpg",
+          "reason": "Construction and neighbouring The Carmel; excluded."
+        },
+        {
+          "filename": "HK SYP 西環 Sai Ying Pun 德輔道西 Des Voeux Road West 14pm June 2020 SS2 21.jpg",
+          "reason": "Advertisement/off-estate scene; excluded."
+        },
+        {
+          "url": "https://www.brewindesignoffice.com/work/oma-by-the-sea/",
+          "reason": "Architect/designer portfolio, no explicit free reuse license verified; excluded."
+        },
+        {
+          "url": "https://www.archify.com/hk/archifynow/oma-by-the-sea",
+          "reason": "Editorial project photos, no explicit free reuse license verified; excluded."
+        }
+      ]
+    },
+    {
+      "slug": "palm-cove",
+      "nameZh": "翠濤居",
+      "result": "added-licensed-exterior",
+      "researchStatus": "metadata_verified_candidate",
+      "searches": [
+        "site:commons.wikimedia.org \"Palm Cove\" \"Hong Kong\"",
+        "Exact Commons category, file metadata and 960px resolution click"
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/File:Palm_Cove,_Castle_Peak_Bay,_Tuen_Mun_part_four_in_March_2021.jpg",
+        "https://commons.wikimedia.org/wiki/Category:Palm_Cove,_Hong_Kong"
+      ],
+      "reason": "Exact estate subject and free-license metadata checked; selected with the disclosed pixel-verification limit.",
+      "photo": {
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Palm_Cove%2C_Castle_Peak_Bay%2C_Tuen_Mun_part_four_in_March_2021.jpg/960px-Palm_Cove%2C_Castle_Peak_Bay%2C_Tuen_Mun_part_four_in_March_2021.jpg",
+        "label": "屋苑外觀（2021年）",
+        "credit": "姒姓賢寧 / Wikimedia Commons, CC BY-SA 4.0",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Palm_Cove,_Castle_Peak_Bay,_Tuen_Mun_part_four_in_March_2021.jpg",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      },
+      "provenance": {
+        "filename": "Palm Cove, Castle Peak Bay, Tuen Mun part four in March 2021.jpg",
+        "captureDate": "2021-03-26T12:56:13",
+        "year": 2021,
+        "author": "姒姓賢寧",
+        "source": "Own work",
+        "license": "CC BY-SA 4.0",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "identityEvidenceUrl": "https://commons.wikimedia.org/wiki/Category:Palm_Cove,_Hong_Kong",
+        "subjectEvidence": "Exact file description is Palm Cove, Castle Peak Bay, Tuen Mun; Commons estate category explicitly labels 翠濤居 with its object coordinates. Exact file and 960px thumbnail accessed through category navigation.",
+        "imageResponseConfirmed": true,
+        "pixelVisualInspection": false,
+        "rawImageBlockReceived": false,
+        "identityEvidenceUrls": ["https://commons.wikimedia.org/wiki/Category:Palm_Cove,_Hong_Kong"]
+      }
+    },
+    {
+      "slug": "pun-lung-bun-do",
+      "nameZh": "蟠龍半島",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Beaulieu Peninsula\"",
+        "Exact Commons category, sole file page and 1280px thumbnail",
+        "Commons Yu Chui Street category"
+      ],
+      "sourcesReviewed": [],
+      "reason": "File's subject is road connecting Pearl Island Garden (right) and Beaulieu Peninsula (left). Broad shared scene; insufficient dedicated estate coverage for hero and no pixel inspection possible.",
+      "rejectedCandidates": [
+        {
+          "filename": "Pearl Island, Tsing Lung Road (Hong Kong).jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Pearl_Island,_Tsing_Lung_Road_(Hong_Kong).jpg",
+          "thumbnailUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Pearl_Island%2C_Tsing_Lung_Road_%28Hong_Kong%29.jpg/1280px-Pearl_Island%2C_Tsing_Lung_Road_%28Hong_Kong%29.jpg",
+          "author": "Mk2010",
+          "captureDate": "2012-10-22T13:47:49",
+          "year": 2012,
+          "source": "Own work",
+          "license": "CC BY-SA 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+          "imageResponseConfirmed": true,
+          "pixelVisualInspection": false,
+          "rawImageBlockReceived": false,
+          "reason": "File's subject is road connecting Pearl Island Garden (right) and Beaulieu Peninsula (left). Broad shared scene; insufficient dedicated estate coverage for hero and no pixel inspection possible."
+        }
+      ]
+    },
+    {
+      "slug": "royal-cove-tower",
+      "nameZh": "帝灣居",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Royal Cove\"",
+        "site:commons.wikimedia.org \"帝灣居\"",
+        "Exa Royal Cove Tower exact address/primary free-license exterior search",
+        "Commons Ka Wo Lei Shan Road category fetch (not found)"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate completed exterior with a clear free license found in the bounded primary-source search."
+    },
+    {
+      "slug": "royal-dragon-villa",
+      "nameZh": "嘉御龍庭",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "Commons exact English estate name, followed by Chinese/alias, Flickr/CC and relevant local categories"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate image with a clear free license was found; unrelated name collisions, broad scenes and protected property-portal images were excluded."
+    },
+    {
+      "slug": "seaside-castle",
+      "nameZh": "畔海",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "Commons exact English estate name, followed by Chinese/alias, Flickr/CC and relevant local categories"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate image with a clear free license was found; unrelated name collisions, broad scenes and protected property-portal images were excluded."
+    },
+    {
+      "slug": "yu-chui-yuen",
+      "nameZh": "瑜翠園",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Peridot Court\"",
+        "site:commons.wikimedia.org \"瑜翠園\"",
+        "Exa Peridot Court Yu Chui Street primary free-license/Flickr photo search",
+        "Commons Yu Chui Street category"
+      ],
+      "sourcesReviewed": [],
+      "reason": "Different estate: Yu Chui Court in Sha Tin is not Peridot Court in Tuen Mun.; Street scene does not establish exact estate exterior as subject; excluded.",
+      "rejectedCandidates": [
+        {
+          "identityEvidenceUrl": "https://commons.wikimedia.org/wiki/Category:Yu_Chui_Court",
+          "reason": "Different estate: Yu Chui Court in Sha Tin is not Peridot Court in Tuen Mun."
+        },
+        {
+          "filename": "Yu Chui Street 2025.jpg",
+          "reason": "Street scene does not establish exact estate exterior as subject; excluded."
+        }
+      ]
+    },
+    {
+      "slug": "deauville",
+      "nameZh": "星岸",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "Commons exact English estate name, followed by Chinese/alias, Flickr/CC and relevant local categories"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate image with a clear free license was found; unrelated name collisions, broad scenes and protected property-portal images were excluded."
+    },
+    {
+      "slug": "long-beach-gardens",
+      "nameZh": "海濤花園",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "Commons exact English estate name, followed by Chinese/alias, Flickr/CC and relevant local categories"
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/File:The_address_of_Long_Beach_Gardens_in_January_2023.jpg",
+        "https://commons.wikimedia.org/wiki/Category:Castle_Peak_Road_-_Ting_Kau"
+      ],
+      "reason": "The only exact-estate file found photographs its door/address number, not a suitable estate exterior."
+    },
+    {
+      "slug": "riviera",
+      "nameZh": "麗海別墅",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "Commons exact English estate name, followed by Chinese/alias, Flickr/CC and relevant local categories"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate image with a clear free license was found; unrelated name collisions, broad scenes and protected property-portal images were excluded."
+    },
+    {
+      "slug": "both-wealth-garden",
+      "nameZh": "均富花園",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "Commons exact English estate name, followed by Chinese/alias, Flickr/CC and relevant local categories"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate image with a clear free license was found; unrelated name collisions, broad scenes and protected property-portal images were excluded."
+    },
+    {
+      "slug": "fiona-garden",
+      "nameZh": "富安新邨",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "Commons exact English estate name, followed by Chinese/alias, Flickr/CC and relevant local categories"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate image with a clear free license was found; unrelated name collisions, broad scenes and protected property-portal images were excluded."
+    },
+    {
+      "slug": "dragon-inn-court",
+      "nameZh": "容龍居",
+      "result": "still-missing",
+      "researchStatus": "rejected_candidate",
+      "searches": [
+        "Exact Commons Dragon Inn Court category",
+        "Exact Yung lung file page via Castle Peak Road category click",
+        "1280px file resolution click"
+      ],
+      "sourcesReviewed": [],
+      "reason": "File page has an image annotation for Dragon Inn Court and category links Dragon Inn Court/Tsing Ha Lane/Castle Peak Bay Garden. Estate category labels 容龍居.",
+      "rejectedCandidates": [
+        {
+          "reason": "Small annotated target in broad scene; reject for estate hero."
+        }
+      ]
+    },
+    {
+      "slug": "tuen-mun-court",
+      "nameZh": "屯門閣",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Tuen Mun Court\"",
+        "site:commons.wikimedia.org \"屯門閣\"",
+        "Exa exact English/Chinese/address/Flickr free-license searches",
+        "Commons Tsing Yung Street category"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate completed exterior with a clear free license found in the bounded primary-source search."
+    },
+    {
+      "slug": "elegant-villa",
+      "nameZh": "雅翠苑",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"Elegant Villa\" \"Tuen\"",
+        "site:commons.wikimedia.org \"雅翠苑\" \"屯門\"",
+        "Exa exact English/Chinese/address/Flickr free-license searches",
+        "Commons Tsing Yung Street category"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate completed exterior with a clear free license found in the bounded primary-source search."
+    },
+    {
+      "slug": "pearl-island-bungalow",
+      "nameZh": "龍珠島平房",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "site:commons.wikimedia.org \"龍珠島平房\"",
+        "Exa exact Pearl Island Bungalow 青龍路9 free-license search",
+        "Commons Pearl Island Garden/Island categories",
+        "Pearl Island Apartment and 2022 aerial exact file metadata"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No.9 Bungalow must remain distinct from No.11 Pearl Island Garden and No.7 Pearl Garden. Search results also expose address/name disagreement for Pearl Island Villas; do not infer that name-only candidates represent the requested No.9 property.",
+      "rejectedCandidates": [
+        {
+          "filename": "Pearl Island Apartment 20150617.jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Pearl_Island_Apartment_20150617.jpg",
+          "author": "Wing1990hk (Wpcpey)",
+          "captureDate": "2015-06-17",
+          "license": "CC BY 3.0",
+          "reason": "Description only Pearl Island Apartment; no unambiguous file-page mapping to No.9 Bungalow."
+        },
+        {
+          "filename": "Pearl Island Apartment.JPG",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:Pearl_Island_Apartment.JPG",
+          "author": "圍棋一級",
+          "captureDate": "2011-05",
+          "license": "CC BY-SA 3.0",
+          "reason": "Description generic Pearl Island residences, cannot isolate No.9."
+        },
+        {
+          "filename": "2022年9月-龍珠島.jpg",
+          "filePageUrl": "https://commons.wikimedia.org/wiki/File:2022年9月-龍珠島.jpg",
+          "author": "建園春秋",
+          "captureDate": "2022-09-10",
+          "license": "CC BY-SA 4.0",
+          "reason": "Island aerial; does not establish No.9 as the dedicated subject."
+        }
+      ]
+    },
+    {
+      "slug": "pearl-garden",
+      "nameZh": "龍珠花園",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "Commons exact English estate name, followed by Chinese/alias, Flickr/CC and relevant local categories"
+      ],
+      "sourcesReviewed": [],
+      "reason": "No exact-estate image with a clear free license was found; unrelated name collisions, broad scenes and protected property-portal images were excluded."
+    },
+    {
+      "slug": "peak-castle",
+      "nameZh": "珀居",
+      "result": "still-missing",
+      "researchStatus": "missing",
+      "searches": [
+        "Commons exact English estate name, followed by Chinese/alias, Flickr/CC and relevant local categories"
+      ],
+      "sourcesReviewed": [
+        "https://commons.wikimedia.org/wiki/Category:Peak_Castle",
+        "https://commons.wikimedia.org/wiki/File:Peak_Castle.jpg",
+        "https://commons.wikimedia.org/wiki/File:Peak_Castle_(revised).jpg"
+      ],
+      "reason": "Both Commons Peak Castle files publish CC BY-SA 4.0 but also author prose excluding Facebook/YouTube/Twitter reuse. Excluded for unresolved conflicting licensing text; no unambiguous alternative found."
+    }
+  ]
+}

@@ -940,6 +940,13 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "lung-chu-island-garden",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/Pearl_Island_Apartment_20150617.jpg/1280px-Pearl_Island_Apartment_20150617.jpg",
+      label: "屋苑外觀（2015年）",
+      credit: "Wikipedia user -Wpcpey (Wing1990hk) / Wikimedia Commons, CC BY 3.0",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Pearl_Island_Apartment_20150617.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by/3.0/",
+    },
     nameZh: "龍珠島花園",
     nameEn: "Pearl Island Garden",
     aliases: ["龍珠島花園", "Pearl Island Garden"],
@@ -976,6 +983,13 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "nam-ngon",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/16/South_Crest_in_January_2023.jpg/960px-South_Crest_in_January_2023.jpg",
+      label: "屋苑外觀（2023年）",
+      credit: "姒姓賢寧 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:South_Crest_in_January_2023.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "南岸",
     nameEn: "South Crest",
     aliases: ["南岸", "South Crest"],
@@ -1036,6 +1050,13 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "ocean-camino",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/53/Emerald_Bay_Tower3.jpg/1280px-Emerald_Bay_Tower3.jpg",
+      label: "屋苑外觀（2021年，第3座）",
+      credit: "Johnkoo002 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Emerald_Bay_Tower3.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "緹岸",
     nameEn: "Ocean Camino",
     aliases: [
@@ -1105,6 +1126,14 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "palm-cove",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Palm_Cove%2C_Castle_Peak_Bay%2C_Tuen_Mun_part_four_in_March_2021.jpg/960px-Palm_Cove%2C_Castle_Peak_Bay%2C_Tuen_Mun_part_four_in_March_2021.jpg",
+      label: "屋苑外觀（2021年）",
+      credit: "姒姓賢寧 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl:
+        "https://commons.wikimedia.org/wiki/File:Palm_Cove,_Castle_Peak_Bay,_Tuen_Mun_part_four_in_March_2021.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "翠濤居",
     nameEn: "Palm Cove",
     aliases: ["翠濤居", "Palm Cove", "PALM COVE"],

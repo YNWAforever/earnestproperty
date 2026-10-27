@@ -1,4 +1,6 @@
-# Estate exterior hero audit
+# Initial estate exterior hero audit
+
+**Follow-up coverage:** this branch now has 25 of 61 corridor estates with source-verified exteriors; 36 still lack one. Four of the original 40 gaps were filled in the [second sourcing pass](estate-exterior-sourcing-round2-20261026.md). The tables below preserve the initial `2618c734` snapshot; use the follow-up audit for current gap status.
 
 Base: `c61e6443b45df23d5323f43af29360489b5c7dcb` (#288). Production read at 2026-10-27T02:24:35.888Z. All 62 published estate URLs returned HTTP 200. The corridor set is the 61 approved presentation estates; published 龍騰閣 (`lung-tang-kok`) is outside that set and also loses its unverified DB hero. Registry publication is compared against accessible production HTML, not assumed to be live solely from a static flag.
 

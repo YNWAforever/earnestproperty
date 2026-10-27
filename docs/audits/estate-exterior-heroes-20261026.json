@@ -1,4 +1,6 @@
 {
+  "snapshotTip": "2618c7349c02edd9861dc2dcfa70b0275e45d2d9",
+  "followupAudit": "estate-exterior-sourcing-round2-20261026.json",
   "auditedAt": "2026-10-27T02:24:35.888Z",
   "baseSha": "c61e6443b45df23d5323f43af29360489b5c7dcb",
   "method": "Read-only production HTML via Vercel connector for all 62 published estates. Corridor membership uses approvedPresentationEstateSlugs (61), not corridorSegment (which excludes most published corridor estates). No database client or writes.",
