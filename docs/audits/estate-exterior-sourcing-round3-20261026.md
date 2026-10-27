@@ -1,5 +1,7 @@
 # Estate exterior sourcing — third pass
 
+**Later research:** the [expanded public-source pass](estate-exterior-sourcing-round4-20261027.md) investigated government/open-data archives, news agencies, other photo collections and additional Wikimedia routes. It found no further qualifying image; coverage remains 25/61 with 36 gaps.
+
 **Outcome: zero additional qualifying exterior sources.** The original 36 gaps remain unresolved; overall corridor coverage stays **25/61**. This is a new discovery/evidence pass on the existing [PR #289](https://github.com/YNWAforever/earnestproperty/pull/289), not a photo-selection change. Baseline tip: `5d11e33f98c446c73d5c97e9558c0d578a4a9f9c`.
 
 ## Counts
