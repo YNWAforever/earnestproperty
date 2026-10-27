@@ -359,7 +359,7 @@ test("an unknown homepage selection never reaches SQL", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("homepage uses complete sale inventory membership and source order before LIMIT", async () => {
+test("homepage uses complete sale inventory membership and source order before LIMIT", async (t) => {
   const db = new PGlite();
   try {
     await db.exec(`CREATE TYPE deal_type AS ENUM ('sale','rent');
@@ -462,6 +462,96 @@ test("homepage uses complete sale inventory membership and source order before L
     assert.deepEqual(
       cappedPaid.map((row) => row.listing_no),
       ["NORMAL"],
+    );
+    // All fixtures below are in this in-memory PGlite instance. A paid company
+    // ref in the current capture must not qualify an unrelated source row.
+    const ineligibleLinks = [
+      { ref: "A052972", source: "propertyhk", status: "active", deal: "sale" },
+      { ref: "A000007", source: null, status: null, deal: "sale" },
+      { ref: "A000008", source: "28hse_agent_540", status: "inactive", deal: "sale" },
+      { ref: "A000009", source: "28hse_agent_540", status: "rejected", deal: "sale" },
+      { ref: "A000010", source: "28hse_agent_540", status: "proposed", deal: "sale" },
+      { ref: "A000011", source: "28hse_agent_540", status: "active", deal: "rent" },
+      { ref: "A000012", source: "28hse_agent_541", status: "active", deal: "sale" },
+    ];
+    for (const { ref, source, status, deal } of ineligibleLinks) {
+      await db.query(
+        `INSERT INTO properties(id,listing_no,canonical_property_no,created_at,source_site,images)
+         VALUES ($1,$1,$1,now(),$2,ARRAY['https://imgs.property.hk/test.jpg'])`,
+        [ref, source === "propertyhk" ? "old-site" : "28hse"],
+      );
+      await db.query(`INSERT INTO property_public_members VALUES ($1,$1)`, [ref]);
+      if (source) {
+        await db.query(
+          `INSERT INTO property_source_links(property_id,source,external_listing_id,deal_type,status)
+           VALUES ($1,$2,$1,$3,$4)`,
+          [ref, source, deal, status],
+        );
+      }
+      await db.query(
+        `INSERT INTO listing_source_observations(id,run_id,source,external_listing_id,deal_type,
+           property_no_normalized,payload,fetched_at)
+         SELECT $1,id,'28hse_agent_540',$1,'sale',$1,
+           '{"homepage_inventory":{"position":0}}',(counts->>'captured_at')::timestamptz
+         FROM listing_sync_runs WHERE id='current'`,
+        [ref],
+      );
+      await db.query(
+        `INSERT INTO mls_source_promotion_tiers(source,external_listing_id,deal_type,promotion_tier,
+           observation_id,observed_at,snapshot_complete)
+         SELECT source,external_listing_id,deal_type,'gold',id,fetched_at,true
+         FROM listing_source_observations WHERE id=$1`,
+        [ref],
+      );
+    }
+    await db.exec(`UPDATE listing_sync_runs SET counts=counts || jsonb_build_object(
+      'advertised_count',(SELECT count(*) FROM listing_source_observations WHERE run_id='current'))
+      WHERE id='current'`);
+    for (const { ref, source, status, deal } of ineligibleLinks) {
+      await t.test(
+        `paid ref ${ref} excludes ${source ?? "source_site-only"}/${status}/${deal}`,
+        async () => {
+          const rows = await server.fetchFeaturedProperties({
+            limit: 100,
+            selection: "28hse-paid",
+          });
+          assert.ok(
+            !rows.some((row) => row.listing_no === ref),
+            `${ref} has no eligible 28hse sale link`,
+          );
+        },
+      );
+    }
+    await t.test(
+      "ineligible paid refs do not consume the limit or hide Property.hk-only cards",
+      async () => {
+        assert.deepEqual(
+          (await server.fetchFeaturedProperties({ limit: 1, selection: "28hse-paid" })).map(
+            (row) => row.listing_no,
+          ),
+          ["NORMAL"],
+        );
+        const rows = await server.fetchFeaturedProperties({ limit: 100, selection: "propertyhk" });
+        assert.ok(rows.some((row) => row.listing_no === "A052972"));
+      },
+    );
+    await t.test(
+      "an active same-deal 28hse link admits a dual-source card without an image-host filter",
+      async () => {
+        await db.exec(`INSERT INTO property_source_links(property_id,source,external_listing_id,deal_type,status)
+        VALUES ('A052972','28hse_agent_540','different-advert-id','sale','active')`);
+        const rows = await server.fetchFeaturedProperties({ limit: 1, selection: "28hse-paid" });
+        assert.deepEqual(
+          rows.map((row) => row.listing_no),
+          ["A052972"],
+        );
+        assert.deepEqual(rows[0].images, ["https://imgs.property.hk/test.jpg"]);
+        assert.ok(
+          !(await server.fetchFeaturedProperties({ limit: 100, selection: "propertyhk" })).some(
+            (row) => row.listing_no === "A052972",
+          ),
+        );
+      },
     );
     // An old capture must never be made current by a new publication execution.
     await db.exec(`UPDATE listing_sync_runs SET counts=counts ||
