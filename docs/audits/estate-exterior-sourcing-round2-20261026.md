@@ -1,5 +1,7 @@
 # Estate exterior sourcing — second pass
 
+**Later research:** the [third pass](estate-exterior-sourcing-round3-20261026.md) checked new live API and open-photo discovery routes but found no further qualifying source. Coverage remains 25/61, with 36 gaps. The four additions and exclusions below are unchanged.
+
 Updating the existing [PR #289](https://github.com/YNWAforever/earnestproperty/pull/289) branch; no follow-on PR. Baseline tip: `2618c7349c02edd9861dc2dcfa70b0275e45d2d9`. This pass researches exactly its 40 missing published corridor estates. The original production/main audit remains a labelled historical snapshot.
 
 ## Coverage
