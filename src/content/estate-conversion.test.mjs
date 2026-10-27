@@ -43,6 +43,8 @@ function buildEstateHead(routeSource) {
   const body = routeSource.slice(bodyStart, bodyEnd);
 
   const snippet = `
+const SITE_URL = "https://example.test";
+const SITE_OG_IMAGE = SITE_URL + "/og-cover.jpg";
 const estateSeo = {
   "with-seo": { title: "registry title", description: "registry description" },
   "no-seo": {},
@@ -674,4 +676,20 @@ test("estate-comparison.ts is a plain .ts module with no JSX, importable directl
   assert.match(source, /export function buildComparisonColumns/);
   assert.match(source, /export function buildComparisonRowDefs/);
   assert.match(source, /export function estateTextFigure/);
+});
+
+test("estate social cards use the reviewed exterior or brand artwork, never the DB unit photo", () => {
+  const head = buildEstateHead(read("src/routes/estate.$slug.tsx"));
+  const estate = { slug: "no-seo", name_zh: "屋苑", hero_image: "https://example.test/unit.jpg" };
+  for (const shareImage of [null, undefined, "/estates/bellagio.jpg"]) {
+    const meta = head({ loaderData: { estate, shareImage } }).meta;
+    for (const key of ["og:image", "twitter:image"]) {
+      const tag = meta.find((item) => item.property === key || item.name === key);
+      assert.equal(
+        tag.content,
+        shareImage ? "https://example.test" + shareImage : "https://example.test/og-cover.jpg",
+      );
+      assert.notEqual(tag.content, estate.hero_image);
+    }
+  }
 });

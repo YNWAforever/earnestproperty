@@ -31,11 +31,12 @@ import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { estateRegistry, findComparableEstates } from "@/content/estate-registry";
+import { getEstateHeroPhoto } from "@/content/estate-photos";
 import type { EprcEstateTransactions } from "@/content/eprc-transactions";
 import { getEstateRegisteredTransactions } from "@/content/eprc-transactions-snapshot";
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
 import { getSchoolNet, schoolNetCodeForDistrict } from "@/content/school-nets";
-import { SITE_URL, authored, canonicalLink, estateSeo } from "@/content/seo";
+import { SITE_URL, SITE_OG_IMAGE, authored, canonicalLink, estateSeo } from "@/content/seo";
 import { publishedBlogArticles, type BlogArticleMeta } from "@/content/blog-articles";
 import { formatHkDate } from "@/lib/format";
 import {
@@ -120,9 +121,9 @@ export const Route = createFileRoute("/estate/$slug")({
     });
     return {
       estate,
-      // Registry card photo (public/estates/...) for og:image; head() has no
-      // registry access of its own.
-      shareImage: estateRegistry.find((entry) => entry.slug === estate.slug)?.photo ?? null,
+      // Sharing uses the same reviewed exterior as the visible hero.
+      shareImage:
+        getEstateHeroPhoto(estateRegistry.find((entry) => entry.slug === estate.slug))?.src ?? null,
       faqs,
       latestListings,
       transactions,
@@ -169,7 +170,7 @@ export const Route = createFileRoute("/estate/$slug")({
       authored(estate.seo_description) ??
       seo?.description ??
       `${estate.name_zh}屋苑資料、現有放盤叫價、成交紀錄及常見問題。晉誠地產 C-018613。`;
-    const image = loaderData?.shareImage ?? estate.hero_image;
+    const image = loaderData?.shareImage ?? SITE_OG_IMAGE;
     return {
       meta: [
         { title },
@@ -251,6 +252,7 @@ function EstatePage() {
   // drift. Falls back to null and every read below degrades gracefully
   // rather than crashing the whole page for a brand-new estate.
   const registryEntry = estateRegistry.find((entry) => entry.slug === estate.slug) ?? null;
+  const heroPhoto = getEstateHeroPhoto(registryEntry);
   useTrackPageView(
     () => ({
       event: {
@@ -392,26 +394,45 @@ function EstatePage() {
         </div>
       </PageHero>
 
-      {registryEntry?.photo || estate.hero_image ? (
+      {heroPhoto ? (
         <Container className="pt-6">
           <figure>
             {/* Largest contentful paint element on every estate page: eager +
                 high priority, like the homepage hero, instead of AppImage's
                 lazy default. */}
             <AppImage
-              src={registryEntry?.photo || estate.hero_image}
-              alt={`${estateName} 屋苑／放盤參考照片`}
+              src={heroPhoto.src}
+              alt={`${estateName} ${heroPhoto.label}`}
               width={1600}
               height={900}
               loading="eager"
               fetchPriority="high"
               sizes="(min-width: 1280px) 1216px, 100vw"
-              className="max-h-[480px] w-full rounded-lg object-cover"
+              className="max-h-[480px] w-full rounded-lg bg-muted object-contain"
             />
             <figcaption className="mt-2 text-xs text-muted-foreground">
-              {registryEntry?.photo
-                ? (registryEntry.photoCredit ?? "屋苑參考照片")
-                : "本行放盤參考照片，並非屋苑全景。"}
+              {heroPhoto.label}
+              {heroPhoto.credit ? (
+                <>
+                  {" · "}
+                  {heroPhoto.sourceUrl ? (
+                    <a className="underline" href={heroPhoto.sourceUrl}>
+                      {heroPhoto.credit}
+                    </a>
+                  ) : (
+                    heroPhoto.credit
+                  )}
+                  {heroPhoto.licenseUrl ? (
+                    <>
+                      {" "}
+                      ·{" "}
+                      <a className="underline" href={heroPhoto.licenseUrl}>
+                        授權條款
+                      </a>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
             </figcaption>
           </figure>
         </Container>

@@ -1,0 +1,2614 @@
+{
+  "baselineTip": "51463c01c3ecd79ee57ef06526ac4f70b511947c",
+  "prUrl": "https://github.com/YNWAforever/earnestproperty/pull/289",
+  "scope": "Expanded public-source discovery beyond round 3 for the same 36 unresolved published corridor estates. No photo selection changes.",
+  "outcome": "Zero new qualifying estate exteriors; record the expanded search rather than substitute unverified imagery.",
+  "summary": {
+    "remainingSetSize": 36,
+    "beforeExteriorsInRemainingSet": 0,
+    "afterExteriorsInRemainingSet": 0,
+    "newQualifiedExteriorSources": 0,
+    "beforeMissing": 36,
+    "afterMissing": 36,
+    "overallCorridorEstates": 61,
+    "overallExteriorsBefore": 25,
+    "overallExteriorsAfter": 25,
+    "listingHeroFallbacksBefore": 0,
+    "listingHeroFallbacksAfter": 0
+  },
+  "acceptedSources": [],
+  "method": {
+    "searchRequests": 58,
+    "requestedResultSlots": 290,
+    "returnedResultRecords": 269,
+    "uniqueDiscoveryUrls": 236,
+    "countsCaveat": "Requested result slots are not sources read. Returned URLs are discovery records, not licensed-photo approvals. Primary source reads and decisions are recorded separately.",
+    "newCommonsCategoryApiReads": 5,
+    "commonsFilePageReads": 6,
+    "newCommonsFilePageReads": 5,
+    "priorExcludedFileReencounters": 1,
+    "chineseWikipediaDirectTitleLookups": 36,
+    "panoramaxSearchUrls": 5,
+    "limits": [
+      "Bounded search, not proof that no qualifying photo exists anywhere.",
+      "No native-browser or image-pixel verification obtained.",
+      "Timeouts/401/SSL errors and unpopulated map UI counts are not empty-result evidence.",
+      "No competitor photograph fetched/copied. Incidental property-portal search hits were discarded.",
+      "No protected street-view screenshot or challenge bypass. No new media upload.",
+      "No Cursor agents, Neon/database access, migration/data patch, merge or production promotion."
+    ]
+  },
+  "collectionAssessments": [
+    {
+      "collection": "GovHK general website",
+      "urls": ["https://www.gov.hk/en/about/copyright.htm"],
+      "rights": "Prior written consent required for photographs and other non-text contents (clause 3).",
+      "decision": "No commercial hero reuse grant; not selected."
+    },
+    {
+      "collection": "ISD Government Photo Store",
+      "urls": [
+        "https://www.isd.gov.hk/eng/photo_sales.htm",
+        "https://www2.photostore.gov.hk/photostore/faq.xhtml"
+      ],
+      "rights": "Personal viewing/download is not commercial reuse. ISD states an additional HK$1,000 copyright fee per commercial-use photo.",
+      "decision": "No paid license obtained; no purchase, contact or photo copying."
+    },
+    {
+      "collection": "news.gov.hk",
+      "urls": [
+        "https://www.news.gov.hk/chi/about/index.html",
+        "https://www.news.gov.hk/eng/about/index.html"
+      ],
+      "rights": "Media reuse with attribution and personal downloading do not grant general commercial-site use; commercial use/republishing images requires prior ISD approval.",
+      "decision": "No commercial hero reuse grant; not selected."
+    },
+    {
+      "collection": "Government Records Service digitised holdings",
+      "urls": ["https://www.grs.gov.hk/en/online_holdings.html"],
+      "rights": "Images are for private study/research; further reproduction or publication requires permission.",
+      "decision": "No commercial reuse grant; not selected."
+    },
+    {
+      "collection": "Lands Department sample aerial photographs",
+      "urls": [
+        "https://www.landsd.gov.hk/en/resources/mapping-information/downloadable-aerial-photographs.html"
+      ],
+      "rights": "The sample download page prohibits third-party dissemination despite offering free downloads.",
+      "decision": "Not treated as open licensed. These sample terms are distinct from the open DAP-L0 product below."
+    },
+    {
+      "collection": "Government open DAP-L0 / CSDI",
+      "urls": [
+        "https://data.gov.hk/en/terms-and-conditions",
+        "https://tools.csdi.gov.hk/csdi-webpage/doc/TNC",
+        "https://www.landsd.gov.hk/en/spatial-data/open-data.html",
+        "https://data.gov.hk/en-data/api/3/action/package_show?id=hk-landsd-openmap-development-hkms-digital-aerial-photo",
+        "https://portal.csdi.gov.hk/geoportal/?datasetId=64fc4fa4-3024-58a1-aac0-715b43021f82",
+        "https://www.hkmapservice.gov.hk/OneStopSystem/map-search?product=OSSCatA",
+        "https://www.hkmapservice.gov.hk/OneStopSystem/faqDownloadOpenDigitalMaps"
+      ],
+      "rights": "DATA.GOV.HK and CSDI clause 3 explicitly permit free commercial/noncommercial distribution/reproduction with attribution. Lands Department and HKMS identify DAP-L0 as open data.",
+      "decision": "Promising open product family, not a selected estate photo. CKAN resolved the exact dataset and resource links, but CSDI retrieval failed and HKMS exposed only a map/search shell. No identifiable, composition-verified photo asset and its applicable grant were obtained. The CKAN license fields were null/isopen false; that metadata alone is not a finding that all DAP-L0 is non-open. The HKMS FAQ describes reCaptcha on downloads; no challenge bypass or download was attempted. Zero UI counters in an unpopulated JS shell are not zero-photo evidence."
+    },
+    {
+      "collection": "Historical Photographs of Hong Kong, Bristol",
+      "urls": ["https://hphkbristol.net/attribution/"],
+      "rights": "CC BY-NC-ND 4.0.",
+      "decision": "Noncommercial restriction does not cover commercial estate heroes."
+    },
+    {
+      "collection": "Hong Kong Heritage Project",
+      "urls": ["https://www.hongkongheritage.org/pages/photographs"],
+      "rights": "Any publication of photographs must be approved by HKHP.",
+      "decision": "No publication permission obtained; not selected."
+    },
+    {
+      "collection": "HKU image/photograph collections",
+      "urls": [
+        "https://digitalrepository.lib.hku.hk/hkimage",
+        "https://arthistory.hku.hk/HKinTransition/contact_us.php",
+        "https://hkuarchives-wix.hku.hk/guidelines-for-using-materials"
+      ],
+      "rights": "Public consultation is not itself a reuse grant. The distinct Hong Kong in Transition collection prohibits commercial use; University Archives reproduction requires approval.",
+      "decision": "No exact-estate image with a primary commercial reuse grant found. Separate collection policies are not assumed interchangeable."
+    },
+    {
+      "collection": "Reuters Connect",
+      "urls": ["https://www.reutersconnect.com/transactional-license-terms/"],
+      "rights": "Section 2.1(a) limits preview use to internal evaluation and expressly forbids public/final material; licensed use depends on an agreed order.",
+      "decision": "No licensed order or free grant; no preview photo used."
+    },
+    {
+      "collection": "HKFP paid licensing and Climate Project",
+      "urls": [
+        "https://hongkongfp.com/hkfp-image-and-article-licensing/",
+        "https://hongkongfp.com/2025/09/02/hkfp-climate-project-dozens-of-ethical-extreme-heat-images-released-for-free-use-under-creative-commons/"
+      ],
+      "rights": "Ordinary image reuse is paid/licensed separately from article text. The Climate Project contains a CC BY 4.0 invitation, alongside introductory noncommercial-entity wording.",
+      "decision": "No exact requested-estate exterior identified in that open release; no conflicting wording is resolved in favor of commercial use and no ordinary/third-party wire image is assumed licensed."
+    },
+    {
+      "collection": "Unsplash",
+      "urls": [
+        "https://unsplash.com/license",
+        "https://unsplash.com/s/photos/tuen-mun",
+        "https://unsplash.com/s/photos/so-kwun-wat"
+      ],
+      "rights": "Basic Unsplash license allows commercial use; verify the individual asset is actually under it.",
+      "decision": "Search results did not establish an exact missing-estate photo. Direct search-page reads returned HTTP 401; no access workaround attempted. Third-party city pages using generic Unsplash photos were not relabeled."
+    },
+    {
+      "collection": "Pexels",
+      "urls": [
+        "https://www.pexels.com/license/",
+        "https://www.pexels.com/search/tuen%20mun/",
+        "https://www.pexels.com/search/so%20kwun%20wat/"
+      ],
+      "rights": "Pexels permits website/app reuse subject to its license.",
+      "decision": "Indexed results were generic Hong Kong building collections; direct targeted searches timed out. Timeouts are not empty-result proof."
+    },
+    {
+      "collection": "Pixabay",
+      "urls": [
+        "https://pixabay.com/service/license-summary/",
+        "https://pixabay.com/images/search/tuen%20mun/",
+        "https://pixabay.com/images/search/so%20kwun%20wat/",
+        "https://pixabay.com/images/search/siu%20lam/",
+        "https://pixabay.com/photos/city-hong-kong-tuen-mun-evening-2770601/"
+      ],
+      "rights": "Pixabay Content License permits use subject to its restrictions.",
+      "decision": "Tuen Mun search reported seven results, not seven primary image records verified in this pass. The identifiable primary record describes an urban wet-road/street scene, not an identified missing-estate exterior. So Kwun Wat and Siu Lam broad matches included unrelated Angkor Wat/Vietnam material; result counts do not establish exact subjects."
+    },
+    {
+      "collection": "Panoramax federation",
+      "urls": ["https://docs.panoramax.fr/backend/api/api/", "https://api.panoramax.xyz/api"],
+      "rights": "Individual inspected metadata records expose CC BY-SA 4.0 license links, producer and date.",
+      "decision": "The narrower corridor query returned a complete empty list. Eastern/northern extensions returned two geolocated records without requested-estate subject identity. Wider Hong Kong/expanded-region responses were character-limited discovery only, not exhaustive pagination or estate matches. See exact query records below."
+    },
+    {
+      "collection": "KartaView",
+      "urls": [
+        "https://doc.kartaview.org/",
+        "https://kartaview.org/terms/",
+        "https://raw.githubusercontent.com/koito19960406/ZenSVI/main/src/zensvi/download/kartaview/download_functions.py",
+        "https://api.openstreetcam.org/2.0/photo/?lat=22.371&lng=113.99&radius=50&join=sequence&orderBy=id&orderDirection=desc&itemsPerPage=10&page=1"
+      ],
+      "rights": "Secondary documentation describes CC BY-SA imagery, but primary terms could not be read in this pass.",
+      "decision": "The documented public proximity endpoint failed with CRAWL_SSL_ERROR. No matching image metadata or primary license verified; no disabled TLS, proxy workaround or zero-coverage claim."
+    },
+    {
+      "collection": "Panoramio archives / other public-domain discovery",
+      "urls": [
+        "https://free-images.com/display/garden_at_tuen_mun.html",
+        "https://www.globalphotos.org/",
+        "https://gwulo.com/"
+      ],
+      "rights": "A mirror claim, generic archive availability or a title is insufficient without original asset/author/license evidence.",
+      "decision": "Exact-name Panoramio queries, public-domain collection queries and scholarly/architecture searches produced no new primary exact-estate licensed photo. The garden-at-Tuen-Mun mirror gives no exact requested-estate identity. No mirror claim is promoted as a verified grant."
+    }
+  ],
+  "newFileAssessments": [
+    {
+      "filename": "201806 Tuen Mun, Hong Kong.jpg",
+      "author": "MNXANL",
+      "year": "2018",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:201806_Tuen_Mun,_Hong_Kong.jpg",
+      "source": "Own work",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "licenseEvidence": "Primary file description and licensing section.",
+      "selected": false,
+      "visualVerification": false,
+      "reason": "Generic Tuen Mun description with annotations; no exact missing-estate exterior identified."
+    },
+    {
+      "filename": "Lok Yi Street 2025.jpg",
+      "author": "Tombus20032000",
+      "year": "2025",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Lok_Yi_Street_2025.jpg",
+      "source": "Own work",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "licenseEvidence": "Primary file description and licensing section.",
+      "selected": false,
+      "visualVerification": false,
+      "reason": "Description identifies a Siu Lam street, not one of the missing estates. Street location alone is insufficient subject proof."
+    },
+    {
+      "filename": "Castle Peak Road - Castle Peak Bay 17-10-2026(1).jpg",
+      "author": "LN9267",
+      "year": "2026",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Castle_Peak_Road_-_Castle_Peak_Bay_17-10-2026(1).jpg",
+      "source": "Own work",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "licenseEvidence": "Primary file description and licensing section.",
+      "selected": false,
+      "visualVerification": false,
+      "reason": "Description says taken in Tuen Mun; no estate subject identified."
+    },
+    {
+      "filename": "Castle Peak Road - Castle Peak Bay 17-10-2026(2).jpg",
+      "author": "LN9267",
+      "year": "2026",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Castle_Peak_Road_-_Castle_Peak_Bay_17-10-2026(2).jpg",
+      "source": "Own work",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "licenseEvidence": "Primary file description and licensing section.",
+      "selected": false,
+      "visualVerification": false,
+      "reason": "Description says taken in Tuen Mun; no estate subject identified."
+    },
+    {
+      "filename": "Castle Peak Road - Tai Lam in March 2024.jpg",
+      "author": "姒姓賢寧",
+      "year": "2024",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File:Castle_Peak_Road_-_Tai_Lam_in_March_2024.jpg",
+      "source": "Own work",
+      "license": "CC BY-SA 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+      "licenseEvidence": "Primary file description and licensing section.",
+      "selected": false,
+      "visualVerification": false,
+      "reason": "Road description, not exact-estate subject. Description and EXIF dates differ within March 2024."
+    }
+  ],
+  "priorExcludedFileReencounters": [
+    {
+      "filename": "2022年9月-龍珠島.jpg",
+      "selected": false,
+      "reason": "Reencountered via the Pearl Island category; already recorded and excluded in round 2 for the distinct No.7/No.9 estates. Its primary page was reread, but it is not a new lead or proposal. Prior rejection retained."
+    }
+  ],
+  "chineseWikipediaDirectTitleEvidence": [
+    {
+      "url": "https://zh.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages%7Cpageprops&piprop=name%7Coriginal&redirects=1&titles=%E5%B8%9D%E5%BE%A1%7C%E9%BB%83%E9%87%91%E6%B5%B7%E7%81%A3%7COma%20Oma%7C%E6%BC%A3%E5%B1%B1%7C%E7%A2%A7%E7%BF%A0%E8%8A%B1%E5%9C%92%7C%E9%9D%92%E5%B1%B1%E5%88%A5%E5%A2%85%7C%E9%9D%92%E9%BA%97%E7%81%A3%E5%88%A5%E5%A2%85%7C%E9%9D%92%E6%A6%95%E8%87%BA%7C%E7%BF%A0%E6%99%AF%E8%8A%B1%E5%9C%92%7C%E6%98%A5%E5%92%8C%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92%7C%E6%A3%95%E6%9C%88%E7%81%A3%7C%E6%B5%B7%E6%BE%84%E8%BB%92%7C%E6%B5%B7%E6%85%A7%E8%8A%B1%E5%9C%92%7C%E6%B5%B7%E8%AD%BD%7C%E7%90%A8%E5%B4%99%7C%E8%A7%80%E6%B5%B7%E5%88%A5%E5%A2%85%7C%E8%92%99%E5%9C%B0%E5%8D%A1%E7%BE%85%E5%88%A5%E5%A2%85%7C%E9%9B%85%E5%BE%B7%E8%8B%91",
+      "pages": [
+        {
+          "title": "海澄軒",
+          "missing": false,
+          "image": "Horizon_Suite_Hotel_201108.jpg",
+          "wikidata": "Q11151096"
+        },
+        {
+          "title": "海譽",
+          "missing": false,
+          "image": "Crown_By_The_Sea_South.jpg",
+          "wikidata": "Q55696061"
+        },
+        {
+          "title": "帝御",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "黃金海灣",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "Oma Oma",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "漣山",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "碧翠花園",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "青山別墅",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "青麗灣別墅",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "青榕臺",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "翠景花園",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "春和海景花園",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "棕月灣",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "海慧花園",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "琨崙",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "觀海別墅",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "蒙地卡羅別墅",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "雅德苑",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        }
+      ]
+    },
+    {
+      "url": "https://zh.wikipedia.org/w/api.php?action=query&format=json&prop=pageimages%7Cpageprops&piprop=name%7Coriginal&redirects=1&titles=%E6%84%9B%E7%90%B4%E7%81%A3%7COMA%20by%20the%20Sea%7C%E8%9F%A0%E9%BE%8D%E5%8D%8A%E5%B3%B6%7C%E5%B8%9D%E7%81%A3%E5%B1%85%7C%E5%98%89%E5%BE%A1%E9%BE%8D%E5%BA%AD%7C%E7%95%94%E6%B5%B7%7C%E7%91%9C%E7%BF%A0%E5%9C%92%7C%E6%98%9F%E5%B2%B8%7C%E6%B5%B7%E6%BF%A4%E8%8A%B1%E5%9C%92%7C%E9%BA%97%E6%B5%B7%E5%88%A5%E5%A2%85%7C%E5%9D%87%E5%AF%8C%E8%8A%B1%E5%9C%92%7C%E5%AF%8C%E5%AE%89%E6%96%B0%E9%82%A8%7C%E5%AE%B9%E9%BE%8D%E5%B1%85%7C%E5%B1%AF%E9%96%80%E9%96%A3%7C%E9%9B%85%E7%BF%A0%E8%8B%91%7C%E9%BE%8D%E7%8F%A0%E5%B3%B6%E5%B9%B3%E6%88%BF%7C%E9%BE%8D%E7%8F%A0%E8%8A%B1%E5%9C%92%7C%E7%8F%80%E5%B1%85",
+      "pages": [
+        {
+          "title": "珀居",
+          "missing": false,
+          "image": "Peak_Castle_(revised).jpg",
+          "wikidata": "Q55694983"
+        },
+        {
+          "title": "愛琴灣",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "OMA by the Sea",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "蟠龍半島",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "帝灣居",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "嘉御龍庭",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "畔海",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "瑜翠園",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "星岸",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "海濤花園",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "麗海別墅",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "均富花園",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "富安新邨",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "容龍居",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "屯門閣",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "雅翠苑",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "龍珠島平房",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        },
+        {
+          "title": "龍珠花園",
+          "missing": true,
+          "image": null,
+          "wikidata": null
+        }
+      ]
+    }
+  ],
+  "sisterDecision": "Thirty-three exact titles returned missing. The three resolved images were the wrong Ma On Shan Horizon Suite Hotel, and the already-excluded Crown By The Sea/Peak Castle files. None selected. This is a direct-title lookup, not proof that no alternate-title article exists. The English Pearl Island article yielded no new exact-estate source; the Chinese Wikivoyage Tuen Mun URL returned 404.",
+  "newCommonsCategoryEvidence": [
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ACastle%20Peak%20Road%20-%20Castle%20Peak%20Bay",
+      "titles": [
+        "Category:2017 in Castle Peak Road - Castle Peak Bay",
+        "Category:2019 in Castle Peak Road - Castle Peak Bay",
+        "Category:Alpine Garden, Hong Kong",
+        "Category:Bayview Terrace, Hong Kong 碧翠花園",
+        "Category:Cafeteria Old Beach Sitting-out Area",
+        "Category:Castle Peak Bay Garden",
+        "Category:Castle Peak Bay Immigration Centre",
+        "Category:Castle Peak Sam Chau Ma Temple",
+        "Category:Chi Lok Fa Yuen",
+        "Category:Chu Hai College of Higher Education - Tuen Mun Campus",
+        "Category:Handsome Court",
+        "Category:Hanford Garden",
+        "Category:Harvest Garden",
+        "Category:Hoi Tak Gardens",
+        "Category:Hong Kong Gold Coast",
+        "Category:Ki Lun Kong Public Park",
+        "Category:Paifang at Sam Shing Street",
+        "Category:Palm Cove, Hong Kong",
+        "Category:Perowne Barracks",
+        "Category:Rainbow Garden",
+        "Category:Salvation Army Sam Shing Chuen Lau Ng Ying School",
+        "Category:Sam Shing Estate",
+        "Category:Sam Shing Temple, Sam Shing Hui",
+        "Category:Seaview Garden, Tuen Mun",
+        "Category:Sin Hing Tung",
+        "Category:Skypoint Royale, Tuen Mun 帝御 嵐天",
+        "Category:South Crest, Hong Kong",
+        "Category:The Royale (Hong Kong)",
+        "Category:Tsing Sin Garden",
+        "Category:Tuen Mun Siu Lun Government Complex",
+        "Category:Tuen Mun Town Plaza",
+        "Category:Verdant Villa",
+        "Category:Villa La Plage",
+        "Category:Waldorf Garden",
+        "Category:Waldorf Shopping Centre",
+        "File:8503 CTB B15 17-10-2026.jpg",
+        "File:8568 CTB B15 17-10-2026(3).jpg",
+        "File:8568 CTB B15 17-10-2026(4).jpg",
+        "File:Alpine Garden.jpg",
+        "File:Cafeteria Old Beach.jpg",
+        "File:Castle Peak Bay Garden part ten in March 2021.jpg",
+        "File:Castle Peak Bay Immigration Centre 2015.jpg",
+        "File:Castle Peak Road - Castle Peak Bay 17-10-2026(1).jpg",
+        "File:Castle Peak Road - Castle Peak Bay 17-10-2026(2).jpg",
+        "File:Castle Peak Road - Castle Peak Bay near Sam Shing Estate in September 2023.jpg",
+        "File:Castle Peak Road - Castle Peak Bay outside Sam Shing Estate in September 2023.jpg",
+        "File:CastlePeakBay01.jpg",
+        "File:Come on Building Shopping Center 2024.jpg",
+        "File:Entrance of Perowne Camp.jpg",
+        "File:Fraser Road, Tuen Hing Road and Castle Peak Road - Mapillary (162565025801673).jpg",
+        "File:Fu Fat Lane - Mapillary (327530525466062).jpg",
+        "File:Fu Hong Society Yau Chong Home in September 2023.jpg",
+        "File:Handsome Court (deep blue sky).jpg",
+        "File:Handsome Court near Fu Fat Lane in March 2021.jpg",
+        "File:Handsome Court.jpg",
+        "File:Hanford ShoppingCtr.JPG",
+        "File:Hin Fat Estate in May 2023.jpg",
+        "File:Hin Fat Lane public housing estate under foundation works in April 2020.jpg",
+        "File:HK CastlePeakSamChauTinHauTemple.JPG",
+        "File:HK GoldCoast Entrance 2015.jpg",
+        "File:HK SA LauNgYingSchool.JPG",
+        "File:HK SamShingEstate.JPG",
+        "File:HK 屯門 Tuen Mun 青山公路 Castle Peak Road 青山灣段 Castle Bay outdoor carpark Nov 2017 IX1.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Castle Peak Road 青山灣段 Castle Peak Bay Immigration Centre Institute Training & Development Nov 2017 IX1.jpg",
+        "File:HKID CastlePeakBay.jpg",
+        "File:Immigration Service Institute of Training and Development.jpg",
+        "File:KMB GL9153 61M.JPG",
+        "File:Kwun Tsing Road, Tuen Mun Road sign part 2 in August 2022.jpg",
+        "File:Palm Cove, Castle Peak Bay, Tuen Mun part two in March 2021.jpg",
+        "File:PerowneBarracksEntrance.jpg",
+        "File:Road widening works are underway at Castle Peak Road - Castle Peak Bay outside Sam Shing Estate part 1 in August 2022.jpg",
+        "File:Road widening works are underway at Castle Peak Road - Castle Peak Bay outside Sam Shing Estate part 2 in August 2022.jpg",
+        "File:Road widening works are underway at Castle Peak Road - Castle Peak Bay outside Sam Shing Estate part 3 in August 2022.jpg",
+        "File:Salvation Army Sam Shing Chuen Lau Ng Ying School in September 2023.jpg",
+        "File:Sam Shing Estate 31-08-2022.jpg",
+        "File:Seaview Garden 海景花園 in January 2023.jpg",
+        "File:South Crest in January 2023.jpg",
+        "File:South Crest, Tuen Mun part six in March 2021.jpg",
+        "File:South Crest, Tuen Mun part two in March 2021.jpg",
+        "File:The address of The Cafeteria in March 2021.jpg",
+        "File:The former Salvation Army Sam Shing Chuen Lau Ng Ying School under renovation works part 1 in August 2022.jpg",
+        "File:The former Salvation Army Sam Shing Chuen Lau Ng Ying School under renovation works part 4 in August 2022.jpg",
+        "File:The Salvation Army Sam Shing Chuen Lau Ng Ying School part three in March 2021.jpg",
+        "File:The sign of Castle Peak Bay Garden in March 2021.jpg",
+        "File:Tuen Mun Government Secondary School in February 2025.jpg",
+        "File:Tuen Mun Siu Lun Government Complex (near Castle Peak Road).jpg",
+        "File:Verdant Villa part 2 in January 2023.jpg",
+        "File:Verdant Villa part 3 in January 2023.jpg",
+        "File:Verdant Villa, Tuen Mun part four in March 2021.jpg",
+        "File:View of Perowne Camp.jpg",
+        "File:Yung lung.JPG"
+      ],
+      "complete": true
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ACastle%20Peak%20Road%20-%20Tai%20Lam",
+      "titles": [
+        "Category:Buildings in Castle Peak Road - Tai Lam",
+        "Category:Maritime Services Training Institute",
+        "Category:OMA By The Sea",
+        "Category:Tai Lam Chung Bus Terminus",
+        "File:Castle Peak Road - Tai Lam in March 2024.jpg",
+        "File:Castle Peak Road - Tai Lam many toilet roll 16-05-2015.jpg",
+        "File:Castle Peak Road - Tai Lam Road site part 1 in January 2021.jpg",
+        "File:Castle Peak Road - Tai Lam Road site part 2 in January 2021.jpg",
+        "File:Castle Peak Road - Tai Lam Road site part 3 in January 2021.jpg",
+        "File:Castle Peak Road between Tsing Lung Tau and Tai Lam.jpg",
+        "File:HK TaiLamChungTinHauTemple.JPG",
+        "File:HK TheMaritimeServicesTrainingInstitute.JPG",
+        "File:HK 城巴 CityBus 962B view 屯門區 Tuen Mun 掃管笏 So Kwun Wat 青山公路 Castle Peak Road November 2019 SS2 12.jpg",
+        "File:Hong Fai Road at Castle Peak Road - Tai Lam - Mapillary (1020180351872866).jpg",
+        "File:Hong Fai Road at Castle Peak Road - Tai Lam - Mapillary (1022104713491943).jpg",
+        "File:Hong Fai Road at Castle Peak Road - Tai Lam - Mapillary (1130446011080565).jpg",
+        "File:Hong Fai Road at Castle Peak Road - Tai Lam - Mapillary (1444473474100690).jpg",
+        "File:Hong Fai Road at Castle Peak Road - Tai Lam - Mapillary (228488219400172).jpg",
+        "File:Hong Fai Road at Castle Peak Road - Tai Lam - Mapillary (290982069333002).jpg",
+        "File:OMA By The Sea under construction in May 2020.jpg",
+        "File:OMA By The Sea Under Construction In November 2020.jpg",
+        "File:Siu Lam Oveview 201406.jpg",
+        "File:Tai Lam Chung 201212.JPG",
+        "File:Tai Lam Chung 2015.jpg",
+        "File:The Carmel East.jpg",
+        "File:The Carmel under construction in January 2019 (corrected).jpg",
+        "File:The Carmel under construction in January 2019.jpg",
+        "File:The Carmel.jpg",
+        "File:Tuen Mun Road near Tai Lam (Hong Kong).jpg",
+        "File:康輝路 - Hong Fai Road at Castle Peak Road - Tai Lam - Mapillary (1020180351872866) (cropped).jpg"
+      ],
+      "complete": true
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ASiu%20Lam",
+      "titles": [
+        "Category:Castle Peak Villas",
+        "Category:Jade Grove",
+        "Category:Lok Chui Street",
+        "Category:Murray Bay (Hong Kong)",
+        "Category:Palatial Coast, Hong Kong",
+        "Category:Peak Castle",
+        "Category:Siu Lam Psychiatric Centre",
+        "Category:Siu Lam Road",
+        "Category:Siu Lam Tsuen",
+        "Category:Siu Lam Tsuen Road",
+        "Category:Tuen Mun Road Bus-Bus Interchange",
+        "Category:Villa De Mer",
+        "File:A Garbage collection station in Siu Lam.jpg",
+        "File:BBQ by the beach map wm2013.png",
+        "File:BBQ by the Beach.jpg",
+        "File:HK Jordan Parkes Street Nanking Street public light minibus sign April 2023 Px3.jpg",
+        "File:Lok Yi Street 2025.jpg",
+        "File:Siu Lam BBQ Beach.jpg",
+        "File:Siu Lam Integrated Rehabilitation Services Complex.jpg",
+        "File:Siu Lam Oveview 201406.jpg",
+        "File:Siu Lam viewed from the sea 02.jpg",
+        "File:Siu Lam viewed from the sea 03.jpg",
+        "File:Siu Lam viewed from the sea 04.jpg",
+        "File:Siu Lam viewed from the sea 05.jpg",
+        "File:Siu Lam viewed from the sea 06.jpg",
+        "File:Siu Lam viewed from the sea 07.jpg",
+        "File:Siu Lam viewed from the sea 09.jpg",
+        "File:Tai Lam Chung 2015.jpg",
+        "File:Tai Lam Chung River from bus on Tuen Mun Road.jpg",
+        "File:The Carmel.jpg",
+        "File:View near Tuen Mun Road Interchange.jpg"
+      ],
+      "complete": true
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3APearl%20Island%2C%20Hong%20Kong",
+      "titles": [
+        "Category:Pearl Island Garden",
+        "File:201806 Tuen Mun, Hong Kong.jpg",
+        "File:2022年9月-龍珠島.jpg"
+      ],
+      "complete": true
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ABuildings%20in%20So%20Kwun%20Wat",
+      "titles": [],
+      "complete": true
+    }
+  ],
+  "panoramaxEvidence": {
+    "narrowQuery": {
+      "url": "https://api.panoramax.xyz/api/search?bbox=113.95,22.34,114.09,22.40&limit=20",
+      "returnedFeatures": [],
+      "paginationLinks": []
+    },
+    "extendedQueries": [
+      {
+        "url": "https://api.panoramax.xyz/api/search?bbox=113.95,22.345,114.14,22.43&limit=10",
+        "returnedFeatures": [
+          {
+            "id": "28d3b516-2c28-437d-83e1-9174affee6db",
+            "coordinates": [114.126900306, 22.357314389],
+            "capturedAt": "2019-06-06T10:14:51.869219+00:00",
+            "producer": "Tehdastehdas",
+            "license": "CC-BY-SA-4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "sourceUrl": "https://api.panoramax.xyz/api/collections/6604a3bd-51ce-4c7e-9208-3a158d1a2bc7/items/28d3b516-2c28-437d-83e1-9174affee6db",
+            "imageUrl": "https://panoramax.openstreetmap.fr/derivates/28/d3/b5/16/2c28-437d-83e1-9174affee6db/sd.jpg"
+          },
+          {
+            "id": "8c55aed9-8c73-4232-9981-a96380da0273",
+            "coordinates": [114.131752639, 22.362562639],
+            "capturedAt": "2019-06-06T04:25:05.513860+00:00",
+            "producer": "Tehdastehdas",
+            "license": "CC-BY-SA-4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "sourceUrl": "https://api.panoramax.xyz/api/collections/1fdca345-f9a2-48e6-ad8f-2c73c018f6da/items/8c55aed9-8c73-4232-9981-a96380da0273",
+            "imageUrl": "https://panoramax.openstreetmap.fr/derivates/8c/55/ae/d9/8c73-4232-9981-a96380da0273/sd.jpg"
+          }
+        ],
+        "paginationLinks": [],
+        "decision": "Not selected: metadata supplies coordinates and a license but no exact requested-estate subject identification. No pixel verification."
+      },
+      {
+        "url": "https://api.panoramax.xyz/api/search?bbox=114.09,22.34,114.14,22.40&limit=10",
+        "returnedFeatures": [
+          {
+            "id": "28d3b516-2c28-437d-83e1-9174affee6db",
+            "coordinates": [114.126900306, 22.357314389],
+            "capturedAt": "2019-06-06T10:14:51.869219+00:00",
+            "producer": "Tehdastehdas",
+            "license": "CC-BY-SA-4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "sourceUrl": "https://api.panoramax.xyz/api/collections/6604a3bd-51ce-4c7e-9208-3a158d1a2bc7/items/28d3b516-2c28-437d-83e1-9174affee6db",
+            "imageUrl": "https://panoramax.openstreetmap.fr/derivates/28/d3/b5/16/2c28-437d-83e1-9174affee6db/sd.jpg"
+          },
+          {
+            "id": "8c55aed9-8c73-4232-9981-a96380da0273",
+            "coordinates": [114.131752639, 22.362562639],
+            "capturedAt": "2019-06-06T04:25:05.513860+00:00",
+            "producer": "Tehdastehdas",
+            "license": "CC-BY-SA-4.0",
+            "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+            "sourceUrl": "https://api.panoramax.xyz/api/collections/1fdca345-f9a2-48e6-ad8f-2c73c018f6da/items/8c55aed9-8c73-4232-9981-a96380da0273",
+            "imageUrl": "https://panoramax.openstreetmap.fr/derivates/8c/55/ae/d9/8c73-4232-9981-a96380da0273/sd.jpg"
+          }
+        ],
+        "paginationLinks": [],
+        "decision": "Not selected: metadata supplies coordinates and a license but no exact requested-estate subject identification. No pixel verification."
+      }
+    ],
+    "partialDiscoveryQueries": [
+      "https://api.panoramax.xyz/api/search?bbox=113.8,22.2,114.5,22.6&limit=5",
+      "https://api.panoramax.xyz/api/search?bbox=113.95,22.32,114.14,22.43&limit=20"
+    ],
+    "partialResponseCaveat": "Character-limited responses were used to locate follow-up query regions only; no total coverage/absence claim is made from them."
+  },
+  "discovery": {
+    "requests": [
+      {
+        "query": "Government Hong Kong photograph archive copyright free reuse commercial purposes Information Services Department photos.gov.hk",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.isd.gov.hk/eng/photo_sales.htm",
+          "https://www2.photostore.gov.hk/photostore/faq.xhtml",
+          "https://www.gov.hk/en/residents/government/publication/photo/photostore.htm",
+          "https://www.gov.hk/en/about/copyright.htm",
+          "https://www.isd.gov.hk/chi/pub.htm"
+        ]
+      },
+      {
+        "query": "Hong Kong government Lands Department aerial photo open data licence reuse photography",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.landsd.gov.hk/doc/en/forms/download_form/Form_LA.pdf",
+          "https://www.landsd.gov.hk/en/resources/mapping-information/mapping-teaching-resources/copyright.html",
+          "https://www.landsd.gov.hk/en/spatial-data/open-data.html",
+          "https://www.hkmapservice.gov.hk/OneStopSystem/conditionOfService",
+          "https://www.landsd.gov.hk/en/resources/mapping-information/downloadable-aerial-photographs.html"
+        ]
+      },
+      {
+        "query": "Tuen Mun Castle Peak Road residential estates photographs creative commons beyond Flickr Wikimedia government archive",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://commons.wikimedia.org/wiki/Category:Residential_buildings_in_Tuen_Mun_District",
+          "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun",
+          "https://commons.wikimedia.org/wiki/Category:Fu_Tai_Estate",
+          "https://commons.wikimedia.org/wiki/Category:Prime_View_Garden,_Hong_Kong",
+          "https://commons.wikimedia.org/wiki/Category:Castle_Peak_Road_-_Castle_Peak_Bay"
+        ]
+      },
+      {
+        "query": "Hong Kong public domain photographs collection Tuen Mun Castle Peak Bay historic photos reuse license",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://digitalrepository.lib.hku.hk/hkimage",
+          "https://hphkbristol.net/attribution/",
+          "https://www.grs.gov.hk/en/online_holdings.html",
+          "https://hk.history.museum/en/web/mh/collections/collections/historical-photographs.html",
+          "https://www.hongkongheritage.org/pages/photographs"
+        ]
+      },
+      {
+        "query": "\"青山公路\" \"照片\" \"創用CC\"",
+        "requestedResults": 5,
+        "returnedUrls": ["https://www.weddingabroad.com.hk/posts/53529558/"]
+      },
+      {
+        "query": "\"帝御\" \"photo\" \"Creative Commons\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://commons.wikimedia.org/wiki/File:Jing_yuan_mansion_tianjin.jpg",
+          "https://commons.wikimedia.org/wiki/File:Macao_Grand_Emperor_Hotel.jpg",
+          "https://commons.wikimedia.org/wiki/File:Emperor_Guangxu.jpg",
+          "https://commons.wikimedia.org/wiki/File:Emperor_Ingy%C5%8D.jpg",
+          "https://commons.wikimedia.org/wiki/File:Gekko_Emperor_Godaigo.jpg"
+        ]
+      },
+      {
+        "query": "A photograph of Hillgrove Tuen Mun Hong Kong estate exterior on Unsplash Pexels Pixabay or public domain image collections",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun",
+          "https://commons.wikimedia.org/wiki/File:Tuen_Hing_Road_Public_Housing_Estate_-_January_2025,_version_3.jpg",
+          "https://commons.wikimedia.org/wiki/Category:Buildings_in_Tuen_Mun",
+          "https://commons.wikimedia.org/wiki/Category:Tai_Hing_Estate",
+          "https://commons.wikimedia.org/wiki/Category:Residential_buildings_in_Tuen_Mun_District"
+        ]
+      },
+      {
+        "query": "A photograph of Beaulieu Peninsula Palm Beach Villa Sapphire Aquamarine Garden Tuen Mun free image license",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Hong_Kong_by_name",
+          "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun",
+          "https://www.okay.com/en/building/beaulieu-peninsula/4927",
+          "https://www.scmp.com/news/hong-kong/society/article/3246135/14-out-28-seafront-homes-luxury-hong-kong-beaulieu-peninsula-estate-occupying-government-land",
+          "https://hk.centanet.com/estate/en/Beaulieu-Peninsula/2-SUUUURUXRJ"
+        ]
+      },
+      {
+        "query": "Hong Kong Free Press copyright photographs Creative Commons reuse AFP Getty images license",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://hongkongfp.com/hkfp-image-and-article-licensing/",
+          "https://hongkongfp.com/hkfp-content-agreement/",
+          "https://hongkongfp.com/guidelines-paid-contributors/",
+          "https://hongkongfp.com/2025/09/02/hkfp-climate-project-dozens-of-ethical-extreme-heat-images-released-for-free-use-under-creative-commons/",
+          "https://creativecommons.org/wp-content/uploads/2023/05/AJournalistsGuideToCreativeCommons2023_1.0.pdf"
+        ]
+      },
+      {
+        "query": "Hong Kong government news photos copyright commercial use images Creative Commons license",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www2.photostore.gov.hk/photostore/notice.xhtml",
+          "https://www.gov.hk/en/about/copyright.htm",
+          "https://www.gov.hk/en/residents/government/publication/photo/photostore.htm",
+          "https://www1.photostore.gov.hk/photostore/faq.xhtml",
+          "https://commons.wikimedia.org/wiki/Commons:Copyright_rules_by_territory/Hong_Kong"
+        ]
+      },
+      {
+        "query": "Hong Kong Image Database HKU copyright reproduction commercial photographs permissions",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "http://digital.lib.hku.hk/hkimage/node/3",
+          "https://digitalrepository.lib.hku.hk/hkimage",
+          "https://hkuarchives-wix.hku.hk/guidelines-for-using-materials",
+          "https://arthistory.hku.hk/HKinTransition/contact_us.php",
+          "https://libguides.lib.hku.hk/copyright_hku/research"
+        ]
+      },
+      {
+        "query": "Mapillary KartaView image photographs Creative Commons license commercial reuse Hong Kong",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://help.mapillary.com/hc/en-us/articles/115001770409-CC-BY-SA-license-for-open-data",
+          "https://web.archive.org/web/20170218102709/https:/www.mapillary.com/legal.html",
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC10239739/",
+          "https://commons.wikimedia.org/wiki/Commons:Copyright_rules_by_territory/Hong_Kong",
+          "https://community.openstreetmap.org/t/upload-my-photos-taken-from-my-camera-into-multiple-street-level-photo-platforms/97600"
+        ]
+      },
+      {
+        "query": "Pexels photo Tuen Mun Hong Kong residential buildings Castle Peak Bay Gold Coast",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.pexels.com/search/hong%20kong%20buildings/",
+          "https://commons.wikimedia.org/wiki/Category:Residential_buildings_in_Tuen_Mun_District",
+          "https://www.pexels.com/search/hong%20kong%20apartment/",
+          "https://www.axiomimages.com/aerial-stock-footage/locations/new-territories/DCA02_062",
+          "https://commons.wikimedia.org/wiki/Category:Castle_Peak_Bay"
+        ]
+      },
+      {
+        "query": "Unsplash photo Tuen Mun Hong Kong So Kwun Wat Castle Peak Bay exterior buildings",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://commons.wikimedia.org/wiki/Category:Buildings_in_Tuen_Mun",
+          "https://commons.wikimedia.org/wiki/Category:Harrow_International_School_Hong_Kong",
+          "https://commons.wikimedia.org/wiki/Category:Emerald_Bay,_So_Kwun_Wat",
+          "https://gwulo.com/media/26415",
+          "https://commons.wikimedia.org/wiki/Category:Castle_Peak_Bay"
+        ]
+      },
+      {
+        "query": "Pixabay photos Hong Kong Tuen Mun buildings free royalty free residential",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://pixabay.com/photos/city-hong-kong-tuen-mun-evening-2770601/",
+          "https://commons.wikimedia.org/wiki/Category:Residential_buildings_in_Tuen_Mun_District",
+          "https://pixabay.com/photos/building-hong-kong-monster-building-3540618/",
+          "https://commons.wikimedia.org/wiki/File:Tuen_Hing_Road_Public_Housing_Estate_-_January_2025,_version_3.jpg",
+          "https://pixabay.com/photos/hong-kong-the-skyscraper-3728675/"
+        ]
+      },
+      {
+        "query": "KartaView API documentation retrieve photos bounding box metadata image license",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://streetscapes.readthedocs.io/en/latest/autoapi/streetscapes/sources/kartaview/",
+          "https://www.trekview.org/blog/playing-with-kartaview-api/",
+          "https://pipeworx.io/docs/reference/kartaview/kartaview_sequence_photos/",
+          "https://github.com/koito19960406/ZenSVI/releases",
+          "https://github.com/facebook/Rapid/issues/1139"
+        ]
+      },
+      {
+        "query": "HKFP Beaulieu Peninsula Tuen Mun Creative Commons images photo",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://hongkongfp.com/2025/09/02/hkfp-climate-project-dozens-of-ethical-extreme-heat-images-released-for-free-use-under-creative-commons/",
+          "https://www.hkp.com.hk/en/estate/New-Territories-Tuen-Mun-Beaulieu-Peninsula-E00631",
+          "https://commons.wikimedia.org/wiki/Category:Tuen_Mun",
+          "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun",
+          "https://hongkongfp.com/2016/02/07/in-pictures-dramatic-hill-fire-rips-through-tuen-mun-hillside/"
+        ]
+      },
+      {
+        "query": "Hong Kong government press releases copyright notice photographs commercial reuse",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.gov.hk/en/about/copyright.htm",
+          "https://www2.photostore.gov.hk/photostore/notice.xhtml",
+          "https://www.news.gov.hk/chi/about/index.html",
+          "https://www.isd.gov.hk/eng/photo_sales.htm",
+          "https://www.gov.hk:7443/en/about/linkpolicy/index.htm"
+        ]
+      },
+      {
+        "query": "KartaView terms license Creative Commons Attribution ShareAlike photos commercial",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://edit.tosdr.org/documents/3206",
+          "https://en.m.wikipedia.org/wiki/KartaView",
+          "https://github.com/Prekzursil/tracelines/blob/main/DATA_LICENSES.md",
+          "https://bellingcat.gitbook.io/toolkit/more/all-tools/kartaview",
+          "https://wiki.osm.org/Street-level_imagery_services"
+        ]
+      },
+      {
+        "query": "Unsplash Tuen Mun Gold Coast Hong Kong photo",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://commons.wikimedia.org/wiki/Category:Hong_Kong_Gold_Coast",
+          "https://unsplash.com/s/photos/gold-coast",
+          "https://www.globalphotos.org/hk-goldcoast.htm",
+          "https://www.istockphoto.com/photo/drone-view-of-gold-coast-hong-kong-gm1313463151-401956014",
+          "https://coconuts.co/hongkong/lifestyle/coconuts-staycation-get-refreshed-gold-coast/"
+        ]
+      },
+      {
+        "query": "Pexels So Kwun Wat Tuen Mun photos buildings",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://commons.wikimedia.org/wiki/Category:So_Kwun_Wat_-_Construction_sites",
+          "https://commons.wikimedia.org/wiki/Category:Buildings_in_Tuen_Mun",
+          "https://www.pexels.com/search/hong%20kong%20buildings/",
+          "https://commons.wikimedia.org/wiki/Category:Emerald_Bay,_So_Kwun_Wat",
+          "https://commons.wikimedia.org/wiki/Category:2018_in_So_Kwun_Wat"
+        ]
+      },
+      {
+        "query": "government Hong Kong data.gov.hk photographs images Open Data Terms of Use commercial aerial",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://data.gov.hk/en/terms-and-conditions",
+          "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-development-hkms-digital-aerial-photo",
+          "https://www.landsd.gov.hk/doc/en/forms/download_form/Form_LA.pdf",
+          "https://www.landsd.gov.hk/en/resources/mapping-information/mapping-teaching-resources/copyright.html",
+          "https://www.landsd.gov.hk/en/resources/mapping-information/downloadable-aerial-photographs.html"
+        ]
+      },
+      {
+        "query": "Reuters Connect photos copyright licensing free reuse images",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.reutersconnect.com/transactional-license-terms/",
+          "https://liaison.reuters.com/tools/restrictions",
+          "https://www.reutersconnect.com/plans-and-pricing",
+          "https://reutersagency.com/content-delivery-platforms/reuters-connect/",
+          "https://images.assets.reuters.com/Web/ReutersNews/%7B3d51069b-c1f3-406e-96de-012e57f1c1b2%7D_Reuters_Connect_-_Top_Tips_for_Pictures.pdf"
+        ]
+      },
+      {
+        "query": "Agence France Presse AFP photographs terms of use license reproduction",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.afp.com/en/useful-links/terms-use",
+          "https://www.afp.com/fr/conditions-generales-vente-photographie-piece",
+          "https://help.afp.com/hc/questions-les-plus-frequentes/restrictions-editoriales?lang=en",
+          "https://www.afp.com/newsletter/copyright/copyright.html",
+          "https://www.afp.com/index.php/en/useful-links/terms-use"
+        ]
+      },
+      {
+        "query": "Digital Aerial Photo DAP-L0 CSDI download free terms reuse Lands Department",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://tools.csdi.gov.hk/csdi-webpage/doc/TNC",
+          "https://www.landsd.gov.hk/en/survey-mapping/mapping/aerial-photo-photogrammetric-products/digital-aerial-photo.html",
+          "https://www.landsd.gov.hk/en/resources/mapping-information/downloadable-aerial-photographs.html",
+          "https://www.landsd.gov.hk/doc/en/mapping/digital-map/product.pdf",
+          "https://www.hkmapservice.gov.hk/OneStopSystem/faqDownloadOpenDigitalMaps"
+        ]
+      },
+      {
+        "query": "\"DAP-L0\" \"https\" \"download\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.landsd.gov.hk/en/survey-mapping/mapping/aerial-photo-photogrammetric-products/digital-aerial-photo.html",
+          "https://www.landsd.gov.hk/en/spatial-data/open-data.html/1000",
+          "https://www.landsd.gov.hk/en/spatial-data/open-data.html",
+          "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-development-hkms-digital-aerial-photo",
+          "https://www.hkmapservice.gov.hk/OneStopSystem/prodOssCatADetail"
+        ]
+      },
+      {
+        "query": "\"Old Photos of Hong Kong\" \"CSDI\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.landsd.gov.hk/en/spatial-data/open-data.html/1000",
+          "https://www.landsd.gov.hk/en/spatial-data/open-data.html",
+          "https://www.landsd.gov.hk/doc/en/consolidated_annual_odata_plan/consolidated_plan_2025_27_en.pdf",
+          "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-mapping-old-urban-and-town-maps",
+          "https://www.landsd.gov.hk/doc/en/consolidated_annual_odata_plan/consolidated_plan_2024_26_en.pdf"
+        ]
+      },
+      {
+        "query": "\"Tuen Mun\" \"Unsplash\" \"photo\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://cityclock.org/hong-kong/tuen-mun",
+          "https://weatherchirp.com/hong-kong/tuen-mun",
+          "https://cityclock.org/hong-kong/tuen-mun/tuen-mun-kau-hui",
+          "https://cityclock.org/hong-kong/tuen-mun/fu-tei-san-tsuen",
+          "https://findyourstay.com/stay/tuen-mun"
+        ]
+      },
+      {
+        "query": "\"Hillgrove\" \"Hong Kong\" \"photo\" \"license\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.homedash.hk/en/property-9-Tsing-Fat-Lane-HD37666939",
+          "https://www.homedash.hk/en/property-9-Tsing-Fat-Lane-HD37749846",
+          "https://www.homedash.hk/en/property-9-Tsing-Fat-Lane-HD37663061",
+          "https://www.homedash.hk/en/property-9-Tsing-Fat-Lane-HD37755316",
+          "https://www.homedash.hk/en/property-9-Tsing-Fat-Lane-HD37726689"
+        ]
+      },
+      {
+        "query": "\"Deauville\" \"Hong Kong\" \"Creative Commons\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://facecaseapp.com/artist",
+          "https://id.unionpedia.org/i/Festival_film",
+          "https://en.unionpedia.org/i/Bettina_Rheims",
+          "https://fr.unionpedia.org/La_L%C3%A9gende_de_Bruce_Lee",
+          "https://reference.org/facts/Leave_Me_Alone_(2004_thriller_film)/AxFmWbRB"
+        ]
+      },
+      {
+        "query": "\"Tuen Mun\" \"pixabay.com/photos\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://pixabay.com/photos/city-hong-kong-tuen-mun-evening-2770601/",
+          "https://www.greening.gov.hk/filemanager/greening/en/content_77/Guidelines%20on%20Soil%20Improvement_2022Oct.pdf"
+        ]
+      },
+      {
+        "query": "\"Tuen Mun\" \"unsplash.com/photos\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.atlanticcouncil.org/wp-content/uploads/2020/12/China-HongKong-FINAL2.pdf",
+          "https://petpethk.com/businesses/wise-pet"
+        ]
+      },
+      {
+        "query": "\"Siu Lam\" \"Unsplash\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://hongkongbusiness.hk/residential-property/news/housing-bureau-picks-4-more-sites-build-light-public-housing-units",
+          "https://hongkongbusiness.hk/news/archsd-investigates-public-housing-projects-over-quality-issues",
+          "https://bookingagency.io/cities/hong-kong/so-kwun-wat",
+          "https://commons.wikimedia.org/wiki/Category:Castle_Peak,_Hong_Kong",
+          "https://www.linkedin.com/posts/gleeds_this-world-earth-day-at-gleeds-were-reminded-activity-7452762990304600065-V_nH"
+        ]
+      },
+      {
+        "query": "\"So Kwun Wat\" \"Panoramio\" photo",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://commons.wikimedia.org/wiki/Category:Tuen_Mun_Road",
+          "https://commons.wikimedia.org/wiki/Category:Tuen_Mun_District",
+          "https://commons.wikimedia.org/wiki/Category:Sinopec_petrol_stations_in_Hong_Kong",
+          "https://commons.wikimedia.org/wiki/Category:Green_post_boxes_in_Hong_Kong",
+          "https://commons.wikimedia.org/wiki/Category:Bilingual_Chinese-English_road_signs"
+        ]
+      },
+      {
+        "query": "\"蟠龍半島\" \"Panoramio\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "http://wikimapia.org/28196544/zh/%E8%9F%A0%E9%BE%99%E5%8D%8A%E5%B2%9B",
+          "https://hohomehk.com/wiki/estate-wiki-beaulieupeninsula/",
+          "https://www.house730.com/estate-23833/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E8%9F%A0%E9%BE%8D%E5%8D%8A%E5%B3%B6/",
+          "https://www.newtohk.com/estates/beaulieu-peninsula",
+          "https://www.hkea.com.hk/dn/slist?f_estate=%E8%9F%A0%E9%BE%8D%E5%8D%8A%E5%B3%B6"
+        ]
+      },
+      {
+        "query": "\"漣山\" \"Panoramio\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.ricacorp.com/zh-hk/property/detail/%E5%B0%8F%E6%AC%96-hma-%E6%BC%A3%E5%B1%B1-cedar-i-cv31760099-3-hk",
+          "https://ja.wikipedia.org/wiki/Panoramio",
+          "https://web.archive.org/web/20051013063919/http:/www.panoramio.com/",
+          "https://www.helpandweb.com/ecmap/en/panoramio.htm",
+          "https://phpjavascriptroom.com/?p=panoramio_api&t=topic"
+        ]
+      },
+      {
+        "query": "\"Castle Peak Villas\" \"Panoramio\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.capevillas.co.za/properties/castle-peak/",
+          "https://www.vacations.capetown/rentals/camps-bay/castle-peak/",
+          "https://www.capsol.co.za/vacation-rentals/castle-peak",
+          "https://commons.wikimedia.org/wiki/File:Castle_peak_from_warren_lake_trail_-_panoramio.jpg",
+          "https://www.capevillas.co.za/"
+        ]
+      },
+      {
+        "query": "Panoramax Hong Kong photo open license imagery",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://docs.panoramax.fr/federated-catalog/",
+          "https://panoramax.koenhabets.nl/",
+          "https://api.panoramax.xyz/",
+          "https://commons.wikimedia.org/wiki/Category:Panoramax",
+          "https://panoramax.fr/comment-participer-a-panoramax"
+        ]
+      },
+      {
+        "query": "Panoramax API search bbox STAC documentation image license assets",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://docs.panoramax.fr/backend/dev/STAC_compatibility/",
+          "https://docs.panoramax.fr/backend/api/openapi/",
+          "https://docs.panoramax.fr/backend/api/api/",
+          "https://gitlab.com/panoramax/server/api/-/blob/develop/CHANGELOG.md",
+          "https://gitlab.com/panoramax/server/api/-/commit/94022109aa360ffbd5f5b06545de9d319e3680a3"
+        ]
+      },
+      {
+        "query": "\"Tuen Mun\" \"Piqsels\"",
+        "requestedResults": 5,
+        "returnedUrls": ["https://earth.org/biggest-environmental-issues-in-hong-kong/"]
+      },
+      {
+        "query": "\"Tuen Mun\" \"PxHere\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.windowssearch-exp.com/images/search?FORM=IRMHRS&q=Coconut+Candy+Hong+Kong",
+          "https://www.greening.gov.hk/filemanager/greening/en/content_77/Guidelines%20on%20Soil%20Improvement_2022Oct.pdf",
+          "https://hongkongliving.com/education-best-after-school-sports-classes-kids-in-hong-kong/",
+          "https://thehkhub.com/hong-kong-observatory-issues-black-rainstorm-warning-amid-serious-flooding-risk/",
+          "https://world-today-journal.com/choosing-the-right-fragrance-for-hot-weather/"
+        ]
+      },
+      {
+        "query": "\"Tuen Mun\" \"public domain\" \"photo\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://photo.wn.com/24_Oras_Paggiba_Sa_Nasa_400_Bahay_Sa_Caloocan,_Nauwi_Sa_Pambabato_At_Pamamaril",
+          "https://uk-rest.com/image-credits/",
+          "https://www.innpedia.com/hotels/hong-kong-gold-coast-hotel",
+          "https://dewiki.de/Lexikon/Geschichte_Hongkongs",
+          "https://weatherchirp.com/hong-kong/tuen-mun"
+        ]
+      },
+      {
+        "query": "\"Castle Peak Bay\" \"public domain\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://en.wikipedia.org/wiki/Boat_Dwellers",
+          "https://en.wikipedia.org/wiki/Battle_of_Tam%C3%A3o",
+          "https://www.tpb.gov.hk/en/meetings/TPB/Minutes/m1300tpb_e.pdf",
+          "https://hongkongfp.com/2022/06/13/hong-kong-govt-should-proactively-disclose-info-on-immigration-detainees-legal-scholar-says/",
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC7597041/"
+        ]
+      },
+      {
+        "query": "\"Bayview Terrace\" \"Wikipedia\" Hong Kong",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "http://www.zssi.net/1l7hhaa1.html",
+          "https://yetigonecrazy.weebly.com/hk-part-iv.html",
+          "https://en.wikipedia.org/wiki/Claremont_Post_Office",
+          "https://trove.nla.gov.au/newspaper/article/240617134",
+          "https://en.wikipedia.org/wiki/Brisbane_Boys_College"
+        ]
+      },
+      {
+        "query": "\"Hillgrove\" \"Hong Kong\" \"CC BY\" exterior",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://doczz.net/doc/1340847/annual-report-2006-2007",
+          "https://www.starmovies.org/People/Details/nm0003339",
+          "https://nationfiles.com/en/country/aus/news/n18682/",
+          "https://nationfiles.com/en/country/aus/news/n18098/",
+          "https://nationfiles.com/es/country/aus/news/n18098/"
+        ]
+      },
+      {
+        "query": "\"Jade Grove\" \"Hong Kong\" \"Creative Commons\" architecture",
+        "requestedResults": 5,
+        "returnedUrls": ["https://zh.wikipedia.org/wiki/File:Jade_Grove.jpg"]
+      },
+      {
+        "query": "\"Beaulieu Peninsula\" \"CC BY\" photograph",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://en.wikipedia.org/wiki/Housing_in_Hong_Kong",
+          "https://moovitapp.com/index/zh-tw/%E5%85%AC%E5%85%B1%E4%BA%A4%E9%80%9A-%E9%BE%8D%E7%8F%A0%E5%B3%B6-Hong_Kong-site_277210627-2741"
+        ]
+      },
+      {
+        "query": "\"OMA by the Sea\" \"license\" photograph",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://hk.centanet.com/estate/en/OMA-by-the-Sea/2-KESPWPPEPD",
+          "https://www.homedash.hk/en/property-166-Castle-Peak-Road-Tai-Lam-HD37669141",
+          "https://www.ricacorp.com/en-hk/property/detail/so-kwun-wat-hma-oma-by-the-sea-tower-1-cv45460832-3-en",
+          "https://www.homedash.hk/en/property-166-Castle-Peak-Road-Tai-Lam-HD37667837",
+          "https://www.homedash.hk/en/property-166-Castle-Peak-Road-Tai-Lam-HD37669151"
+        ]
+      },
+      {
+        "query": "\"Tuen Mun\" \"photographs\" \"data.gov.hk\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-historical-maps",
+          "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-digital-orthophoto-dop1000-1976g",
+          "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-digital-orthophoto-dop1000-1976p",
+          "https://geog.hku.hk/cartographica-laboratory-and-library",
+          "https://www.landsd.gov.hk/doc/en/annual_odata_plan/Fourth_Annual_Open_Data_Plan_en.pdf"
+        ]
+      },
+      {
+        "query": "\"Hong Kong\" \"estate\" \"exterior\" \"CC BY 4.0\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.websaber.es/geografia/asia/ciudades/china/hongkong/que-ver-en-hong-kong.htm",
+          "https://roark.archi/i/principal-tower-and-old-shopfronts",
+          "https://raremaisons.com/hotels/rosewood-hong-kong/",
+          "https://www.fridayclubmag.com/haunt-seek-explore-the-most-haunted-places-in-hong-kong/",
+          "https://howtorhino.com/blog/architects/leigh-orange/"
+        ]
+      },
+      {
+        "query": "\"Tai-Yu\" estate exterior open license photo",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.tech-top-eng.com/work-detail/181/",
+          "https://commons.wikimedia.org/wiki/File:Synapse_immunologique.jpg",
+          "https://www.sluurpy.com/en/amsterdam/restaurant/4363527/restaurant-tai-yu",
+          "https://en.wikipedia.org/wiki/Tung_Chung",
+          "https://www.berkeleyside.org/2013/12/10/great-china-to-open-in-new-berkeley-spot-within-days"
+        ]
+      },
+      {
+        "query": "\"帝御\" \"維基百科\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.sogousrf.com/wikipedia/wiki/%E7%B2%BE%E9%80%B2%E5%BB%BA%E7%AF%89",
+          "https://wiki.kfd.me/wiki/Template:%E5%B8%9D%E5%9C%8B%E9%9B%86%E5%9C%98",
+          "https://www.ploymarket.com/proxy/https/zh.wikipedia.org/wiki/Template:%E5%B8%9D%E5%9C%8B%E9%9B%86%E5%9C%98",
+          "https://www.dingjitang.com/wikipedia/wiki/Template:%E5%B8%9D%E5%9C%8B%E9%9B%86%E5%9C%98",
+          "https://zh.100ke.info/wiki/Template:%E5%B8%9D%E5%9C%8B%E9%9B%86%E5%9C%98"
+        ]
+      },
+      {
+        "query": "\"OMA OMA\" \"Wikipedia\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://en.wikipedia.org/wiki/OMA",
+          "https://en.wikipedia.org/wiki/Oma",
+          "https://zh.wikipedia.org/wiki/OMA",
+          "https://en.wikipedia.org/wiki/OMA_(architecture_firm)",
+          "https://es.wikipedia.org/wiki/OMA"
+        ]
+      },
+      {
+        "query": "\"Royal Cove\" \"Tuen Mun\" \"Creative Commons\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://hk.centanet.com/info/en/new-property/Tuen-Mun/Royal-Cove/1828",
+          "https://hk.centanet.com/estate/en/Royal-Cove/2-KESPWPPYPG",
+          "https://www.thestandard.com.hk/market/article/230122/Wah-Yips-Royal-Cove-in-Tuen-Mun-selling-12-units-by-tender",
+          "https://hkaddresses.com/en/building/53858",
+          "https://www.eac.hk/pdf/distco/2023dc/final/eng/dc2023l.pdf"
+        ]
+      },
+      {
+        "query": "\"Villa Sapphire\" \"Hong Kong\" \"CC BY\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://hkaddresses.com/en/building/13690",
+          "https://www.homedash.hk/en/property-8-Tsing-Fat-Street-HD37667185",
+          "https://www.spacious.hk/en/hong-kong/n/149-siu-lam/b/148195--villa-sapphire-block-1/transactions",
+          "https://www.spacious.hk/en/hong-kong/n/149-siu-lam/b/148196--villa-sapphire-block-2/transactions",
+          "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Hong_Kong_by_name"
+        ]
+      },
+      {
+        "query": "\"Chun Wo Sea View Garden\" \"photo\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://www.homedash.hk/en/estate-Spring-Seaview-Terrace-2-SUOVFROYRD",
+          "https://www.chunwo.com/en/what-we-develop/grand-view-garden",
+          "https://www.choowap.com/cn/popup/gallery_place/973324",
+          "https://web.archive.org/web/20091216083657/http:/www.chunwo.com/cw_prop.aspx",
+          "https://hotelseaviewgarden.com/gallery"
+        ]
+      },
+      {
+        "query": "\"Fiona Garden\" \"Hong Kong\" \"Creative Commons\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://hkaddresses.com/en/building/53967",
+          "https://www.ricacorp.com/en-hk/property/estate/block-c3-building-fiona-garden-estate-en",
+          "https://www.oneday.com.hk/en_US/listings/fiona-garden-fiona-garden-block-c3/",
+          "https://library.nga.gov/discovery/fulldisplay/alma992016573504896/01NGA_INST:NGA",
+          "https://commons.wikimedia.org/wiki/Category:Hong_Kong_Garden"
+        ]
+      },
+      {
+        "query": "\"Pearl Garden\" \"Tuen Mun\" \"Creative Commons\"",
+        "requestedResults": 5,
+        "returnedUrls": [
+          "https://commons.wikimedia.org/wiki/Category:Pearl_Island_Garden",
+          "https://hk.centanet.com/estate/en/Pearl-Garden/2-SUDDURUXRJ",
+          "https://free-images.com/display/garden_at_tuen_mun.html",
+          "https://www.hkp.com.hk/en/estate/New-Territories-Tuen-Mun-Pearl-Island-Garden-E00301",
+          "https://mapcarta.com/W378406901"
+        ]
+      }
+    ],
+    "sources": [
+      {
+        "url": "https://www.isd.gov.hk/eng/photo_sales.htm",
+        "title": "Photo Sales - Information Services Department"
+      },
+      {
+        "url": "https://www2.photostore.gov.hk/photostore/faq.xhtml",
+        "title": "Government Photo Store - Frequently Asked Questions (FAQs)"
+      },
+      {
+        "url": "https://www.gov.hk/en/residents/government/publication/photo/photostore.htm",
+        "title": "Buying Government Photos Online"
+      },
+      {
+        "url": "https://www.gov.hk/en/about/copyright.htm",
+        "title": "GovHK: Copyright Notice & Disclaimer"
+      },
+      {
+        "url": "https://www.isd.gov.hk/chi/pub.htm",
+        "title": "宣傳及推廣科 - 政府新聞處"
+      },
+      {
+        "url": "https://www.landsd.gov.hk/doc/en/forms/download_form/Form_LA.pdf",
+        "title": "Licence Agreement for Using Government Digital Map"
+      },
+      {
+        "url": "https://www.landsd.gov.hk/en/resources/mapping-information/mapping-teaching-resources/copyright.html",
+        "title": "Lands Department - Copyright Notice"
+      },
+      {
+        "url": "https://www.landsd.gov.hk/en/spatial-data/open-data.html",
+        "title": "Lands Department - Open Data (Geospatial)"
+      },
+      {
+        "url": "https://www.hkmapservice.gov.hk/OneStopSystem/conditionOfService",
+        "title": "HKMS 2.0 - Copyright Notice"
+      },
+      {
+        "url": "https://www.landsd.gov.hk/en/resources/mapping-information/downloadable-aerial-photographs.html",
+        "title": "Lands Department - Downloadable Aerial Photographs"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Residential_buildings_in_Tuen_Mun_District",
+        "title": "Category:Residential buildings in Tuen Mun District - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Tuen_Mun",
+        "title": "Category:Private housing estates in Tuen Mun - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Fu_Tai_Estate",
+        "title": "Category:Fu Tai Estate - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Prime_View_Garden,_Hong_Kong",
+        "title": "Category:Prime View Garden, Hong Kong - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Castle_Peak_Road_-_Castle_Peak_Bay",
+        "title": "Category:Castle Peak Road"
+      },
+      {
+        "url": "https://digitalrepository.lib.hku.hk/hkimage",
+        "title": "Hong Kong Image Database@Digital Repository"
+      },
+      {
+        "url": "https://hphkbristol.net/attribution/",
+        "title": "HPHK Attribution policy | Historical Photographs of Hong Kong"
+      },
+      {
+        "url": "https://www.grs.gov.hk/en/online_holdings.html",
+        "title": "GRS: Digitised holdings"
+      },
+      {
+        "url": "https://hk.history.museum/en/web/mh/collections/collections/historical-photographs.html",
+        "title": "Hong Kong Museum of History - Historical Photographs"
+      },
+      {
+        "url": "https://www.hongkongheritage.org/pages/photographs",
+        "title": "Photograph Collections | Hong Kong Heritage Project"
+      },
+      {
+        "url": "https://www.weddingabroad.com.hk/posts/53529558/",
+        "title": "洪福邨藥房2023全攻略!（震驚真相） - Wedding Abroad"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/File:Jing_yuan_mansion_tianjin.jpg",
+        "title": "File : Jing yuan mansion tianjin.jpg"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/File:Macao_Grand_Emperor_Hotel.jpg",
+        "title": "File : Macao Grand Emperor Hotel.jpg"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/File:Emperor_Guangxu.jpg",
+        "title": "File : Emperor Guangxu.jpg"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/File:Emperor_Ingy%C5%8D.jpg",
+        "title": "File : Emperor Ingyō.jpg"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/File:Gekko_Emperor_Godaigo.jpg",
+        "title": "File : Gekko Emperor Godaigo.jpg"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/File:Tuen_Hing_Road_Public_Housing_Estate_-_January_2025,_version_3.jpg",
+        "title": "File : Tuen Hing Road Public Housing Estate - January 2025, version 3.jpg"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Buildings_in_Tuen_Mun",
+        "title": "Category:Buildings in Tuen Mun - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Tai_Hing_Estate",
+        "title": "Category:Tai Hing Estate - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Private_housing_estates_in_Hong_Kong_by_name",
+        "title": "Category:Private housing estates in Hong Kong by name - Wikimedia Commons"
+      },
+      {
+        "url": "https://www.okay.com/en/building/beaulieu-peninsula/4927",
+        "title": "Beaulieu Peninsula 蟠龍半島 - Tuen Mun"
+      },
+      {
+        "url": "https://www.scmp.com/news/hong-kong/society/article/3246135/14-out-28-seafront-homes-luxury-hong-kong-beaulieu-peninsula-estate-occupying-government-land",
+        "title": "14 out of 28 seafront homes at luxury Hong Kong Beaulieu ..."
+      },
+      {
+        "url": "https://hk.centanet.com/estate/en/Beaulieu-Peninsula/2-SUUUURUXRJ",
+        "title": "Beaulieu Peninsula｜So Kwun Wat｜Estate Info - 中原地產"
+      },
+      {
+        "url": "https://hongkongfp.com/hkfp-image-and-article-licensing/",
+        "title": "Licence HKFP images or articles"
+      },
+      {
+        "url": "https://hongkongfp.com/hkfp-content-agreement/",
+        "title": "HKFP Content Agreement | Hong Kong Free Press HKFP"
+      },
+      {
+        "url": "https://hongkongfp.com/guidelines-paid-contributors/",
+        "title": "HKFP Freelance Charter"
+      },
+      {
+        "url": "https://hongkongfp.com/2025/09/02/hkfp-climate-project-dozens-of-ethical-extreme-heat-images-released-for-free-use-under-creative-commons/",
+        "title": "HKFP Climate Project: Dozens of ethical, extreme heat images released for free"
+      },
+      {
+        "url": "https://creativecommons.org/wp-content/uploads/2023/05/AJournalistsGuideToCreativeCommons2023_1.0.pdf",
+        "title": "A Journalist’s Guide to Creative Commons"
+      },
+      {
+        "url": "https://www2.photostore.gov.hk/photostore/notice.xhtml",
+        "title": "Government Photo Store - Important Notices"
+      },
+      {
+        "url": "https://www1.photostore.gov.hk/photostore/faq.xhtml",
+        "title": "Government Photo Store - Frequently Asked Questions (FAQs)"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Commons:Copyright_rules_by_territory/Hong_Kong",
+        "title": "Commons:Copyright rules by territory/Hong Kong - Wikimedia Commons"
+      },
+      {
+        "url": "http://digital.lib.hku.hk/hkimage/node/3",
+        "title": "TERMS OF USE | Hong Kong Image Database"
+      },
+      {
+        "url": "https://hkuarchives-wix.hku.hk/guidelines-for-using-materials",
+        "title": "Guidelines for Using Materials | University Archives, HKU"
+      },
+      {
+        "url": "https://arthistory.hku.hk/HKinTransition/contact_us.php",
+        "title": "Hong Kong in Transition"
+      },
+      {
+        "url": "https://libguides.lib.hku.hk/copyright_hku/research",
+        "title": "Copyright in Research - Copyright - LibGuides at University of Hong Kong"
+      },
+      {
+        "url": "https://help.mapillary.com/hc/en-us/articles/115001770409-CC-BY-SA-license-for-open-data",
+        "title": "CC-BY-SA license for open data – Mapillary"
+      },
+      {
+        "url": "https://web.archive.org/web/20170218102709/https:/www.mapillary.com/legal.html",
+        "title": "N/A"
+      },
+      {
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC10239739/",
+        "title": "In Search of Basement Indicators from Street View Imagery Data: An Investigation of Data Sources and Analysis Strategies"
+      },
+      {
+        "url": "https://community.openstreetmap.org/t/upload-my-photos-taken-from-my-camera-into-multiple-street-level-photo-platforms/97600",
+        "title": "Upload my photos taken from my camera into multiple street-level photo platforms - General talk - OpenStreetMap Community Forum"
+      },
+      {
+        "url": "https://www.pexels.com/search/hong%20kong%20buildings/",
+        "title": "Free Hong Kong Buildings Photos"
+      },
+      {
+        "url": "https://www.pexels.com/search/hong%20kong%20apartment/",
+        "title": "Free Hong Kong Apartment Photos"
+      },
+      {
+        "url": "https://www.axiomimages.com/aerial-stock-footage/locations/new-territories/DCA02_062",
+        "title": "4K aerial stock footage flyby Hong Kong Gold Coast waterfront apartment high-rises in New Territories, Hong Kong, China Aerial Stock Footage DCA02_062 | Axiom Images"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Castle_Peak_Bay",
+        "title": "Category:Castle Peak Bay - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Harrow_International_School_Hong_Kong",
+        "title": "Category:Harrow International School Hong Kong - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Emerald_Bay,_So_Kwun_Wat",
+        "title": "Category:Emerald Bay, So Kwun Wat - Wikimedia Commons"
+      },
+      {
+        "url": "https://gwulo.com/media/26415",
+        "title": "Tuen-Mun-Castle Peak Bay-1981-panorama | Gwulo"
+      },
+      {
+        "url": "https://pixabay.com/photos/city-hong-kong-tuen-mun-evening-2770601/",
+        "title": "Urban street in Tuen Mun, Hong Kong Photo - Pixabay"
+      },
+      {
+        "url": "https://pixabay.com/photos/building-hong-kong-monster-building-3540618/",
+        "title": "Hong Kong apartment towers from below Photo - Pixabay"
+      },
+      {
+        "url": "https://pixabay.com/photos/hong-kong-the-skyscraper-3728675/",
+        "title": "Colorful residential towers in Hong Kong Photo - Pixabay"
+      },
+      {
+        "url": "https://streetscapes.readthedocs.io/en/latest/autoapi/streetscapes/sources/kartaview/",
+        "title": "kartaview"
+      },
+      {
+        "url": "https://www.trekview.org/blog/playing-with-kartaview-api/",
+        "title": "A Quick Start Guide to the KartaView API | Trek View"
+      },
+      {
+        "url": "https://pipeworx.io/docs/reference/kartaview/kartaview_sequence_photos/",
+        "title": "kartaview_sequence_photos — Pipeworx Docs"
+      },
+      {
+        "url": "https://github.com/koito19960406/ZenSVI/releases",
+        "title": "Releases · koito19960406/ZenSVI · GitHub"
+      },
+      {
+        "url": "https://github.com/facebook/Rapid/issues/1139",
+        "title": "Kartaview Imagery is not loading / sending 301s · Issue #1139 · facebook/Rapid"
+      },
+      {
+        "url": "https://www.hkp.com.hk/en/estate/New-Territories-Tuen-Mun-Beaulieu-Peninsula-E00631",
+        "title": "Beaulieu Peninsula - Tuen Mun | Estate Page | Hong Kong ..."
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Tuen_Mun",
+        "title": "Category:Tuen Mun - Wikimedia Commons"
+      },
+      {
+        "url": "https://hongkongfp.com/2016/02/07/in-pictures-dramatic-hill-fire-rips-through-tuen-mun-hillside/",
+        "title": "In Pictures: Dramatic hill fire rips through Tuen Mun hillside"
+      },
+      {
+        "url": "https://www.news.gov.hk/chi/about/index.html",
+        "title": "香港政府新聞網 - 關於本網站"
+      },
+      {
+        "url": "https://www.gov.hk:7443/en/about/linkpolicy/index.htm",
+        "title": "GovHK: Linking to GovHK"
+      },
+      {
+        "url": "https://edit.tosdr.org/documents/3206",
+        "title": "KartaView Terms of Service"
+      },
+      {
+        "url": "https://en.m.wikipedia.org/wiki/KartaView",
+        "title": "KartaView - Wikipedia"
+      },
+      {
+        "url": "https://github.com/Prekzursil/tracelines/blob/main/DATA_LICENSES.md",
+        "title": "DATA_LICENSES.md"
+      },
+      {
+        "url": "https://bellingcat.gitbook.io/toolkit/more/all-tools/kartaview",
+        "title": "KartaView | Bellingcat's Online Investigation Toolkit"
+      },
+      {
+        "url": "https://wiki.osm.org/Street-level_imagery_services",
+        "title": "Street-level imagery services - OpenStreetMap Wiki"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Hong_Kong_Gold_Coast",
+        "title": "Category:Hong Kong Gold Coast - Wikimedia Commons"
+      },
+      {
+        "url": "https://unsplash.com/s/photos/gold-coast",
+        "title": "Gold Coast Pictures | Download Free Images on Unsplash"
+      },
+      {
+        "url": "https://www.globalphotos.org/hk-goldcoast.htm",
+        "title": "Hong Kong Gold Coast Photo Gallery"
+      },
+      {
+        "url": "https://www.istockphoto.com/photo/drone-view-of-gold-coast-hong-kong-gm1313463151-401956014",
+        "title": "Drone View Of Gold Coast Hong Kong Stock Photo - Download Image Now - Tuen Mun, Beach, Coastline - iStock"
+      },
+      {
+        "url": "https://coconuts.co/hongkong/lifestyle/coconuts-staycation-get-refreshed-gold-coast/",
+        "title": "A Coconuts travel guide to Hong Kong's Gold Coast"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:So_Kwun_Wat_-_Construction_sites",
+        "title": "Category:So Kwun Wat - Construction sites - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:2018_in_So_Kwun_Wat",
+        "title": "Category:2018 in So Kwun Wat - Wikimedia Commons"
+      },
+      {
+        "url": "https://data.gov.hk/en/terms-and-conditions",
+        "title": "Terms and Conditions | DATA.GOV.HK"
+      },
+      {
+        "url": "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-development-hkms-digital-aerial-photo",
+        "title": "Digital Aerial Photo | DATA.GOV.HK"
+      },
+      {
+        "url": "https://www.reutersconnect.com/transactional-license-terms/",
+        "title": "Reuters Connect Transactional license terms"
+      },
+      {
+        "url": "https://liaison.reuters.com/tools/restrictions",
+        "title": "Reuters Restrictions Guide"
+      },
+      {
+        "url": "https://www.reutersconnect.com/plans-and-pricing",
+        "title": "Subscription Plans"
+      },
+      {
+        "url": "https://reutersagency.com/content-delivery-platforms/reuters-connect/",
+        "title": "Reuters Connect: Ultimate Content Marketplace"
+      },
+      {
+        "url": "https://images.assets.reuters.com/Web/ReutersNews/%7B3d51069b-c1f3-406e-96de-012e57f1c1b2%7D_Reuters_Connect_-_Top_Tips_for_Pictures.pdf",
+        "title": "Reuters Connect Top Tips for Pictures"
+      },
+      {
+        "url": "https://www.afp.com/en/useful-links/terms-use",
+        "title": "Terms of use | AFP.com"
+      },
+      {
+        "url": "https://www.afp.com/fr/conditions-generales-vente-photographie-piece",
+        "title": "Conditions générales de vente - Photographie à la pièce | AFP.com"
+      },
+      {
+        "url": "https://help.afp.com/hc/questions-les-plus-frequentes/restrictions-editoriales?lang=en",
+        "title": "Editorial restrictions🔒(Photos and Videos) | AFP - Seconde marque Knowledge Base"
+      },
+      {
+        "url": "https://www.afp.com/newsletter/copyright/copyright.html",
+        "title": "copyright AFP"
+      },
+      {
+        "url": "https://www.afp.com/index.php/en/useful-links/terms-use",
+        "title": "Terms of use | AFP.com"
+      },
+      {
+        "url": "https://tools.csdi.gov.hk/csdi-webpage/doc/TNC",
+        "title": "Terms and Conditions of Use"
+      },
+      {
+        "url": "https://www.landsd.gov.hk/en/survey-mapping/mapping/aerial-photo-photogrammetric-products/digital-aerial-photo.html",
+        "title": "Lands Department - Digital Aerial Photo"
+      },
+      {
+        "url": "https://www.landsd.gov.hk/doc/en/mapping/digital-map/product.pdf",
+        "title": "Information Paper of Hong Kong Digital Map"
+      },
+      {
+        "url": "https://www.hkmapservice.gov.hk/OneStopSystem/faqDownloadOpenDigitalMaps",
+        "title": "HKMS 2.0 - Download Open Digital Maps"
+      },
+      {
+        "url": "https://www.landsd.gov.hk/en/spatial-data/open-data.html/1000",
+        "title": "Lands Department - Open Data (Geospatial)"
+      },
+      {
+        "url": "https://www.hkmapservice.gov.hk/OneStopSystem/prodOssCatADetail",
+        "title": "HKMS 2.0 - Useful Info"
+      },
+      {
+        "url": "https://www.landsd.gov.hk/doc/en/consolidated_annual_odata_plan/consolidated_plan_2025_27_en.pdf",
+        "title": "Consolidated Annual Open Data Plan (Spatial Data Plan included) for 2025 to 2027"
+      },
+      {
+        "url": "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-mapping-old-urban-and-town-maps",
+        "title": "Old Urban and Town Maps"
+      },
+      {
+        "url": "https://www.landsd.gov.hk/doc/en/consolidated_annual_odata_plan/consolidated_plan_2024_26_en.pdf",
+        "title": "Consolidated Annual Open Data Plan (Spatial Data Plan included) for 2024 to 2026"
+      },
+      {
+        "url": "https://cityclock.org/hong-kong/tuen-mun",
+        "title": "Tuen Mun, HK Current Local Time, Time Zone, Hourly Weather and Weather History"
+      },
+      {
+        "url": "https://weatherchirp.com/hong-kong/tuen-mun",
+        "title": "Tuen Mun Climate — Average Weather by Month, Hong Kong"
+      },
+      {
+        "url": "https://cityclock.org/hong-kong/tuen-mun/tuen-mun-kau-hui",
+        "title": "Tuen Mun Kau Hui, HK Current Local Time, Time Zone, Hourly Weather and Weather History"
+      },
+      {
+        "url": "https://cityclock.org/hong-kong/tuen-mun/fu-tei-san-tsuen",
+        "title": "Fu Tei San Tsuen, HK Current Local Time, Time Zone, Hourly Weather and Weather History"
+      },
+      {
+        "url": "https://findyourstay.com/stay/tuen-mun",
+        "title": "Where to Stay in Tuen Mun 2026: 3 Best Neighbourhoods, Hotels & Local Tips | FindYourStay"
+      },
+      {
+        "url": "https://www.homedash.hk/en/property-9-Tsing-Fat-Lane-HD37666939",
+        "title": "The Hillgrove | Siu LamSale Listings | HomeDash - Hong Kong Conversational Property Search Platform"
+      },
+      {
+        "url": "https://www.homedash.hk/en/property-9-Tsing-Fat-Lane-HD37749846",
+        "title": "[Centaline Property Agency - Luxury Property Recommendation] Adjoining units \"Saleable Area: 1,847 sq. ft.\" with 2 parking spaces! South-facing sea view! Large flat floor! | The Hillgrove Mid-rise | Siu LamSale Listings | HomeDash - Hong Kong Conversational Property Search Platform"
+      },
+      {
+        "url": "https://www.homedash.hk/en/property-9-Tsing-Fat-Lane-HD37663061",
+        "title": "Laurel Hill CEDAR I | The Hillgrove Block CEDAR I Mid-rise | Siu LamSale Listings | HomeDash - Hong Kong Conversational Property Search Platform"
+      },
+      {
+        "url": "https://www.homedash.hk/en/property-9-Tsing-Fat-Lane-HD37755316",
+        "title": "Duplex with large garden, includes a parking space, rare listing, keys available for immediate viewing | The Hillgrove Lower Floor | Siu LamSale Listings | HomeDash - Hong Kong Conversational Property Search Platform"
+      },
+      {
+        "url": "https://www.homedash.hk/en/property-9-Tsing-Fat-Lane-HD37726689",
+        "title": "Extra large two-bedroom! Internal garden and swimming pool view! Includes parking space! Nicely renovated throughout! Move in immediately! Ultra-low density luxury residence | The Hillgrove Mid-rise | Siu LamSale Listings | HomeDash - Hong Kong Conversational Property Search Platform"
+      },
+      {
+        "url": "https://facecaseapp.com/artist",
+        "title": "FaceCase"
+      },
+      {
+        "url": "https://id.unionpedia.org/i/Festival_film",
+        "title": "Festival film - Unionpedia, jaringan semantik"
+      },
+      {
+        "url": "https://en.unionpedia.org/i/Bettina_Rheims",
+        "title": "Bettina Rheims - Unionpedia, the concept map"
+      },
+      {
+        "url": "https://fr.unionpedia.org/La_L%C3%A9gende_de_Bruce_Lee",
+        "title": "La Légende de Bruce Lee - Unionpédia"
+      },
+      {
+        "url": "https://reference.org/facts/Leave_Me_Alone_(2004_thriller_film)/AxFmWbRB",
+        "title": "Leave Me Alone (film) - Reference.org"
+      },
+      {
+        "url": "https://www.greening.gov.hk/filemanager/greening/en/content_77/Guidelines%20on%20Soil%20Improvement_2022Oct.pdf",
+        "title": "Guidelines on Soil Improvement - Greening"
+      },
+      {
+        "url": "https://www.atlanticcouncil.org/wp-content/uploads/2020/12/China-HongKong-FINAL2.pdf",
+        "title": "TARGETING THE ANTI EXTRADITION BILL MOVEMENT"
+      },
+      {
+        "url": "https://petpethk.com/businesses/wise-pet",
+        "title": "Wise Pet - PetPetHK"
+      },
+      {
+        "url": "https://hongkongbusiness.hk/residential-property/news/housing-bureau-picks-4-more-sites-build-light-public-housing-units",
+        "title": "Housing Bureau picks 4 more sites to build light public housing units | Hong Kong Business"
+      },
+      {
+        "url": "https://hongkongbusiness.hk/news/archsd-investigates-public-housing-projects-over-quality-issues",
+        "title": "ArchSD investigates public housing projects over quality issues | Hong Kong Business"
+      },
+      {
+        "url": "https://bookingagency.io/cities/hong-kong/so-kwun-wat",
+        "title": "So Kwun Wat, Hong Kong Guide | The Booking Agency"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Castle_Peak,_Hong_Kong",
+        "title": "Category:Castle Peak, Hong Kong - Wikimedia Commons"
+      },
+      {
+        "url": "https://www.linkedin.com/posts/gleeds_this-world-earth-day-at-gleeds-were-reminded-activity-7452762990304600065-V_nH",
+        "title": "Gleeds Celebrates Sustainability Efforts on World Earth Day"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Tuen_Mun_Road",
+        "title": "Category:Tuen Mun Road"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Tuen_Mun_District",
+        "title": "Category:Tuen Mun District - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Sinopec_petrol_stations_in_Hong_Kong",
+        "title": "Category:Sinopec petrol stations in Hong Kong"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Green_post_boxes_in_Hong_Kong",
+        "title": "Category:Green post boxes in Hong Kong"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Bilingual_Chinese-English_road_signs",
+        "title": "Category:Bilingual Chinese-English road signs - Wikimedia Commons"
+      },
+      {
+        "url": "http://wikimapia.org/28196544/zh/%E8%9F%A0%E9%BE%99%E5%8D%8A%E5%B2%9B",
+        "title": "蟠龙半岛 - 香港"
+      },
+      {
+        "url": "https://hohomehk.com/wiki/estate-wiki-beaulieupeninsula/",
+        "title": "【深井 | 青山公路蟠龍半島】平面圖・成交・校網・裝修訂造傢俬攻略 | HoHomeHK 屋苑百科"
+      },
+      {
+        "url": "https://www.house730.com/estate-23833/%E9%9D%92%E5%B1%B1%E5%85%AC%E8%B7%AF-%E8%9F%A0%E9%BE%8D%E5%8D%8A%E5%B3%B6/",
+        "title": "蟠龍半島平面圖、樓價走勢、成交紀錄 | 青山公路 | 屋苑專頁 - House730"
+      },
+      {
+        "url": "https://www.newtohk.com/estates/beaulieu-peninsula",
+        "title": "掃管笏蟠龍半島 - Beaulieu Peninsula - 屯門區屋苑 | NewToHK"
+      },
+      {
+        "url": "https://www.hkea.com.hk/dn/slist?f_estate=%E8%9F%A0%E9%BE%8D%E5%8D%8A%E5%B3%B6",
+        "title": "蟠龍半島-住宅,工商舖,車位|售盤,買樓-香港地產網"
+      },
+      {
+        "url": "https://www.ricacorp.com/zh-hk/property/detail/%E5%B0%8F%E6%AC%96-hma-%E6%BC%A3%E5%B1%B1-cedar-i-cv31760099-3-hk",
+        "title": "真盤源 - 利嘉閣地產 - 深井/青山公路 漣山 CEDAR I"
+      },
+      {
+        "url": "https://ja.wikipedia.org/wiki/Panoramio",
+        "title": "Panoramio"
+      },
+      {
+        "url": "https://web.archive.org/web/20051013063919/http:/www.panoramio.com/",
+        "title": "Panoramio"
+      },
+      {
+        "url": "https://www.helpandweb.com/ecmap/en/panoramio.htm",
+        "title": "Panoramio"
+      },
+      {
+        "url": "https://phpjavascriptroom.com/?p=panoramio_api&t=topic",
+        "title": "Panoramio API｜Panoramio｜Web関連特集｜PHP & JavaScript Room"
+      },
+      {
+        "url": "https://www.capevillas.co.za/properties/castle-peak/",
+        "title": "Castle Peak - Cape Villas"
+      },
+      {
+        "url": "https://www.vacations.capetown/rentals/camps-bay/castle-peak/",
+        "title": "Castle Peak - Luxury Villa Rental In Camps Bay | CTV"
+      },
+      {
+        "url": "https://www.capsol.co.za/vacation-rentals/castle-peak",
+        "title": "Castle Peak, Luxury Accomodation In Camps Bay | Capsol Luxury Villas & Apartments"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/File:Castle_peak_from_warren_lake_trail_-_panoramio.jpg",
+        "title": "File : Castle peak from warren lake trail - panoramio.jpg"
+      },
+      {
+        "url": "https://www.capevillas.co.za/",
+        "title": "Homepage - Cape Villas"
+      },
+      {
+        "url": "https://docs.panoramax.fr/federated-catalog/",
+        "title": "How to be part of it - Panoramax - Docs"
+      },
+      {
+        "url": "https://panoramax.koenhabets.nl/",
+        "title": "Field photos all over the world"
+      },
+      {
+        "url": "https://api.panoramax.xyz/",
+        "title": "The free alternative for photo-mapping territories - Panoramax"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Panoramax",
+        "title": "Category:Panoramax - Wikimedia Commons"
+      },
+      {
+        "url": "https://panoramax.fr/comment-participer-a-panoramax",
+        "title": "How to contribute?"
+      },
+      {
+        "url": "https://docs.panoramax.fr/backend/dev/STAC_compatibility/",
+        "title": "STAC Compatibility - Panoramax - Docs"
+      },
+      {
+        "url": "https://docs.panoramax.fr/backend/api/openapi/",
+        "title": "Open API - Panoramax - Docs"
+      },
+      {
+        "url": "https://docs.panoramax.fr/backend/api/api/",
+        "title": "Using the API - Panoramax - Docs"
+      },
+      {
+        "url": "https://gitlab.com/panoramax/server/api/-/blob/develop/CHANGELOG.md",
+        "title": "CHANGELOG.md · develop · Panoramax / Server / API · GitLab"
+      },
+      {
+        "url": "https://gitlab.com/panoramax/server/api/-/commit/94022109aa360ffbd5f5b06545de9d319e3680a3",
+        "title": "Merge branch 'patch_roll_pitch' into 'develop' (94022109) · Commits · Panoramax / Server / API · GitLab"
+      },
+      {
+        "url": "https://earth.org/biggest-environmental-issues-in-hong-kong/",
+        "title": "6 Biggest Environmental Issues Hong Kong Is Facing | Earth.Org"
+      },
+      {
+        "url": "https://www.windowssearch-exp.com/images/search?FORM=IRMHRS&q=Coconut+Candy+Hong+Kong",
+        "title": "Coconut Candy Hong Kong - Search Images"
+      },
+      {
+        "url": "https://hongkongliving.com/education-best-after-school-sports-classes-kids-in-hong-kong/",
+        "title": "The best sports classes and activities for kids in Hong Kong"
+      },
+      {
+        "url": "https://thehkhub.com/hong-kong-observatory-issues-black-rainstorm-warning-amid-serious-flooding-risk/",
+        "title": "Hong Kong Observatory Issues Black Rainstorm Warning ..."
+      },
+      {
+        "url": "https://world-today-journal.com/choosing-the-right-fragrance-for-hot-weather/",
+        "title": "Choosing the Right Fragrance for Hot Weather - World Today Journal"
+      },
+      {
+        "url": "https://photo.wn.com/24_Oras_Paggiba_Sa_Nasa_400_Bahay_Sa_Caloocan,_Nauwi_Sa_Pambabato_At_Pamamaril",
+        "title": "24 Oras Paggiba Sa Nasa 400 Bahay Sa Caloocan, Nauwi Sa Pambabato At Pamamaril"
+      },
+      {
+        "url": "https://uk-rest.com/image-credits/",
+        "title": "Image credits | UK Rest"
+      },
+      {
+        "url": "https://www.innpedia.com/hotels/hong-kong-gold-coast-hotel",
+        "title": "Hong Kong Gold Coast Hotel - hotel near Tai Po District | Innpedia"
+      },
+      {
+        "url": "https://dewiki.de/Lexikon/Geschichte_Hongkongs",
+        "title": "DeWiki > Geschichte Hongkongs"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Boat_Dwellers",
+        "title": "Boat Dwellers"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Battle_of_Tam%C3%A3o",
+        "title": "Battle of Tunmen"
+      },
+      {
+        "url": "https://www.tpb.gov.hk/en/meetings/TPB/Minutes/m1300tpb_e.pdf",
+        "title": "Minutes of 1300th Meeting of the Town Planning Board ..."
+      },
+      {
+        "url": "https://hongkongfp.com/2022/06/13/hong-kong-govt-should-proactively-disclose-info-on-immigration-detainees-legal-scholar-says/",
+        "title": "Hong Kong gov’t should ‘proactively disclose’ info on immigration detainees, legal scholar says  | Hong Kong Free Press HKFP"
+      },
+      {
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7597041/",
+        "title": "Ethnoichthyology of freshwater fish in Europe: a review of vanishing traditional fisheries and their cultural significance in changing landscapes from the later medieval period with a focus on northern Europe"
+      },
+      {
+        "url": "http://www.zssi.net/1l7hhaa1.html",
+        "title": "香港翠涛花园(Sea Crest Villa) - 谷歌高清地图"
+      },
+      {
+        "url": "https://yetigonecrazy.weebly.com/hk-part-iv.html",
+        "title": "HK Part IV - the Yeti Cave"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Claremont_Post_Office",
+        "title": "Claremont Post Office"
+      },
+      {
+        "url": "https://trove.nla.gov.au/newspaper/article/240617134",
+        "title": "21 Nov 1974 - CERTIFICATE OF AUSTRALIAN CITIZENSHIP"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Brisbane_Boys_College",
+        "title": "Brisbane Boys' College"
+      },
+      {
+        "url": "https://doczz.net/doc/1340847/annual-report-2006-2007",
+        "title": "Annual Report 2006-2007"
+      },
+      {
+        "url": "https://www.starmovies.org/People/Details/nm0003339",
+        "title": "Herbert Marshall - StarMovies"
+      },
+      {
+        "url": "https://nationfiles.com/en/country/aus/news/n18682/",
+        "title": "Australia Sees Slight Improveme… · Australia (AUS) · n18682 · 2026-05-26 10:00 | NFSI Geopolitical Risk Analysis"
+      },
+      {
+        "url": "https://nationfiles.com/en/country/aus/news/n18098/",
+        "title": "Australia: A Country in Transit… · Australia (AUS) · n18098 · 2026-05-23 10:00 | NFSI Geopolitical Risk Analysis"
+      },
+      {
+        "url": "https://nationfiles.com/es/country/aus/news/n18098/",
+        "title": "Australia: Un país en transición · Australia (AUS) · n18098 · 2026-05-23 10:00 | NFSI Análisis de riesgos geopolíticos"
+      },
+      {
+        "url": "https://zh.wikipedia.org/wiki/File:Jade_Grove.jpg",
+        "title": "File:Jade Grove.jpg"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Housing_in_Hong_Kong",
+        "title": "Housing in Hong Kong"
+      },
+      {
+        "url": "https://moovitapp.com/index/zh-tw/%E5%85%AC%E5%85%B1%E4%BA%A4%E9%80%9A-%E9%BE%8D%E7%8F%A0%E5%B3%B6-Hong_Kong-site_277210627-2741",
+        "title": "如何搭乘 巴士 或 輕鐵 前往屯門 Tuen Mun的龍珠島？"
+      },
+      {
+        "url": "https://hk.centanet.com/estate/en/OMA-by-the-Sea/2-KESPWPPEPD",
+        "title": "OMA by the Sea - Estate Info｜Centaline Property - 中原地產"
+      },
+      {
+        "url": "https://www.homedash.hk/en/property-166-Castle-Peak-Road-Tai-Lam-HD37669141",
+        "title": "OMA BY THE SEA Tower 1 High Floor | Block Block 1 High-rise | So Kwun WatRent and sale listing | HomeDash - Hong Kong Conversational Property Search Platform"
+      },
+      {
+        "url": "https://www.ricacorp.com/en-hk/property/detail/so-kwun-wat-hma-oma-by-the-sea-tower-1-cv45460832-3-en",
+        "title": "Real Listing - Ricacorp Property Limited - Sham Tseng/Castle Peak Road OMA BY THE SEA TOWER 1 Low Floor Zone Flat C6"
+      },
+      {
+        "url": "https://www.homedash.hk/en/property-166-Castle-Peak-Road-Tai-Lam-HD37667837",
+        "title": "OMA BY THE SEA Tower 2, high floor | Block Block 2 High-rise | So Kwun WatSale Listings | HomeDash - Hong Kong Conversational Property Search Platform"
+      },
+      {
+        "url": "https://www.homedash.hk/en/property-166-Castle-Peak-Road-Tai-Lam-HD37669151",
+        "title": "OMA BY THE SEA Tower 1, Mid-floor | Block Block 1 Mid-rise | So Kwun WatRent and sale listing | HomeDash - Hong Kong Conversational Property Search Platform"
+      },
+      {
+        "url": "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-historical-maps",
+        "title": "Historical Maps | DATA.GOV.HK"
+      },
+      {
+        "url": "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-digital-orthophoto-dop1000-1976g",
+        "title": "Digital Orthophoto DOP1000-1976G | DATA.GOV.HK"
+      },
+      {
+        "url": "https://data.gov.hk/en-data/dataset/hk-landsd-openmap-digital-orthophoto-dop1000-1976p",
+        "title": "Digital Orthophoto DOP1000-1976P | DATA.GOV.HK"
+      },
+      {
+        "url": "https://geog.hku.hk/cartographica-laboratory-and-library",
+        "title": "Cartographica Laboratory and Library | GEOG | HKU"
+      },
+      {
+        "url": "https://www.landsd.gov.hk/doc/en/annual_odata_plan/Fourth_Annual_Open_Data_Plan_en.pdf",
+        "title": "A. Departmental datasets to be released in 2022 # Type of Data/ Name of Dataset Target Release Date (in mm/yyyy)"
+      },
+      {
+        "url": "https://www.websaber.es/geografia/asia/ciudades/china/hongkong/que-ver-en-hong-kong.htm",
+        "title": "32 lugares imprescindibles de Hong Kong"
+      },
+      {
+        "url": "https://roark.archi/i/principal-tower-and-old-shopfronts",
+        "title": "Exterior: Principal Tower by Norman Foster · Roark"
+      },
+      {
+        "url": "https://raremaisons.com/hotels/rosewood-hong-kong/",
+        "title": "Rosewood Hong Kong | RARE Maisons"
+      },
+      {
+        "url": "https://www.fridayclubmag.com/haunt-seek-explore-the-most-haunted-places-in-hong-kong/",
+        "title": "Haunt & Seek: Explore The Most Haunted Places In Hong Kong"
+      },
+      {
+        "url": "https://howtorhino.com/blog/architects/leigh-orange/",
+        "title": "Leigh & Orange: Pioneering Architectural Achievements Revealed!"
+      },
+      {
+        "url": "https://www.tech-top-eng.com/work-detail/181/",
+        "title": "Class 100,10K,100K級無塵室改建工程-泰創工程(6750)Tech-Top Engineering Co., Ltd."
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/File:Synapse_immunologique.jpg",
+        "title": "File : Synapse immunologique.jpg"
+      },
+      {
+        "url": "https://www.sluurpy.com/en/amsterdam/restaurant/4363527/restaurant-tai-yu",
+        "title": "Restaurant Tai Yu Restaurant in Amsterdam - Chinees Menu, Reviews, Photos"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Tung_Chung",
+        "title": "N/A"
+      },
+      {
+        "url": "https://www.berkeleyside.org/2013/12/10/great-china-to-open-in-new-berkeley-spot-within-days",
+        "title": "Great China to open in new Berkeley spot in days"
+      },
+      {
+        "url": "https://www.sogousrf.com/wikipedia/wiki/%E7%B2%BE%E9%80%B2%E5%BB%BA%E7%AF%89",
+        "title": "精進建築有限公司 - 维基百科，自由的百科全书"
+      },
+      {
+        "url": "https://wiki.kfd.me/wiki/Template:%E5%B8%9D%E5%9C%8B%E9%9B%86%E5%9C%98",
+        "title": "Template:帝國集團 - 维基百科，自由的百科全书"
+      },
+      {
+        "url": "https://www.ploymarket.com/proxy/https/zh.wikipedia.org/wiki/Template:%E5%B8%9D%E5%9C%8B%E9%9B%86%E5%9C%98",
+        "title": "Template:帝國集團 - 维基百科，自由的百科全书"
+      },
+      {
+        "url": "https://www.dingjitang.com/wikipedia/wiki/Template:%E5%B8%9D%E5%9C%8B%E9%9B%86%E5%9C%98",
+        "title": "Template:帝國集團 - 维基百科，自由的百科全书"
+      },
+      {
+        "url": "https://zh.100ke.info/wiki/Template:%E5%B8%9D%E5%9C%8B%E9%9B%86%E5%9C%98",
+        "title": "Template:帝國集團 - 维基百科，自由的百科全书"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/OMA",
+        "title": "OMA"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Oma",
+        "title": "OMA"
+      },
+      {
+        "url": "https://zh.wikipedia.org/wiki/OMA",
+        "title": "OMA"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/OMA_(architecture_firm)",
+        "title": "Office for Metropolitan Architecture"
+      },
+      {
+        "url": "https://es.wikipedia.org/wiki/OMA",
+        "title": "OMA"
+      },
+      {
+        "url": "https://hk.centanet.com/info/en/new-property/Tuen-Mun/Royal-Cove/1828",
+        "title": "Royal Cove | New Property in Tuen Mun | Centaline Property Hong Kong"
+      },
+      {
+        "url": "https://hk.centanet.com/estate/en/Royal-Cove/2-KESPWPPYPG",
+        "title": "Royal Cove｜So Kwun Wat｜Estate Info｜Centaline Property"
+      },
+      {
+        "url": "https://www.thestandard.com.hk/market/article/230122/Wah-Yips-Royal-Cove-in-Tuen-Mun-selling-12-units-by-tender",
+        "title": "Wah Yip's Royal Cove in Tuen Mun selling 12 units by tender"
+      },
+      {
+        "url": "https://hkaddresses.com/en/building/53858",
+        "title": "ROYAL COVE (帝灣居) - Address in TUEN MUN DISTRICT, Hong Kong | HKAddresses"
+      },
+      {
+        "url": "https://www.eac.hk/pdf/distco/2023dc/final/eng/dc2023l.pdf",
+        "title": "District Council Geographical Constituency (“DCGC”) Areas"
+      },
+      {
+        "url": "https://hkaddresses.com/en/building/13690",
+        "title": "Villa Sapphire Block 1 (海澄軒第1座) - Address in TUEN MUN DISTRICT, Hong Kong | HKAddresses"
+      },
+      {
+        "url": "https://www.homedash.hk/en/property-8-Tsing-Fat-Street-HD37667185",
+        "title": "Villa Sapphire | Siu LamSale Listings | HomeDash - Hong Kong Conversational Property Search Platform"
+      },
+      {
+        "url": "https://www.spacious.hk/en/hong-kong/n/149-siu-lam/b/148195--villa-sapphire-block-1/transactions",
+        "title": "Transactions in Villa Sapphire Block 1 海澄軒1座, Siu Lam, Hong Kong｜spacious.hk"
+      },
+      {
+        "url": "https://www.spacious.hk/en/hong-kong/n/149-siu-lam/b/148196--villa-sapphire-block-2/transactions",
+        "title": "Transactions in Villa Sapphire Block 2 海澄軒2座, Siu Lam, Hong Kong｜spacious.hk"
+      },
+      {
+        "url": "https://www.homedash.hk/en/estate-Spring-Seaview-Terrace-2-SUOVFROYRD",
+        "title": "Spring Seaview Terrace details | HomeDash Hong Kong conversational property search"
+      },
+      {
+        "url": "https://www.chunwo.com/en/what-we-develop/grand-view-garden",
+        "title": "Grand View Garden"
+      },
+      {
+        "url": "https://www.choowap.com/cn/popup/gallery_place/973324",
+        "title": "画廊 - 滨海湾花园 (Gardens by the Bay)"
+      },
+      {
+        "url": "https://web.archive.org/web/20091216083657/http:/www.chunwo.com/cw_prop.aspx",
+        "title": "Chun Wo Development Holdings Limited"
+      },
+      {
+        "url": "https://hotelseaviewgarden.com/gallery",
+        "title": "Seaview Garden Hotel Gallery - Stunning Suites &amp; Amenities"
+      },
+      {
+        "url": "https://hkaddresses.com/en/building/53967",
+        "title": "FIONA GARDEN (富安新邨) - Address in TUEN MUN DISTRICT, Hong Kong | HKAddresses"
+      },
+      {
+        "url": "https://www.ricacorp.com/en-hk/property/estate/block-c3-building-fiona-garden-estate-en",
+        "title": "Block C3 - Estate | Block C3 | Estate Listing – Ricacorp Properties Limited."
+      },
+      {
+        "url": "https://www.oneday.com.hk/en_US/listings/fiona-garden-fiona-garden-block-c3/",
+        "title": "FIONA GARDEN with Car Park Space, Fiona Garden Block C3 富安新邨C3座 Rental Listings | Tuen Mun (TAMJO-5160211609)"
+      },
+      {
+        "url": "https://library.nga.gov/discovery/fulldisplay/alma992016573504896/01NGA_INST:NGA",
+        "title": "Fiona Rae : Hong Kong garden  - National Gallery of Art Library"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Hong_Kong_Garden",
+        "title": "Category:Hong Kong Garden - Wikimedia Commons"
+      },
+      {
+        "url": "https://commons.wikimedia.org/wiki/Category:Pearl_Island_Garden",
+        "title": "Category:Pearl Island Garden - Wikimedia Commons"
+      },
+      {
+        "url": "https://hk.centanet.com/estate/en/Pearl-Garden/2-SUDDURUXRJ",
+        "title": "Pearl Garden｜So Kwun Wat｜Estate Info｜Centaline Property"
+      },
+      {
+        "url": "https://free-images.com/display/garden_at_tuen_mun.html",
+        "title": "Free Images - garden at tuen mun"
+      },
+      {
+        "url": "https://www.hkp.com.hk/en/estate/New-Territories-Tuen-Mun-Pearl-Island-Garden-E00301",
+        "title": "龍珠島花園"
+      },
+      {
+        "url": "https://mapcarta.com/W378406901",
+        "title": "Tsing Lung Garden Map - Tuen Mun District, Hong Kong"
+      }
+    ],
+    "verificationBoundary": "Search title/snippet discovery only unless separately assessed above. No competitor image requests."
+  },
+  "verification": {
+    "runtimeChanged": false,
+    "registryChanged": false,
+    "testsChanged": false,
+    "neonMigrationIncluded": false,
+    "neonApplied": false,
+    "merged": false,
+    "baselineCi": {
+      "sha": "51463c01c3ecd79ee57ef06526ac4f70b511947c",
+      "runUrl": "https://github.com/YNWAforever/earnestproperty/actions/runs/40447441572",
+      "conclusion": "success"
+    },
+    "latestTipCi": "Recorded in PR body after push."
+  },
+  "estates": [
+    {
+      "slug": "tai-yu",
+      "nameZh": "帝御",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "wong-gam-hoi-waan",
+      "nameZh": "黃金海灣",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "oma-oma",
+      "nameZh": "Oma Oma",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "lin-shan",
+      "nameZh": "漣山",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "bayview-terrace",
+      "nameZh": "碧翠花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "castle-peak-villas",
+      "nameZh": "青山別墅",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "ching-lai-waan-villas",
+      "nameZh": "青麗灣別墅",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "ching-yung-toi",
+      "nameZh": "青榕臺",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "chui-king-garden",
+      "nameZh": "翠景花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "chun-wo-sea-view-garden",
+      "nameZh": "春和海景花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "chung-yuet-waan",
+      "nameZh": "棕月灣",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "hoi-ching-hin",
+      "nameZh": "海澄軒",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "hoi-wai-garden",
+      "nameZh": "海慧花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "hoi-yu",
+      "nameZh": "海譽",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "kwan-lun",
+      "nameZh": "琨崙",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "kwun-hoi-villas",
+      "nameZh": "觀海別墅",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "monte-carlo-villas",
+      "nameZh": "蒙地卡羅別墅",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "nga-tak-yuen",
+      "nameZh": "雅德苑",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "oi-kam-waan",
+      "nameZh": "愛琴灣",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "oma-by-the-sea",
+      "nameZh": "OMA by the Sea",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "pun-lung-bun-do",
+      "nameZh": "蟠龍半島",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "royal-cove-tower",
+      "nameZh": "帝灣居",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "royal-dragon-villa",
+      "nameZh": "嘉御龍庭",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "seaside-castle",
+      "nameZh": "畔海",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "yu-chui-yuen",
+      "nameZh": "瑜翠園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "deauville",
+      "nameZh": "星岸",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "long-beach-gardens",
+      "nameZh": "海濤花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "riviera",
+      "nameZh": "麗海別墅",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "both-wealth-garden",
+      "nameZh": "均富花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "fiona-garden",
+      "nameZh": "富安新邨",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "dragon-inn-court",
+      "nameZh": "容龍居",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "tuen-mun-court",
+      "nameZh": "屯門閣",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "elegant-villa",
+      "nameZh": "雅翠苑",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "pearl-island-bungalow",
+      "nameZh": "龍珠島平房",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "pearl-garden",
+      "nameZh": "龍珠花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    },
+    {
+      "slug": "peak-castle",
+      "nameZh": "珀居",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Retained unchanged; see round 2/3 ledgers."
+    }
+  ]
+}

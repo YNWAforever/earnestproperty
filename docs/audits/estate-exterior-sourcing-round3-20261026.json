@@ -1,0 +1,2198 @@
+{
+  "baselineTip": "5d11e33f98c446c73d5c97e9558c0d578a4a9f9c",
+  "prUrl": "https://github.com/YNWAforever/earnestproperty/pull/289",
+  "scope": "The exact 36 unresolved published corridor estates after round 2. Discovery and audit only; no runtime photo selections change.",
+  "outcome": "No additional source passed the estate-subject and license checks. No rejected file was re-proposed as a hero.",
+  "summary": {
+    "remainingSetSize": 36,
+    "beforeExteriorsInRemainingSet": 0,
+    "afterExteriorsInRemainingSet": 0,
+    "newQualifiedExteriorSources": 0,
+    "beforeMissing": 36,
+    "afterMissing": 36,
+    "overallCorridorEstates": 61,
+    "overallExteriorsBefore": 25,
+    "overallExteriorsAfter": 25,
+    "listingHeroFallbacksBefore": 0,
+    "listingHeroFallbacksAfter": 0
+  },
+  "method": {
+    "newRoutes": [
+      "Commons public MediaWiki API search in file namespace, including exact aliases and bitmap filters",
+      "Current Commons categorymembers API, rather than only indexed category pages",
+      "Openverse public images API and primary Flickr license-filtered searches for 10 focus estates",
+      "Original YouTube watch/embed/oEmbed and Wayback capture checks for the newly discovered Seacoast still"
+    ],
+    "commonsApiSearchRequests": 85,
+    "commonsCategoryReads": 12,
+    "openverse": {
+      "estatesExamined": 10,
+      "newAcceptedSources": 0,
+      "newTagLevelLeadsNotRecommended": 1,
+      "openverseApiReadUrls": 29,
+      "openverseVerifiedHttp200Empty": 15,
+      "openverseTimeouts": 14,
+      "primaryFlickrSearchPagesRead": 23,
+      "primaryFlickrExplicitNoMatches": 20,
+      "primaryFlickrPagesWithoutPhotoRecords": 3,
+      "realPixelInspections": 0
+    },
+    "limits": [
+      "Openverse public API displayed anonymous limits of 20 requests/minute and 200/day; no retry loop or policy change used.",
+      "Four web-connector API opens were inaccessible; Exa public API fetch was the functioning read route.",
+      "Fourteen Openverse read URLs timed out; these are not recorded as zero results.",
+      "Flickr JSON/RSS feed content could not be extracted (CRAWL_UNEXPECTED_CONTENT_TYPE).",
+      "Native browser JavaScript is unavailable. No protected street-view screenshots, image pixels, or fabricated image verification.",
+      "API and file-page metadata do not show pixels.",
+      "No actual image response was requested for the newly rejected aerial; its observed thumbnail comes directly from imageinfo JSON.",
+      "The search is bounded, and absence of a qualifying result does not prove that no source exists.",
+      "Some generic-name searches have unrelated matches; they were not fetched or relabeled.",
+      "The original 36 gaps remain gaps in this research output."
+    ]
+  },
+  "acceptedSources": [],
+  "newUnqualifiedLeads": [
+    {
+      "slug": "tai-yu",
+      "nameZh": "帝御",
+      "filename": "Seacoast Royale Aerial view 202201.png",
+      "filePageUrl": "https://commons.wikimedia.org/wiki/File:Seacoast_Royale_Aerial_view_202201.png",
+      "sourceUrl": "https://www.youtube.com/watch?v=282uy6t__9M",
+      "thumbnailUrl": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/72/Seacoast_Royale_Aerial_view_202201.png/1280px-Seacoast_Royale_Aerial_view_202201.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "thumbnailUrlEvidence": "Public Commons imageinfo JSON, iiurlwidth=1280.",
+      "author": "Brian 帶你飛",
+      "captureDate": "2022-01-22",
+      "year": 2022,
+      "source": "Third-party YouTube video screenshot uploaded to Commons by Wpcpey, not uploader Own work.",
+      "ownWorkVerified": false,
+      "licenseClaimed": "CC BY 3.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/3.0",
+      "licenseVerifiedAgainstOriginal": false,
+      "identityEvidenceUrl": "https://commons.wikimedia.org/wiki/File:Seacoast_Royale_Aerial_view_202201.png",
+      "subjectEvidence": "FILE page description specifically identifies 帝御金灣. Original video title names the Royale phases and discusses towers 6 and 7 near Tuen Mun Road.",
+      "imageResponseConfirmed": false,
+      "visualVerificationObtained": false,
+      "nativeBrowserVerified": false,
+      "reason": "Commons explicitly says the external source license has not yet been reviewed and categorizes it License review needed. The original YouTube metadata available through Exa did not expose the license grant or own-work provenance. Completed-building status/composition were also not established. Excluded from verified sources."
+    }
+  ],
+  "newNonPhotoOrConstructionMatches": [
+    {
+      "filename": "Seacoast Royale Under Construction In July 2020.jpg",
+      "disposition": "Explicit construction-state filename; excluded from completed exteriors without reopening prior construction pages."
+    },
+    {
+      "filename": "OMA OMA under construction in June 2019.jpg",
+      "disposition": "Explicit construction-state filename; excluded from completed exteriors."
+    },
+    {
+      "filename": "OMA OMA.svg",
+      "disposition": "Logo/vector rather than estate exterior photo."
+    }
+  ],
+  "commonsRoutes": [
+    {
+      "route": "Exa fetch of Commons w/api.php",
+      "result": "success",
+      "details": "Returned public JSON search, categorymembers and imageinfo metadata. This route found files missed by prior public web-index searching."
+    },
+    {
+      "route": "search_service_web_run open of Commons API/Special:Search/MediaSearch",
+      "result": "failed",
+      "details": "All three returned URL-not-accessible errors. No retry or shell-network bypass was used."
+    },
+    {
+      "route": "Exa fetch of Special:Search",
+      "result": "success_but_noisy",
+      "details": "Returned results for quoted OMA OMA, including unrelated OMA subjects and a previously rejected promotion. API search was used for precise bounded discovery."
+    },
+    {
+      "route": "Exa fetch of Special:MediaSearch",
+      "result": "empty_interface",
+      "details": "Returned only Search media heading; no client-side result data. No claim of native browser access."
+    },
+    {
+      "route": "Exa fetch of original YouTube watch page for new aerial",
+      "result": "partial",
+      "details": "Returned video title, channel author and transcript, but no license option or explicit own-work assertion."
+    },
+    {
+      "route": "search_service_web_run open of original YouTube page",
+      "result": "failed_throttled",
+      "details": "Reported online fetch throttled. No retry/bypass."
+    }
+  ],
+  "commonsApiEvidence": [
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=intitle%3A%22Seacoast%20Royale%22",
+      "kind": "search",
+      "totalHits": 3,
+      "titles": [
+        "File:Seacoast Royale Under Construction In July 2020.jpg",
+        "File:Seacoast Royale Aerial view 202201.png",
+        "File:Seacoast Royale Under Construction In November 2020.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=intitle%3A%22Starfront%20Royale%22",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=intitle%3A%22Skypoint%20Royale%22",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=%E5%B8%9D%E5%BE%A1",
+      "kind": "search",
+      "parseStatus": "Response truncated due to overbroad unquoted Chinese search; superseded by later quoted filetype:bitmap query.",
+      "partialResponse": "# api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=%E5%B8%9D%E5%BE%A1\nURL: https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=%E5%B8%9D%E5%BE%A1\n\n{\"batchcomplete\":\"\",\"continue\":{\"sroffset\":50,\"continue\":\"-||\"},\"query\":{\"searchinfo\":{\"totalhits\":59546},\"search\":[{\"ns\":6,\"title\":\"File:NDL949702 \\u660e\\u6cbb\\u5e"
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=%22Gold%20Coast%20Bay%22",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=%E9%BB%83%E9%87%91%E6%B5%B7%E7%81%A3",
+      "kind": "search",
+      "parseStatus": "Response truncated due to overbroad unquoted Chinese search; superseded by later quoted filetype:bitmap query.",
+      "partialResponse": "# api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=%E9%BB%83%E9%87%91%E6%B5%B7%E7%81%A3\nURL: https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=%E9%BB%83%E9%87%91%E6%B5%B7%E7%81%A3\n\n{\"batchcomplete\":\"\",\"query\":{\"searchinfo\":{\"totalhits\":45},\"search\":[{\"ns\":6,\"title\":\"File:Golden Bay Holiday Hotel.jpg\",\"pageid"
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=intitle%3A%22OMA%20OMA%22",
+      "kind": "search",
+      "totalHits": 5,
+      "titles": [
+        "File:OMA OMA Removing Scaffold In November 2020.jpg",
+        "File:Ọma ọma.wav",
+        "File:Oma Oma under construction in April 2020.jpg",
+        "File:OMA OMA.svg",
+        "File:OMA OMA under construction in June 2019.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=%E6%BC%A3%E5%B1%B1",
+      "kind": "search",
+      "totalHits": 6556,
+      "titles": [
+        "File:Gamaksan Bridge 1.jpg",
+        "File:Gamaksan Mountain.jpg",
+        "File:Gamaksan Suspension Bridge - 54973096378.jpg",
+        "File:Gamaksan Suspension Bridge - 54972915976.jpg",
+        "File:CNTS-00047691173 文學世界. 第四- 岩谷漣山 作.pdf",
+        "File:NLC404-01J002668-59754 漣農季刊 1936年1卷1期.pdf",
+        "File:Gamaksan Suspension Bridge.jpg",
+        "File:Gamaksan Suspension Bridge in Paju.jpg",
+        "File:Gamaksan Suspension Bridge in Paju South Korea.jpg",
+        "File:山書(九).djvu",
+        "File:定山堂詩集(十八).djvu",
+        "File:樊山集(三).djvu",
+        "File:山左金石志(十七).djvu",
+        "File:翁山詩外(二).djvu",
+        "File:泊鷗山房集(十三).djvu",
+        "File:山右石刻叢編(八).djvu",
+        "File:山右石刻叢編(十八).djvu",
+        "File:山右石刻叢編(三十五).djvu",
+        "File:樓山堂集(八).djvu",
+        "File:石笥山房集(十五).djvu",
+        "File:峴嶕山房詩集(三).djvu",
+        "File:泊鷗山房集(十六).djvu",
+        "File:小峴山人詩文集(十六).djvu",
+        "File:香蘇山館詩集(九).djvu",
+        "File:小峴山人詩文集(八).djvu",
+        "File:養默山房詩藁(五).djvu",
+        "File:山右石刻叢編(二十三).djvu",
+        "File:小峴山人詩文集(二).djvu",
+        "File:小峴山人詩文集(十).djvu",
+        "File:羅浮山志會編(十三).djvu",
+        "File:小峴山人詩文集(九).djvu",
+        "File:玉函山房輯佚書(六十九).djvu",
+        "File:玉函山房輯佚書(一百十七).djvu",
+        "File:NLC403-312001076719-113472 天臺山全志 ［後印年不詳］ 卷一十五.pdf",
+        "File:NLC403-312001076769-94910 大別山志 清同治13年(1874) 卷一十.pdf",
+        "File:CNTS-00129835197 엄州山人四部稿. 卷67-69, 文部.pdf",
+        "File:NLC403-312001072127-93592 虎邱山志 清乾隆32年(1767) 卷二十四.pdf",
+        "File:Ungye Falls, Gamaksan Mountain, Paju.jpg",
+        "File:NLC403-312001072127-93547 虎邱山志 清乾隆32年(1767) 卷一十八.pdf",
+        "File:CNTS-00129834199 修山集. 卷11-12, 東史本紀, 世家, 列傳, 東史年表, 表, 志.pdf",
+        "File:Ungye Falls Gamaksan Mountain Paju in South Korea.jpg",
+        "File:Ungye Falls Gamaksan Mountain, Paju 운계 폭포.jpg",
+        "File:Ungye Falls, Gamaksan Mountain, Paju in South Korea.jpg",
+        "File:雲左山房詩鈔(二).djvu",
+        "File:靈巖山人詩集(六).djvu",
+        "File:埽垢山房詩鈔(三).djvu",
+        "File:九公山房易問(一).djvu",
+        "File:叢書集成新編076.pdf",
+        "File:Ripple marks Tonbi yama in Futamachiya Miura Vertical.jpg",
+        "File:Wuxi Huishan Clay Figurines in Nanjing Museum.jpg"
+      ],
+      "continuation": {
+        "sroffset": 50,
+        "continue": "-||"
+      }
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=50&srsearch=%22Hillgrove%22%20%22Hong%20Kong%22",
+      "kind": "search",
+      "totalHits": 3,
+      "titles": [
+        "File:Hillgrove Village (Elegance Court) bus stop flag 09-06-2014.jpg",
+        "File:Hillgrove Village (Elegance Court) bus stop flag 12-09-2014.jpg",
+        "File:Proceedings of the Malacological Society of London (IA proceedingsofmal1141893295mala).pdf"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srsearch=intitle%3A%22Gold%20Coast%20Bay%22",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srsearch=intitle%3A%22%E9%BB%83%E9%87%91%E6%B5%B7%E7%81%A3%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srsearch=intitle%3A%22The%20Uppland%22",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srsearch=intitle%3A%22Hillgrove%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 136,
+      "titles": [
+        "File:32 Jamaica Street and 4 Hillgrove Street, Bristol - DSC 7395.jpg",
+        "File:Waveney Cottage, Hillgrove Lane, Hillgrove - geograph.org.uk - 7838896.jpg",
+        "File:Hill out of Hillgrove - geograph.org.uk - 1679659.jpg",
+        "File:Navant Hill south of Hillgrove - geograph.org.uk - 1734622.jpg",
+        "File:Hillgrove Road is under snow - geograph.org.uk - 5711567.jpg",
+        "File:Brunskills Road in Hillgrove.jpg",
+        "File:Nilgiri Mountain Railway-Hillgrove Railway Station-WUS05781.jpg",
+        "File:Hillgrove Covered Bridge new deck section 1.jpg",
+        "File:Hillgrove Street, Bristol - geograph.org.uk - 5450711.jpg",
+        "File:Approaching Hillgrove - geograph.org.uk - 6123765.jpg",
+        "File:Hillgrove Avenue, Mardy - geograph.org.uk - 5489656.jpg",
+        "File:Hillgrove Hall - geograph.org.uk - 7276211.jpg",
+        "File:Wheelwrights House, Hookham Lane, Hillgrove - geograph.org.uk - 7838881.jpg",
+        "File:Nilgiri Mountain Railway-Hillgrove Railway Station-WUS05744.jpg",
+        "File:Beverly Hills Hillgrove.jpg",
+        "File:Nilgiri Mountain Railway-Hillgrove Railway Station-WUS05768.jpg",
+        "File:The only road junction in the hamlet of Hillgrove - geograph.org.uk - 1734589.jpg",
+        "File:Nilgiri Mountain Railway-NMR X 37396 (Neela Kurinji)-Hillgrove Railway Station-WUS05773.jpg",
+        "File:Pine Gully Road viewed from Prices Road in Downside looking towards Hillgrove.jpg",
+        "File:Nilgiri Mountain Railway-NMR X 37396 (Neela Kurinji)-Hillgrove Railway Station-WUS05760.jpg",
+        "File:Abandoned farm house in Hillgrove (4).jpg",
+        "File:Victory Cottage, Hillgrove Lane, Hillgrove - geograph.org.uk - 7838863.jpg",
+        "File:Nilgiri Mountain Railway-Hillgrove Railway Station-WUS05763.jpg",
+        "File:Nilgiri Mountain Railway-Hillgrove Railway Station-WUS05783.jpg",
+        "File:53 Hillgrove St N, Bristol.jpg",
+        "File:Hillgrove school.JPG",
+        "File:Pine Gully Road viewed from Prices Road in Downside looking towards Hillgrove (1).jpg",
+        "File:Hillgrove Museum.jpg",
+        "File:Hillview, Hillgrove Lane, Northchapel - geograph.org.uk - 7838839.jpg",
+        "File:Footpath leaving Hillgrove Lane - geograph.org.uk - 6123813.jpg"
+      ],
+      "continuation": {
+        "sroffset": 30,
+        "continue": "-||"
+      }
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srsearch=intitle%3A%22%E6%BC%A3%E5%B1%B1%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srsearch=intitle%3A%22%E5%B8%9D%E5%BE%A1%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 4,
+      "titles": [
+        "File:清乾隆帝御诗碑 6945.jpg",
+        "File:清乾隆帝御诗碑 6946.jpg",
+        "File:清乾隆帝御诗碑 6944.jpg",
+        "File:栗枝渡・八幡神社、安徳帝御火葬場.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srsearch=incategory%3A%22OMA%20OMA%22%20-construction%20-promotion%20-promoters",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srsearch=%22Royale%22%20%22Tuen%20Mun%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 6,
+      "titles": [
+        "File:HK tram tour view Wan Chai Hennessy Road April 2021 SS2 02.jpg",
+        "File:Seacoast Royale Under Construction In November 2020.jpg",
+        "File:HK tram tour view Wan Chai Hennessy Road April 2021 SS2 01.jpg",
+        "File:HK TMD Bus B2 tour view from 元朗 Yuen Long to 屯門 Tuen Mun highway January 2025 R12S 03 Shell Petrol Station.jpg",
+        "File:HK TST 尖沙咀 Tsim Sha Tsui 彌敦道 132 Nathan Road 美麗華商場 MiraPlace February 2021 SS2 01.jpg",
+        "File:Kwun Tsing Road, Tuen Mun Road sign part 2 in August 2022.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22The%20Hillgrove%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 4,
+      "titles": [
+        "File:Mineral resources (1898) (14587444860).jpg",
+        "File:Mineral resources (1898) (14760780106).jpg",
+        "File:The Hillgrove, Bristol - geograph.org.uk - 4923293.jpg",
+        "File:Nilgiri Mountain Railway Steam Engine.JPG"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22%E6%BC%A3%E5%B1%B1%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Bayview%20Terrace%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 21,
+      "titles": [
+        "File:Bruce's Beach 3.jpg",
+        "File:Bruce's Beach.jpg",
+        "File:Bruce's Beach, Manhattan Beach, California.jpg",
+        "File:Bayview Terrace, Kirkcolm - geograph.org.uk - 3885870.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 27.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 30.jpg",
+        "File:2025-11-01 at 6.06.37 PM credit to Zohranman39, view of Bayview Terrace Milwaukee Wisconsin.png",
+        "File:Bayview Terrace during nighttime.jpg",
+        "File:Bayview Terrace during daytime.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 31.jpg",
+        "File:Claremont Baptist Church on Stirling Highway after Bayview Terrace in Claremont, Western Australia.JPG",
+        "File:Bayview Terrace, Kirkcolm - geograph.org.uk - 6997481.jpg",
+        "File:BayView Terrace from the east.jpg",
+        "File:Bulletin - New York State Museum (1905) (14759245336).jpg",
+        "File:StateLibQld 1 116444 Bayview Terrace, Clayfield, Brisbane, 1906.jpg",
+        "File:Bayview Terrace - geograph.org.uk - 590451.jpg",
+        "File:StateLibQld 2 75103 Bayview Terrace, Clayfield, Brisbane, 1908.jpg",
+        "File:Drabble's plaque.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 26.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 24.jpg"
+      ],
+      "continuation": {
+        "sroffset": 20,
+        "continue": "-||"
+      }
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Castle%20Peak%20Villas%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 4,
+      "titles": [
+        "File:Siu Lam BBQ Beach.jpg",
+        "File:Siu Lam viewed from the sea 02.jpg",
+        "File:Siu Lam Oveview 201406.jpg",
+        "File:Siu Lam viewed from the sea 01.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22The%20Castle%20Bay%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 9,
+      "titles": [
+        "File:Castle Bay Whaling Station cairn, February 2021 05.jpg",
+        "File:Castle Bay Whaling Station cairn, February 2021 02.jpg",
+        "File:Mansfeld, das Schloss Erker.jpg",
+        "File:Merseburg, das Schloss, Erker.jpg",
+        "File:Old fishing boat, Annalong - geograph.org.uk - 340791.jpg",
+        "File:Mansfeld, das Schloss, Erker.jpg",
+        "File:Castle Bay Whaling Station cairn, February 2021 01.jpg",
+        "File:Castle Bay Whaling Station cairn, February 2021 03.jpg",
+        "File:Castle Bay Whaling Station cairn, February 2021 04.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22%E9%9D%92%E9%BA%97%E7%81%A3%E5%88%A5%E5%A2%85%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Tsing%20Yung%20Terrace%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22%E9%9D%92%E6%A6%95%E8%87%BA%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Jade%20View%20Villa%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22%E7%BF%A0%E6%99%AF%E8%8A%B1%E5%9C%92%22%20%22Tuen%20Mun%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Spring%20Seaview%20Terrace%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22%E6%98%A5%E5%92%8C%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22%E6%A3%95%E6%9C%88%E7%81%A3%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Palm%20Beach%22%20%22Tuen%20Mun%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Villa%20Sapphire%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Aquamarine%20Garden%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 1,
+      "titles": [
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 32.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Crown%20By%20The%20Sea%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 2,
+      "titles": ["File:Crown By The Sea South.jpg", "File:Crown By The Sea.jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Jade%20Grove%22%20%22Hong%20Kong%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 2,
+      "titles": ["File:Jade Grove (blue sky).jpg", "File:Jade Grove.jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3AThe%20Royale%20(Hong%20Kong)",
+      "kind": "categorymembers",
+      "titles": [
+        "Category:Skypoint Royale, Tuen Mun 帝御 嵐天",
+        "File:Kwun Tsing Road, Tuen Mun Road sign part 2 in August 2022.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3AOMA%20OMA",
+      "kind": "categorymembers",
+      "titles": [
+        "File:HK CWB 銅鑼灣 Causeway Bay 軒尼詩道 Hennessy Road sidewalk product and service promoters salespeople October 2021 SS2 01.jpg",
+        "File:HK CWB 銅鑼灣 Causeway Bay 軒尼詩道 Hennessy Road sidewalk product and service promotion van October 2021 SS2 01.jpg",
+        "File:HK CWB 銅鑼灣 Causeway Bay 軒尼詩道 Hennessy Road sidewalk product and service promotion van October 2021 SS2 02.jpg",
+        "File:OMA OMA Removing Scaffold In November 2020.jpg",
+        "File:Oma Oma under construction in April 2020.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ABayview%20Terrace%2C%20Hong%20Kong%20%E7%A2%A7%E7%BF%A0%E8%8A%B1%E5%9C%92",
+      "kind": "categorymembers",
+      "titles": [
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 24.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 26.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 27.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 30.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 31.jpg",
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 32.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ACastle%20Peak%20Villas",
+      "kind": "categorymembers",
+      "titles": [
+        "File:Siu Lam BBQ Beach.jpg",
+        "File:Siu Lam Oveview 201406.jpg",
+        "File:Siu Lam viewed from the sea 01.jpg",
+        "File:Siu Lam viewed from the sea 02.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3AJade%20Grove",
+      "kind": "categorymembers",
+      "titles": ["File:Jade Grove (blue sky).jpg", "File:Jade Grove.jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ACrown%20By%20The%20Sea",
+      "kind": "categorymembers",
+      "titles": ["File:Crown By The Sea South.jpg", "File:Crown By The Sea.jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ASo%20Kwun%20Wat%20Road",
+      "kind": "categorymembers",
+      "titles": [
+        "Category:AD & FD POHL Mrs. Cheng Yam On Millennium School",
+        "Category:Aegean Coast, Hong Kong",
+        "Category:Avignon, Hong Kong",
+        "Category:Emerald Bay, So Kwun Wat",
+        "Category:Le Pont (Hong Kong)",
+        "Category:Napa, So Kwun Wat",
+        "Category:OMA OMA",
+        "Category:Shun Tak Fraternal Association Lee Kam Primary School",
+        "File:A.D.& F.D. of Pok Oi Hospital Mrs. Cheng Yam On Millennium School part 10 in August 2022.jpg",
+        "File:A.D.& F.D. of Pok Oi Hospital Mrs. Cheng Yam On Millennium School part 11 in August 2022.jpg",
+        "File:A.D.& F.D. of Pok Oi Hospital Mrs. Cheng Yam On Millennium School part 3 in August 2022.jpg",
+        "File:A.D.& F.D. of Pok Oi Hospital Mrs. Cheng Yam On Millennium School part 7 in August 2022.jpg",
+        "File:Avignon (Tower 1-5).JPG",
+        "File:HK minibus tour view 01 屯門 Tuen Mun 愛琴海岸 Aegean Coast Feb-2011.JPG",
+        "File:NAPA 05-09-2022.jpg",
+        "File:So Kwun Wat Road Road site in August 2021.jpg",
+        "File:Street sign at So Kwun Wat Road, Tuen Mun part 1 in August 2022.jpg",
+        "File:Street sign at So Kwun Wat Road, Tuen Mun part 2 in August 2022.jpg",
+        "File:The address of A.D.& F.D. of Pok Oi Hospital Mrs. Cheng Yam On Millennium School in August 2022.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ATsing%20Fat%20Lane",
+      "kind": "categorymembers",
+      "titles": ["Category:Jade Grove"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ATsing%20Yung%20Street",
+      "kind": "categorymembers",
+      "titles": [
+        "Category:Crown By The Sea",
+        "Category:Seaview Garden, Tuen Mun",
+        "File:Crown By The Sea.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3ATsing%20Tai%20Road",
+      "kind": "categorymembers",
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3AKwun%20Tsing%20Road",
+      "kind": "categorymembers",
+      "titles": [
+        "Category:Aegean Coast, Hong Kong",
+        "Category:Po Leung Kuk Women's Welfare Club (WD) Fung Lee Pui Yiu Primary School",
+        "File:Kwun Tsing Road Road site part 1 in August 2021.jpg",
+        "File:Kwun Tsing Road Road site part 3 in August 2021.jpg",
+        "File:Kwun Tsing Road, Tuen Mun part 1 in August 2022.jpg",
+        "File:Kwun Tsing Road, Tuen Mun part 2 in August 2022.jpg",
+        "File:Kwun Tsing Road, Tuen Mun Road sign part 1 in August 2022.jpg",
+        "File:Kwun Tsing Road, Tuen Mun Road sign part 2 in August 2022.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=categorymembers&cmlimit=500&cmtitle=Category%3APrivate%20housing%20estates%20in%20Tuen%20Mun%20District",
+      "kind": "categorymembers",
+      "titles": [
+        "Category:Private housing estates in Tuen Mun",
+        "Category:Aegean Coast, Hong Kong",
+        "Category:Aqua Blue (Hong Kong)",
+        "Category:Avignon, Hong Kong",
+        "Category:Beaulieu Peninsula",
+        "Category:Beneville, Hong Kong",
+        "Category:Botania Villa",
+        "Category:Brilliant Garden",
+        "Category:Castle Peak Villas",
+        "Category:Dragon Inn Court",
+        "Category:Eldo Court",
+        "Category:Emerald Bay, So Kwun Wat",
+        "Category:Hong Kong Gold Coast",
+        "Category:Grand Jeté, Hong Kong",
+        "Category:Jade Grove",
+        "Category:Kam Wah Garden",
+        "Category:Le Pont (Hong Kong)",
+        "Category:Marina Garden",
+        "Category:Murray Bay (Hong Kong)",
+        "Category:Napa, So Kwun Wat",
+        "Category:OMA By The Sea",
+        "Category:OMA OMA",
+        "Category:Parkland Villas",
+        "Category:Pearl Island Garden",
+        "Category:The Sherwood",
+        "Category:South Crest, Hong Kong",
+        "Category:The Bloomsway",
+        "Category:The Carmel, So Kwun Wat",
+        "Category:The Royale (Hong Kong)",
+        "Category:Trend Plaza",
+        "Category:Villa De Mer",
+        "Category:Villa Pinada"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22%E5%B8%9D%E5%BE%A1%E9%87%91%E7%81%A3%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 1,
+      "titles": ["File:Seacoast Royale Aerial view 202201.png"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22%E5%B8%9D%E5%BE%A1%E5%B5%90%E5%A4%A9%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 3,
+      "titles": [
+        "File:HK tram tour view Wan Chai Hennessy Road April 2021 SS2 02.jpg",
+        "File:HK tram tour view Wan Chai Hennessy Road April 2021 SS2 01.jpg",
+        "File:HK TST 尖沙咀 Tsim Sha Tsui 彌敦道 132 Nathan Road 美麗華商場 MiraPlace February 2021 SS2 01.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Starfront%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 21,
+      "titles": [
+        "File:SH2-54 in SHO palette.jpg",
+        "File:M15 with Integrated flux nebulae (IFN).jpg",
+        "File:NGC 253 - Sculptor.png",
+        "File:M39-Star-Cluster.png",
+        "File:Seagull Nebula (IC 2177) by Arnaud Geoffroy.jpg",
+        "File:Thor's Helmet Nebula (NGC 2359) by Arnaud Geoffroy.jpg",
+        "File:VdB 31 with 10 refractors (Nico Carver).jpg",
+        "File:ENebula.png",
+        "File:SH2-248 aka \"Jellyfish Nebula\" in Hubble Palette.jpg",
+        "File:M36-pinwheel-cluster.png",
+        "File:Squid Nebula (Ou4) and Flying Bat Nebula (Sh2-129) by Arnaud Geoffroy.jpg",
+        "File:Four-Clusters.jpg",
+        "File:NGC7000 in Hubble (SHO) palette.jpg",
+        "File:Ngc6888-hoo-bright.png",
+        "File:M3 (Messier 3) in broadband.jpg",
+        "File:Seahorse Nebula (Barnard 150) by Arnaud Geoffroy.jpg",
+        "File:WR-134.png",
+        "File:SH2 199 in Hubble (SHO) palette.jpg",
+        "File:Flower Bug NGC 7129.png",
+        "File:Dolphin Head Nebula (Sh2-308) by Arnaud Geoffroy.jpg"
+      ],
+      "continuation": {
+        "sroffset": 20,
+        "continue": "-||"
+      }
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Hill%20Grove%22%20%22Hong%20Kong%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Tsing%20Fat%20Lane%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22%E6%B5%B7%E6%BE%84%E8%BB%92%22%20%22%E9%9D%92%E7%99%BC%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22Gold%20Coast%20Bay%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srsearch=%22%E9%BB%83%E9%87%91%E6%B5%B7%E7%81%A3%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 1,
+      "titles": ["File:Golden Bay Holiday Hotel.jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E8%A7%80%E6%B5%B7%E5%88%A5%E5%A2%85%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E8%92%99%E5%9C%B0%E5%8D%A1%E7%BE%85%E5%88%A5%E5%A2%85%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E9%9B%85%E5%BE%B7%E8%8B%91%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E6%84%9B%E7%90%B4%E7%81%A3%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22OMA%20by%20the%20Sea%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 4,
+      "titles": [
+        "File:OMA By The Sea under construction in May 2020.jpg",
+        "File:HK SYP 西環 Sai Ying Pun 德輔道西 Des Voeux Road West 14pm June 2020 SS2 21.jpg",
+        "File:OMA By The Sea Under Construction In November 2020.jpg",
+        "File:HK Tuen Mun 掃管笏 So Kwun Wat 青山公路 欖段 168 Castle Peak Road Tai Lam 永泰亞洲 WingTaiAsia construction site The Carmel October 2018 IX2 02.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E8%9F%A0%E9%BE%8D%E5%8D%8A%E5%B3%B6%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 1,
+      "titles": ["File:Pearl Island, Tsing Lung Road (Hong Kong).jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E5%B8%9D%E7%81%A3%E5%B1%85%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E5%98%89%E5%BE%A1%E9%BE%8D%E5%BA%AD%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E7%95%94%E6%B5%B7%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 47,
+      "titles": [
+        "File:Neues Schloß Hainburg.png",
+        "File:Hainburg an der Donau (1).JPG",
+        "File:Hainburg an der Donau - Hauptplatz.JPG",
+        "File:Hainburg from Stopfenreuth 02.jpg",
+        "File:20231226.Donau in Niederösterreich.-027.jpg",
+        "File:20231226.Donau in Niederösterreich.-011.jpg",
+        "File:Wegkreuz bei Hainburg an der Donau 01.jpg",
+        "File:Nationalpark Donau-Auen, Hainburg an der Donau (4).jpg",
+        "File:Map ill. devin.JPG",
+        "File:20231226.Donau in Niederösterreich.-025.jpg",
+        "File:Nationalpark Donau-Auen, Hainburg an der Donau (7).jpg",
+        "File:Bildschirmfoto 2024-04-24 um 16.30.53.png",
+        "File:Donau-Rundwanderweg bei Hainburg 01.jpg",
+        "File:Austria11Hainburg20.JPG",
+        "File:Donau-Rundwanderweg bei Hainburg 02.jpg",
+        "File:Nationalpark Donau-Auen, Hainburg an der Donau (2).jpg",
+        "File:20231226.Donau in Niederösterreich.-016.jpg",
+        "File:Nationalpark Donau-Auen, Hainburg an der Donau (9).jpg",
+        "File:20231226.Donau in Niederösterreich.-013.jpg",
+        "File:Burgruine Heimenburg über Hainburg an der Donau 01.jpg",
+        "File:Hainburg an der Donau - Infotafel.JPG",
+        "File:Nationalpark Donau-Auen, Hainburg an der Donau (3).jpg",
+        "File:20231226.Donau in Niederösterreich.-019.jpg",
+        "File:Hainburg an der Donau im Bezirk BL.PNG",
+        "File:Nationalpark Donau-Auen, Hainburg an der Donau (8).jpg",
+        "File:Paragleiten bei Hainburg, Österreich.jpg",
+        "File:20231226.Donau in Niederösterreich.-012.jpg",
+        "File:20231226.Donau in Niederösterreich.-031.jpg",
+        "File:Nationalpark Donau-Auen, Hainburg an der Donau (5).jpg",
+        "File:20231226.Donau in Niederösterreich.-018.jpg"
+      ],
+      "continuation": {
+        "sroffset": 30,
+        "continue": "-||"
+      }
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E7%91%9C%E7%BF%A0%E5%9C%92%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E6%98%9F%E5%B2%B8%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 12,
+      "titles": [
+        "File:Stars by the Harbour 201705.jpg",
+        "File:Hung Hom Bay Buildings view 2017.jpg",
+        "File:Stars by the Harbour Garden view 201705.jpg",
+        "File:HK showflat Hung Hom FV 維港 星岸 Stars by the Harbour T2 28A January 2022 DSC.jpg",
+        "File:HK showflat Hung Hom FV 維港 星岸 Stars by the Harbour January 2022 DSC 06.jpg",
+        "File:Stars by the Harbour (better contrast).jpg",
+        "File:HK showflat Hung Hom FV 維港 星岸 Stars by the Harbour January 2022 DSC 05.jpg",
+        "File:HK showflat Hung Hom FV 維港 星岸 Stars by the Harbour T5 28A January 2022 DSC.jpg",
+        "File:Stars by the Harbour.JPG",
+        "File:HK showflat Hung Hom FV 維港 星岸 Stars by the Harbour January 2022 DSC 04.jpg",
+        "File:Stars by the Harbour under construction in April 2015.JPG",
+        "File:HK showflat Hung Hom FV 維港 星岸 Stars by the Harbour January 2022 DSC 01.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E6%B5%B7%E6%BF%A4%E8%8A%B1%E5%9C%92%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 1,
+      "titles": ["File:The address of Long Beach Gardens in January 2023.jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E9%BA%97%E6%B5%B7%E5%88%A5%E5%A2%85%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E5%9D%87%E5%AF%8C%E8%8A%B1%E5%9C%92%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E5%AF%8C%E5%AE%89%E6%96%B0%E9%82%A8%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E5%AE%B9%E9%BE%8D%E5%B1%85%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E5%B1%AF%E9%96%80%E9%96%A3%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E9%9B%85%E7%BF%A0%E8%8B%91%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E9%BE%8D%E7%8F%A0%E5%B3%B6%E5%B9%B3%E6%88%BF%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E9%BE%8D%E7%8F%A0%E8%8A%B1%E5%9C%92%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=30&srprop=timestamp&srsearch=%22%E7%8F%80%E5%B1%85%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 2,
+      "titles": ["File:Peak Castle (revised).jpg", "File:Peak Castle.jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Vista%20Del%20Mar%22%20%22Hong%20Kong%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Monte%20Carlo%20Villas%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Faraday%20House%22%20%22Hong%20Kong%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22The%20Aegean%22%20%22Tuen%20Mun%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Beaulieu%20Peninsula%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 1,
+      "titles": ["File:Pearl Island, Tsing Lung Road (Hong Kong).jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Royal%20Cove%22%20%22Hong%20Kong%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Royal%20Dragon%20Villa%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Seaside%20Castle%22%20%22Hong%20Kong%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Peridot%20Court%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Deauville%22%20%22Hong%20Kong%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Long%20Beach%20Gardens%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 1,
+      "titles": ["File:The address of Long Beach Gardens in January 2023.jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Riviera%22%20%22Ting%20Kau%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Both%20Wealth%20Garden%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Fiona%20Garden%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 1,
+      "titles": ["File:Chrysanthemum Fiona 1zz.jpg"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Dragon%20Inn%20Court%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 1,
+      "titles": ["File:Yung lung.JPG"],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Tuen%20Mun%20Court%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Elegant%20Villa%22%20%22Hong%20Kong%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Pearl%20Island%20Bungalow%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&srprop=timestamp&srsearch=%22Pearl%20Garden%22%20%22Tuen%20Mun%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 0,
+      "titles": [],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&sroffset=20&srprop=timestamp&srsearch=%22Bayview%20Terrace%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 21,
+      "titles": [
+        "File:HK 屯門 Tuen Mun 青山公路 Peak Castle Road 青山灣段 Peak Castle Bay Nov 2019 SS2 32.jpg"
+      ],
+      "continuation": null
+    },
+    {
+      "url": "https://commons.wikimedia.org/w/api.php?action=query&format=json&list=search&srnamespace=6&srlimit=20&sroffset=20&srprop=timestamp&srsearch=%22Starfront%22%20filetype%3Abitmap",
+      "kind": "search",
+      "totalHits": 21,
+      "titles": ["File:M10 and light IFN in broadband.jpg"],
+      "continuation": null
+    }
+  ],
+  "openverseAndFlickrEvidence": [
+    {
+      "slug": "yu-chui-yuen",
+      "nameZh": "瑜翠園",
+      "nameEn": "Peridot Court",
+      "address": "瑜翠街9號",
+      "result": "no_new_qualified_source",
+      "acceptedSources": [],
+      "observedImageUrl": null,
+      "imageResponseConfirmed": false,
+      "pixelVisualInspection": false,
+      "newResearch": [
+        {
+          "source": "Openverse public images API",
+          "query": "Peridot Court",
+          "url": "https://api.openverse.org/v1/images/?q=Peridot%20Court",
+          "scope": "all default API image sources",
+          "httpStatus": 200,
+          "resultCount": 0,
+          "evidence": "Exa fetched the public Django REST API read surface; response explicitly showed result_count 0 and empty results."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "瑜翠園",
+          "url": "https://api.openverse.org/v1/images/?q=%E7%91%9C%E7%BF%A0%E5%9C%92&license_type=commercial&page_size=20",
+          "scope": "all image sources, commercial-use filter",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT",
+          "evidence": "No result-count inference made from timeout."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Peridot Court\"",
+          "url": "https://www.flickr.com/search/?text=%22Peridot%20Court%22&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed query."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "瑜翠園",
+          "url": "https://www.flickr.com/search/?text=%E7%91%9C%E7%BF%A0%E5%9C%92&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed Chinese query."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Yu Chui Street\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Yu%20Chui%20Street%22&license_type=commercial&page_size=20",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT"
+        }
+      ],
+      "reason": "No new primary exact-estate photo with verified reusable license, author, capture year and remote image URL was obtained.",
+      "limitations": [
+        "This bounded pass does not establish that no freely licensed photograph exists.",
+        "No image pixels or native browser inspection obtained."
+      ]
+    },
+    {
+      "slug": "tuen-mun-court",
+      "nameZh": "屯門閣",
+      "nameEn": "Tuen Mun Court",
+      "address": "青榕街2號",
+      "result": "no_new_qualified_source",
+      "acceptedSources": [],
+      "observedImageUrl": null,
+      "imageResponseConfirmed": false,
+      "pixelVisualInspection": false,
+      "newResearch": [
+        {
+          "source": "Openverse public images API",
+          "query": "\"Tuen Mun Court\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Tuen%20Mun%20Court%22&license_type=commercial&source=flickr&page_size=20",
+          "scope": "Flickr, commercial-use filter",
+          "httpStatus": 200,
+          "resultCount": 0,
+          "evidence": "Exa fetched the public Django REST API read surface; response explicitly showed result_count 0 and empty results."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "屯門閣",
+          "url": "https://api.openverse.org/v1/images/?q=%E5%B1%AF%E9%96%80%E9%96%A3&license_type=commercial&page_size=20",
+          "scope": "all image sources, commercial-use filter",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT",
+          "evidence": "No result-count inference made from timeout."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Tuen Mun Court\"",
+          "url": "https://www.flickr.com/search/?text=%22Tuen%20Mun%20Court%22&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed query."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "屯門閣",
+          "url": "https://www.flickr.com/search/?text=%E5%B1%AF%E9%96%80%E9%96%A3&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed Chinese query."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Tsing Yung\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Tsing%20Yung%22&license_type=commercial&page_size=20",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT"
+        }
+      ],
+      "reason": "No new primary exact-estate photo with verified reusable license, author, capture year and remote image URL was obtained.",
+      "limitations": [
+        "This bounded pass does not establish that no freely licensed photograph exists.",
+        "No image pixels or native browser inspection obtained."
+      ]
+    },
+    {
+      "slug": "elegant-villa",
+      "nameZh": "雅翠苑",
+      "nameEn": "Elegant Villa",
+      "address": "青榕街4號",
+      "result": "no_new_qualified_source",
+      "acceptedSources": [],
+      "observedImageUrl": null,
+      "imageResponseConfirmed": false,
+      "pixelVisualInspection": false,
+      "newResearch": [
+        {
+          "source": "Openverse public images API",
+          "query": "\"Elegant Villa\" Hong Kong",
+          "url": "https://api.openverse.org/v1/images/?q=%22Elegant%20Villa%22%20Hong%20Kong&license_type=commercial&source=flickr&page_size=20",
+          "scope": "Flickr, commercial-use filter",
+          "httpStatus": 200,
+          "resultCount": 0,
+          "evidence": "Exa fetched the public Django REST API read surface; response explicitly showed result_count 0 and empty results."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "雅翠苑",
+          "url": "https://api.openverse.org/v1/images/?q=%E9%9B%85%E7%BF%A0%E8%8B%91&license_type=commercial&page_size=20",
+          "scope": "all image sources, commercial-use filter",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT",
+          "evidence": "No result-count inference made from timeout."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Elegant Villa\" Hong Kong",
+          "url": "https://www.flickr.com/search/?text=%22Elegant%20Villa%22%20Hong%20Kong&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed query."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "雅翠苑",
+          "url": "https://www.flickr.com/search/?text=%E9%9B%85%E7%BF%A0%E8%8B%91&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed Chinese query."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Tsing Yung\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Tsing%20Yung%22&license_type=commercial&page_size=20",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT"
+        }
+      ],
+      "reason": "No new primary exact-estate photo with verified reusable license, author, capture year and remote image URL was obtained.",
+      "limitations": [
+        "This bounded pass does not establish that no freely licensed photograph exists.",
+        "No image pixels or native browser inspection obtained."
+      ]
+    },
+    {
+      "slug": "nga-tak-yuen",
+      "nameZh": "雅德苑",
+      "nameEn": "Faraday House",
+      "address": "青榕街6號",
+      "result": "no_new_qualified_source",
+      "acceptedSources": [],
+      "observedImageUrl": null,
+      "imageResponseConfirmed": false,
+      "pixelVisualInspection": false,
+      "newResearch": [
+        {
+          "source": "Openverse public images API",
+          "query": "\"Faraday House\" Hong Kong",
+          "url": "https://api.openverse.org/v1/images/?q=%22Faraday%20House%22%20Hong%20Kong&license_type=commercial&source=flickr&page_size=20",
+          "scope": "Flickr, commercial-use filter",
+          "httpStatus": 200,
+          "resultCount": 0,
+          "evidence": "Exa fetched the public Django REST API read surface; response explicitly showed result_count 0 and empty results."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "雅德苑",
+          "url": "https://api.openverse.org/v1/images/?q=%E9%9B%85%E5%BE%B7%E8%8B%91&license_type=commercial&page_size=20",
+          "scope": "all image sources, commercial-use filter",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT",
+          "evidence": "No result-count inference made from timeout."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Faraday House\" Hong Kong",
+          "url": "https://www.flickr.com/search/?text=%22Faraday%20House%22%20Hong%20Kong&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed query."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "雅德苑",
+          "url": "https://www.flickr.com/search/?text=%E9%9B%85%E5%BE%B7%E8%8B%91&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed Chinese query."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Tsing Yung\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Tsing%20Yung%22&license_type=commercial&page_size=20",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT"
+        }
+      ],
+      "reason": "No new primary exact-estate photo with verified reusable license, author, capture year and remote image URL was obtained.",
+      "limitations": [
+        "This bounded pass does not establish that no freely licensed photograph exists.",
+        "No image pixels or native browser inspection obtained."
+      ]
+    },
+    {
+      "slug": "oi-kam-waan",
+      "nameZh": "愛琴灣",
+      "nameEn": "The Aegean",
+      "address": "青發街2號",
+      "result": "no_new_qualified_source",
+      "acceptedSources": [],
+      "observedImageUrl": null,
+      "imageResponseConfirmed": false,
+      "pixelVisualInspection": false,
+      "newResearch": [
+        {
+          "source": "Openverse public images API",
+          "query": "\"The Aegean\" Hong Kong",
+          "url": "https://api.openverse.org/v1/images/?q=%22The%20Aegean%22%20Hong%20Kong&license_type=commercial&source=flickr&page_size=20",
+          "scope": "Flickr, commercial-use filter",
+          "httpStatus": 200,
+          "resultCount": 0,
+          "evidence": "Exa fetched the public Django REST API read surface; response explicitly showed result_count 0 and empty results."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "愛琴灣",
+          "url": "https://api.openverse.org/v1/images/?q=%E6%84%9B%E7%90%B4%E7%81%A3&license_type=commercial&page_size=20",
+          "scope": "all image sources, commercial-use filter",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT",
+          "evidence": "No result-count inference made from timeout."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"The Aegean\" Hong Kong",
+          "url": "https://www.flickr.com/search/?text=%22The%20Aegean%22%20Hong%20Kong&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed query."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "愛琴灣",
+          "url": "https://www.flickr.com/search/?text=%E6%84%9B%E7%90%B4%E7%81%A3&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed Chinese query."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Tsing Fat Street\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Tsing%20Fat%20Street%22&license_type=commercial&page_size=20",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT"
+        }
+      ],
+      "reason": "No new primary exact-estate photo with verified reusable license, author, capture year and remote image URL was obtained.",
+      "limitations": [
+        "This bounded pass does not establish that no freely licensed photograph exists.",
+        "No image pixels or native browser inspection obtained."
+      ]
+    },
+    {
+      "slug": "monte-carlo-villas",
+      "nameZh": "蒙地卡羅別墅",
+      "nameEn": "Monte Carlo Villas",
+      "address": "青山公路青山灣段25號",
+      "result": "no_new_qualified_source",
+      "acceptedSources": [],
+      "observedImageUrl": null,
+      "imageResponseConfirmed": false,
+      "pixelVisualInspection": false,
+      "newResearch": [
+        {
+          "source": "Openverse public images API",
+          "query": "\"Monte Carlo Villas\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Monte%20Carlo%20Villas%22&license_type=commercial&source=flickr&page_size=20",
+          "scope": "Flickr, commercial-use filter",
+          "httpStatus": 200,
+          "resultCount": 0,
+          "evidence": "Exa fetched the public Django REST API read surface; response explicitly showed result_count 0 and empty results."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "蒙地卡羅別墅",
+          "url": "https://api.openverse.org/v1/images/?q=%E8%92%99%E5%9C%B0%E5%8D%A1%E7%BE%85%E5%88%A5%E5%A2%85&license_type=commercial&page_size=20",
+          "scope": "all image sources, commercial-use filter",
+          "status": "http_200_zero_results",
+          "httpStatus": 200,
+          "resultCount": 0
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Monte Carlo Villas\"",
+          "url": "https://www.flickr.com/search/?text=%22Monte%20Carlo%20Villas%22&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed query."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "蒙地卡羅別墅",
+          "url": "https://www.flickr.com/search/?text=%E8%92%99%E5%9C%B0%E5%8D%A1%E7%BE%85%E5%88%A5%E5%A2%85&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed Chinese query."
+        }
+      ],
+      "reason": "No new primary exact-estate photo with verified reusable license, author, capture year and remote image URL was obtained.",
+      "limitations": [
+        "This bounded pass does not establish that no freely licensed photograph exists.",
+        "No image pixels or native browser inspection obtained."
+      ]
+    },
+    {
+      "slug": "pun-lung-bun-do",
+      "nameZh": "蟠龍半島",
+      "nameEn": "Beaulieu Peninsula",
+      "address": "瑜翠街2號",
+      "result": "no_new_qualified_source",
+      "acceptedSources": [],
+      "observedImageUrl": null,
+      "imageResponseConfirmed": false,
+      "pixelVisualInspection": false,
+      "newResearch": [
+        {
+          "source": "Openverse public images API",
+          "query": "\"Beaulieu Peninsula\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Beaulieu%20Peninsula%22&license_type=commercial&source=flickr&page_size=20",
+          "scope": "Flickr, commercial-use filter",
+          "httpStatus": 200,
+          "resultCount": 0,
+          "evidence": "Exa fetched the public Django REST API read surface; response explicitly showed result_count 0 and empty results."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "蟠龍半島",
+          "url": "https://api.openverse.org/v1/images/?q=%E8%9F%A0%E9%BE%8D%E5%8D%8A%E5%B3%B6&license_type=commercial&page_size=20",
+          "scope": "all image sources, commercial-use filter",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT",
+          "evidence": "No result-count inference made from timeout."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Beaulieu Peninsula\"",
+          "url": "https://www.flickr.com/search/?text=%22Beaulieu%20Peninsula%22&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "page_loaded_without_extractable_photo_records",
+          "evidence": "Extracted content only says Everyone’s photos; neither photo detail URLs nor license records are provided. This is an extraction limitation, not a zero-result assertion."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "蟠龍半島",
+          "url": "https://www.flickr.com/search/?text=%E8%9F%A0%E9%BE%8D%E5%8D%8A%E5%B3%B6&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "page_loaded_without_extractable_photo_records",
+          "evidence": "Extracted content only says Everyone’s photos. Photo records could not be examined."
+        }
+      ],
+      "reason": "One new Flickr tag-level lead was found; it fails primary photo/license/date/image-URL and substantial exact-subject verification, so it is not recommended.",
+      "limitations": [
+        "This bounded pass does not establish that no freely licensed photograph exists.",
+        "No image pixels or native browser inspection obtained."
+      ],
+      "newLead": {
+        "source": "Flickr public tag pages",
+        "tagUrls": [
+          "https://www.flickr.com/photos/tags/beaulieupeninsula/",
+          "https://www.flickr.com/photos/tags/%E8%9F%A0%E9%BE%8D%E5%8D%8A%E5%B3%B6/"
+        ],
+        "displayedTitle": "hong_kong_airport_20240420173738",
+        "displayedPhotographer": "inunami",
+        "primaryPhotoPageUrl": null,
+        "observedImageUrl": null,
+        "captureDate": null,
+        "captureYear": null,
+        "license": null,
+        "licenseUrl": null,
+        "status": "not_recommended_insufficient_primary_evidence",
+        "reason": "Both precise Beaulieu Peninsula tag pages expose this title/photographer, but neither extracted a primary photo detail URL, capture date, license or reusable image URL. The title identifies airport-oriented imagery, so the tag alone also does not prove a substantial dedicated estate exterior. Encoded filename digits were not treated as verified capture-date evidence.",
+        "followups": [
+          "Exa exact-title/photographer search did not locate a matching primary photo detail page.",
+          "Web connector opening the primary tag page returned not accessible.",
+          "Flickr public RSS feed returned CRAWL_UNEXPECTED_CONTENT_TYPE."
+        ],
+        "imageResponseConfirmed": false,
+        "pixelVisualInspection": false
+      }
+    },
+    {
+      "slug": "royal-cove-tower",
+      "nameZh": "帝灣居",
+      "nameEn": "Royal Cove / Royal Cove Tower",
+      "address": "嘉和里山路2號",
+      "result": "no_new_qualified_source",
+      "acceptedSources": [],
+      "observedImageUrl": null,
+      "imageResponseConfirmed": false,
+      "pixelVisualInspection": false,
+      "newResearch": [
+        {
+          "source": "Openverse public images API",
+          "query": "\"Royal Cove\" Hong Kong",
+          "url": "https://api.openverse.org/v1/images/?q=%22Royal%20Cove%22%20Hong%20Kong&license_type=commercial&source=flickr&page_size=20",
+          "scope": "Flickr, commercial-use filter",
+          "httpStatus": 200,
+          "resultCount": 0,
+          "evidence": "Exa fetched the public Django REST API read surface; response explicitly showed result_count 0 and empty results."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "帝灣居",
+          "url": "https://api.openverse.org/v1/images/?q=%E5%B8%9D%E7%81%A3%E5%B1%85&license_type=commercial&page_size=20",
+          "scope": "all image sources, commercial-use filter",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT",
+          "evidence": "No result-count inference made from timeout."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Royal Cove\" Hong Kong",
+          "url": "https://www.flickr.com/search/?text=%22Royal%20Cove%22%20Hong%20Kong&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed query."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "帝灣居",
+          "url": "https://www.flickr.com/search/?text=%E5%B8%9D%E7%81%A3%E5%B1%85&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed Chinese query."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Ka Wo Lei\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Ka%20Wo%20Lei%22&license_type=commercial&page_size=20",
+          "httpStatus": 200,
+          "resultCount": 0
+        }
+      ],
+      "reason": "No new primary exact-estate photo with verified reusable license, author, capture year and remote image URL was obtained.",
+      "limitations": [
+        "This bounded pass does not establish that no freely licensed photograph exists.",
+        "No image pixels or native browser inspection obtained."
+      ]
+    },
+    {
+      "slug": "pearl-garden",
+      "nameZh": "龍珠花園",
+      "nameEn": "Pearl Garden",
+      "address": "青龍路7號",
+      "result": "no_new_qualified_source",
+      "acceptedSources": [],
+      "observedImageUrl": null,
+      "imageResponseConfirmed": false,
+      "pixelVisualInspection": false,
+      "newResearch": [
+        {
+          "source": "Openverse public images API",
+          "query": "\"Pearl Garden\" Hong Kong",
+          "url": "https://api.openverse.org/v1/images/?q=%22Pearl%20Garden%22%20Hong%20Kong&license_type=commercial&source=flickr&page_size=20",
+          "scope": "Flickr, commercial-use filter",
+          "httpStatus": 200,
+          "resultCount": 0,
+          "evidence": "Exa fetched the public Django REST API read surface; response explicitly showed result_count 0 and empty results."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "龍珠花園",
+          "url": "https://api.openverse.org/v1/images/?q=%E9%BE%8D%E7%8F%A0%E8%8A%B1%E5%9C%92&license_type=commercial&page_size=20",
+          "scope": "all image sources, commercial-use filter",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT",
+          "evidence": "No result-count inference made from timeout."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Pearl Garden\" Hong Kong",
+          "url": "https://www.flickr.com/search/?text=%22Pearl%20Garden%22%20Hong%20Kong&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed query."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "龍珠花園",
+          "url": "https://www.flickr.com/search/?text=%E9%BE%8D%E7%8F%A0%E8%8A%B1%E5%9C%92&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed Chinese query."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Pearl Garden\" Tuen Mun",
+          "url": "https://api.openverse.org/v1/images/?q=%22Pearl%20Garden%22%20Tuen%20Mun&license_type=commercial&page_size=20",
+          "httpStatus": 200,
+          "resultCount": 0
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Tsing Lung Road\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Tsing%20Lung%20Road%22&license_type=commercial&page_size=20",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT"
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Pearl Island\" Hong Kong",
+          "url": "https://api.openverse.org/v1/images/?q=%22Pearl%20Island%22%20Hong%20Kong&license_type=commercial&page_size=20",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT"
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Pearl Island\" Hong Kong",
+          "url": "https://www.flickr.com/search/?text=%22Pearl%20Island%22%20Hong%20Kong&license=4%2C5%2C9%2C10",
+          "status": "page_loaded_without_extractable_photo_records",
+          "evidence": "Only Everyone’s photos heading exposed; no primary photo record or license metadata. No result-count assertion."
+        }
+      ],
+      "reason": "No new primary exact-estate photo with verified reusable license, author, capture year and remote image URL was obtained.",
+      "limitations": [
+        "This bounded pass does not establish that no freely licensed photograph exists.",
+        "No image pixels or native browser inspection obtained."
+      ],
+      "identityCaution": "No.7 Pearl Garden must not be substituted by No.11 Pearl Island Garden or No.9 Pearl Island Bungalow."
+    },
+    {
+      "slug": "pearl-island-bungalow",
+      "nameZh": "龍珠島平房",
+      "nameEn": "Pearl Island Bungalow / 龍珠島別墅",
+      "address": "青龍路9號",
+      "result": "no_new_qualified_source",
+      "acceptedSources": [],
+      "observedImageUrl": null,
+      "imageResponseConfirmed": false,
+      "pixelVisualInspection": false,
+      "newResearch": [
+        {
+          "source": "Openverse public images API",
+          "query": "\"Pearl Island Bungalow\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Pearl%20Island%20Bungalow%22&license_type=commercial&source=flickr&page_size=20",
+          "scope": "Flickr, commercial-use filter",
+          "httpStatus": 200,
+          "resultCount": 0,
+          "evidence": "Exa fetched the public Django REST API read surface; response explicitly showed result_count 0 and empty results."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "龍珠島平房",
+          "url": "https://api.openverse.org/v1/images/?q=%E9%BE%8D%E7%8F%A0%E5%B3%B6%E5%B9%B3%E6%88%BF&license_type=commercial&page_size=20",
+          "scope": "all image sources, commercial-use filter",
+          "status": "http_200_zero_results",
+          "httpStatus": 200,
+          "resultCount": 0
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Pearl Island Bungalow\"",
+          "url": "https://www.flickr.com/search/?text=%22Pearl%20Island%20Bungalow%22&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed query."
+        },
+        {
+          "source": "Flickr public search",
+          "query": "龍珠島平房",
+          "url": "https://www.flickr.com/search/?text=%E9%BE%8D%E7%8F%A0%E5%B3%B6%E5%B9%B3%E6%88%BF&license=4%2C5%2C9%2C10",
+          "licenseFilterIds": [4, 5, 9, 10],
+          "status": "explicit_no_matches",
+          "evidence": "Flickr primary search page explicitly reports no matches for the displayed Chinese query."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Tsing Lung Road\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Tsing%20Lung%20Road%22&license_type=commercial&page_size=20",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT"
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Pearl Island\" Hong Kong",
+          "url": "https://api.openverse.org/v1/images/?q=%22Pearl%20Island%22%20Hong%20Kong&license_type=commercial&page_size=20",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT"
+        },
+        {
+          "source": "Flickr public search",
+          "query": "\"Pearl Island\" Hong Kong",
+          "url": "https://www.flickr.com/search/?text=%22Pearl%20Island%22%20Hong%20Kong&license=4%2C5%2C9%2C10",
+          "status": "page_loaded_without_extractable_photo_records",
+          "evidence": "Only Everyone’s photos heading exposed; no primary photo record or license metadata. No result-count assertion."
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "龍珠島別墅",
+          "url": "https://api.openverse.org/v1/images/?q=%E9%BE%8D%E7%8F%A0%E5%B3%B6%E5%88%A5%E5%A2%85&license_type=commercial&page_size=20",
+          "httpStatus": 200,
+          "resultCount": 0
+        },
+        {
+          "source": "Flickr public search",
+          "query": "龍珠島別墅",
+          "url": "https://www.flickr.com/search/?text=%E9%BE%8D%E7%8F%A0%E5%B3%B6%E5%88%A5%E5%A2%85&license=4%2C5%2C9%2C10",
+          "status": "explicit_no_matches"
+        },
+        {
+          "source": "Openverse public images API",
+          "query": "\"Pearl Island Villas\"",
+          "url": "https://api.openverse.org/v1/images/?q=%22Pearl%20Island%20Villas%22&license_type=commercial&page_size=20",
+          "status": "access_timeout",
+          "error": "CRAWL_LIVECRAWL_TIMEOUT"
+        }
+      ],
+      "reason": "No new primary exact-estate photo with verified reusable license, author, capture year and remote image URL was obtained.",
+      "limitations": [
+        "This bounded pass does not establish that no freely licensed photograph exists.",
+        "No image pixels or native browser inspection obtained."
+      ],
+      "identityCaution": "No.9 Pearl Island Bungalow must remain distinct from the already-added No.11 Pearl Island Garden and No.7 Pearl Garden; no ambiguous island photograph reproposed."
+    }
+  ],
+  "otherOpenSourceResearch": [
+    {
+      "source": "web search",
+      "queries": [
+        "site:commons.wikimedia.org \"Peridot\" \"Mapillary\"",
+        "site:commons.wikimedia.org \"Tsing Yung\" \"Mapillary\"",
+        "site:commons.wikimedia.org \"Tsing Fat\" \"Mapillary\"",
+        "site:commons.wikimedia.org \"Ka Wo Lei\" \"Mapillary\""
+      ],
+      "result": "Empty search results"
+    },
+    {
+      "source": "Flickr tag read",
+      "url": "https://www.flickr.com/photos/tags/pearlislandhongkong/",
+      "result": "No extractable photo records; not used as proof of zero matches."
+    },
+    {
+      "source": "Flickr public feed",
+      "url": "https://www.flickr.com/services/feeds/photos_public.gne?tags=peridotcourt&format=json",
+      "result": "CRAWL_UNEXPECTED_CONTENT_TYPE"
+    },
+    {
+      "source": "Openverse web search UI",
+      "url": "https://openverse.org/search/image?q=%22Peridot%20Court%22",
+      "result": "No matching image records; page prompts to try another query."
+    }
+  ],
+  "originalGrantChecks": [
+    {
+      "url": "https://www.youtube.com/watch?v=282uy6t__9M&hl=en",
+      "result": "Title, Brian 帶你飛 channel and transcript were exposed; no license grant."
+    },
+    {
+      "url": "https://www.youtube.com/embed/282uy6t__9M?hl=en",
+      "result": "Title/author/transcript only; no license grant."
+    },
+    {
+      "url": "https://www.youtube.com/oembed?url=https%3A%2F%2Fwww.youtube.com%2Fwatch%3Fv%3D282uy6t__9M&format=json",
+      "result": "Title, author and thumbnail metadata only; no license field."
+    },
+    {
+      "url": "https://web.archive.org/cdx/search/cdx?url=www.youtube.com%2Fwatch%3Fv%3D282uy6t__9M&output=json&filter=statuscode:200&collapse=digest",
+      "result": "Watch-page captures exist for June 2022, April 2023 and June 2026; capture existence does not prove a license."
+    },
+    {
+      "url": "https://web.archive.org/web/20220601161420/https://www.youtube.com/watch?v=282uy6t__9M&gl=US&hl=en",
+      "result": "Accessible extraction exposed title/author only; no license. Raw replay fetch failed. Original grant remains unverified."
+    }
+  ],
+  "verification": {
+    "pixelInspection": false,
+    "nativeBrowserInspection": false,
+    "newHeroSelected": false,
+    "registryOrRuntimeFilesModified": false,
+    "NeonAccessOrMigration": false
+  },
+  "estates": [
+    {
+      "slug": "tai-yu",
+      "nameZh": "帝御",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "wong-gam-hoi-waan",
+      "nameZh": "黃金海灣",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "oma-oma",
+      "nameZh": "Oma Oma",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "lin-shan",
+      "nameZh": "漣山",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "bayview-terrace",
+      "nameZh": "碧翠花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "castle-peak-villas",
+      "nameZh": "青山別墅",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "ching-lai-waan-villas",
+      "nameZh": "青麗灣別墅",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "ching-yung-toi",
+      "nameZh": "青榕臺",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "chui-king-garden",
+      "nameZh": "翠景花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "chun-wo-sea-view-garden",
+      "nameZh": "春和海景花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "chung-yuet-waan",
+      "nameZh": "棕月灣",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "hoi-ching-hin",
+      "nameZh": "海澄軒",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "hoi-wai-garden",
+      "nameZh": "海慧花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "hoi-yu",
+      "nameZh": "海譽",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "kwan-lun",
+      "nameZh": "琨崙",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "kwun-hoi-villas",
+      "nameZh": "觀海別墅",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "monte-carlo-villas",
+      "nameZh": "蒙地卡羅別墅",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": true
+    },
+    {
+      "slug": "nga-tak-yuen",
+      "nameZh": "雅德苑",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": true
+    },
+    {
+      "slug": "oi-kam-waan",
+      "nameZh": "愛琴灣",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": true
+    },
+    {
+      "slug": "oma-by-the-sea",
+      "nameZh": "OMA by the Sea",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "pun-lung-bun-do",
+      "nameZh": "蟠龍半島",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": true
+    },
+    {
+      "slug": "royal-cove-tower",
+      "nameZh": "帝灣居",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": true
+    },
+    {
+      "slug": "royal-dragon-villa",
+      "nameZh": "嘉御龍庭",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "seaside-castle",
+      "nameZh": "畔海",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "yu-chui-yuen",
+      "nameZh": "瑜翠園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": true
+    },
+    {
+      "slug": "deauville",
+      "nameZh": "星岸",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "long-beach-gardens",
+      "nameZh": "海濤花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "riviera",
+      "nameZh": "麗海別墅",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "both-wealth-garden",
+      "nameZh": "均富花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "fiona-garden",
+      "nameZh": "富安新邨",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "dragon-inn-court",
+      "nameZh": "容龍居",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    },
+    {
+      "slug": "tuen-mun-court",
+      "nameZh": "屯門閣",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": true
+    },
+    {
+      "slug": "elegant-villa",
+      "nameZh": "雅翠苑",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": true
+    },
+    {
+      "slug": "pearl-island-bungalow",
+      "nameZh": "龍珠島平房",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": true
+    },
+    {
+      "slug": "pearl-garden",
+      "nameZh": "龍珠花園",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": true
+    },
+    {
+      "slug": "peak-castle",
+      "nameZh": "珀居",
+      "before": "missing-exterior",
+      "after": "missing-exterior",
+      "newSourcesSelected": [],
+      "priorExclusions": "Preserved; see round2 source/rejection ledger.",
+      "newCommonsPass": "Included in the 36-estate live API discovery pass. Raw query URLs and result titles are retained above.",
+      "additionalOpenSourcePass": false
+    }
+  ]
+}

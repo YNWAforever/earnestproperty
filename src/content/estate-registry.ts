@@ -97,6 +97,18 @@ export type EstateRegistryEntry = {
   hasPage: boolean;
   /** Card photo under `public/`, an existing agency listing image URL, or null. */
   photo: string | null;
+  /** Explicit review of the card photo; unclassified/listing photos cannot be estate heroes. */
+  photoKind?: "exterior" | "panorama" | "listing";
+  /** More precise subject, e.g. the supplied Sea Crest Villa photo covers phase 3 only. */
+  photoLabel?: string;
+  /** Separately licensed estate exterior; card/listing provenance remains unchanged. */
+  exteriorPhoto?: {
+    src: string;
+    label: string;
+    credit: string;
+    sourceUrl: string;
+    licenseUrl: string;
+  };
   /**
    * Attribution line for `photo`, required whenever the photo is CC-licensed
    * (Wikimedia Commons etc.) rather than client-supplied. Omitted (undefined)
@@ -148,6 +160,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     branchId: "lido",
     hasPage: true,
     photo: "/estates/bellagio.jpg",
+    photoKind: "exterior",
     homepageDistrict: "深井",
     parentEstateSlug: null,
     heroEyebrow: "深井屋苑資料",
@@ -157,6 +170,13 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "hong-kong-garden",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/Hong_Kong_Garden.jpg/1280px-Hong_Kong_Garden.jpg",
+      label: "屋苑外觀（2016年）",
+      credit: "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Hong_Kong_Garden.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "豪景花園",
     nameEn: "Hong Kong Garden",
     aliases: [
@@ -195,6 +215,8 @@ export const estateRegistry: EstateRegistryEntry[] = [
     // TODO(client): the supplied 浪翠園 photo is 600×357 and captioned 三期 only -- too small
     // for a card at 2× DPR. Awaiting a higher-resolution estate-level shot.
     photo: "/estates/sea-crest-villa.jpg",
+    photoKind: "exterior",
+    photoLabel: "屋苑外觀（第三期）",
     homepageDistrict: "深井",
     parentEstateSlug: null,
     heroEyebrow: "深井屋苑資料",
@@ -212,6 +234,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     branchId: "lido",
     hasPage: true,
     photo: "/estates/lido-garden.jpg",
+    photoKind: "exterior",
     homepageDistrict: "深井",
     parentEstateSlug: null,
     heroEyebrow: "深井屋苑資料",
@@ -230,6 +253,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     branchId: "rhine",
     hasPage: true,
     photo: "/estates/rhine-garden.jpg",
+    photoKind: "exterior",
     homepageDistrict: "深井",
     parentEstateSlug: null,
     heroEyebrow: "深井屋苑資料",
@@ -266,6 +290,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/hoi-wan-hin.jpg",
+    photoKind: "exterior",
     photoCredit: "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
     homepageDistrict: "深井",
     parentEstateSlug: null,
@@ -290,6 +315,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/tai-wah-hin.jpg",
+    photoKind: "exterior",
     photoCredit: "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
     homepageDistrict: "深井",
     parentEstateSlug: "sea-crest-villa",
@@ -307,6 +333,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/hoi-wan-toi.jpg",
+    photoKind: "exterior",
     photoCredit: "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
     homepageDistrict: "深井",
     parentEstateSlug: null,
@@ -324,6 +351,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/chun-wong-kui.jpg",
+    photoKind: "exterior",
     photoCredit: "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
     homepageDistrict: "深井",
     parentEstateSlug: null,
@@ -369,6 +397,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/mun-ming-shan.jpg",
+    photoKind: "exterior",
     photoCredit: "Fotointheworld / Wikimedia Commons, CC BY 4.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
@@ -391,6 +420,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/wong-gam-hoi-ngon.jpg",
+    photoKind: "exterior",
     photoCredit: "Minghong / Wikimedia Commons, CC BY-SA 4.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
@@ -408,6 +438,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/oi-kam-hoi-ngon.jpg",
+    photoKind: "exterior",
     photoCredit: "Wpcpey / Wikimedia Commons, CC BY 3.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
@@ -486,6 +517,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/sing-tai.jpg",
+    photoKind: "exterior",
     photoCredit: "Wpcpey / Wikimedia Commons, CC BY 3.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
@@ -503,6 +535,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/seong-yuen.jpg",
+    photoKind: "exterior",
     photoCredit: "Prosperity Horizons / Wikimedia Commons, CC BY-SA 4.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
@@ -525,6 +558,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/the-carmel.jpg",
+    photoKind: "exterior",
     photoCredit: "Prosperity Horizons / Wikimedia Commons, CC BY-SA 4.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
@@ -570,6 +604,13 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "long-tou-waan",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/Aqua_Blue_29-09-2026(1).jpg/1280px-Aqua_Blue_29-09-2026(1).jpg",
+      label: "屋苑外觀（2026年）",
+      credit: "LN9267 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Aqua_Blue_29-09-2026(1).jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "浪濤灣",
     nameEn: "Aqua Blue",
     aliases: ["浪濤灣", "Aqua Blue", "AQUA BLUE"],
@@ -603,6 +644,7 @@ export const estateRegistry: EstateRegistryEntry[] = [
     corridorSegment: null,
     hasPage: true,
     photo: "/estates/tai-tou-waan.jpg",
+    photoKind: "exterior",
     photoCredit: "Kaihin0812 / Wikimedia Commons, CC BY-SA 3.0",
     homepageDistrict: "青山公路",
     parentEstateSlug: null,
@@ -760,6 +802,14 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "fei-yeung",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/78/2024%E5%B9%B47%E6%9C%88-%E9%A3%9B%E6%8F%9A.jpg/1280px-2024%E5%B9%B47%E6%9C%88-%E9%A3%9B%E6%8F%9A.jpg",
+      label: "屋苑外觀（2024年）",
+      credit: "建園春秋 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl:
+        "https://commons.wikimedia.org/wiki/File:2024%E5%B9%B47%E6%9C%88-%E9%A3%9B%E6%8F%9A.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "飛揚",
     nameEn: "Grand Jeté",
     aliases: ["飛揚", "Grand Jeté", "飛揚 1期", "飛揚1期", "飛揚 2期", "飛揚2期"],
@@ -795,6 +845,14 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "hoi-king-garden",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/Seaview_Garden_%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92_in_January_2023.jpg/1280px-Seaview_Garden_%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92_in_January_2023.jpg",
+      label: "屋苑外觀（2023年）",
+      credit: "姒姓賢寧 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl:
+        "https://commons.wikimedia.org/wiki/File:Seaview_Garden_%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92_in_January_2023.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "海景花園",
     nameEn: "Seaview Garden",
     aliases: ["海景花園", "Seaview Garden"],
@@ -882,6 +940,13 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "lung-chu-island-garden",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/ce/Pearl_Island_Apartment_20150617.jpg/1280px-Pearl_Island_Apartment_20150617.jpg",
+      label: "屋苑外觀（2015年）",
+      credit: "Wikipedia user -Wpcpey (Wing1990hk) / Wikimedia Commons, CC BY 3.0",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Pearl_Island_Apartment_20150617.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by/3.0/",
+    },
     nameZh: "龍珠島花園",
     nameEn: "Pearl Island Garden",
     aliases: ["龍珠島花園", "Pearl Island Garden"],
@@ -918,6 +983,13 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "nam-ngon",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/16/South_Crest_in_January_2023.jpg/960px-South_Crest_in_January_2023.jpg",
+      label: "屋苑外觀（2023年）",
+      credit: "姒姓賢寧 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:South_Crest_in_January_2023.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "南岸",
     nameEn: "South Crest",
     aliases: ["南岸", "South Crest"],
@@ -936,6 +1008,13 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "napa",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/NAPA_05-09-2022.jpg/1280px-NAPA_05-09-2022.jpg",
+      label: "屋苑外觀（2022年）",
+      credit: "LN9267 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:NAPA_05-09-2022.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "NAPA",
     nameEn: "NAPA",
     aliases: ["NAPA", "NAPA 大廈", "NAPA大廈"],
@@ -971,6 +1050,13 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "ocean-camino",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/53/Emerald_Bay_Tower3.jpg/1280px-Emerald_Bay_Tower3.jpg",
+      label: "屋苑外觀（2021年，第3座）",
+      credit: "Johnkoo002 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:Emerald_Bay_Tower3.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "緹岸",
     nameEn: "Ocean Camino",
     aliases: [
@@ -1040,6 +1126,14 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "palm-cove",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Palm_Cove%2C_Castle_Peak_Bay%2C_Tuen_Mun_part_four_in_March_2021.jpg/960px-Palm_Cove%2C_Castle_Peak_Bay%2C_Tuen_Mun_part_four_in_March_2021.jpg",
+      label: "屋苑外觀（2021年）",
+      credit: "姒姓賢寧 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl:
+        "https://commons.wikimedia.org/wiki/File:Palm_Cove,_Castle_Peak_Bay,_Tuen_Mun_part_four_in_March_2021.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "翠濤居",
     nameEn: "Palm Cove",
     aliases: ["翠濤居", "Palm Cove", "PALM COVE"],
@@ -1152,6 +1246,13 @@ export const estateRegistry: EstateRegistryEntry[] = [
   },
   {
     slug: "l-aquatique",
+    exteriorPhoto: {
+      src: "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/L%27Aquatique_in_January_2023.jpg/960px-L%27Aquatique_in_January_2023.jpg",
+      label: "屋苑外觀（2023年）",
+      credit: "姒姓賢寧 / Wikimedia Commons, CC BY-SA 4.0",
+      sourceUrl: "https://commons.wikimedia.org/wiki/File:L'Aquatique_in_January_2023.jpg",
+      licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+    },
     nameZh: "逸璟．龍灣",
     nameEn: "L'Aquatique",
     aliases: ["逸璟．龍灣", "L'Aquatique", "逸璟龍灣", "逸璟‧龍灣"],
