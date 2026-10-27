@@ -850,9 +850,14 @@ const HOMEPAGE_INVENTORY_CTE = `homepage_inventory_run AS (
     AND r.captured_at <= now() + interval '5 minutes'
 )`;
 
-// Company reference plus deal is the authority, including owner-published rows
-// that intentionally have no numeric-ad-ID source link.
+// The capture supplies membership by company reference plus deal. Only a row
+// with an active same-deal agent540 link may represent that paid placement.
 const HOMEPAGE_INVENTORY_MATCH_SQL = `p.deal_type = 'sale'
+    AND EXISTS (
+      SELECT 1 FROM property_source_links paid_link
+      WHERE paid_link.property_id = p.id AND paid_link.deal_type = p.deal_type
+        AND paid_link.source = '28hse_agent_540' AND paid_link.status = 'active'
+    )
     AND i.agency_ref = COALESCE(NULLIF(p.canonical_property_no, ''), (
       SELECT ref.public_listing_no FROM property_public_members ref WHERE ref.property_id = p.id
     ))`;
