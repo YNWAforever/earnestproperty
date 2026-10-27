@@ -1,0 +1,1042 @@
+{
+  "auditedAt": "2026-10-27T02:24:35.888Z",
+  "baseSha": "c61e6443b45df23d5323f43af29360489b5c7dcb",
+  "method": "Read-only production HTML via Vercel connector for all 62 published estates. Corridor membership uses approvedPresentationEstateSlugs (61), not corridorSegment (which excludes most published corridor estates). No database client or writes.",
+  "estates": [
+    {
+      "slug": "bellagio",
+      "nameZh": "碧堤半島",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/bellagio.jpg",
+      "alt": "碧堤半島 屋苑／放盤參考照片",
+      "caption": "屋苑參考照片",
+      "ogImage": "https://www.earnestproperty.com/estates/bellagio.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/bellagio.jpg",
+        "label": "屋苑外觀"
+      }
+    },
+    {
+      "slug": "hong-kong-garden",
+      "nameZh": "豪景花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/d/8/d/214eb89f4f6ef0769eb9a028719fca40.jpeg",
+      "alt": "豪景花園 屋苑／放盤參考照片",
+      "caption": "本行放盤參考照片，並非屋苑全景。",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/d/8/d/214eb89f4f6ef0769eb9a028719fca40.jpeg",
+      "baselineSelection": "database-fallback",
+      "after": {
+        "status": "new-licensed-exterior",
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/Hong_Kong_Garden.jpg/1280px-Hong_Kong_Garden.jpg",
+        "label": "屋苑外觀（2016年）",
+        "credit": "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Hong_Kong_Garden.jpg",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      }
+    },
+    {
+      "slug": "sea-crest-villa",
+      "nameZh": "浪翠園",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/sea-crest-villa.jpg",
+      "alt": "浪翠園 屋苑／放盤參考照片",
+      "caption": "屋苑參考照片",
+      "ogImage": "https://www.earnestproperty.com/estates/sea-crest-villa.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/sea-crest-villa.jpg",
+        "label": "屋苑外觀（第三期）"
+      }
+    },
+    {
+      "slug": "lido-garden",
+      "nameZh": "麗都花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/lido-garden.jpg",
+      "alt": "麗都花園 屋苑／放盤參考照片",
+      "caption": "屋苑參考照片",
+      "ogImage": "https://www.earnestproperty.com/estates/lido-garden.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/lido-garden.jpg",
+        "label": "屋苑外觀"
+      }
+    },
+    {
+      "slug": "rhine-garden",
+      "nameZh": "海韻花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/rhine-garden.jpg",
+      "alt": "海韻花園 屋苑／放盤參考照片",
+      "caption": "屋苑參考照片",
+      "ogImage": "https://www.earnestproperty.com/estates/rhine-garden.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/rhine-garden.jpg",
+        "label": "屋苑外觀"
+      }
+    },
+    {
+      "slug": "hoi-wan-hin",
+      "nameZh": "海雲軒",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/hoi-wan-hin.jpg",
+      "alt": "海雲軒 屋苑／放盤參考照片",
+      "caption": "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
+      "ogImage": "https://www.earnestproperty.com/estates/hoi-wan-hin.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/hoi-wan-hin.jpg",
+        "label": "屋苑外觀",
+        "credit": "Exploringlife / Wikimedia Commons, CC BY-SA 4.0"
+      }
+    },
+    {
+      "slug": "tai-wah-hin",
+      "nameZh": "帝華軒",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/tai-wah-hin.jpg",
+      "alt": "帝華軒 屋苑／放盤參考照片",
+      "caption": "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
+      "ogImage": "https://www.earnestproperty.com/estates/tai-wah-hin.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/tai-wah-hin.jpg",
+        "label": "屋苑外觀",
+        "credit": "Exploringlife / Wikimedia Commons, CC BY-SA 4.0"
+      }
+    },
+    {
+      "slug": "hoi-wan-toi",
+      "nameZh": "海韻臺",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/hoi-wan-toi.jpg",
+      "alt": "海韻臺 屋苑／放盤參考照片",
+      "caption": "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
+      "ogImage": "https://www.earnestproperty.com/estates/hoi-wan-toi.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/hoi-wan-toi.jpg",
+        "label": "屋苑外觀",
+        "credit": "Exploringlife / Wikimedia Commons, CC BY-SA 4.0"
+      }
+    },
+    {
+      "slug": "chun-wong-kui",
+      "nameZh": "縉皇居",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/chun-wong-kui.jpg",
+      "alt": "縉皇居 屋苑／放盤參考照片",
+      "caption": "Exploringlife / Wikimedia Commons, CC BY-SA 4.0",
+      "ogImage": "https://www.earnestproperty.com/estates/chun-wong-kui.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/chun-wong-kui.jpg",
+        "label": "屋苑外觀",
+        "credit": "Exploringlife / Wikimedia Commons, CC BY-SA 4.0"
+      }
+    },
+    {
+      "slug": "lung-tang-kok",
+      "nameZh": "龍騰閣",
+      "corridor": false,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/1/f/2/4e6f531a5bbe13869fb5ab7ea99e093f.jpg",
+      "alt": "龍騰閣 屋苑／放盤參考照片",
+      "caption": "本行放盤參考照片，並非屋苑全景。",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/1/f/2/4e6f531a5bbe13869fb5ab7ea99e093f.jpg",
+      "baselineSelection": "database-fallback",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "mun-ming-shan",
+      "nameZh": "滿名山",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/mun-ming-shan.jpg",
+      "alt": "滿名山 屋苑／放盤參考照片",
+      "caption": "Fotointheworld / Wikimedia Commons, CC BY 4.0",
+      "ogImage": "https://www.earnestproperty.com/estates/mun-ming-shan.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/mun-ming-shan.jpg",
+        "label": "屋苑外觀",
+        "credit": "Fotointheworld / Wikimedia Commons, CC BY 4.0"
+      }
+    },
+    {
+      "slug": "wong-gam-hoi-ngon",
+      "nameZh": "香港黃金海岸",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/wong-gam-hoi-ngon.jpg",
+      "alt": "香港黃金海岸 屋苑／放盤參考照片",
+      "caption": "Minghong / Wikimedia Commons, CC BY-SA 4.0",
+      "ogImage": "https://www.earnestproperty.com/estates/wong-gam-hoi-ngon.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/wong-gam-hoi-ngon.jpg",
+        "label": "屋苑外觀",
+        "credit": "Minghong / Wikimedia Commons, CC BY-SA 4.0"
+      }
+    },
+    {
+      "slug": "oi-kam-hoi-ngon",
+      "nameZh": "愛琴海岸",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/oi-kam-hoi-ngon.jpg",
+      "alt": "愛琴海岸 屋苑／放盤參考照片",
+      "caption": "Wpcpey / Wikimedia Commons, CC BY 3.0",
+      "ogImage": "https://www.earnestproperty.com/estates/oi-kam-hoi-ngon.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/oi-kam-hoi-ngon.jpg",
+        "label": "屋苑外觀",
+        "credit": "Wpcpey / Wikimedia Commons, CC BY 3.0"
+      }
+    },
+    {
+      "slug": "tai-yu",
+      "nameZh": "帝御",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/8/9/6/166339b8a3cd0eea20d865de1a260077.jpg",
+      "alt": "帝御 屋苑／放盤參考照片",
+      "caption": "本行放盤參考照片，並非屋苑全景。",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/8/9/6/166339b8a3cd0eea20d865de1a260077.jpg",
+      "baselineSelection": "database-fallback",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "wong-gam-hoi-waan",
+      "nameZh": "黃金海灣",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/d/9/7/5eaa86002ce967180b0bda4c9ffe0598.jpg",
+      "alt": "黃金海灣 屋苑／放盤參考照片",
+      "caption": "本行放盤參考照片，並非屋苑全景。",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/d/9/7/5eaa86002ce967180b0bda4c9ffe0598.jpg",
+      "baselineSelection": "database-fallback",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "sing-tai",
+      "nameZh": "星堤",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/sing-tai.jpg",
+      "alt": "星堤 屋苑／放盤參考照片",
+      "caption": "Wpcpey / Wikimedia Commons, CC BY 3.0",
+      "ogImage": "https://www.earnestproperty.com/estates/sing-tai.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/sing-tai.jpg",
+        "label": "屋苑外觀",
+        "credit": "Wpcpey / Wikimedia Commons, CC BY 3.0"
+      }
+    },
+    {
+      "slug": "seong-yuen",
+      "nameZh": "上源",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/seong-yuen.jpg",
+      "alt": "上源 屋苑／放盤參考照片",
+      "caption": "Prosperity Horizons / Wikimedia Commons, CC BY-SA 4.0",
+      "ogImage": "https://www.earnestproperty.com/estates/seong-yuen.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/seong-yuen.jpg",
+        "label": "屋苑外觀",
+        "credit": "Prosperity Horizons / Wikimedia Commons, CC BY-SA 4.0"
+      }
+    },
+    {
+      "slug": "the-carmel",
+      "nameZh": "The Carmel",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/the-carmel.jpg",
+      "alt": "The Carmel 屋苑／放盤參考照片",
+      "caption": "Prosperity Horizons / Wikimedia Commons, CC BY-SA 4.0",
+      "ogImage": "https://www.earnestproperty.com/estates/the-carmel.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/the-carmel.jpg",
+        "label": "屋苑外觀",
+        "credit": "Prosperity Horizons / Wikimedia Commons, CC BY-SA 4.0"
+      }
+    },
+    {
+      "slug": "oma-oma",
+      "nameZh": "Oma Oma",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/7/8/2/c05220a0357783a76fe74502f41bb75c.jpg",
+      "alt": "Oma Oma 屋苑／放盤參考照片",
+      "caption": "本行放盤參考照片，並非屋苑全景。",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/7/8/2/c05220a0357783a76fe74502f41bb75c.jpg",
+      "baselineSelection": "database-fallback",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "lin-shan",
+      "nameZh": "漣山",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2025/1/f/c/46a488bf382012252e9d415be22964db.jpg",
+      "alt": "漣山 屋苑／放盤參考照片",
+      "caption": "本行放盤參考照片，並非屋苑全景。",
+      "ogImage": "https://imgs.property.hk/largePhotos/2025/1/f/c/46a488bf382012252e9d415be22964db.jpg",
+      "baselineSelection": "database-fallback",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "long-tou-waan",
+      "nameZh": "浪濤灣",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/1/8/5/3a0dcbcaf499ddc14fef6e78d55b1334.jpg",
+      "alt": "浪濤灣 屋苑／放盤參考照片",
+      "caption": "本行放盤參考照片，並非屋苑全景。",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/1/8/5/3a0dcbcaf499ddc14fef6e78d55b1334.jpg",
+      "baselineSelection": "database-fallback",
+      "after": {
+        "status": "new-licensed-exterior",
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/63/Aqua_Blue_29-09-2026(1).jpg/1280px-Aqua_Blue_29-09-2026(1).jpg",
+        "label": "屋苑外觀（2026年）",
+        "credit": "LN9267 / Wikimedia Commons, CC BY-SA 4.0",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Aqua_Blue_29-09-2026(1).jpg",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      }
+    },
+    {
+      "slug": "tai-tou-waan",
+      "nameZh": "帝濤灣",
+      "corridor": true,
+      "status": 200,
+      "hero": "/estates/tai-tou-waan.jpg",
+      "alt": "帝濤灣 屋苑／放盤參考照片",
+      "caption": "Kaihin0812 / Wikimedia Commons, CC BY-SA 3.0",
+      "ogImage": "https://www.earnestproperty.com/estates/tai-tou-waan.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "retained-curated-exterior",
+        "src": "/estates/tai-tou-waan.jpg",
+        "label": "屋苑外觀",
+        "credit": "Kaihin0812 / Wikimedia Commons, CC BY-SA 3.0"
+      }
+    },
+    {
+      "slug": "bayview-terrace",
+      "nameZh": "碧翠花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/5/f/8/58bf4c9fa5c25874c54c4ffe0e70d341.jpg",
+      "alt": "碧翠花園 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/5/f/8/58bf4c9fa5c25874c54c4ffe0e70d341.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "castle-peak-villas",
+      "nameZh": "青山別墅",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/38/384abf198c6ca47ef656ca788e1976edacc32c1082a7a9e8ab8270c8d2091128.jpg",
+      "alt": "青山別墅 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/38/384abf198c6ca47ef656ca788e1976edacc32c1082a7a9e8ab8270c8d2091128.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "ching-lai-waan-villas",
+      "nameZh": "青麗灣別墅",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/35/35b60726094f0c3abcbc1d21e9554d2390a13dc80950e5d7b8a635dadf8b289d.jpg",
+      "alt": "青麗灣別墅 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/35/35b60726094f0c3abcbc1d21e9554d2390a13dc80950e5d7b8a635dadf8b289d.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "ching-yung-toi",
+      "nameZh": "青榕臺",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/b4/b4f12661f6db2c1cccdd354f8a32f1ee64cd257ba270dabf5065756bf8a88155.jpg",
+      "alt": "青榕臺 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/b4/b4f12661f6db2c1cccdd354f8a32f1ee64cd257ba270dabf5065756bf8a88155.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "chui-king-garden",
+      "nameZh": "翠景花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1edce3beba410ed109e4fb4d0db5551f46f50df57e56a9c9eb163772c9750243.webp",
+      "alt": "翠景花園 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1edce3beba410ed109e4fb4d0db5551f46f50df57e56a9c9eb163772c9750243.webp",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "chun-wo-sea-view-garden",
+      "nameZh": "春和海景花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/3d/3dab39f1fedbe804e074e8d35d439f2172895f10d37e89a222b30af49a4c7a85.jpg",
+      "alt": "春和海景花園 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/3d/3dab39f1fedbe804e074e8d35d439f2172895f10d37e89a222b30af49a4c7a85.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "chung-yuet-waan",
+      "nameZh": "棕月灣",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/0e/0e34d2bf93186ff756e2db1fbbde1ece2a36f6a1cfac0994fe9c67472a23fb1b.webp",
+      "alt": "棕月灣 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/0e/0e34d2bf93186ff756e2db1fbbde1ece2a36f6a1cfac0994fe9c67472a23fb1b.webp",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "fei-yeung",
+      "nameZh": "飛揚",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/b/f/c/e8f252c0a4992f4c2192d8e4459b43a8.jpg",
+      "alt": "飛揚 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/b/f/c/e8f252c0a4992f4c2192d8e4459b43a8.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "new-licensed-exterior",
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/78/2024%E5%B9%B47%E6%9C%88-%E9%A3%9B%E6%8F%9A.jpg/1280px-2024%E5%B9%B47%E6%9C%88-%E9%A3%9B%E6%8F%9A.jpg",
+        "label": "屋苑外觀（2024年）",
+        "credit": "建園春秋 / Wikimedia Commons, CC BY-SA 4.0",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:2024%E5%B9%B47%E6%9C%88-%E9%A3%9B%E6%8F%9A.jpg",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      }
+    },
+    {
+      "slug": "hoi-ching-hin",
+      "nameZh": "海澄軒",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1b/1b335c3abf6400edd5f2561e9ad05fb3d18553c173a397a718712b057f500d80.webp",
+      "alt": "海澄軒 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1b/1b335c3abf6400edd5f2561e9ad05fb3d18553c173a397a718712b057f500d80.webp",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "hoi-king-garden",
+      "nameZh": "海景花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/f/8/5/08afcca7aaada5af73483caa275d1fab.jpg",
+      "alt": "海景花園 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/f/8/5/08afcca7aaada5af73483caa275d1fab.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "new-licensed-exterior",
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/Seaview_Garden_%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92_in_January_2023.jpg/1280px-Seaview_Garden_%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92_in_January_2023.jpg",
+        "label": "屋苑外觀（2023年）",
+        "credit": "姒姓賢寧 / Wikimedia Commons, CC BY-SA 4.0",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:Seaview_Garden_%E6%B5%B7%E6%99%AF%E8%8A%B1%E5%9C%92_in_January_2023.jpg",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      }
+    },
+    {
+      "slug": "hoi-wai-garden",
+      "nameZh": "海慧花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d1/d17aaef525ccba8aef3715c2d34cf13a655aa203e295814b72c7bf0070307166.jpg",
+      "alt": "海慧花園 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d1/d17aaef525ccba8aef3715c2d34cf13a655aa203e295814b72c7bf0070307166.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "hoi-yu",
+      "nameZh": "海譽",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae65106225cd33e3cba9bd939a30e2f5e1972ab8f793112753fbed9c0355d94c.webp",
+      "alt": "海譽 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae65106225cd33e3cba9bd939a30e2f5e1972ab8f793112753fbed9c0355d94c.webp",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "kwan-lun",
+      "nameZh": "琨崙",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/b/5/1/464f55ec15fb07fa1daa36fad11b8d07.jpeg",
+      "alt": "琨崙 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/b/5/1/464f55ec15fb07fa1daa36fad11b8d07.jpeg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "kwun-hoi-villas",
+      "nameZh": "觀海別墅",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/b/b/0/70a74c8ec7bd8c429dc7f4c59e963c7c.jpg",
+      "alt": "觀海別墅 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/b/b/0/70a74c8ec7bd8c429dc7f4c59e963c7c.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "lung-chu-island-garden",
+      "nameZh": "龍珠島花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8e/8ebd6372f460076ae63aaf5e630aae6081ed36b7ec724ad4a7907b06155a2861.jpg",
+      "alt": "龍珠島花園 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8e/8ebd6372f460076ae63aaf5e630aae6081ed36b7ec724ad4a7907b06155a2861.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "monte-carlo-villas",
+      "nameZh": "蒙地卡羅別墅",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1ebc954d2ced6db1cff3b7fd69d1eef380216bbf85e717e22b1ce828019139e2.webp",
+      "alt": "蒙地卡羅別墅 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/1e/1ebc954d2ced6db1cff3b7fd69d1eef380216bbf85e717e22b1ce828019139e2.webp",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "nam-ngon",
+      "nameZh": "南岸",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/04/04d8c87b1df833e08daf623c83d49617d34e3e3488192af9a11e5d0ef553209f.jpg",
+      "alt": "南岸 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/04/04d8c87b1df833e08daf623c83d49617d34e3e3488192af9a11e5d0ef553209f.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "napa",
+      "nameZh": "NAPA",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/8/2/9/7c6b63e09c39928784f20d761c23bd89.jpg",
+      "alt": "NAPA 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/8/2/9/7c6b63e09c39928784f20d761c23bd89.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "new-licensed-exterior",
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/23/NAPA_05-09-2022.jpg/1280px-NAPA_05-09-2022.jpg",
+        "label": "屋苑外觀（2022年）",
+        "credit": "LN9267 / Wikimedia Commons, CC BY-SA 4.0",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:NAPA_05-09-2022.jpg",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      }
+    },
+    {
+      "slug": "nga-tak-yuen",
+      "nameZh": "雅德苑",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/59/5992dd4bc265744fd9e4d96156c41241afc9c4daf5c09f67a29af9fb643732f8.jpg",
+      "alt": "雅德苑 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/59/5992dd4bc265744fd9e4d96156c41241afc9c4daf5c09f67a29af9fb643732f8.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "ocean-camino",
+      "nameZh": "緹岸",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/5d/5d85da6a8de8c28c54b5e2b36d3cbf06119908de5d0ddbfc64915afcf7f407b1.jpg",
+      "alt": "緹岸 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/5d/5d85da6a8de8c28c54b5e2b36d3cbf06119908de5d0ddbfc64915afcf7f407b1.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "oi-kam-waan",
+      "nameZh": "愛琴灣",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/d/a/9/d118a89a3ac63d2afa96c9b06b05a0f3.jpg",
+      "alt": "愛琴灣 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/d/a/9/d118a89a3ac63d2afa96c9b06b05a0f3.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "oma-by-the-sea",
+      "nameZh": "OMA by the Sea",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/78/7889533d3eea8d8dea6718bc2c140466d853544aeee4f6868eca2953a0d4cd75.jpg",
+      "alt": "OMA by the Sea 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/78/7889533d3eea8d8dea6718bc2c140466d853544aeee4f6868eca2953a0d4cd75.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "palm-cove",
+      "nameZh": "翠濤居",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8f/8f628dbfe5852a4d770602ea64a9f46751534a19aade4ee06cc48db414e20f81.jpg",
+      "alt": "翠濤居 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/8f/8f628dbfe5852a4d770602ea64a9f46751534a19aade4ee06cc48db414e20f81.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "pun-lung-bun-do",
+      "nameZh": "蟠龍半島",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae8688aeef547cba5a65a0574fc829f5136abab059a9fac3973ccd382d9a9cb3.jpg",
+      "alt": "蟠龍半島 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/ae/ae8688aeef547cba5a65a0574fc829f5136abab059a9fac3973ccd382d9a9cb3.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "royal-cove-tower",
+      "nameZh": "帝灣居",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/b/c/e/180ec74c4fd0be97d1d241f51e40bbec.jpg",
+      "alt": "帝灣居 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/b/c/e/180ec74c4fd0be97d1d241f51e40bbec.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "royal-dragon-villa",
+      "nameZh": "嘉御龍庭",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/d/4/5/252dcfeffb5ea212f047b5220026a47f.jpeg",
+      "alt": "嘉御龍庭 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/d/4/5/252dcfeffb5ea212f047b5220026a47f.jpeg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "seaside-castle",
+      "nameZh": "畔海",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/d/c/3/4dd478d18530ede031cbf003e2521312.jpg",
+      "alt": "畔海 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/d/c/3/4dd478d18530ede031cbf003e2521312.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "yu-chui-yuen",
+      "nameZh": "瑜翠園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/77/770eccf3710c9adc09f63132b37230f95f0b5711b79b6ed400f31148d18043c1.jpg",
+      "alt": "瑜翠園 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/77/770eccf3710c9adc09f63132b37230f95f0b5711b79b6ed400f31148d18043c1.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "l-aquatique",
+      "nameZh": "逸璟．龍灣",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/7/8/b/b6740003588d99f67968a649e9fba067.jpg",
+      "alt": "逸璟．龍灣 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/7/8/b/b6740003588d99f67968a649e9fba067.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "new-licensed-exterior",
+        "src": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/L%27Aquatique_in_January_2023.jpg/960px-L%27Aquatique_in_January_2023.jpg",
+        "label": "屋苑外觀（2023年）",
+        "credit": "姒姓賢寧 / Wikimedia Commons, CC BY-SA 4.0",
+        "sourceUrl": "https://commons.wikimedia.org/wiki/File:L'Aquatique_in_January_2023.jpg",
+        "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/"
+      }
+    },
+    {
+      "slug": "deauville",
+      "nameZh": "星岸",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/56/56abcc171952c57c6cedb1b91fa48a7c415347bd3637a3159147907d3653a4f2.jpg",
+      "alt": "星岸 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/56/56abcc171952c57c6cedb1b91fa48a7c415347bd3637a3159147907d3653a4f2.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "long-beach-gardens",
+      "nameZh": "海濤花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/24/241e4ed6a8f6913ebc420e9a13badeced4b3b752c796980f429a35e300f40f37.jpg",
+      "alt": "海濤花園 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/24/241e4ed6a8f6913ebc420e9a13badeced4b3b752c796980f429a35e300f40f37.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "riviera",
+      "nameZh": "麗海別墅",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/a/5/2/61b9e3267ef9e369eea3236791ad2d53.jpg",
+      "alt": "麗海別墅 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/a/5/2/61b9e3267ef9e369eea3236791ad2d53.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "both-wealth-garden",
+      "nameZh": "均富花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/1/8/e/7a6e8678e0447977e58ff48c0500499d.jpg",
+      "alt": "均富花園 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/1/8/e/7a6e8678e0447977e58ff48c0500499d.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "fiona-garden",
+      "nameZh": "富安新邨",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/1/8/1/fdf6b5d2e4d5eb76b684e938434a2f26.jpeg",
+      "alt": "富安新邨 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/1/8/1/fdf6b5d2e4d5eb76b684e938434a2f26.jpeg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "dragon-inn-court",
+      "nameZh": "容龍居",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/7/5/2/17ceacec2610f8161e6b97186f470ef6.jpeg",
+      "alt": "容龍居 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/7/5/2/17ceacec2610f8161e6b97186f470ef6.jpeg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "tuen-mun-court",
+      "nameZh": "屯門閣",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/1/0/2/05d18e188a23b68f3eb743f154514631.jpg",
+      "alt": "屯門閣 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/1/0/2/05d18e188a23b68f3eb743f154514631.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "elegant-villa",
+      "nameZh": "雅翠苑",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/3/7/6/cd96f59acb42cbb327d4bf070a9a9a3a.jpg",
+      "alt": "雅翠苑 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/3/7/6/cd96f59acb42cbb327d4bf070a9a9a3a.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "pearl-island-bungalow",
+      "nameZh": "龍珠島平房",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://imgs.property.hk/largePhotos/2026/a/5/e/534dfb816d73e407eaaa1878c96d485e.jpg",
+      "alt": "龍珠島平房 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://imgs.property.hk/largePhotos/2026/a/5/e/534dfb816d73e407eaaa1878c96d485e.jpg",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "pearl-garden",
+      "nameZh": "龍珠花園",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d2/d26242b165dd439bb04e3052ff65994f07ed2652a0d570a3ec450167616c8557.webp",
+      "alt": "龍珠花園 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/d2/d26242b165dd439bb04e3052ff65994f07ed2652a0d570a3ec450167616c8557.webp",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    },
+    {
+      "slug": "peak-castle",
+      "nameZh": "珀居",
+      "corridor": true,
+      "status": 200,
+      "hero": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/62/62051f93d6f782391f0e9ba95514217b5c68afd32ba746f5e3f5a531c6824c55.webp",
+      "alt": "珀居 屋苑／放盤參考照片",
+      "caption": "晉誠地產放盤參考照片（個別單位／景觀）",
+      "ogImage": "https://sehe3hq90qgbyxqa.public.blob.vercel-storage.com/mls/62/62051f93d6f782391f0e9ba95514217b5c68afd32ba746f5e3f5a531c6824c55.webp",
+      "baselineSelection": "registry",
+      "after": {
+        "status": "missing-exterior",
+        "hero": null,
+        "shareImage": "https://www.earnestproperty.com/og-cover.jpg"
+      }
+    }
+  ],
+  "summary": {
+    "published": 62,
+    "publishedCorridor": 61,
+    "baselineCuratedExteriors": 15,
+    "baselineListingHeroes": 46,
+    "baselineRegistryListingHeroes": 40,
+    "baselineDatabaseFallbacks": 6,
+    "newLicensedExteriors": 6,
+    "afterExteriors": 21,
+    "afterMissingExteriors": 40,
+    "afterListingHeroes": 0,
+    "afterDatabaseFallbacks": 0,
+    "fullPanoramaClaims": 0
+  }
+}
