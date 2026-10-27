@@ -39,6 +39,14 @@ test("28Hse's two real grade labels normalize; everything else does not", () => 
   assert.equal(normalize28HsePromotionTier(" 黃金 ", { badgeObserved: true }).tier, "gold");
 });
 
+test("full placement badge labels are exact aliases, never title substrings", () => {
+  for (const badge of ["黃金置頂", "黃金置頂盤"])
+    assert.equal(normalize28HsePromotionTier(badge, { badgeObserved: true }).tier, "gold");
+  assert.equal(normalize28HsePromotionTier("置頂盤", { badgeObserved: true }).tier, "pinned");
+  for (const title of ["黃金置頂盤靚裝", "黃金海岸", "黃金地段"])
+    assert.equal(normalize28HsePromotionTier(title, { badgeObserved: true }).tier, "unknown");
+});
+
 test("a grade we have never seen stays unknown, never guessed into a tier", () => {
   const result = normalize28HsePromotionTier("鑽石", { badgeObserved: true });
   assert.equal(result.tier, PROMOTION_TIERS.UNKNOWN);

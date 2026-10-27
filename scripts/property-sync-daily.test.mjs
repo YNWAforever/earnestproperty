@@ -32,6 +32,21 @@ test("daily property workflow retains gated scheduling, privacy, branch and poli
     }
 });
 
+test("scheduled owner publication requires fresh inventory evidence inside the frozen bundle", async () => {
+  const w = await workflow();
+  const owner = w.jobs["owner-publish"];
+  const publish = owner.steps.find(
+    (step) => step.name === "Publish owner capture into site listings",
+  );
+  assert.match(publish.run, /GITHUB_EVENT_NAME.*schedule/);
+  assert.match(publish.run, /--require-homepage-inventory/);
+  assert.match(publish.run, /homepageInventory/);
+  assert.doesNotMatch(
+    JSON.stringify(owner),
+    /firecrawl|run_28hse_sync|scrapingbee|curl|requests\.get/i,
+  );
+});
+
 test("native jobs export measured clocks even after failure without new credentials", async () => {
   const w = await workflow();
   for (const name of ["preflight", "collect", "ingest", "publish", "verify"]) {

@@ -71,7 +71,10 @@ export function isPromotionTier(value) {
  */
 const LABELS = new Map([
   ["黃金", PROMOTION_TIERS.GOLD],
+  ["黃金置頂", PROMOTION_TIERS.GOLD],
+  ["黃金置頂盤", PROMOTION_TIERS.GOLD],
   ["置頂", PROMOTION_TIERS.PINNED],
+  ["置頂盤", PROMOTION_TIERS.PINNED],
 ]);
 
 function clean(value) {

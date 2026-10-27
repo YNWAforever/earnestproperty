@@ -567,15 +567,19 @@ jobs:
           set -euo pipefail
           mkdir -p owner-output
           choose_args=()
+          inventory_args=()
+          if [ "$GITHUB_EVENT_NAME" = schedule ]; then
+           inventory_args+=(--require-homepage-inventory)
+          fi
           if [ -n "${OWNER_CHOICES:-}" ]; then
            IFS=',' read -ra pairs <<< "$OWNER_CHOICES"
            for pair in "${pairs[@]}"; do choose_args+=(--choose "$pair"); done
           fi
           status=0
-          node scripts/mls/owner-publication.mjs --apply --driver=neon-ws --input owner-capture/import_ready.frozen.json --confirm-production="$OWNER_INPUT_SHA256" --report owner-output/owner-publication "${choose_args[@]}" >/dev/null || status=$?
+          node scripts/mls/owner-publication.mjs --apply --driver=neon-ws --input owner-capture/import_ready.frozen.json --confirm-production="$OWNER_INPUT_SHA256" --report owner-output/owner-publication "${choose_args[@]}" "${inventory_args[@]}" >/dev/null || status=$?
           if [ "$status" -eq 1 ]; then exit 1; fi
           if [ "$status" -gt 2 ]; then exit "$status"; fi
-          node --input-type=module -e 'import { readFileSync } from "node:fs"; const report = JSON.parse(readFileSync(process.argv[1], "utf8")); if (report.mode !== "APPLY" || !report.result) throw new Error("OWNER_PUBLICATION_REPORT_INVALID"); const published = report.result.published?.length ?? 0; const current = report.result.alreadyPublished?.length ?? 0; const unknown = report.result.unknown?.length ?? 0; const held = report.result.held?.length ?? 0; if (unknown || published + current < 1) throw new Error("OWNER_PUBLICATION_WROTE_NOTHING"); console.log(JSON.stringify({ published, alreadyPublished: current, held }));' owner-output/owner-publication.json >> "$GITHUB_STEP_SUMMARY"
+          node --input-type=module -e 'import { readFileSync } from "node:fs"; const report = JSON.parse(readFileSync(process.argv[1], "utf8")); if (report.mode !== "APPLY" || !report.result) throw new Error("OWNER_PUBLICATION_REPORT_INVALID"); const published = report.result.published?.length ?? 0; const current = report.result.alreadyPublished?.length ?? 0; const unknown = report.result.unknown?.length ?? 0; const held = report.result.held?.length ?? 0; const inventory = report.homepageInventory; if (unknown || (published + current < 1 && !inventory?.result)) throw new Error("OWNER_PUBLICATION_WROTE_NOTHING"); console.log(JSON.stringify({ published, alreadyPublished: current, held, homepageInventory: inventory }));' owner-output/owner-publication.json >> "$GITHUB_STEP_SUMMARY"
           if [ "$status" -eq 2 ]; then echo "Owner policy held some rows. Eligible listings were created, updated, or already current. The private report lists the holds." >> "$GITHUB_STEP_SUMMARY"; fi
       - name: Read owner capture without writing
         if: env.MODE == 'owner-publication-dry-run'

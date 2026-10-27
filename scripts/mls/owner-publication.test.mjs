@@ -235,3 +235,50 @@ test("owner CLI rejects unsafe choices, offline apply and unauthorized productio
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("owner bundle binds complete ordered sale promotion evidence to the confirmed input bytes", async () => {
+  const { parseOwnerCaptureInput, parseOwnerArgs } = await import("./owner-publication.mjs");
+  const legacy = [{ source_id: "123" }];
+  assert.deepEqual(parseOwnerCaptureInput(legacy).listings, legacy);
+  assert.throws(
+    () => parseOwnerCaptureInput(legacy, { requireHomepageInventory: true }),
+    /REQUIRED/,
+  );
+  const snapshot = {
+    schema_version: 1,
+    source: "28hse_agent_540",
+    scope: "agent:540",
+    deal_type: "sale",
+    complete: true,
+    captured_at: new Date().toISOString(),
+    advertised_count: 2,
+    entries: [
+      { source_id: "123", agent_listing_ref: "A000001", promotion_tier_raw: "置頂" },
+      { source_id: "124", agent_listing_ref: "A000002", promotion_tier_raw: "黃金置頂盤" },
+    ],
+  };
+  const parsed = parseOwnerCaptureInput({ listings: [], homepage_inventory: snapshot });
+  assert.equal(parsed.homepageInventory.advertisedCount, 2);
+  assert.deepEqual(
+    parsed.homepageInventory.entries.map((e) => e.promotionTier),
+    ["pinned", "gold"],
+  );
+  assert.equal(parsed.homepageInventory.capturedAt, snapshot.captured_at);
+  assert.throws(
+    () =>
+      parseOwnerCaptureInput({
+        listings: [],
+        homepage_inventory: { ...snapshot, complete: false },
+      }),
+    /INCOMPLETE/,
+  );
+  assert.throws(
+    () =>
+      parseOwnerCaptureInput({
+        listings: [],
+        homepage_inventory: { ...snapshot, captured_at: "2026-01-01T00:00:00Z" },
+      }),
+    /TIME_INVALID/,
+  );
+  assert.equal(parseOwnerArgs(["--require-homepage-inventory"]).requireHomepageInventory, true);
+});

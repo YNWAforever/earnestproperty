@@ -238,7 +238,7 @@ export async function fetchFeaturedProperties(): Promise<FeaturedProperty[]> {
   return loadHomepageListings(homepageListingQuery(undefined, "newest"));
 }
 
-/** 黃金必走盤: 28hse 黃金置頂 (gold) and 置頂盤 (pinned) only. */
+/** 黃金必走盤: current approved sale inventory, gold then pinned in source order. */
 export async function fetchGoldStickyProperties(): Promise<FeaturedProperty[]> {
   return loadHomepageListings(homepageListingQuery("28hse-paid", "promotion"));
 }
