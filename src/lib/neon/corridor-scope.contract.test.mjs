@@ -36,7 +36,9 @@ test("homepage feeds accept the expanded estate registry with deduplicated SQL s
   ]) {
     assert.deepEqual(await queries[name](), []);
   }
-  const feeds = calls.filter(({ text }) => text.includes("JOIN canonical c ON c.id=p.id"));
+  const feeds = calls.filter(({ text }) =>
+    /JOIN (?:canonical|homepage_companies) c ON c.id=p.id/.test(text),
+  );
   assert.equal(feeds.length, 3, "each homepage feed reaches its listing query");
   for (const { text, params } of feeds) {
     const slugs = params.find((value) => Array.isArray(value) && value.includes("bellagio"));

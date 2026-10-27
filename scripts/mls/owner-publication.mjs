@@ -16,6 +16,24 @@ import {
   ownerDecision,
 } from "../../src/lib/mls/owner-publication.mjs";
 import { resolveSavedEstate } from "../../src/lib/mls/saved-capture-estates.mjs";
+import {
+  normalizeHomepageInventory,
+  saveHomepageInventory,
+} from "../../src/lib/mls/homepage-inventory.mjs";
+
+// The snapshot lives INSIDE the frozen file: the existing production SHA guard
+// therefore confirms inventory membership/order as well as listing content.
+export function parseOwnerCaptureInput(raw, { requireHomepageInventory = false } = {}) {
+  const legacy = Array.isArray(raw);
+  const listings = legacy ? raw : raw?.listings;
+  if (!Array.isArray(listings)) throw Error("OWNER_CAPTURE_LISTINGS_REQUIRED");
+  const supplied = !legacy && Object.hasOwn(raw, "homepage_inventory");
+  if (requireHomepageInventory && !supplied) throw Error("HOMEPAGE_INVENTORY_REQUIRED");
+  const homepageInventory = supplied ? normalizeHomepageInventory(raw.homepage_inventory) : null;
+  if (!listings.length && !homepageInventory) throw Error("OWNER_CAPTURE_LISTINGS_REQUIRED");
+  return { listings, homepageInventory };
+}
+
 export function parseOwnerArgs(args) {
   const options = {
     input: "/workspace/28hse_capture/import_ready.frozen.json",
@@ -33,6 +51,8 @@ export function parseOwnerArgs(args) {
     )
       options[flag.slice(2)] = resolve(args[++i]);
     else if (flag === "--apply" && !options.apply) options.apply = true;
+    else if (flag === "--require-homepage-inventory" && !options.requireHomepageInventory)
+      options.requireHomepageInventory = true;
     else if (flag.startsWith("--confirm-production=") && !options.confirmationHash)
       options.confirmationHash = flag.slice("--confirm-production=".length);
     else if (flag.startsWith("--driver=") && ["pg", "neon-ws"].includes(flag.slice(9)))
@@ -175,6 +195,14 @@ function markdown(report) {
   );
   if (report.result)
     lines.push("", "## Apply result", "", "```json", JSON.stringify(report.result, null, 2), "```");
+  lines.push(
+    "",
+    "## Homepage inventory",
+    "",
+    "```json",
+    JSON.stringify(report.homepageInventory, null, 2),
+    "```",
+  );
   return lines.join("\n") + "\n";
 }
 export async function runOwnerPublication(args, { env = process.env, ports = {} } = {}) {
@@ -187,11 +215,16 @@ export async function runOwnerPublication(args, { env = process.env, ports = {} 
       inputSha256: frozen.inputSha256,
     });
   const authorization = options.apply ? assertImportBlobTarget(env) : null;
-  const raw = JSON.parse(frozen.bytes.toString("utf8"));
-  const plan = await buildSavedImportPlan(raw, {
-    captureRoot: dirname(options.input),
-    capturedAt: frozen.capturedAt,
-  });
+  const { listings: raw, homepageInventory } = parseOwnerCaptureInput(
+    JSON.parse(frozen.bytes.toString("utf8")),
+    { requireHomepageInventory: options.requireHomepageInventory },
+  );
+  const plan = raw.length
+    ? await buildSavedImportPlan(raw, {
+        captureRoot: dirname(options.input),
+        capturedAt: homepageInventory?.capturedAt ?? frozen.capturedAt,
+      })
+    : { rows: [] };
   for (const row of plan.rows) {
     const date = raw.find((r) => String(r.source_id) === row.id)?.updated_date;
     row.ownerSourceDate = /^\d{4}-\d{2}-\d{2}$/.test(date ?? "") ? date : null;
@@ -208,6 +241,17 @@ export async function runOwnerPublication(args, { env = process.env, ports = {} 
         : "READ ONLY DRY-RUN",
     inputSha256: frozen.inputSha256,
     choices: options.choices,
+    homepageInventory: homepageInventory
+      ? {
+          state: "validated",
+          capturedAt: homepageInventory.capturedAt,
+          advertisedCount: homepageInventory.advertisedCount,
+          fingerprint: homepageInventory.fingerprint,
+          gold: homepageInventory.entries.filter((entry) => entry.promotionTier === "gold").length,
+          pinned: homepageInventory.entries.filter((entry) => entry.promotionTier === "pinned")
+            .length,
+        }
+      : { state: "not-supplied" },
   };
   const persist = async () => {
     await writeFile(options.report, markdown(report));
@@ -239,10 +283,12 @@ export async function runOwnerPublication(args, { env = process.env, ports = {} 
         options.driver,
       );
       await client.connect();
-      items = await inspectOwnerPublication(client, plan, {
-        choices: options.choices,
-        inputSha256: frozen.inputSha256,
-      });
+      items = plan.rows.length
+        ? await inspectOwnerPublication(client, plan, {
+            choices: options.choices,
+            inputSha256: frozen.inputSha256,
+          })
+        : [];
     }
     report.items = ownerReportItems(items);
     report.counts = Object.fromEntries(
@@ -253,6 +299,15 @@ export async function runOwnerPublication(args, { env = process.env, ports = {} 
     );
     await persist();
     if (options.apply) {
+      if (homepageInventory) {
+        report.homepageInventory.result = await saveHomepageInventory(client, homepageInventory, {
+          inputSha256: frozen.inputSha256,
+        });
+        report.homepageInventory.state = report.homepageInventory.result.replayed
+          ? "replayed"
+          : "applied";
+        await persist();
+      }
       const store = (ports.createBlobStore ?? createVercelBlobStore)({
         token: authorization.token,
       });
@@ -291,6 +346,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
           mode: report.mode,
           inputSha256: report.inputSha256,
           counts: report.counts,
+          homepageInventory: report.homepageInventory,
           result: report.result ?? null,
         },
         null,

@@ -2,6 +2,12 @@
 
 ## Scheduled path from 2026-10-25: 09:00 Hong Kong owner-capture publication
 
+Homepage promotion refresh now requires a fresh complete sale index inside the
+hash-approved owner bundle. The scheduled CLI rejects missing or older-than-36-hour
+index evidence; reusing a fixed listing-only bundle cannot refresh promotions.
+See [root cause, envelope and rollout](../reports/2026-10-27-homepage-gold-inventory.md).
+The existing schedule still performs no source collection.
+
 The workflow file is still `.github/workflows/property-sync-daily.yml`. Its cron is `0 1 * * *` (09:00 Asia/Hong_Kong; Actions cron is UTC and can start late). A scheduled run does **not** call `run_28hse_sync.py`, does **not** read `PROPERTY_SYNC_28HSE_TRANSPORT`, and does **not** use Firecrawl. Plain GitHub runners receive `SOURCE_ROBOTS_HTTP_403` from 28hse `robots.txt`. This schedule does not try to unblock that collector.
 
 The scheduled job downloads one private release asset and runs `scripts/mls/owner-publication.mjs --apply --driver=neon-ws`. That is the same owner-capture writer as `npm run import:28hse-owner`. It creates a missing ref+deal listing and updates a matching draft or inactive row, sets the row active, and stores every validated captured photo on the configured Blob host. It does not install `scripts/mls/sql/prepare-28hse-saved-import-policy.sql` and it does not advance the python-v2.2 full-snapshot receipt. The 08:15 Hong Kong watchdog still reads that full receipt, so it can report the HTTP snapshot as stale; it does not unpublish owner-capture listings.

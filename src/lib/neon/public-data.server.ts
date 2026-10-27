@@ -1,5 +1,9 @@
 import "@tanstack/react-start/server-only";
-import { canonicalListingCte, LISTING_FRESHNESS_ORDER } from "./public-listing-query.js";
+import {
+  canonicalListingCte,
+  CURRENT_PUBLIC_OFFERING_ORDER,
+  LISTING_FRESHNESS_ORDER,
+} from "./public-listing-query.js";
 
 import type {
   NeonBranchRecord,
@@ -818,23 +822,73 @@ const PROMOTION_TIER_RANK_JOIN = `LEFT JOIN LATERAL (
 
 const PROMOTION_TIER_RANK_EXPRESSION = "COALESCE(promotion.rank, 3)";
 
-/**
- * 黃金必走盤. 28hse stores the grade on mls_source_promotion_tiers, joined
- * through the active property_source_links row (source 28hse_agent_540).
- * gold is the 黃金 badge (黃金置頂); pinned is the 置頂 badge (置頂盤).
- * Ordinary and unobserved 28hse rows are not this section.
- */
+// The complete, approved index capture is the membership boundary. Historical
+// active links are deliberately insufficient: absence inference is disabled and
+// numeric advert IDs can be reused. This read model never rebinds those IDs.
+// Select the newest snapshot BEFORE checking freshness, so an expired/empty
+// snapshot cannot fall back to older paid inventory.
+const HOMEPAGE_INVENTORY_CTE = `homepage_inventory_run AS (
+  SELECT id, (counts->>'captured_at')::timestamptz AS captured_at
+  FROM listing_sync_runs
+  WHERE parser_version = 'owner-homepage-inventory-v1'
+    AND mode = 'publish' AND status = 'healthy'
+    AND counts @> '{"homepage_inventory":true,"full_snapshot":true,"source":"28hse_agent_540","scope":"agent:540","deal_type":"sale"}'::jsonb
+  ORDER BY (counts->>'captured_at')::timestamptz DESC, id DESC
+  LIMIT 1
+), homepage_inventory AS (
+  SELECT o.property_no_normalized AS agency_ref, t.promotion_tier,
+    (o.payload#>>'{homepage_inventory,position}')::integer AS source_position
+  FROM homepage_inventory_run r
+  JOIN listing_source_observations o ON o.run_id = r.id
+  JOIN mls_source_promotion_tiers t ON t.observation_id = o.id
+    AND t.source = o.source AND t.external_listing_id = o.external_listing_id
+    AND t.deal_type = o.deal_type
+  WHERE o.source = '28hse_agent_540' AND o.deal_type = 'sale'
+    AND t.snapshot_complete = true
+    AND t.observed_at = r.captured_at AND o.fetched_at = r.captured_at
+    AND r.captured_at >= now() - interval '36 hours'
+    AND r.captured_at <= now() + interval '5 minutes'
+)`;
+
+// Company reference plus deal is the authority, including owner-published rows
+// that intentionally have no numeric-ad-ID source link.
+const HOMEPAGE_INVENTORY_MATCH_SQL = `p.deal_type = 'sale'
+    AND i.agency_ref = COALESCE(NULLIF(p.canonical_property_no, ''), (
+      SELECT ref.public_listing_no FROM property_public_members ref WHERE ref.property_id = p.id
+    ))`;
+
 const PAID_28HSE_PLACEMENT_SQL = `EXISTS (
-  SELECT 1
-  FROM property_source_links psl
-  JOIN mls_source_promotion_tiers t
-    ON t.source = psl.source
-   AND t.external_listing_id = psl.external_listing_id
-   AND t.deal_type = psl.deal_type
-  WHERE psl.property_id = p.id
-    AND psl.status = 'active'
-    AND psl.source = '28hse_agent_540'
-    AND t.promotion_tier IN ('gold', 'pinned')
+  SELECT 1 FROM homepage_inventory i
+  WHERE ${HOMEPAGE_INVENTORY_MATCH_SQL}
+    AND i.promotion_tier IN ('gold', 'pinned')
+)`;
+
+const HOMEPAGE_PROMOTION_RANK_JOIN = `LEFT JOIN LATERAL (
+  SELECT CASE i.promotion_tier WHEN 'gold' THEN 0 WHEN 'pinned' THEN 1 ELSE 3 END AS rank,
+    i.source_position
+  FROM homepage_inventory i WHERE ${HOMEPAGE_INVENTORY_MATCH_SQL}
+    AND i.promotion_tier IN ('gold', 'pinned')
+  ORDER BY rank ASC, i.source_position ASC LIMIT 1
+) promotion ON TRUE`;
+
+// Historical public groups can still be separate for the same company number.
+// Deduplicate those candidates before LIMIT, after current-offering suppression,
+// using the standing source precedence rather than a later JS card filter.
+const HOMEPAGE_COMPANY_CTE = `, homepage_companies AS (
+  SELECT c.*, ROW_NUMBER() OVER (
+    PARTITION BY COALESCE(NULLIF(p.canonical_property_no, ''), c.public_listing_no), p.deal_type
+    ORDER BY CASE
+      WHEN EXISTS (SELECT 1 FROM property_source_links authority
+        WHERE authority.property_id=p.id AND authority.deal_type=p.deal_type
+          AND authority.status='active' AND authority.source='28hse_agent_540') THEN 0
+      WHEN p.source_site='28hse' THEN 0
+      WHEN EXISTS (SELECT 1 FROM property_source_links authority
+        WHERE authority.property_id=p.id AND authority.deal_type=p.deal_type
+          AND authority.status='active' AND authority.source='propertyhk') THEN 1
+      WHEN p.source_site='propertyhk' THEN 1 ELSE 2 END,
+      ${CURRENT_PUBLIC_OFFERING_ORDER}
+  ) AS company_rank
+  FROM canonical c JOIN properties p ON p.id=c.id
 )`;
 
 /**
@@ -904,7 +958,8 @@ async function promotionTierTableAvailable(): Promise<boolean> {
  * in both modes. No paid-placement lookup is needed for the newest feed.
  *
  * selection narrows that same feed for the two homepage bands:
- * - 28hse-paid: 黃金必走盤, gold then pinned, empty if the tier table is absent
+ * - 28hse-paid: 黃金必走盤, current sale gold then pinned in source index order;
+ *   empty without a complete fresh approved inventory or the tier table
  * - propertyhk: 荀盤推介 (宅谷). A unit that is also 黃金必走盤 is left in that
  *   band so the homepage does not repeat the card. The exclusion needs the
  *   tier table; without it, 宅谷 still renders and simply cannot see grades.
@@ -949,24 +1004,32 @@ export async function fetchFeaturedProperties(input: {
     where += ` AND ${PROPERTYHK_LISTING_SQL}`;
     if (excludePaid28hse) where += ` AND NOT ${PAID_28HSE_PLACEMENT_SQL}`;
   }
-  // Before the migration lands there is no tier to rank on, so the feed keeps
-  // its previous freshness order rather than erroring. The two homepage bands
-  // order by first-seen advert time; gold still sorts ahead of pinned.
+  // Legacy callers retain their existing advert ordering. The paid homepage
+  // feed follows the captured index order within each grade, not collector age.
   const candidateOrder =
     paid28hse || propertyHk || newest ? LATEST_ADVERT_ORDER : LISTING_NEWEST_ORDER;
-  const order = ranked
-    ? `${PROMOTION_TIER_RANK_EXPRESSION} ASC, ${paid28hse ? LATEST_ADVERT_ORDER : LISTING_NEWEST_ORDER}`
-    : candidateOrder;
+  const order = paid28hse
+    ? `${PROMOTION_TIER_RANK_EXPRESSION} ASC, promotion.source_position ASC, p.id ASC`
+    : ranked
+      ? `${PROMOTION_TIER_RANK_EXPRESSION} ASC, ${paid28hse ? LATEST_ADVERT_ORDER : LISTING_NEWEST_ORDER}`
+      : candidateOrder;
   const limitParam = addParam(params, pageSize);
+
+  const canonical =
+    canonicalListingCte(where, false, candidateOrder) + (paid28hse ? HOMEPAGE_COMPANY_CTE : "");
+  const cte =
+    paid28hse || excludePaid28hse
+      ? canonical.replace(/^WITH /, `WITH ${HOMEPAGE_INVENTORY_CTE}, `)
+      : canonical;
 
   const rows = await sql().query(
     `
-    ${canonicalListingCte(where, false, candidateOrder)}
+    ${cte}
     SELECT ${listingCardColumns}
-    FROM properties p JOIN canonical c ON c.id=p.id
+    FROM properties p JOIN ${paid28hse ? "homepage_companies" : "canonical"} c ON c.id=p.id
     LEFT JOIN estates e ON e.id = p.estate_id
-    ${ranked ? PROMOTION_TIER_RANK_JOIN : ""}
-    WHERE ${where}
+    ${paid28hse ? HOMEPAGE_PROMOTION_RANK_JOIN : ranked ? PROMOTION_TIER_RANK_JOIN : ""}
+    WHERE ${where}${paid28hse ? " AND c.company_rank = 1" : ""}
     ORDER BY ${order}
     LIMIT ${limitParam}
     `,

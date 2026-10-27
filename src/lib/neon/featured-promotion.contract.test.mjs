@@ -6,6 +6,7 @@ import ts from "typescript";
 import { PGlite } from "@electric-sql/pglite";
 
 import { promotionTierRank } from "../mls/promotion-tier.mjs";
+import { normalizeHomepageInventory, saveHomepageInventory } from "../mls/homepage-inventory.mjs";
 
 /**
  * Historical promotion mode retains 黃金 > 置頂 > 普通.
@@ -292,11 +293,15 @@ test("homepage newest feed ranks new source adverts before old promoted inventor
   }
 });
 
-test("黃金必走盤 keeps only active 28hse gold and pinned placements", async () => {
+test("黃金必走盤 uses fresh complete agent540 sale evidence and paid grades", async () => {
   const { text, params } = await captureFeaturedQuery({ limit: 6, selection: "28hse-paid" });
-  assert.match(text, /psl\.source = '28hse_agent_540'/);
-  assert.match(text, /t\.promotion_tier IN \('gold', 'pinned'\)/);
-  assert.match(text, /psl\.status = 'active'/);
+  assert.match(text, /o\.source = '28hse_agent_540'/);
+  assert.match(text, /i\.promotion_tier IN \('gold', 'pinned'\)/);
+  assert.match(text, /p\.status = 'active'/);
+  assert.match(text, /p\.deal_type = 'sale'/);
+  assert.match(text, /owner-homepage-inventory-v1/);
+  assert.match(text, /interval '36 hours'/);
+  assert.match(text, /t\.observation_id = o\.id/);
   assert.match(text, /JOIN mls_source_promotion_tiers t/);
   assert.match(text, /WHEN 'gold' THEN 0/);
   assert.match(text, /WHEN 'pinned' THEN 1/);
@@ -324,8 +329,8 @@ test("荀盤推介 is active Property.hk inventory and omits 28hse paid placemen
   assert.match(text, /psl\.source = 'propertyhk'/);
   assert.match(text, /psl\.status = 'active'/);
   assert.match(text, /AND NOT EXISTS \(/);
-  assert.match(text, /psl\.source = '28hse_agent_540'/);
-  assert.match(text, /t\.promotion_tier IN \('gold', 'pinned'\)/);
+  assert.match(text, /o\.source = '28hse_agent_540'/);
+  assert.match(text, /i\.promotion_tier IN \('gold', 'pinned'\)/);
   assert.match(text, /SELECT max\(fresh\.first_seen_at\)/);
   assert.doesNotMatch(text, /promotion\.rank/);
 });
@@ -354,12 +359,13 @@ test("an unknown homepage selection never reaches SQL", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("homepage bands select gold then pinned, and 宅谷 without repeating paid 28hse", async () => {
+test("homepage uses complete sale inventory membership and source order before LIMIT", async () => {
   const db = new PGlite();
   try {
-    await db.exec(`CREATE TABLE properties (
+    await db.exec(`CREATE TYPE deal_type AS ENUM ('sale','rent');
+    CREATE TABLE properties (
       id text PRIMARY KEY, listing_no text, canonical_property_no text, title_zh text,
-      deal_type text NOT NULL DEFAULT 'sale', source_updated_at timestamp,
+      deal_type deal_type NOT NULL DEFAULT 'sale', source_updated_at timestamp,
       last_seen_at timestamp, updated_at timestamp, created_at timestamp NOT NULL,
       status text NOT NULL DEFAULT 'active', featured boolean NOT NULL DEFAULT false,
       estate_id text, district_slug text, address text, price numeric, rent numeric,
@@ -369,9 +375,16 @@ test("homepage bands select gold then pinned, and 宅谷 without repeating paid 
     CREATE TABLE property_public_members(property_id text, public_listing_no text);
     CREATE TABLE estates(id text, name_zh text, slug text, district_slug text);
     CREATE TABLE property_source_links(property_id text, source text, external_listing_id text,
-      deal_type text, status text, first_seen_at timestamp, last_seen_at timestamp);
-    CREATE TABLE mls_source_state(property_id text, first_seen_at timestamp, source_status text, last_accepted_at timestamp, source text, external_listing_id text, deal_type text);
-    CREATE TABLE mls_source_promotion_tiers(source text, external_listing_id text, deal_type text, promotion_tier text);
+      deal_type deal_type, status text, first_seen_at timestamp, last_seen_at timestamp);
+    CREATE TABLE mls_source_state(property_id text, first_seen_at timestamp, source_status text, last_accepted_at timestamp, source text, external_listing_id text, deal_type deal_type);
+    CREATE TABLE mls_source_promotion_tiers(source text, external_listing_id text, deal_type deal_type,
+      promotion_tier text, observation_id text, observed_at timestamptz, snapshot_complete boolean,
+      promotion_tier_raw text, updated_at timestamptz, PRIMARY KEY(source,external_listing_id,deal_type));
+    CREATE TABLE listing_sync_runs(id text, parser_version text, status text, mode text, counts jsonb,
+      started_at timestamptz DEFAULT now(), scheduled_for date, finished_at timestamptz);
+    CREATE TABLE listing_source_observations(id text, run_id text, source text, external_listing_id text,
+      deal_type deal_type, property_no_normalized text, payload jsonb, fetched_at timestamptz,
+      source_url text, property_no_raw text, content_hash text, validation_state text, discovered_at timestamptz);
     INSERT INTO properties(id,listing_no,created_at,status) VALUES
       ('gold-new','GOLD-NEW','2026-10-01','active'),
       ('gold-old','GOLD-OLD','2026-08-01','active'),
@@ -407,26 +420,130 @@ test("homepage bands select gold then pinned, and 宅谷 without repeating paid 
       ('28hse_agent_540','p1','sale','pinned'),
       ('28hse_agent_540','n1','sale','normal'),
       ('28hse_agent_540','n2','sale','normal'),
-      ('28hse_agent_540','g3','sale','gold');`);
+      ('28hse_agent_540','g3','sale','gold');
+    UPDATE properties SET canonical_property_no=CASE id
+      WHEN 'gold-new' THEN 'A000001' WHEN 'gold-old' THEN 'A000002'
+      WHEN 'pinned' THEN 'A000003' WHEN 'normal-28' THEN 'A000004'
+      WHEN 'hk-normal' THEN 'A000005' END;
+    INSERT INTO listing_sync_runs(id,parser_version,status,mode,counts) VALUES ('current','owner-homepage-inventory-v1','healthy','publish',
+      jsonb_build_object('homepage_inventory',true,'full_snapshot',true,'scope','agent:540',
+        'source','28hse_agent_540','deal_type','sale','captured_at',now(),'advertised_count',4));
+    INSERT INTO listing_source_observations(id,run_id,source,external_listing_id,deal_type,property_no_normalized,payload,fetched_at) VALUES
+      ('o1','current','28hse_agent_540','homepage-inventory-g1','sale','A000001','{"homepage_inventory":{"position":3}}',now()),
+      ('o2','current','28hse_agent_540','homepage-inventory-p1','sale','A000003','{"homepage_inventory":{"position":1}}',now()),
+      ('o3','current','28hse_agent_540','homepage-inventory-n1','sale','A000004','{"homepage_inventory":{"position":2}}',now()),
+      ('o4','current','28hse_agent_540','homepage-inventory-n2','sale','A000005','{"homepage_inventory":{"position":4}}',now());
+    INSERT INTO mls_source_promotion_tiers(source,external_listing_id,deal_type,promotion_tier,observation_id,observed_at,snapshot_complete) VALUES
+      ('28hse_agent_540','homepage-inventory-g1','sale','gold','o1',now(),true),
+      ('28hse_agent_540','homepage-inventory-p1','sale','pinned','o2',now(),true),
+      ('28hse_agent_540','homepage-inventory-n1','sale','gold','o3',now(),true),
+      ('28hse_agent_540','homepage-inventory-n2','sale','normal','o4',now(),true);`);
     const server = await loadPublicDataServer(async (text, params) => {
       return (await db.query(text, params)).rows;
     });
     const paid = await server.fetchFeaturedProperties({ limit: 6, selection: "28hse-paid" });
     assert.deepEqual(
       paid.map((row) => row.listing_no),
-      ["GOLD-NEW", "GOLD-OLD", "PINNED"],
-      "gold before pinned; ordinary, 宅谷-only, inactive and dead links stay out",
+      ["NORMAL", "GOLD-NEW", "PINNED"],
+      "current gold before pinned in source order; historic paid links absent from this capture stay out",
     );
     const zaakGu = await server.fetchFeaturedProperties({ limit: 6, selection: "propertyhk" });
     assert.deepEqual(
       zaakGu.map((row) => row.listing_no),
-      ["HK-NORMAL", "HK-NEW", "HK-OLD"],
-      "宅谷 newest first, without the gold listing that also has a Property.hk link",
+      ["HK-NORMAL", "HK-NEW", "GOLD-OLD", "HK-OLD"],
+      "only current paid sale inventory is excluded from 宅谷",
     );
     const capped = await server.fetchFeaturedProperties({ limit: 2, selection: "propertyhk" });
     assert.deepEqual(
       capped.map((row) => row.listing_no),
       ["HK-NORMAL", "HK-NEW"],
+    );
+    const cappedPaid = await server.fetchFeaturedProperties({ limit: 1, selection: "28hse-paid" });
+    assert.deepEqual(
+      cappedPaid.map((row) => row.listing_no),
+      ["NORMAL"],
+    );
+    // An old capture must never be made current by a new publication execution.
+    await db.exec(`UPDATE listing_sync_runs SET counts=counts ||
+      jsonb_build_object('captured_at',now()-interval '2 days')`);
+    assert.deepEqual(
+      await server.fetchFeaturedProperties({ limit: 6, selection: "28hse-paid" }),
+      [],
+    );
+    // Exercise the real offline writer and the real public query together.
+    const capture = (entries, offset = 0) =>
+      normalizeHomepageInventory({
+        schema_version: 1,
+        source: "28hse_agent_540",
+        scope: "agent:540",
+        deal_type: "sale",
+        complete: true,
+        captured_at: new Date(Date.now() + offset).toISOString(),
+        advertised_count: entries.length,
+        entries,
+      });
+    const client = { query: (sql, params) => db.query(sql, params) };
+    const approved = { inputSha256: "a".repeat(64) };
+    await saveHomepageInventory(
+      client,
+      capture([
+        { source_id: "9001", agent_listing_ref: "A000004", promotion_tier_raw: "置頂" },
+        { source_id: "9002", agent_listing_ref: "A000004", promotion_tier_raw: "黃金置頂盤" },
+        { source_id: "9003", agent_listing_ref: "A000001", promotion_tier_raw: "黃金" },
+      ]),
+      approved,
+    );
+    assert.deepEqual(
+      (await server.fetchFeaturedProperties({ limit: 6, selection: "28hse-paid" })).map(
+        (p) => p.listing_no,
+      ),
+      ["NORMAL", "GOLD-NEW"],
+      "one company ref, strongest grade and its own position",
+    );
+    await db.exec(`INSERT INTO properties(id,listing_no,canonical_property_no,deal_type,created_at,status)
+      VALUES ('duplicate','GOLD-DUPLICATE','A000001','sale',now(),'active'),
+      ('rental','RENTAL','A000004','rent',now(),'active');
+      INSERT INTO property_public_members VALUES ('duplicate','P-DUPLICATE'),('rental','P-NORMAL');
+      INSERT INTO property_source_links(property_id,source,external_listing_id,deal_type,status)
+      VALUES ('duplicate','propertyhk','duplicate','sale','active');`);
+    assert.deepEqual(
+      (await server.fetchFeaturedProperties({ limit: 6, selection: "28hse-paid" })).map(
+        (p) => p.listing_no,
+      ),
+      ["NORMAL", "GOLD-NEW"],
+      "company ref is unique across public groups before LIMIT; 28hse outranks a newer Property.hk row and rent stays out",
+    );
+    await saveHomepageInventory(
+      client,
+      capture(
+        [
+          { source_id: "9003", agent_listing_ref: "A000005", promotion_tier_raw: "黃金" },
+          { source_id: "9002", agent_listing_ref: "A000004", promotion_tier_raw: "置頂" },
+        ],
+        1000,
+      ),
+      approved,
+    );
+    assert.deepEqual(
+      (await server.fetchFeaturedProperties({ limit: 6, selection: "28hse-paid" })).map(
+        (p) => p.listing_no,
+      ),
+      ["HK-NORMAL", "NORMAL"],
+      "reused advert ID cannot keep the old company's gold membership",
+    );
+    await db.exec(`UPDATE properties SET status='inactive' WHERE id='hk-normal'`);
+    assert.deepEqual(
+      (await server.fetchFeaturedProperties({ limit: 6, selection: "28hse-paid" })).map(
+        (p) => p.listing_no,
+      ),
+      ["NORMAL"],
+      "index evidence never overrides staff withdrawal",
+    );
+    await saveHomepageInventory(client, capture([], 2000), approved);
+    assert.deepEqual(
+      await server.fetchFeaturedProperties({ limit: 6, selection: "28hse-paid" }),
+      [],
+      "verified empty snapshot has no historical fallback",
     );
   } finally {
     await db.close();
