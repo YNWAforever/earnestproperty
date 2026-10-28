@@ -222,7 +222,7 @@ test("Property.hk terminal labels in the amount cell preserve inactive reasons w
     assert.equal(detail.price, null);
   }
 });
-function browserMock(sequence) {
+function browserMock(sequence, { late429 = false } = {}) {
   let time = 0,
     current = 0,
     handler,
@@ -278,6 +278,8 @@ function browserMock(sequence) {
     now: () => time,
     sleep: async (ms) => {
       time += ms;
+      if (late429 && ms === 3000)
+        handler({ status: () => 429, request: () => request, frame: () => mainFrame });
     },
     inspect: () => ({ time, attempts, closed, launchOptions }),
   };
@@ -307,6 +309,12 @@ test("transient server failures have at most four attempts", async () => {
   const mock = browserMock([503]);
   await assert.rejects(collectDetails([detailUrl], mock), /attempts_exhausted/);
   assert.equal(mock.inspect().attempts, 4);
+});
+test("a 429 during the final page pacing interval cannot produce a complete capture", async () => {
+  const mock = browserMock([200], { late429: true });
+  await assert.rejects(collectDetails([detailUrl], mock), /rate_limited/);
+  assert.equal(mock.inspect().attempts, 1);
+  assert.equal(mock.inspect().closed, 2);
 });
 test("Property.hk requires detail confirmation and exact exported source links; holds overrides", () => {
   const f = fresh();

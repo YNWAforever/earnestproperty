@@ -167,6 +167,7 @@ export async function collectDetails(
       if (!result) throw Error("detail_attempts_exhausted");
       listings.push(result);
       await sleep(3000);
+      if (stop) throw Error(stop);
     }
     return { schema: "propertyhk-details/v1", complete: true, absence_enabled: false, listings };
   } finally {
