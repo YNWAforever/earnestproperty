@@ -3,6 +3,7 @@ import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createRequire } from "node:module";
 import test from "node:test";
 import { diffPriceStatus, parseArgs } from "./price_status_diff.mjs";
 import { lockedReport, validate28Capture } from "./price_status_locked.mjs";
@@ -13,6 +14,27 @@ const fixture = JSON.parse(
 );
 const fresh = () => structuredClone(fixture);
 const run = (f) => diffPriceStatus(f.capture, f.current, { now: f.now });
+
+test("T5 scheduled reports stay opt-in and expose only the manual dispatch trigger", async () => {
+  const { load } = createRequire(import.meta.url)("js-yaml");
+  const workflow = load(
+    await readFile(
+      new URL("../../.github/workflows/property-price-status-sync.yml", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(Object.keys(workflow.on).sort(), ["schedule", "workflow_dispatch"]);
+  assert.equal(
+    workflow.jobs.report.if,
+    "github.event_name == 'workflow_dispatch' || vars.PRICE_STATUS_SYNC_ENABLED == 'true'",
+  );
+  assert.deepEqual(
+    workflow.jobs.report.steps.flatMap((s) =>
+      Object.keys(s.env ?? {}).filter((key) => key.endsWith("DATABASE_URL")),
+    ),
+    ["PRICE_STATUS_SYNC_READONLY_DATABASE_URL"],
+  );
+});
 
 test("company number + deal distinguishes sale and rent and normalizes amounts", () => {
   const f = fresh(),
@@ -65,6 +87,73 @@ test("staff field overrides hold prices and rent, including null overrides", () 
   const report = run(f);
   assert.equal(report.counts["override-held"], 2);
   assert.ok(report.rows.every((r) => r.would_change.length === 0));
+});
+test("offline properties remain valid comparison targets without reactivation", () => {
+  const f = fresh();
+  f.current.properties[0].status = "offline";
+  const report = run(f);
+  assert.equal(report.counts["price-changed"], 1);
+  assert.ok(report.rows.every((r) => r.would_change.every((c) => c.field !== "status")));
+});
+test("unnumbered linked Property.hk targets are held without aborting other comparisons", () => {
+  const f = fresh();
+  f.current.properties.forEach((p, i) => {
+    p.source = "propertyhk";
+    p.source_ids = [f.capture.listings[i].property_id];
+  });
+  f.current.properties[0].canonical_property_no = null;
+  const report = diffPriceStatus(f.capture, f.current, { now: f.now, source: "propertyhk" });
+  assert.equal(report.counts["ambiguous-ref"], 2);
+  assert.equal(report.counts["rent-changed"], 1);
+  assert.ok(
+    report.rows.filter((r) => r.category === "ambiguous-ref").every((r) => !r.would_change.length),
+  );
+});
+test("SQL export holds manual and unknown ownership as well as overrides and drift", async () => {
+  const { PGlite } = await import("@electric-sql/pglite");
+  const db = new PGlite();
+  try {
+    // Disposable in-memory tables only; no migration files or external connection.
+    await db.exec(`
+      CREATE TABLE properties (id text, canonical_property_no text, deal_type text,
+        price numeric, rent numeric, status text);
+      CREATE TABLE property_source_links (property_id text, source text, status text,
+        external_listing_id text);
+      CREATE TABLE property_public_members (property_id text, public_listing_no text);
+      CREATE TABLE property_public_groups (public_listing_no text, review_required boolean);
+      CREATE TABLE admin_property_overrides (property_no text, shared jsonb, sale jsonb, rent jsonb);
+      CREATE TABLE property_sync_fields (property_id text, field_name text,
+        active_override boolean, selection_reason text, last_published_value jsonb,
+        winning_observation_id text);
+      INSERT INTO properties VALUES ('sale', 'A000001', 'sale', 5100000, NULL, 'offline');
+      INSERT INTO property_sync_fields VALUES
+        ('sale', 'price', false, 'source_priority', '5100000', NULL),
+        ('sale', 'status', false, 'source_priority', '"offline"', 'authorized');
+    `);
+    const sql = await readFile(new URL("./price_status_export.sql", import.meta.url), "utf8");
+    const exported = async () => (await db.query(sql, ["28hse_agent_540"])).rows[0];
+    assert.deepEqual((await exported()).override_fields, ["price"]);
+    await db.exec("DELETE FROM property_sync_fields WHERE field_name='price'");
+    assert.deepEqual((await exported()).override_fields, ["price"]);
+    await db.exec(`INSERT INTO property_sync_fields VALUES
+      ('sale', 'price', false, 'source_priority', '5100000', 'authorized')`);
+    assert.deepEqual((await exported()).override_fields, []);
+    for (const update of [
+      "active_override=true",
+      "selection_reason='manual_override'",
+      "last_published_value='5000000'",
+    ]) {
+      await db.exec("UPDATE property_sync_fields SET " + update + " WHERE field_name='price'");
+      assert.ok((await exported()).override_fields.includes("price"));
+      await db.exec(`UPDATE property_sync_fields SET active_override=false,
+        selection_reason='source_priority', last_published_value='5100000' WHERE field_name='price'`);
+    }
+    await db.exec(`INSERT INTO property_public_members VALUES ('sale', 'A000001');
+      INSERT INTO admin_property_overrides VALUES ('A000001', '{}', '{"price":null}', '{}')`);
+    assert.deepEqual((await exported()).override_fields, ["price"]);
+  } finally {
+    await db.close();
+  }
 });
 for (const reason of ["sold", "rented", "delisted"])
   test(`${reason} proposes only inactive plus reason`, () => {
@@ -222,15 +311,28 @@ test("Property.hk terminal labels in the amount cell preserve inactive reasons w
     assert.equal(detail.price, null);
   }
 });
-function browserMock(sequence, { late429 = false } = {}) {
+function browserMock(sequence, { late429 = false, closing429 = false, requests = [] } = {}) {
   let time = 0,
     current = 0,
     handler,
-    routeHandler,
+    contextHandler,
+    requestHandler,
     attempts = 0,
     closed = 0;
   const mainFrame = {},
     request = { isNavigationRequest: () => true, frame: () => mainFrame, url: () => detailUrl };
+  const sent = [];
+  const paused = (id, resourceType = "Document", url = detailUrl) => ({
+    requestId: id,
+    resourceType,
+    frameId: "main",
+    request: { url },
+  });
+  const respond = (code) => {
+    const response = { status: () => code, request: () => request, frame: () => mainFrame };
+    contextHandler(response);
+    handler(response);
+  };
   const page = {
     mainFrame: () => mainFrame,
     url: () => detailUrl,
@@ -239,33 +341,46 @@ function browserMock(sequence, { late429 = false } = {}) {
     },
     goto: async () => {
       attempts++;
-      await routeHandler({
-        request: () => request,
-        continue: async () => {},
-        abort: async () => {},
-      });
+      await requestHandler(paused("navigation-" + attempts));
+      await Promise.all(
+        requests.map((r, i) => requestHandler(paused("resource-" + i, r.type, r.url))),
+      );
     },
     title: async () => {
       current = Math.min(Math.floor(time / 500), sequence.length - 1);
-      handler({ status: () => sequence[current], request: () => request, frame: () => mainFrame });
+      respond(sequence[current]);
       return sequence[current] === 403 ? "正在驗證您的瀏覽器" : "樓盤詳情";
     },
     evaluate: async () => (sequence[current] === 200 ? dom : { refs: [] }),
   };
-  let launchOptions;
+  let launchOptions, contextOptions;
   const chromium = {
     launch: async (options) => {
       launchOptions = options;
       return {
-        newContext: async () => ({
-          route: async (_pattern, cb) => {
-            routeHandler = cb;
-          },
-          newPage: async () => page,
-          close: async () => {
-            closed++;
-          },
-        }),
+        newContext: async (options) => {
+          contextOptions = options;
+          return {
+            on: (_name, cb) => {
+              contextHandler = cb;
+            },
+            newCDPSession: async () => ({
+              on: (_name, cb) => {
+                requestHandler = cb;
+              },
+              send: async (name, args) => {
+                if (name === "Page.getFrameTree") return { frameTree: { frame: { id: "main" } } };
+                if (name === "Fetch.continueRequest" || name === "Fetch.failRequest")
+                  sent.push({ name, ...args, time });
+              },
+            }),
+            newPage: async () => page,
+            close: async () => {
+              if (closing429) contextHandler({ status: () => 429 });
+              closed++;
+            },
+          };
+        },
         close: async () => {
           closed++;
         },
@@ -278,10 +393,9 @@ function browserMock(sequence, { late429 = false } = {}) {
     now: () => time,
     sleep: async (ms) => {
       time += ms;
-      if (late429 && ms === 3000)
-        handler({ status: () => 429, request: () => request, frame: () => mainFrame });
+      if (late429 && ms === 3000) contextHandler({ status: () => 429 });
     },
-    inspect: () => ({ time, attempts, closed, launchOptions }),
+    inspect: () => ({ time, attempts, closed, launchOptions, contextOptions, sent }),
   };
 }
 test("normal headless clears a transient challenge, uses pinned executable and closes context", async () => {
@@ -290,8 +404,32 @@ test("normal headless clears a transient challenge, uses pinned executable and c
   assert.equal(result.listings.length, 1);
   assert.equal(mock.inspect().launchOptions.headless, true);
   assert.equal(mock.inspect().launchOptions.executablePath, "/pinned/chromium");
+  assert.deepEqual(mock.inspect().launchOptions.args, ["--no-proxy-server"]);
+  assert.deepEqual(mock.inspect().contextOptions, { serviceWorkers: "block" });
   assert.equal(mock.inspect().closed, 2);
   assert.ok(mock.inspect().time >= 3000);
+});
+test("concurrent resources and redirected document requests each wait at least three seconds", async () => {
+  const mock = browserMock([200], {
+    requests: [
+      { type: "Script", url: "https://www.property.hk/script.js" },
+      { type: "Image", url: "https://www.property.hk/image.jpg" },
+      { type: "Document", url: detailUrl },
+    ],
+  });
+  await collectDetails([detailUrl], mock);
+  assert.deepEqual(
+    mock.inspect().sent.map((r) => r.time),
+    [0, 3000, 6000, 9000],
+  );
+});
+test("an unapproved redirected document fails closed before continuing its request", async () => {
+  const mock = browserMock([200], {
+    requests: [{ type: "Document", url: "https://elsewhere.test/asking_detail/100.html" }],
+  });
+  await assert.rejects(collectDetails([detailUrl], mock), /unexpected_navigation/);
+  assert.equal(mock.inspect().sent.at(-1).name, "Fetch.failRequest");
+  assert.equal(mock.inspect().closed, 2);
 });
 test("persistent challenge stops at 20s without retries; 429 stops immediately", async () => {
   for (const [sequence, error] of [
@@ -315,6 +453,23 @@ test("a 429 during the final page pacing interval cannot produce a complete capt
   await assert.rejects(collectDetails([detailUrl], mock), /rate_limited/);
   assert.equal(mock.inspect().attempts, 1);
   assert.equal(mock.inspect().closed, 2);
+});
+test("a resource 429 aborts queued requests and a 429 during shutdown rejects the capture", async () => {
+  const queued = browserMock([200], {
+    late429: true,
+    requests: [
+      { type: "Script", url: "https://www.property.hk/one.js" },
+      { type: "Script", url: "https://www.property.hk/two.js" },
+    ],
+  });
+  await assert.rejects(collectDetails([detailUrl], queued), /rate_limited/);
+  assert.deepEqual(
+    queued.inspect().sent.map((r) => r.name),
+    ["Fetch.continueRequest", "Fetch.failRequest", "Fetch.failRequest"],
+  );
+  const closing = browserMock([200], { closing429: true });
+  await assert.rejects(collectDetails([detailUrl], closing), /rate_limited/);
+  assert.equal(closing.inspect().closed, 2);
 });
 test("Property.hk requires detail confirmation and exact exported source links; holds overrides", () => {
   const f = fresh();

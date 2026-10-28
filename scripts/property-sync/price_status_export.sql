@@ -9,8 +9,14 @@ SELECT p.id, p.canonical_property_no, p.deal_type, p.price, p.rent, p.status,
              ORDER BY l.external_listing_id) AS source_ids,
        ARRAY(SELECT f.field_name FROM property_sync_fields f
              WHERE f.property_id=p.id AND (f.active_override OR f.selection_reason='manual_override'
+               OR f.winning_observation_id IS NULL
                OR (f.field_name IN ('price','rent','status') AND
                    f.last_published_value IS DISTINCT FROM to_jsonb(p)->f.field_name))
+             UNION
+             SELECT field FROM (VALUES ('price', p.price::text), ('rent', p.rent::text),
+               ('status', p.status::text)) AS current_fields(field, value)
+             WHERE value IS NOT NULL AND NOT EXISTS(SELECT 1 FROM property_sync_fields f
+               WHERE f.property_id=p.id AND f.field_name=field)
              UNION
              SELECT field FROM jsonb_object_keys(coalesce(o.shared, '{}'::jsonb) ||
                CASE p.deal_type WHEN 'sale' THEN coalesce(o.sale, '{}'::jsonb)

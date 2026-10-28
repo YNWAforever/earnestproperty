@@ -95,10 +95,12 @@ export function diffPriceStatus(
   const candidates = new Map(),
     observations = new Map();
   for (const row of current.properties) {
-    const match = key(row);
+    // Property.hk-only inventory may have no company number. Keep it held for
+    // review without preventing valid numbered properties from being compared.
+    const match = key(row) ?? `invalid:${digest(JSON.stringify(row))}`;
     if (
-      !match ||
-      !["active", "inactive", "draft", "sold", "rented"].includes(row.status) ||
+      !["sale", "rent"].includes(row.deal_type) ||
+      !["active", "inactive", "offline", "draft", "sold", "rented"].includes(row.status) ||
       !Array.isArray(row.override_fields)
     )
       throw Error("invalid_export_row");

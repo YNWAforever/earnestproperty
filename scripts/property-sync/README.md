@@ -308,7 +308,8 @@ contain hashed references and no PII. No Neon query or write was run for this PR
 Property.hk is a required later T5 fallback. `propertyhk_index_http.py` reads the
 fixed 19-agent manifest with an honest UA and ≥3 seconds between requests;
 `propertyhk_detail_browser.mjs` uses the approved normal headless path with a pinned
-`PROPERTYHK_BROWSER_EXECUTABLE`, ≥3 seconds per page, at most four transport attempts,
+`PROPERTYHK_BROWSER_EXECUTABLE`, ≥3 seconds between requests (including redirects
+and subresources), at most four transport attempts,
 a ~20-second challenge cutoff and immediate stop on 429. `propertyhk_daily_diff.mjs`
 compares browser-confirmed evidence against a read-only export/fixture with staff
 overrides held and `absence_enabled=false`. These tools are not wired to the 09:00

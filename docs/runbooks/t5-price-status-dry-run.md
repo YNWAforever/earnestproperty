@@ -73,7 +73,10 @@ node scripts/property-sync/price_status_diff.mjs \
 ## Property.hk: approved normal headless browser on the box
 
 Willy's **Ask A Yes**, 2026-10-28, sanctions normal headless browsing at **≥3 seconds
-per page/navigation**, including native challenge reloads. A fresh browser may run
+between requests**, including subresources, HTTP redirects and native challenge reloads.
+Chromium's request pauses share one serial queue; service workers are blocked so
+they cannot bypass that queue. Requests still run in the normal browser, without
+HTTP replay or challenge manipulation. A fresh browser may run
 the site's own JavaScript and receive its own in-memory cookies. The supplied probe
 facts are index HTTP 200 and detail 403 → 200 in about six seconds. They are not a
 new live probe performed by this PR, full inventory proof or permission to apply.

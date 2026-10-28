@@ -97,32 +97,62 @@ export async function collectDetails(
   const env = Object.fromEntries(
     Object.entries(process.env).filter(([name]) => !/^(?:http|https|all|no)_proxy$/i.test(name)),
   );
-  const browser = await chromium.launch({ executablePath, headless: true, env });
-  let context;
+  const browser = await chromium.launch({
+    executablePath,
+    headless: true,
+    env,
+    args: ["--no-proxy-server"],
+  });
+  let context,
+    stop = null,
+    closing = false,
+    requests = Promise.resolve();
   try {
-    context = await browser.newContext(); // Fresh, in-memory; no storageState/cookie import/export.
+    context = await browser.newContext({ serviceWorkers: "block" }); // Fresh, in-memory; no cookie import/export.
     const page = await context.newPage();
-    let lastNavigation = null,
-      stop = null,
+    let lastRequest = null,
       status = null;
-    await context.route("**/*", async (route) => {
-      if (stop) return route.abort();
-      const request = route.request();
-      if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
-        try {
-          detailIdentity(request.url());
-        } catch {
-          stop = "unexpected_navigation";
-          return route.abort();
-        }
-        if (lastNavigation !== null) await sleep(Math.max(0, 3000 - (now() - lastNavigation)));
-        lastNavigation = now();
-        if (stop) return route.abort();
-      }
-      return route.continue();
+    // Playwright routes automatically continue HTTP redirects without routing
+    // them again. Chromium Fetch pauses each hop, including native reloads and
+    // subresources, before the browser sends it. Serialize the pauses so parallel
+    // resources cannot all finish the same pacing sleep together.
+    const session = await context.newCDPSession(page);
+    const { frameTree } = await session.send("Page.getFrameTree");
+    session.on("Fetch.requestPaused", (request) => {
+      requests = requests
+        .then(async () => {
+          if (closing) return;
+          if (request.resourceType === "Document" && request.frameId === frameTree.frame.id) {
+            try {
+              detailIdentity(request.request.url);
+            } catch {
+              stop = "unexpected_navigation";
+            }
+          }
+          if (!stop && lastRequest !== null) await sleep(Math.max(0, 3000 - (now() - lastRequest)));
+          if (closing) return;
+          if (stop)
+            await session.send("Fetch.failRequest", {
+              requestId: request.requestId,
+              errorReason: "Aborted",
+            });
+          else {
+            await session.send("Fetch.continueRequest", { requestId: request.requestId });
+            lastRequest = now();
+          }
+        })
+        .catch(() => {
+          if (!closing) stop ??= "browser_request_failed";
+        });
+      return requests;
+    });
+    await session.send("Fetch.enable", {
+      patterns: [{ urlPattern: "*", requestStage: "Request" }],
+    });
+    context.on("response", (response) => {
+      if (response.status() === 429) stop = "rate_limited";
     });
     page.on("response", (response) => {
-      if (response.status() === 429) stop = "rate_limited";
       if (response.request().isNavigationRequest() && response.frame() === page.mainFrame())
         status = response.status();
     });
@@ -171,11 +201,14 @@ export async function collectDetails(
     }
     return { schema: "propertyhk-details/v1", complete: true, absence_enabled: false, listings };
   } finally {
+    closing = true;
     try {
       await context?.close();
     } finally {
+      await requests;
       await browser.close();
     }
+    if (stop) throw Error(stop);
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
