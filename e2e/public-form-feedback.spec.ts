@@ -282,6 +282,44 @@ for (const viewport of [
       ]);
     });
 
+    test("valuation ignores a second submit before React disables the button", async ({ page }) => {
+      await open(page);
+      await setMode(page, "hold");
+      await fill(page, "valuation");
+      const s = section(page, "valuation");
+      const enabledAtSecondClick = await submitButton(page, "valuation").evaluate(
+        (button: HTMLButtonElement) => {
+          button.click();
+          const enabled = !button.disabled;
+          button.click();
+          return enabled;
+        },
+      );
+      expect(enabledAtSecondClick).toBe(true);
+      expect((await calls(page)).map((call) => call.name)).toEqual(["createValuationLead"]);
+      await expect(s.getByRole("button", { name: "提交中…", exact: true })).toBeDisabled();
+      await page.evaluate(() => window.publicFormsFixture.release());
+      await expect(s.getByText("已收到查詢", { exact: true })).toBeVisible();
+      expect(await calls(page)).toHaveLength(1);
+    });
+
+    test("valuation can retry after a failed submission", async ({ page }) => {
+      await open(page);
+      await setMode(page, "network");
+      await fill(page, "valuation");
+      const s = section(page, "valuation");
+      await submitButton(page, "valuation").click();
+      await expectOnlyError(page, "valuation", COPY.NETWORK);
+      await expectTypedValuesKept(page, "valuation");
+      await setMode(page, "success");
+      await submitButton(page, "valuation").click();
+      await expect(s.getByText("已收到查詢", { exact: true })).toBeVisible();
+      expect((await calls(page)).map((call) => call.name)).toEqual([
+        "createValuationLead",
+        "createValuationLead",
+      ]);
+    });
+
     for (const form of ["valuation", "alert"] as const) {
       test(`consent unticked shows consent message and records no call (${form})`, async ({
         page,

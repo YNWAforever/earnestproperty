@@ -15,6 +15,7 @@ type VercelRedirect = {
       }
     | { type: "host"; value: string }
   >;
+  missing?: Array<{ type: "query"; key: string }>;
 };
 
 type VercelConfig = {
@@ -91,6 +92,9 @@ export const config: VercelConfig = {
     ),
     redirectEntry("/estate/belvedere-garden", "/estate/bellagio", true),
     redirectEntry("/estate/sea-pearl-garden", "/estate/rhine-garden", true),
+    // SEO-02: the old Search Console submission returns 404. Keep its URL
+    // working while the current sitemap remains the authoritative inventory.
+    redirectEntry("/sitemap2.xml", "/sitemap.xml", true),
     // /property-detail/:oldId.html is NOT redirected here: it is an app route
     // (src/routes/property-detail.$file.ts) that looks the legacy id up in
     // properties.legacy_detail_id and 301s to the matching /property/ page,
@@ -119,6 +123,23 @@ export const config: VercelConfig = {
     redirectEntry("/bankval.php", "/contact", true),
     redirectEntry("/unlucky.php", "/blog", true),
     redirectEntry("/tran_trends.php", "/blog", true),
+    // L-04: the ID-less English trend URL and the seven IDs that returned 404.
+    // The old building numbers have no verified mapping to the current estate
+    // registry, so use the estate directory temporarily; its estate pages
+    // provide registered transaction information where available. Leave the
+    // denied and untested IDs alone until they can be investigated safely.
+    redirectEntry("/eng/tran_trends.php", "/estate-reviews", false, {
+      missing: [{ type: "query", key: "bldgno" }],
+    }),
+    redirectEntry("/eng/tran_trends.php", "/estate-reviews", false, {
+      has: [
+        {
+          type: "query",
+          key: "bldgno",
+          value: "(?:12847|12940|13050|13089|13245|13256|13489)",
+        },
+      ],
+    }),
     // L-04 (audit :150): old-site 404s, 24 h counts in brackets.
     redirectEntry("/info_gallery.php", "/listings", true), // 707
     redirectEntry("/vr.php", "/listings", true), // 52
@@ -143,7 +164,7 @@ function redirectEntry(
   source: string,
   destination: string,
   permanent: boolean,
-  options: Pick<VercelRedirect, "has"> = {},
+  options: Pick<VercelRedirect, "has" | "missing"> = {},
 ): VercelRedirect {
   return { source, destination, permanent, ...options };
 }

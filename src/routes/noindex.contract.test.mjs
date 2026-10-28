@@ -50,7 +50,12 @@ test("empty transaction and estate-review pages retain conditional noindex", () 
 
 test("listings noindexes zero results after the loader runs, preserving populated and pending behavior", () => {
   const head = routeHead("src/routes/listings.tsx");
-  assert.ok(noindexed(head({ loaderData: { total: 0 } })));
-  assert.equal(noindexed(head({ loaderData: { total: 1 } })), false);
+  assert.ok(
+    noindexed(head({ loaderData: { total: 0, rows: [], seoSearch: { indexable: true } } })),
+  );
+  assert.equal(
+    noindexed(head({ loaderData: { total: 1, rows: [{}], seoSearch: { indexable: true } } })),
+    false,
+  );
   assert.equal(noindexed(head({ loaderData: undefined })), false);
 });

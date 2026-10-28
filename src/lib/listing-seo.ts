@@ -237,19 +237,37 @@ function priceParts(input: ListingSeoInput): string[] {
 // A segment may list alternatives, longest first; the first that fits is used.
 type TitleSegment = string | null | string[];
 
-function assembleTitle(head: string, rawSegments: TitleSegment[]): string {
-  const budget = TITLE_MAX_UNITS - displayWidth(BRAND_SUFFIX);
+function assembleTitle(
+  head: string,
+  rawSegments: TitleSegment[],
+  publicNo = "",
+  reserveListingFacts = false,
+): string {
+  // A bedroom count or floor band can be identical across several listings.
+  // Reserve the public reference so distinct pages remain distinguishable even
+  // when all their other displayed facts happen to match. Never truncate it.
+  const reference = publicNo ? `｜#${publicNo}` : "";
+  const available = TITLE_MAX_UNITS - displayWidth(BRAND_SUFFIX);
+  const referenceSuffix =
+    displayWidth(reference) <= available - Math.min(displayWidth(head), 12) ? reference : "";
+  const budget = available - displayWidth(referenceSuffix);
   const alternatives = rawSegments.map((segment) =>
     Array.isArray(segment) ? segment.filter(Boolean) : segment ? [segment] : [],
   );
-  const segments = alternatives.map((options) => options[0] ?? null);
-  // Reserve the first segment's width before the head takes the rest. A long
-  // source title -- the normal case when estate_id is NULL, so there is no
-  // estate name to head with -- used to consume the whole budget and ship a
-  // title with no price, no room count and no area at all.
-  const reserved = segments.find(Boolean);
-  const headBudget = reserved ? budget - displayWidth(reserved) - displayWidth("｜") : budget;
-  let title = truncateToWidth(head, Math.max(headBudget, Math.ceil(budget / 2)));
+  // Keep room for the listing's status, specification and one price when
+  // possible. An overlong source headline otherwise crowds those facts out.
+  const reserved = reserveListingFacts
+    ? alternatives.slice(0, 3).filter((options) => options.length)
+    : [alternatives.find((options) => options.length) ?? []].filter((options) => options.length);
+  const reservedWidth = reserved.reduce(
+    (width, options) => width + Math.min(...options.map(displayWidth)) + displayWidth("｜"),
+    0,
+  );
+  const minimumHead = reserveListingFacts
+    ? Math.min(displayWidth(head), 12)
+    : Math.ceil(budget / 2);
+  const headBudget = Math.max(budget - reservedWidth, minimumHead);
+  let title = truncateToWidth(head, headBudget);
   for (const options of alternatives) {
     for (const segment of options) {
       if (restates(title, segment)) break;
@@ -260,7 +278,7 @@ function assembleTitle(head: string, rawSegments: TitleSegment[]): string {
       }
     }
   }
-  return `${title}${BRAND_SUFFIX}`;
+  return `${title}${referenceSuffix}${BRAND_SUFFIX}`;
 }
 
 /**
@@ -298,6 +316,14 @@ function removeGeneratedFactsFiller(body: string | null, estate: string | null):
   return rest || null;
 }
 
+/** Remove a reference altogether if the width limit would cut it mid-token. */
+function truncateDescription(value: string, budget: number): string {
+  const truncated = truncateToWidth(value, budget);
+  const next = value.charAt(truncated.length);
+  if (!/[A-Za-z0-9_-]/.test(next)) return truncated;
+  return truncated.replace(/[#＃][A-Za-z0-9_-]*$/, "").trimEnd();
+}
+
 /**
  * The SEO 標題 for a listing detail page.
  *
@@ -322,9 +348,15 @@ export function listingSeoTitle(input: ListingSeoInput): string {
 
   // Unit spec first: it is what separates two listings in the same estate, and
   // "碧堤半島 高層 3 房" is the phrase a buyer actually searches.
-  const spec = [floorLabel(input.floor), bedroomLabel(input.bedrooms)].filter(Boolean).join(" ");
+  const spec = [floorLabel(input.floor), bedroomLabel(input.bedrooms)]
+    .filter(Boolean)
+    .join("")
+    .replace(/\s+/g, "");
   const area = formatArea(positive(input.saleable_area) ?? positive(input.gross_area));
-  const distinguishing = Boolean(spec) || Boolean(area);
+  const publicNo = publicPropertyNo({
+    listing_no: input.listing_no,
+    public_listing_no: input.public_listing_no ?? undefined,
+  });
   // A gone listing must say so: the page is noindexed, but its
   // og:title/og:description still render wherever the URL was shared.
   const state = UNAVAILABLE_STATUSES.has(input.status ?? "")
@@ -333,34 +365,21 @@ export function listingSeoTitle(input: ListingSeoInput): string {
       : "已售出"
     : null;
 
-  return assembleTitle(head, [
-    state,
-    spec || null,
-    // Both sides of a 可買可租 group when they fit, else the first offering alone
-    // (the site price format is wider than the old "$1,180萬" / "$32,000").
-    [priceLabel(input), ...priceParts(input)].filter((value): value is string => Boolean(value)),
-    district ? `${district}放盤` : null,
-    // Only reached when the estate name is short enough to leave room; the
-    // source title often repeats the estate, so it goes last.
-    area ? `實用 ${area}` : null,
-    // Uniqueness backstop, same rule as the description: two units in one
-    // estate at one asking price with no floor and no area recorded produce
-    // byte-identical titles otherwise, which is the duplicate-content case
-    // this module exists to remove. Ordered ahead of the source title
-    // deliberately -- when the two collide for the remaining budget, a
-    // distinct title is worth more than a restatement of the estate name.
-    distinguishing
-      ? null
-      : `編號 ${publicPropertyNo({
-          listing_no: input.listing_no,
-          public_listing_no: input.public_listing_no ?? undefined,
-        })}`,
-    // Only the part of the source title the head does not already carry.
-    // `restates()` suppresses a multi-part segment only when every part is
-    // present, so "碧堤半島 第05座" behind a 碧堤半島 head used to append the
-    // estate name a second time.
-    estate && sourceTitle ? sanitizeListingText(sourceTitle.split(estate).join(" ")) : null,
-  ]);
+  return assembleTitle(
+    head,
+    [
+      state,
+      spec || null,
+      // Both sides of a 可買可租 group when they fit, else the first offering alone.
+      [priceLabel(input), ...priceParts(input)].filter((value): value is string => Boolean(value)),
+      district ? [`${district}放盤`, district] : null,
+      area ? `實用 ${area}` : null,
+      // Only the part of the source title the head does not already carry.
+      estate && sourceTitle ? sanitizeListingText(sourceTitle.split(estate).join(" ")) : null,
+    ],
+    publicNo,
+    true,
+  );
 }
 
 /**
@@ -374,11 +393,13 @@ export function listingSeoTitle(input: ListingSeoInput): string {
  */
 export function listingSeoDescription(input: ListingSeoInput): string {
   const authored = text(input.seo_description);
-  if (authored)
-    return truncateToWidth(
+  if (authored) {
+    const description = truncateDescription(
       stripUnsupportedVrClaim(authored, input.video_url),
       DESCRIPTION_MAX_UNITS,
     );
+    if (description) return description;
+  }
 
   const estate = text(input.estates?.name_zh);
   const sourceTitle = cleanSourceTitle(input.title_zh, input.video_url);
@@ -471,7 +492,7 @@ export function listingSeoDescription(input: ListingSeoInput): string {
   //    above, so it is removed before the body is considered.
   const body = removeGeneratedFactsFiller(text(input.description), estate);
   if (body && displayWidth(description) < DESCRIPTION_MIN_UNITS) {
-    const filler = truncateToWidth(body, bodyBudget - displayWidth(description) - 2);
+    const filler = truncateDescription(body, bodyBudget - displayWidth(description) - 2);
     if (filler) description += `${filler}。`;
   }
 

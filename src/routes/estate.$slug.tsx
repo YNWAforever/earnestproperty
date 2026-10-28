@@ -672,20 +672,38 @@ function EstatePage() {
       ) : null}
 
       <Container className="py-8">
-        <div className="flex items-end justify-between gap-4">
+        <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-primary">最新放盤</h2>
             <p className="mt-1 text-sm text-muted-foreground">
               以下放盤以網站現時資料為準；如需確認是否仍可睇樓，歡迎聯絡團隊。
             </p>
           </div>
-          <Link
-            to="/listings"
-            search={{ deal: "all", estate: estate.slug, page: 1 }}
-            className="text-sm font-semibold text-primary"
-          >
-            查看全部
-          </Link>
+          <nav aria-label={`${estateName}放盤分類`} className="flex flex-wrap gap-x-4 gap-y-2">
+            <Link
+              to="/listings"
+              search={{ deal: "all", estate: estate.slug, page: 1 }}
+              className="text-sm font-semibold text-primary"
+            >
+              查看全部
+            </Link>
+            <Link
+              to="/listings"
+              search={{ deal: "sale", estate: estate.slug, page: 1 }}
+              aria-label={`查看${estateName}售盤`}
+              className="text-sm font-semibold text-primary"
+            >
+              查看售盤
+            </Link>
+            <Link
+              to="/listings"
+              search={{ deal: "rent", estate: estate.slug, page: 1 }}
+              aria-label={`查看${estateName}租盤`}
+              className="text-sm font-semibold text-primary"
+            >
+              查看租盤
+            </Link>
+          </nav>
         </div>
         {latestListings.length === 0 ? (
           <div className="mt-5">
