@@ -44,6 +44,13 @@ export function propertyhkDiff(index, current, details, options = {}) {
     const detail = byId.get(ad.property_id);
     if (detail.identity_verified !== true || !/^[a-f0-9]{64}$/.test(detail.evidence_hash ?? ""))
       throw Error("unverified_detail");
+    if (
+      detail.source_status === "delisted" &&
+      (!Array.isArray(detail.source_status_deals) ||
+        !detail.source_status_deals.length ||
+        detail.source_status_deals.some((deal) => !["sale", "rent"].includes(deal)))
+    )
+      throw Error("detail_status_scope_missing");
     for (const deal of ["sale", "rent"]) {
       const field = deal === "sale" ? "price" : "rent";
       const linked = current.properties.some(
@@ -52,7 +59,8 @@ export function propertyhkDiff(index, current, details, options = {}) {
       if (ad[field] == null && detail[field] == null && !linked) continue;
       if (
         detail.source_status === "delisted" &&
-        ((detail.source_status_reason === "sold" && deal === "rent") ||
+        (!detail.source_status_deals.includes(deal) ||
+          (detail.source_status_reason === "sold" && deal === "rent") ||
           (detail.source_status_reason === "rented" && deal === "sale"))
       )
         throw Error("mixed_terminal_offers");

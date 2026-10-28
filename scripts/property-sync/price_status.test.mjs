@@ -788,3 +788,97 @@ for (const [label, field, otherDeal] of [
     assert.equal(report.counts[label === "已售" ? "sold" : "rented"], 1);
     assert.equal(report.rows.flatMap((r) => r.would_change).length, 1);
   });
+
+for (const label of ["已撤盤", "已下架"])
+  for (const deal of ["sale", "rent"])
+    test(`Property.hk ${label} in the ${deal} cell cannot deactivate the other offer`, () => {
+      const f = fresh();
+      f.current.properties.forEach((p) => {
+        p.source = "propertyhk";
+        p.source_ids = ["100"];
+      });
+      const field = deal === "sale" ? "price" : "rent";
+      const amountLabel = deal === "sale" ? "售價" : "出租價";
+      const otherLabel = deal === "sale" ? "出租價" : "售價";
+      const otherQuote = deal === "sale" ? "$20,000" : "$500 萬";
+      for (const quoted of [label, `${deal === "sale" ? "$500 萬" : "$20,000"} ${label}`]) {
+        assert.throws(
+          () =>
+            parseDetail(
+              {
+                ...dom,
+                fields: [
+                  [amountLabel, quoted],
+                  [otherLabel, otherQuote],
+                ],
+                lifecycle: [label],
+              },
+              detailUrl,
+              f.capture.scraped_at,
+            ),
+          /mixed_terminal_offers/,
+        );
+      }
+      const index = {
+        schema: "propertyhk-index/v1",
+        complete: true,
+        absence_enabled: false,
+        scraped_at: f.capture.scraped_at,
+        ads: [{ property_id: "100", detail_url: detailUrl, [field]: null }],
+      };
+      const detail = parseDetail(
+        { ...dom, fields: [[amountLabel, label]], lifecycle: [label] },
+        detailUrl,
+        f.capture.scraped_at,
+      );
+      assert.deepEqual(detail.source_status_deals, [deal]);
+      const details = {
+        schema: "propertyhk-details/v1",
+        complete: true,
+        absence_enabled: false,
+        listings: [detail],
+      };
+      assert.throws(
+        () => propertyhkDiff(index, f.current, details, { now: f.now }),
+        /mixed_terminal_offers/,
+      );
+      f.current.properties = f.current.properties.filter((p) => p.deal_type === deal);
+      const report = propertyhkDiff(index, f.current, details, { now: f.now });
+      assert.equal(report.counts.delisted, 1);
+      assert.deepEqual(report.rows[0].would_change, [
+        { field: "status", old: "active", new: "inactive" },
+      ]);
+      delete detail.source_status_deals;
+      assert.throws(
+        () => propertyhkDiff(index, f.current, details, { now: f.now }),
+        /detail_status_scope_missing/,
+      );
+    });
+
+test("Property.hk listing-wide withdrawal can settle both explicitly linked offers", () => {
+  const f = fresh();
+  f.current.properties.forEach((p) => {
+    p.source = "propertyhk";
+    p.source_ids = ["100"];
+  });
+  const detail = parseDetail(
+    { ...dom, fields: [...dom.fields, ["樓盤狀態", "已撤盤"]], lifecycle: ["已撤盤"] },
+    detailUrl,
+    f.capture.scraped_at,
+  );
+  assert.deepEqual(detail.source_status_deals, ["rent", "sale"]);
+  const report = propertyhkDiff(
+    {
+      schema: "propertyhk-index/v1",
+      complete: true,
+      absence_enabled: false,
+      scraped_at: f.capture.scraped_at,
+      ads: [{ property_id: "100", detail_url: detailUrl, price: "5000000", rent: "20000" }],
+    },
+    f.current,
+    { schema: "propertyhk-details/v1", complete: true, absence_enabled: false, listings: [detail] },
+    { now: f.now },
+  );
+  assert.equal(report.counts.delisted, 2);
+  assert.ok(report.rows.every((r) => r.would_change[0].new === "inactive"));
+});

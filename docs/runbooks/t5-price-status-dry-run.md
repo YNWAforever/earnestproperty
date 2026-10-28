@@ -131,7 +131,11 @@ lifecycle or company reference. An unchanged-detail cache is deferred. The plann
 therefore emits all index detail URLs, including new ads. New/unlinked company refs
 are held for review. A sold label with a quoted rent, or rented label with a quoted
 sale price, fails closed because one offer's terminal label cannot settle the other
-offer's lifecycle. The diff requires complete details, exact exported `propertyhk`
+offer's lifecycle. Withdrawal labels in an amount cell likewise apply only to that
+deal; a quoted or linked opposite offer stops the report unless its withdrawal is
+also explicit. A listing status field can establish withdrawal of both offers. Terminal details must retain
+`source_status_deals`; older files without that scope must be collected again.
+The diff requires complete details, exact exported `propertyhk`
 source links, agreement on index/detail amounts for active offers and company number
 
 - sale/rent uniqueness. A missing, stale, failed or mismatched detail fails/holds;

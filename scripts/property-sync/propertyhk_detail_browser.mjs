@@ -18,8 +18,9 @@ export function parseDetail(dom, url, capturedAt) {
     const values = dom.fields
       .filter(([label]) => labels.includes(label))
       .map(([, raw]) => {
-        const cleaned = raw.replace(/[,\s]/g, "");
-        if (["--", "面議", "已售", "已租", "已撤盤", "已下架"].includes(cleaned)) return null;
+        const cleaned = raw.replace(/已售|已租|已撤盤|已下架/g, "").replace(/[,\s]/g, "");
+        if (!cleaned && /已售|已租|已撤盤|已下架/.test(raw)) return null;
+        if (["--", "面議"].includes(cleaned)) return null;
         const match = /^\$(\d+(?:\.\d+)?)(萬)?$/.exec(cleaned);
         if (!match || (multiplier === 10000 && !match[2]) || (multiplier === 1 && match[2]))
           throw Error("detail_amount_invalid");
@@ -40,11 +41,27 @@ export function parseDetail(dom, url, capturedAt) {
     throw Error("conflicting_detail_status");
   const reason =
     { 已售: "sold", 已租: "rented", 已撤盤: "delisted", 已下架: "delisted" }[labels[0]] ?? null;
+  // A withdrawal in an amount cell belongs to that offer. A separate listing
+  // status field can establish withdrawal of both sale and rent.
+  const terminalDeals = new Set();
+  if (reason === "sold") terminalDeals.add("sale");
+  else if (reason === "rented") terminalDeals.add("rent");
+  else if (reason) {
+    for (const [label, raw] of dom.fields) {
+      if (!/已撤盤|已下架/.test(raw)) continue;
+      if (["售價", "出售價", "狀態", "樓盤狀態"].includes(label)) terminalDeals.add("sale");
+      if (["出租價", "租金", "狀態", "樓盤狀態"].includes(label)) terminalDeals.add("rent");
+    }
+    if (!terminalDeals.size) throw Error("detail_status_scope_missing");
+  }
   const price = field(["售價", "出售價"], 10000),
     rent = field(["出租價", "租金"], 1);
   // A terminal label in one offer cannot establish the lifecycle of the other
   // quoted deal. Keep the whole detail out of reports until that scope is clear.
-  if ((reason === "sold" && rent != null) || (reason === "rented" && price != null))
+  if (
+    reason &&
+    ((price != null && !terminalDeals.has("sale")) || (rent != null && !terminalDeals.has("rent")))
+  )
     throw Error("mixed_terminal_offers");
   if (!reason && price == null && rent == null) throw Error("detail_offers_missing");
   return {
@@ -55,6 +72,7 @@ export function parseDetail(dom, url, capturedAt) {
     rent,
     source_status: reason ? "delisted" : "active",
     source_status_reason: reason,
+    source_status_deals: [...terminalDeals].sort(),
     identity_verified: true,
     evidence_hash: digest(JSON.stringify(dom)),
   };
@@ -76,8 +94,7 @@ export function readDetailDom() {
     const text = clone.textContent.trim();
     const status = text.match(/已售|已租|已撤盤|已下架/g) ?? [];
     lifecycle.push(...status);
-    if (!["狀態", "樓盤狀態"].includes(name))
-      fields.push([name, text.replace(/已售|已租|已撤盤|已下架/g, "").trim() || text]);
+    fields.push([name, text]);
   }
   return {
     refs: [...document.querySelectorAll(".refno")].map((n) => n.textContent.trim()),
