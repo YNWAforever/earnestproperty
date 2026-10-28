@@ -81,6 +81,9 @@ export function parseDetail(dom, url, capturedAt) {
 // Runs in the page. Select only identity, quoted amounts and explicit status;
 // personal contacts and the rest of the body never leave the browser.
 export function readDetailDom() {
+  // A reference can precede a blocking script whose request is still paced.
+  // Leave the existing bounded polling loop to wait for the full document.
+  if (document.readyState === "loading") return null;
   const fields = [],
     lifecycle = [];
   for (const tr of document.querySelectorAll("tr")) {
@@ -191,8 +194,13 @@ export async function collectDetails(
             lastRequest = now();
           }
         })
-        .catch(() => {
-          if (!closing) stop ??= "browser_request_failed";
+        .catch((error) => {
+          // Navigation can cancel an old resource while it waits in the pacing
+          // queue. Its interception ID no longer denotes a request to send.
+          const canceled = ["continueRequest", "failRequest"].some((method) =>
+            error.message?.endsWith(`Protocol error (Fetch.${method}): Invalid InterceptionId.`),
+          );
+          if (!closing && !canceled) stop ??= "browser_request_failed";
         });
       return requests;
     });

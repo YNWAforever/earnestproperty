@@ -110,7 +110,7 @@
     "test:property-sync:publication:owned:db": "node scripts/acceptance/named-publication-owned.mjs",
     "test:property-sync:admin": "node --test src/lib/mls/sync-run-repository.test.mjs src/lib/mls/dispatch-property-sync.test.mjs scripts/mls/record-sync-execution.test.mjs && bun test --no-env-file src/components/admin/property-sync/PropertySyncWorkspace.test.tsx",
     "test:property-sync:admin:db": "node --test --test-concurrency=1 src/lib/mls/sync-run-repository.db.test.mjs",
-    "test:property-sync:ui": "node scripts/test-property-sync-workspace.mjs",
+    "test:property-sync:ui": "node scripts/test-property-sync-workspace.mjs && node --test scripts/property-sync/price_status.browser.test.mjs",
     "test:property-sync:withdrawal": "node --test src/lib/mls/withdrawal-review.test.mjs",
     "test:property-sync:withdrawal:db": "node --test --test-concurrency=1 src/lib/mls/withdrawal-review.db.test.mjs src/lib/mls/historical-withdrawal.db.test.mjs",
     "test:property-sync:private-replay:db": "node --test --test-concurrency=1 src/lib/mls/original-28hse-evidence.db.test.mjs",

@@ -505,6 +505,7 @@ function browserMock(
     requests = [],
     extraPageRequest = false,
     socket = false,
+    requestFailure = null,
   } = {},
 ) {
   let time = 0,
@@ -601,6 +602,12 @@ function browserMock(
                 if (name === "Page.getFrameTree") return { frameTree: { frame: { id: "main" } } };
                 if (name === "Fetch.continueRequest" || name === "Fetch.failRequest")
                   sent.push({ name, ...args, time });
+                if (
+                  name === "Fetch.continueRequest" &&
+                  args.requestId === "resource-0" &&
+                  requestFailure
+                )
+                  throw Error(requestFailure);
               },
             }),
             newPage: async () => page,
@@ -659,6 +666,23 @@ test("an unapproved redirected document fails closed before continuing its reque
   await assert.rejects(collectDetails([detailUrl], mock), /unexpected_navigation/);
   assert.equal(mock.inspect().sent.at(-1).name, "Fetch.failRequest");
   assert.equal(mock.inspect().closed, 2);
+});
+test("only a canceled request's invalid interception ID is safe to skip", async () => {
+  const canceled = browserMock([200], {
+    requests: [{ type: "Image", url: "https://www.property.hk/image.png" }],
+    requestFailure: "Protocol error (Fetch.continueRequest): Invalid InterceptionId.",
+  });
+  assert.equal((await collectDetails([detailUrl], canceled)).complete, true);
+  for (const requestFailure of [
+    "Protocol error (Fetch.continueRequest): Target closed",
+    "Protocol error (Fetch.enable): Invalid InterceptionId.",
+  ]) {
+    const broken = browserMock([200], {
+      requests: [{ type: "Image", url: "https://www.property.hk/image.png" }],
+      requestFailure,
+    });
+    await assert.rejects(collectDetails([detailUrl], broken), /browser_request_failed/);
+  }
 });
 for (const extraPageRequest of ["popup", "frameless", "subframe"])
   test(`an unpaced browser target is blocked before sending (${extraPageRequest})`, async () => {
