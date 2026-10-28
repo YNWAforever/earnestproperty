@@ -37,6 +37,10 @@ export function parseDetail(dom, url, capturedAt) {
     { 已售: "sold", 已租: "rented", 已撤盤: "delisted", 已下架: "delisted" }[labels[0]] ?? null;
   const price = field(["售價", "出售價"], 10000),
     rent = field(["出租價", "租金"], 1);
+  // A terminal label in one offer cannot establish the lifecycle of the other
+  // quoted deal. Keep the whole detail out of reports until that scope is clear.
+  if ((reason === "sold" && rent != null) || (reason === "rented" && price != null))
+    throw Error("mixed_terminal_offers");
   if (!reason && price == null && rent == null) throw Error("detail_offers_missing");
   return {
     property_id: detailIdentity(url),
@@ -110,6 +114,30 @@ export async function collectDetails(
   try {
     context = await browser.newContext({ serviceWorkers: "block" }); // Fresh, in-memory; no cookie import/export.
     const page = await context.newPage();
+    // The CDP pacing session below covers this page's main target only. Popups
+    // and out-of-process iframes can bypass it. Reject their first request at
+    // the context boundary and fail the whole capture instead of claiming pacing.
+    await context.route("**/*", async (route) => {
+      let frame;
+      try {
+        frame = route.request().frame();
+      } catch {
+        // A request without a page/frame cannot be covered by our CDP session.
+      }
+      if (frame !== page.mainFrame() || stop) {
+        stop ??= "unexpected_browser_target";
+        await route.abort();
+      } else await route.fallback();
+    });
+    context.on("page", (opened) => {
+      if (opened !== page) stop ??= "unexpected_browser_target";
+    });
+    // WebSocket handshakes do not pass through HTTP routes or Fetch pauses.
+    // A routed socket stays local unless connectToServer is explicitly called.
+    await context.routeWebSocket("**/*", async (socket) => {
+      stop ??= "unexpected_browser_target";
+      await socket.close();
+    });
     let lastRequest = null,
       status = null;
     // Playwright routes automatically continue HTTP redirects without routing

@@ -311,15 +311,48 @@ test("Property.hk terminal labels in the amount cell preserve inactive reasons w
     assert.equal(detail.price, null);
   }
 });
-function browserMock(sequence, { late429 = false, closing429 = false, requests = [] } = {}) {
+for (const [fields, lifecycle] of [
+  [
+    [
+      ["售價", "$500 萬"],
+      ["出租價", "已租"],
+    ],
+    ["已租"],
+  ],
+  [
+    [
+      ["售價", "已售"],
+      ["出租價", "$20,000"],
+    ],
+    ["已售"],
+  ],
+])
+  test(`a terminal offer cannot mark the other quoted deal inactive (${lifecycle[0]})`, () => {
+    assert.throws(
+      () => parseDetail({ ...dom, fields, lifecycle }, detailUrl, fixture.capture.scraped_at),
+      /mixed_terminal_offers/,
+    );
+  });
+function browserMock(
+  sequence,
+  {
+    late429 = false,
+    closing429 = false,
+    requests = [],
+    extraPageRequest = false,
+    socket = false,
+  } = {},
+) {
   let time = 0,
     current = 0,
     handler,
     contextHandler,
     requestHandler,
+    routeHandler,
+    socketHandler,
     attempts = 0,
     closed = 0;
-  const mainFrame = {},
+  const mainFrame = { page: () => page },
     request = { isNavigationRequest: () => true, frame: () => mainFrame, url: () => detailUrl };
   const sent = [];
   const paused = (id, resourceType = "Document", url = detailUrl) => ({
@@ -342,6 +375,32 @@ function browserMock(sequence, { late429 = false, closing429 = false, requests =
     goto: async () => {
       attempts++;
       await requestHandler(paused("navigation-" + attempts));
+      if (routeHandler)
+        await routeHandler({
+          request: () => ({ frame: () => mainFrame }),
+          abort: async () => {
+            throw Error("main_page_blocked");
+          },
+          fallback: async () => {},
+        });
+      if (extraPageRequest && routeHandler)
+        await routeHandler({
+          request: () => ({
+            frame: () => {
+              if (extraPageRequest === "frameless") throw Error("no_frame");
+              return { page: () => (extraPageRequest === "subframe" ? page : {}) };
+            },
+          }),
+          abort: async () => sent.push({ name: "extra-page-aborted", time }),
+          fallback: async () => sent.push({ name: "extra-page-sent", time }),
+        });
+      else if (extraPageRequest) sent.push({ name: "extra-page-sent", time });
+      if (socket && socketHandler)
+        await socketHandler({
+          close: async () => sent.push({ name: "websocket-closed", time }),
+          connectToServer: () => sent.push({ name: "websocket-sent", time }),
+        });
+      else if (socket) sent.push({ name: "websocket-sent", time });
       await Promise.all(
         requests.map((r, i) => requestHandler(paused("resource-" + i, r.type, r.url))),
       );
@@ -361,8 +420,14 @@ function browserMock(sequence, { late429 = false, closing429 = false, requests =
         newContext: async (options) => {
           contextOptions = options;
           return {
-            on: (_name, cb) => {
-              contextHandler = cb;
+            on: (name, cb) => {
+              if (name === "response") contextHandler = cb;
+            },
+            route: async (_pattern, cb) => {
+              routeHandler = cb;
+            },
+            routeWebSocket: async (_pattern, cb) => {
+              socketHandler = cb;
             },
             newCDPSession: async () => ({
               on: (_name, cb) => {
@@ -429,6 +494,21 @@ test("an unapproved redirected document fails closed before continuing its reque
   });
   await assert.rejects(collectDetails([detailUrl], mock), /unexpected_navigation/);
   assert.equal(mock.inspect().sent.at(-1).name, "Fetch.failRequest");
+  assert.equal(mock.inspect().closed, 2);
+});
+for (const extraPageRequest of ["popup", "frameless", "subframe"])
+  test(`an unpaced browser target is blocked before sending (${extraPageRequest})`, async () => {
+    const mock = browserMock([200], { extraPageRequest });
+    await assert.rejects(collectDetails([detailUrl], mock), /unexpected_browser_target/);
+    assert.ok(mock.inspect().sent.some((r) => r.name === "extra-page-aborted"));
+    assert.ok(mock.inspect().sent.every((r) => r.name !== "extra-page-sent"));
+    assert.equal(mock.inspect().closed, 2);
+  });
+test("a WebSocket cannot open an unpaced connection from the main frame", async () => {
+  const mock = browserMock([200], { socket: true });
+  await assert.rejects(collectDetails([detailUrl], mock), /unexpected_browser_target/);
+  assert.ok(mock.inspect().sent.some((r) => r.name === "websocket-closed"));
+  assert.ok(mock.inspect().sent.every((r) => r.name !== "websocket-sent"));
   assert.equal(mock.inspect().closed, 2);
 });
 test("persistent challenge stops at 20s without retries; 429 stops immediately", async () => {

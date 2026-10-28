@@ -75,7 +75,10 @@ node scripts/property-sync/price_status_diff.mjs \
 Willy's **Ask A Yes**, 2026-10-28, sanctions normal headless browsing at **≥3 seconds
 between requests**, including subresources, HTTP redirects and native challenge reloads.
 Chromium's request pauses share one serial queue; service workers are blocked so
-they cannot bypass that queue. Requests still run in the normal browser, without
+they cannot bypass that queue. The adapter fails closed before sending any popup,
+subframe, frameless request or WebSocket handshake, because those targets fall
+outside the verified pacing session. A page requiring such a target stops the
+capture and needs reviewed support. Requests still run in the normal browser, without
 HTTP replay or challenge manipulation. A fresh browser may run
 the site's own JavaScript and receive its own in-memory cookies. The supplied probe
 facts are index HTTP 200 and detail 403 → 200 in about six seconds. They are not a
@@ -126,7 +129,9 @@ node scripts/property-sync/propertyhk_daily_diff.mjs \
 Phase 0 confirms every present ad before comparing: the index alone cannot verify
 lifecycle or company reference. An unchanged-detail cache is deferred. The planner
 therefore emits all index detail URLs, including new ads. New/unlinked company refs
-are held for review. The diff requires complete details, exact exported `propertyhk`
+are held for review. A sold label with a quoted rent, or rented label with a quoted
+sale price, fails closed because one offer's terminal label cannot settle the other
+offer's lifecycle. The diff requires complete details, exact exported `propertyhk`
 source links, agreement on index/detail amounts for active offers and company number
 
 - sale/rent uniqueness. A missing, stale, failed or mismatched detail fails/holds;
