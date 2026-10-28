@@ -205,6 +205,23 @@ test("Property.hk parses duplicate mobile/desktop fields and rejects identity/pr
   );
   assert.throws(() => detailIdentity("https://elsewhere.test/asking_detail/100.html"));
 });
+test("Property.hk terminal labels in the amount cell preserve inactive reasons without a numeric quote", () => {
+  for (const [label, reason] of [
+    ["已售", "sold"],
+    ["已租", "rented"],
+    ["已撤盤", "delisted"],
+    ["已下架", "delisted"],
+  ]) {
+    const detail = parseDetail(
+      { ...dom, fields: [["售價", label]], lifecycle: [label] },
+      detailUrl,
+      fixture.capture.scraped_at,
+    );
+    assert.equal(detail.source_status, "delisted");
+    assert.equal(detail.source_status_reason, reason);
+    assert.equal(detail.price, null);
+  }
+});
 function browserMock(sequence) {
   let time = 0,
     current = 0,

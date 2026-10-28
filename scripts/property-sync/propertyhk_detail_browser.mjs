@@ -19,7 +19,7 @@ export function parseDetail(dom, url, capturedAt) {
       .filter(([label]) => labels.includes(label))
       .map(([, raw]) => {
         const cleaned = raw.replace(/[,\s]/g, "");
-        if (["--", "面議", "已售", "已租"].includes(cleaned)) return null;
+        if (["--", "面議", "已售", "已租", "已撤盤", "已下架"].includes(cleaned)) return null;
         const match = /^\$(\d+(?:\.\d+)?)(萬)?$/.exec(cleaned);
         if (!match || (multiplier === 10000 && !match[2]) || (multiplier === 1 && match[2]))
           throw Error("detail_amount_invalid");
