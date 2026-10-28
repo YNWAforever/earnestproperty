@@ -180,6 +180,12 @@ export function diffPriceStatus(
       continue;
     }
     if (stamp(row.captured_at ?? capture.scraped_at) > clock) throw Error("future_evidence");
+    // Complete pagination does not resolve conflicts recorded by the native
+    // parser. A report has no authority to acknowledge those review holds.
+    if (row.raw_payload?.source_conflicts?.some((conflict) => conflict.status === "review")) {
+      emit(match, "ambiguous-ref", [], "source_conflict_requires_review", evidenceHash);
+      continue;
+    }
     const reason = row.source_status_reason;
     if (
       !["active", "delisted"].includes(row.source_status) ||
@@ -205,6 +211,7 @@ export function diffPriceStatus(
     const field = row.deal_type === "sale" ? "price" : "rent";
     const next = money(row[field]),
       prior = money(target[field]);
+    if (next === "0") throw Error("invalid_amount");
     if (next != null && next !== prior) {
       if (target.override_fields.includes(field))
         emit(match, "override-held", [], `staff_${field}_override`, evidenceHash);

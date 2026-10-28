@@ -286,6 +286,50 @@ test("duplicates, missing references, review holds and unknown company refs are 
     );
   }
 });
+test("unreviewed native source conflicts hold price, rent and terminal proposals", () => {
+  for (const deal of ["sale", "rent"])
+    for (const terminal of [false, true]) {
+      const f = fresh();
+      const observed = f.capture.listings.find((r) => r.deal_type === deal);
+      const field = deal === "sale" ? "price" : "rent";
+      observed.raw_payload = {
+        source_conflicts: [
+          {
+            field,
+            dom: observed[field],
+            json_ld: "6000000",
+            resolution: "dom",
+            status: "review",
+          },
+        ],
+      };
+      if (terminal) {
+        observed.source_status = "delisted";
+        observed.source_status_reason = deal === "sale" ? "sold" : "rented";
+      }
+      validate28Capture(f.capture);
+      const report = run(f);
+      assert.equal(report.counts["ambiguous-ref"], 1, `${deal}/${terminal}`);
+      const held = report.rows.find((r) => r.category === "ambiguous-ref");
+      assert.equal(held.reason, "source_conflict_requires_review");
+      assert.deepEqual(held.would_change, []);
+      assert.equal(report.rows.flatMap((r) => r.would_change).length, 1);
+      observed.raw_payload.source_conflicts = [];
+      assert.equal(run(f).counts["ambiguous-ref"], 0);
+    }
+});
+test("zero source quotes never propose replacing a current price or rent", () => {
+  for (const [i, field] of [
+    [0, "price"],
+    [1, "rent"],
+  ])
+    for (const zero of [0, "0", "000.0000"]) {
+      const f = fresh();
+      f.capture.listings[i][field] = zero;
+      validate28Capture(f.capture);
+      assert.throws(() => run(f), /invalid_amount/, `${field}/${zero}`);
+    }
+});
 test("36h is inclusive, older capture/detail/export suppresses proposals", () => {
   const f = fresh();
   f.now = "2026-10-30T00:00:00Z";
