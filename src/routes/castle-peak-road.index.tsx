@@ -490,6 +490,10 @@ function CastlePeakRoadHubPage() {
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
+    inLanguage: "zh-HK",
+    name: castlePeakRoadHub.label,
+    alternateName: castlePeakRoadHub.nameEn,
+    url: `${SITE_URL}${castlePeakRoadHub.path}`,
     mainEntity: faqs.map((faq) => ({
       "@type": "Question",
       name: faq.question,

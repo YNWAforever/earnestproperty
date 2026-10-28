@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { MapPin, Phone, Mail } from "lucide-react";
 import { SITE_BRANCHES, SITE_CONTACT } from "@/config/site";
 import { estatesWithPage } from "@/content/estate-registry";
-import { clientAreaGroupsInNavOrder } from "@/content/client-area-presentation";
+import { corridorFooterLinks } from "@/lib/corridor-links";
 import { SiteLink } from "@/components/site/SiteLink";
 import { PhoneLink } from "@/components/site/PhoneLink";
 // "2688 2988", matching how the same numbers are printed elsewhere on the
@@ -104,14 +104,12 @@ export function SiteFooter() {
                   搜尋全部放盤
                 </Link>
               </li>
-              {/* docx p1's three region labels and destinations, from the same
-                  client-area-presentation.ts source the header navigation and
-                  the estate directory read -- so the footer cannot drift into
-                  a fourth wording for the same three destinations. */}
-              {clientAreaGroupsInNavOrder().map((group) => (
-                <li key={group.key}>
+              {/* Preserve the client's area labels and add corridor guides
+                  only once, using canonical page destinations. */}
+              {corridorFooterLinks().map((group) => (
+                <li key={group.href}>
                   <SiteLink href={group.href} className="opacity-80 hover:opacity-100">
-                    {group.label}買樓租樓
+                    {group.label}
                   </SiteLink>
                 </li>
               ))}

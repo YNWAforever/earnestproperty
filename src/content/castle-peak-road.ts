@@ -16,6 +16,7 @@ export type CorridorHub = {
   path: string;
   label: string;
   launchName: string;
+  nameEn: string;
   title: string;
   description: string;
   h1: string;
@@ -79,6 +80,7 @@ export const castlePeakRoadHub = {
   slug: "castle-peak-road",
   path: "/castle-peak-road",
   label: "青山公路 Castle Peak Road",
+  nameEn: "Castle Peak Road",
   launchName: "Core Corridor Launch",
   title: "青山公路樓盤｜汀九、深井、青龍頭海景屋苑｜晉誠地產",
   description:
@@ -221,6 +223,11 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
         answer:
           "想要大型屋苑、商店和較多放盤可先比較深井；想要低密度、海景、私隱和較寧靜環境，汀九會更合適。",
       },
+      {
+        question: "汀九睇樓時要比較哪些細節？",
+        answer:
+          "汀九盤源較深井大型屋苑稀少，睇樓時需要仔細比較維修、管理費、車位和實用面積，按家庭對私隱、泊車和安靜生活的需要選擇。",
+      },
     ],
     links: [
       { href: "/castle-peak-road/sham-tseng", label: "比較深井 / 青山公路" },
@@ -309,6 +316,10 @@ export const castlePeakRoadSegments: CorridorSegment[] = [
       {
         question: "青龍頭交通會否太遠？",
         answer: "青龍頭主要靠巴士、小巴和自駕，買家應按上班地點實測繁忙時間車程。",
+      },
+      {
+        question: "青山公路深井段至青龍頭屬哪個校網？",
+        answer: "這一段屬 62 校網，實際派位及個別地址的校網資料以教育局最新公布為準。",
       },
     ],
     links: [
