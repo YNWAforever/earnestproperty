@@ -1,5 +1,14 @@
 # Daily 28hse collection operations
 
+T5 Phase 0 adds a separate manual-first `property-price-status-sync.yml` report
+workflow at 07:00 HKT, scheduled only when `PRICE_STATUS_SYNC_ENABLED=true` (default
+false). It consumes existing complete captures, waits on the shared MLS lock and
+produces sanitized price/rent/status diffs under a read-only transaction. Property.hk
+Ask A Yes permits normal headless ≥3s detail reads for the required later fallback;
+the box tools remain dry-run only. Neither path is wired to this 09:00 owner/gold
+workflow. Daily 28Hse Firecrawl-basic remains a separate later T5 workflow.
+See the [T5 runbook](../runbooks/t5-price-status-dry-run.md).
+
 ## Scheduled path from 2026-10-25: 09:00 Hong Kong owner-capture publication
 
 Homepage promotion refresh now requires a fresh complete sale index inside the

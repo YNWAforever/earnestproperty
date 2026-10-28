@@ -94,7 +94,7 @@ gh workflow run property-sync-daily.yml --repo YNWAforever/earnestproperty --ref
 
 ### Collection取消／Property.hk403
 
-停止full gate：保存可得raw/page/detail checkpoints，缺上傳部分明示missing evidence；不得拼昨日頁面成今日full。任一branch未complete即全Property.hk業務apply=0；current baseline保持，沒有missing下架。403／challenge不可retry繞過，交provider；其他來源工作繼續。Collection重做是新觀察，downstream retry則不得再collect。
+停止full gate：保存可得raw/page/detail checkpoints，缺上傳部分明示missing evidence；不得拼昨日頁面成今日full。任一branch未complete即全Property.hk業務apply=0；current baseline保持，沒有missing下架。2026-10-28 Willy Ask A Yes 批准的正常 headless browser 可讓網站自行完成 JS challenge：pin `PROPERTYHK_BROWSER_EXECUTABLE`、fresh context、≥3秒／頁；約20秒未清除或429即停，HTTP index 非200／challenge／缺 C-018613即停。不得複製 cookies、用代理、stealth 或 captcha solver。超出此正常瀏覽器路徑仍不得繞過，交provider；其他來源工作繼續。詳見 [T5 Phase0 runbook](t5-price-status-dry-run.md)。Collection重做是新觀察，downstream retry則不得再collect。新工具只報 price/status diff、override-held 和 stale，absence_enabled=false，未接入09:00 gold/owner schedule。
 
 ### 後台dispatch未知／stale
 

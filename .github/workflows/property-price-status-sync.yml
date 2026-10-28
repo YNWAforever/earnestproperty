@@ -1,0 +1,48 @@
+name: T5 Phase 0 price and status dry-run
+"on":
+  workflow_dispatch:
+  schedule:
+    # 07:00 Asia/Hong_Kong; disabled unless explicitly enabled by the repo variable.
+    - cron: "0 23 * * *"
+concurrency:
+  group: property-sync-agent-540
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  report:
+    if: github.event_name == 'workflow_dispatch' || vars.PRICE_STATUS_SYNC_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install locked offline parser dependencies
+        run: |
+          python -m pip install -r scripts/property-sync/requirements.txt
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Select newest existing complete 28Hse capture
+        env:
+          GH_TOKEN: ${{ secrets.PROPERTY_SYNC_EVIDENCE_TOKEN || github.token }}
+          EVIDENCE_REPOSITORY: ${{ vars.PROPERTY_SYNC_EVIDENCE_REPO || github.repository }}
+        run: |
+          mkdir -p .private-sync-evidence price-status-report
+          python scripts/property-sync/select_price_status_capture.py --repository "$EVIDENCE_REPOSITORY" --out .private-sync-evidence/selected.json
+      - name: Wait for MLS writer lock and report under read-only transaction
+        env:
+          PRICE_STATUS_SYNC_READONLY_DATABASE_URL: ${{ secrets.PRICE_STATUS_SYNC_READONLY_DATABASE_URL }}
+        run: |
+          node scripts/property-sync/price_status_locked.mjs --capture .private-sync-evidence/selected.json --out price-status-report/diff
+          cat price-status-report/diff.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: price-status-dry-run-${{ github.run_id }}
+          path: price-status-report/diff.*
+          retention-days: 7
+          if-no-files-found: error

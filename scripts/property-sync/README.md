@@ -294,6 +294,28 @@ count-drop, baseline scope/version, receipt and absence rules remain in force.
 Dry-run cannot submit, publish or advance a baseline. The optional transport
 does not turn a few successful pages into a complete snapshot.
 
+## T5 Phase 0 price/status dry-run + Property.hk Ask A Yes (2026-10-28)
+
+[`property-price-status-sync.yml`](../../.github/workflows/property-price-status-sync.yml)
+is a separate manual-first report workflow. Its 07:00 HKT cron defaults off unless
+`PRICE_STATUS_SYNC_ENABLED=true`. It selects the newest existing **complete** 28Hse
+artifact from the private evidence release; it adds no collector. It queues in
+`property-sync-agent-540` and waits on the MLS writer lock inside a read-only
+transaction. Only price/rent/status proposals are reported; staff overrides hold,
+absence has no proposed change and evidence older than 36 hours is stale. Reports
+contain hashed references and no PII. No Neon query or write was run for this PR.
+
+Property.hk is a required later T5 fallback. `propertyhk_index_http.py` reads the
+fixed 19-agent manifest with an honest UA and ≥3 seconds between requests;
+`propertyhk_detail_browser.mjs` uses the approved normal headless path with a pinned
+`PROPERTYHK_BROWSER_EXECUTABLE`, ≥3 seconds per page, at most four transport attempts,
+a ~20-second challenge cutoff and immediate stop on 429. `propertyhk_daily_diff.mjs`
+compares browser-confirmed evidence against a read-only export/fixture with staff
+overrides held and `absence_enabled=false`. These tools are not wired to the 09:00
+owner workflow. No Firecrawl for Property.hk; later daily 28Hse Firecrawl-basic must
+be a separate T5 workflow, never gold. See the [runbook](../../docs/runbooks/t5-price-status-dry-run.md)
+for dispatch, SQL export templates, file-only commands and failure recovery.
+
 ## Daily inventory recovery (2026-10-01)
 
 The property workflow runs at 09:00 Asia/Hong_Kong (`0 1 * * *` UTC), subject to GitHub scheduling delays. The schedule publishes an operator-approved owner-capture bundle through `owner-publication-v1`. It does not run `run_28hse_sync.py` and does not read `PROPERTY_SYNC_28HSE_TRANSPORT` or Firecrawl. It stays inactive unless `PROPERTY_SYNC_DAILY_ENABLED=true` and `OWNER_PUBLICATION_DAILY_ENABLED=true`. Keep `PROPERTY_SYNC_EXPECTED_BRANCH=main`. Manual HTTP shadow/apply/replay still requires `PROPERTY_SYNC_POLICY_APPROVED=python-v2.2` and the exact verified direct Neon database host in `PROPERTY_SYNC_EXPECTED_DATABASE_HOST`. Those manual modes are not the 09:00 schedule. See `docs/deployment/property-sync-daily.md`.
@@ -308,7 +330,7 @@ Before enabling writes, run shadow collection with a restored accepted baseline.
 
 Absence handling stays disabled until a complete fresh snapshot and reviewed reconciliation exist. Network errors, security challenges, partial pagination and failed detail parsing are not evidence of withdrawal. The current absence algorithm compares only the previous accepted full snapshot; switching it on cannot clean up all historical stale source IDs. Historical reconciliation must be a separate reviewed, reversible operation, with source identities, before/after status, reason and receipt recorded.
 
-Property.hk EPW/EPS/EPT are not live-enabled by this patch. Live verification returned a browser security check (403). Obtain a supported feed/export or resolve access with the provider before validating branch pagination, selectors and global-versus-branch ID scope. Do not copy challenge cookies or treat failed fetches as empty inventory. The supplied EPS link starts at page 9; a full branch crawl must start at page 1.
+Historical HTTP verification returned a Property.hk browser security check (403). Under Willy's **2026-10-28 Ask A Yes**, the sanctioned detail path is a fresh normal headless browser at ≥3 seconds per page, pinned by `PROPERTYHK_BROWSER_EXECUTABLE`, with a ~20-second challenge cutoff and immediate stop on 429. The site may set its own in-memory cookies; copied cookies, proxies, stealth and captcha solvers remain forbidden. Failed fetches never mean empty inventory. Full branch scope, ID semantics, ingestion and absence authority remain unverified/disabled. The old HTTP worker still fails closed on 403. See the [T5 Phase 0 runbook](../../docs/runbooks/t5-price-status-dry-run.md) for the separate agentblog HTTP index + browser detail + file-only diff tools.
 
 ### Private real Property.hk index evidence
 

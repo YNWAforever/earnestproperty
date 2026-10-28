@@ -1,5 +1,15 @@
 # EP-09 — Property.hk scope 與合法完整存取缺口
 
+**2026-10-28 T5 Phase0／Ask A Yes 補充：** Willy 批准 normal headless browser
+≥3秒／頁，pin `PROPERTYHK_BROWSER_EXECUTABLE`；fresh context 的網站自行 JS challenge
+可正常完成，約20秒不清除或429即停。仍禁止 copied cookies、proxies、stealth、captcha
+solvers；HTTP index 非200/challenge/缺公司牌照即停。Property.hk 是必需 fallback；
+目前只新增乾跑，無 production apply、absence auto-apply 或09:00 gold/owner改動。
+以下 BLOCKED_EXTERNAL 是歷史 HTTP/full-scope 驗收狀態，不能再解讀為禁止已批准的正常
+browser 路徑，也不能把新的存取路徑當 full-scope/ingestion 驗收。
+詳見 [2026-10-28 存取修訂](propertyhk-access-verification.md)及
+[T5 runbook](../runbooks/t5-price-status-dry-run.md)。
+
 | 分行 | 原用戶 dt | 原 audit index dt | 現況 |
 |---|---|---|---|
 | EPS | NTW | NTM、NTW | 各 dt approval／terminal/detail/media 未獨立核實 |
