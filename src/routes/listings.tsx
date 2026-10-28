@@ -138,11 +138,33 @@ export const Route = createFileRoute("/listings")({
         console.error("WA_TRACKING_RESOLVER_FAILED", error);
         return resolveWebsiteActions(offers, [], SITE_CONTACT.whatsappPhone).actions;
       });
+    const district = deps.district && deps.district !== "all" ? deps.district : null;
+    const estate = deps.estate || null;
+    const knownDistrict = !district || Object.hasOwn(DISTRICT_LABELS, district);
+    const knownEstate = !estate || estates.some((option) => option.slug === estate);
+    // Only a finite set of useful sale/rent, district and published-estate
+    // result pages is eligible for indexing. Arbitrary searches remain fully
+    // usable, but never place their terms (which may be personal) in head URLs.
+    const hasAdHocFilters =
+      Boolean(deps.keyword?.trim()) ||
+      Boolean(deps.agent) ||
+      deps.minPrice !== undefined ||
+      deps.maxPrice !== undefined ||
+      deps.minArea !== undefined ||
+      deps.maxArea !== undefined ||
+      deps.bedrooms !== undefined ||
+      deps.sort !== "newest";
     return {
       ...result,
       estates,
       listingEnquiryActions,
       page: deps.page,
+      seoSearch: {
+        deal: deps.deal === "all" ? null : deps.deal,
+        district: knownDistrict ? district : null,
+        estate: knownEstate ? estate : null,
+        indexable: !hasAdHocFilters && knownDistrict && knownEstate && !(district && estate),
+      },
       // head() receives loaderData, not the search params, so the facts its
       // title/description need travel with the result. The estate's real name
       // is resolved here because `estates` is already fetched.
@@ -158,6 +180,18 @@ export const Route = createFileRoute("/listings")({
   head: ({ loaderData }) => {
     const page = loaderData?.page ?? 1;
     const filters = loaderData?.seoFilters;
+    const seoSearch = loaderData?.seoSearch;
+    const params = new URLSearchParams();
+    if (seoSearch?.deal) params.set("deal", seoSearch.deal);
+    if (seoSearch?.district) params.set("district", seoSearch.district);
+    if (seoSearch?.estate) params.set("estate", seoSearch.estate);
+    if (page > 1) params.set("page", String(page));
+    const canonical =
+      seoSearch?.indexable === false
+        ? null
+        : params.size
+          ? canonicalLink(`${pageSeo.listings.path}?${params.toString()}`)
+          : canonicalLink(pageSeo.listings.path);
     // Every filter combination is its own crawlable URL, and they all used to
     // share one title and one description (only `page` touched the title). The
     // pageSeo entry stays the bare /listings copy, which is what an unfiltered
@@ -178,31 +212,25 @@ export const Route = createFileRoute("/listings")({
         { name: "description", content: description },
         { property: "og:title", content: title },
         { property: "og:description", content: description },
+        // The root layout sets a homepage og:url, so override it even for an
+        // ad-hoc search. A safe hub URL never exposes a typed search term.
         {
           property: "og:url",
-          content: canonicalLink(
-            page > 1 ? `${pageSeo.listings.path}?page=${page}` : pageSeo.listings.path,
-          ).href,
+          content: canonical?.href ?? canonicalLink(pageSeo.listings.path).href,
         },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: description },
-        // A filter combination with no rows is a soft-404 if indexed; the
-        // bare /listings and any populated page stay indexable. Gated on the
-        // loader having actually run: `loaderData?.total ?? 0` also read 0
-        // during a transient failure, which noindexed a hub page with
-        // hundreds of rows.
-        ...(loaderData && loaderData.total === 0
+        // Empty result pages (including a page past the last result) and
+        // arbitrary combinations are not search landing pages. Only decide
+        // after the loader has run, so a transient load does not noindex a hub.
+        ...(loaderData && (loaderData.rows.length === 0 || !loaderData.seoSearch.indexable)
           ? [{ name: "robots", content: "noindex,follow" }]
           : []),
       ],
-      // Bare path -- the canonical must not fork per filter combination.
-      // Pagination is the one exception: page 2+ self-canonicalises, otherwise
-      // every deep result page collapses into page 1 and drops out of the index.
-      links: [
-        page > 1
-          ? canonicalLink(`${pageSeo.listings.path}?page=${page}`)
-          : canonicalLink(pageSeo.listings.path),
-      ],
+      // The selected curated filter and page identify the actual result set.
+      // Unsupported combinations are noindexed and have no misleading
+      // canonical to an unrelated set of listings.
+      links: canonical ? [canonical] : [],
     };
   },
   pendingComponent: ListingsPendingComponent,

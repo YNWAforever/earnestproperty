@@ -312,6 +312,45 @@ function nonHostRules(redirects) {
   return redirects.filter((redirect) => !redirect.has?.some((h) => h.type === "host"));
 }
 
+test("the old submitted sitemap reaches the current XML sitemap without a loop", async () => {
+  const { config } = await import("../vercel.ts");
+  const rules = nonHostRules(config.redirects);
+  assert.deepEqual(match(rules, { host: WWW_HOST, path: "/sitemap2.xml" }), {
+    status: 308,
+    location: "/sitemap.xml",
+  });
+  assert.equal(match(rules, { host: WWW_HOST, path: "/sitemap.xml" }), null);
+  assert.ok(fileRoutePatterns().some((route) => route.path === "/sitemap.xml"));
+});
+
+test("verified old transaction 404s reach the estate directory without affecting denied or untested IDs", async () => {
+  const { config } = await import("../vercel.ts");
+  const rules = nonHostRules(config.redirects);
+  const path = "/eng/tran_trends.php";
+  assert.deepEqual(match(rules, { host: WWW_HOST, path }), {
+    status: 307,
+    location: "/estate-reviews",
+  });
+
+  for (const bldgno of ["12847", "12940", "13050", "13089", "13245", "13256", "13489"]) {
+    const query = { bldgno, prop: "R", cs: "example" };
+    assert.deepEqual(
+      match(rules, { host: WWW_HOST, path, query }),
+      {
+        status: 307,
+        location: `/estate-reviews?${new URLSearchParams(query)}`,
+      },
+      bldgno,
+    );
+  }
+
+  // A 403 stopped the audit; it must not be turned into a redirect or retried
+  // through a blanket rule. Other IDs were not verified either.
+  for (const bldgno of ["14469", "14542", "30335", "unknown"]) {
+    assert.equal(match(rules, { host: WWW_HOST, path, query: { bldgno } }), null, bldgno);
+  }
+});
+
 // "/castle-peak-road/$segment" -> /^\/castle-peak-road\/[^/]+$/
 function fileRoutePatterns() {
   const source = readFileSync("src/routeTree.gen.ts", "utf8");
@@ -412,7 +451,7 @@ function satisfyingRequest(rule) {
       query[condition.key] = "1";
       continue;
     }
-    const sample = ["tc", "sc", "123", "1", "x", ""].find((value) =>
+    const sample = ["tc", "sc", "123", "1", "x", "", "12847"].find((value) =>
       anchored(condition.value).test(value),
     );
     if (sample === undefined) return null;

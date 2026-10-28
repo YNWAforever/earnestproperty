@@ -61,9 +61,13 @@ export function ValuationLeadForm({ estateId }: { estateId?: string }) {
   const [submitted, setSubmitted] = useState(false);
   const [status, setStatus] = useState<FormStatusState>({ kind: "idle" });
   const honeypotRef = useRef<HTMLInputElement>(null);
+  // State updates do not synchronously disable the button: a second submit
+  // can arrive before React renders the pending state.
+  const submitInFlightRef = useRef(false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (submitInFlightRef.current) return;
     // Clear any previous result first so a stale error never sits next to a
     // fresh attempt.
     setStatus({ kind: "idle" });
@@ -71,28 +75,37 @@ export function ValuationLeadForm({ estateId }: { estateId?: string }) {
       setStatus({ kind: "error", message: "請先剔選同意先可以提交" });
       return;
     }
+    submitInFlightRef.current = true;
     setSubmitting(true);
-    const outcome = await submitPublicForm(() =>
-      createValuationLead({
-        data: {
-          name,
-          phone,
-          propertyAddress,
-          notes,
-          estateId,
-          consent,
-          utm: collectUtmParams(),
-          website: honeypotRef.current?.value,
-        },
-      }),
-    );
-    setSubmitting(false);
-    if (outcome.status === "error") {
-      setStatus({ kind: "error", message: outcome.message });
-      return;
+    let completed = false;
+    try {
+      const outcome = await submitPublicForm(() =>
+        createValuationLead({
+          data: {
+            name,
+            phone,
+            propertyAddress,
+            notes,
+            estateId,
+            consent,
+            utm: collectUtmParams(),
+            website: honeypotRef.current?.value,
+          },
+        }),
+      );
+      if (outcome.status === "error") {
+        setStatus({ kind: "error", message: outcome.message });
+        return;
+      }
+      completed = true;
+      setSubmitted(true);
+      track({ name: "valuation_form_submit", payload: {} }, buildContext());
+    } finally {
+      // Failed attempts can be retried; a successful submission stays locked
+      // until the confirmation screen replaces the form.
+      if (!completed) submitInFlightRef.current = false;
+      setSubmitting(false);
     }
-    setSubmitted(true);
-    track({ name: "valuation_form_submit", payload: {} }, buildContext());
   }
 
   if (submitted) {
