@@ -138,6 +138,23 @@ test("SQL export holds manual and unknown ownership as well as overrides and dri
     await db.exec(`INSERT INTO property_sync_fields VALUES
       ('sale', 'price', false, 'source_priority', '5100000', 'authorized')`);
     assert.deepEqual((await exported()).override_fields, []);
+    // The ingestion adapter persists PostgreSQL numeric values as JSON strings.
+    // Decimal scale and JSON number/string representation are not staff drift.
+    for (const baseline of ['"5100000"', '"05100000.0000"', "5100000.00"]) {
+      await db.query(
+        "UPDATE property_sync_fields SET last_published_value=$1::jsonb WHERE field_name='price'",
+        [baseline],
+      );
+      const property = await exported();
+      assert.deepEqual(property.override_fields, [], baseline);
+      const f = fresh();
+      const report = diffPriceStatus(
+        f.capture,
+        { exported_at: f.current.exported_at, properties: [property] },
+        { now: f.now },
+      );
+      assert.equal(report.counts["price-changed"], 1, baseline);
+    }
     for (const update of [
       "active_override=true",
       "selection_reason='manual_override'",
@@ -151,6 +168,84 @@ test("SQL export holds manual and unknown ownership as well as overrides and dri
     await db.exec(`INSERT INTO property_public_members VALUES ('sale', 'A000001');
       INSERT INTO admin_property_overrides VALUES ('A000001', '{}', '{"price":null}', '{}')`);
     assert.deepEqual((await exported()).override_fields, ["price"]);
+    await db.exec(`INSERT INTO properties VALUES ('rent', 'A000001', 'rent', NULL, 19000, 'active');
+      INSERT INTO property_sync_fields VALUES
+        ('rent', 'rent', false, 'source_priority', '"19000.0000"', 'authorized'),
+        ('rent', 'status', false, 'source_priority', '"active"', 'authorized')`);
+    const f = fresh();
+    const report = diffPriceStatus(
+      f.capture,
+      {
+        exported_at: f.current.exported_at,
+        properties: (await db.query(sql, ["28hse_agent_540"])).rows,
+      },
+      { now: f.now },
+    );
+    assert.equal(report.counts["rent-changed"], 1);
+    assert.equal(report.counts["override-held"], 1);
+    for (const baseline of ['"19000.0001"', '"invalid"', "{}", "null"]) {
+      await db.query(
+        "UPDATE property_sync_fields SET last_published_value=$1::jsonb WHERE field_name='rent'",
+        [baseline],
+      );
+      const rent = (await db.query(sql, ["28hse_agent_540"])).rows.find((p) => p.id === "rent");
+      assert.deepEqual(rent.override_fields, ["rent"], baseline);
+    }
+  } finally {
+    await db.close();
+  }
+});
+test("SQL export retains proposed and rejected source identities as comparison holds", async () => {
+  const { PGlite } = await import("@electric-sql/pglite");
+  const db = new PGlite();
+  try {
+    await db.exec(`
+      CREATE TABLE properties (id text, canonical_property_no text, deal_type text,
+        price numeric, rent numeric, status text);
+      CREATE TABLE property_source_links (property_id text, source text, status text,
+        external_listing_id text);
+      CREATE TABLE property_public_members (property_id text, public_listing_no text);
+      CREATE TABLE property_public_groups (public_listing_no text, review_required boolean);
+      CREATE TABLE admin_property_overrides (property_no text, shared jsonb, sale jsonb, rent jsonb);
+      CREATE TABLE property_sync_fields (property_id text, field_name text,
+        active_override boolean, selection_reason text, last_published_value jsonb,
+        winning_observation_id text);
+      INSERT INTO properties VALUES
+        ('sale', 'A000001', 'sale', 5100000, NULL, 'active'),
+        ('unnumbered', NULL, 'sale', 7000000, NULL, 'active');
+      INSERT INTO property_sync_fields VALUES
+        ('sale', 'price', false, 'source_priority', '5100000', 'authorized'),
+        ('sale', 'status', false, 'source_priority', '"active"', 'authorized');
+    `);
+    const sql = await readFile(new URL("./price_status_export.sql", import.meta.url), "utf8");
+    const f = fresh();
+    f.capture.listings = [f.capture.listings[0]];
+    const report = async () =>
+      diffPriceStatus(
+        f.capture,
+        {
+          exported_at: f.current.exported_at,
+          properties: (await db.query(sql, ["28hse_agent_540"])).rows,
+        },
+        { now: f.now },
+      );
+    assert.equal((await report()).counts["price-changed"], 1);
+    for (const status of ["proposed", "rejected"]) {
+      for (const propertyId of ["sale", "unnumbered"]) {
+        await db.exec("DELETE FROM property_source_links");
+        await db.query(
+          "INSERT INTO property_source_links VALUES ($1, '28hse_agent_540', $2, '100')",
+          [propertyId, status],
+        );
+        const held = await report();
+        assert.equal(held.counts["price-changed"], 0, `${status}/${propertyId}`);
+        assert.equal(held.counts["ambiguous-ref"], 1, `${status}/${propertyId}`);
+        assert.ok(held.rows.every((r) => r.would_change.length === 0));
+      }
+    }
+    // A rejected historical ad does not hold a different, unblocked ad's proposal.
+    await db.exec("UPDATE property_source_links SET property_id='sale', external_listing_id='old'");
+    assert.equal((await report()).counts["price-changed"], 1);
   } finally {
     await db.close();
   }
@@ -293,6 +388,31 @@ test("Property.hk parses duplicate mobile/desktop fields and rejects identity/pr
     parseDetail({ ...dom, fields: [...dom.fields, ["售價", "$800 萬"]] }, detailUrl, fixture.now),
   );
   assert.throws(() => detailIdentity("https://elsewhere.test/asking_detail/100.html"));
+});
+test("Property.hk scales fractional WAN quotes exactly without floating-point rejection", () => {
+  for (const [quote, amount] of [
+    ["$100.04萬", "1000400"],
+    ["$100.07萬", "1000700"],
+  ]) {
+    const detail = parseDetail(
+      {
+        ...dom,
+        fields: [
+          ["售價", quote],
+          ["租金", "$20,000.00"],
+        ],
+      },
+      detailUrl,
+      fixture.capture.scraped_at,
+    );
+    assert.equal(detail.price, amount);
+    assert.equal(detail.rent, "20000");
+  }
+  for (const quote of ["$100.00001萬", "$0萬", "$900719925475萬"])
+    assert.throws(
+      () => parseDetail({ ...dom, fields: [["售價", quote]] }, detailUrl, fixture.now),
+      /detail_amount_invalid/,
+    );
 });
 test("Property.hk terminal labels in the amount cell preserve inactive reasons without a numeric quote", () => {
   for (const [label, reason] of [
@@ -585,3 +705,42 @@ test("Property.hk requires detail confirmation and exact exported source links; 
     1,
   );
 });
+for (const [label, field, otherDeal] of [
+  ["已售", "price", "rent"],
+  ["已租", "rent", "sale"],
+])
+  test(`Property.hk ${label} cannot deactivate an unquoted linked ${otherDeal} offer`, () => {
+    const f = fresh();
+    f.current.properties.forEach((p) => {
+      p.source = "propertyhk";
+      p.source_ids = ["100"];
+    });
+    const index = {
+      schema: "propertyhk-index/v1",
+      complete: true,
+      absence_enabled: false,
+      scraped_at: f.capture.scraped_at,
+      ads: [{ property_id: "100", detail_url: detailUrl, [field]: "20000" }],
+    };
+    const details = {
+      schema: "propertyhk-details/v1",
+      complete: true,
+      absence_enabled: false,
+      listings: [
+        parseDetail(
+          { ...dom, fields: [[field === "price" ? "售價" : "出租價", label]], lifecycle: [label] },
+          detailUrl,
+          f.capture.scraped_at,
+        ),
+      ],
+    };
+    assert.throws(
+      () => propertyhkDiff(index, f.current, details, { now: f.now }),
+      /mixed_terminal_offers/,
+    );
+    // With only the explicitly terminal deal linked, the report remains useful.
+    f.current.properties = f.current.properties.filter((p) => p.deal_type !== otherDeal);
+    const report = propertyhkDiff(index, f.current, details, { now: f.now });
+    assert.equal(report.counts[label === "已售" ? "sold" : "rented"], 1);
+    assert.equal(report.rows.flatMap((r) => r.would_change).length, 1);
+  });

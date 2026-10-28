@@ -51,6 +51,12 @@ export function propertyhkDiff(index, current, details, options = {}) {
       );
       if (ad[field] == null && detail[field] == null && !linked) continue;
       if (
+        detail.source_status === "delisted" &&
+        ((detail.source_status_reason === "sold" && deal === "rent") ||
+          (detail.source_status_reason === "rented" && deal === "sale"))
+      )
+        throw Error("mixed_terminal_offers");
+      if (
         detail.source_status === "active" &&
         normalizeDecimal(ad[field]) !== normalizeDecimal(detail[field])
       )

@@ -23,8 +23,13 @@ export function parseDetail(dom, url, capturedAt) {
         const match = /^\$(\d+(?:\.\d+)?)(萬)?$/.exec(cleaned);
         if (!match || (multiplier === 10000 && !match[2]) || (multiplier === 1 && match[2]))
           throw Error("detail_amount_invalid");
-        const amount = Number(match[1]) * multiplier;
-        if (!Number.isSafeInteger(amount) || amount <= 0) throw Error("detail_amount_invalid");
+        const decimals = match[1].split(".")[1]?.length ?? 0;
+        const units = BigInt(match[1].replace(".", "")) * BigInt(multiplier);
+        const scale = 10n ** BigInt(decimals);
+        if (units % scale !== 0n) throw Error("detail_amount_invalid");
+        const amount = units / scale;
+        if (amount <= 0n || amount > BigInt(Number.MAX_SAFE_INTEGER))
+          throw Error("detail_amount_invalid");
         return String(amount);
       });
     if (new Set(values).size > 1) throw Error("conflicting_detail_amount");

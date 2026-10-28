@@ -141,8 +141,10 @@ source links, agreement on index/detail amounts for active offers and company nu
 
 The SQL source is [price_status_export.sql](../../scripts/property-sync/price_status_export.sql).
 Its only parameter `$1` is `propertyhk` or `28hse_agent_540`. It selects current amounts,
-status, canonical company reference, active source IDs and held field names. It
-includes staff patches from shared/deal-specific admin overrides and sync fields.
+status, canonical company reference, active source IDs, source IDs requiring review
+and held field names. Rejected/proposed source links hold only matching incoming
+identities, including links to unnumbered targets. It includes staff patches from
+shared/deal-specific admin overrides and sync fields.
 No PII-bearing columns are selected. An operator with a separately provisioned
 SELECT-only session can export it under the writer lock:
 
@@ -165,8 +167,8 @@ URL in chat, a fixture, PR body or artifact. Wrap the exported rows in:
 
 The checked-in synthetic fixture provides the exact types. In particular,
 `override_fields` is a required array even when empty; never fabricate it for a real
-export. Keep `source_ids` as returned by SQL. The Property.hk diff has no DB driver
-or online export mode. Read/export code in Part A is a read-only report adapter,
+export. Keep `source_ids` and `source_review_ids` as returned by SQL. The Property.hk
+diff has no DB driver or online export mode. Read/export code in Part A is a read-only report adapter,
 not Phase 1's guarded writer.
 
 ## Later T5 wiring and failure recovery

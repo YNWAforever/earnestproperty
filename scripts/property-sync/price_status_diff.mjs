@@ -151,10 +151,11 @@ export function diffPriceStatus(
       row &&
       current.properties.some(
         (p) =>
-          p.source === (source === "28hse" ? "28hse_agent_540" : source) &&
           p.deal_type === row.deal_type &&
-          p.source_ids?.includes(row.property_id) &&
-          key(p) !== match,
+          (p.source_review_ids?.includes(row.property_id) ||
+            (p.source === (source === "28hse" ? "28hse_agent_540" : source) &&
+              p.source_ids?.includes(row.property_id) &&
+              key(p) !== match)),
       );
     if (
       targets.length !== 1 ||
