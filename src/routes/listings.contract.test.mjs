@@ -360,8 +360,7 @@ test("each of the three filter selects has its SelectTrigger id wired to a real 
   assert.doesNotMatch(fieldsBody, /aria-label="屋苑"/);
 });
 
-test("FreshnessStamp replaces the raw formatHkDate '最後更新' text in BOTH ListingCard and ListingCardRow", () => {
-  assert.match(source, /from "@\/components\/layout\/FreshnessStamp"/);
+test("ListingCard and ListingCardRow omit freshness stamps and raw update copy", () => {
   const cardBody = source.slice(
     source.indexOf("function ListingCard("),
     source.indexOf("// Same data as ListingCard"),
@@ -374,19 +373,14 @@ test("FreshnessStamp replaces the raw formatHkDate '最後更新' text in BOTH L
     ["ListingCard", cardBody],
     ["ListingCardRow", rowBody],
   ]) {
-    assert.match(
-      body,
-      /<FreshnessStamp\s+updatedAt={propertyUpdatedAt\(p\)}/,
-      `expected ${name} to render freshness using actual available record timestamps`,
-    );
     assert.doesNotMatch(
       body,
-      /最後更新：/,
-      `expected ${name} to no longer render the raw "最後更新：" text`,
+      /<FreshnessStamp\b|propertyUpdatedAt\(/,
+      `expected ${name} to omit the freshness stamp`,
     );
+    assert.doesNotMatch(body, /最後更新/, `expected ${name} to omit raw update copy`);
   }
-  // The card-data helper no longer needs to derive a formatted date string
-  // itself -- FreshnessStamp does that internally from the raw timestamp.
+  // Cards must not bring back the old raw date rendering either.
   assert.doesNotMatch(source, /formatHkDate/);
 });
 

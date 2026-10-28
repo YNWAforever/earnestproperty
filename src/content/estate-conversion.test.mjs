@@ -469,13 +469,13 @@ test("homepage shows featured property videos after featured listings", () => {
   // duplicated the label visually, and was removed in ecaef90
   // ("fix: remove duplicate homepage section labels").
   const goldAt = home.indexOf('title="黃金必走盤"');
-  const promoAt = home.indexOf('title="荀盤推介"');
+  const promoAt = home.indexOf('title="筍盤推介"');
   const videosAt = home.indexOf('title="精選樓盤影片"');
   assert.ok(goldAt > -1, "黃金必走盤 section should carry its title");
-  assert.ok(promoAt > -1, "荀盤推介 section should carry its title");
+  assert.ok(promoAt > -1, "筍盤推介 section should carry its title");
   assert.ok(videosAt > -1, "video section should carry its title");
-  assert.ok(goldAt < promoAt, "荀盤推介 must render after 黃金必走盤");
-  assert.ok(promoAt < videosAt, "精選樓盤影片 must render after 荀盤推介");
+  assert.ok(goldAt < promoAt, "筍盤推介 must render after 黃金必走盤");
+  assert.ok(promoAt < videosAt, "精選樓盤影片 must render after 筍盤推介");
 });
 
 // --- P4 Task 4: verified-facts DataNote, transport, school-net, PSF trend ---

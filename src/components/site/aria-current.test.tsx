@@ -71,6 +71,17 @@ function currentLinks($: CheerioAPI, value: string) {
 const article = publishedBlogArticles()[0];
 const postPath = `/blog/${article.slug}`;
 
+test("market menu features 晉誠最新成交 before YouTube and preserves its blog category", async () => {
+  const $ = await renderAt("/agents");
+  const links = $("#mega-menu-market a");
+  const labels = links.map((_, el) => $(el).find("span").first().text()).get();
+  expect(labels.slice(0, 2)).toEqual(["晉誠最新成交", "YouTube影片"]);
+
+  const destination = new URL(links.first().attr("href")!, "https://x.test");
+  expect(destination.pathname).toBe("/blog");
+  expect(destination.searchParams.get("category")).toBe("成交分析");
+});
+
 test("a blog post: section-root links (header menu, breadcrumb, footer) are not the current page", async () => {
   const $ = await renderAt(postPath);
 

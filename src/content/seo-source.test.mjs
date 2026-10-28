@@ -113,16 +113,15 @@ test("estate pages use seo registry and latest listing sections", () => {
   assert.match(queries, /fetchListingsForEstate/);
 });
 
-test("listings page supports district and imported listing freshness", () => {
+test("listing districts and imported detail freshness remain available without card stamps", () => {
   const listings = read("src/routes/listings.tsx");
   const queries = read("src/lib/queries.ts");
+  const detail = read("src/routes/property.$listingNo.tsx");
 
   assert.match(listings, /district/);
-  // Was a raw "最後更新" text match; P3 Task 3 replaced the inline date with
-  // <FreshnessStamp>, which renders a relative label (e.g. "X 日前更新")
-  // instead of the literal string -- assert the component is wired in
-  // rather than pinning to now-stale exact copy.
-  assert.match(listings, /FreshnessStamp/);
+  assert.doesNotMatch(listings, /FreshnessStamp/);
+  assert.match(detail, /<FreshnessStamp updatedAt=\{property\.updated_at\} \/>/);
+  assert.match(detail, /property\.updated_at \? \{ dateModified: property\.updated_at \} : \{\}/);
   assert.match(queries, /districtSlug/);
   assert.match(queries, /last_seen_at/);
 });

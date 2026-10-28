@@ -6,6 +6,15 @@ const headerSource = await readFile(new URL("./SiteHeader.tsx", import.meta.url)
 const homeSource = await readFile(new URL("../../routes/index.tsx", import.meta.url), "utf8");
 const sheetSource = await readFile(new URL("../ui/sheet.tsx", import.meta.url), "utf8");
 
+test("market featured links share their order with the mobile menu", () => {
+  const market = headerSource.slice(headerSource.indexOf('id: "market",'));
+  const featured = market.slice(market.indexOf("featured: ["), market.indexOf("links: ["));
+  assert.match(featured, /href: "\/blog\?category=成交分析",\s*label: "晉誠最新成交"/);
+  assert.ok(featured.indexOf("晉誠最新成交") < featured.indexOf("YouTube影片"));
+  assert.match(headerSource, /const base = \[\.\.\.menu\.featured, \.\.\.menu\.links\]/);
+  assert.match(headerSource, /menuMobileItems\(menu\)\.map/);
+});
+
 test("mega menu omits redundant group-purpose copy but keeps navigation labels", () => {
   for (const purpose of [
     "按深井、青山公路、汀九或屋苑入口瀏覽。",

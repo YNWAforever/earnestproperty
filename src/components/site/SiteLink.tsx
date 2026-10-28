@@ -145,8 +145,10 @@ export function SiteLink({ href, children, ...props }: SharedProps & { href: str
     );
   }
   if (pathname === "/blog") {
+    // Keep category links filtered; the blog route validates the search values.
+    const search = Object.fromEntries(new URLSearchParams(href.split("?")[1]?.split("#")[0]));
     return (
-      <Link to="/blog" hash={hash} {...linkProps}>
+      <Link to="/blog" search={search} hash={hash} {...linkProps}>
         {children}
       </Link>
     );

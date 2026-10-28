@@ -897,7 +897,7 @@ const HOMEPAGE_COMPANY_CTE = `, homepage_companies AS (
 )`;
 
 /**
- * 荀盤推介. 宅谷 is Property.hk (EPW / EPS / EPT) in this product, stored as
+ * 筍盤推介. 宅谷 is Property.hk (EPW / EPS / EPT) in this product, stored as
  * source propertyhk on property_source_links. source_site is often
  * dual-source-mls after a merge, so the link is the selector, not source_site.
  */
@@ -965,7 +965,7 @@ async function promotionTierTableAvailable(): Promise<boolean> {
  * selection narrows that same feed for the two homepage bands:
  * - 28hse-paid: 黃金必走盤, current sale gold then pinned in source index order;
  *   empty without a complete fresh approved inventory or the tier table
- * - propertyhk: 荀盤推介 (宅谷). A unit that is also 黃金必走盤 is left in that
+ * - propertyhk: 筍盤推介 (宅谷). A unit that is also 黃金必走盤 is left in that
  *   band so the homepage does not repeat the card. The exclusion needs the
  *   tier table; without it, 宅谷 still renders and simply cannot see grades.
  */

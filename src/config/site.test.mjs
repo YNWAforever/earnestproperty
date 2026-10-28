@@ -284,7 +284,7 @@ test("homepage and navigation include Ting Kau content entry points", () => {
 });
 
 // Live stock stays above the estate directory (client p2). The single 最新放盤
-// block is now 黃金必走盤 then 荀盤推介. This regressed once already because
+// block is now 黃金必走盤 then 筍盤推介. This regressed once already because
 // the copy edits landed and the move did not, and nothing failed — so the
 // order is pinned here.
 test("homepage puts the two listing bands above 深井核心屋苑", () => {
@@ -294,15 +294,15 @@ test("homepage puts the two listing bands above 深井核心屋苑", () => {
   // eyebrow identical to the title duplicated the label visually, and was
   // removed in ecaef90 ("fix: remove duplicate homepage section labels").
   const gold = source.indexOf('title="黃金必走盤"');
-  const promo = source.indexOf('title="荀盤推介"');
+  const promo = source.indexOf('title="筍盤推介"');
   const estates = source.indexOf('title="深井核心屋苑"');
   const whyUs = source.indexOf('title="為何選晉誠"');
 
   assert.notEqual(gold, -1, "homepage should have a 黃金必走盤 section");
-  assert.notEqual(promo, -1, "homepage should have a 荀盤推介 section");
+  assert.notEqual(promo, -1, "homepage should have a 筍盤推介 section");
   assert.notEqual(estates, -1, "homepage should still have a 深井核心屋苑 section");
-  assert.ok(gold < promo, "黃金必走盤 must render before 荀盤推介");
-  assert.ok(promo < estates, "荀盤推介 must render before 深井核心屋苑");
+  assert.ok(gold < promo, "黃金必走盤 must render before 筍盤推介");
+  assert.ok(promo < estates, "筍盤推介 must render before 深井核心屋苑");
   assert.ok(estates < whyUs, "深井核心屋苑 must stay above 為何選晉誠");
 
   // DOM order is only visual order while nothing reorders with CSS.
