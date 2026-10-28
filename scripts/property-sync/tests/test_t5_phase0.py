@@ -6,6 +6,7 @@ import tarfile
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -24,6 +25,17 @@ def capture():
 
 def html():
     return (FIXTURES / "propertyhk-agentblog.html").read_text()
+
+
+def empty_html():
+    soup = BeautifulSoup(html().replace("共 2 頁", "共 1 頁"), "html.parser")
+    table = soup.select_one("table.table-hover")
+    table.clear()
+    headers = ["全選", "相片", "地區", "物業資料", "樓層", "建築(呎)", "實用(呎)", "售價(萬)", "租金(HK$)"]
+    fragment = "<thead><tr>" + "".join("<th>" + name + "</th>" for name in headers) + "</tr></thead>"
+    fragment += '<tr><td colspan="9"><input name="selCount" value="0"><input name="selPrint" value="- 列印已預選的項目共 0 個 -"></td></tr>'
+    table.append(BeautifulSoup(fragment, "html.parser"))
+    return str(soup)
 
 
 def test_newest_complete_uses_capture_clock_not_upload_or_iteration_order():
@@ -69,6 +81,34 @@ def test_index_structure_amounts_and_follow_actual_pagination_fields():
     assert pages == 2
     assert next_url == "https://www.property.hk/agentblog.php?dt=ALL&agent=EPS&blog=RUBY&sid=&page=1&p=2"
     assert set(rows[0]) == {"property_id", "detail_url", "price", "rent"}
+
+
+def test_verified_empty_agent_is_single_page_with_known_structure():
+    assert parse_index(empty_html(), URL, "eps/ruby") == ([], 1, None)
+
+
+def test_unrecognized_or_paginated_empty_index_still_fails_closed():
+    for invalid in [empty_html().replace("共 1 頁", "共 2 頁"),
+                    empty_html().replace('name="selCount"', 'name="unknown"'),
+                    empty_html().replace("物業資料", "unknown"),
+                    empty_html().replace("</body>", '<a href="/asking_detail/100.html">unexpected ad</a></body>')]:
+        with pytest.raises(ValueError, match="empty_index_requires_review"):
+            parse_index(invalid, URL, "eps/ruby")
+
+
+def test_full_19_agent_collection_includes_verified_empty_roster_agents():
+    manifest = json.loads(MANIFEST.read_text())
+    class Http:
+        def get(self, url):
+            if url.endswith("robots.txt"):
+                return "User-agent: *\nAllow: /"
+            branch, slug = url.removeprefix("https://www.property.hk/agentblog/").strip("/").split("/")
+            return empty_html().replace('value="EPS"', 'value="' + branch.upper() + '"').replace('value="RUBY"', 'value="' + slug.upper() + '"')
+    result = collect(manifest, Http())
+    assert result["complete"] is True
+    assert result["absence_enabled"] is False
+    assert len(result["evidence"]) == 19
+    assert result["ads"] == []
 
 
 @pytest.mark.parametrize("mutate", [

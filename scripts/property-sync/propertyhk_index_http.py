@@ -93,7 +93,17 @@ def parse_index(html, url, agent, page=1):
     action = validate_url(urljoin(url, form.get("action", "")))
     next_url = action + "?" + urlencode({**fields, "p": page + 1}) if page < pages else None
     if not ads:
-        raise ValueError("empty_index_requires_review")
+        # A roster agent may legitimately have no ads. Require the known empty
+        # table/footer plus a single page; a missing/changed layout is not zero stock.
+        headers = [n.get_text("", strip=True) for n in tables[0].select("thead th")]
+        count = tables[0].find("input", attrs={"name": "selCount"})
+        selected = tables[0].find("input", attrs={"name": "selPrint"})
+        expected_headers = ["全選", "相片", "地區", "物業資料", "樓層", "建築(呎)", "實用(呎)", "售價(萬)", "租金(HK$)"]
+        if (page != 1 or pages != 1 or headers[:9] != expected_headers
+                or count is None or count.get("value") != "0" or selected is None
+                or not re.search(r"共\s*0\s*個", selected.get("value", ""))
+                or soup.select('a[href*="/asking_detail/"]')):
+            raise ValueError("empty_index_requires_review")
     return ads, pages, next_url
 
 

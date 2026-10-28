@@ -82,7 +82,9 @@ captcha solver or manual challenge manipulation is permitted. The HTTP collector
 never attempts to solve a challenge. A persistent browser challenge stops after
 about 20 seconds with no challenge retry; any 429 stops the whole run. Transient
 transport/server failures have at most four attempts. No failed page becomes empty
-inventory. Empty/unrecognized index tables also require review.
+inventory. An empty agent is accepted only on page 1 of 1 with the known table
+headers/footer and no detail links. Other empty/unrecognized tables require review;
+accepted empty agents still grant no absence authority.
 
 The fixed [19-agent manifest](../../scripts/property-sync/config/propertyhk-agents.json)
 comes from the recorded agentblog discovery; `full_branch_scope_verified=false`.
