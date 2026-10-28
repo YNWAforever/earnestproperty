@@ -96,7 +96,7 @@ test("actual public mount registers once and emits only sanitized page/vital fie
       matchMedia: () => ({ matches: true }),
     };
     globalThis.document = {
-      referrer: "https://example.org/private?email=secret",
+      referrer: "https://chatgpt.com/private?email=secret",
       getElementById: () => null,
       createElement: () => ({}),
       head: { appendChild: () => scripts++ },
@@ -128,6 +128,11 @@ test("actual public mount registers once and emits only sanitized page/vital fie
     });
     const commands = window.dataLayer.map((args) => Array.from(args));
     assert.equal(commands.filter((c) => c[0] === "event" && c[1] === "page_view").length, 1);
+    assert.equal(commands.find((c) => c[0] === "config")[2].page_referrer, "https://chatgpt.com/");
+    assert.equal(
+      commands.find((c) => c[0] === "event" && c[1] === "page_view")[2].page_referrer,
+      "https://chatgpt.com/",
+    );
     assert.equal(commands.at(-1)[2].value, 0.012);
     assert.doesNotMatch(JSON.stringify(commands), /person@example|email=secret|\/private\?/);
   } finally {

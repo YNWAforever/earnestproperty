@@ -42,6 +42,7 @@ export function AnalyticsProvider({
         approvedTokens: approvedCampaignTokens,
         documentIsolationApproved,
         getPath: () => window.location.pathname,
+        getReferrer: () => document.referrer,
         origin: window.location.origin,
         gtag: (...args) => browser.gtag!(...args),
         load: (measurementId) => {

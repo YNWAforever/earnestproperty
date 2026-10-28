@@ -5,12 +5,7 @@ import {
   publicPropertyTitle,
 } from "@/lib/property-public";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { FaqList } from "@/components/site/FaqList";
 import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
 import { Container } from "@/components/layout/Container";
@@ -780,18 +775,12 @@ function EstatePage() {
         <Container className="py-8">
           <div className="max-w-3xl">
             <h2 className="text-2xl font-bold text-primary">常見問題</h2>
-            <Accordion type="single" collapsible className="mt-6">
-              {visibleFaqs.map((f: VisibleFaq, i: number) => (
-                <AccordionItem key={i} value={`faq-${i}`}>
-                  <AccordionTrigger className="text-left text-base font-medium">
-                    {f.question}
-                  </AccordionTrigger>
-                  <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
-                    {f.answer}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+            <FaqList
+              items={visibleFaqs}
+              group="estate-faq"
+              className="mt-6"
+              questionClassName="text-base"
+            />
           </div>
         </Container>
       )}

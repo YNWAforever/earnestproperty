@@ -35,12 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { FaqList } from "@/components/site/FaqList";
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import { EmptyState } from "@/components/layout/EmptyState";
@@ -216,7 +211,10 @@ export const Route = createFileRoute("/")({
       { property: "og:image", content: HERO_OG_IMAGE },
       { name: "twitter:image", content: HERO_OG_IMAGE },
     ],
-    links: [canonicalLink(pageSeo.home.path)],
+    links: [
+      canonicalLink(pageSeo.home.path),
+      { rel: "help", type: "text/plain", href: `${SITE_URL}/llms.txt`, title: "網站內容索引" },
+    ],
   }),
   component: HomePage,
 });
@@ -635,18 +633,12 @@ function HomePage() {
         <section className="bg-card border-y border-border">
           <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
             <SectionHeader eyebrow="常見問題" title="深井買樓租樓 FAQ" />
-            <Accordion type="single" collapsible className="mt-8">
-              {faqs.map((f: FaqItem, i: number) => (
-                <AccordionItem key={i} value={`faq-${i}`}>
-                  <AccordionTrigger className="text-left text-base font-medium">
-                    {f.question}
-                  </AccordionTrigger>
-                  <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
-                    {f.answer}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+            <FaqList
+              items={faqs}
+              group="home-sham-tseng-faq"
+              className="mt-8"
+              questionClassName="text-base"
+            />
           </div>
         </section>
       )}
@@ -658,18 +650,12 @@ function HomePage() {
         <section className="border-b border-border">
           <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
             <SectionHeader eyebrow="常見問題" title="青山公路屋苑買樓租樓 FAQ" />
-            <Accordion type="single" collapsible className="mt-8">
-              {corridorFaqs.map((f: FaqItem, i: number) => (
-                <AccordionItem key={i} value={`corridor-faq-${i}`}>
-                  <AccordionTrigger className="text-left text-base font-medium">
-                    {f.question}
-                  </AccordionTrigger>
-                  <AccordionContent className="text-sm leading-relaxed text-muted-foreground">
-                    {f.answer}
-                  </AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+            <FaqList
+              items={corridorFaqs}
+              group="home-corridor-faq"
+              className="mt-8"
+              questionClassName="text-base"
+            />
             <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-sm">
               <Link to="/castle-peak-road" className="font-medium text-primary hover:underline">
                 青山公路置業指南 →
