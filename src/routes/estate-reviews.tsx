@@ -6,6 +6,7 @@ import { Container } from "@/components/layout/Container";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { AppImage } from "@/components/media/AppImage";
 import { PageHero } from "@/components/site/PageHero";
+import { EstateReviewGuides } from "@/components/site/EstateReviewGuides";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
 import { articlePublishedAt, publishedBlogArticles } from "@/content/blog-articles";
@@ -137,7 +138,9 @@ function EstateReviewsPage() {
         lead="先睇屋苑文章，再入屋苑頁比較放盤、成交、校網、交通和生活配套。"
       />
 
-      <Container className="py-12">
+      <EstateReviewGuides />
+
+      <Container id="review-articles" className="scroll-mt-24 py-12">
         <div className="flex items-end justify-between gap-4">
           <div>
             <p className="text-sm font-semibold text-coral">屋苑文章</p>
