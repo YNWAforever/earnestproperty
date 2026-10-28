@@ -13,6 +13,10 @@ async function getLlms({
   transactions = [],
   failEstates = false,
   failTransactions = false,
+  publishedArticles = [
+    { slug: "sham-tseng-buying-guide-2026" },
+    { slug: "bellagio-vs-sea-crest-villa-vs-hong-kong-garden" },
+  ],
 } = {}) {
   assert.ok(existsSync(routeUrl), "llms.txt needs an app route");
   const moduleUrl = (source) => `data:text/javascript,${encodeURIComponent(source)}`;
@@ -23,6 +27,9 @@ async function getLlms({
           "export const createFileRoute = id => options => ({ id, ...options });",
         ),
         "@/content/seo": new URL("../content/seo.ts", import.meta.url).href,
+        "@/content/blog-articles": moduleUrl(`export function publishedBlogArticles() {
+          return ${JSON.stringify(publishedArticles)};
+        }`),
         "@/lib/neon/public-data.server": moduleUrl(`export async function fetchSitemapTimestamps() {
           ${failEstates ? 'throw new Error("unavailable");' : `return ${JSON.stringify({ estates, articles: {} })};`}
         }`),
@@ -76,6 +83,9 @@ test("GET returns Chinese-first bilingual navigation as cacheable plain text", a
     "/district/sham-tseng",
     "/listings",
     "/blog",
+    "/about",
+    "/blog/sham-tseng-buying-guide-2026",
+    "/blog/bellagio-vs-sea-crest-villa-vs-hong-kong-garden",
     "/estate-reviews",
     "/agents",
     "/contact",
@@ -88,6 +98,15 @@ test("GET returns Chinese-first bilingual navigation as cacheable plain text", a
   assert.doesNotMatch(body, /\/(?:admin|api|w\/|district\/tsuen-wan|district\/ting-kau)/);
   assert.ok(!urls.some((url) => url.pathname.startsWith("/estate/")));
   assert.ok(!urls.some((url) => url.pathname === "/transactions"));
+});
+
+test("featured guides are linked only while the article registry marks them published", async () => {
+  const body = await (await getLlms({ publishedArticles: [] })).text();
+  assert.doesNotMatch(
+    body,
+    /sham-tseng-buying-guide-2026|bellagio-vs-sea-crest-villa-vs-hong-kong-garden/,
+  );
+  assert.match(body, /\/about\)/);
 });
 
 test("only currently published curated estates and populated transactions are linked", async () => {

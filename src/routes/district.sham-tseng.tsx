@@ -8,12 +8,7 @@ import {
   CartesianGrid,
   Tooltip,
 } from "recharts";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { FaqList } from "@/components/site/FaqList";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -415,14 +410,7 @@ function ShamTsengPage() {
               description="深井買樓租樓常見問題會陸續上載；有任何疑問可直接 WhatsApp 我們的深井地舖團隊。"
             />
           ) : (
-            <Accordion type="single" collapsible className="mt-4">
-              {faqs.map((f, i) => (
-                <AccordionItem key={i} value={`q-${i}`}>
-                  <AccordionTrigger className="text-left">{f.question}</AccordionTrigger>
-                  <AccordionContent className="text-muted-foreground">{f.answer}</AccordionContent>
-                </AccordionItem>
-              ))}
-            </Accordion>
+            <FaqList items={faqs} group="district-sham-tseng-faq" className="mt-4" />
           )}
         </section>
       </Container>

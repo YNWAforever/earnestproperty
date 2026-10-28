@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
+import { publishedBlogArticles } from "@/content/blog-articles";
 import { SITE_URL, estateSeo } from "@/content/seo";
 import { fetchSitemapTimestamps } from "@/lib/neon/public-data.server";
 import { fetchRecentTransactions } from "@/lib/queries";
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/llms.txt")({
           }),
         ]);
         const link = (label: string, path: string) => `- [${label}](${SITE_URL}${path})`;
+        const publishedArticles = new Set(publishedBlogArticles().map((article) => article.slug));
         const body = [
           "# 晉誠地產 Earnest Property",
           "",
@@ -41,7 +43,19 @@ export const Route = createFileRoute("/llms.txt")({
           "",
           "## 文章與聯絡 Articles and contact",
           link("市場分析 Blog", "/blog"),
+          ...(publishedArticles.has("sham-tseng-buying-guide-2026")
+            ? [link("深井買樓攻略 Sham Tseng buying guide", "/blog/sham-tseng-buying-guide-2026")]
+            : []),
+          ...(publishedArticles.has("bellagio-vs-sea-crest-villa-vs-hong-kong-garden")
+            ? [
+                link(
+                  "深井屋苑比較 Estate comparison",
+                  "/blog/bellagio-vs-sea-crest-villa-vs-hong-kong-garden",
+                ),
+              ]
+            : []),
           link("屋苑開箱 Estate reviews", "/estate-reviews"),
+          link("關於晉誠地產 About Earnest Property", "/about"),
           link("代理團隊 Agents", "/agents"),
           link("聯絡我們 Contact", "/contact"),
           "",
