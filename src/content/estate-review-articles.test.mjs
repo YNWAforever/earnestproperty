@@ -25,9 +25,19 @@ const TITLE_BUDGET_WITH_SUFFIX = 50;
 
 const reviewArticles = blogArticles.filter((article) => article.category === "屋苑開箱");
 
-test("the section is populated: 90 屋苑開箱 articles, one per estate plus the multi-estate set", () => {
+test("the original 90 屋苑開箱 articles remain alongside the new guides", () => {
   assert.equal(estateReviewArticles.length, 90);
-  assert.equal(reviewArticles.length, 90, "all 90 must reach blogArticles with the right category");
+  assert.equal(
+    reviewArticles.length,
+    110,
+    "the original 90 and 20 new guides must reach blogArticles",
+  );
+  for (const article of estateReviewArticles) {
+    assert.ok(
+      reviewArticles.some((review) => review.slug === article.slug),
+      `${article.slug} is missing`,
+    );
+  }
 
   // Every estate with a detail page gets its own 開箱, so a new estate cannot
   // land with no article pointing at it.
@@ -327,11 +337,13 @@ test("publishedBlogArticles gates on the clock, so a scheduled article is not li
     "an article must be live exactly on its date",
   );
 
-  // Everything is out by the day after the last scheduled article.
+  // The original run is out after its last scheduled article. Newer batches
+  // have their own dates and must not accidentally be pulled forward.
   const afterRun = new Date(
     Date.parse(scheduledArticles[scheduledArticles.length - 1].publishedAt) + 1000,
   );
-  assert.equal(publishedBlogArticles(afterRun).length, blogArticles.length);
+  const afterRunSlugs = new Set(publishedBlogArticles(afterRun).map((article) => article.slug));
+  assert.ok(estateReviewArticles.every((article) => afterRunSlugs.has(article.slug)));
 });
 
 test("every article carries a real date, and the flagship pair keep theirs", () => {
