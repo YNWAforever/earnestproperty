@@ -22,6 +22,7 @@ import {
   isWithinCorridorRegion,
 } from "./castle-peak-road.ts";
 import { renderableFaqs } from "../lib/faq.ts";
+import { castlePeakRoadHomeFaqs } from "./home-faq.ts";
 import { estateRegistry, getEstateEntry } from "./estate-registry.ts";
 import {
   clientAreaGroupsInNavOrder,
@@ -42,6 +43,52 @@ import {
 function read(path) {
   return readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 }
+
+test("corridor and homepage questions are unique across all FAQ surfaces", () => {
+  const seen = new Set();
+  for (const faqs of [
+    castlePeakRoadHub.faqs,
+    ...castlePeakRoadSegments.map((s) => s.faqs),
+    castlePeakRoadHomeFaqs,
+  ]) {
+    for (const faq of renderableFaqs(faqs)) {
+      const question = faq.question.normalize("NFKC").replace(/\s|[？?]/g, "");
+      assert.ok(!seen.has(question), `duplicate FAQ: ${faq.question}`);
+      seen.add(question);
+    }
+  }
+});
+
+test("segment FAQs answer specific viewing and school-net questions from existing copy", () => {
+  const tingKau = getCastlePeakRoadSegment("ting-kau");
+  const shamTseng = getCastlePeakRoadSegment("sham-tseng");
+  assert.ok(
+    renderableFaqs(tingKau.faqs).some(
+      (faq) => /睇樓.*比較/.test(faq.question) && /維修、管理費、車位和實用面積/.test(faq.answer),
+    ),
+  );
+  assert.ok(
+    renderableFaqs(shamTseng.faqs).some(
+      (faq) =>
+        /青龍頭.*校網/.test(faq.question) &&
+        /62 校網/.test(faq.answer) &&
+        /教育局/.test(faq.answer),
+    ),
+  );
+});
+
+test("corridor FAQPage schema carries the existing English name and zh-HK language", () => {
+  assert.equal(castlePeakRoadHub.nameEn, "Castle Peak Road");
+  for (const [path, name] of [
+    ["src/routes/castle-peak-road.index.tsx", "castlePeakRoadHub"],
+    ["src/routes/castle-peak-road.$segment.tsx", "segment"],
+  ]) {
+    const source = read(path);
+    assert.match(source, /"@type": "FAQPage",\s*inLanguage: "zh-HK"/);
+    assert.ok(source.includes(`alternateName: ${name}.nameEn`));
+    assert.ok(source.includes(`url: \`\${SITE_URL}\${${name}.path}\``));
+  }
+});
 
 // The five-zone structure shipped with these slugs. Three of them no longer
 // have a page, and all three were live URLs, so they are the redirect
@@ -339,7 +386,7 @@ test("district entry links are exactly the three the client approved", () => {
   // them from client-area-presentation.ts rather than typing them out, so this
   // asserts the shared source is what they consume -- and the exact label
   // strings are asserted directly against that module below.
-  for (const source of [header, footer]) {
+  for (const source of [header, footer + read("src/lib/corridor-links.ts")]) {
     assert.match(
       source,
       /client-area-presentation/,
@@ -681,7 +728,8 @@ test("canonical links, redirects, and sitemap use castle peak road routes", () =
     clientAreaGroupsInNavOrder().find((group) => group.key === "yau-kom-tau-ting-kau").href,
     "/castle-peak-road/ting-kau",
   );
-  assert.match(footer, /clientAreaGroupsInNavOrder\(\)/);
+  assert.match(footer, /corridorFooterLinks\(\)/);
+  assert.match(read("src/lib/corridor-links.ts"), /clientAreaGroupsInNavOrder\(\)/);
   assert.doesNotMatch(footer, /to="\/district\/ting-kau"/);
   assert.match(sitemap, /sitemap\.xml/);
   assert.match(sitemap, /castlePeakRoadSitemapPaths/);

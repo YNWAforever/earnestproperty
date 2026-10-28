@@ -19,6 +19,7 @@ import { Route as ContactRouteImport } from './routes/contact'
 import { Route as DisclaimerRouteImport } from './routes/disclaimer'
 import { Route as EstateReviewsRouteImport } from './routes/estate-reviews'
 import { Route as ListingsRouteImport } from './routes/listings'
+import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as MortgageRouteImport } from './routes/mortgage'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
@@ -142,6 +143,11 @@ const EstateReviewsRoute = EstateReviewsRouteImport.update({
 const ListingsRoute = ListingsRouteImport.update({
   id: '/listings',
   path: '/listings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
+  id: '/llms.txt',
+  path: '/llms.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MortgageRoute = MortgageRouteImport.update({
@@ -541,6 +547,7 @@ export interface FileRoutesByFullPath {
   '/disclaimer': typeof DisclaimerRoute
   '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/mortgage': typeof MortgageRoute
   '/privacy': typeof PrivacyRoute
   '/robots.txt': typeof RobotsDottxtRoute
@@ -625,6 +632,7 @@ export interface FileRoutesByTo {
   '/disclaimer': typeof DisclaimerRoute
   '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/mortgage': typeof MortgageRoute
   '/privacy': typeof PrivacyRoute
   '/robots.txt': typeof RobotsDottxtRoute
@@ -712,6 +720,7 @@ export interface FileRoutesById {
   '/disclaimer': typeof DisclaimerRoute
   '/estate-reviews': typeof EstateReviewsRoute
   '/listings': typeof ListingsRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/mortgage': typeof MortgageRoute
   '/privacy': typeof PrivacyRoute
   '/robots.txt': typeof RobotsDottxtRoute
@@ -800,6 +809,7 @@ export interface FileRouteTypes {
     | '/disclaimer'
     | '/estate-reviews'
     | '/listings'
+    | '/llms.txt'
     | '/mortgage'
     | '/privacy'
     | '/robots.txt'
@@ -884,6 +894,7 @@ export interface FileRouteTypes {
     | '/disclaimer'
     | '/estate-reviews'
     | '/listings'
+    | '/llms.txt'
     | '/mortgage'
     | '/privacy'
     | '/robots.txt'
@@ -970,6 +981,7 @@ export interface FileRouteTypes {
     | '/disclaimer'
     | '/estate-reviews'
     | '/listings'
+    | '/llms.txt'
     | '/mortgage'
     | '/privacy'
     | '/robots.txt'
@@ -1057,6 +1069,7 @@ export interface RootRouteChildren {
   DisclaimerRoute: typeof DisclaimerRoute
   EstateReviewsRoute: typeof EstateReviewsRoute
   ListingsRoute: typeof ListingsRoute
+  LlmsDottxtRoute: typeof LlmsDottxtRoute
   MortgageRoute: typeof MortgageRoute
   PrivacyRoute: typeof PrivacyRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
@@ -1170,6 +1183,13 @@ declare module '@tanstack/react-router' {
       path: '/listings'
       fullPath: '/listings'
       preLoaderRoute: typeof ListingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/llms.txt': {
+      id: '/llms.txt'
+      path: '/llms.txt'
+      fullPath: '/llms.txt'
+      preLoaderRoute: typeof LlmsDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mortgage': {
@@ -1838,6 +1858,7 @@ const rootRouteChildren: RootRouteChildren = {
   DisclaimerRoute: DisclaimerRoute,
   EstateReviewsRoute: EstateReviewsRoute,
   ListingsRoute: ListingsRoute,
+  LlmsDottxtRoute: LlmsDottxtRoute,
   MortgageRoute: MortgageRoute,
   PrivacyRoute: PrivacyRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,

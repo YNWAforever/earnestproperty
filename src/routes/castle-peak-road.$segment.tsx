@@ -167,6 +167,10 @@ function CastlePeakRoadSegmentPage() {
   const faqJsonLd = {
     "@context": "https://schema.org",
     "@type": "FAQPage",
+    inLanguage: "zh-HK",
+    name: segment.nameZh,
+    alternateName: segment.nameEn,
+    url: `${SITE_URL}${segment.path}`,
     mainEntity: faqs.map((faq) => ({
       "@type": "Question",
       name: faq.question,

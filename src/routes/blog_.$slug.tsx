@@ -29,6 +29,7 @@ import { absoluteUrl, articleSchema } from "@/lib/schema";
 import { fetchArticleBySlug, fetchEstateBySlug } from "@/lib/queries";
 import { jsonLdScript } from "@/lib/schema";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
+import { blogCorridorLinks } from "@/lib/corridor-links";
 
 type ArticleDetail = {
   slug: string;
@@ -256,6 +257,13 @@ function BlogArticlePage() {
   }
 
   const url = `${SITE_URL}/blog/${article.slug}`;
+  const relatedLinks = [
+    ...(article.links ?? []),
+    ...blogCorridorLinks(
+      compareEstates.map((estate) => estate.slug),
+      article.links,
+    ),
+  ];
   const sectionAnchors = article.sections.map((section, index) =>
     sectionAnchorId(section.heading, index),
   );
@@ -366,11 +374,11 @@ function BlogArticlePage() {
 
           {compareEstates.length > 0 && <BlogEstateComparisonTable estates={compareEstates} />}
 
-          {article.links && article.links.length > 0 && (
+          {relatedLinks.length > 0 && (
             <nav className="mt-10 rounded-lg border bg-muted/30 p-5">
               <h2 className="text-sm font-semibold">延伸閱讀</h2>
               <div className="mt-3 flex flex-wrap gap-2">
-                {article.links.map((link) => (
+                {relatedLinks.map((link) => (
                   <SiteLink
                     key={link.href}
                     href={link.href}
