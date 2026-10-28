@@ -1,12 +1,10 @@
 /**
- * Blog article content model (P5e1). Every fact in an article's `sections`
- * must already be established elsewhere in this codebase -- castle-peak-road.ts
- * (corridor/transport/school-net text), school-nets.ts (structured school-net
- * data), or estate-registry.ts (which estates are real and published). Numeric
- * estate facts (avg PSF, total units, year completed, developer) are never
- * hand-typed here -- they're fetched live via fetchEstateBySlug() at render
- * time (see blog_.$slug.tsx's loader + BlogEstateComparisonTable), so they can
- * never go stale or be wrong.
+ * Blog article content model (P5e1). Estate facts are grounded in the site's
+ * estate content and the cited public sources; the decision guides also link
+ * official tenancy and viewing guidance. Changing figures such as average PSF,
+ * unit counts, completion year and developer are fetched from estate records
+ * when the comparison table renders (see blog_.$slug.tsx). A missing or older
+ * record is possible, so the copy does not promise that figures are current.
  *
  * `author` is an organizational byline ("晉誠地產編輯團隊"), matching this
  * project's existing Organization-as-author convention (blog_.$slug.tsx's own
@@ -20,6 +18,10 @@
 import { castlePeakRoadSegments } from "./castle-peak-road.ts";
 import { estateRegistry } from "./estate-registry.ts";
 import { estateReviewArticles } from "./estate-review-articles.ts";
+import { rentalEstateDecisionArticles } from "./estate-decision-rental.ts";
+import { estateDecisionComparisonsA } from "./estate-decision-comparisons-a.ts";
+import { estateDecisionComparisonsB } from "./estate-decision-comparisons-b.ts";
+import { estateDecisionComparisonsC } from "./estate-decision-comparisons-c.ts";
 import { schoolNets } from "./school-nets.ts";
 
 export const BLOG_CATEGORIES = [
@@ -79,7 +81,7 @@ function estateDisplayName(slug: string): string {
 }
 
 /**
- * The 50 屋苑開箱 articles behind /estate-reviews's 最新屋苑文章 section live in
+ * The 90 derived 屋苑開箱 articles behind /estate-reviews live in
  * their own module because they are derived from estatePageContent rather than
  * hand-typed. They are appended here (rather than kept separate) so /blog, the
  * sitemap, blog_.$slug.tsx and estate.$slug.tsx's "related articles" lookup all
@@ -184,6 +186,19 @@ const flagshipArticles: readonly BlogArticleMeta[] = [
 
 export const blogArticles: readonly BlogArticleMeta[] = [
   ...flagshipArticles,
+  // Keep the newest estate guides ahead of the older fallback articles on the
+  // review hub. This explicit date avoids the legacy flagship date default.
+  ...[
+    ...rentalEstateDecisionArticles,
+    ...estateDecisionComparisonsA,
+    ...estateDecisionComparisonsB,
+    ...estateDecisionComparisonsC,
+  ].map((article) => ({
+    ...article,
+    publishedAt: "2026-10-28T21:02:00.000Z",
+    author: EDITORIAL_AUTHOR,
+    reviewer: null,
+  })),
   ...estateReviewArticles.map((article) => ({
     ...article,
     author: EDITORIAL_AUTHOR,
