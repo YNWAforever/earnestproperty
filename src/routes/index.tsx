@@ -3,7 +3,6 @@ import {
   propertyPriceSummary,
   propertyDealLabel,
   publicPropertyTitle,
-  propertyUpdatedAt,
 } from "@/lib/property-public";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
@@ -46,7 +45,6 @@ import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import { EmptyState } from "@/components/layout/EmptyState";
 import { CoreEstateGrid } from "@/components/site/EstateGroupGrid";
-import { FreshnessStamp } from "@/components/layout/FreshnessStamp";
 import heroImage from "@/assets/hero-front.jpg";
 import responsiveImages from "@/lib/media/responsive-images.generated.json";
 const companyLogo = "/brand/earnest-company-logo-2026.jpg";
@@ -371,12 +369,12 @@ function HomePage() {
       <section className="border-t border-border bg-muted/40">
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 sm:py-20 lg:px-8">
           <HomepageListingBand
-            title="荀盤推介"
+            title="筍盤推介"
             listings={propertyHkPromo}
             enquiryActions={listingEnquiryActions}
-            emptyTitle="暫時未有荀盤推介"
+            emptyTitle="暫時未有筍盤推介"
             emptyDescription="請稍後再試，或直接 WhatsApp 我哋查詢。"
-            whatsappMessage="你好，想查詢荀盤推介"
+            whatsappMessage="你好，想查詢筍盤推介"
           />
         </div>
       </section>
@@ -1081,7 +1079,6 @@ function PropertyCard({
             {publicPropertyTitle(property)}
           </Link>
         </h3>
-        <FreshnessStamp updatedAt={propertyUpdatedAt(property)} className="mt-1 block" />
         <div className="mt-3 flex items-baseline gap-2">
           <span className="text-2xl font-bold text-coral">{priceDisplay}</span>
           <span className="text-xs text-muted-foreground">

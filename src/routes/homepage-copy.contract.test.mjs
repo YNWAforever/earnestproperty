@@ -12,7 +12,7 @@ const gridModuleSource = await readFile(
 );
 
 test("homepage uses Chinese-only large headings for the requested sections", () => {
-  for (const title of ["黃金必走盤", "荀盤推介", "精選樓盤影片", "深井核心屋苑", "為何選晉誠"]) {
+  for (const title of ["黃金必走盤", "筍盤推介", "精選樓盤影片", "深井核心屋苑", "為何選晉誠"]) {
     assert.match(source, new RegExp(`title=\\"${title}\\"`));
   }
 
@@ -24,6 +24,17 @@ test("homepage uses Chinese-only large headings for the requested sections", () 
   ]) {
     assert.doesNotMatch(source, new RegExp(`title=\\"${title}\\"`));
   }
+});
+
+test("筍盤推介 uses the corrected copy in its heading, empty state and WhatsApp enquiry", () => {
+  const promoBand = source.match(
+    /<HomepageListingBand\b[^>]*\blistings=\{propertyHkPromo\}[^>]*\/>/,
+  )?.[0];
+  assert.ok(promoBand, "the Property.hk homepage band is present");
+  assert.match(promoBand, /title="筍盤推介"/);
+  assert.match(promoBand, /emptyTitle="暫時未有筍盤推介"/);
+  assert.match(promoBand, /whatsappMessage="你好，想查詢筍盤推介"/);
+  assert.doesNotMatch(promoBand, /荀盤推介/);
 });
 
 test("homepage keeps the featured video section in the requested order", () => {
@@ -66,10 +77,10 @@ test("AGENT TEAM PREVIEW no longer restates the local-market/instant-WhatsApp ta
   assert.match(agentPreview, /agents\.map/);
 });
 
-test("featured-listings PropertyCard shows a FreshnessStamp", () => {
-  assert.match(source, /import \{ FreshnessStamp \} from "@\/components\/layout\/FreshnessStamp";/);
+test("featured-listings PropertyCard omits freshness stamps and raw update copy", () => {
   const propertyCard = source.slice(source.indexOf("function PropertyCard("));
-  assert.match(propertyCard, /<FreshnessStamp updatedAt=\{propertyUpdatedAt\(property\)\}/);
+  assert.doesNotMatch(propertyCard, /<FreshnessStamp\b|propertyUpdatedAt\(/);
+  assert.doesNotMatch(propertyCard, /最後更新|formatHkDate/);
 });
 
 test("featured-listings empty state uses the shared EmptyState component", () => {
@@ -163,9 +174,7 @@ test("CoreEstateGrid renders the shared EmptyState, not a bare cardless grid, wh
   );
 });
 
-test("homepage does not hide current timestamps when legacy source metadata is missing", () => {
-  const card = source.slice(source.indexOf("function PropertyCard("));
-  assert.doesNotMatch(card, /property\.source_site &&/);
+test("homepage does not claim listings were published today", () => {
   assert.doesNotMatch(source, /即日新放盤/);
 });
 

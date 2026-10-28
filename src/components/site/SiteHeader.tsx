@@ -162,6 +162,11 @@ const megaMenus: MegaMenuGroup[] = [
     label: "市場資訊",
     featured: [
       {
+        href: "/blog?category=成交分析",
+        label: "晉誠最新成交",
+        description: "閱讀晉誠地產成交分析。",
+      },
+      {
         to: "/videos",
         label: "YouTube影片",
         description: "觀看晉誠地產頻道及樓盤影片。",
