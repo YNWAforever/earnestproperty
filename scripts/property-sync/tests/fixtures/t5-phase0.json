@@ -1,0 +1,77 @@
+{
+  "fixture_label": "SYNTHETIC - NOT LIVE SOURCE EVIDENCE",
+  "now": "2026-10-28T23:00:00Z",
+  "capture": {
+    "source": "28hse",
+    "scraped_at": "2026-10-28T12:00:00Z",
+    "meta": {
+      "scope_id": "agent:540",
+      "parser_version": "python-v2.2",
+      "policy_version": "no-hermes-v2",
+      "run_id": "synthetic-t5",
+      "crawl_complete": true,
+      "pages_failed": 0,
+      "worker_rejected_count": 0,
+      "eligible_for_absence": true,
+      "pages": [
+        {
+          "scope": "sale",
+          "page": 1,
+          "status": "listings",
+          "details_complete": true,
+          "ids": ["100"]
+        },
+        { "scope": "sale", "page": 2, "status": "terminal", "details_complete": true, "ids": [] },
+        {
+          "scope": "rent",
+          "page": 1,
+          "status": "listings",
+          "details_complete": true,
+          "ids": ["200"]
+        },
+        { "scope": "rent", "page": 2, "status": "terminal", "details_complete": true, "ids": [] }
+      ]
+    },
+    "listings": [
+      {
+        "property_id": "100",
+        "agency_property_no": "A000001",
+        "deal_type": "sale",
+        "price": "5000000",
+        "source_status": "active"
+      },
+      {
+        "property_id": "200",
+        "agency_property_no": "A000001",
+        "deal_type": "rent",
+        "rent": "20000",
+        "source_status": "active"
+      }
+    ]
+  },
+  "current": {
+    "exported_at": "2026-10-28T12:05:00Z",
+    "properties": [
+      {
+        "id": "synthetic-sale",
+        "canonical_property_no": "A000001",
+        "deal_type": "sale",
+        "price": "5100000",
+        "rent": null,
+        "status": "active",
+        "source": "28hse_agent_540",
+        "override_fields": []
+      },
+      {
+        "id": "synthetic-rent",
+        "canonical_property_no": "A000001",
+        "deal_type": "rent",
+        "price": null,
+        "rent": "19000",
+        "status": "active",
+        "source": "28hse_agent_540",
+        "override_fields": []
+      }
+    ]
+  }
+}

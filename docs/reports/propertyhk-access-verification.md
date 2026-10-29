@@ -1,4 +1,22 @@
-# Property.hk 存取及隔離解析核實（更新2026-10-11）
+# Property.hk 存取及隔離解析核實（更新2026-10-28）
+
+## 2026-10-28 T5 Phase 0 — Willy Ask A Yes
+
+Property.hk 是後續 T5 必需 fallback。Willy 已批准正常 headless browser 讀詳情：
+每頁／navigation（包括網站自行 reload）≥3秒，必須 pin `PROPERTYHK_BROWSER_EXECUTABLE`，
+fresh in-memory context，只讓網站自然執行 JS 和設定該 context 的 cookies。不得複製 cookies、
+用代理、stealth、captcha solver 或改驗證流程。此為「不得繞過」的明確批准正常瀏覽器路徑，
+不是解除其他限制。HTTP index 遇非200／challenge／缺 C-018613 即停；browser challenge
+約20秒未自行清除即停、429立即停，普通 transport/server error 最多4次。
+
+使用者提供的2026-10-28事實：agentblog index HTTP200；詳情403在正常 headless Chromium
+約6秒清除。本 PR 未做新 live probe，不能把該事實擴寫成全公司 inventory、完整 branch
+scope、production ingestion 或 media rights 驗收。以下10月歷史403紀錄保留為當時證據。
+舊 HTTP worker 仍 fail closed；新增固定19-agent HTTP index、browser detail 和 file-only
+price/status diff 只作 Phase0，sold/delisted 提議 inactive＋reason，staff overrides 保留，
+`absence_enabled=false`、`production_writes=0`。未接入09:00 gold/owner schedule，沒有
+Property.hk Firecrawl 或 Neon 執行。操作及 SQL export 模板見
+[T5 dry-run runbook](../runbooks/t5-price-status-dry-run.md)。
 
 ## 2026-10-11 荃灣dt補讀：六入口index readback
 

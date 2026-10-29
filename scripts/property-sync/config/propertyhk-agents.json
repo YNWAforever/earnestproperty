@@ -1,0 +1,28 @@
+{
+  "schema": "propertyhk-agentblog-manifest/v1",
+  "verified_at": "2026-10-28",
+  "license": "C-018613",
+  "full_branch_scope_verified": false,
+  "absence_enabled": false,
+  "agents": [
+    "ept/tommyyiu",
+    "ept/king",
+    "ept/joeyuen",
+    "ept/mon",
+    "ept/lee",
+    "ept/shadow",
+    "ept/winnie",
+    "ept/joanna",
+    "eps/kelvin",
+    "eps/ruby",
+    "eps/wendy",
+    "eps/terry",
+    "eps/eunice",
+    "epw/sam",
+    "epw/mike",
+    "epw/george",
+    "epw/vincy",
+    "epw/eric",
+    "epw/dickson"
+  ]
+}
