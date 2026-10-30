@@ -293,14 +293,23 @@ test("homepage newest feed ranks new source adverts before old promoted inventor
   }
 });
 
-test("黃金必走盤 uses fresh complete agent540 sale evidence and paid grades", async () => {
+test("黃金必走盤 uses the newest complete agent540 sale snapshot and paid grades", async () => {
   const { text, params } = await captureFeaturedQuery({ limit: 6, selection: "28hse-paid" });
   assert.match(text, /o\.source = '28hse_agent_540'/);
   assert.match(text, /i\.promotion_tier IN \('gold', 'pinned'\)/);
   assert.match(text, /p\.status = 'active'/);
   assert.match(text, /p\.deal_type = 'sale'/);
   assert.match(text, /owner-homepage-inventory-v1/);
-  assert.match(text, /interval '36 hours'/);
+  assert.match(
+    text,
+    /homepage_inventory_run AS \([\s\S]*?ORDER BY \(counts->>'captured_at'\)::timestamptz DESC, id DESC\s+LIMIT 1\s*\), homepage_inventory AS \(/,
+  );
+  assert.match(text, /r\.captured_at <= now\(\) \+ interval '5 minutes'/);
+  assert.doesNotMatch(
+    text,
+    /interval '36 hours'/,
+    "a newest snapshot older than 36 hours remains the membership boundary",
+  );
   assert.match(text, /t\.observation_id = o\.id/);
   assert.match(text, /JOIN mls_source_promotion_tiers t/);
   assert.match(text, /WHEN 'gold' THEN 0/);
@@ -553,7 +562,9 @@ test("homepage uses complete sale inventory membership and source order before L
         );
       },
     );
-    // An old capture must never be made current by a new publication execution.
+    // Moving only the run clock leaves the observation clocks behind, so this
+    // capture no longer qualifies. A newest snapshot whose clocks all age past
+    // 36 hours is covered separately and still serves.
     await db.exec(`UPDATE listing_sync_runs SET counts=counts ||
       jsonb_build_object('captured_at',now()-interval '2 days')`);
     assert.deepEqual(
@@ -636,6 +647,211 @@ test("homepage uses complete sale inventory membership and source order before L
       "verified empty snapshot has no historical fallback",
     );
   } finally {
+    await db.close();
+  }
+});
+
+function capturedAtSql(interval, future = false) {
+  if (!/^\d+ (hours|minutes)$/.test(interval)) throw new Error(`bad interval ${interval}`);
+  return `date_trunc('second', now() ${future ? "+" : "-"} interval '${interval}')`;
+}
+
+async function insertHomepageInventoryRun(db, { id, capturedSql, entries }) {
+  await db.query(
+    `WITH stamp AS (SELECT ${capturedSql} AS captured_at)
+     INSERT INTO listing_sync_runs(id, parser_version, status, mode, counts)
+     SELECT $1, 'owner-homepage-inventory-v1', 'healthy', 'publish',
+       jsonb_build_object(
+         'homepage_inventory', true,
+         'full_snapshot', true,
+         'scope', 'agent:540',
+         'source', '28hse_agent_540',
+         'deal_type', 'sale',
+         'captured_at', to_char(stamp.captured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+         'advertised_count', $2::int
+       )
+     FROM stamp`,
+    [id, entries.length],
+  );
+  for (const [index, entry] of entries.entries()) {
+    const observationId = `${id}-o${index}`;
+    await db.query(
+      `WITH stamp AS (
+         SELECT (counts->>'captured_at')::timestamptz AS captured_at
+         FROM listing_sync_runs WHERE id = $1
+       )
+       INSERT INTO listing_source_observations(
+         id, run_id, source, external_listing_id, deal_type,
+         property_no_normalized, payload, fetched_at
+       )
+       SELECT $2, $1, '28hse_agent_540', $3, 'sale', $4,
+         jsonb_build_object('homepage_inventory', jsonb_build_object('position', $5::int)),
+         stamp.captured_at
+       FROM stamp`,
+      [id, observationId, `${id}-ext-${index}`, entry.ref, entry.position],
+    );
+    await db.query(
+      `INSERT INTO mls_source_promotion_tiers(
+         source, external_listing_id, deal_type, promotion_tier,
+         observation_id, observed_at, snapshot_complete
+       )
+       SELECT source, external_listing_id, deal_type, $2, id, fetched_at, true
+       FROM listing_source_observations WHERE id = $1`,
+      [observationId, entry.tier],
+    );
+  }
+}
+
+async function ageHomepageInventoryRun(db, id, capturedSql) {
+  await db.query(
+    `WITH stamp AS (SELECT ${capturedSql} AS captured_at),
+     updated_run AS (
+       UPDATE listing_sync_runs
+       SET counts = counts || jsonb_build_object(
+         'captured_at', to_char(stamp.captured_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')
+       )
+       FROM stamp
+       WHERE listing_sync_runs.id = $1
+       RETURNING listing_sync_runs.id
+     ),
+     updated_obs AS (
+       UPDATE listing_source_observations
+       SET fetched_at = stamp.captured_at
+       FROM stamp
+       WHERE listing_source_observations.run_id = $1
+       RETURNING listing_source_observations.id
+     )
+     UPDATE mls_source_promotion_tiers AS tier
+     SET observed_at = stamp.captured_at
+     FROM stamp, updated_obs
+     WHERE tier.observation_id = updated_obs.id`,
+    [id],
+  );
+}
+
+test("黃金必走盤 soft-serves the newest healthy snapshot after 36 hours", async (t) => {
+  const db = new PGlite();
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => {
+    warnings.push(args);
+  };
+  const paid = async (server) =>
+    (await server.fetchFeaturedProperties({ limit: 6, selection: "28hse-paid" })).map(
+      (row) => row.listing_no,
+    );
+  const propertyHk = async (server) =>
+    (await server.fetchFeaturedProperties({ limit: 6, selection: "propertyhk" }))
+      .map((row) => row.listing_no)
+      .sort();
+  try {
+    await db.exec(`CREATE TYPE deal_type AS ENUM ('sale','rent');
+    CREATE TABLE properties (
+      id text PRIMARY KEY, listing_no text, canonical_property_no text, title_zh text,
+      deal_type deal_type NOT NULL DEFAULT 'sale', source_updated_at timestamp,
+      last_seen_at timestamp, updated_at timestamp, created_at timestamp NOT NULL,
+      status text NOT NULL DEFAULT 'active', featured boolean NOT NULL DEFAULT false,
+      estate_id text, district_slug text, address text, price numeric, rent numeric,
+      saleable_area numeric, bedrooms numeric, bathrooms numeric, features text[],
+      images text[], video_url text, source_site text
+    );
+    CREATE TABLE property_public_members(property_id text, public_listing_no text);
+    CREATE TABLE estates(id text, name_zh text, slug text, district_slug text);
+    CREATE TABLE property_source_links(property_id text, source text, external_listing_id text,
+      deal_type deal_type, status text, first_seen_at timestamp, last_seen_at timestamp);
+    CREATE TABLE mls_source_state(property_id text, first_seen_at timestamp, source_status text,
+      last_accepted_at timestamp, source text, external_listing_id text, deal_type deal_type);
+    CREATE TABLE mls_source_promotion_tiers(source text, external_listing_id text, deal_type deal_type,
+      promotion_tier text, observation_id text, observed_at timestamptz, snapshot_complete boolean,
+      promotion_tier_raw text, updated_at timestamptz, PRIMARY KEY(source,external_listing_id,deal_type));
+    CREATE TABLE listing_sync_runs(id text, parser_version text, status text, mode text, counts jsonb,
+      started_at timestamptz DEFAULT now(), scheduled_for date, finished_at timestamptz);
+    CREATE TABLE listing_source_observations(id text, run_id text, source text, external_listing_id text,
+      deal_type deal_type, property_no_normalized text, payload jsonb, fetched_at timestamptz,
+      source_url text, property_no_raw text, content_hash text, validation_state text, discovered_at timestamptz);
+    INSERT INTO properties(id,listing_no,canonical_property_no,created_at,status,source_site) VALUES
+      ('fresh-gold','FRESH-GOLD','A100001','2026-10-02','active','28hse'),
+      ('fresh-pinned','FRESH-PINNED','A100002','2026-10-03','active','28hse'),
+      ('fresh-normal','FRESH-NORMAL','A100003','2026-10-04','active','28hse'),
+      ('older-gold','OLDER-GOLD','A100004','2026-09-01','active','28hse'),
+      ('future-gold','FUTURE-GOLD','A100005','2026-10-05','active','28hse'),
+      ('hk-only','HK-ONLY','A100006','2026-10-06','active','propertyhk');
+    INSERT INTO property_public_members VALUES
+      ('fresh-gold','P-FRESH-GOLD'),('fresh-pinned','P-FRESH-PINNED'),
+      ('fresh-normal','P-FRESH-NORMAL'),('older-gold','P-OLDER-GOLD'),
+      ('future-gold','P-FUTURE-GOLD'),('hk-only','P-HK-ONLY');
+    INSERT INTO property_source_links(property_id,source,external_listing_id,deal_type,status) VALUES
+      ('fresh-gold','28hse_agent_540','g-fresh','sale','active'),
+      ('fresh-gold','propertyhk','h-fresh','sale','active'),
+      ('fresh-pinned','28hse_agent_540','p-fresh','sale','active'),
+      ('fresh-normal','28hse_agent_540','n-fresh','sale','active'),
+      ('older-gold','28hse_agent_540','g-older','sale','active'),
+      ('future-gold','28hse_agent_540','g-future','sale','active'),
+      ('hk-only','propertyhk','h-only','sale','active');`);
+    await insertHomepageInventoryRun(db, {
+      id: "older",
+      capturedSql: capturedAtSql("50 hours"),
+      entries: [{ ref: "A100004", position: 1, tier: "gold" }],
+    });
+    await insertHomepageInventoryRun(db, {
+      id: "newest",
+      capturedSql: capturedAtSql("2 hours"),
+      entries: [
+        { ref: "A100002", position: 1, tier: "pinned" },
+        { ref: "A100001", position: 2, tier: "gold" },
+        { ref: "A100003", position: 3, tier: "normal" },
+      ],
+    });
+    const server = await loadPublicDataServer(async (text, params) => {
+      return (await db.query(text, params)).rows;
+    });
+
+    await t.test("newest within 36 hours returns that snapshot's gold then pinned", async () => {
+      assert.deepEqual(await paid(server), ["FRESH-GOLD", "FRESH-PINNED"]);
+      assert.deepEqual(await propertyHk(server), ["HK-ONLY"]);
+      assert.equal(warnings.filter((args) => args[0] === "HOMEPAGE_INVENTORY_STALE").length, 0);
+    });
+
+    await ageHomepageInventoryRun(db, "newest", capturedAtSql("48 hours"));
+
+    await t.test("newest past 36 hours still returns that snapshot, not an older one", async () => {
+      assert.deepEqual(await paid(server), ["FRESH-GOLD", "FRESH-PINNED"]);
+      assert.deepEqual(
+        await propertyHk(server),
+        ["HK-ONLY"],
+        "stale gold remains the paid membership boundary for 宅谷",
+      );
+      const staleLogs = warnings.filter((args) => args[0] === "HOMEPAGE_INVENTORY_STALE");
+      assert.equal(staleLogs.length, 1, "stale inventory is logged once per snapshot");
+      assert.equal(typeof staleLogs[0][1].capturedAt, "string");
+      assert.ok(staleLogs[0][1].ageHours >= 36);
+    });
+
+    await t.test("a newer snapshot still wins over older paid inventory", async () => {
+      await insertHomepageInventoryRun(db, {
+        id: "future",
+        capturedSql: capturedAtSql("1 hours", true),
+        entries: [{ ref: "A100005", position: 1, tier: "gold" }],
+      });
+      assert.deepEqual(
+        await paid(server),
+        [],
+        "a future newest snapshot is unused and does not reveal older gold",
+      );
+      await db.exec(`DELETE FROM mls_source_promotion_tiers
+        WHERE observation_id IN (SELECT id FROM listing_source_observations WHERE run_id = 'future');
+        DELETE FROM listing_source_observations WHERE run_id = 'future';
+        DELETE FROM listing_sync_runs WHERE id = 'future';`);
+      await insertHomepageInventoryRun(db, {
+        id: "empty-newest",
+        capturedSql: capturedAtSql("1 minutes"),
+        entries: [],
+      });
+      assert.deepEqual(await paid(server), [], "a newer empty snapshot has no historical fallback");
+      assert.deepEqual(await propertyHk(server), ["FRESH-GOLD", "HK-ONLY"]);
+    });
+  } finally {
+    console.warn = originalWarn;
     await db.close();
   }
 });

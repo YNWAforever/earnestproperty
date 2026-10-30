@@ -825,8 +825,11 @@ const PROMOTION_TIER_RANK_EXPRESSION = "COALESCE(promotion.rank, 3)";
 // The complete, approved index capture is the membership boundary. Historical
 // active links are deliberately insufficient: absence inference is disabled and
 // numeric advert IDs can be reused. This read model never rebinds those IDs.
-// Select the newest snapshot BEFORE checking freshness, so an expired/empty
-// snapshot cannot fall back to older paid inventory.
+// Choose the newest healthy snapshot before any clock check, so a newer empty
+// or not-yet-usable snapshot cannot fall back to older paid inventory. Age is
+// not a membership gate: that newest snapshot still supplies gold and pinned
+// after 36 hours. A capture more than five minutes ahead of the database clock
+// stays excluded and still does not fall back.
 const HOMEPAGE_INVENTORY_CTE = `homepage_inventory_run AS (
   SELECT id, (counts->>'captured_at')::timestamptz AS captured_at
   FROM listing_sync_runs
@@ -846,7 +849,6 @@ const HOMEPAGE_INVENTORY_CTE = `homepage_inventory_run AS (
   WHERE o.source = '28hse_agent_540' AND o.deal_type = 'sale'
     AND t.snapshot_complete = true
     AND t.observed_at = r.captured_at AND o.fetched_at = r.captured_at
-    AND r.captured_at >= now() - interval '36 hours'
     AND r.captured_at <= now() + interval '5 minutes'
 )`;
 
@@ -954,6 +956,38 @@ async function promotionTierTableAvailable(): Promise<boolean> {
   }
 }
 
+const HOMEPAGE_INVENTORY_SOFT_TTL_MS = 36 * 60 * 60 * 1000;
+const HOMEPAGE_INVENTORY_STALE_LOG_INTERVAL_MS = 10 * 60 * 1000;
+let lastStaleHomepageInventoryLog: { capturedAt: string; loggedAt: number } | null = null;
+
+function homepageInventoryCapturedMs(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "string" || typeof value === "number") return new Date(value).getTime();
+  return Number.NaN;
+}
+
+// Operators can see that 黃金必走盤 is serving the last approved index rather
+// than a capture from the last 36 hours. The page itself stays quiet.
+function noteStaleHomepageInventory(capturedAt: unknown) {
+  const capturedMs = homepageInventoryCapturedMs(capturedAt);
+  if (!Number.isFinite(capturedMs)) return;
+  const ageMs = Date.now() - capturedMs;
+  if (ageMs <= HOMEPAGE_INVENTORY_SOFT_TTL_MS) return;
+  const stamp = new Date(capturedMs).toISOString();
+  const now = Date.now();
+  if (
+    lastStaleHomepageInventoryLog?.capturedAt === stamp &&
+    now - lastStaleHomepageInventoryLog.loggedAt < HOMEPAGE_INVENTORY_STALE_LOG_INTERVAL_MS
+  ) {
+    return;
+  }
+  lastStaleHomepageInventoryLog = { capturedAt: stamp, loggedAt: now };
+  console.warn("HOMEPAGE_INVENTORY_STALE", {
+    capturedAt: stamp,
+    ageHours: Math.round(ageMs / 3_600_000),
+  });
+}
+
 /**
  * Canonical public card feed, ordered and deduplicated before LIMIT.
  * Homepage explicitly requests newest accepted active adverts; legacy callers
@@ -964,7 +998,8 @@ async function promotionTierTableAvailable(): Promise<boolean> {
  *
  * selection narrows that same feed for the two homepage bands:
  * - 28hse-paid: 黃金必走盤, current sale gold then pinned in source index order;
- *   empty without a complete fresh approved inventory or the tier table
+ *   empty without a complete approved inventory or the tier table. The newest
+ *   healthy snapshot still serves after 36 hours; an older snapshot never does.
  * - propertyhk: 筍盤推介 (宅谷). A unit that is also 黃金必走盤 is left in that
  *   band so the homepage does not repeat the card. The exclusion needs the
  *   tier table; without it, 宅谷 still renders and simply cannot see grades.
@@ -1022,15 +1057,18 @@ export async function fetchFeaturedProperties(input: {
 
   const canonical =
     canonicalListingCte(where, false, candidateOrder) + (paid28hse ? HOMEPAGE_COMPANY_CTE : "");
-  const cte =
-    paid28hse || excludePaid28hse
-      ? canonical.replace(/^WITH /, `WITH ${HOMEPAGE_INVENTORY_CTE}, `)
-      : canonical;
+  const readsHomepageInventory = paid28hse || excludePaid28hse;
+  const cte = readsHomepageInventory
+    ? canonical.replace(/^WITH /, `WITH ${HOMEPAGE_INVENTORY_CTE}, `)
+    : canonical;
+  const inventoryClockSql = readsHomepageInventory
+    ? ", (SELECT captured_at FROM homepage_inventory_run) AS homepage_inventory_captured_at"
+    : "";
 
-  const rows = await sql().query(
+  const rows = (await sql().query(
     `
     ${cte}
-    SELECT ${listingCardColumns}
+    SELECT ${listingCardColumns}${inventoryClockSql}
     FROM properties p JOIN ${paid28hse ? "homepage_companies" : "canonical"} c ON c.id=p.id
     LEFT JOIN estates e ON e.id = p.estate_id
     ${paid28hse ? HOMEPAGE_PROMOTION_RANK_JOIN : ranked ? PROMOTION_TIER_RANK_JOIN : ""}
@@ -1039,7 +1077,8 @@ export async function fetchFeaturedProperties(input: {
     LIMIT ${limitParam}
     `,
     params,
-  );
+  )) as DbRow[];
+  if (readsHomepageInventory) noteStaleHomepageInventory(rows[0]?.homepage_inventory_captured_at);
   return rows.map(mapListingCardRow);
 }
 
