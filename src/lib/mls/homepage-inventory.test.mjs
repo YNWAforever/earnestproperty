@@ -79,7 +79,6 @@ test("invalid or incomplete source evidence cannot replace current inventory", a
     { advertised_count: "3" },
     { entries: null },
     { entries: Array(10001).fill(input().entries[0]), advertised_count: 10001 },
-    { captured_at: "2026-10-25T15:59:59Z" },
     { captured_at: "2026-10-27T04:05:01Z" },
     { captured_at: "2026-10-27T03:00:00+00:00" },
     { captured_at: "2026-02-30T03:00:00Z" },
@@ -89,6 +88,15 @@ test("invalid or incomplete source evidence cannot replace current inventory", a
     normalizeHomepageInventory(input({ entries: [], advertised_count: 0 }), { now }).entries.length,
     0,
   );
+});
+
+test("old but valid UTC captures normalize without a hard 36h age gate", async () => {
+  const { normalizeHomepageInventory } = await import("./homepage-inventory.mjs");
+  for (const old of ["2026-01-01T00:00:00Z", "2025-06-15T12:30:45.123Z"]) {
+    const result = normalizeHomepageInventory(input({ captured_at: old }), { now });
+    assert.equal(result.capturedAt, old);
+    assert.equal(result.advertisedCount, 3);
+  }
 });
 
 async function database() {
