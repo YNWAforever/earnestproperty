@@ -33,8 +33,7 @@ export function normalizeHomepageInventory(input, { now = Date.now() } = {}) {
     !Number.isFinite(capturedMs) ||
     new Date(capturedMs).toISOString().slice(0, 19) !== capturedAt.slice(0, 19) ||
     !Number.isFinite(Number(now)) ||
-    capturedMs > Number(now) + 5 * 60 * 1000 ||
-    capturedMs < Number(now) - 36 * 60 * 60 * 1000
+    capturedMs > Number(now) + 5 * 60 * 1000
   )
     throw Error("HOMEPAGE_INVENTORY_CAPTURE_TIME_INVALID");
   const seen = new Set();

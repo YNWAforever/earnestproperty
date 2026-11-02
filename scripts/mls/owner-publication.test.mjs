@@ -272,11 +272,27 @@ test("owner bundle binds complete ordered sale promotion evidence to the confirm
       }),
     /INCOMPLETE/,
   );
+  const oldButValid = parseOwnerCaptureInput({
+    listings: [],
+    homepage_inventory: { ...snapshot, captured_at: "2026-01-01T00:00:00Z" },
+  });
+  assert.equal(oldButValid.homepageInventory.capturedAt, "2026-01-01T00:00:00Z");
   assert.throws(
     () =>
       parseOwnerCaptureInput({
         listings: [],
-        homepage_inventory: { ...snapshot, captured_at: "2026-01-01T00:00:00Z" },
+        homepage_inventory: { ...snapshot, captured_at: "2026-01-01 00:00:00" },
+      }),
+    /TIME_INVALID/,
+  );
+  assert.throws(
+    () =>
+      parseOwnerCaptureInput({
+        listings: [],
+        homepage_inventory: {
+          ...snapshot,
+          captured_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        },
       }),
     /TIME_INVALID/,
   );
