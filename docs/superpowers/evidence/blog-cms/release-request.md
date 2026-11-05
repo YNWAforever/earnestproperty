@@ -1,6 +1,6 @@
 # Blog CMS production release package
 
-**Preparation only — production activation is BLOCKED.** No push, merge, deployment, production schema/content/permission change, writer pause or snapshot creation is authorized by this package. The user's requirement for separate approvals remains binding.
+**Release candidate and draft PR only — production activation is BLOCKED.** The user authorized pushing `codex/blog-cms-release` and creating a pull request against `main`. Merge, deployment, production schema/content/permission changes, writer pause and snapshot creation remain separately unauthorized.
 
 ## Exact scope and baseline
 
@@ -16,7 +16,7 @@ Extend `/admin/cms?tab=articles` to edit all existing articles, the main blog an
 | Database | Neon `dawn-meadow-79190048` / `br-polished-sea-aom4i1ct` / `ep-divine-frost-aokzrg7f` / `neondb` |
 | App-to-database binding | USER_CONFIRMED; not independently proven from immutable deployment runtime |
 | Latest read-only counts | 2026-11-05 20:48 SGT: zero articles, zero article revisions, 95 migrations |
-| Candidate | Uncommitted managed worktree; no release commit or PR exists |
+| Candidate | `codex/blog-cms-release`; the exact release commit and build receipt are attached to the pull request |
 
 The three proposed migrations and exact hashes are in [live-rehearsal.md](live-rehearsal.md). They advance the captured baseline from 95 to 98. No other migration is included. Fresh under-fence capture must match the final approved manifest; the counts above are not a freshness lease.
 
@@ -37,7 +37,8 @@ Latest finishing verification (2026-11-06): the consolidated local CI matrix rec
 | Hosted authentication, upload/storage and CDN | NOT_RUN | Approved isolated hosted environment with separate DB/auth/storage; existing local auth fixtures do not qualify |
 | Named accountable owners | USER_CONFIRMED | Willy covers release decision-maker, database/recovery owner, platform/deployment owner and editorial approver. Assignment does not approve any release action. |
 | Under-fence freshness and approval | NOT_RUN | Recollected exact source/DB/schema/target; new fingerprint reviewed if any change |
-| Push, merge, production changes and activation | NOT_APPROVED | Four separate, exact action approvals; scope coupling checked before each |
+| Push and PR | APPROVED | Push `codex/blog-cms-release` and open a PR against `main`; keep it unmerged |
+| Merge, production changes and activation | NOT_APPROVED | Separate, exact action approvals; scope coupling checked before each |
 
 ## Final local candidate binding
 
@@ -66,7 +67,7 @@ Private draft: `.private-sync-evidence/blog-import/production-draft-2026-11-05T1
 
 The existing importer's mutation algorithm is coupled to a private owned-container capability. A production executor needs a separately reviewed shared transaction implementation or exact SQL compiler with equivalent authority, collision, retry and receipt tests; bypassing the WeakMap/owned-target guard or duplicating unchecked SQL is not acceptable. This preparation delivery does not close that implementation gate. The [executor implementation contract](production-execution-design.md) specifies extraction boundaries, migration/receipt sequencing and acceptance cases. Selected semantic hashes do not substitute for the full candidate/build receipt.
 
-Read-only Vercel API metadata confirms GitHub integration, production branch `main`, `gitProviderOptions.createDeployments="enabled"`, no returned `gitDeploymentEnabled` override and no ignore-build command. **Automatic deployment coupling is present; do not push or merge assuming it is disabled.** No integration setting was changed.
+Read-only Vercel API metadata confirms GitHub integration, production branch `main`, `gitProviderOptions.createDeployments="enabled"`, no returned `gitDeploymentEnabled` override and no ignore-build command. The candidate therefore adds `"codex/blog-cms-release": false` to the source-controlled `git.deploymentEnabled` map, with its contract test. This suppresses automatic previews for this branch without changing the project setting or `main`. After the push, verify that no deployment was created; a deployment requires separate approval. A merge may still deploy and remains separately blocked.
 
 ## Hosted acceptance preparation
 
@@ -78,7 +79,7 @@ Confirm `Cache-Control`, `CDN-Cache-Control`, `Vercel-CDN-Cache-Control` and act
 
 ## Approval sequence and stop conditions
 
-1. **Push/PR only:** create and review a concrete local release commit, file manifest and source hash; proposed remote branch `codex/blog-cms-release`. Before requesting push, verify or explicitly suppress automatic preview deployment for that branch. A push approval does not implicitly authorize preview deployment. Vercel's documented branch controls are [git.deploymentEnabled](https://vercel.com/docs/project-configuration/git-configuration); no such project/repository setting was changed here.
+1. **Push/PR only — approved:** push `codex/blog-cms-release` and open an unmerged PR against `main`. The branch-level source control disables Vercel deployment creation for this branch; verify that no deployment appears after the push. A push approval does not authorize deployment. Vercel's documented branch controls are [git.deploymentEnabled](https://vercel.com/docs/project-configuration/git-configuration); no project-level setting was changed.
 2. **Isolated hosted validation:** separately approve exact new isolated resources, identifiers/bindings, preview artifact, allowed test writes and cleanup. Do not select an existing branch merely by a reassuring name. This closes provider/runtime/auth/media gates without production mutation.
 3. **Merge only:** exact PR/head/base, CI and independent review. A merge to the production branch may deploy; prove automatic deployment is prevented or obtain a separate explicit deployment approval before merging. CI is not evidence that this coupling is disabled.
 4. **Production operational controls and DB writes:** separately approve precise writer fence, role/access/job changes, drain, new backup and recovery proof; then exact three migrations, immutable import manifest and adapter revision with bounded operations. A fresh capture that differs stops execution and requires new review. No manifest is auto-approved by a matching article count.
