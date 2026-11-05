@@ -6,6 +6,10 @@ import { registerHooks } from "node:module";
 import { setTimeout as delay } from "node:timers/promises";
 import pg from "pg";
 import { MIGRATION_VERSIONS } from "../../src/lib/control-plane/migration-versions.js";
+import {
+  isOwnedPostgresImage,
+  PINNED_POSTGRES_17,
+} from "../../src/lib/neon/owned-postgres-images.ts";
 
 export const repoRoot = new URL("../../", import.meta.url);
 registerHooks({
@@ -30,8 +34,6 @@ registerHooks({
   },
 });
 
-const image =
-  "pgvector/pgvector@sha256:d2ef61f42ef767baa5a1475393303cc235bcd92febd9d7014eddb48b41f3bad0";
 function dockerCli(...args) {
   const result = spawnSync("docker", args, { encoding: "utf8", timeout: 30000 });
   if (result.error || result.status !== 0)
@@ -46,7 +48,7 @@ function dockerCli(...args) {
  * The run error is the one thrown; a failed removal rides along as
  * `error.cleanupError`.
  */
-function startContainer(docker, name) {
+function startContainer(docker, name, image) {
   try {
     return docker(
       "run",
@@ -91,8 +93,11 @@ async function rollbackKeeping(client, error) {
 // No connection URL is accepted. Every writable target is a new container with
 // verified identity and a dynamically assigned loopback-only port.
 // `deps` lets the harness's own unit tests (owned-neon-sql.test.mjs) stand in
-// for the docker CLI and the pool; every real suite calls it with `run` only.
+// for the docker CLI and the pool. Real rehearsals may explicitly select one of
+// the fixed image pins and a captured migrationVersions list; PG17 is the default.
 export async function withOwnedPostgres(run, deps = {}) {
+  const image = deps.image === undefined ? PINNED_POSTGRES_17 : deps.image;
+  assert.ok(isOwnedPostgresImage(image), "OWNED_POSTGRES_IMAGE_NOT_ALLOWED");
   const docker = deps.docker ?? dockerCli;
   const createPool = deps.createPool ?? ((config) => new pg.Pool(config));
   const migrationVersions = deps.migrationVersions ?? MIGRATION_VERSIONS;
@@ -100,7 +105,7 @@ export async function withOwnedPostgres(run, deps = {}) {
   let id;
   let pool;
   try {
-    id = startContainer(docker, name);
+    id = startContainer(docker, name, image);
     assert.match(id, /^[a-f0-9]{64}$/);
     const metadata = JSON.parse(docker("inspect", id))[0];
     assert.equal(metadata.Name, "/" + name);

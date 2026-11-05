@@ -127,6 +127,19 @@ test("CI requires zero lint and typecheck errors", () => {
   assert.doesNotMatch(workflow, /ESLINT_BASELINE|TSC_BASELINE/);
 });
 
+test("owned PostgreSQL job selects pinned Bun before its Bun-backed suites", async () => {
+  const { createRequire } = await import("node:module");
+  const workflow = createRequire(import.meta.url)("js-yaml").load(
+    readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"),
+  );
+  const steps = workflow.jobs["no-link-local-postgres"].steps;
+  const setup = steps.findIndex((step) => step.uses === "oven-sh/setup-bun@v2");
+  assert.ok(setup >= 0, "each job must install its own selected Bun");
+  assert.equal(steps[setup].with["bun-version"], "1.3.12");
+  for (const name of ["test:cms:db", "test:blog-cms:db"])
+    assert.ok(steps.findIndex((step) => step.run === "npm run " + name) > setup, name);
+});
+
 test("CI exposes the browser suite as an explicit staging environment gate", () => {
   const workflow = readFileSync(join(root, ".github/workflows/ci.yml"), "utf8");
 

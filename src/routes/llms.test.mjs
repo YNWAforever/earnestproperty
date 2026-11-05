@@ -13,6 +13,8 @@ async function getLlms({
   transactions = [],
   failEstates = false,
   failTransactions = false,
+  suppressed = [],
+  failVisibility = false,
   publishedArticles = [
     { slug: "sham-tseng-buying-guide-2026" },
     { slug: "bellagio-vs-sea-crest-villa-vs-hong-kong-garden" },
@@ -23,6 +25,9 @@ async function getLlms({
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
       const replacements = {
+        "@/lib/blog/public": moduleUrl(
+          'export const blogNoStoreHeaders = () => ({"Cache-Control":"no-store","CDN-Cache-Control":"no-store","Vercel-CDN-Cache-Control":"no-store"});',
+        ),
         "@tanstack/react-router": moduleUrl(
           "export const createFileRoute = id => options => ({ id, ...options });",
         ),
@@ -31,7 +36,7 @@ async function getLlms({
           return ${JSON.stringify(publishedArticles)};
         }`),
         "@/lib/neon/public-data.server": moduleUrl(`export async function fetchSitemapTimestamps() {
-          ${failEstates ? 'throw new Error("unavailable");' : `return ${JSON.stringify({ estates, articles: {} })};`}
+          ${failEstates || failVisibility ? 'throw new Error("unavailable");' : `return ${JSON.stringify({ estates, articles: Object.fromEntries(publishedArticles.filter((a) => !suppressed.includes(a.slug)).map((a) => [a.slug, null])) })};`}
         }`),
         "@/lib/queries": moduleUrl(`export async function fetchRecentTransactions(options) {
           if (options.limit !== 1) throw new Error("expected sitemap data-exists probe");
@@ -62,11 +67,11 @@ test("llms.txt is an app route using SITE_URL, never a shadowing public file", (
   assert.ok(pkg.scripts["test:seo"].includes("src/routes/llms.test.mjs"));
 });
 
-test("GET returns Chinese-first bilingual navigation as cacheable plain text", async () => {
+test("GET returns Chinese-first bilingual navigation as fresh plain text", async () => {
   const response = await getLlms();
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("content-type"), "text/plain; charset=utf-8");
-  assert.equal(response.headers.get("cache-control"), "public, max-age=3600");
+  assert.equal(response.headers.get("cache-control"), "no-store");
   const body = await response.text();
   assert.match(body, /^# 晉誠地產 Earnest Property/);
   assert.match(body, /C-018613/);
@@ -100,7 +105,7 @@ test("GET returns Chinese-first bilingual navigation as cacheable plain text", a
   assert.ok(!urls.some((url) => url.pathname === "/transactions"));
 });
 
-test("featured guides are linked only while the article registry marks them published", async () => {
+test("featured guides are linked only while the database marks them published", async () => {
   const body = await (await getLlms({ publishedArticles: [] })).text();
   assert.doesNotMatch(
     body,
@@ -123,17 +128,25 @@ test("only currently published curated estates and populated transactions are li
   assert.doesNotMatch(empty, /\/estate\/bellagio|\/transactions\)/);
 });
 
-test("failed reads retain navigation without caching an incomplete discovery file", async () => {
-  for (const fixture of [
-    { failEstates: true },
-    { failTransactions: true },
-    { failEstates: true, failTransactions: true },
-  ]) {
-    const response = await getLlms(fixture);
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get("cache-control"), "no-store");
-    const body = await response.text();
-    assert.match(body, /\/castle-peak-road\)/);
-    assert.doesNotMatch(body, /\/estate\/|\/transactions\)/);
-  }
+test("failed publication reads return explicit unavailable; unrelated transaction probe can degrade", async () => {
+  const failed = await getLlms({ failEstates: true });
+  assert.equal(failed.status, 503);
+  assert.equal(failed.headers.get("cache-control"), "no-store");
+  assert.equal(await failed.text(), "BLOG_UNAVAILABLE");
+  const response = await getLlms({ failTransactions: true });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.doesNotMatch(await response.text(), /\/transactions\)/);
+});
+
+test("withdrawn or future registry guides do not leak through llms.txt", async () => {
+  const body = await (await getLlms({ suppressed: ["sham-tseng-buying-guide-2026"] })).text();
+  assert.doesNotMatch(body, /\/blog\/sham-tseng-buying-guide-2026/);
+  assert.match(body, /bellagio-vs-sea-crest-villa-vs-hong-kong-garden/);
+});
+test("failed publication eligibility read omits guide URLs and disables caching", async () => {
+  const response = await getLlms({ failVisibility: true });
+  assert.equal(response.status, 503);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal(await response.text(), "BLOG_UNAVAILABLE");
 });

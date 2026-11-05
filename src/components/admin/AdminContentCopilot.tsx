@@ -161,19 +161,35 @@ export function AdminContentCopilot({
   resourceId,
   values,
   fingerprintValues,
+  disabled = false,
+  renderFieldValue,
   onApply,
 }: {
   resourceType: ContentCopilotResourceType;
   resourceId: string | null;
   values: Record<string, ContentCopilotValue>;
   fingerprintValues?: Record<string, unknown>;
-  onApply: (patch: Record<string, ContentCopilotValue>) => void;
+  disabled?: boolean;
+  renderFieldValue?: (field: string, value: ContentCopilotValue) => React.ReactNode;
+  onApply: (
+    patch: Record<string, ContentCopilotValue>,
+  ) => Record<string, ContentCopilotValue> | void;
 }) {
   const valueFieldKey = Object.keys(values).sort().join("|");
   const availableFields = useMemo(() => {
     const valueFields = new Set(valueFieldKey ? valueFieldKey.split("|") : []);
     return allowedContentCopilotFields(resourceType).filter((field) => valueFields.has(field));
   }, [resourceType, valueFieldKey]);
+  const latest = useRef({ values, fingerprintValues, disabled, onApply });
+  latest.current = { values, fingerprintValues, disabled, onApply };
+  const lifetime = useRef(0);
+  useEffect(() => {
+    const tracker = lifetime;
+    const epoch = ++tracker.current;
+    return () => {
+      if (tracker.current === epoch) tracker.current++;
+    };
+  }, [resourceId]);
   const [state, setState] = useState<PanelState>(resourceId ? "ready" : "disabled-unsaved");
   const [action, setAction] = useState<ContentCopilotAction>("improve");
   const [selectedFields, setSelectedFields] = useState<string[]>(() => availableFields.slice(0, 6));
@@ -254,7 +270,8 @@ export function AdminContentCopilot({
   }
 
   async function generate() {
-    if (!resourceId || selectedFields.length === 0) return;
+    if (!resourceId || disabled || selectedFields.length === 0) return;
+    const epoch = lifetime.current;
     setState("generating");
     setError(null);
     setProposal(null);
@@ -276,6 +293,7 @@ export function AdminContentCopilot({
           researchMode,
         },
       });
+      if (epoch !== lifetime.current) return;
       if (!result.ok || !isReviewProposal(result.proposal)) {
         setError(result.error || "COPILOT_GENERATION_FAILED");
         setState("failed");
@@ -288,13 +306,20 @@ export function AdminContentCopilot({
       setAcceptedFields([]);
       setState("review");
     } catch {
+      if (epoch !== lifetime.current) return;
       setError("COPILOT_GENERATION_FAILED");
       setState("failed");
     }
   }
 
   async function apply() {
-    if (!proposal || !proposalClientFingerprint || applying) return;
+    if (!proposal || !proposalClientFingerprint || applying || disabled) return;
+    const epoch = lifetime.current;
+    const snapshot = JSON.stringify(fingerprintValues ?? values);
+    const unchanged = () =>
+      epoch === lifetime.current &&
+      !latest.current.disabled &&
+      snapshot === JSON.stringify(latest.current.fingerprintValues ?? latest.current.values);
     setError(null);
     setApplying(true);
     try {
@@ -309,10 +334,25 @@ export function AdminContentCopilot({
         return;
       }
 
+      if (!unchanged()) {
+        if (epoch === lifetime.current) {
+          setError("COPILOT_STALE_PROPOSAL");
+          setState("stale");
+        }
+        return;
+      }
       const { decideAdminContentProposal } = await import("@/lib/ai/content-copilot-admin");
       const decision = await decideAdminContentProposal({
         data: { proposalId: proposal.id, decision: "apply", acceptedFields },
       });
+      // The decision call may outlive typing, saving, reloading or closing the editor.
+      if (!unchanged()) {
+        if (epoch === lifetime.current) {
+          setError("COPILOT_STALE_PROPOSAL");
+          setState("stale");
+        }
+        return;
+      }
       if (!decision.ok) {
         setError(decision.error || "COPILOT_DECISION_FAILED");
         // Only a stale proposal is unrecoverable. Anything else keeps the review
@@ -325,17 +365,20 @@ export function AdminContentCopilot({
       // the patched value meant 復原為套用前內容 rewound edits the user made after
       // the apply -- a hand-fixed 標題 and a rewritten 特色 both silently reverted
       // even though neither came from the AI.
+      const applied = latest.current.onApply(
+        Object.fromEntries(acceptedFields.map((field) => [field, patchResult.value[field]])),
+      );
       setUndoValues(
         Object.fromEntries(acceptedFields.map((field) => [field, values[field] ?? null])),
       );
-      appliedValuesRef.current = { ...values, ...patchResult.value };
-      onApply(patchResult.value);
+      appliedValuesRef.current = applied ?? patchResult.value;
       setState("applied");
     } catch {
+      if (epoch !== lifetime.current) return;
       setError("COPILOT_DECISION_FAILED");
       setState("review");
     } finally {
-      setApplying(false);
+      if (epoch === lifetime.current) setApplying(false);
     }
   }
 
@@ -363,7 +406,7 @@ export function AdminContentCopilot({
   }, [fingerprintValues, proposal, proposalClientFingerprint, state, values]);
 
   function undoApply() {
-    if (!undoValues) return;
+    if (!undoValues || disabled) return;
     onApply(undoValues);
     setUndoValues(null);
     setState("ready");
@@ -494,7 +537,7 @@ export function AdminContentCopilot({
                   <Checkbox
                     checked={selectedFields.includes(field)}
                     onCheckedChange={() => toggleField(field)}
-                    aria-label={fieldLabels[field] ?? field}
+                    aria-label={`選擇${fieldLabels[field] ?? field}欄位`}
                   />
                   {fieldLabels[field] ?? field}
                 </span>
@@ -567,6 +610,7 @@ export function AdminContentCopilot({
       ) : null}
       {displayState === "review" && proposal ? (
         <Review
+          renderFieldValue={renderFieldValue}
           proposal={proposal}
           acceptedFields={acceptedFields}
           applying={applying}
@@ -592,6 +636,7 @@ function Control({ label, children }: { label: string; children: React.ReactNode
 }
 
 function Review({
+  renderFieldValue,
   proposal,
   acceptedFields,
   applying,
@@ -602,6 +647,7 @@ function Review({
   onRegenerate,
   onApply,
 }: {
+  renderFieldValue?: (field: string, value: ContentCopilotValue) => React.ReactNode;
   proposal: ReviewProposal;
   acceptedFields: string[];
   applying: boolean;
@@ -629,7 +675,7 @@ function Review({
             variant="outline"
             size="sm"
             onClick={onAcceptAll}
-            disabled={allAccepted}
+            disabled={applying || allAccepted}
           >
             全選
           </Button>
@@ -700,7 +746,7 @@ function Review({
                 <div className="flex items-start gap-2">
                   <Checkbox
                     checked={selection.checked}
-                    disabled={selection.disabled}
+                    disabled={applying || selection.disabled}
                     onCheckedChange={() => onTogglePatch(patch)}
                     aria-label={`套用 ${fieldLabels[patch.field] ?? patch.field}`}
                   />
@@ -716,15 +762,19 @@ function Review({
                     <div className="mt-2 grid gap-2 sm:grid-cols-2">
                       <div className="rounded-md bg-muted/40 p-2">
                         <p className="text-xs font-medium text-muted-foreground">目前內容</p>
-                        <p className="mt-1 whitespace-pre-wrap text-sm">
-                          {formatValue(patch.before)}
-                        </p>
+                        <div className="mt-1 whitespace-pre-wrap text-sm">
+                          {renderFieldValue
+                            ? renderFieldValue(patch.field, patch.before)
+                            : formatValue(patch.before)}
+                        </div>
                       </div>
                       <div className="rounded-md border border-primary/30 bg-primary/5 p-2">
                         <p className="text-xs font-medium text-muted-foreground">建議內容</p>
-                        <p className="mt-1 whitespace-pre-wrap text-sm">
-                          {formatValue(patch.after)}
-                        </p>
+                        <div className="mt-1 whitespace-pre-wrap text-sm">
+                          {renderFieldValue
+                            ? renderFieldValue(patch.field, patch.after)
+                            : formatValue(patch.after)}
+                        </div>
                       </div>
                     </div>
                     <p className="mt-2 text-xs text-muted-foreground">{patch.reason}</p>

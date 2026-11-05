@@ -13,7 +13,7 @@
  * path for those three resource types.
  */
 import { createServerFn } from "@tanstack/react-start";
-import { getRequest } from "@tanstack/react-start/server";
+import { getRequest, setResponseHeader } from "@tanstack/react-start/server";
 
 import { withStaffAuthHeaders } from "@/auth";
 import type {
@@ -31,6 +31,7 @@ import {
   cmsRestoreSchema,
 } from "./admin-write-schemas";
 import { unwrapServerFnResponse } from "./server-fn-response.ts";
+import { blogRequest } from "./blog-response";
 
 const cmsServer = () => import("./admin-cms.server");
 
@@ -79,7 +80,12 @@ const restoreAdminCmsRevisionServer = createServerFn({ method: "POST" })
   .inputValidator((data: CmsRestoreInput) => cmsRestoreSchema.parse(data))
   .handler(async ({ data }) => {
     const request = getRequest();
-    return (await cmsServer()).restoreAdminCmsRevision(data, request);
+    const restore = async () => (await cmsServer()).restoreAdminCmsRevision(data, request);
+    if (data.articleTokens) {
+      setResponseHeader("Cache-Control", "private, no-store");
+      setResponseHeader("X-Robots-Tag", "noindex, nofollow");
+    }
+    return data.articleTokens ? blogRequest(restore) : restore();
   });
 export const restoreAdminCmsRevision = async (options: { data: CmsRestoreInput }) =>
   unwrapServerFnResponse(restoreAdminCmsRevisionServer(await withStaffAuthHeaders(options)));
@@ -88,7 +94,12 @@ const archiveAdminCmsResourceServer = createServerFn({ method: "POST" })
   .inputValidator((data: CmsArchiveInput) => cmsArchiveSchema.parse(data))
   .handler(async ({ data }) => {
     const request = getRequest();
-    return (await cmsServer()).archiveAdminCmsResource(data, request);
+    const archive = async () => (await cmsServer()).archiveAdminCmsResource(data, request);
+    if (data.resourceType === "article") {
+      setResponseHeader("Cache-Control", "private, no-store");
+      setResponseHeader("X-Robots-Tag", "noindex, nofollow");
+    }
+    return data.resourceType === "article" ? blogRequest(archive) : archive();
   });
 export const archiveAdminCmsResource = async (options: { data: CmsArchiveInput }) =>
   unwrapServerFnResponse(archiveAdminCmsResourceServer(await withStaffAuthHeaders(options)));

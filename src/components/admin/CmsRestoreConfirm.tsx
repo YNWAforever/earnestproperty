@@ -32,6 +32,7 @@ export function CmsRestoreConfirm({
   savedDraft,
   labels,
   isPending,
+  error,
   onOpenChange,
   onConfirm,
 }: {
@@ -49,6 +50,7 @@ export function CmsRestoreConfirm({
   /** Labels for a form with more fields than the 內容中心 dialog. */
   labels?: Record<string, string>;
   isPending?: boolean;
+  error?: string;
   onOpenChange: (open: boolean) => void;
   onConfirm: (revisionId: string) => void;
 }) {
@@ -67,6 +69,7 @@ export function CmsRestoreConfirm({
       description={`還原會以 v${target.versionNumber}（${CMS_REVISION_STATE_LABELS[target.state]}，${when(target.createdAt)}）的內容建立新草稿。以下內容會被取代：`}
       confirmLabel="還原"
       isPending={isPending}
+      error={error}
       onOpenChange={onOpenChange}
       onConfirm={() => onConfirm(target.id)}
     >

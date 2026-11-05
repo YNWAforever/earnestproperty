@@ -34,13 +34,26 @@ export type CmsPublishInput = {
   basePublishedVersion?: number | null;
   draftEditVersion?: number | null;
 };
-export type CmsRestoreInput = { revisionId: string };
-export type CmsArchiveInput = { resourceType: CmsResourceType; resourceId: string };
-/** Every field this repo's CMS payloads actually store -- string/number/
- * boolean/string-array/null, never a nested object or function. Narrower
- * than `unknown` because TanStack Start's serialization check on a
- * createServerFn return type rejects `Record<string, unknown>`. */
-export type CmsPayloadValue = string | number | boolean | string[] | null;
+/** Required at runtime for articles only; other CMS resource contracts stay unchanged. */
+export type CmsArticleMutationTokens = {
+  requestId: string;
+  expectedVersion: number;
+  editState: Omit<CmsEditState<never>, "payload">;
+};
+export type CmsRestoreInput = { revisionId: string; articleTokens?: CmsArticleMutationTokens };
+export type CmsArchiveInput = {
+  resourceType: CmsResourceType;
+  resourceId: string;
+  articleTokens?: CmsArticleMutationTokens;
+};
+/** Serializable JSON payloads include validated article links and editorial metadata. */
+export type CmsPayloadValue =
+  | string
+  | number
+  | boolean
+  | null
+  | CmsPayloadValue[]
+  | { [key: string]: CmsPayloadValue };
 
 export type CmsEditState<TPayload> = {
   resourceId: string;
