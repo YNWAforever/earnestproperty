@@ -126,7 +126,7 @@ await withOwnedPostgres(async (owned) => {
   );
   const child = spawn(
     process.execPath,
-    ["--import", "./scripts/blog-cms/owned-http-preload.mjs", ".output/server/index.mjs"],
+    ["--import", "./scripts/blog-cms/test-owned-http-preload.mjs", ".output/server/index.mjs"],
     {
       env: {
         ...env,
