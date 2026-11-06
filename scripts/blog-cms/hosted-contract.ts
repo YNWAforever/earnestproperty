@@ -130,6 +130,14 @@ export const inputSchema = z
       })
       .strict(),
     media: z.object({ uploadId: uuid, pathname: text, url: text, imageSha256: hash }).strict(),
+    recovery: z
+      .object({
+        id: text,
+        table: z.literal("articles"),
+        offlineTable: z.string().regex(/^task7_offline_[a-f0-9]{32}$/),
+        maxDurationMs: z.number().int().min(5000).max(60000),
+      })
+      .strict(),
     cleanup: z
       .object({
         id: text,
@@ -160,6 +168,7 @@ export const approvalSchema = z
       z.literal("cms-test-writes"),
       z.literal("test-image-upload"),
       z.literal("browser-a11y"),
+      z.literal("bounded-read-outage"),
       z.literal("exact-cleanup"),
     ]),
   })
@@ -180,6 +189,14 @@ export function sameSet(actual: string[], expected: string[], label: string) {
   assert.equal(new Set(actual).size, actual.length, label + ": duplicates");
   assert.deepEqual([...actual].sort(), [...expected].sort(), label);
 }
+export class HostedRefusal extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+const refuseProduction = (value: string, forbidden: string[], code: string) => {
+  if (forbidden.some((v) => v.toLowerCase() === value.toLowerCase())) throw new HostedRefusal(code);
+};
 function safeOrigin(value: string, suffix: string) {
   const u = new URL(value);
   assert.equal(u.origin, value, "origin must be exact HTTPS origin without path/credentials/port");
@@ -202,8 +219,49 @@ export function validateInput(raw: unknown, now = Date.now()): HostedInput {
     t = p.target,
     deny = p.production;
   assert.ok(Number.isFinite(now));
-  const appHost = safeOrigin(t.origin, ".vercel.app");
-  const authHost = safeOrigin(t.auth.origin, ".neon.tech");
+  const parsedAppHost = new URL(t.origin).hostname;
+  if (
+    /(^|\.)earnestproperty\.com$/.test(parsedAppHost) ||
+    /earnestproperty.*\.vercel\.app$/.test(parsedAppHost) ||
+    deny.domains.some((d) => parsedAppHost === d || parsedAppHost.endsWith("." + d))
+  )
+    throw new HostedRefusal("PRODUCTION_DOMAIN");
+  refuseProduction(
+    t.projectId,
+    [...deny.projectIds, "prj_hNaDYmYGeJhBY00vxsC2A0E5Fon5"],
+    "PRODUCTION_PROJECT",
+  );
+  refuseProduction(
+    t.neon.projectId,
+    [...deny.neonProjectIds, "dawn-meadow-79190048"],
+    "PRODUCTION_NEON_PROJECT",
+  );
+  refuseProduction(
+    t.neon.branchId,
+    [...deny.branchIds, "br-polished-sea-aom4i1ct"],
+    "PRODUCTION_NEON_BRANCH",
+  );
+  refuseProduction(t.neon.endpointId, deny.endpointIds, "PRODUCTION_DB_ENDPOINT");
+  refuseProduction(t.neon.host, deny.dbHosts, "PRODUCTION_DB_HOST");
+  refuseProduction(t.neon.database, [...deny.databases, "neondb"], "PRODUCTION_DATABASE");
+  refuseProduction(t.blob.host, deny.blobHosts, "PRODUCTION_BLOB_HOST");
+  refuseProduction(t.blob.storeId, deny.blobStoreIds, "PRODUCTION_BLOB_STORE");
+  refuseProduction(new URL(t.auth.origin).hostname, deny.authHosts, "PRODUCTION_AUTH_HOST");
+  for (const value of [
+    t.projectId,
+    t.neon.projectId,
+    t.neon.branchId,
+    t.neon.endpointId,
+    t.neon.host,
+    t.neon.database,
+    t.blob.host,
+    t.blob.storeId,
+  ]) {
+    if (/(\{\{|\bproduction\b|fixture|synthetic|mock|localhost|owned:)/i.test(value))
+      throw new HostedRefusal("PLACEHOLDER_OR_LOCAL_TARGET");
+  }
+  safeOrigin(t.origin, ".vercel.app");
+  safeOrigin(t.auth.origin, ".neon.tech");
   const authBase = new URL(t.auth.baseUrl);
   assert.equal(authBase.origin, t.auth.origin);
   assert.equal(authBase.username + authBase.password + authBase.search + authBase.hash, "");
@@ -221,28 +279,6 @@ export function validateInput(raw: unknown, now = Date.now()): HostedInput {
   assert.equal(t.blob.host, `${t.blob.storeId}.public.blob.vercel-storage.com`);
   assert.equal(t.auth.projectId, t.neon.projectId);
   assert.equal(t.auth.branchId, t.neon.branchId);
-  const refuse = (value: string, forbidden: string[]) => {
-    assert.ok(
-      !forbidden.map((v) => v.toLowerCase()).includes(value.toLowerCase()),
-      "production identifier refused",
-    );
-    assert.ok(
-      !/(\{\{|\bproduction\b|fixture|synthetic|mock|localhost|owned:)/i.test(value),
-      "placeholder/local identifier refused",
-    );
-  };
-  refuse(t.projectId, [...deny.projectIds, "prj_hNaDYmYGeJhBY00vxsC2A0E5Fon5"]);
-  refuse(t.neon.projectId, [...deny.neonProjectIds, "dawn-meadow-79190048"]);
-  refuse(t.neon.branchId, [...deny.branchIds, "br-polished-sea-aom4i1ct"]);
-  refuse(t.neon.endpointId, deny.endpointIds);
-  refuse(t.neon.host, deny.dbHosts);
-  refuse(t.neon.database, [...deny.databases, "neondb"]);
-  refuse(t.blob.host, deny.blobHosts);
-  refuse(t.blob.storeId, deny.blobStoreIds);
-  refuse(authHost, deny.authHosts);
-  for (const domain of [...deny.domains, "earnestproperty.com"]) {
-    assert.ok(appHost !== domain && !appHost.endsWith("." + domain), "production domain refused");
-  }
   assert.equal(digest(p.binding.target), digest(t), "deployment resource binding mismatch");
   assert.ok(
     Date.parse(p.binding.verifiedAt) <= now && now < Date.parse(p.binding.expiresAt),
@@ -272,6 +308,11 @@ export function validateInput(raw: unknown, now = Date.now()): HostedInput {
   assert.equal(p.media.imageSha256, sha256(imageBytes));
   assert.equal(p.cleanup.uploadId, p.media.uploadId);
   assert.equal(p.cleanup.blobUrl, p.media.url);
+  assert.equal(
+    p.recovery.offlineTable,
+    "task7_offline_" + p.runId.replaceAll("-", ""),
+    "RECOVERY_TABLE_BINDING",
+  );
   return p;
 }
 export function validateApproval(

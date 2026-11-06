@@ -1,3 +1,4 @@
+import { HostedRefusal } from "./hosted-contract";
 import { describe, test, expect } from "bun:test";
 import {
   acceptReceipt,
@@ -15,6 +16,27 @@ import { imageBytes } from "./hosted-contract";
 import { validateTriggerInventory } from "./hosted-contract";
 import { inflateSync } from "node:zlib";
 const now = Date.now();
+for (const status of [200, 401, 403, 409, 503]) {
+  for (const extra of [
+    { "cdn-cache-control": "s-maxage=60" },
+    { "vercel-cdn-cache-control": "public, max-age=60" },
+    { "x-vercel-cache": "HIT" },
+    { "x-vercel-cache": "STALE" },
+    { age: "1" },
+  ] as Record<string, string>[]) {
+    test(`private ${status} rejects CDN caching ${JSON.stringify(extra)}`, () => {
+      const response = new Response(null, {
+        status,
+        headers: {
+          "cache-control": "private, no-store",
+          "x-robots-tag": "noindex, nofollow",
+          ...extra,
+        },
+      });
+      expect(() => checkCache(response.headers, true)).toThrow();
+    });
+  }
+}
 test("unapproved trigger side effects and missing integrity guards block writes", () => {
   const rows = [
     { table_name: "articles", name: "blog_article_contract_guard", enabled: "O" },
@@ -406,11 +428,41 @@ describe("pure hosted input guards (never hosted evidence)", () => {
       },
     ],
   ];
+  const productionCodes: Record<string, string> = {
+    "production apex": "PRODUCTION_DOMAIN",
+    "production www": "PRODUCTION_DOMAIN",
+    "production Vercel alias": "PRODUCTION_DOMAIN",
+    "foreign production alias": "PRODUCTION_DOMAIN",
+    "production project": "PRODUCTION_PROJECT",
+    "inventory project": "PRODUCTION_PROJECT",
+    "production Neon project": "PRODUCTION_NEON_PROJECT",
+    "production branch": "PRODUCTION_NEON_BRANCH",
+    "production DB name": "PRODUCTION_DATABASE",
+    "production endpoint": "PRODUCTION_DB_ENDPOINT",
+    "production DB host": "PRODUCTION_DB_HOST",
+    "production Blob host": "PRODUCTION_BLOB_HOST",
+    "production Blob store": "PRODUCTION_BLOB_STORE",
+    "production auth": "PRODUCTION_AUTH_HOST",
+  };
   for (const [label, mutate] of invalid)
     test(label, () => {
       const p = fixture(now);
       mutate(p);
-      expect(() => validateInput(p, now)).toThrow();
+      if (!label.startsWith("different runtime")) p.binding.target = structuredClone(p.target);
+      if (productionCodes[label]) {
+        p.target.auth.projectId = p.target.neon.projectId;
+        p.target.auth.branchId = p.target.neon.branchId;
+        p.target.auth.baseUrl = `${p.target.auth.origin}/${p.target.neon.database}/auth`;
+        p.binding.target = structuredClone(p.target);
+        expect(digest(p.target)).toBe(digest(p.binding.target));
+        try {
+          validateInput(p, now);
+          throw new Error("target was accepted");
+        } catch (error) {
+          expect(error).toBeInstanceOf(HostedRefusal);
+          expect((error as HostedRefusal).code).toBe(productionCodes[label]);
+        }
+      } else expect(() => validateInput(p, now)).toThrow();
     });
   for (const name of ["fixtureAuth", "fixtureDatabase"])
     test(name, () => {
@@ -425,6 +477,27 @@ describe("pure hosted input guards (never hosted evidence)", () => {
       a = approved(p, now);
     p.articles[0].title += " changed";
     expect(() => validateApproval(p, a, p.target.commit, now)).toThrow();
+  });
+  test("outage table, deadline and explicit approval action are mandatory and bound", () => {
+    const p = fixture(now),
+      a = approved(p, now);
+    expect(() => validateInput({ ...p, recovery: undefined }, now)).toThrow();
+    expect(() =>
+      validateInput({ ...p, recovery: { ...p.recovery, offlineTable: "articles" } }, now),
+    ).toThrow();
+    expect(() =>
+      validateInput({ ...p, recovery: { ...p.recovery, maxDurationMs: 60001 } }, now),
+    ).toThrow();
+    expect(() =>
+      validateApproval(
+        p,
+        { ...a, actions: a.actions.filter((v) => v !== "bounded-read-outage") },
+        p.target.commit,
+        now,
+      ),
+    ).toThrow();
+    p.recovery.maxDurationMs = 5000;
+    expect(() => validateApproval(p, a, p.target.commit, now)).toThrow("approval input binding");
   });
   test("missing/expired/future approval and wrong runner reject", () => {
     const p = fixture(now),

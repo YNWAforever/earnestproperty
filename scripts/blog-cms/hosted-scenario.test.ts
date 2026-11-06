@@ -140,6 +140,42 @@ function seam() {
     async checkUrl(item) {
       urlChecks.push(item.slug);
     },
+    async recover(expected) {
+      return {
+        target: {
+          origin: p.target.origin,
+          deploymentId: p.target.deploymentId,
+          commit: p.target.commit,
+        },
+        faultId: p.recovery.id,
+        failures: [
+          { name: "pageServer", status: 503 },
+          { name: "articleServer", status: 503 },
+        ],
+        pages: expected.map((v) => ({
+          path: v.path,
+          unavailableStatus: 500,
+          unavailableVisible: true,
+          retryVisible: true,
+          recoveredStatus: 200,
+          recoveredTitle: v.title,
+        })),
+        restored: true,
+        elapsedMs: 10,
+      };
+    },
+    async renderSettings(path, expected, paths) {
+      const actual = await io.page(
+        new URL(path, "https://local.invalid").searchParams.get("category") ?? undefined,
+      );
+      expect(actual.settings).toEqual({ ...expected, version: actual.settings.version });
+      expect(
+        actual.featured.map((a) => "/blog/" + p.articles.find((v) => v.id === a.id)!.slug),
+      ).toEqual(paths);
+    },
+    async renderCategories(expected) {
+      expect(expected).toEqual((await io.state("admin")).categories);
+    },
     async indexes(slugs) {
       const visible = [];
       for (const a of records.values()) if (await io.article(a.slug)) visible.push(a.slug);
@@ -150,6 +186,26 @@ function seam() {
     },
   };
   return { p, io, checks, urlChecks, requests };
+}
+
+for (const kind of ["article", "settings", "category"] as const) {
+  test(`LOCAL_SEAM: consistently unchanged ${kind} writes must fail requested-value checks`, async () => {
+    const s = seam();
+    if (kind === "article") s.io.save = (cmd, role) => s.io.preview(cmd.id!, role);
+    if (kind === "settings")
+      s.io.settings = async (value) =>
+        (await s.io.state("admin")).settings.find((v) => digest(v.scope) === digest(value.scope))!;
+    if (kind === "category")
+      s.io.category = async (value) =>
+        (await s.io.state("admin")).categories.find((v) => v.id === value.id)!;
+    await expect(runCmsScenario(s.p, s.io)).rejects.toThrow(
+      kind === "article"
+        ? "CMS_REQUESTED_TITLE"
+        : kind === "settings"
+          ? "CMS_REQUESTED_SETTINGS"
+          : "CMS_REQUESTED_CATEGORY",
+    );
+  });
 }
 test("LOCAL_SEAM: all 112 identities, eight scopes, seven categories, roles, publication, retry execute", async () => {
   const s = seam();
@@ -165,6 +221,33 @@ test("LOCAL_SEAM: all 112 identities, eight scopes, seven categories, roles, pub
     "retry",
   ]);
   expect([...s.requests.values()].filter((a) => a.title.startsWith("Retry ")).length).toBe(1);
+});
+
+test("LOCAL_SEAM: consistently reordered feature IDs fail even when version and other fields change", async () => {
+  const s = seam(),
+    save = s.io.settings;
+  s.io.settings = (value, role) =>
+    save({ ...value, featuredIds: [...value.featuredIds].reverse() }, role);
+  await expect(runCmsScenario(s.p, s.io)).rejects.toThrow("CMS_REQUESTED_SETTINGS");
+  expect(s.checks).not.toContain("settings-8");
+});
+
+test("LOCAL_SEAM: successful replay cannot mark retry without unavailable browser recovery", async () => {
+  const s = seam(),
+    recover = s.io.recover;
+  s.io.recover = async (expected) => ({ ...(await recover(expected)), failures: [] });
+  await expect(runCmsScenario(s.p, s.io)).rejects.toThrow("RECOVERY_REAL_UNAVAILABLE_REQUIRED");
+  expect([...s.requests.values()].filter((a) => a.title.startsWith("Retry ")).length).toBe(1);
+  expect(s.checks).not.toContain("retry");
+});
+
+test("LOCAL_SEAM: public render failure cannot mark settings acceptance", async () => {
+  const s = seam();
+  s.io.renderSettings = async () => {
+    throw new Error("CMS_RENDERED_FEATURE_ORDER");
+  };
+  await expect(runCmsScenario(s.p, s.io)).rejects.toThrow("CMS_RENDERED_FEATURE_ORDER");
+  expect(s.checks).not.toContain("settings-8");
 });
 test("LOCAL_SEAM: wrong content association stops before all-record success", async () => {
   const s = seam();

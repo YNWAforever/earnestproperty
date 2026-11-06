@@ -1,3 +1,11 @@
+import {
+  reconcileMutationRequests,
+  type MutationIntent,
+  type MutationRow,
+} from "./hosted-mutation-cleanup";
+import { encodeArticle } from "../../src/lib/blog/article-codec";
+import type { SaveArticleCommand } from "../../src/lib/blog/types";
+import { createRecoveryJournal } from "./hosted-journal";
 import { withExactCleanup } from "./hosted-lifecycle";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
@@ -24,7 +32,7 @@ import {
   type Role,
   type Receipt,
 } from "./hosted-contract";
-import { readBrowserStates, runHostedBrowser } from "./hosted-browser";
+import { readBrowserStates, runHostedBrowser, runHostedRecovery } from "./hosted-browser";
 import { runCmsScenario, type HostedIO } from "./hosted-scenario";
 
 type Row = Record<string, unknown>;
@@ -41,6 +49,7 @@ const tables = [
   "blog_featured_articles",
   "cms_content_revisions",
   "audit_logs",
+  "blog_mutation_requests",
 ] as const;
 type Snapshot = Record<(typeof tables)[number], Row[]>;
 
@@ -49,14 +58,14 @@ export function checkCache(headers: Headers, privateResponse = false) {
   if (privateResponse) {
     assert.match(headers.get("cache-control") ?? "", /private/i);
     assert.equal(headers.get("x-robots-tag"), "noindex, nofollow");
-  } else {
-    // Vercel consumes its own CDN directive. Record absence; any returned cacheable value fails.
-    for (const key of ["cdn-cache-control", "vercel-cdn-cache-control"])
-      if (headers.has(key)) assert.match(headers.get(key)!, /^no-store$/i);
-    assert.notEqual(headers.get("x-vercel-cache"), "HIT");
-    assert.notEqual(headers.get("x-vercel-cache"), "STALE");
-    assert.ok(Number(headers.get("age") ?? 0) === 0);
   }
+  // Apply to public and private success/denial responses alike.
+  // Vercel consumes its own CDN directive. Record absence; any returned cacheable value fails.
+  for (const key of ["cdn-cache-control", "vercel-cdn-cache-control"])
+    if (headers.has(key)) assert.match(headers.get(key)!, /^no-store$/i);
+  assert.notEqual(headers.get("x-vercel-cache")?.toUpperCase(), "HIT");
+  assert.notEqual(headers.get("x-vercel-cache")?.toUpperCase(), "STALE");
+  assert.ok(Number(headers.get("age") ?? 0) === 0);
 }
 
 /** No callbacks or fetch overrides are accepted here. Unit seams cannot create hosted receipts. */
@@ -74,35 +83,25 @@ export async function executeHosted(
   // A new private journal is mandatory before any network access; never overwrite a prior run.
   mkdirSync(output, { recursive: false });
   const checks: string[] = [],
-    events: unknown[] = [],
     requestIds: string[] = [];
+  const mutationIntents: MutationIntent[] = [];
   let snapshot: Snapshot | undefined,
     cleanupPhase = false,
     cleanupDone = false,
     attemptedWrites = false;
+  const recoveryJournal = createRecoveryJournal(output);
   const journal = () =>
-    writeFileSync(
-      join(output, "journal.json"),
-      JSON.stringify(
-        {
-          status: "INCOMPLETE_NOT_ACCEPTANCE",
-          inputSha256: digest(p),
-          runId: p.runId,
-          target: p.target,
-          checks,
-          events,
-          requestIds,
-          snapshot,
-          cleanupDone,
-        },
-        null,
-        2,
-      ),
-    );
-  const event = (row: unknown) => {
-    events.push(row);
-    journal();
-  };
+    recoveryJournal.append({
+      kind: "state",
+      status: "INCOMPLETE_NOT_ACCEPTANCE",
+      inputSha256: digest(p),
+      runId: p.runId,
+      target: p.target,
+      checks,
+      requestIds,
+      cleanupDone,
+    });
+  const event = (row: unknown) => recoveryJournal.append({ kind: "event", event: row });
   const guard = () => {
     validateApproval(p, approval, runnerCommit, Date.now(), cleanupPhase);
     // Cleanup has its own authorization lease, and must still target the same immutable resources.
@@ -169,31 +168,114 @@ export async function executeHosted(
     guard();
     return (await db.query(sql, params)).rows;
   };
+  let faultOid: string | undefined,
+    faultArmed = false,
+    faultTimer: ReturnType<typeof setTimeout> | undefined;
+  let restoringFault: Promise<void> | undefined, watchdogFailure: unknown;
+  const restoreFault = async () => {
+    if (!faultArmed) return;
+    if (restoringFault) return restoringFault;
+    restoringFault = (async () => {
+      validateApproval(p, approval, runnerCommit, Date.now(), true);
+      const rows = (
+        await db.query(
+          "SELECT c.oid::text AS oid,c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])",
+          [["articles", p.recovery.offlineTable]],
+        )
+      ).rows;
+      assert.equal(rows.length, 1, "RECOVERY_TABLE_AMBIGUOUS");
+      assert.equal(rows[0].oid, faultOid, "RECOVERY_TABLE_OID_MISMATCH");
+      if (rows[0].name === p.recovery.offlineTable) {
+        await db.query("BEGIN");
+        try {
+          await db.query("SET LOCAL lock_timeout='3s'");
+          await db.query("SET LOCAL statement_timeout='5s'");
+          await db.query(`ALTER TABLE public.${p.recovery.offlineTable} RENAME TO articles`);
+          await db.query("COMMIT");
+        } catch (error) {
+          await db.query("ROLLBACK");
+          throw error;
+        }
+      } else assert.equal(rows[0].name, "articles", "RECOVERY_TABLE_NAME");
+      faultArmed = false;
+      if (faultTimer) clearTimeout(faultTimer);
+      event({ kind: "outage-restored", faultId: p.recovery.id, oid: faultOid });
+    })();
+    try {
+      await restoringFault;
+    } finally {
+      restoringFault = undefined;
+    }
+  };
+  const enableFault = async () => {
+    guard();
+    assert.equal(faultArmed, false);
+    const rows = await query(
+      "SELECT c.oid::text AS oid,c.relname AS name FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=ANY($1::text[])",
+      [["articles", p.recovery.offlineTable]],
+    );
+    assert.equal(rows.length, 1, "RECOVERY_TABLE_AMBIGUOUS");
+    assert.equal(rows[0].name, "articles");
+    faultOid = String(rows[0].oid);
+    event({
+      kind: "outage-intent",
+      faultId: p.recovery.id,
+      oid: faultOid,
+      from: "articles",
+      to: p.recovery.offlineTable,
+      maxDurationMs: p.recovery.maxDurationMs,
+    });
+    faultArmed = true;
+    attemptedWrites = true;
+    const startedAt = Date.now();
+    await query("BEGIN");
+    try {
+      await query("SET LOCAL lock_timeout='3s'");
+      await query("SET LOCAL statement_timeout='5s'");
+      await query(`ALTER TABLE public.articles RENAME TO ${p.recovery.offlineTable}`);
+      await query("COMMIT");
+      // Arm only after COMMIT: the watchdog must not interleave a second transaction
+      // on this connection while the rename is still in flight.
+      faultTimer = setTimeout(
+        () => {
+          void restoreFault().catch((error) => {
+            watchdogFailure = error;
+          });
+        },
+        Math.max(0, p.recovery.maxDurationMs - (Date.now() - startedAt)),
+      );
+    } catch (error) {
+      await db.query("ROLLBACK");
+      throw error;
+    }
+  };
   const capture = async (): Promise<Snapshot> => {
     const result = {} as Snapshot;
     for (const table of tables) {
       const [where, ids] =
         table === "articles"
           ? ["id = ANY($1::uuid[])", p.cleanup.articleIds]
-          : table === "blog_categories"
-            ? ["id = ANY($1::uuid[])", p.categoryIds]
-            : table === "blog_settings"
-              ? ["id = ANY($1::uuid[])", p.settingsIds]
-              : table === "blog_featured_articles"
-                ? ["scope_id = ANY($1::uuid[])", p.settingsIds]
-                : table === "cms_content_revisions"
-                  ? [
-                      "resource_type='article' AND resource_id = ANY($1::uuid[])",
-                      p.cleanup.articleIds,
-                    ]
-                  : [
-                      "subject_id::text = ANY($1::text[])",
-                      [...p.cleanup.articleIds, ...p.categoryIds, ...p.settingsIds],
-                    ];
+          : table === "blog_mutation_requests"
+            ? ["TRUE", []]
+            : table === "blog_categories"
+              ? ["id = ANY($1::uuid[])", p.categoryIds]
+              : table === "blog_settings"
+                ? ["id = ANY($1::uuid[])", p.settingsIds]
+                : table === "blog_featured_articles"
+                  ? ["scope_id = ANY($1::uuid[])", p.settingsIds]
+                  : table === "cms_content_revisions"
+                    ? [
+                        "resource_type='article' AND resource_id = ANY($1::uuid[])",
+                        p.cleanup.articleIds,
+                      ]
+                    : [
+                        "subject_id::text = ANY($1::text[])",
+                        [...p.cleanup.articleIds, ...p.categoryIds, ...p.settingsIds],
+                      ];
       result[table] = (
         await query(
-          `SELECT to_jsonb(t) AS row FROM public.${table} t WHERE ${where} ORDER BY to_jsonb(t)::text`,
-          [ids],
+          `SELECT ${table === "blog_mutation_requests" ? "to_jsonb(t) || jsonb_build_object('_transaction',t.xmin::text)" : "to_jsonb(t)"} AS row FROM public.${table} t WHERE ${where} ORDER BY to_jsonb(t)::text`,
+          table === "blog_mutation_requests" ? [] : [ids],
         )
       ).map((r) => r.row as Row);
     }
@@ -206,9 +288,15 @@ export async function executeHosted(
     try {
       await query("SELECT blog_lock()");
       await query(
-        "LOCK TABLE articles, blog_categories, blog_settings, blog_featured_articles, cms_content_revisions, audit_logs IN EXCLUSIVE MODE",
+        "LOCK TABLE articles, blog_categories, blog_settings, blog_featured_articles, cms_content_revisions, audit_logs, blog_mutation_requests IN EXCLUSIVE MODE",
       );
       const current = await capture();
+      const ownedRequests = reconcileMutationRequests(
+        snapshot.blog_mutation_requests as MutationRow[],
+        current.blog_mutation_requests as MutationRow[],
+        mutationIntents,
+      );
+      event({ kind: "cleanup-request-ownership", requests: ownedRequests });
       for (const table of ["cms_content_revisions", "audit_logs"] as const) {
         const oldIds = new Set(snapshot[table].map((r) => r.id));
         for (const row of current[table].filter((r) => !oldIds.has(r.id)))
@@ -258,7 +346,7 @@ export async function executeHosted(
       );
       await query(
         "DELETE FROM blog_mutation_requests WHERE request_id = ANY($1::uuid[]) AND actor_id = ANY($2::uuid[])",
-        [requestIds, roles.map((r) => p.actors[r].staffId)],
+        [ownedRequests.map((r) => r.requestId), roles.map((r) => p.actors[r].staffId)],
       );
       await query("ALTER TABLE public.cms_content_revisions ENABLE TRIGGER cms_revision_immutable");
       await query(
@@ -272,6 +360,7 @@ export async function executeHosted(
     }
   };
   const cleanup = async () => {
+    await restoreFault();
     if (!attemptedWrites || !snapshot) return;
     guard();
     await verifyProviders();
@@ -376,6 +465,13 @@ export async function executeHosted(
         );
       }
       snapshot = await capture();
+      recoveryJournal.baseline({
+        inputSha256: digest(p),
+        runId: p.runId,
+        target: p.target,
+        snapshot,
+      });
+      journal();
       sameSet(
         snapshot.articles.map((r) => String(r.id)),
         p.cleanup.articleIds,
@@ -434,7 +530,19 @@ export async function executeHosted(
           attemptedWrites = true;
           if (name === "saveServer") {
             const id = (data as { requestId: string }).requestId;
-            if (!requestIds.includes(id)) requestIds.push(id);
+            if (!requestIds.includes(id)) {
+              requestIds.push(id);
+              if (role) {
+                const { input, ...tokens } = data as SaveArticleCommand;
+                const intent = {
+                  requestId: id,
+                  actorId: p.actors[role].staffId,
+                  command: { ...tokens, payload: encodeArticle(input) },
+                };
+                mutationIntents.push(intent);
+                event({ kind: "mutation-intent", intent });
+              }
+            }
           }
           journal(); // intent persisted before dispatch, including lost responses
         }
@@ -494,6 +602,80 @@ export async function executeHosted(
         page: (categoryKey) =>
           rpc("pageServer", { page: 1, ...(categoryKey ? { categoryKey } : {}) }),
         mark,
+        async recover(expected) {
+          const result = await runHostedRecovery(
+            p,
+            env,
+            expected,
+            guard,
+            { enable: enableFault, restore: restoreFault },
+            async (name) => {
+              try {
+                await rpc(name, name === "pageServer" ? { page: 1 } : { slug: p.articles[0].slug });
+              } catch (error) {
+                if (
+                  error &&
+                  typeof error === "object" &&
+                  "status" in error &&
+                  typeof error.status === "number"
+                )
+                  return error.status;
+                throw error;
+              }
+              throw new Error("RECOVERY_REAL_UNAVAILABLE_REQUIRED");
+            },
+            checkCache,
+          );
+          if (watchdogFailure) throw watchdogFailure;
+          event({ kind: "bounded-outage-recovery", result });
+          return result;
+        },
+        async renderSettings(path, expected, featuredPaths) {
+          const r = await request(p.target.origin + path);
+          assert.equal(r.status, 200);
+          checkCache(r.headers);
+          const $ = load(await r.text());
+          assert.equal($("h1").text().trim(), expected.heading, "CMS_RENDERED_HEADING");
+          assert.ok($("body").text().includes(expected.introduction), "CMS_RENDERED_INTRODUCTION");
+          assert.equal($("title").text(), expected.seoTitle, "CMS_RENDERED_SEO_TITLE");
+          assert.equal(
+            $("meta[name=description]").attr("content"),
+            expected.seoDescription,
+            "CMS_RENDERED_SEO_DESCRIPTION",
+          );
+          const hrefs = $('section[aria-label="精選文章"] a')
+            .toArray()
+            .map((el) => $(el).attr("href"));
+          assert.deepEqual(hrefs, featuredPaths, "CMS_RENDERED_FEATURE_ORDER");
+          event({
+            kind: "rendered-settings",
+            path,
+            requestedSha256: digest(expected),
+            featuredPaths,
+          });
+        },
+        async renderCategories(expected) {
+          const r = await request(p.target.origin + "/blog");
+          assert.equal(r.status, 200);
+          checkCache(r.headers);
+          const $ = load(await r.text());
+          const filters = $('[aria-label="按分類篩選文章"] a')
+            .toArray()
+            .map((el) => ({
+              key: new URL($(el).attr("href")!, p.target.origin).searchParams.get("category"),
+              name: $(el).text().trim(),
+            }))
+            .filter((c) => c.key !== null);
+          assert.deepEqual(
+            filters,
+            expected
+              .filter((c) => !c.hidden)
+              .sort((a, b) => a.navigationOrder - b.navigationOrder || a.id.localeCompare(b.id))
+              .map((c) => ({ key: c.key, name: c.name })),
+            "CMS_RENDERED_CATEGORIES",
+          );
+          event({ kind: "rendered-categories", requestedSha256: digest(expected) });
+        },
         async indexes(eligibleSlugs) {
           for (const path of ["/sitemap.xml", "/llms.txt"]) {
             const response = await request(p.target.origin + path);
@@ -645,7 +827,10 @@ export async function executeHosted(
       cleanupPhase = true;
       await cleanup();
     },
-    () => db.end(),
+    async () => {
+      if (faultTimer) clearTimeout(faultTimer);
+      await db.end();
+    },
   );
   validateApproval(p, approval, runnerCommit); // expiry during tests cannot produce PASS
   const receipt: Receipt = {

@@ -111,6 +111,12 @@ export function fixture(now = Date.now()): HostedInput {
       ].map((n) => [n, sha256(n)]),
     ) as HostedInput["functions"],
     media,
+    recovery: {
+      id: "bounded-read-outage",
+      table: "articles",
+      offlineTable: "task7_offline_" + id(600).replaceAll("-", ""),
+      maxDurationMs: 60000,
+    },
     cleanup: {
       id: "cleanup-exact-run",
       mode: "restore-exact-blog-rows-and-delete-exact-upload",
@@ -138,6 +144,7 @@ export function approved(p: HostedInput, now = Date.now()): Approval {
       "cms-test-writes",
       "test-image-upload",
       "browser-a11y",
+      "bounded-read-outage",
       "exact-cleanup",
     ],
   };

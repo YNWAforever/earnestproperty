@@ -1,3 +1,5 @@
+import { installReadBoundary } from "./hosted-browser-boundary";
+import { exerciseRecovery } from "./hosted-recovery";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { chromium, expect, type BrowserContext, type Page } from "@playwright/test";
@@ -14,6 +16,77 @@ import {
 import { roles, sha256, checklist, type HostedInput, type Role } from "./hosted-contract";
 
 type State = Awaited<ReturnType<BrowserContext["storageState"]>>;
+export async function runHostedRecovery(
+  p: HostedInput,
+  env: NodeJS.ProcessEnv,
+  expected: { path: string; title: string }[],
+  guard: () => void,
+  faults: { enable(): Promise<void>; restore(): Promise<void> },
+  failedRpc: (name: "pageServer" | "articleServer") => Promise<number>,
+  cache: (headers: Headers) => void,
+) {
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const context = await browser.newContext({ baseURL: p.target.origin, serviceWorkers: "block" });
+    const boundaryErrors: unknown[] = [];
+    await installReadBoundary(
+      context,
+      {
+        appOrigin: p.target.origin,
+        authOrigin: p.target.auth.origin,
+        blobOrigin: `https://${p.target.blob.host}`,
+        bypass: env.HOSTED_VERCEL_BYPASS,
+      },
+      guard,
+      (e) => boundaryErrors.push(e),
+    );
+    const pages = new Map<string, Page>();
+    return await exerciseRecovery(p, expected, {
+      ...faults,
+      failedRpc,
+      now: Date.now,
+      async unavailable(path) {
+        guard();
+        const page = await context.newPage();
+        pages.set(path, page);
+        const response = await page.goto(path, { timeout: 15000 });
+        assert.equal(response?.status(), 500, "RECOVERY_UNAVAILABLE_HTTP");
+        cache(new Headers(await response!.allHeaders()));
+        await expect(
+          page.getByRole("heading", { name: "文章暫時未能載入", exact: true }),
+        ).toBeVisible({ timeout: 10000 });
+        await expect(page.getByRole("button", { name: "重試", exact: true })).toBeVisible({
+          timeout: 10000,
+        });
+        assert.deepEqual(boundaryErrors, [], "RECOVERY_BROWSER_BOUNDARY");
+        return { path, unavailableStatus: 500, unavailableVisible: true, retryVisible: true };
+      },
+      async recover(path, title) {
+        guard();
+        const page = pages.get(path)!;
+        const id = path === "/blog" ? p.functions.pageServer : p.functions.articleServer;
+        const received = page.waitForResponse(
+          (r) =>
+            new URL(r.url()).origin === p.target.origin &&
+            new URL(r.url()).pathname === "/_serverFn/" + id,
+          { timeout: 15000 },
+        );
+        await page.getByRole("button", { name: "重試", exact: true }).click({ timeout: 10000 });
+        const response = await received;
+        assert.equal(response.status(), 200, "RECOVERY_RETRY_HTTP");
+        cache(new Headers(await response.allHeaders()));
+        await expect(page.getByRole("heading", { name: title, exact: true })).toBeVisible({
+          timeout: 10000,
+        });
+        assert.equal(new URL(page.url()).origin, p.target.origin);
+        assert.deepEqual(boundaryErrors, []);
+        return { recoveredStatus: 200, recoveredTitle: await page.locator("h1").innerText() };
+      },
+    });
+  } finally {
+    await browser.close();
+  }
+}
 export function readBrowserStates(p: HostedInput, env: NodeJS.ProcessEnv): Record<Role, State> {
   return Object.fromEntries(
     roles.map((role) => {
@@ -56,39 +129,24 @@ export async function runHostedBrowser(
           serviceWorkers: "block",
           ...(role ? { storageState: states[role] } : {}),
         });
-        await context.route("**/*", async (route) => {
-          try {
-            guard();
-            const request = route.request(),
-              url = new URL(request.url());
-            if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) return await route.abort();
-            if (
-              ![p.target.origin, p.target.auth.origin, `https://${p.target.blob.host}`].includes(
-                url.origin,
-              )
-            )
-              return await route.abort();
-            const headers = { ...request.headers() };
-            // Never forward app credentials/bypass to redirects or another origin.
-            delete headers["x-vercel-protection-bypass"];
-            if (url.origin === p.target.origin) {
-              // Use the real browser's cookie-to-token flow, never inject an authenticated actor.
-              if (headers.authorization) {
-                assert.ok(role, "anonymous browser supplied a session");
-                assert.equal(
-                  headers.authorization,
-                  `Bearer ${env[`HOSTED_${role.toUpperCase()}_SESSION`]}`,
-                );
-              }
-              if (env.HOSTED_VERCEL_BYPASS)
-                headers["x-vercel-protection-bypass"] = env.HOSTED_VERCEL_BYPASS;
-            } else delete headers.authorization;
-            await route.continue({ headers });
-          } catch {
+        await installReadBoundary(
+          context,
+          {
+            appOrigin: p.target.origin,
+            authOrigin: p.target.auth.origin,
+            blobOrigin: `https://${p.target.blob.host}`,
+            session: role ? env[`HOSTED_${role.toUpperCase()}_SESSION`] : undefined,
+            bypass: env.HOSTED_VERCEL_BYPASS,
+          },
+          guard,
+          (error) => {
             boundaryFailure = true;
-            await route.abort();
-          }
-        });
+            evidence({
+              kind: "browser-boundary-failure",
+              code: error instanceof Error ? error.message : "BROWSER_BOUNDARY_FAILED",
+            });
+          },
+        );
         return context;
       };
       const scan = async (page: Page, label: string) => {

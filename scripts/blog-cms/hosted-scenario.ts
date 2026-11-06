@@ -8,6 +8,7 @@ import type {
   SaveArticleCommand,
 } from "../../src/lib/blog/types";
 import { checklist, digest, roles, type HostedInput, type Role } from "./hosted-contract";
+import { validateRecovery, type RecoveryEvidence } from "./hosted-recovery";
 
 export type PublicArticle = {
   id: string;
@@ -31,6 +32,9 @@ export interface HostedIO {
   document(path: string, status: number, title?: string, absent?: string): Promise<void>;
   checkUrl(item: HostedInput["articles"][number]): Promise<void>;
   indexes(eligibleSlugs: string[]): Promise<void>;
+  renderSettings(path: string, expected: BlogSettings, featuredPaths: string[]): Promise<void>;
+  renderCategories(expected: BlogCategory[]): Promise<void>;
+  recover(expected: { path: string; title: string }[]): Promise<RecoveryEvidence>;
   mark(check: string): void;
 }
 const denied = (status: number) => (error: unknown) =>
@@ -48,6 +52,21 @@ export const command = (
   requestId: randomUUID(),
 });
 
+export function assertSettings(expected: BlogSettings, actual: BlogSettings) {
+  const { version: expectedVersion, ...wanted } = expected;
+  const { version: actualVersion, ...received } = actual;
+  assert.deepEqual(received, wanted, "CMS_REQUESTED_SETTINGS");
+}
+export function assertCategory(expected: BlogCategory, actual: BlogCategory) {
+  const {
+    version: expectedVersion,
+    settingsVersion: expectedSettingsVersion,
+    ...wanted
+  } = expected;
+  const { version: actualVersion, settingsVersion: actualSettingsVersion, ...received } = actual;
+  assert.deepEqual(received, wanted, "CMS_REQUESTED_CATEGORY");
+}
+
 /** Fixed scenarios; a supplied IO is a unit-test seam, never a hosted receipt authority. */
 export async function runCmsScenario(p: HostedInput, io: HostedIO) {
   for (const item of p.articles) await io.checkUrl(item);
@@ -64,12 +83,14 @@ export async function runCmsScenario(p: HostedInput, io: HostedIO) {
     assert.equal(digest(articleInput(before)), item.inputSha256, "approved content association");
     assert.equal(before.slug, item.slug);
     assert.equal(before.slugLocked, true);
-    const saved = await io.save(
-      command(before, { title: before.title + " [" + p.runId + "]" }),
-      "admin",
-    );
+    const requested = command(before, { title: before.title + " [" + p.runId + "]" });
+    const saved = await io.save(requested, "admin");
+    assert.equal(saved.title, requested.input.title, "CMS_REQUESTED_TITLE");
+    assert.deepEqual(articleInput(saved), requested.input, "CMS_REQUESTED_ARTICLE");
+    assert.ok(saved.version > before.version, "CMS_ARTICLE_VERSION");
     assert.deepEqual(await io.preview(item.id, "admin"), saved);
-    assert.equal((await io.article(item.slug))?.title, saved.title);
+    assert.equal((await io.article(item.slug))?.title, requested.input.title);
+    await io.document("/blog/" + item.slug, 200, requested.input.title);
     const restored = await io.save(command(saved, { title: before.title }), "admin");
     assert.equal(restored.title, before.title);
   }
@@ -85,20 +106,20 @@ export async function runCmsScenario(p: HostedInput, io: HostedIO) {
         eligible.push(a);
     }
     assert.ok(eligible.length >= 2, "two approved published records per scope required");
-    const saved = await io.settings(
-      {
-        ...original,
-        heading: `Acceptance ${p.runId}`,
-        introduction: "Isolated introduction",
-        seoTitle: "Isolated SEO",
-        seoDescription: "Isolated description",
-        featuredIds: eligible
-          .slice(0, 2)
-          .reverse()
-          .map((a) => a.id),
-      },
-      "manager",
-    );
+    const requested: BlogSettings = {
+      ...original,
+      heading: `Acceptance ${p.runId}`,
+      introduction: "Isolated introduction",
+      seoTitle: "Isolated SEO",
+      seoDescription: "Isolated description",
+      featuredIds: eligible
+        .slice(0, 2)
+        .reverse()
+        .map((a) => a.id),
+    };
+    const saved = await io.settings(requested, "manager");
+    assertSettings(requested, saved);
+    assert.ok(saved.version > original.version, "CMS_SETTINGS_VERSION");
     assert.deepEqual(
       (await io.state("admin")).settings.find((s) => digest(s.scope) === digest(original.scope)),
       saved,
@@ -110,14 +131,19 @@ export async function runCmsScenario(p: HostedInput, io: HostedIO) {
           )!.key
         : undefined;
     const page = await io.page(key);
-    assert.equal(page.settings.heading, saved.heading);
+    assertSettings(requested, page.settings);
     assert.deepEqual(
       page.featured.map((a) => a.id),
-      saved.featuredIds,
+      requested.featuredIds,
     );
     assert.equal(
       new Set([...page.featured, ...page.articles.items].map((a) => a.id)).size,
       page.featured.length + page.articles.items.length,
+    );
+    await io.renderSettings(
+      key ? "/blog?category=" + encodeURIComponent(key) : "/blog",
+      requested,
+      requested.featuredIds.map((id) => "/blog/" + p.articles.find((a) => a.id === id)!.slug),
     );
     // Every other scope remains independent.
     for (const s of (await io.state("admin")).settings)
@@ -127,6 +153,7 @@ export async function runCmsScenario(p: HostedInput, io: HostedIO) {
           initial.settings.find((x) => digest(x.scope) === digest(s.scope)),
         );
     const restored = await io.settings({ ...original, version: saved.version }, "admin");
+    assertSettings(original, restored);
     initial.settings = initial.settings.map((s) =>
       digest(s.scope) === digest(original.scope) ? restored : s,
     );
@@ -134,23 +161,26 @@ export async function runCmsScenario(p: HostedInput, io: HostedIO) {
   io.mark("settings-8");
   for (const original of initial.categories) {
     const current = (await io.state("admin")).categories.find((c) => c.id === original.id)!;
-    const saved = await io.category(
-      {
-        ...current,
-        name: current.name + " acceptance",
-        navigationOrder: current.navigationOrder + 1,
-      },
-      "manager",
-    );
+    const requested: BlogCategory = {
+      ...current,
+      name: current.name + " acceptance",
+      navigationOrder: current.navigationOrder + 1,
+    };
+    const saved = await io.category(requested, "manager");
+    assertCategory(requested, saved);
+    assert.ok(saved.version > current.version, "CMS_CATEGORY_VERSION");
     assert.equal(saved.key, original.key);
     assert.deepEqual(
       (await io.state("admin")).categories.find((c) => c.id === original.id),
       saved,
     );
-    await io.category(
+    await io.renderCategories((await io.state("admin")).categories);
+    const restored = await io.category(
       { ...original, version: saved.version, settingsVersion: saved.settingsVersion },
       "admin",
     );
+    assertCategory(original, restored);
+    await io.renderCategories((await io.state("admin")).categories);
   }
   io.mark("categories-7");
   await assert.rejects(io.list(), denied(401));
@@ -170,12 +200,14 @@ export async function runCmsScenario(p: HostedInput, io: HostedIO) {
     command(await io.preview(id, "agent"), { title: "PRIVATE " + p.runId }),
     "agent",
   );
-  assert.equal((await io.preview(id, "agent")).title, draft.title);
+  assert.equal(draft.title, "PRIVATE " + p.runId, "CMS_REQUESTED_DRAFT");
+  assert.equal((await io.preview(id, "agent")).title, "PRIVATE " + p.runId);
   assert.equal((await io.article(slug))?.title, a.title);
   await io.document("/blog/" + slug, 200, a.title, draft.title);
   await assert.rejects(io.save(command(draft, {}, "publish"), "agent"), denied(403));
   await assert.rejects(io.save(command(draft, {}, "unpublish"), "agent"), denied(403));
   const saved = await io.save(command(a, { title: a.title + " manager" }), "manager");
+  assert.equal(saved.title, a.title + " manager", "CMS_REQUESTED_MANAGER_TITLE");
   assert.deepEqual(await io.preview(id, "manager"), saved);
   await assert.rejects(io.save(command(a, { title: "stale" }), "admin"), denied(409));
   assert.equal((await io.preview(id, "agent")).title, draft.title);
@@ -198,8 +230,14 @@ export async function runCmsScenario(p: HostedInput, io: HostedIO) {
   const retry = command(a, { title: "Retry " + p.runId });
   await io.save(retry, "admin");
   const once = await io.preview(id, "admin");
+  assert.equal(once.title, retry.input.title, "CMS_REQUESTED_REPLAY_TITLE");
   const twice = await io.save(retry, "admin");
   assert.deepEqual(twice, once);
   assert.deepEqual(await io.preview(id, "admin"), once);
+  const expectedRecovery = [
+    { path: "/blog", title: (await io.page()).settings.heading },
+    { path: "/blog/" + slug, title: retry.input.title },
+  ];
+  validateRecovery(p, await io.recover(expectedRecovery), expectedRecovery);
   io.mark("retry");
 }

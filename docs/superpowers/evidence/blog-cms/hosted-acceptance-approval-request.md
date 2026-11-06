@@ -40,6 +40,7 @@ identities are errors. All times are UTC ISO timestamps.
 | `categoryIds`, `settingsIds` | Seven distinct existing category UUIDs and eight distinct existing settings UUIDs. Each scope needs at least two published articles for ordered feature checks. |
 | `functions` | Eight distinct full built server-function IDs from this exact deployment: `listServer`, `previewServer`, `saveServer`, `stateServer`, `settingsServer`, `categoryServer`, `pageServer`, `articleServer` |
 | `media` | New UUID `uploadId`, exact `pathname=article/<admin-staff-id>/<uploadId>`, exact Blob `url`, and `imageSha256` of the runner's fixed valid 69-byte PNG |
+| `recovery` | Named `id`, literal `table=articles`, exact `offlineTable=task7_offline_<runId without hyphens>`, and `maxDurationMs` from 5000 through 60000. Approve the bounded read-outage operations below; no default fault authority is inferred. |
 | `cleanup` | Named `id`; literal mode `restore-exact-blog-rows-and-delete-exact-upload`; exact `articleIds`, `categoryIds`, `settingsIds`, `uploadId`, `blobUrl`, all matching the preceding inputs |
 
 The immutable configuration receipt must verify **both build-time and runtime**
@@ -90,9 +91,30 @@ the runner cannot infer those from redacted evidence.
   Missing dynamic data, login redirects, skipped pages and non-200 outcomes fail.
   Third-party frames are excluded as in the existing suite. Browser network
   requests are restricted to approved app/auth/Blob origins and read methods.
+  Every response is fetched with zero redirects; all 3xx responses (including
+  same-origin redirects) fail before another hop receives headers or cookies.
+- Separately exercise read-outage recovery after the request-ID replay check.
+  Temporarily rename only `public.articles` to the exact approved `offlineTable`
+  in this exclusive isolated database. Record its catalog OID and both names in
+  the durable journal before dispatch. Require actual page/article RPC 503s,
+  both hosted documents returning 500 with the unavailable heading and Retry
+  button, then restore the same OID to `articles` and click both Retry buttons.
+  Require real successful RPC responses and the expected rendered headings
+  within `maxDurationMs`; simulated browser errors or successful replay do not
+  count. The rename transactions use 3-second lock and 5-second statement limits.
+  A process-local watchdog and `finally` restore the name on failure. **A killed
+  process or lost DB connection cannot guarantee the time bound:** retain the
+  writer fence and use separately approved exact-OID recovery if restoration
+  cannot be verified. This operation requires the isolated table owner's DDL
+  authority and the explicit `bounded-read-outage` approval action.
 - Capture a private baseline before writes. Restore only approved article,
   category, settings, feature, article-revision and associated `audit_logs` rows;
-  remove only the journaled run request IDs from `blog_mutation_requests`.
+  remove client-journaled request IDs plus internally generated archive requests
+  proven to belong to an exact unpublish parent by transaction ID (`xmin`),
+  actor, article, operation, command and result. Reconcile and journal those
+  exact IDs before deletion; read back the **entire** `blog_mutation_requests`
+  table against the immutable baseline. Unknown or missing children, foreign
+  writes and changes to baseline rows fail cleanup; the table is never excluded.
   `ops_audit_logs`, users, roles, migrations, import receipts and other resources
   are outside this cleanup. The owner must approve **transactional disable and
   re-enable of `cms_revision_immutable` and `blog_project_article_revision` on
@@ -114,7 +136,10 @@ does not automatically resume/replay a crashed run or provision a replacement.
 
 ## Private credential delivery and commands
 
-Use a clean environment and an already installed Bun/Chromium. Do not put
+Use a clean environment and already installed Node (with `registerHooks`),
+TypeScript and Chromium. Bun runs the pure guard tests only; Node runs native
+acceptance and loopback browser regressions because Bun's Chromium launch hangs
+on this Windows host. Do not put
 credentials or storage-state contents in this document or tracked files.
 
 | Environment key | Private input |
@@ -126,14 +151,16 @@ credentials or storage-state contents in this document or tracked files.
 | `HOSTED_ADMIN_STORAGE_STATE`, `HOSTED_MANAGER_STORAGE_STATE`, `HOSTED_AGENT_STORAGE_STATE` | Existing private Playwright JSON files; exact file hashes and app/auth-only origins/cookies required |
 | `HOSTED_VERCEL_BYPASS` | Optional existing bypass secret, sent only to the exact app origin |
 
-Ambient DB/auth/Blob/Playwright/proxy/TLS overrides are refused. Bun is invoked
-with `--no-env-file`. No production credentials are read or copied implicitly.
+Ambient DB/auth/Blob/Playwright/proxy/TLS overrides are refused. The Node command
+does not load `.env` files; pure Bun tests use `--no-env-file`. No production
+credentials are read or copied implicitly.
 
 Local validation only:
 
 ```text
 npm run blog:hosted -- validate <private-input.json>
 npm run test:blog:hosted:guards
+npm run test:blog:hosted:browser
 npm run typecheck:blog:hosted
 ```
 
@@ -151,7 +178,7 @@ issuedAt: <UTC instant>
 expiresAt: <UTC end of tests and acceptance decision>
 cleanupUntil: <later UTC deadline, expressly authorizing only exact cleanup>
 actions: [read-provider-bindings, read-112-urls, cms-test-writes,
-          test-image-upload, browser-a11y, exact-cleanup]
+          test-image-upload, browser-a11y, bounded-read-outage, exact-cleanup]
 ```
 
 After the exact future approval, on the clean committed branch:
@@ -161,8 +188,14 @@ npm run blog:hosted -- execute <private-input.json> <private-approval.json> <new
 ```
 
 The parent output directory must already exist; the run directory must not.
-The private journal contains a scoped DB snapshot, request IDs and per-check
-evidence, so protect it as private test data. The runner writes `receipt.json`
+The private output contains one immutable `baseline.json` and append-only,
+hash-chained `journal-00000001.json` generations, including request intents and
+per-check evidence. Each file is flushed before atomic publication; a failed or
+interrupted write leaves a `.pending` file without replacing earlier evidence.
+`readRecoveryJournal` is read-only inspection, not resume authorization. A write
+failure poisons the writer and stops further dispatch. This is process-crash
+recovery evidence, not a guarantee against disk loss or hardware power failure.
+Protect these files as private test data. The runner writes `receipt.json`
 only after every required check and exact cleanup succeeds within approval.
 Failures exit nonzero with a generic message and retain an incomplete journal;
 do not infer successful cleanup from exit status. A forged receipt JSON is not

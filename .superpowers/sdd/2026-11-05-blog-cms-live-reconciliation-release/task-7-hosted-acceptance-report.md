@@ -152,3 +152,143 @@ inflates the pixel bytes, so it does not depend on `sharp`.
 Production activation remains blocked under the existing release request. The
 new command and local evidence do not grant push, merge, deploy, provisioning,
 production writes, new sessions or any later hosted execution.
+
+
+## Fix round 1 — seven review findings (2026-11-07)
+
+Reopened from `19b8e28b080dde228e939998e9bcd671a4aa2643` on
+`codex/blog-cms-release`. This appendix supersedes the original implementation
+notes where identified below; the earlier verification remains historical.
+No hosted/provider request, hosted write, resource provisioning, deployment,
+production access, identity/session creation, push or merge occurred. No
+subagents were used. Hosted acceptance remains **NOT_RUN / BLOCKED** pending
+exact isolated resources and a separate owner approval.
+
+### Changes and covering evidence
+
+1. **Critical — browser redirect credential propagation.** Replaced
+   `route.continue()` with one-hop `route.fetch({maxRedirects: 0,maxRetries: 0})`.
+   Only terminal responses are fulfilled; every 3xx response fails before
+   Chromium can follow it. Unapproved initial origins and redirect destinations
+   have distinct `BrowserBoundaryError` codes. All document and subresource
+   requests use the same boundary, with service workers blocked and bypass
+   headers attached only to the exact app origin. Five real local Chromium
+   regressions cover documents, scripts, images, fetch, and a same-origin first
+   hop that would subsequently redirect off-origin. Sentinel bearer, bypass and
+   cookie values reach the approved loopback app, while the unapproved sink and
+   second hop receive **zero requests and zero credentials**. Direct unapproved
+   requests also fail with the intended origin code. All redirects, including
+   legitimate same-origin redirects, are intentionally unavailable in this
+   acceptance runner; approved URLs must be terminal responses.
+2. **Important — internal unpublish mutation requests.** The immutable baseline
+   and final full readback now include **all `blog_mutation_requests` rows**.
+   Client commands are durably recorded before dispatch. Cleanup reconciles
+   each direct row to its exact actor/encoded command and each generated archive
+   child to one unpublish parent using the same PostgreSQL transaction (`xmin`),
+   actor, article, operation, token and archived result. The exact reconciled
+   parent/child IDs are journaled before deletion under the cleanup lock.
+   Missing/duplicate children, a foreign transaction/actor/resource, incorrect
+   operation/result and changed/deleted baseline rows fail. Pure tests remove
+   the proven parent and child and assert the complete remaining table equals
+   baseline, with zero residual new request rows. Actual PostgreSQL execution
+   remains unverified here; no database/provider was started or accessed.
+3. **Important — consistent no-op CMS saves.** Article saves are checked against
+   the requested title and full article input, then independent reload, public
+   API and rendered heading checks. Settings compare every requested field and
+   ordered feature IDs independently of the returned record. The native HTML
+   check requires the requested heading, introduction, SEO title/description
+   and exact ordered featured links. Categories compare requested fields and
+   rendered filter names/order; restoration is checked separately. Three
+   no-op implementations, reversed feature IDs and a failed rendered feature
+   check all reject before their acceptance group can pass.
+4. **Important — recoverable journal.** Removed the truncating `journal.json`
+   overwrite. A single immutable `baseline.json` is sealed before writes, with
+   immutable numbered journal generations linked by hashes. Each generation is
+   written exclusively to a new pending file, flushed with `fsync`, closed and
+   atomically renamed. Failed writes poison the writer and cannot replace prior
+   valid evidence. Tests inject a partial write, flush failure and rename failure
+   and compare baseline/previous generation bytes. A real child process exits
+   before publication of generation 2; read-only recovery still loads baseline
+   and generation 1 and reports the pending file. No automatic resume or repair
+   is implied; filesystem power-loss durability is not claimed.
+5. **Important — private CDN cache checks.** Private CMS responses retain the
+   private/no-store/noindex requirements and now also run the same CDN directive,
+   HIT/STALE (case insensitive) and positive Age checks as public responses.
+   The RPC transport checks these before parsing both successes and denials.
+   Twenty-five negative cases cover statuses 200/401/403/409/503 crossed with
+   both cacheable CDN headers, HIT, STALE and Age 1.
+6. **Important — outage recovery separate from replay.** The exact-request-ID
+   replay remains an idempotency check. `retry` cannot pass until target-bound
+   recovery evidence separately proves real page/article RPC 503 responses,
+   both HTTP 500 unavailable pages and visible Retry controls, exact restoration,
+   successful Retry RPCs and expected rendered titles within the approved bound.
+   The future native fault temporarily renames only the exact isolated
+   `public.articles` table; its OID, original name and run-bound offline name are
+   journaled before dispatch. Timed transactions, `finally`, cleanup and a
+   process-local watchdog restore the same OID. The contract now requires an
+   exact `recovery` object and `bounded-read-outage` approval action, invalidating
+   old approval digests. Tests reject successful RPCs as outage proof, failed
+   UI/recovery, deadline expiry and a successful replay with missing outage
+   evidence. One real loopback Chromium test observes 503/503, both unavailable
+   pages, clicks both Retry controls after restoration, and observes 200/200
+   plus correct headings. This is local fixture evidence, never hosted evidence.
+7. **Important — intended production isolation refusals.** Production target
+   cases synchronize the immutable deployment target and dependent auth
+   project/branch/database bindings. They assert `HostedRefusal` plus the exact
+   production domain/project/Neon/DB/Blob/auth code, not a generic throw. The
+   refusal codes are evaluated before incidental cross-field validation so a
+   stale binding or provider hostname mismatch cannot satisfy these assertions.
+
+### Runtime correction discovered by the regressions
+
+The Windows Bun 1.3.14 Playwright launch hung before navigation even outside the
+sandbox. A standalone Node Chromium launch succeeded; the final native command
+and loopback browser suite therefore use Node with a repository-scoped
+TypeScript import hook and the already installed TypeScript compiler. Node does
+not load `.env` files. Pure tests continue using Bun with `--no-env-file`.
+The browser regressions use the same native browser boundary/recovery code as
+future hosted execution. No dependencies were installed or browsers downloaded.
+The no-input Node CLI was checked to refuse with `BLOCKED_OR_FAILED` and exit 1,
+before any output journal or network operation.
+
+### Round 1 verification
+
+The red test run reproduced **28 failures** (25 private-cache cases plus three
+consistent no-op cases) against the original behavior; see `task-7-r1-red.log`.
+The sandbox then blocked browser discovery and atomic temporary-file renames;
+that failed run is retained in `task-7-r1-tests.log`, not credited as acceptance.
+The unsandboxed Bun browser failures are retained in
+`task-7-r1-tests-unsandboxed.log` and `task-7-r1-browser-debug.log`. Node loopback
+regressions replaced those failed browser executions. Local filesystem/browser
+reruns used authorized escalation; no approval rejection occurred.
+
+| Final local check | Result | Evidence beside this report |
+| --- | --- | --- |
+| `npm run test:blog:hosted:guards` | 228 PASS, 0 FAIL; 2045 assertions across five files | `task-7-r1-guards-final.log` |
+| `npm run test:blog:hosted:browser` | 6 PASS, 0 FAIL, no skips; real Chromium, loopback servers only | `task-7-r1-browser-node.log` |
+| `tsc --noEmit -p tsconfig.hosted-acceptance.json` | PASS, exit 0 | `task-7-r1-focused-typecheck.log` |
+| `tsc --noEmit` | PASS, exit 0 | `task-7-r1-typecheck.log` |
+| `eslint .` | PASS, exit 0; zero errors, nine existing React refresh warnings outside this change | `task-7-r1-lint.log` |
+| `playwright test --list e2e/a11y.spec.ts` | PASS discovery, 54 tests; not execution of that a11y matrix | `task-7-r1-a11y-discovery.log` |
+| `npm run blog:hosted` without input | Expected refusal, exit 1 and `BLOCKED_OR_FAILED` | `task-7-r1-cli-refusal.log` |
+| `git diff --check` | PASS | Local command output |
+
+The approval request in
+`docs/superpowers/evidence/blog-cms/hosted-acceptance-approval-request.md` now
+explicitly describes the outage fields/action, exact child-request cleanup,
+immutable recovery files, zero-redirect policy and Node execution requirements.
+No concrete resource identifiers or approvals were fabricated.
+
+### Remaining round 1 limitations
+
+- Native provider/SQL identity, cleanup and hosted app outage behavior are still
+  **NOT_RUN**. Pure reconciliation tests and loopback browser fixtures cannot
+  clear those gates or produce hosted receipts.
+- The bounded outage needs newly approved isolated-table DDL authority, an
+  exclusive writer fence and cleanup lease. A process kill, disk failure or
+  lost DB connection may outlive the process-local watchdog; keep the target
+  fenced for separately approved exact-OID recovery. The runner will not pass
+  on timeout, partial evidence or unverified restoration.
+- Browser redirect refusal is deliberately strict. The future approved target
+  must serve terminal URLs and only approved origins. The owner must arrange
+  exact isolated resources and sessions; no provisioning is part of this work.
