@@ -187,3 +187,132 @@ prints no private payloads. Receipt outputs are restricted to
 Only the requested implementation, documentation and this report are committed
 locally. Raw provider metadata/private evidence and transient verification logs
 remain in their existing ignored workspace location. No push, merge or deploy.
+
+## Fix round 1/5 — exact resource and database-reference bindings
+
+Starting commit verified: `a403005700700cdb4909a0e15ef8de3773989d6f` on
+`codex/blog-cms-release`; working tree was clean. This section supersedes initial
+readiness claims wherever the review findings exposed insufficient validation.
+All three Important findings and the linked signature defect are addressed in
+this local fix. External recovery/media evidence, action approvals and release
+closure remain **BLOCKED**. No subagents were used.
+
+### Findings reproduced before fixes
+
+Added six synthetic regressions against the starting implementation. All six
+failed as expected because the old validator accepted: unrelated upload digest;
+invented held upload identity; substituted restored branch/endpoint/host plus
+matching cleanup branch; substituted snapshot IDs; a captured standalone asset
+whose object was missing; and whitespace edits to a sealed snapshot identifier
+without resealing. Existing 52 recovery tests still passed.
+
+Command: `bun test --no-env-file scripts/blog-cms/recovery-evidence.test.ts`.
+Result: **52 pass / 6 fail**, exit 1, 86 assertions.
+Log: `task-6-fix1-red.log`. Tests ran outside the previously established Bun
+sandbox parent-directory restriction; they use only synthetic local files.
+
+### Fixes and evidence model changes
+
+1. **Upload rows and references:** new `recovery-reference-manifest.ts` reads the
+   complete local `media_upload_intents` row-array archive identified by the
+   baseline database fingerprint. It checks canonical UTF-8 bytes, complete row
+   count, unique ordered IDs, unchanged parsed values and SHA-256; baseline and
+   restored fingerprints must already match. `uploads.rowsSha256` must equal
+   this exact table fingerprint. Every upload reference is independently derived
+   from the captured ID, pathname, URL/completion state and inventory presence.
+   Arbitrary identity/path/state/null substitutions fail. Pending rows preserve
+   their captured pathname and use an explicit `pending-object-held` or
+   `pending-absent-held` disposition; completed rows use `completed-object`.
+   Present pending objects must remain inventoried/copied, and the existing
+   held-disposition archive remains mandatory. No replay/finalization occurs.
+2. **Approved returned identities:** v2 reviewed context pins `snapshotId`, full
+   `restoredTarget` and `cleanupIdentity` (complete target, exact destination and
+   ordered deletion keys). Snapshot/restore/copy/cleanup must match these values
+   exactly, in addition to isolation checks. Tests reject coordinated evidence
+   substitutions under unchanged context, including branch, endpoint, host,
+   database, role and system identity. A positive test reprovisions exact context
+   values and applicable approval archives, rotates the synthetic public key,
+   seals the new context digest, and verifies successful offline validation;
+   old context and old receipt replay both fail.
+3. **Complete typed media reference manifest:** all rows of `media_upload_intents`,
+   `media_assets`, `articles` and `cms_content_revisions` require full canonical
+   row-array captures bound to the respective DB fingerprints. The manifest has
+   a typed source table, captured row ID/hash and exact source paths/values for
+   every row, including empty reference lists. References are independently
+   enumerated across all row fields, nested JSON/editor content and legacy
+   HTML/Markdown sources; every revision resource/state is included. Source-host
+   URLs must resolve within the exact store/host/prefix inventory. Standalone
+   assets require no upload intent to be included. Missing standalone/nested
+   media, missing manifest rows and altered paths/values/store identity fail.
+   The four canonical row archives are added to receipt artifact hashes and
+   revalidated on receipt verification.
+4. **Original signature encoding:** removed transforming `.trim()` validation.
+   Padded identifiers are rejected, and parsed context/envelope must preserve
+   original canonical representations exactly. Signature verification uses the
+   original `canonical(record)` bytes. Regressions reject edits without resealing,
+   resealed padded identifiers and normalized-context substitutions.
+
+The revised contract uses `blog-recovery-context-v2`,
+`blog-recovery-evidence-v2` and `blog-recovery-receipt-v2`; v1 inputs are rejected.
+The context template retains explicit null blockers for actual returned IDs and
+cleanup identity. The approval request, recovery document and CLI README now
+describe reprovisioning, complete captures, typed references and dispositions.
+
+Full capture format: all columns of every row, sorted by exact `id` using
+code-unit ordering, encoded as `canonical(rows)` with no trailing newline.
+External/static/non-media values conservatively detected by the scanner require
+exact reviewed `excludedReferenceValues`; source-host references cannot use that
+exception. Unsupported/ambiguous source syntax requires reconciliation or a
+reviewed extractor extension before acceptance. Export completeness/provenance,
+independent context/public-key trust and actual provider proof remain external
+requirements; this code does not collect live data or authorize production.
+
+### Additional self-review regression
+
+A narrowly scoped synthetic probe found a protocol-relative source-host value
+could use the external-reference exception. Added a failing regression first:
+`bun test --no-env-file scripts/blog-cms/recovery-evidence.test.ts -t 'fix1 cannot exclude'`
+returned **0 pass / 1 fail / 79 filtered**, exit 1.
+Log: `task-6-fix1-source-host-red.log`. Host classification now recognizes
+protocol-relative source URLs, then rejects their noncanonical encoding; an
+external exception cannot hide them. Final tests include this regression.
+
+### Commands and results
+
+- Expanded recovery-only run after the principal fixes:
+  `bun test --no-env-file scripts/blog-cms/recovery-evidence.test.ts` — **75 pass /
+  0 fail**, exit 0, 112 assertions. Log: `task-6-fix1-tests-expanded.log`.
+  Later tests add legacy markup, exact external exclusions, raw capture ordering/
+  completeness, source-store identity and protocol-relative rejection.
+- Initial combined focused run while typecheck/lint ran concurrently:
+  **118 pass / 1 fail**, exit 1. The existing release-packet test
+  `rejects inconsistent rehashed migrationSha256` exceeded its 5,000 ms limit
+  (5,272.45 ms). No recovery test failed. This is retained, not represented as
+  a passing run. Log: `task-6-fix1-focused-final.log`.
+- Final combined command, run by itself after the last hardening change:
+  `bun test --no-env-file scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/release-controls.test.ts scripts/blog-cms/release-packet.test.ts scripts/blog-cms/writer-control-register.test.ts`
+  — **120 pass / 0 fail**, exit 0, **269 assertions**, four files, 11.77 seconds.
+  This includes 80 recovery tests and 40 adjacent release/control/register tests.
+  Log: `task-6-fix1-focused-verified.log`.
+- `npm run typecheck` — **PASS**, exit 0.
+  Log: `task-6-fix1-typecheck.log`.
+- `node node_modules/typescript/bin/tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler --esModuleInterop --skipLibCheck --strict --types bun scripts/blog-cms/recovery-evidence.ts scripts/blog-cms/recovery-reference-manifest.ts scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/recovery-receipt.ts`
+  — **PASS**, exit 0 after final code changes.
+  Log: `task-6-fix1-script-typecheck-verified.log`.
+- `node node_modules/eslint/bin/eslint.js scripts/blog-cms/recovery-evidence.ts scripts/blog-cms/recovery-reference-manifest.ts scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/recovery-receipt.ts`
+  — **PASS**, exit 0, zero errors/warnings; log: `task-6-fix1-lint-verified.log`. The first lint run
+  found one `no-useless-escape` violation in JSON-prefix detection; that regex
+  was replaced with a direct character check before final verification.
+- `node node_modules/prettier/bin/prettier.cjs --check scripts/blog-cms/recovery-evidence.ts scripts/blog-cms/recovery-reference-manifest.ts scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/recovery-receipt.ts docs/superpowers/evidence/blog-cms/recovery-context.template.json`
+  — **PASS**. `git diff --check` — **PASS**.
+
+Verification is scoped to the amended offline code and adjacent focused tests;
+it is not full repository/CI/provider/hosted acceptance. The earlier timeout is
+resolved by the clean final run, with no edits to the adjacent packet test.
+Resource limits remain 16 MiB per CLI JSON and 512 MiB total archives; complete
+raw table captures may exceed that bound and must fail closed rather than omit
+rows. Local blog-table snapshots remain insufficient for full recovery.
+
+No provider or production changes, production data access, credential/token
+retrieval, push, merge or deployment occurred. The fix and this appended report
+are committed locally; all external evidence/approval gates remain blocked.

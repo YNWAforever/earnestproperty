@@ -54,3 +54,12 @@ current time. No asserted boolean satisfies any evidence gate.
 test or offline receipt does not independently prove provider actions occurred.
 Raw evidence provenance and the reviewed authority/context remain external trust
 requirements. Local blog-table snapshots remain insufficient for full recovery.
+
+Fix round 1 hardens this contract to v2: exact returned snapshot/restore and
+cleanup identities are pinned in the final reviewed context; all upload reference
+identities, pathnames and held dispositions are derived from database-bound row
+captures. A complete typed manifest covers uploads, standalone media assets,
+articles and all CMS revision media sources. Original canonical signed bytes are
+verified without trimming or schema normalization. V1 records are rejected;
+reprovisioned context, applicable approvals and resealing are required. These
+local fixes do not clear any external evidence or approval gate.

@@ -1,5 +1,5 @@
 {
-  "format": "blog-recovery-context-v1",
+  "format": "blog-recovery-context-v2",
   "target": {
     "projectId": "dawn-meadow-79190048",
     "branchId": "br-polished-sea-aom4i1ct",
@@ -32,6 +32,14 @@
     "host": null,
     "prefix": "recovery/blog-cms-858458194fc3-01/"
   },
+  "snapshotId": null,
+  "restoredTarget": null,
+  "cleanupIdentity": {
+    "target": null,
+    "destination": null,
+    "deletedKeys": null
+  },
+  "excludedReferenceValues": [],
   "snapshotName": "blog-cms-858458194fc3-recovery-01",
   "restoreBranchName": "blog-cms-858458194fc3-restore-01",
   "isolationLabel": "blog-cms-recovery-858458194fc3-01"

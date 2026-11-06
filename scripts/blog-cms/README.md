@@ -149,6 +149,14 @@ full table catalog, source store/host/prefix/count/bytes, approved destination,
 names, isolation label, approval hashes and validity window. Never use a public
 key supplied by an untrusted evidence submitter as the trust baseline.
 
+The v2 context additionally pins the exact returned `snapshotId`, complete
+`restoredTarget`, and `cleanupIdentity` (complete restored target, destination
+identity and exact ordered deletion keys). Internal agreement among submitted
+snapshot/restore/copy/cleanup records cannot substitute for these approved
+bindings. Returned-ID changes require reprovisioning the reviewed context,
+amending applicable approvals and resealing its binding in the evidence record.
+V1 contexts/evidence/receipts are rejected; there is no automatic migration.
+
 Start from
 `docs/superpowers/evidence/blog-cms/recovery-context.template.json`; its null
 fields are intentional blockers. The companion `recovery-approval-request.md`
@@ -166,6 +174,11 @@ accepted by the CLI. All times are integer Unix milliseconds. Evidence windows
 must fit the context window and last at most 21,600,000 ms; observation chronology,
 snapshot history/retention and current receipt expiry are checked independently.
 
+Use `blog-recovery-context-v2` and `blog-recovery-evidence-v2`; outputs are
+`blog-recovery-receipt-v2`. The verifier authenticates original `canonical(record)`
+bytes, rejects schema transformations and rejects padded identifiers, even if
+resealed. No field is silently trimmed into a valid signed value.
+
 Keep the complete package in restricted local evidence storage. Archive files
 and original media bytes go in one directory, each named by its lowercase
 64-character SHA-256 without extension; no directories, symlinks or arbitrary
@@ -177,6 +190,44 @@ the tool cannot infer raw export provenance or inspect a live provider. The
 authority must review full canonicalization, pagination and complete row/metadata
 coverage before sealing. Opaque archive hashes alone do not authenticate a
 provider; the independently trusted signature is required as well.
+
+`recovery-reference-manifest.ts` requires complete raw row captures for
+`media_upload_intents`, `media_assets`, `articles` and `cms_content_revisions`.
+Each archive contains the full table's rows, with all captured columns, sorted by
+exact `id` using code-unit ordering. Its exact UTF-8 bytes are `canonical(rows)`
+with no newline, and SHA-256 equals the table fingerprint in both database
+states. Duplicate/out-of-order IDs, missing archives, counts, altered bytes and
+incompatible row shapes fail. These private row archives are included in the
+receipt's required archive hashes; they are not merely hash-shaped assertions.
+
+`media.referenceManifest` is an ordered array grouped as upload intents, media
+assets, articles, then CMS revisions, and sorted by row ID within each group.
+Every row has `{source, rowId, rowSha256, references}`, including rows with no
+media. Reference entries contain `{path, value, storeId, objectKey, disposition}`.
+Paths use JSON Pointer escaping, with `/@json` when traversing JSON encoded in a
+string; values are exact captured strings. The verifier independently derives
+this manifest by scanning every row field, nested JSON/editor sources and
+HTML/Markdown media in legacy text. Object fields are traversed in code-unit
+order; each text field's distinct source values are sorted the same way.
+
+Every source-host URL must resolve to an existing key in the exact reviewed
+store/host/prefix. References in standalone assets or unpublished/historical
+revisions are equally mandatory. External/static values (including conservatively
+detected non-media links) require an exact `excludedReferenceValues` entry in the
+reviewed context and use `reviewed-external`; source-host URLs cannot use this
+exception. In-scope entries use `inventory`. Encoded/noncanonical source URLs,
+ambiguous composite media values and unsupported captures must be reconciled or
+handled by a reviewed extractor extension before acceptance, not silently
+treated as missing/zero references.
+
+`uploads.rowsSha256` must equal the captured upload table fingerprint. Its
+references must exactly match captured IDs/pathnames, URL/completion state and
+inventory presence. Each includes `pathname` and one disposition:
+`completed-object`, `pending-object-held`, or `pending-absent-held`. An absent
+pending object has a null `objectKey` but retains its real pathname. A present
+pending object must be inventoried/copied and held; arbitrary nulls cannot hide
+it. Completion requires a URL, completion timestamp and matching object pathname.
+These are evidence dispositions only; no upload/finalization retry is performed.
 
 CLI JSON inputs are limited to 16 MiB each; total archive bytes to 512 MiB. Larger
 packages fail closed and require a separately reviewed streaming implementation;

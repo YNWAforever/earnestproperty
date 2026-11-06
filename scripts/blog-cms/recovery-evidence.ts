@@ -2,14 +2,18 @@ import { createHash, createPublicKey, verify } from "node:crypto";
 import { z } from "zod";
 import { canonical, fingerprint } from "../../src/lib/blog/reconcile";
 import { productionTargetSchema } from "./production-evidence";
+import {
+  referenceManifestSchema,
+  uploadReferenceSchema,
+  validateReferenceManifest,
+} from "./recovery-reference-manifest";
 
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const text = z
   .string()
-  .trim()
   .min(1)
   .max(256)
-  .refine((v) => !/[{}<>\r\n]/.test(v));
+  .refine((v) => v.trim() === v && !/[{}<>\r\n]/.test(v));
 const time = z.number().int().positive().safe();
 const count = z.number().int().nonnegative().safe();
 const host = z.string().regex(/^[a-z0-9-]+(?:\.[a-z0-9-]+)+$/);
@@ -48,7 +52,7 @@ const destination = z
   .strict();
 const contextSchema = z
   .object({
-    format: z.literal("blog-recovery-context-v1"),
+    format: z.literal("blog-recovery-context-v2"),
     target,
     packetSha256: hash,
     releaseHead: z.string().regex(/^[a-f0-9]{40}$/),
@@ -60,6 +64,10 @@ const contextSchema = z
     tableNames: z.array(text).min(1),
     mediaTarget: z.object({ storeId: text, host, prefix, count, bytes: count }).strict(),
     destination,
+    snapshotId: text,
+    restoredTarget: target,
+    cleanupIdentity: z.object({ target, destination, deletedKeys: z.array(key) }).strict(),
+    excludedReferenceValues: z.array(z.string().min(1)),
     snapshotName: text,
     restoreBranchName: text,
     isolationLabel: text,
@@ -70,7 +78,7 @@ const databaseState = z.object({ schemaSha256: hash, tables: z.array(table).min(
 const object = z.object({ key, bytes: count, sha256: hash, metadataSha256: hash }).strict();
 const recordSchema = z
   .object({
-    format: z.literal("blog-recovery-evidence-v1"),
+    format: z.literal("blog-recovery-evidence-v2"),
     contextSha256: hash,
     startsAt: time,
     expiresAt: time,
@@ -127,21 +135,14 @@ const recordSchema = z
         inventoriedAt: time,
         objects: z.array(object),
         inventoryArchiveSha256: hash,
+        referenceManifest: referenceManifestSchema,
         uploads: z
           .object({
             rows: count,
             pending: count,
             rowsSha256: hash,
             dispositionArchiveSha256: hash,
-            references: z.array(
-              z
-                .object({
-                  uploadId: text,
-                  state: z.enum(["completed", "held"]),
-                  objectKey: key.nullable(),
-                })
-                .strict(),
-            ),
+            references: z.array(uploadReferenceSchema),
           })
           .strict(),
         restore: z
@@ -159,6 +160,7 @@ const recordSchema = z
       .object({
         completedAt: time,
         branchId: text,
+        target,
         destination,
         deletedKeys: z.array(key),
         remainingObjects: z.literal(0),
@@ -206,6 +208,9 @@ export function createRecoveryReceipt(
   const c = parsedContext.data,
     e = parsedEvidence.data,
     r = e.record;
+  // Never authenticate a normalized/rebuilt representation in place of the signed input.
+  fail(same(c, trustedContext) && same(e, untrustedEvidence), "NONCANONICAL");
+  const originalRecord = (untrustedEvidence as { record: unknown }).record;
   fail(r.contextSha256 === fingerprint(c), "CONTEXT_BINDING");
   try {
     fail(c.evidencePublicKey.startsWith("-----BEGIN PUBLIC KEY-----"), "AUTHORITY");
@@ -214,7 +219,7 @@ export function createRecoveryReceipt(
     fail(
       publicKey.asymmetricKeyType === "ed25519" &&
         signature.toString("base64") === e.signature &&
-        verify(null, Buffer.from(canonical(r)), publicKey, signature),
+        verify(null, Buffer.from(canonical(originalRecord)), publicKey, signature),
       "SIGNATURE",
     );
   } catch {
@@ -260,8 +265,20 @@ export function createRecoveryReceipt(
     "SNAPSHOT_WINDOW",
   );
   fail(
-    s.name === c.snapshotName && d.snapshotId === s.id && d.name === c.restoreBranchName,
+    s.name === c.snapshotName &&
+      s.id === c.snapshotId &&
+      d.snapshotId === c.snapshotId &&
+      d.name === c.restoreBranchName,
     "SNAPSHOT_BINDING",
+  );
+  fail(
+    same(d.target, c.restoredTarget) &&
+      same(cleanup.target, c.cleanupIdentity.target) &&
+      same(c.cleanupIdentity.target, c.restoredTarget) &&
+      same(cleanup.destination, c.cleanupIdentity.destination) &&
+      same(c.cleanupIdentity.destination, c.destination) &&
+      same(cleanup.deletedKeys, c.cleanupIdentity.deletedKeys),
+    "APPROVED_IDENTITIES",
   );
   const validHost = (t: z.infer<typeof target>) =>
     t.host.startsWith(t.endpointId + ".") && t.host.endsWith(".neon.tech");
@@ -350,6 +367,15 @@ export function createRecoveryReceipt(
       ),
     "UPLOAD_COVERAGE",
   );
+  const referenceArchiveHashes = validateReferenceManifest({
+    tables: db.baseline.tables,
+    artifacts,
+    source: c.mediaTarget,
+    objects: m.objects,
+    excludedReferenceValues: c.excludedReferenceValues,
+    manifest: m.referenceManifest,
+    uploads: m.uploads,
+  });
   const copies = m.restore.objects;
   fail(
     copies.length === m.objects.length &&
@@ -389,6 +415,7 @@ export function createRecoveryReceipt(
     m.restore.readbackArchiveSha256,
     m.restore.isolationEvidenceSha256,
     cleanup.evidenceSha256,
+    ...referenceArchiveHashes,
     ...m.objects.map((o) => o.sha256),
   ];
   for (const digest of archiveHashes) {
@@ -397,7 +424,7 @@ export function createRecoveryReceipt(
   }
   for (const o of m.objects) fail(artifacts.get(o.sha256)!.byteLength === o.bytes, "MEDIA_BYTES");
   const receipt = {
-    format: "blog-recovery-receipt-v1" as const,
+    format: "blog-recovery-receipt-v2" as const,
     status: "OFFLINE_EVIDENCE_VALIDATED" as const,
     productionAuthorized: false as const,
     closure: "REQUIRES_INDEPENDENT_REVIEW" as const,

@@ -168,11 +168,23 @@ and seals the actual policy values. The reviewed public verification key is
 supplied separately from the evidence envelope; accepting a key chosen by the
 evidence submitter is not independent trust.
 
-The authority signs the complete `blog-recovery-evidence-v1` record after
+The authority signs the complete `blog-recovery-evidence-v2` record after
 reviewing raw provider/read-only archives, their provenance, capture methods and
 the actual approval. Use Ed25519 over UTF-8 canonical JSON (the repository's
 `canonical` function); the envelope is `{record, signature}` with canonical
 base64 signature. Never put a signing private key in this tool or checkout.
+
+The final reviewed `blog-recovery-context-v2` must include `snapshotId`, the full
+`restoredTarget` (project/branch/endpoint/host/port/database/role/system identifier/
+version), and `cleanupIdentity` containing that full target, exact destination
+store/host/prefix/strategy and exact ordered deletion-key list. Restore and
+cleanup evidence must match these approved values, not merely differ from
+production. Copy destination must match the same context destination. New returned
+IDs require a reprovisioned reviewed context and newly sealed evidence binding its
+digest, along with applicable amended approvals. An internally consistent
+substitution under the old context is rejected. V1 packages/receipts cannot be
+reused. Signature verification uses the original canonical record and rejects any
+schema transformation, including silently trimmed identifiers.
 
 All archive references must resolve to local bytes named by SHA-256. Whole-store
 inventory is matched to the reviewed context count/bytes; all copied byte hashes
@@ -185,6 +197,33 @@ includes all article states and every revision/author, not only published rows.
 The full verification archive must document canonicalization and coverage.
 Referenced uploads include completed and held pending intents with no automatic
 retry. Zero counts require explicit full enumeration evidence.
+
+For `media_upload_intents`, `media_assets`, `articles` and `cms_content_revisions`,
+provide complete canonical JSON row-array archives sorted by exact `id` (strictly
+increasing, no duplicates). Encode using UTF-8 `canonical(rows)` with no newline;
+the file SHA-256 must equal the corresponding baseline/restored table fingerprint.
+These contain all captured columns and every row/state, including media assets
+without intents and revisions for every CMS resource. A typed manifest must
+include every row, its fingerprint and exact extracted source paths/values;
+even rows without media have explicit empty reference arrays. This is a complete
+table capture, not a reference-only projection or an independently asserted list.
+
+Upload digest must equal the captured `media_upload_intents` fingerprint. Upload
+reference identity and pathname come directly from the captured rows; completion
+requires both URL and completion timestamp. Pending paths that exist in the
+inventory use `pending-object-held`; absent paths use `pending-absent-held` and a
+null resolved object key, while retaining the exact captured pathname. Completed
+rows use `completed-object`. All remain bound to the held-disposition archive;
+no replay or finalization is authorized by a disposition.
+
+The validator derives reference sources from raw row fields, nested JSON/editor
+content and legacy HTML/Markdown media. Every source-host URL must be HTTPS,
+canonical and resolve within the exact prefix and complete inventory; a missing
+source object cannot be excluded. External/static sources and conservatively
+detected non-media URLs require exact `excludedReferenceValues` in the reviewed
+context. Unsupported/ambiguous source syntax is not live acceptance; reconcile it
+or extend the reviewed extractor and tests before signing. Full scope and raw
+export provenance remain the independent reviewer's responsibility.
 
 Implementation readiness, authenticated offline record consistency, external
 provider proof and release closure are separate. An offline receipt is

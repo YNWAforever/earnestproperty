@@ -2,6 +2,8 @@ import { expect, test } from "bun:test";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { canonical, fingerprint } from "../../src/lib/blog/reconcile";
 import * as recovery from "./recovery-evidence";
+import type { z } from "zod";
+import { referenceManifestSchema } from "./recovery-reference-manifest";
 import { runRecoveryCli } from "./recovery-receipt";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -55,8 +57,67 @@ export function fixture() {
     host: "isolated.public.blob.vercel-storage.com",
     prefix: "recovery/",
   };
+  const restoredTarget = {
+    ...target,
+    branchId: "br-recovery-fixture",
+    endpointId: "ep-recovery-fixture",
+    host: "ep-recovery-fixture.ap-southeast-1.aws.neon.tech",
+  };
+  const url = `https://${mediaTarget.host}/image.png`;
+  const captures: Record<string, Record<string, unknown>[]> = {
+    media_upload_intents: [
+      { id: "upload-1", pathname: "image.png", url, completed_at: "2026-11-06T12:00:00Z" },
+      { id: "upload-2", pathname: "pending.png", url: null, completed_at: null },
+    ],
+    media_assets: [
+      { id: "asset-1", upload_intent_id: "upload-1", pathname: "image.png", url },
+      { id: "asset-2", upload_intent_id: null, pathname: "image.png", url },
+    ],
+    articles: [
+      { id: "article-1", cover_image: url, content: "", content_format: "legacy-text" },
+      {
+        id: "article-2",
+        cover_image: null,
+        content: JSON.stringify({ type: "doc", content: [{ type: "image", attrs: { src: url } }] }),
+        content_format: "editor-json-v1",
+      },
+    ],
+    cms_content_revisions: [
+      { id: "revision-1", resource_type: "article", state: "draft", payload: { coverImage: url } },
+      { id: "revision-2", resource_type: "estate", state: "archived", payload: { image_url: url } },
+    ],
+  };
+  for (const [name, rows] of Object.entries(captures))
+    tables.find((t) => t.name === "public." + name)!.sha256 = artifact(canonical(rows));
+  const paths = [
+    ["/url"],
+    [],
+    ["/url"],
+    ["/url"],
+    ["/cover_image"],
+    ["/content/@json/content/0/attrs/src"],
+    ["/payload/coverImage"],
+    ["/payload/image_url"],
+  ];
+  let rowIndex = 0;
+  const referenceManifest: z.infer<typeof referenceManifestSchema> = [];
+  for (const [source, rows] of Object.entries(captures))
+    for (const row of rows) {
+      referenceManifest.push({
+        source: source as z.infer<typeof referenceManifestSchema>[number]["source"],
+        rowId: String(row.id),
+        rowSha256: fingerprint(row),
+        references: paths[rowIndex++].map((path) => ({
+          path,
+          value: url,
+          storeId: mediaTarget.storeId,
+          objectKey: "image.png",
+          disposition: "inventory",
+        })),
+      });
+    }
   const context = {
-    format: "blog-recovery-context-v1",
+    format: "blog-recovery-context-v2",
     target: structuredClone(target),
     packetSha256: digest("packet"),
     releaseHead: "8".repeat(40),
@@ -68,6 +129,14 @@ export function fixture() {
     tableNames,
     mediaTarget,
     destination,
+    snapshotId: "snap-synthetic",
+    restoredTarget: structuredClone(restoredTarget),
+    cleanupIdentity: {
+      target: structuredClone(restoredTarget),
+      destination: structuredClone(destination),
+      deletedKeys: ["recovery/image.png"],
+    },
+    excludedReferenceValues: [] as string[],
     snapshotName: "blog-cms-synthetic-snapshot",
     restoreBranchName: "blog-cms-synthetic-restore",
     isolationLabel: "blog-cms-synthetic",
@@ -79,7 +148,7 @@ export function fixture() {
     metadataSha256: digest("image metadata"),
   };
   const record = {
-    format: "blog-recovery-evidence-v1",
+    format: "blog-recovery-evidence-v2",
     contextSha256: fingerprint(context),
     startsAt: now - 3600000,
     expiresAt: now + 1800000,
@@ -101,12 +170,7 @@ export function fixture() {
       operation: "restore-new-branch",
       snapshotId: "snap-synthetic",
       name: context.restoreBranchName,
-      target: {
-        ...target,
-        branchId: "br-synthetic-restore",
-        endpointId: "ep-synthetic-restore",
-        host: "ep-synthetic-restore.ap-southeast-1.aws.neon.tech",
-      },
+      target: structuredClone(restoredTarget),
       createdAt: now - 2700000,
       readyAt: now - 2600000,
       isolationLabel: context.isolationLabel,
@@ -134,14 +198,27 @@ export function fixture() {
       inventoriedAt: now - 2950000,
       objects: [object],
       inventoryArchiveSha256: artifact("complete media inventory with pagination evidence"),
+      referenceManifest,
       uploads: {
         rows: 2,
         pending: 1,
-        rowsSha256: digest("upload rows"),
+        rowsSha256: fingerprint(captures.media_upload_intents),
         dispositionArchiveSha256: artifact("pending upload held and referenced objects resolved"),
         references: [
-          { uploadId: "upload-1", state: "completed", objectKey: "image.png" },
-          { uploadId: "upload-2", state: "held", objectKey: null },
+          {
+            uploadId: "upload-1",
+            pathname: "image.png",
+            state: "completed",
+            objectKey: "image.png",
+            disposition: "completed-object",
+          },
+          {
+            uploadId: "upload-2",
+            pathname: "pending.png",
+            state: "held",
+            objectKey: null,
+            disposition: "pending-absent-held",
+          },
         ],
       },
       restore: {
@@ -156,7 +233,8 @@ export function fixture() {
     },
     cleanup: {
       completedAt: now - 2300000,
-      branchId: "br-synthetic-restore",
+      branchId: restoredTarget.branchId,
+      target: structuredClone(restoredTarget),
       destination: structuredClone(destination),
       deletedKeys: ["recovery/image.png"],
       remainingObjects: 0,
@@ -169,7 +247,7 @@ export function fixture() {
     record,
     signature: sign(null, Buffer.from(canonical(record)), keys.privateKey).toString("base64"),
   });
-  return { context, record, artifacts, seal };
+  return { context, record, artifacts, seal, captures };
 }
 
 test("complete signed synthetic recovery yields expiring offline receipt, never production authority", () => {
@@ -181,6 +259,396 @@ test("complete signed synthetic recovery yields expiring offline receipt, never 
   expect(
     recovery.verifyRecoveryReceipt(receipt, f.seal(), f.context, f.artifacts, now + 1),
   ).toBeUndefined();
+});
+
+test("fix1 rejects unrelated upload row digest with unchanged database evidence", () => {
+  const f = fixture();
+  f.record.media.uploads.rowsSha256 = digest("unrelated upload rows");
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow();
+});
+
+test("fix1 rejects invented held references with unchanged database evidence", () => {
+  const f = fixture();
+  f.record.media.uploads.references[1].uploadId = "invented-held-upload";
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow();
+});
+
+test("fix1 rejects substituted returned branch endpoint host and matching cleanup", () => {
+  const f = fixture();
+  Object.assign(f.record.restore.target, {
+    branchId: "br-substitute",
+    endpointId: "ep-substitute",
+    host: "ep-substitute.ap-southeast-1.aws.neon.tech",
+  });
+  f.record.cleanup.branchId = "br-substitute";
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow();
+});
+
+test("fix1 rejects substituted snapshot IDs despite internal consistency", () => {
+  const f = fixture();
+  f.record.snapshot.id = f.record.restore.snapshotId = "snap-substitute";
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow();
+});
+
+test("fix1 rejects a media asset without an upload intent whose object is missing", () => {
+  const f = fixture();
+  const captured = [
+    {
+      id: "asset-orphan",
+      upload_intent_id: null,
+      pathname: "missing.png",
+      url: "https://synthetic.public.blob.vercel-storage.com/missing.png",
+    },
+  ];
+  const bytes = canonical(captured),
+    sha = digest(bytes);
+  f.artifacts.set(sha, Buffer.from(bytes));
+  for (const state of [f.record.database.baseline, f.record.database.restored]) {
+    Object.assign(state.tables.find((t) => t.name === "public.media_assets")!, {
+      rows: 1,
+      sha256: sha,
+    });
+  }
+  f.record.media.referenceManifest = f.record.media.referenceManifest.filter(
+    (r) => r.source !== "media_assets",
+  );
+  f.record.media.referenceManifest.splice(2, 0, {
+    source: "media_assets",
+    rowId: "asset-orphan",
+    rowSha256: fingerprint(captured[0]),
+    references: [
+      {
+        path: "/url",
+        value: captured[0].url,
+        storeId: f.context.mediaTarget.storeId,
+        objectKey: "missing.png",
+        disposition: "inventory",
+      },
+    ],
+  });
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_OBJECT",
+  );
+});
+
+test("fix1 rejects whitespace edits to a sealed record without resealing", () => {
+  const f = fixture(),
+    sealed = f.seal();
+  sealed.record.snapshot.id = " " + sealed.record.snapshot.id + " ";
+  expect(() => recovery.createRecoveryReceipt(sealed, f.context, f.artifacts, now)).toThrow();
+});
+
+function recapture(f: ReturnType<typeof fixture>, table: string) {
+  const rows = f.captures[table],
+    bytes = canonical(rows),
+    sha = digest(bytes);
+  f.artifacts.set(sha, Buffer.from(bytes));
+  for (const state of [f.record.database.baseline, f.record.database.restored])
+    Object.assign(state.tables.find((t) => t.name === "public." + table)!, {
+      rows: rows.length,
+      sha256: sha,
+    });
+  return sha;
+}
+
+test("fix1 binds completed versus held state and pathname to captured upload rows", () => {
+  const a = fixture();
+  a.record.media.uploads.pending = 2;
+  Object.assign(a.record.media.uploads.references[0], {
+    state: "held",
+    objectKey: null,
+    disposition: "pending-absent-held",
+  });
+  expect(() => recovery.createRecoveryReceipt(a.seal(), a.context, a.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_UPLOAD_ROWS",
+  );
+  const b = fixture();
+  b.record.media.uploads.references[1].pathname = "invented-pending.png";
+  expect(() => recovery.createRecoveryReceipt(b.seal(), b.context, b.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_UPLOAD_ROWS",
+  );
+});
+
+test("fix1 pending objects require exact held-present or held-absent dispositions", () => {
+  const f = fixture();
+  f.captures.media_upload_intents[1].pathname = "image.png";
+  f.record.media.uploads.rowsSha256 = recapture(f, "media_upload_intents");
+  f.record.media.referenceManifest[1].rowSha256 = fingerprint(f.captures.media_upload_intents[1]);
+  Object.assign(f.record.media.uploads.references[1], {
+    pathname: "image.png",
+    objectKey: "image.png",
+    disposition: "pending-object-held",
+  });
+  expect(
+    recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now).record
+      .productionAuthorized,
+  ).toBe(false);
+  Object.assign(f.record.media.uploads.references[1], {
+    objectKey: null,
+    disposition: "pending-absent-held",
+  });
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_UPLOAD_ROWS",
+  );
+});
+
+for (const field of [
+  "branchId",
+  "endpointId",
+  "host",
+  "database",
+  "systemIdentifier",
+  "role",
+] as const)
+  test("fix1 rejects coordinated restore/cleanup " + field + " substitution", () => {
+    const f = fixture();
+    f.record.restore.target[field] = f.record.cleanup.target[field] =
+      field === "systemIdentifier"
+        ? "987654321"
+        : field === "host"
+          ? "ep-other.ap-southeast-1.aws.neon.tech"
+          : "other";
+    f.record.cleanup.branchId = f.record.restore.target.branchId;
+    expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+      "RECOVERY_APPROVED_IDENTITIES",
+    );
+  });
+
+test("fix1 accepts new returned identities only after context reprovisioning and resealing", () => {
+  const f = fixture(),
+    oldContext = structuredClone(f.context),
+    oldReceipt = recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now);
+  const newTarget = {
+    ...f.context.restoredTarget,
+    branchId: "br-reviewed-new",
+    endpointId: "ep-reviewed-new",
+    host: "ep-reviewed-new.ap-southeast-1.aws.neon.tech",
+    systemIdentifier: "987654321",
+  };
+  const newDestination = {
+    ...f.context.destination,
+    storeId: "store_reviewed_new",
+    host: "reviewed-new.public.blob.vercel-storage.com",
+  };
+  f.context.snapshotId = f.record.snapshot.id = f.record.restore.snapshotId = "snap-reviewed-new";
+  f.context.restoredTarget = structuredClone(newTarget);
+  f.record.restore.target = structuredClone(newTarget);
+  f.record.cleanup.target = structuredClone(newTarget);
+  f.record.cleanup.branchId = newTarget.branchId;
+  f.context.cleanupIdentity.target = structuredClone(newTarget);
+  f.context.destination = structuredClone(newDestination);
+  f.context.cleanupIdentity.destination = structuredClone(newDestination);
+  f.record.media.restore.destination = structuredClone(newDestination);
+  f.record.cleanup.destination = structuredClone(newDestination);
+  for (const name of ["approvalSha256", "cleanupApprovalSha256"] as const) {
+    const bytes = Buffer.from("new independent approval for returned identities: " + name);
+    f.context[name] = digest(bytes.toString());
+    f.artifacts.set(f.context[name], bytes);
+  }
+  f.record.cleanup.approvalSha256 = f.context.cleanupApprovalSha256;
+  const newKeys = generateKeyPairSync("ed25519");
+  f.context.evidencePublicKey = newKeys.publicKey
+    .export({ type: "spki", format: "pem" })
+    .toString();
+  f.record.contextSha256 = fingerprint(f.context);
+  const sealed = {
+    record: f.record,
+    signature: sign(null, Buffer.from(canonical(f.record)), newKeys.privateKey).toString("base64"),
+  };
+  expect(() => recovery.createRecoveryReceipt(sealed, oldContext, f.artifacts, now)).toThrow(
+    "RECOVERY_CONTEXT_BINDING",
+  );
+  expect(
+    recovery.createRecoveryReceipt(sealed, f.context, f.artifacts, now).record.productionAuthorized,
+  ).toBe(false);
+  expect(() =>
+    recovery.verifyRecoveryReceipt(oldReceipt, sealed, f.context, f.artifacts, now),
+  ).toThrow("RECOVERY_RECEIPT");
+});
+
+for (const source of [
+  "media_upload_intents",
+  "media_assets",
+  "articles",
+  "cms_content_revisions",
+] as const)
+  test(
+    "fix1 requires every " + source + " row and exact reference path/value in the typed manifest",
+    () => {
+      const a = fixture();
+      a.record.media.referenceManifest = a.record.media.referenceManifest.filter(
+        (r) => r.source !== source,
+      );
+      expect(() => recovery.createRecoveryReceipt(a.seal(), a.context, a.artifacts, now)).toThrow(
+        "RECOVERY_REFERENCE_MANIFEST",
+      );
+      const b = fixture();
+      b.record.media.referenceManifest.find((r) => r.source === source)!.references[0].path =
+        "/invented-field";
+      expect(() => recovery.createRecoveryReceipt(b.seal(), b.context, b.artifacts, now)).toThrow(
+        "RECOVERY_REFERENCE_MANIFEST",
+      );
+    },
+  );
+
+for (const source of ["articles", "cms_content_revisions"] as const)
+  test(
+    "fix1 resolves nested " + source + " image sources even with an omitted manifest reference",
+    () => {
+      const f = fixture(),
+        missing = `https://${f.context.mediaTarget.host}/missing.png`;
+      if (source === "articles")
+        f.captures.articles[1].content = JSON.stringify({
+          type: "doc",
+          content: [{ type: "image", attrs: { src: missing } }],
+        });
+      else
+        f.captures.cms_content_revisions[1].payload = {
+          body: { document: { type: "image", attrs: { src: missing } } },
+        };
+      recapture(f, source);
+      expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+        "RECOVERY_REFERENCE_OBJECT",
+      );
+    },
+  );
+
+test("fix1 rejects captured row tampering under unchanged database fingerprints", () => {
+  const f = fixture(),
+    sha = f.record.media.uploads.rowsSha256;
+  f.captures.media_upload_intents[1].id = "forged-id";
+  f.artifacts.set(sha, Buffer.from(canonical(f.captures.media_upload_intents)));
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_CAPTURE_BINDING",
+  );
+});
+
+test("fix1 refuses whitespace even when resealed and does not normalize trusted context", () => {
+  const a = fixture();
+  a.record.snapshot.id += " ";
+  expect(() => recovery.createRecoveryReceipt(a.seal(), a.context, a.artifacts, now)).toThrow(
+    "RECOVERY_SCHEMA",
+  );
+  const b = fixture();
+  b.context.snapshotName += " ";
+  expect(() => recovery.createRecoveryReceipt(b.seal(), b.context, b.artifacts, now)).toThrow(
+    "RECOVERY_SCHEMA",
+  );
+});
+
+test("fix1 reconciles legacy HTML and Markdown sources against their captured row", () => {
+  const f = fixture(),
+    url = `https://${f.context.mediaTarget.host}/image.png`;
+  f.captures.articles[0].content = `<img src="${url}"> ![photo](${url})`;
+  recapture(f, "articles");
+  const entry = f.record.media.referenceManifest.find((r) => r.rowId === "article-1")!;
+  entry.rowSha256 = fingerprint(f.captures.articles[0]);
+  entry.references.unshift({ ...entry.references[0], path: "/content" });
+  expect(recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now).record.status).toBe(
+    "OFFLINE_EVIDENCE_VALIDATED",
+  );
+  entry.references[0].value = `https://${f.context.mediaTarget.host}/substituted.png`;
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_MANIFEST",
+  );
+});
+
+test("fix1 external/static reference exceptions require exact reviewed context values", () => {
+  const f = fixture(),
+    value = "/public/static-cover.png";
+  f.captures.articles[0].cover_image = value;
+  recapture(f, "articles");
+  const entry = f.record.media.referenceManifest.find((r) => r.rowId === "article-1")!;
+  entry.rowSha256 = fingerprint(f.captures.articles[0]);
+  entry.references = [
+    {
+      path: "/cover_image",
+      value,
+      storeId: null,
+      objectKey: null,
+      disposition: "reviewed-external",
+    },
+  ];
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_UNREVIEWED_EXTERNAL",
+  );
+  f.context.excludedReferenceValues = [value];
+  f.record.contextSha256 = fingerprint(f.context);
+  expect(
+    recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now).record
+      .productionAuthorized,
+  ).toBe(false);
+  const missing = `https://${f.context.mediaTarget.host}/missing.png`;
+  f.captures.articles[0].cover_image = missing;
+  recapture(f, "articles");
+  f.context.excludedReferenceValues.push(missing);
+  f.record.contextSha256 = fingerprint(f.context);
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_OBJECT",
+  );
+});
+
+test("fix1 source URL host and prefix cannot be silently reassigned", () => {
+  const f = fixture();
+  f.context.mediaTarget.host = "another.public.blob.vercel-storage.com";
+  f.record.contextSha256 = fingerprint(f.context);
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_UNREVIEWED_EXTERNAL",
+  );
+  const g = fixture();
+  g.record.media.referenceManifest[0].references[0].storeId = "store_other";
+  expect(() => recovery.createRecoveryReceipt(g.seal(), g.context, g.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_MANIFEST",
+  );
+});
+
+test("fix1 cannot exclude a protocol-relative source-host reference as external", () => {
+  const f = fixture(),
+    value = `//${f.context.mediaTarget.host}/missing.png`;
+  f.captures.articles[0].cover_image = value;
+  recapture(f, "articles");
+  f.context.excludedReferenceValues = [value];
+  f.record.contextSha256 = fingerprint(f.context);
+  const entry = f.record.media.referenceManifest.find((r) => r.rowId === "article-1")!;
+  entry.rowSha256 = fingerprint(f.captures.articles[0]);
+  entry.references = [
+    {
+      path: "/cover_image",
+      value,
+      storeId: null,
+      objectKey: null,
+      disposition: "reviewed-external",
+    },
+  ];
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_OBJECT",
+  );
+});
+
+test("fix1 rejects v1 envelopes and noncanonical or incomplete captured row arrays", () => {
+  const old = fixture();
+  old.context.format = "blog-recovery-context-v1";
+  expect(() => recovery.createRecoveryReceipt(old.seal(), old.context, old.artifacts, now)).toThrow(
+    "RECOVERY_SCHEMA",
+  );
+  for (const change of [
+    (rows: Record<string, unknown>[]) => rows.reverse(),
+    (rows: Record<string, unknown>[]) => {
+      rows[1] = structuredClone(rows[0]);
+    },
+  ]) {
+    const f = fixture();
+    change(f.captures.media_assets);
+    recapture(f, "media_assets");
+    expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+      "RECOVERY_REFERENCE_CAPTURE_BINDING",
+    );
+  }
+  const g = fixture();
+  g.artifacts.delete(g.record.media.uploads.rowsSha256);
+  expect(() => recovery.createRecoveryReceipt(g.seal(), g.context, g.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_CAPTURE_MISSING",
+  );
 });
 
 const mutations: [string, (f: ReturnType<typeof fixture>) => void][] = [
@@ -567,6 +1035,8 @@ test("explicit prefix isolation succeeds only with a complete collision-free inv
     prefix: "drill/",
   };
   f.context.destination = structuredClone(d);
+  f.context.cleanupIdentity.destination = structuredClone(d);
+  f.context.cleanupIdentity.deletedKeys = ["drill/image.png"];
   f.record.media.restore.destination = structuredClone(d);
   f.record.cleanup.destination = structuredClone(d);
   f.record.media.restore.objects[0].key = "drill/image.png";
