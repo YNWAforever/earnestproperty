@@ -1,5 +1,7 @@
 # Production writer control register and approval packet
 
+Task 5's register and validator are **implementation-ready locally**; no live
+fence activation, drain, per-writer denial proof or reopening has occurred.
 The concrete task-5 deliverables are the sanitized
 [36-control register](writer-control-register.json) and the
 [separate activation, bounded acceptance-access and reopening requests](writer-fence-approval-request.md).

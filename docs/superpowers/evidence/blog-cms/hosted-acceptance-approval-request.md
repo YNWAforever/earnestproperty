@@ -1,6 +1,6 @@
 # Isolated hosted acceptance: exact resource approval request
 
-Status: **DRAFT — NOT AUTHORIZATION. Hosted execution NOT_RUN.**
+Status: **runner implementation-ready locally; DRAFT — NOT AUTHORIZATION. Hosted execution NOT_RUN.** The task-7 pure guards and loopback Chromium/axe regressions do not establish real identity/provider bindings, native hosted cleanup, production CDN/cache behavior or hosted acceptance.
 
 This request accompanies Task 7 on `codex/blog-cms-release`, starting from
 `e33323cf862551d4e341456f36aaf1a9751c75f7`. The deployment and runner must use the

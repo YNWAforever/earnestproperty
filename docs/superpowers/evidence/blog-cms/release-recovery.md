@@ -1,6 +1,6 @@
 # Production backup and recovery package
 
-Status: **metadata verified; fresh backup and restore proof outstanding**. Production unchanged.
+Status: **offline evidence validation implementation-ready; external recovery/media evidence BLOCKED**. Historical metadata below was read-only. No fresh production snapshot, isolated restore, media copy or cleanup has occurred; production is unchanged.
 
 Read-only provider metadata collected on 2026-11-05 reports project `dawn-meadow-79190048`, production branch `br-polished-sea-aom4i1ct`, PostgreSQL 18, history retention **21,600 seconds (six hours)** and an empty snapshot schedule. Eight manual snapshots exist, all dated October 26; newest is `snap-wispy-flower-aos73lyq`, created 2026-10-26T12:54:18Z. Neither their presence nor the retention setting proves this release can be restored.
 
