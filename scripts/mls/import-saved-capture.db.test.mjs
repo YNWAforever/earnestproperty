@@ -76,10 +76,12 @@ test("local PostgreSQL: 52 creates + 3 in-place updates, sold skipped, owned pho
         }
       }
       // Exercise only the review-only schema guard in an isolated schema, not the owner policy seed.
-      const preparedSql = await readFile(
-        new URL("./sql/prepare-28hse-saved-import-policy.sql", import.meta.url),
-        "utf8",
-      );
+      const preparedSql = (
+        await readFile(
+          new URL("./sql/prepare-28hse-saved-import-policy.sql", import.meta.url),
+          "utf8",
+        )
+      ).replace(/\r\n/g, "\n");
       const guardDdl = preparedSql
         .split("-- BEGIN PARSER GUARD DDL (also exercised only in disposable-schema tests)\n")[1]
         .split("-- END PARSER GUARD DDL")[0];

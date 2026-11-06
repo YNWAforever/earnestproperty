@@ -1,3 +1,4 @@
+import { BlogManager } from "@/components/admin/blog/BlogManager";
 import { useStaffSession } from "@/components/admin/staff-session";
 import { hasPermission } from "@/lib/control-plane/role-permissions";
 import { YouTubeSyncStatusPanel } from "@/components/admin/YouTubeSyncStatus";
@@ -95,8 +96,6 @@ import {
 } from "@/lib/neon/admin-data";
 import type {
   AdminAiKnowledgeStatus,
-  AdminArticleCmsRow,
-  AdminArticleInput,
   AdminCmsData,
   AdminCmsVideoInput,
   AdminCmsVideoRow,
@@ -165,20 +164,6 @@ const emptyEstate: AdminEstateInput = {
   seo_description: null,
 };
 
-const emptyArticle: AdminArticleInput = {
-  slug: "",
-  title: "",
-  excerpt: null,
-  content: null,
-  cover_image: null,
-  category: null,
-  reading_minutes: 5,
-  published: false,
-  published_at: null,
-  seo_title: null,
-  seo_description: null,
-};
-
 const emptyFaq: AdminFaqInput = {
   scope: "general",
   question: "",
@@ -230,7 +215,6 @@ function AdminCms({ identity }: { identity: string }) {
   const activeTab = search.tab ?? "estates";
   const [saving, setSaving] = useState(false);
   const [editingEstate, setEditingEstate] = useState<AdminEstateInput | null>(null);
-  const [editingArticle, setEditingArticle] = useState<AdminArticleInput | null>(null);
   const [editingFaq, setEditingFaq] = useState<AdminFaqInput | null>(null);
   const [cmsVideos, setCmsVideos] = useState<AdminCmsVideoRow[] | null>(null);
   const [editingCmsVideo, setEditingCmsVideo] = useState<AdminCmsVideoInput | null>(null);
@@ -258,20 +242,13 @@ function AdminCms({ identity }: { identity: string }) {
     string,
     CmsPayloadValue
   > | null>(null);
-  const [articleRevisions, setArticleRevisions] = useState<CmsRevisionSummary[] | null>(null);
   const estateLoadSequence = useRef(0);
-  const articleLoadSequence = useRef(0);
   const [estateEdit, setEstateEdit] = useState<CmsEditState<
-    Record<string, CmsPayloadValue>
-  > | null>(null);
-  const [articleEdit, setArticleEdit] = useState<CmsEditState<
     Record<string, CmsPayloadValue>
   > | null>(null);
   const [draftRows, setDraftRows] = useState<CmsHubRow[]>([]);
   const [publishing, setPublishing] = useState(false);
-  const [archiving, setArchiving] = useState<{ type: "estate" | "article"; id: string } | null>(
-    null,
-  );
+  const [archiving, setArchiving] = useState<{ type: "estate"; id: string } | null>(null);
   const [deletingFaq, setDeletingFaq] = useState<AdminFaqCmsRow | null>(null);
   const [faqDeleting, setFaqDeleting] = useState(false);
   const [faqDeleteError, setFaqDeleteError] = useState<string | null>(null);
@@ -305,6 +282,12 @@ function AdminCms({ identity }: { identity: string }) {
       const sequence = ++cmsRequest.current;
 
       if (!isWorkspaceCurrent()) return;
+      if (activeTab === "articles") {
+        setData((current) => current ?? { estates: [], articles: [], faqs: [], faqGroups: [] });
+        setDraftRows([]);
+        setError(null);
+        return;
+      }
       const page = await fetchAdminPage({
         data: {
           resource: activeTab,
@@ -397,7 +380,6 @@ function AdminCms({ identity }: { identity: string }) {
   }, [refreshKnowledgeStatus, user]);
 
   const filteredEstates = data?.estates ?? [];
-  const filteredArticles = data?.articles ?? [];
   const filteredVideos = cmsVideos ?? [];
   const filteredMediaAssets = mediaAssets ?? [];
 
@@ -650,172 +632,6 @@ function AdminCms({ identity }: { identity: string }) {
 
       if (!isWorkspaceCurrent()) return;
       await refreshAfterWrite("屋苑已封存");
-      if (!isWorkspaceCurrent()) return;
-    } catch (err) {
-      if (!isWorkspaceCurrent()) return;
-
-      toast.error(errorText(err));
-    } finally {
-      if (isWorkspaceCurrent()) {
-        setSaving(false);
-      }
-    }
-  }
-
-  async function loadArticleRevisions(resourceId: string | undefined) {
-    const sequence = ++articleLoadSequence.current;
-    if (!resourceId) {
-      setArticleRevisions(null);
-      setArticleEdit(null);
-      return;
-    }
-    try {
-      if (!isWorkspaceCurrent()) return;
-      const { revisions, payload, editState } = await fetchAdminCmsEditor({
-        data: { resourceType: "article", resourceId },
-      });
-      if (!isWorkspaceCurrent()) return;
-
-      if (sequence !== articleLoadSequence.current) return;
-      setArticleEdit(editState);
-      if (payload)
-        setEditingArticle({ ...emptyArticle, ...payload, id: resourceId } as AdminArticleInput);
-      setArticleRevisions(revisions);
-    } catch {
-      if (!isWorkspaceCurrent()) return;
-
-      if (sequence === articleLoadSequence.current) toast.error("未能載入完整草稿，請重試。");
-    }
-  }
-
-  async function handleSaveArticleDraft(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!editingArticle) return;
-    if (!editingArticle.slug.trim() || !editingArticle.title.trim()) {
-      toast.error("請填寫文章 slug 及標題");
-      return;
-    }
-
-    const sequence = articleLoadSequence.current;
-    setSaving(true);
-    try {
-      if (!isWorkspaceCurrent()) return;
-      const result = await callCms(() =>
-        saveAdminCmsDraft({
-          data: {
-            resourceType: "article",
-            resourceId: editingArticle.id,
-            payload: { ...editingArticle },
-            basePublishedVersion: articleEdit?.basePublishedVersion ?? null,
-            draftRevisionId: articleEdit?.draftRevisionId ?? null,
-            draftEditVersion: articleEdit?.draftEditVersion ?? null,
-          },
-        }),
-      );
-      if (!isWorkspaceCurrent()) return;
-
-      if (sequence === articleLoadSequence.current) {
-        setArticleEdit(result.editState);
-        setEditingArticle((current) => (current ? { ...current, id: result.resourceId } : current));
-      }
-      void refreshCmsData().catch(() => undefined);
-      toast.success("草稿已儲存");
-    } catch (err) {
-      if (!isWorkspaceCurrent()) return;
-
-      toast.error(errorText(err));
-    } finally {
-      if (isWorkspaceCurrent()) {
-        setSaving(false);
-      }
-    }
-  }
-
-  async function handlePublishArticle() {
-    if (!editingArticle) return;
-    setPublishing(true);
-    try {
-      if (
-        !articleEdit?.draftRevisionId ||
-        Object.entries(editingArticle).some(
-          ([key, value]) =>
-            key !== "id" &&
-            JSON.stringify(value) !==
-              JSON.stringify(
-                ({ ...emptyArticle, ...articleEdit.payload } as Record<string, unknown>)[key],
-              ),
-        )
-      ) {
-        throw new Error("請先儲存草稿並核對內容後發布。");
-      }
-      const draft = { resourceId: articleEdit.resourceId, revisionId: articleEdit.draftRevisionId };
-
-      if (!isWorkspaceCurrent()) return;
-      await callCms(() =>
-        publishAdminCmsRevision({
-          data: {
-            resourceType: "article",
-            resourceId: draft.resourceId,
-            revisionId: draft.revisionId,
-            basePublishedVersion: articleEdit.basePublishedVersion,
-            draftEditVersion: articleEdit.draftEditVersion,
-          },
-        }),
-      );
-      if (!isWorkspaceCurrent()) return;
-
-      setEditingArticle(null);
-
-      if (!isWorkspaceCurrent()) return;
-      await refreshAfterWrite("文章已發布");
-      if (!isWorkspaceCurrent()) return;
-    } catch (err) {
-      if (!isWorkspaceCurrent()) return;
-
-      toast.error(errorText(err));
-    } finally {
-      if (isWorkspaceCurrent()) {
-        setPublishing(false);
-      }
-    }
-  }
-
-  async function handleRestoreArticleRevision(revisionId: string) {
-    setSaving(true);
-    try {
-      if (!isWorkspaceCurrent()) return;
-      const result = await callCms(() => restoreAdminCmsRevision({ data: { revisionId } }));
-      if (!isWorkspaceCurrent()) return;
-
-      if (!isWorkspaceCurrent()) return;
-      await loadArticleRevisions(result.resourceId);
-      if (!isWorkspaceCurrent()) return;
-
-      toast.success("已還原為新草稿，請檢查內容後發布");
-    } catch (err) {
-      if (!isWorkspaceCurrent()) return;
-
-      toast.error(errorText(err));
-    } finally {
-      if (isWorkspaceCurrent()) {
-        setSaving(false);
-      }
-    }
-  }
-
-  async function handleArchiveArticle(articleId: string) {
-    setSaving(true);
-    try {
-      if (!isWorkspaceCurrent()) return;
-      await callCms(() =>
-        archiveAdminCmsResource({ data: { resourceType: "article", resourceId: articleId } }),
-      );
-      if (!isWorkspaceCurrent()) return;
-
-      setArchiving(null);
-
-      if (!isWorkspaceCurrent()) return;
-      await refreshAfterWrite("文章已封存");
       if (!isWorkspaceCurrent()) return;
     } catch (err) {
       if (!isWorkspaceCurrent()) return;
@@ -1223,20 +1039,7 @@ function AdminCms({ identity }: { identity: string }) {
               <Plus className="h-4 w-4" />
               新增屋苑
             </Button>
-          ) : activeTab === "articles" ? (
-            <Button
-              onClick={() => {
-                setArticleEdit(null);
-                ++articleLoadSequence.current;
-                setArticleRevisions(null);
-                setEditingArticle({ ...emptyArticle });
-                setArticleRevisions(null);
-              }}
-            >
-              <Plus className="h-4 w-4" />
-              新增文章
-            </Button>
-          ) : activeTab === "videos" ? (
+          ) : activeTab === "articles" ? null : activeTab === "videos" ? (
             <Button onClick={() => setEditingCmsVideo({ ...emptyCmsVideo })}>
               <Plus className="h-4 w-4" />
               新增影片
@@ -1288,34 +1091,35 @@ function AdminCms({ identity }: { identity: string }) {
                 variant="outline"
                 onClick={() => {
                   if (row.resourceType === "estate") void loadEstateRevisions(row.resourceId);
-                  else void loadArticleRevisions(row.resourceId);
                 }}
               >
                 草稿：{row.title}
               </Button>
             ))}
           </div>
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <span>
-              {activeSearch.trim() ? "符合搜尋" : "目前分類"}共 {cmsTotal} 項（包括草稿）
-            </span>
-            <Button
-              variant="outline"
-              disabled={!cmsCursor}
-              onClick={() => void refreshCmsData().catch((err) => setError(errorText(err)))}
-            >
-              第一頁
-            </Button>
-            <Button
-              variant="outline"
-              disabled={!cmsNextCursor}
-              onClick={() =>
-                void refreshCmsData(cmsNextCursor).catch((err) => setError(errorText(err)))
-              }
-            >
-              下一頁
-            </Button>
-          </div>
+          {activeTab !== "articles" ? (
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span>
+                {activeSearch.trim() ? "符合搜尋" : "目前分類"}共 {cmsTotal} 項（包括草稿）
+              </span>
+              <Button
+                variant="outline"
+                disabled={!cmsCursor}
+                onClick={() => void refreshCmsData().catch((err) => setError(errorText(err)))}
+              >
+                第一頁
+              </Button>
+              <Button
+                variant="outline"
+                disabled={!cmsNextCursor}
+                onClick={() =>
+                  void refreshCmsData(cmsNextCursor).catch((err) => setError(errorText(err)))
+                }
+              >
+                下一頁
+              </Button>
+            </div>
+          ) : null}
           <Tabs
             value={activeTab}
             onValueChange={(tab) => {
@@ -1434,102 +1238,7 @@ function AdminCms({ identity }: { identity: string }) {
             </TabsContent>
 
             <TabsContent value="articles">
-              <Card>
-                <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <CardTitle as="h2" className="text-base">
-                      文章編輯
-                    </CardTitle>
-                    <CardDescription>管理文章內容、分類、發布狀態及 SEO。</CardDescription>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <TableSearch
-                      label="搜尋標題、slug 或分類"
-                      value={searchByTab.articles}
-                      onChange={(value) =>
-                        setSearchByTab((current) => ({ ...current, articles: value }))
-                      }
-                    />
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0">
-                  <RowCapNotice
-                    shown={filteredArticles.length}
-                    loaded={data?.articles.length ?? 0}
-                    limit={CMS_ROW_LIMITS.articles}
-                    label="文章"
-                  />
-                  {filteredArticles.length ? (
-                    <Table containerLabel="文章內容">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>標題</TableHead>
-                          <TableHead>分類</TableHead>
-                          <TableHead>狀態</TableHead>
-                          <TableHead>SEO 標題</TableHead>
-                          <TableHead className="w-28 text-right">操作</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredArticles.map((article) => (
-                          <TableRow key={article.id}>
-                            <TableCell>
-                              <p className="font-medium">{article.title}</p>
-                              <p className="text-xs text-muted-foreground">{article.slug}</p>
-                            </TableCell>
-                            <TableCell>{article.category ?? "—"}</TableCell>
-                            <TableCell>
-                              <Badge variant={article.published ? "default" : "outline"}>
-                                {article.published ? "已發布" : "草稿"}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="max-w-xs truncate">
-                              {article.seo_title ?? "—"}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  void loadArticleRevisions(article.id);
-                                }}
-                              >
-                                <Pencil className="h-4 w-4" />
-                                編輯
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setArchiving({ type: "article", id: article.id })}
-                              >
-                                <Archive className="h-4 w-4" />
-                                封存
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : (
-                    <div className="p-6">
-                      {searchByTab.articles.trim() ? (
-                        <NoSearchMatch
-                          label="文章"
-                          query={searchByTab.articles}
-                          onClear={() =>
-                            setSearchByTab((current) => ({ ...current, articles: "" }))
-                          }
-                        />
-                      ) : (
-                        <AdminEmptyState
-                          title="未有文章"
-                          description="新增文章後即可管理內容及發布狀態。"
-                        />
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+              <BlogManager canPublish={canReadYouTubeStatus} />
             </TabsContent>
 
             <TabsContent value="videos">
@@ -2028,29 +1737,6 @@ function AdminCms({ identity }: { identity: string }) {
             onPublish={handlePublishEstate}
             onRestoreRevision={handleRestoreEstateRevision}
           />
-          <ArticleDialog
-            article={editingArticle}
-            savedPayload={
-              articleEdit && articleEdit.resourceId === editingArticle?.id
-                ? { ...emptyArticle, ...articleEdit?.payload }
-                : null
-            }
-            fingerprintValues={articleFingerprintValues(
-              editingArticle,
-              data?.articles.find((item) => item.id === editingArticle?.id) ?? null,
-            )}
-            saving={saving}
-            publishing={publishing}
-            revisions={articleRevisions}
-            onChange={setEditingArticle}
-            onClose={() => {
-              ++articleLoadSequence.current;
-              setEditingArticle(null);
-            }}
-            onSubmit={handleSaveArticleDraft}
-            onPublish={handlePublishArticle}
-            onRestoreRevision={handleRestoreArticleRevision}
-          />
           <CmsVideoDialog
             video={editingCmsVideo}
             fingerprintValues={cmsVideoFingerprintValues(
@@ -2090,7 +1776,6 @@ function AdminCms({ identity }: { identity: string }) {
             onConfirm={() => {
               if (!archiving) return;
               if (archiving.type === "estate") void handleArchiveEstate(archiving.id);
-              else void handleArchiveArticle(archiving.id);
             }}
           />
           <AdminConfirmDialog
@@ -2554,233 +2239,6 @@ function EstateDialog({
             <CmsPublishFooter
               uploading={imageUploading}
               formId="cms-estate-form"
-              saving={saving}
-              publishing={publishing}
-              dirty={isDirty}
-              hasSaved={!!savedPayload}
-              onClose={requestClose}
-              onPublish={() => setConfirmingPublish(true)}
-            />
-          ) : null}
-          <AdminConfirmDialog
-            open={confirmingPublish}
-            onOpenChange={setConfirmingPublish}
-            title="確認發布內容"
-            description="此操作會將已儲存草稿公開。請先與已發布版本比較並核對內容。"
-            confirmLabel="確認發布"
-            disabled={imageUploading || isDirty || !savedPayload}
-            isPending={publishing}
-            onConfirm={() => {
-              setConfirmingPublish(false);
-              onPublish();
-            }}
-          />
-        </DialogContent>
-      </Dialog>
-      {dialog}
-      {leaveGuard}
-    </>
-  );
-}
-
-function ArticleDialog({
-  article,
-  savedPayload,
-  saving,
-  publishing,
-  revisions,
-  fingerprintValues,
-  onChange,
-  onClose,
-  onSubmit,
-  onPublish,
-  onRestoreRevision,
-}: {
-  article: AdminArticleInput | null;
-  savedPayload: Record<string, unknown> | null;
-  saving: boolean;
-  publishing: boolean;
-  revisions: CmsRevisionSummary[] | null;
-  fingerprintValues: Record<string, unknown>;
-  onChange: (article: AdminArticleInput | null) => void;
-  onClose: () => void;
-  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
-  onPublish: () => void;
-  onRestoreRevision: (revisionId: string) => void;
-}) {
-  const openingDirty = useEditingDirty(article);
-  const isDirty = article
-    ? savedPayload
-      ? cmsEditorHasChanges({ ...article }, savedPayload)
-      : openingDirty
-    : false;
-  const [imageUploading, setImageUploading] = useState(false);
-  const [confirmingPublish, setConfirmingPublish] = useState(false);
-  const canRestore = useCmsCanRestore();
-  const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
-  const openingArticle = useOpeningSnapshot(article);
-  const { requestClose: requestDirtyClose, dialog } = useDirtyCloseGuard({
-    isDirty: isDirty || imageUploading,
-    onClose,
-    description: "你未儲存的文章修改會遺失。",
-  });
-  const { dialog: leaveGuard } = useRouteLeaveGuard(isDirty || imageUploading);
-  function requestClose() {
-    if (imageUploading) {
-      toast.info("圖片上載中，請等待完成後再關閉。其他欄位仍可編輯。");
-      return;
-    }
-    requestDirtyClose();
-  }
-  return (
-    <>
-      <Dialog open={!!article} onOpenChange={(open) => (!open ? requestClose() : undefined)}>
-        <DialogContent className="max-h-[90dvh] flex flex-col overflow-hidden sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{article?.id ? "文章編輯" : "新增文章"}</DialogTitle>
-            <DialogDescription>
-              儲存草稿不會影響公開頁面，按「發布」才會將內容公開。
-            </DialogDescription>
-          </DialogHeader>
-          {article ? (
-            <div className="min-h-0 overflow-y-auto space-y-6 pr-1">
-              <form
-                id="cms-article-form"
-                className="grid gap-4"
-                onSubmit={(event) => {
-                  if (imageUploading) {
-                    event.preventDefault();
-                    return;
-                  }
-                  onSubmit(event);
-                }}
-              >
-                <CmsPublicationCompare
-                  resourceType="article"
-                  resourceId={article.id}
-                  localPayload={{ ...article }}
-                />
-                <fieldset className="grid gap-4 rounded-md border p-4 md:grid-cols-2">
-                  <legend className="px-1 font-semibold">基本資料</legend>
-                  <p className="text-xs text-muted-foreground md:col-span-full">
-                    網址代稱請使用英文小寫、數字及連字號，例如
-                    sea-view。修改現有代稱會影響頁面網址。
-                  </p>
-                  <TextField
-                    label="網址代稱（Slug）"
-                    value={article.slug}
-                    onChange={(value) => onChange({ ...article, slug: value })}
-                    required
-                  />
-                  <TextField
-                    label="標題"
-                    value={article.title}
-                    onChange={(value) => onChange({ ...article, title: value })}
-                    required
-                  />
-                  <TextField
-                    label="分類"
-                    value={article.category ?? ""}
-                    onChange={(value) => onChange({ ...article, category: nullIfBlank(value) })}
-                  />
-                  <NumberField
-                    label="閱讀分鐘"
-                    value={article.reading_minutes}
-                    onChange={(value) => onChange({ ...article, reading_minutes: value })}
-                  />
-                </fieldset>
-                <fieldset className="grid gap-4 rounded-md border p-4">
-                  <legend className="px-1 font-semibold">頁面內容</legend>
-                  <TextAreaField
-                    label="摘要"
-                    value={article.excerpt ?? ""}
-                    onChange={(value) => onChange({ ...article, excerpt: nullIfBlank(value) })}
-                    rows={3}
-                  />
-                  <TextAreaField
-                    label="內容"
-                    value={article.content ?? ""}
-                    onChange={(value) => onChange({ ...article, content: nullIfBlank(value) })}
-                    rows={8}
-                  />
-                </fieldset>
-                <fieldset className="grid gap-4 rounded-md border p-4">
-                  <legend className="px-1 font-semibold">圖片</legend>
-                  <CmsImageField
-                    onUploadingChange={setImageUploading}
-                    label="封面圖片"
-                    ownerType="article"
-                    value={article.cover_image ?? ""}
-                    onChange={(value) => onChange({ ...article, cover_image: nullIfBlank(value) })}
-                  />
-                </fieldset>
-                <fieldset className="grid gap-4 rounded-md border p-4">
-                  <legend className="px-1 font-semibold">搜尋結果外觀</legend>
-                  <TextField
-                    label="SEO 標題"
-                    value={article.seo_title ?? ""}
-                    onChange={(value) => onChange({ ...article, seo_title: nullIfBlank(value) })}
-                  />
-                  <TextAreaField
-                    label="SEO 描述"
-                    value={article.seo_description ?? ""}
-                    onChange={(value) =>
-                      onChange({ ...article, seo_description: nullIfBlank(value) })
-                    }
-                    rows={3}
-                  />
-                </fieldset>
-              </form>
-              <details className="rounded-md border p-3">
-                <summary className="cursor-pointer font-medium">AI 內容建議</summary>
-                <AdminContentCopilot
-                  resourceType="article"
-                  resourceId={article.id ?? null}
-                  fingerprintValues={fingerprintValues}
-                  values={{
-                    title: article.title,
-                    excerpt: article.excerpt,
-                    content: article.content,
-                    seo_title: article.seo_title,
-                    seo_description: article.seo_description,
-                  }}
-                  onApply={(patch) => onChange({ ...article, ...patch })}
-                />
-              </details>
-              <CmsRevisionHistory
-                resourceId={article.id}
-                revisions={revisions}
-                canRestore={canRestore}
-                onRequestRestore={(revision) => {
-                  if (imageUploading) {
-                    toast.info("圖片上載中，請等待完成後再還原版本。");
-                    return;
-                  }
-                  setPendingRestore(revision);
-                }}
-              />
-              <CmsRestoreConfirm
-                resource="article"
-                revision={pendingRestore}
-                savedPayload={savedPayload}
-                openingForm={openingArticle}
-                form={{ ...article }}
-                savedDraft={revisions?.find((revision) => revision.state === "draft")}
-                isPending={saving}
-                onOpenChange={(open) => {
-                  if (!open) setPendingRestore(null);
-                }}
-                onConfirm={(revisionId) => {
-                  setPendingRestore(null);
-                  onRestoreRevision(revisionId);
-                }}
-              />
-            </div>
-          ) : null}
-          {article ? (
-            <CmsPublishFooter
-              uploading={imageUploading}
-              formId="cms-article-form"
               saving={saving}
               publishing={publishing}
               dirty={isDirty}
@@ -3337,27 +2795,6 @@ function estateFingerprintValues(
   };
 }
 
-function articleFingerprintValues(
-  article: AdminArticleInput | null,
-  persisted: AdminArticleCmsRow | null,
-): Record<string, unknown> {
-  if (!article) return {};
-  return {
-    id: article.id ?? "",
-    title: article.title,
-    excerpt: article.excerpt,
-    content: article.content,
-    seo_title: article.seo_title,
-    seo_description: article.seo_description,
-    slug: article.slug,
-    category: article.category,
-    reading_minutes: article.reading_minutes,
-    published: article.published,
-    published_at: article.published_at,
-    updated_at: persisted?.updated_at ?? null,
-  };
-}
-
 function faqFingerprintValues(
   faq: AdminFaqInput | null,
   persisted: AdminFaqCmsRow | null,
@@ -3408,23 +2845,6 @@ function estateToInput(estate: AdminEstateCmsRow): AdminEstateInput {
     facilities: estate.facilities,
     seo_title: estate.seo_title,
     seo_description: estate.seo_description,
-  };
-}
-
-function articleToInput(article: AdminArticleCmsRow): AdminArticleInput {
-  return {
-    id: article.id,
-    slug: article.slug,
-    title: article.title,
-    excerpt: article.excerpt,
-    content: article.content,
-    cover_image: article.cover_image,
-    category: article.category,
-    reading_minutes: article.reading_minutes,
-    published: article.published,
-    published_at: article.published_at,
-    seo_title: article.seo_title,
-    seo_description: article.seo_description,
   };
 }
 

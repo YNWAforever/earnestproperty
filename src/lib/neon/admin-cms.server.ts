@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { validateLegacyArticlePayload } from "../blog/write-schemas";
 import { invalidatePublicEstateOptions } from "./public-estate-options-cache";
 
 import { getRequest } from "@tanstack/react-start/server";
@@ -47,8 +48,7 @@ function validatePayload(resourceType: CmsResourceType, payload: Record<string, 
     nonEmpty(payload.name_zh, "name_zh");
     nonEmpty(payload.district_slug, "district_slug");
   } else if (resourceType === "article") {
-    nonEmpty(payload.slug, "slug");
-    nonEmpty(payload.title, "title");
+    validateLegacyArticlePayload(payload);
   } else if (resourceType === "video") {
     nonEmpty(payload.title, "title");
     nonEmpty(payload.video_url, "video_url");
@@ -275,10 +275,19 @@ async function mutateCms(
     draftEditVersion?: number | null;
     revisionId?: string;
     draftRevisionId?: string | null;
+    articleTokens?: import("./admin-cms.types").CmsArticleMutationTokens;
   },
   actor: StaffAccess,
 ) {
   assertResourceType(input.resourceType);
+  if (input.resourceType === "article" && (op === "publish" || op === "restore")) {
+    const [source] = await queryRows(
+      "SELECT payload FROM cms_content_revisions WHERE id=$1 AND resource_type='article' AND resource_id=$2",
+      [input.revisionId, input.resourceId],
+    );
+    if (!source) throw new Error("CMS_REVISION_NOT_FOUND");
+    validateLegacyArticlePayload(payloadRecord(source.payload));
+  }
   const rows = await queryRows(
     "SELECT cms_mutate($1, $2, $3::uuid, $4::uuid, $5::jsonb, $6::integer, $7::integer, $8::uuid) AS revision",
     [
@@ -286,7 +295,11 @@ async function mutateCms(
       input.resourceType,
       input.resourceId,
       actor.staffId,
-      input.payload ? JSON.stringify(input.payload) : null,
+      input.resourceType === "article" && (op === "restore" || op === "archive")
+        ? JSON.stringify(input.articleTokens ?? null)
+        : input.payload
+          ? JSON.stringify(input.payload)
+          : null,
       input.basePublishedVersion ?? null,
       input.draftEditVersion ?? null,
       input.revisionId ?? input.draftRevisionId ?? null,
@@ -345,7 +358,7 @@ export async function publishAdminCmsRevision(input: CmsPublishInput, request: R
 }
 export async function restoreAdminCmsRevision(input: CmsRestoreInput, request: Request) {
   const actor = await requireStaffAccess(request, ["admin", "manager"]);
-  // Identity only; the locked SQL operation re-reads the historical snapshot and current publication.
+  // Identity lookup is read-only; SQL checks the caller's draft/public snapshot under lock.
   const [source] = await queryRows(
     "SELECT resource_type, resource_id FROM cms_content_revisions WHERE id = $1 LIMIT 1",
     [input.revisionId],
@@ -359,6 +372,7 @@ export async function restoreAdminCmsRevision(input: CmsRestoreInput, request: R
         resourceType: source.resource_type,
         resourceId: stringOrEmpty(source.resource_id),
         revisionId: input.revisionId,
+        articleTokens: input.articleTokens,
       },
       actor,
     ),

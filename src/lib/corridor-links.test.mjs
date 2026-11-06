@@ -70,12 +70,11 @@ test("footer includes the hub and Sham Tseng segment exactly once alongside area
 });
 
 // Route/component source wiring complements the pure derivation tests above.
-test("blog and footer render derived corridor links through SiteLink", () => {
+test("blog uses the safe article renderer and footer uses SiteLink for derived corridor links", () => {
   const blog = readFileSync("src/routes/blog_.$slug.tsx", "utf8");
   const footer = readFileSync("src/components/site/SiteFooter.tsx", "utf8");
   assert.match(blog, /blogCorridorLinks\(\s*compareEstates\.map/);
-  assert.match(blog, /relatedLinks\.map/);
-  assert.match(blog, /<SiteLink[\s\S]*?href=\{link\.href\}/);
+  assert.match(blog, /<ArticleBody body=\{article.body\} links=\{relatedLinks\}/);
   assert.match(footer, /corridorFooterLinks\(\)\.map/);
   assert.match(footer, /<SiteLink href=\{group\.href\}/);
 });

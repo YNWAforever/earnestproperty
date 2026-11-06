@@ -78,13 +78,25 @@ async function runCmsSuite(sql, owned) {
       revision = null,
       type = "article",
     } = {},
-  ) =>
-    (
+  ) => {
+    if (type === "article" && ["restore", "archive"].includes(op)) {
+      const [row] = await query("SELECT blog_article_document($1::uuid,$2::uuid) AS d", [
+        id,
+        actor,
+      ]);
+      payload = {
+        requestId: randomUUID(),
+        expectedVersion: row.d.version,
+        editState: row.d.editState,
+      };
+    }
+    return (
       await query(
         "SELECT cms_mutate($1,$2,$3::uuid,$4::uuid,$5::jsonb,$6::integer,$7::integer,$8::uuid) AS r",
         [op, type, id, actor, JSON.stringify(payload), base, edit, revision],
       )
     )[0].r;
+  };
   const publish = (d, actor = admin) =>
     mutate("publish", d.resource_id, actor, {
       base: d.base_published_version,
@@ -136,7 +148,10 @@ async function runCmsSuite(sql, owned) {
             else if (op === "restore") {
               await publish(a);
               await mutate("restore", fresh, actor, { revision: a.id });
-            } else await mutate("archive", fresh, actor);
+            } else {
+              await publish(a, actor);
+              await mutate("archive", fresh, actor);
+            }
           }
         }
       }
@@ -254,18 +269,18 @@ async function runCmsSuite(sql, owned) {
       await assert.rejects(publish(older), /CMS_REVISION_CONFLICT/);
     });
     await check(
-      "archive of draft-only resource invalidates every previously issued save and publish token",
+      "article draft-only archive refuses to share or retire independently owned drafts",
       async () => {
         const id = randomUUID();
         const a = await mutate("save", id);
         const b = await mutate("save", id, manager);
-        await mutate("archive", id);
+        await assert.rejects(mutate("archive", id), /CMS_RESOURCE_NOT_FOUND/);
         for (const d of [a, b]) {
-          await assert.rejects(publish(d), /CMS_REVISION_CONFLICT/);
-          await assert.rejects(
-            mutate("save", id, d.created_by, { revision: d.id, edit: d.draft_edit_version }),
-            /CMS_REVISION_CONFLICT/,
-          );
+          const saved = await mutate("save", id, d.created_by, {
+            revision: d.id,
+            edit: d.draft_edit_version,
+          });
+          assert.equal(saved.id, d.id);
         }
         assert.equal(
           (
@@ -274,7 +289,7 @@ async function runCmsSuite(sql, owned) {
               [id],
             )
           ).length,
-          0,
+          2,
         );
         assert.equal((await query("SELECT * FROM articles WHERE id=$1", [id])).length, 0);
       },
@@ -286,7 +301,7 @@ async function runCmsSuite(sql, owned) {
         const a = await mutate("save", id);
         await Promise.allSettled([mutate("archive", id), publish(a)]);
         const rows = await query("SELECT published FROM articles WHERE id=$1", [id]);
-        assert.ok(rows.length === 0 || rows[0].published === false);
+        assert.equal(rows.length, 1); // Publication wins or is subsequently withdrawn with fresh CAS.
         await assert.rejects(publish(a), /CMS_REVISION_CONFLICT/);
       },
     );
@@ -301,7 +316,7 @@ async function runCmsSuite(sql, owned) {
         [id],
       );
       assert.equal(r.published, r.revision_published);
-      assert.equal(r.published, false);
+      // Either current publication or its checked withdrawal can win.
     });
     await check(
       "every archive/publish write failure rolls back revision, live projection and audit",
@@ -317,6 +332,7 @@ async function runCmsSuite(sql, owned) {
             ["articles", "UPDATE", ""],
             ["audit_logs", "INSERT", ""],
           ]) {
+            if (op === "archive" && condition.includes("OLD.state = 'draft'")) continue;
             if (op === "publish" && event === "INSERT" && table === "cms_content_revisions")
               continue;
             const id = randomUUID();

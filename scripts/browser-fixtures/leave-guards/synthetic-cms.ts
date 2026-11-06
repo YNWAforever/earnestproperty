@@ -1,3 +1,5 @@
+import { getArticlePreview, restoreFixtureArticle } from "./synthetic-blog";
+import { encodeArticle } from "../../../src/lib/blog/article-codec";
 import { article, draftSaves, estate } from "./synthetic-api";
 // FX-19d-1 H-08: the real page's payload must pass the server function's own schema.
 import {
@@ -24,11 +26,41 @@ function openingPayload(resourceType: string, resourceId: string): Payload {
 export async function fetchAdminCmsEditor({
   data,
 }: {
-  data: { resourceType: string; resourceId: string };
+  data: { resourceType: string; resourceId: string; reviewDraftRevisionId?: string };
 }) {
   const fixture = (window as unknown as { leaveGuardFixture: { editorReads: number } })
     .leaveGuardFixture;
   setTimeout(() => (fixture.editorReads += 1), 0);
+  if (data.resourceType === "article") {
+    const a = await getArticlePreview({ data: { id: data.resourceId } });
+    const payload = encodeArticle(a);
+    if (data.reviewDraftRevisionId) {
+      payload.title = "指定草稿內容";
+      payload.content = "其他作者的草稿";
+    }
+
+    return {
+      revisions: [
+        {
+          id: "70000000-0000-4000-8000-000000003002",
+          versionNumber: 1,
+          state: "superseded",
+          createdAt: "2026-11-01T00:00:00Z",
+          createdBy: null,
+        },
+      ],
+      payload,
+      publishedPayload: a.published ? payload : null,
+      editState: {
+        ...a.editState,
+        ...(data.reviewDraftRevisionId
+          ? { draftRevisionId: data.reviewDraftRevisionId, draftEditVersion: 42 }
+          : {}),
+        payload,
+      },
+      row: null,
+    };
+  }
   const payload = openingPayload(data.resourceType, data.resourceId);
   const saved = drafts.get(data.resourceId);
   return {
@@ -57,8 +89,8 @@ export const publishAdminCmsRevision = async ({ data }: { data: unknown }) => {
   return {};
 };
 export const restoreAdminCmsRevision = async ({ data }: { data: unknown }) => {
-  cmsRestoreSchema.parse(data);
-  return {};
+  const input = cmsRestoreSchema.parse(data);
+  return restoreFixtureArticle(input.revisionId, input.articleTokens);
 };
 // The hub's estate and article draft saves: the server function's strict input schema, then the
 // result shape admin-cms.server.ts `savedResult` returns (a new draft revision and edit state).

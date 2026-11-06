@@ -808,13 +808,16 @@ test("FX-07 receipts: observe-only retry, listing and C-09 labelling", async (t)
         );
         const routing = await seed(
           "synthetic-ops-l-routing",
-          "projection_state='projected', attempt_count=2, projected_at=now()",
+          "projection_state='projected', attempt_count=2, projected_at=now(), received_at=now()",
         );
         const oldRouting = await seed(
           "synthetic-ops-l-old-routing",
           "projection_state='projected', attempt_count=2, projected_at=now(), received_at=now()-interval '40 days'",
         );
-        const plain = await seed("synthetic-ops-l-plain", "projection_state='projected'");
+        const plain = await seed(
+          "synthetic-ops-l-plain",
+          "projection_state='projected', received_at=now()",
+        );
         const [conversation] = await query(
           `INSERT INTO whatsapp_conversations(woztell_member_id, channel_id)
            VALUES('synthetic-ops-customer','synthetic-ops-channel') RETURNING id`,
