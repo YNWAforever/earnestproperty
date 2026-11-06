@@ -259,6 +259,22 @@ for an additional form requires a reviewed parser extension and tests.
 The five parser packages are exact direct development dependencies promoted from
 versions already present in the lockfile; no package version or integrity changed.
 
+Fix round 3 rejects document-level HTML before fragment tree construction:
+doctypes and `html`, `head`, `body`, `frameset`, `frame`, `meta`, `title` and
+`noscript` tags (including closing tags) are unsupported. An existing object or
+external exclusion cannot waive this boundary. This prevents document-wrapper
+attributes from disappearing silently during fragment parsing.
+
+The pinned parse5 parser also records each actual source start tag and its
+decoded attributes before tree construction, then matches them by source offset
+against the nodes inspected for media. Any discarded, merged or rewritten source
+tag/attribute fails `RECOVERY_REFERENCE_SYNTAX`, including carriers dropped in
+an incompatible parent. Parser-created structural nodes such as an implicit
+`tbody` do not count as source evidence. Comments and quoted attribute text are
+not mistaken for tags. The parser subclass/factory and token-to-tree coverage
+are checked fail-closed; a parse5 upgrade requires re-verifying this contract.
+This remains bounded fragment validation, not arbitrary document rendering.
+
 CLI JSON inputs are limited to 16 MiB each; total archive bytes to 512 MiB. Larger
 packages fail closed and require a separately reviewed streaming implementation;
 never drop objects or evidence to fit the limit. The reviewed table catalog must

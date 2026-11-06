@@ -236,6 +236,13 @@ Markdown definitions, malformed HTML, `srcset`, CSS escapes/dynamic functions,
 stylesheets/imports, repeated encoding and percent-encoded candidates. Consult
 the CLI README for the supported parser contract before preparing evidence.
 
+Fix round 3 additionally rejects doctypes/document-level carriers before the
+fragment parser can discard them, and requires every source start tag and its
+attributes to survive into the inspected tree. Tree absence or an empty manifest
+is never sufficient evidence of absent media. Unsupported wrappers or dropped
+carriers require a separately reviewed parser/scope decision; an exclusion or
+known inventory object cannot authorize them. External approvals remain blocked.
+
 Implementation readiness, authenticated offline record consistency, external
 provider proof and release closure are separate. An offline receipt is
 checksum-sealed, expires, and is bound to candidate, target, context, signed

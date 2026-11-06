@@ -361,6 +361,85 @@ function legacySyntaxFixture(content: string) {
   return { ...f, entry };
 }
 
+const discardedMediaUrl = "https:&#47;&#47;synthetic.public.blob.vercel-storage.com/missing.png";
+for (const [name, content] of [
+  ["doctype only", "<!DOCTYPE html>"],
+  ["meta carrier", `<meta style="background-image:url(${discardedMediaUrl})">`],
+  ["title carrier", `<title background="${discardedMediaUrl}">title</title>`],
+  ["noscript carrier", `<noscript><body background="${discardedMediaUrl}"></body></noscript>`],
+  ["closing document wrapper", "<div>text</div></body>"],
+] as const)
+  test("fix3 rejects unsupported document-level " + name, () => {
+    const f = legacySyntaxFixture(content);
+    expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+      "RECOVERY_REFERENCE_SYNTAX",
+    );
+  });
+for (const [name, content] of [
+  ["body background", `<body background="${discardedMediaUrl}"></body>`],
+  ["body inline style", `<body style="background-image:url(${discardedMediaUrl})"></body>`],
+  ["mixed-case body", `<BoDy\nBACKGROUND='${discardedMediaUrl}'></BoDy>`],
+  ["html background", `<html background="${discardedMediaUrl}"></html>`],
+  ["html inline style", `<html style="background-image:url(${discardedMediaUrl})"></html>`],
+  ["head background", `<head background="${discardedMediaUrl}"></head>`],
+  ["head inline style", `<head style="background-image:url(${discardedMediaUrl})"></head>`],
+  [
+    "whole document",
+    `<!DOCTYPE html><html><head></head><body background="${discardedMediaUrl}"></body></html>`,
+  ],
+  ["frameset carrier", `<frameset background="${discardedMediaUrl}"></frameset>`],
+  ["frame carrier", `<frame src="${discardedMediaUrl}">`],
+  ["table column in incompatible parent", `<div><col background="${discardedMediaUrl}"></div>`],
+  ["table row in incompatible parent", `<div><tr background="${discardedMediaUrl}"></tr></div>`],
+  [
+    "table cell in incompatible parent",
+    `<div><td style="background-image:url(${discardedMediaUrl})"></td></div>`,
+  ],
+] as const)
+  test("fix3 rejects discarded " + name + " rather than accepting empty coverage", () => {
+    const f = legacySyntaxFixture(content);
+    expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+      "RECOVERY_REFERENCE_SYNTAX",
+    );
+  });
+
+test("fix3 document wrappers cannot be waived by inventory membership or exclusions", () => {
+  const content = `<body background="${discardedMediaUrl.replace("missing.png", "image.png")}"></body>`;
+  const f = legacySyntaxFixture(content);
+  f.context.excludedReferenceValues = [content];
+  f.record.contextSha256 = fingerprint(f.context);
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_SYNTAX",
+  );
+});
+
+test("fix3 tokenizer audit does not treat comments or quoted attribute text as document tags", () => {
+  const f = legacySyntaxFixture(
+    `<!-- <body background="${discardedMediaUrl}"></body> --><div title="<body>literal text</body>">safe</div>`,
+  );
+  expect(recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now).record.status).toBe(
+    "OFFLINE_EVIDENCE_VALIDATED",
+  );
+});
+
+test("fix3 accepts preserved table media with parser-inserted structural nodes", () => {
+  const value = discardedMediaUrl.replace("missing.png", "image.png");
+  const f = legacySyntaxFixture(`<table><tr><td><img src="${value}"></td></tr></table>`);
+  f.entry.references = [
+    {
+      path: "/content",
+      value,
+      storeId: f.context.mediaTarget.storeId,
+      objectKey: "image.png",
+      disposition: "inventory",
+    },
+  ];
+  expect(
+    recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now).record
+      .productionAuthorized,
+  ).toBe(false);
+});
+
 test("fix2 entity-encoded source-store URLs cannot be approved as external", () => {
   const f = fixture(),
     value = `https:&#47;&#47;${f.context.mediaTarget.host}/missing.png`;

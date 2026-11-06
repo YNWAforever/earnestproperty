@@ -69,3 +69,9 @@ parsing. Encoded URLs are interpreted before inventory/exclusion classification,
 while original encoded values remain bound in the signed evidence. Unresolved,
 malformed, dynamic or unsupported media syntax is rejected instead of yielding
 empty coverage. External recovery/media evidence and approvals remain blocked.
+
+Fix round 3 rejects document-level HTML tokens before tree construction and
+audits all source start tags/attributes against inspected nodes. Silently dropped
+`body`/`html`/`head` or contextual carriers cannot become empty coverage. Valid
+supported fragments still use the same signed raw-source bindings; no browser
+rendering or external recovery action is introduced.

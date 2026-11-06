@@ -1,7 +1,7 @@
 import { decodeHTML, decodeHTMLAttribute } from "entities";
 import { lexer, walkTokens } from "marked";
-import { parseFragment } from "parse5";
-import type { DefaultTreeAdapterMap } from "parse5";
+import { Parser } from "parse5";
+import type { DefaultTreeAdapterMap, Token } from "parse5";
 import postcss from "postcss";
 import valueParser from "postcss-value-parser";
 
@@ -10,6 +10,44 @@ const requireSyntax = (ok: boolean) => {
   if (!ok) throw new Error("RECOVERY_REFERENCE_SYNTAX");
 };
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const documentElements = new Set([
+  "html",
+  "head",
+  "body",
+  "frameset",
+  "frame",
+  "meta",
+  "title",
+  "noscript",
+]);
+const attributeIdentity = (attrs: { name: string; value: string }[]) =>
+  JSON.stringify(attrs.map(({ name, value }) => ({ name, value })));
+
+/** Observe real tokenizer events BEFORE the fragment tree builder can discard or
+ * merge them. Uses the already pinned parse5 parser hook; factory identity and
+ * token-to-tree coverage must hold, or validation stops. No document rendering.
+ */
+class EvidenceFragmentParser extends Parser<DefaultTreeAdapterMap> {
+  readonly sourceTags = new Map<number, { name: string; attributes: string }>();
+
+  override onStartTag(token: Token.TagToken) {
+    requireSyntax(!documentElements.has(token.tagName) && token.location !== null);
+    this.sourceTags.set(token.location!.startOffset, {
+      name: token.tagName,
+      attributes: attributeIdentity(token.attrs),
+    });
+    super.onStartTag(token);
+  }
+
+  override onEndTag(token: Token.TagToken) {
+    requireSyntax(!documentElements.has(token.tagName));
+    super.onEndTag(token);
+  }
+
+  override onDoctype() {
+    throw new Error("RECOVERY_REFERENCE_SYNTAX");
+  }
+}
 
 /** Decode only for interpretation. The original string is ALWAYS retained in evidence.
  * Multiple encoding layers, percent-encoded delimiters, CSS escapes and controls are
@@ -141,13 +179,27 @@ export function parseMediaSources(value: string, field: string): Source[] {
     if (html.length) {
       const source = html.join("\n");
       const errors: unknown[] = [];
-      const fragment = parseFragment(source, {
+      const parser = EvidenceFragmentParser.getFragmentParser<DefaultTreeAdapterMap>(null, {
         sourceCodeLocationInfo: true,
         onParseError: (error) => errors.push(error),
       });
+      requireSyntax(parser instanceof EvidenceFragmentParser);
+      if (!(parser instanceof EvidenceFragmentParser)) throw new Error("RECOVERY_REFERENCE_SYNTAX");
+      parser.tokenizer.write(source, true);
+      const fragment = parser.getFragment();
       requireSyntax(errors.length === 0);
+      const inspectedTags = new Set<number>();
       const visit = (node: DefaultTreeAdapterMap["node"]) => {
         if ("tagName" in node) {
+          const offset = node.sourceCodeLocation?.startOffset;
+          if (offset !== undefined) {
+            const original = parser.sourceTags.get(offset);
+            requireSyntax(
+              original?.name === node.tagName &&
+                original.attributes === attributeIdentity(node.attrs),
+            );
+            inspectedTags.add(offset);
+          }
           requireSyntax(
             ![
               "script",
@@ -190,6 +242,9 @@ export function parseMediaSources(value: string, field: string): Source[] {
         if ("childNodes" in node) node.childNodes.forEach(visit);
       };
       fragment.childNodes.forEach(visit);
+      // No source tag (including an attribute-bearing carrier) may silently vanish.
+      // Parser-inserted structural nodes have no source offset and are not evidence.
+      requireSyntax(inspectedTags.size === parser.sourceTags.size);
     }
   }
   const unique = new Map(

@@ -450,3 +450,84 @@ offline invariants (exact captures, returned identities, signed bytes, expiry,
 non-authorizing receipts) remain in force. Unsupported syntax, raw-export
 provenance, independent authority/context trust and actual provider proof remain
 explicit boundaries. The fix and this appended report are committed locally.
+
+## Fix round 3/5 — prevent fragment-parser carrier loss
+
+Verified starting HEAD: `ca8c72408b41080c6867b6d3e0b5f67f410ccf18` on
+`codex/blog-cms-release`; initial working tree clean. This round addresses the
+remaining Important finding that fragment parsing can silently discard document
+elements and their media attributes. No providers, production data, credentials,
+deployment, push, merge or subagents were used. External recovery/media evidence
+and approvals remain **BLOCKED**. Local blog snapshots remain insufficient.
+
+### Reproduction and fix
+
+The two requested probes (`body background` and `body style=background-image`)
+both returned accepted offline receipts with empty content manifests before the
+fix. Related probes reproduced the same behavior for mixed-case body, html/head
+attributes, a full document/doctype, frameset/frame, and col/tr/td carriers placed
+inside an incompatible div parent. Each used an entity-encoded missing source
+object and no external exclusions.
+
+The final red reproduction command was:
+`bun test --no-env-file --timeout 30000 scripts/blog-cms/recovery-evidence.test.ts -t fix3`
+— **0 pass / 13 fail / 125 filtered**, exit 1; all 13 failures were
+`Received function did not throw`. Log: `task-6-fix3-carriers-red.log`.
+An earlier fixture run is retained in `task-6-fix3-red.log`: its three standalone
+table tags were actually preserved in parse5's default template context and
+correctly failed object resolution. Those fixtures were corrected to use the
+incompatible div context before the final red run; they are not claimed as
+standalone-table bypasses.
+
+`EvidenceFragmentParser` now observes parse5 tokenizer callbacks **before** tree
+construction. It rejects doctypes and document-level html/head/body/frameset/
+frame/meta/title/noscript start or end tags as unsupported. This happens before
+the tree builder can discard or merge their attributes, and cannot be waived
+by an exclusion or even by an existing inventory object.
+
+For other supported HTML, the parser snapshots every real source start tag,
+its source offset and decoded attributes before tree construction. Every
+inspected source node must match that snapshot, and every source token must
+be represented in the inspected tree. Missing, merged or rewritten carriers
+fail `RECOVERY_REFERENCE_SYNTAX`; absence from the tree cannot establish empty
+reference coverage. Parser-inserted structural nodes without source offsets
+are not counted as evidence. This also closes contextual tag loss without
+expanding into document/browser rendering.
+
+The callback/factory contract uses the existing exact-pinned parse5 7.3.0
+dependency, with a runtime subclass identity guard. No dependencies changed.
+Parser upgrades require re-verifying callback and token-to-tree coverage tests.
+Original row/manifest/signature bindings, encoded-URL handling, returned-target
+bindings and non-authorizing receipt semantics remain unchanged.
+
+Added 21 tests in total. Positive regressions verify that comments and quoted
+attribute text containing literal body tags are not mistaken for active tags,
+and that supported table media still validates when the parser inserts tbody.
+Negative regressions also cover doctype-only input, meta/title/noscript, closing
+document wrappers and attempted exclusion/inventory waivers. The README,
+approval request and recovery evidence document describe the new boundary.
+
+### Commands and results
+
+- `bun test --no-env-file --timeout 30000 scripts/blog-cms/recovery-evidence.test.ts`
+  after the initial implementation — **138 pass / 0 fail**, exit 0, 205 assertions.
+  Log: `task-6-fix3-tests.log`.
+- Final focused command:
+  `bun test --no-env-file --timeout 30000 scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/release-controls.test.ts scripts/blog-cms/release-packet.test.ts scripts/blog-cms/writer-control-register.test.ts`
+  — **186 pass / 0 fail**, exit 0, **358 assertions**, four files, 27.52 seconds.
+  This is 146 recovery tests plus 40 adjacent tests. The established explicit
+  30-second per-test limit is retained for the existing packet filesystem checks.
+  Log: `task-6-fix3-focused.log`.
+- `npm run typecheck` — **PASS**, exit 0. Log: `task-6-fix3-typecheck.log`.
+- `node node_modules/typescript/bin/tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler --esModuleInterop --skipLibCheck --strict --types bun scripts/blog-cms/recovery-evidence.ts scripts/blog-cms/recovery-reference-manifest.ts scripts/blog-cms/recovery-media-syntax.ts scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/recovery-receipt.ts`
+  — **PASS**, exit 0. Log: `task-6-fix3-script-typecheck.log`.
+- `node node_modules/eslint/bin/eslint.js scripts/blog-cms/recovery-evidence.ts scripts/blog-cms/recovery-reference-manifest.ts scripts/blog-cms/recovery-media-syntax.ts scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/recovery-receipt.ts`
+  — **PASS**, exit 0, zero errors/warnings. Log: `task-6-fix3-lint.log`.
+- `node node_modules/prettier/bin/prettier.cjs --check scripts/blog-cms/recovery-evidence.ts scripts/blog-cms/recovery-reference-manifest.ts scripts/blog-cms/recovery-media-syntax.ts scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/recovery-receipt.ts`
+  — **PASS**. `git diff --check` — **PASS**.
+
+These are focused offline checks, not full-suite/build/CI/browser/provider
+acceptance. Unsupported document markup and parser-loss cases remain explicit
+rejections. Raw evidence provenance and independently approved live recovery
+actions remain external gates. This fix and the appended report are committed
+locally only.
