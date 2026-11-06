@@ -182,9 +182,7 @@ export async function listFeaturedArticles({ data }: { data: ArticleQuery }) {
       ),
   );
   return structuredClone({
-    items: items
-      .slice((q.page - 1) * q.pageSize, q.page * q.pageSize)
-      .map(publishedSummary),
+    items: items.slice((q.page - 1) * q.pageSize, q.page * q.pageSize).map(publishedSummary),
     total: items.length,
     page: q.page,
     pageSize: q.pageSize,
