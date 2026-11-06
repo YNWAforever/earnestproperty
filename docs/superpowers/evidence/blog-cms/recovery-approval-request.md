@@ -225,6 +225,17 @@ context. Unsupported/ambiguous source syntax is not live acceptance; reconcile i
 or extend the reviewed extractor and tests before signing. Full scope and raw
 export provenance remain the independent reviewer's responsibility.
 
+Fix round 2 parses supported Markdown/HTML/CSS media syntax before applying any
+external exclusion. Numeric/named HTML entities are interpreted for target
+classification while the manifest retains the original encoded source (or full
+original CSS attribute/value). Encoded source-host references must resolve to the
+inventory; exclusions cannot hide missing objects. Reference-style Markdown and
+HTML inline backgrounds cannot be accepted with empty reference coverage.
+Unsupported or ambiguous syntax fails closed, including unresolved/duplicate
+Markdown definitions, malformed HTML, `srcset`, CSS escapes/dynamic functions,
+stylesheets/imports, repeated encoding and percent-encoded candidates. Consult
+the CLI README for the supported parser contract before preparing evidence.
+
 Implementation readiness, authenticated offline record consistency, external
 provider proof and release closure are separate. An offline receipt is
 checksum-sealed, expires, and is bound to candidate, target, context, signed

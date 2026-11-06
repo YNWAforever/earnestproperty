@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { canonical, fingerprint } from "../../src/lib/blog/reconcile";
+import { decodeReferenceValue, parseMediaSources } from "./recovery-media-syntax";
 
 export const referenceTables = [
   "media_upload_intents",
@@ -22,7 +23,7 @@ export const referenceManifestSchema = z.array(
         z
           .object({
             path: text,
-            value: text,
+            value: z.string().min(1),
             storeId: text.nullable(),
             objectKey: text.nullable(),
             disposition: z.enum(["inventory", "reviewed-external"]),
@@ -70,7 +71,7 @@ const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  * are retained; external/static references require an exact reviewed exclusion.
  */
 function sourceValues(row: Record<string, unknown>) {
-  const found: { path: string; value: string }[] = [];
+  const found: { path: string; value: string; decoded: string }[] = [];
   function visit(value: unknown, path: string, field: string, depth: number) {
     requireEvidence(depth < 80, "DEPTH");
     if (Array.isArray(value)) {
@@ -91,24 +92,7 @@ function sourceValues(row: Record<string, unknown>) {
           return;
         }
       }
-      const candidates = new Set<string>();
-      if (
-        /^(?:src|srcset|url|href|poster|cover_?image|image_?url|thumbnail_?url|avatar_?url)$/i.test(
-          field,
-        )
-      )
-        candidates.add(value);
-      for (const match of value.matchAll(/(?:https?:)?\/\/[^\s"'<>\\)]+/g))
-        candidates.add(match[0]);
-      for (const match of value.matchAll(/!\[[^\]]*\]\(([^\s)]+)(?:\s+[^)]*)?\)/g))
-        candidates.add(match[1]);
-      for (const tag of value.matchAll(/<(?:img|source|video|audio)\b[^>]*>/gi)) {
-        for (const match of tag[0].matchAll(
-          /\b(?:src|srcset|poster)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi,
-        ))
-          if (match[1] || match[2] || match[3]) candidates.add(match[1] ?? match[2] ?? match[3]);
-      }
-      for (const candidate of [...candidates].sort(compare)) found.push({ path, value: candidate });
+      for (const candidate of parseMediaSources(value, field)) found.push({ path, ...candidate });
     }
   }
   visit(row, "", "", 0);
@@ -131,10 +115,10 @@ export function validateReferenceManifest(input: {
   };
 }) {
   const inventory = new Set(input.objects.map((o) => o.key));
-  function resolve(value: string) {
+  function resolve(value: string, decoded = decodeReferenceValue(value)) {
     let url: URL | undefined;
     try {
-      url = new URL(value.startsWith("//") ? "https:" + value : value);
+      url = new URL(decoded.startsWith("//") ? "https:" + decoded : decoded);
     } catch {
       /* Only exact reviewed exclusions may be non-URLs. */
     }
@@ -148,7 +132,7 @@ export function validateReferenceManifest(input: {
           !url.port &&
           !url.search &&
           !url.hash &&
-          value === `https://${input.source.host}/${pathname}` &&
+          decoded === `https://${input.source.host}/${pathname}` &&
           pathname.startsWith(input.source.prefix) &&
           inventory.has(pathname),
         "OBJECT",
@@ -190,7 +174,11 @@ export function validateReferenceManifest(input: {
     if (source === "media_upload_intents")
       requireEvidence(input.uploads.rowsSha256 === table.sha256, "UPLOAD_DIGEST");
     for (const row of rows.data) {
-      const refs = sourceValues(row).map((v) => ({ ...v, ...resolve(v.value) }));
+      const refs = sourceValues(row).map(({ path, value, decoded }) => ({
+        path,
+        value,
+        ...resolve(value, decoded),
+      }));
       expected.push({ source, rowId: row.id, rowSha256: fingerprint(row), references: refs });
       if (source === "media_upload_intents") {
         const intent = rowSchemas.media_upload_intents.parse(row);

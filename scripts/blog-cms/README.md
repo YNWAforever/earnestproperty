@@ -229,6 +229,36 @@ pending object must be inventoried/copied and held; arbitrary nulls cannot hide
 it. Completion requires a URL, completion timestamp and matching object pathname.
 These are evidence dispositions only; no upload/finalization retry is performed.
 
+Fix round 2 uses `recovery-media-syntax.ts` to parse media syntax before URL
+classification. Marked resolves inline, full-reference, collapsed-reference and
+shortcut Markdown images; parse5 reads HTML attributes with source locations;
+PostCSS and its value parser read inline CSS and `url(...)` sources. Decimal,
+hexadecimal and named HTML character references are decoded for classification
+only. An encoded source-store URL must resolve within the same exact inventory
+and cannot become `reviewed-external`, even with an exact exclusion entry.
+
+The manifest still binds original values, not decoded replacements. HTML URL
+attributes and Markdown destinations retain their original encoded destination;
+when Markdown unescapes a destination, the original token/definition-containing
+text is retained. CSS references retain the complete original style/background
+attribute or scalar CSS value. Multiple CSS URLs may therefore have the same
+original value but different resolved object keys. Sources sort by original
+value, then interpreted destination, and duplicate pairs are collapsed. Raw row
+hashes and signature verification remain unchanged. Replacing an original
+encoded manifest value with its decoded equivalent fails manifest comparison.
+
+This is a deliberately bounded parser contract. Unresolved or duplicate Markdown
+references, malformed HTML/attributes, `srcset`, CSS escapes/comments, dynamic
+CSS functions (`var`, `image-set`, etc.), stylesheets/imports, SVG/embedded/dynamic
+HTML, repeated encoding, percent-encoded candidates and control characters are
+rejected as `RECOVERY_REFERENCE_SYNTAX`. Quoted URL-like CSS values outside
+`url(...)` are rejected rather than counted as empty coverage. These syntax
+failures occur before external exclusions and cannot be waived by one. Support
+for an additional form requires a reviewed parser extension and tests.
+
+The five parser packages are exact direct development dependencies promoted from
+versions already present in the lockfile; no package version or integrity changed.
+
 CLI JSON inputs are limited to 16 MiB each; total archive bytes to 512 MiB. Larger
 packages fail closed and require a separately reviewed streaming implementation;
 never drop objects or evidence to fit the limit. The reviewed table catalog must

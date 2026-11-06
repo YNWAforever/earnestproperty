@@ -63,3 +63,9 @@ articles and all CMS revision media sources. Original canonical signed bytes are
 verified without trimming or schema normalization. V1 records are rejected;
 reprovisioned context, applicable approvals and resealing are required. These
 local fixes do not clear any external evidence or approval gate.
+
+Fix round 2 replaces media regex extraction with bounded Markdown, HTML and CSS
+parsing. Encoded URLs are interpreted before inventory/exclusion classification,
+while original encoded values remain bound in the signed evidence. Unresolved,
+malformed, dynamic or unsupported media syntax is rejected instead of yielding
+empty coverage. External recovery/media evidence and approvals remain blocked.

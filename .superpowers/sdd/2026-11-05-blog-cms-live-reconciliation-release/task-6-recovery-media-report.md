@@ -316,3 +316,137 @@ rows. Local blog-table snapshots remain insufficient for full recovery.
 No provider or production changes, production data access, credential/token
 retrieval, push, merge or deployment occurred. The fix and this appended report
 are committed locally; all external evidence/approval gates remain blocked.
+
+## Fix round 2/5 — encoded media syntax and fail-closed parsing
+
+Verified starting HEAD: `b30fd2f49ba2a55b2bf761ee6dda36bf4b4d7dd0` on
+`codex/blog-cms-release`, with a clean working tree. The reviewer accepted upload
+bindings, returned resource identities and original signature encoding; this
+round addresses the remaining Important media-reference extraction finding.
+No provider/production access or change, credentials, push, merge, deployment or
+subagents were involved. External recovery/media evidence and approvals remain
+**BLOCKED**; local blog-table snapshots remain insufficient for full recovery.
+
+### Reproduced findings
+
+Added three focused regressions against the starting commit:
+
+- A source-host URL encoded as `https:&#47;&#47;.../missing.png` could be accepted
+  as `reviewed-external` under an exact exclusion.
+- Reference-style Markdown with an encoded destination could pass with zero
+  content references and no exclusions despite the missing object.
+- HTML inline `background-image:url(...)` with an encoded destination could
+  likewise pass with zero references and no exclusions.
+
+`bun test --no-env-file scripts/blog-cms/recovery-evidence.test.ts -t fix2`
+returned **0 pass / 3 fail / 80 filtered**, exit 1, confirming all three probes.
+Log: `task-6-fix2-red.log`. These are deliberately failing synthetic tests, not
+live evidence. Runs use the established local escape from Bun's sandbox
+parent-directory restriction and make no external connections.
+
+### Changes
+
+New `scripts/blog-cms/recovery-media-syntax.ts` parses supported syntax before
+classification instead of using media regex extraction:
+
+- **Markdown:** Marked resolves inline, full-reference, collapsed-reference and
+  shortcut image syntax, including entity-encoded destinations and escaped URL
+  punctuation. Definitions are accounted for; unresolved image syntax and
+  duplicate definitions are rejected rather than yielding empty coverage.
+- **HTML:** parse5 parses attributes with source locations. Original attribute
+  values are retained and checked against the parser's entity interpretation.
+  Ordinary media attributes, legacy backgrounds and inline CSS backgrounds are
+  covered. Parser errors, duplicate/malformed attributes and unsupported dynamic
+  or embedded constructs fail closed.
+- **CSS:** PostCSS and its value parser parse declarations and `url(...)` nodes,
+  including entity-encoded function names/quotes and JSON background shorthand.
+  The complete original CSS attribute/scalar is retained for each reference.
+  Dynamic functions, imports/stylesheets, escapes/comments, malformed/unclosed
+  constructs and URL-like strings outside `url(...)` are rejected.
+- **Encoding/classification:** decimal, hexadecimal and named HTML entities are
+  interpreted before inventory/exclusion classification. Source-host references
+  always require the exact source store/host/prefix object. Exact external
+  exclusions cannot waive this requirement. Repeated encoding, percent-encoded
+  candidates, controls and unsupported escaping reject before exclusions.
+
+`recovery-reference-manifest.ts` now delegates syntax interpretation to that
+parser. It keeps the original source value in the manifest and uses the separate
+internal interpreted value only for resolution. No decoded value replaces a
+captured row or a signed record. Tests demonstrate that replacing an original
+encoded manifest value with its decoded equivalent fails exact manifest
+comparison. Row capture, candidate/target and original-signature bindings from
+round 1 are preserved. The v2 format remains; the updated parser contract and
+CSS value representation are documented in the README and approval/recovery
+documents. Evidence must be regenerated/reviewed for the current candidate.
+
+Explicitly unsupported forms include `srcset`, unresolved/duplicate Markdown
+references, malformed HTML, CSS `var`/`image-set` or other non-allowlisted
+functions, stylesheet/import/SVG/dynamic embedded content and ambiguous encoding.
+They return `RECOVERY_REFERENCE_SYNTAX`, never an accepted empty manifest. An
+extension requires reviewed parser support and tests; an exclusion cannot waive
+a syntax failure. External/static values in supported syntax still require exact
+reviewed exclusions. This is a bounded offline parser contract, not arbitrary
+browser rendering or live/provider acceptance.
+
+### Related gaps found during self-review
+
+Added two additional failing synthetic probes before hardening: quoted URL-like
+CSS outside `url(...)` could yield empty coverage, and a JSON `background`
+shorthand could be treated as an external scalar. The focused command
+`bun test --no-env-file scripts/blog-cms/recovery-evidence.test.ts -t 'fix2 (rejects ambiguous quoted CSS|JSON background shorthand)'`
+returned **0 pass / 2 fail / 121 filtered**, exit 1.
+Log: `task-6-fix2-css-red.log`. Quoted URL-like CSS now rejects, and JSON
+background shorthand is parsed as CSS. Both regressions pass in the final run.
+
+### Dependency handling
+
+Pinned five direct development dependencies already present locally and in the
+existing lockfile: `entities@4.5.0`, `marked@15.0.12`, `parse5@7.3.0`,
+`postcss@8.5.28`, `postcss-value-parser@4.2.0`. An initial
+`npm install --package-lock-only --ignore-scripts --offline --no-audit --no-fund --save-dev marked@15.0.12 parse5@7.3.0 entities@4.5.0 postcss@8.5.28 postcss-value-parser@4.2.0`
+failed with `ENOTCACHED` (and pre-existing peer-resolution warnings); offline mode
+did not download packages and left manifests unchanged. The existing exact
+locked entries were then promoted in root development-dependency metadata only.
+
+A local Node verification compared every non-root lockfile package record to
+`git show HEAD:package-lock.json`, required the same complete package set, and
+matched all five root requirements against locked and installed versions:
+**PASS**. The only package/package-lock changes are five direct dependency lines
+in each file. No resolved package, version, integrity or transitive dependency
+changed. No dependency download or clean-install claim is made.
+
+### Verification commands/results
+
+- Expanded recovery-only suite after the main parser change:
+  `bun test --no-env-file scripts/blog-cms/recovery-evidence.test.ts` —
+  **121 pass / 0 fail**, exit 0, 186 assertions.
+  Log: `task-6-fix2-expanded-tests.log`.
+- First combined run at Bun's default five-second per-test timeout:
+  **162 pass / 1 fail**, exit 1. All recovery tests passed; existing test
+  `binds the exact release packet bytes and reviewed artifact list` exceeded
+  5,000 ms (5,829.57 ms). Log: `task-6-fix2-focused.log`. This failed run is
+  retained, not represented as passing.
+- Final command:
+  `bun test --no-env-file --timeout 30000 scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/release-controls.test.ts scripts/blog-cms/release-packet.test.ts scripts/blog-cms/writer-control-register.test.ts`
+  — **165 pass / 0 fail**, exit 0, **337 assertions**, four files, 17.55 seconds.
+  This is **125 recovery tests plus 40 adjacent tests**. The explicit 30-second
+  per-test limit accommodates the existing filesystem-heavy packet checks; no
+  assertions were removed or changed in those tests.
+  Log: `task-6-fix2-focused-verified.log`.
+- `npm run typecheck` — **PASS**, exit 0.
+  Log: `task-6-fix2-typecheck.log`.
+- `node node_modules/typescript/bin/tsc --noEmit --target ES2022 --module ESNext --moduleResolution Bundler --esModuleInterop --skipLibCheck --strict --types bun scripts/blog-cms/recovery-evidence.ts scripts/blog-cms/recovery-reference-manifest.ts scripts/blog-cms/recovery-media-syntax.ts scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/recovery-receipt.ts`
+  — **PASS**, exit 0 after final test edits.
+  Log: `task-6-fix2-script-typecheck-verified.log`.
+- `node node_modules/eslint/bin/eslint.js scripts/blog-cms/recovery-evidence.ts scripts/blog-cms/recovery-reference-manifest.ts scripts/blog-cms/recovery-media-syntax.ts scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/recovery-receipt.ts`
+  — **PASS**, exit 0, zero errors/warnings; log: `task-6-fix2-lint-verified.log`. The earlier amended run
+  also passed (`task-6-fix2-lint.log`).
+- `node node_modules/prettier/bin/prettier.cjs --check scripts/blog-cms/recovery-evidence.ts scripts/blog-cms/recovery-reference-manifest.ts scripts/blog-cms/recovery-media-syntax.ts scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/recovery-receipt.ts package.json package-lock.json`
+  — **PASS**. `git diff --check` — **PASS**.
+
+No full repository suite, build, clean dependency install, browser/provider
+acceptance or production collection was run or claimed. The five original
+offline invariants (exact captures, returned identities, signed bytes, expiry,
+non-authorizing receipts) remain in force. Unsupported syntax, raw-export
+provenance, independent authority/context trust and actual provider proof remain
+explicit boundaries. The fix and this appended report are committed locally.

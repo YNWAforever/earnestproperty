@@ -351,6 +351,207 @@ function recapture(f: ReturnType<typeof fixture>, table: string) {
   return sha;
 }
 
+function legacySyntaxFixture(content: string) {
+  const f = fixture();
+  Object.assign(f.captures.articles[0], { content, cover_image: null });
+  recapture(f, "articles");
+  const entry = f.record.media.referenceManifest.find((r) => r.rowId === "article-1")!;
+  entry.rowSha256 = fingerprint(f.captures.articles[0]);
+  entry.references = [];
+  return { ...f, entry };
+}
+
+test("fix2 entity-encoded source-store URLs cannot be approved as external", () => {
+  const f = fixture(),
+    value = `https:&#47;&#47;${f.context.mediaTarget.host}/missing.png`;
+  f.captures.articles[0].cover_image = value;
+  recapture(f, "articles");
+  f.context.excludedReferenceValues = [value];
+  f.record.contextSha256 = fingerprint(f.context);
+  const entry = f.record.media.referenceManifest.find((r) => r.rowId === "article-1")!;
+  entry.rowSha256 = fingerprint(f.captures.articles[0]);
+  entry.references = [
+    {
+      path: "/cover_image",
+      value,
+      storeId: null,
+      objectKey: null,
+      disposition: "reviewed-external",
+    },
+  ];
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow();
+});
+
+test("fix2 reference-style Markdown cannot hide encoded missing media behind empty coverage", () => {
+  const f = legacySyntaxFixture(
+    "![photo][asset]\n\n[asset]: https:&#47;&#47;synthetic.public.blob.vercel-storage.com/missing.png",
+  );
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow();
+});
+
+test("fix2 HTML background-image cannot hide encoded missing media behind empty coverage", () => {
+  const f = legacySyntaxFixture(
+    '<div style="background-image:url(https:&#47;&#47;synthetic.public.blob.vercel-storage.com/missing.png)"></div>',
+  );
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow();
+});
+
+const encodedImage = "https:&#47;&#47;synthetic.public.blob.vercel-storage.com/image.png";
+const supportedMediaSyntax = [
+  [
+    "Markdown escaped URL punctuation",
+    "![photo](https\\:\\/\\/synthetic.public.blob.vercel-storage.com/image.png)",
+    "![photo](https\\:\\/\\/synthetic.public.blob.vercel-storage.com/image.png)",
+  ],
+  ["HTML entity attribute", `<img src="${encodedImage}">`, encodedImage],
+  [
+    "named and hexadecimal entities",
+    '<img src="https&colon;&sol;&#x2f;synthetic.public.blob.vercel-storage.com/image.png">',
+    "https&colon;&sol;&#x2f;synthetic.public.blob.vercel-storage.com/image.png",
+  ],
+  ["full Markdown reference", `![photo][id]\n\n[id]: ${encodedImage}`, encodedImage],
+  ["collapsed Markdown reference", `![photo][]\n\n[photo]: ${encodedImage}`, encodedImage],
+  ["shortcut Markdown reference", `![photo]\n\n[photo]: ${encodedImage}`, encodedImage],
+  ["Markdown inline image", `![photo](${encodedImage})`, encodedImage],
+  [
+    "HTML CSS background",
+    `<div style="background-image:url(${encodedImage})"></div>`,
+    `background-image:url(${encodedImage})`,
+  ],
+  [
+    "entity-encoded CSS function and quotes",
+    `<div style="background-image:u&#114;l(&quot;${encodedImage}&quot;)"></div>`,
+    `background-image:u&#114;l(&quot;${encodedImage}&quot;)`,
+  ],
+  ["HTML background attribute", `<table background="${encodedImage}"></table>`, encodedImage],
+  [
+    "HTML background-image attribute",
+    `<div background-image="url(${encodedImage})"></div>`,
+    `url(${encodedImage})`,
+  ],
+] as const;
+for (const [name, content, original] of supportedMediaSyntax) {
+  test("fix2 parses " + name + " and binds the original encoded source", () => {
+    const f = legacySyntaxFixture(content);
+    f.entry.references = [
+      {
+        path: "/content",
+        value: original,
+        storeId: f.context.mediaTarget.storeId,
+        objectKey: "image.png",
+        disposition: "inventory",
+      },
+    ];
+    const receipt = recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now);
+    expect(receipt.record.status).toBe("OFFLINE_EVIDENCE_VALIDATED");
+    expect(receipt.record.evidenceSha256).toBe(fingerprint(f.seal()));
+    f.entry.references[0].value = "https://synthetic.public.blob.vercel-storage.com/image.png";
+    expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+      "RECOVERY_REFERENCE_MANIFEST",
+    );
+  });
+  test("fix2 rejects missing objects in " + name + " despite empty manifest", () => {
+    const f = legacySyntaxFixture(content.replaceAll("image.png", "missing.png"));
+    expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+      "RECOVERY_REFERENCE_OBJECT",
+    );
+  });
+}
+
+for (const [name, content] of [
+  ["unresolved Markdown reference", "![photo][unknown]"],
+  ["duplicate Markdown definitions", `![p][x]\n\n[x]: ${encodedImage}\n[x]: /other.png`],
+  [
+    "malformed Markdown image",
+    "![photo](https:&#47;&#47;synthetic.public.blob.vercel-storage.com/missing.png",
+  ],
+  ["duplicate HTML source attributes", `<img src="${encodedImage}" src="/other.png">`],
+  ["malformed HTML attribute", `<img src="${encodedImage}>`],
+  ["srcset", `<img srcset="${encodedImage} 1x">`],
+  ["CSS function escape", `<div style="background-image:u\\72l(${encodedImage})"></div>`],
+  [
+    "CSS URL escape",
+    '<div style="background-image:url(\\68 ttps://synthetic.public.blob.vercel-storage.com/missing.png)"></div>',
+  ],
+  ["CSS variable", '<div style="background-image:var(--asset)"></div>'],
+  ["CSS image-set", `<div style="background-image:image-set('${encodedImage}' 1x)"></div>`],
+  ["CSS comment", `<div style="background-image:u/**/rl(${encodedImage})"></div>`],
+  ["CSS import", `<div style="@import '${encodedImage}';"></div>`],
+  ["stylesheet", `<style>div {background-image:url(${encodedImage})}</style>`],
+  ["SVG media", `<svg><image href="${encodedImage}"></image></svg>`],
+  [
+    "percent-encoded scheme",
+    "![p](https%3A%2F%2Fsynthetic.public.blob.vercel-storage.com/missing.png)",
+  ],
+  [
+    "double entities",
+    '<img src="https:&amp;#47;&amp;#47;synthetic.public.blob.vercel-storage.com/missing.png">',
+  ],
+  [
+    "control entity",
+    '<img src="https:&Tab;//synthetic.public.blob.vercel-storage.com/missing.png">',
+  ],
+] as const)
+  test("fix2 rejects unsupported or ambiguous " + name, () => {
+    const f = legacySyntaxFixture(content);
+    f.context.excludedReferenceValues = [content];
+    f.record.contextSha256 = fingerprint(f.context);
+    expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+      "RECOVERY_REFERENCE_SYNTAX",
+    );
+  });
+
+test("fix2 scalar and revision entity URLs resolve without changing their captured bytes", () => {
+  const f = fixture();
+  f.captures.cms_content_revisions[0].payload = { coverImage: encodedImage };
+  recapture(f, "cms_content_revisions");
+  const entry = f.record.media.referenceManifest.find((r) => r.rowId === "revision-1")!;
+  entry.rowSha256 = fingerprint(f.captures.cms_content_revisions[0]);
+  entry.references[0].value = encodedImage;
+  expect(
+    recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now).record
+      .productionAuthorized,
+  ).toBe(false);
+  (f.captures.cms_content_revisions[0].payload as { coverImage: string }).coverImage =
+    encodedImage.replace("image.png", "missing.png");
+  recapture(f, "cms_content_revisions");
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_OBJECT",
+  );
+});
+
+test("fix2 rejects ambiguous quoted CSS media instead of empty coverage", () => {
+  const f = legacySyntaxFixture(
+    `<div style="background-image:'https:&#47;&#47;synthetic.public.blob.vercel-storage.com/missing.png'"></div>`,
+  );
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_SYNTAX",
+  );
+});
+
+test("fix2 JSON background shorthand cannot hide an encoded CSS object as external", () => {
+  const f = fixture(),
+    value = "url(https:&#47;&#47;synthetic.public.blob.vercel-storage.com/missing.png)";
+  f.captures.cms_content_revisions[0].payload = { style: { background: value } };
+  recapture(f, "cms_content_revisions");
+  f.context.excludedReferenceValues = [value];
+  f.record.contextSha256 = fingerprint(f.context);
+  const entry = f.record.media.referenceManifest.find((r) => r.rowId === "revision-1")!;
+  entry.rowSha256 = fingerprint(f.captures.cms_content_revisions[0]);
+  entry.references = [
+    {
+      path: "/payload/style/background",
+      value,
+      storeId: null,
+      objectKey: null,
+      disposition: "reviewed-external",
+    },
+  ];
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_REFERENCE_OBJECT",
+  );
+});
+
 test("fix1 binds completed versus held state and pathname to captured upload rows", () => {
   const a = fixture();
   a.record.media.uploads.pending = 2;
