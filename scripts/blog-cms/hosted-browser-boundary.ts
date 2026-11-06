@@ -11,7 +11,10 @@ export type BrowserPolicy = {
   blobOrigin: string;
   session?: string;
   bypass?: string;
+  // Enable only alongside the scanner's .exclude("iframe"); never grants network access.
+  excludeThirdPartyIframes?: boolean;
 };
+export type ExcludedFrame = { code: "BROWSER_EXCLUDED_IFRAME_BLOCKED"; origin: string };
 
 /** Browser routing does not intercept every redirected hop. Never give it a redirect to follow.
  * Fetch exactly one hop, reject every 3xx, then fulfill only the terminal response. */
@@ -20,6 +23,46 @@ export async function forwardReadOnly(route: Route, policy: BrowserPolicy, guard
   const req = route.request(),
     url = new URL(req.url());
   const allowed = [policy.appOrigin, policy.authOrigin, policy.blobOrigin];
+  if (
+    !allowed.includes(url.origin) &&
+    policy.excludeThirdPartyIframes &&
+    req.isNavigationRequest() &&
+    req.resourceType() === "document" &&
+    req.frame().parentFrame() !== null
+  ) {
+    // Only a direct, credential-free GET into an excluded iframe of the owned page
+    // is non-fatal. Redirects, top-level navigation and arbitrary subresources are not.
+    const headers = await req.allHeaders();
+    if (
+      url.username ||
+      url.password ||
+      [
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+        "x-vercel-protection-bypass",
+        "x-vercel-set-bypass-cookie",
+      ].some((key) => key in headers)
+    )
+      throw new BrowserBoundaryError("BROWSER_CREDENTIAL_REFUSED");
+    if (req.redirectedFrom()) throw new BrowserBoundaryError("BROWSER_REDIRECT_ORIGIN_REFUSED");
+    if (req.method() !== "GET") throw new BrowserBoundaryError("BROWSER_METHOD_REFUSED");
+    const frame = req.frame(),
+      parent = frame.parentFrame()!;
+    if (parent === frame.page().mainFrame() && new URL(parent.url()).origin === policy.appOrigin) {
+      const element = await frame.frameElement();
+      const isIframe = await element.evaluate((el) => el.nodeName === "IFRAME");
+      await element.dispose();
+      if (isIframe) {
+        guard();
+        await route.abort("blockedbyclient");
+        return {
+          code: "BROWSER_EXCLUDED_IFRAME_BLOCKED",
+          origin: url.origin,
+        } satisfies ExcludedFrame;
+      }
+    }
+  }
   if (!allowed.includes(url.origin) || url.username || url.password)
     throw new BrowserBoundaryError("BROWSER_ORIGIN_REFUSED");
   if (!["GET", "HEAD", "OPTIONS"].includes(req.method()))
@@ -57,10 +100,12 @@ export async function installReadBoundary(
   policy: BrowserPolicy,
   guard: () => void,
   failed: (error: unknown) => void,
+  excluded: (frame: ExcludedFrame) => void = () => {},
 ) {
   await context.route("**/*", async (route) => {
     try {
-      await forwardReadOnly(route, policy, guard);
+      const result = await forwardReadOnly(route, policy, guard);
+      if (result) excluded(result);
     } catch (error) {
       failed(error);
       await route.abort("blockedbyclient");

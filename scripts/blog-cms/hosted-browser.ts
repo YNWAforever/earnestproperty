@@ -16,6 +16,39 @@ import {
 import { roles, sha256, checklist, type HostedInput, type Role } from "./hosted-contract";
 
 type State = Awaited<ReturnType<BrowserContext["storageState"]>>;
+export async function scanHostedPage(
+  page: Page,
+  options: {
+    appOrigin: string;
+    label: string;
+    viewport: (typeof VIEWPORTS)[number];
+    guard: () => void;
+    boundaryFailed: () => boolean;
+    evidence: (row: unknown) => void;
+  },
+) {
+  const { appOrigin, label, viewport, guard, boundaryFailed, evidence } = options;
+  const checkBoundary = () => {
+    guard();
+    assert.equal(new URL(page.url()).origin, appOrigin);
+    assert.equal(boundaryFailed(), false, "browser identity/approval boundary failed");
+  };
+  checkBoundary();
+  const axe = await new AxeBuilder({ page }).withTags(TAGS).exclude("iframe").analyze();
+  assert.deepEqual(
+    axe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
+    [],
+    label,
+  );
+  await expectCurrentLinksMatchPath(page);
+  const url = new URL(page.url());
+  if (url.pathname === "/blog") await expectOneBlogFilterCurrent(page);
+  if (url.pathname === "/listings" && url.searchParams.get("page") === "2")
+    await expectPaginationCurrentIs(page, "2");
+  if (viewport.mobile) await expectNoSmallRunningChinese(page);
+  checkBoundary();
+  evidence({ kind: "a11y", label, viewport: viewport.width, status: "PASS", tags: TAGS });
+}
 export async function runHostedRecovery(
   p: HostedInput,
   env: NodeJS.ProcessEnv,
@@ -137,6 +170,7 @@ export async function runHostedBrowser(
             blobOrigin: `https://${p.target.blob.host}`,
             session: role ? env[`HOSTED_${role.toUpperCase()}_SESSION`] : undefined,
             bypass: env.HOSTED_VERCEL_BYPASS,
+            excludeThirdPartyIframes: true,
           },
           guard,
           (error) => {
@@ -146,26 +180,19 @@ export async function runHostedBrowser(
               code: error instanceof Error ? error.message : "BROWSER_BOUNDARY_FAILED",
             });
           },
+          (frame) => evidence({ kind: "browser-excluded-frame", ...frame }),
         );
         return context;
       };
       const scan = async (page: Page, label: string) => {
-        guard();
-        assert.equal(new URL(page.url()).origin, p.target.origin);
-        assert.equal(boundaryFailure, false, "browser identity/approval boundary failed");
-        const axe = await new AxeBuilder({ page }).withTags(TAGS).exclude("iframe").analyze();
-        assert.deepEqual(
-          axe.violations.map((v) => ({ id: v.id, nodes: v.nodes.map((n) => n.target) })),
-          [],
+        await scanHostedPage(page, {
+          appOrigin: p.target.origin,
           label,
-        );
-        await expectCurrentLinksMatchPath(page);
-        const url = new URL(page.url());
-        if (url.pathname === "/blog") await expectOneBlogFilterCurrent(page);
-        if (url.pathname === "/listings" && url.searchParams.get("page") === "2")
-          await expectPaginationCurrentIs(page, "2");
-        if (viewport.mobile) await expectNoSmallRunningChinese(page);
-        evidence({ kind: "a11y", label, viewport: viewport.width, status: "PASS", tags: TAGS });
+          viewport,
+          guard,
+          boundaryFailed: () => boundaryFailure,
+          evidence,
+        });
       };
       const context = await makeContext();
       try {

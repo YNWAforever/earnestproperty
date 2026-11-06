@@ -91,6 +91,13 @@ the runner cannot infer those from redacted evidence.
   Missing dynamic data, login redirects, skipped pages and non-200 outcomes fail.
   Third-party frames are excluded as in the existing suite. Browser network
   requests are restricted to approved app/auth/Blob origins and read methods.
+  Direct credential-free GET navigations into excluded third-party iframes
+  (including the contact page's Google Maps embeds) are aborted before network
+  access and recorded as `browser-excluded-frame`, without failing the parent
+  scan. This exception applies only to iframes directly owned by the approved
+  main page during the accessibility suite. Top-level navigation, other foreign
+  resources, credentials, writes, approval expiry and every redirect remain
+  fatal. The scanner still reports accessibility violations in the parent page.
   Every response is fetched with zero redirects; all 3xx responses (including
   same-origin redirects) fail before another hop receives headers or cookies.
 - Separately exercise read-outage recovery after the request-ID replay check.

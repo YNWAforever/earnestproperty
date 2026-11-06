@@ -292,3 +292,71 @@ No concrete resource identifiers or approvals were fabricated.
 - Browser redirect refusal is deliberately strict. The future approved target
   must serve terminal URLs and only approved origins. The owner must arrange
   exact isolated resources and sessions; no provisioning is part of this work.
+
+
+## Fix round 2 — excluded iframe coverage (2026-11-07)
+
+Reopened cleanly from `683fa35d251ab7522206d92b2c353e8abe022d47` on
+`codex/blog-cms-release`. The scoped finding was confirmed: `/contact` renders
+Google Maps iframes, and the shared accessibility scanner excludes iframe
+markup, but the request boundary previously made every foreign iframe request
+fatal before axe could scan the parent page.
+
+The accessibility context now explicitly enables the same third-party iframe
+exclusion at the request boundary. Only a direct, credential-free GET document
+navigation into an actual iframe directly owned by the approved main page is
+classified as `BROWSER_EXCLUDED_IFRAME_BLOCKED`. It is **aborted before fetch**
+and journaled as `browser-excluded-frame`; it never becomes an allowed network
+origin and does not set the viewport's fatal-boundary flag. Other contexts,
+including outage recovery, retain the default strict policy.
+
+Top-level navigation, foreign scripts/images/fetches, redirects (including a
+redirect from an approved iframe URL), credential-bearing requests, writes and
+expired approval still fail. Classification checks URL credentials and actual
+request headers, including bearer/proxy authorization, cookies and bypass
+headers. Detached/unidentifiable frames or other classification failures also
+remain fatal. No iframe content is inspected or accepted as accessible.
+
+The existing parent scanner is now a shared `scanHostedPage` function used by
+both native acceptance and the local regression. It checks the fatal boundary
+before and after scanning, retains the same axe tags/iframe exclusion and
+navigation/mobile assertions, and emits PASS only after all assertions succeed.
+The approval request documents the distinction between an excluded frame and
+a fatal origin violation.
+
+### Round 2 verification
+
+The new regression first failed on the original behavior with
+`browser identity/approval boundary failed`; see `task-7-r2-red.log`.
+After the fix, a real Chromium parent-page scan succeeds while the excluded
+loopback iframe server receives **zero requests**. Injecting an unnamed button
+then makes the same scanner report axe's `button-name` violation and emit no
+additional PASS. The iframe server remains at zero requests throughout.
+
+The browser suite also adds an iframe redirect case and runs all redirect
+cases with the exclusion enabled, preserving exact fatal codes and zero
+credential propagation. A separate browser test covers six cases: exclusion
+disabled, bearer authorization, bypass header, cookie, POST iframe navigation,
+and expired approval. Each is fatal, records no benign exclusion, and sends
+zero requests to the foreign server.
+
+| Final local check | Result | Evidence beside this report |
+| --- | --- | --- |
+| `npm run test:blog:hosted:browser` | 9 PASS, 0 FAIL, no skips; actual Chromium/axe and loopback servers only | `task-7-r2-browser.log` |
+| `npm run test:blog:hosted:guards` | 228 PASS, 0 FAIL; 2045 assertions | `task-7-r2-guards.log` |
+| `tsc --noEmit -p tsconfig.hosted-acceptance.json` | PASS, exit 0 | `task-7-r2-focused-typecheck.log` |
+| `tsc --noEmit` | PASS, exit 0 | `task-7-r2-typecheck.log` |
+| `eslint .` | PASS, exit 0; zero errors, nine existing React refresh warnings | `task-7-r2-lint.log` |
+| `playwright test --list e2e/a11y.spec.ts` | PASS discovery, 54 tests; not full matrix execution | `task-7-r2-a11y-discovery.log` |
+| `git diff --check` | PASS | Local command output |
+
+Focused lint of all three changed TypeScript files also passed with zero errors
+or warnings (`task-7-r2-focused-lint.log`).
+
+Browser and filesystem guard tests used authorized local escalation for the
+installed Chromium and temporary-file operations. No hosted/provider request,
+production access, provisioning, deployment, push or merge occurred. No
+subagents were used. Hosted acceptance remains **NOT_RUN** pending the exact
+isolated resources and approval described above; local iframe/axe verification
+does not close that gate. The existing outage/cleanup recovery limitations
+remain unchanged.
