@@ -8,6 +8,7 @@ import { runRecoveryCli } from "./recovery-receipt";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { MIGRATION_VERSIONS } from "../../src/lib/control-plane/migration-versions.js";
 
 const now = Date.parse("2026-11-06T13:00:00Z");
 const digest = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -24,7 +25,7 @@ const target = {
   serverVersion: 180000,
 };
 
-export function fixture() {
+export function fixture(phase: "pre-migration" | "post-migration" = "post-migration") {
   const artifacts = new Map<string, Uint8Array>();
   const artifact = (text: string) => {
     artifacts.set(digest(text), Buffer.from(text));
@@ -42,8 +43,19 @@ export function fixture() {
     "public.media_upload_intents",
     "public.properties",
   ];
-  const tables = tableNames.map((name) => ({ name, rows: 2, sha256: digest(name) }));
-  const state = { schemaSha256: digest("schema"), tables };
+  const absentRelations =
+    phase === "pre-migration" ? tableNames.filter((name) => name.startsWith("public.blog_")) : [];
+  const presentTables = tableNames.filter((name) => !absentRelations.includes(name));
+  const tables = presentTables.map((name) => ({ name, rows: 2, sha256: digest(name) }));
+  const ledger = MIGRATION_VERSIONS.slice(0, phase === "pre-migration" ? 95 : 98).map(
+    (version) => ({ version }),
+  );
+  const migrationLedgerSha256 = artifact(canonical(ledger));
+  Object.assign(tables.find((t) => t.name === "public.app_migrations")!, {
+    rows: ledger.length,
+    sha256: migrationLedgerSha256,
+  });
+  const state = { schemaSha256: digest("schema"), tables, absentRelations };
   const mediaTarget = {
     storeId: "store_sEHe3hQ90qGByxQA",
     host: "synthetic.public.blob.vercel-storage.com",
@@ -87,6 +99,7 @@ export function fixture() {
       { id: "revision-2", resource_type: "estate", state: "archived", payload: { image_url: url } },
     ],
   };
+  if (phase === "pre-migration") for (const row of captures.articles) delete row.content_format;
   for (const [name, rows] of Object.entries(captures))
     tables.find((t) => t.name === "public." + name)!.sha256 = artifact(canonical(rows));
   const paths = [
@@ -126,7 +139,8 @@ export function fixture() {
     evidencePublicKey: keys.publicKey.export({ type: "spki", format: "pem" }).toString(),
     approvalSha256: artifact("synthetic snapshot and restore approval"),
     cleanupApprovalSha256: artifact("synthetic separate cleanup approval"),
-    tableNames,
+    tableNames: presentTables,
+    schemaProfile: { phase, schemaSha256: state.schemaSha256, migrationLedgerSha256 },
     mediaTarget,
     destination,
     snapshotId: "snap-synthetic",
@@ -259,6 +273,114 @@ test("complete signed synthetic recovery yields expiring offline receipt, never 
   expect(
     recovery.verifyRecoveryReceipt(receipt, f.seal(), f.context, f.artifacts, now + 1),
   ).toBeUndefined();
+});
+
+test("signed pre-migration recovery preserves legacy rows and explicit absent relations at ledger 95", () => {
+  const f = fixture("pre-migration");
+  const signed = f.seal();
+  const before = canonical(signed);
+  const receipt = recovery.createRecoveryReceipt(signed, f.context, f.artifacts, now);
+  expect(receipt.record.status).toBe("OFFLINE_EVIDENCE_VALIDATED");
+  expect(canonical(signed)).toBe(before);
+  expect(f.captures.articles.every((row) => !Object.hasOwn(row, "content_format"))).toBe(true);
+  expect(f.record.database.baseline.absentRelations).toHaveLength(4);
+  recovery.verifyRecoveryReceipt(receipt, signed, f.context, f.artifacts, now + 1);
+});
+
+for (const phase of ["pre-migration", "post-migration"] as const) {
+  for (const relation of [
+    "articles",
+    "cms_content_revisions",
+    "media_assets",
+    "media_upload_intents",
+    "app_migrations",
+  ]) {
+    test(`${phase} rejects missing required legacy relation ${relation} even in reviewed catalog`, () => {
+      const f = fixture(phase);
+      f.context.tableNames = f.context.tableNames.filter((name) => name !== "public." + relation);
+      for (const state of [f.record.database.baseline, f.record.database.restored])
+        state.tables = state.tables.filter((t) => t.name !== "public." + relation);
+      f.record.contextSha256 = fingerprint(f.context);
+      expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+        "RECOVERY_FULL_CATALOG",
+      );
+    });
+  }
+  test(`${phase} rejects missing captured legacy rows`, () => {
+    const f = fixture(phase);
+    const bytes = canonical(f.captures.articles.slice(1));
+    f.artifacts.set(digest(bytes), Buffer.from(bytes));
+    for (const state of [f.record.database.baseline, f.record.database.restored])
+      state.tables.find((t) => t.name === "public.articles")!.sha256 = digest(bytes);
+    expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+      "CAPTURE_BINDING",
+    );
+  });
+  test(`${phase} rejects wrong schema, migration count and exact ledger identities`, () => {
+    for (const mutation of ["schema", "count", "ledger"]) {
+      const f = fixture(phase);
+      for (const state of [f.record.database.baseline, f.record.database.restored]) {
+        if (mutation === "schema") state.schemaSha256 = digest("unreviewed schema");
+        if (mutation === "count")
+          state.tables.find((t) => t.name === "public.app_migrations")!.rows++;
+        if (mutation === "ledger") {
+          const ledger = MIGRATION_VERSIONS.slice(0, phase === "pre-migration" ? 95 : 98).map(
+            (version, i) => ({ version: i ? version : "unexpected.sql" }),
+          );
+          const bytes = canonical(ledger);
+          f.artifacts.set(digest(bytes), Buffer.from(bytes));
+          state.tables.find((t) => t.name === "public.app_migrations")!.sha256 = digest(bytes);
+          f.context.schemaProfile.migrationLedgerSha256 = digest(bytes);
+        }
+      }
+      f.record.contextSha256 = fingerprint(f.context);
+      expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+        "RECOVERY_SCHEMA_PROFILE",
+      );
+    }
+  });
+}
+
+test("phase cannot be inferred from evidence or omit explicit absent relations", () => {
+  const f = fixture("pre-migration");
+  f.record.database.restored.absentRelations = [];
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_TABLE_COVERAGE",
+  );
+  const post = fixture();
+  post.context.schemaProfile.phase = "pre-migration";
+  post.record.contextSha256 = fingerprint(post.context);
+  expect(() =>
+    recovery.createRecoveryReceipt(post.seal(), post.context, post.artifacts, now),
+  ).toThrow("RECOVERY_FULL_CATALOG");
+});
+
+test("post-migration recovery cannot omit a required blog relation or article format marker", () => {
+  const f = fixture();
+  f.context.tableNames = f.context.tableNames.filter((name) => name !== "public.blog_settings");
+  for (const state of [f.record.database.baseline, f.record.database.restored])
+    state.tables = state.tables.filter((t) => t.name !== "public.blog_settings");
+  f.record.contextSha256 = fingerprint(f.context);
+  expect(() => recovery.createRecoveryReceipt(f.seal(), f.context, f.artifacts, now)).toThrow(
+    "RECOVERY_FULL_CATALOG",
+  );
+  const missingFormat = fixture();
+  delete missingFormat.captures.articles[0].content_format;
+  const bytes = canonical(missingFormat.captures.articles);
+  missingFormat.artifacts.set(digest(bytes), Buffer.from(bytes));
+  for (const state of [
+    missingFormat.record.database.baseline,
+    missingFormat.record.database.restored,
+  ])
+    state.tables.find((t) => t.name === "public.articles")!.sha256 = digest(bytes);
+  expect(() =>
+    recovery.createRecoveryReceipt(
+      missingFormat.seal(),
+      missingFormat.context,
+      missingFormat.artifacts,
+      now,
+    ),
+  ).toThrow("RECOVERY_REFERENCE_CAPTURE_SCHEMA");
 });
 
 test("fix1 rejects unrelated upload row digest with unchanged database evidence", () => {
@@ -1265,7 +1387,7 @@ test("full catalog, restored schema and media copy coverage cannot be reduced", 
   const b = fixture();
   b.record.database.restored.schemaSha256 = digest("changed schema");
   expect(() => recovery.createRecoveryReceipt(b.seal(), b.context, b.artifacts, now)).toThrow(
-    "RECOVERY_DATABASE_MISMATCH",
+    "RECOVERY_SCHEMA_PROFILE",
   );
   const c = fixture();
   c.record.media.restore.objects = [];

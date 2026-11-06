@@ -75,3 +75,14 @@ audits all source start tags/attributes against inspected nodes. Silently droppe
 `body`/`html`/`head` or contextual carriers cannot become empty coverage. Valid
 supported fragments still use the same signed raw-source bindings; no browser
 rendering or external recovery action is introduced.
+
+Final-review fix requires an independently reviewed `schemaProfile` in the context:
+`phase`, full `schemaSha256` and exact `migrationLedgerSha256`. The release backup
+uses `pre-migration`: ledger 95 and explicit absence of the four new blog tables
+in both baseline and restore. `post-migration` requires those tables and ledger 98.
+Both phases require the legacy article/revision/media tables and unaffected-table
+coverage. Ledger archives must contain the exact migration versions for the phase.
+Legacy article captures may omit `content_format` only before migration; their
+original signed rows and archive bytes are retained without adding a default.
+Existing contexts/evidence missing the profile or `absentRelations` fail closed
+and need independent review and resealing. External recovery remains BLOCKED.

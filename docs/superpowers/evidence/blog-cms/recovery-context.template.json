@@ -19,6 +19,11 @@
   "approvalSha256": null,
   "cleanupApprovalSha256": null,
   "tableNames": null,
+  "schemaProfile": {
+    "phase": "pre-migration",
+    "schemaSha256": null,
+    "migrationLedgerSha256": null
+  },
   "mediaTarget": {
     "storeId": "store_sEHe3hQ90qGByxQA",
     "host": null,

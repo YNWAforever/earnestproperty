@@ -6,6 +6,7 @@ import pg from "pg";
 import { withOwnedPostgres } from "../acceptance/owned-postgres-test.mjs";
 import { PINNED_POSTGRES_18 } from "../../src/lib/neon/owned-postgres-images.ts";
 import { MIGRATION_VERSIONS } from "../../src/lib/control-plane/migration-versions.js";
+import { syntheticReleaseSource } from "./synthetic-release-source.mjs";
 
 const { verifyImportTarget, applyOwnedBlogRelease, snapshotOwnedBlogRelease } =
   await import("../../src/lib/neon/blog-import.ts");
@@ -21,13 +22,27 @@ const urlKeys = [
   "ASTRA_TEST_DATABASE_URL",
 ];
 for (const key of urlKeys) assert.ok(!process.env[key], "Refuses " + key);
-const source = readFileSync(
-  new URL(
-    "../../.private-sync-evidence/blog-import/public-source-2026-11-05T11-54-46-574Z/normalized-main-navigation/source-bundle.json",
-    import.meta.url,
-  ),
+assert.ok(
+  process.argv.length === 2 ||
+    (process.argv.length === 3 && process.argv[2] === "--captured-source"),
+  "Unknown owned release option",
 );
-assert.equal(sha256(source), "60f95f002b0b0f1da1ad4145b7a8d02f14ab19066e9bd3a18bd9b3563a71427e");
+const capturedSource = process.argv[2] === "--captured-source";
+const source = capturedSource
+  ? readFileSync(
+      new URL(
+        "../../.private-sync-evidence/blog-import/public-source-2026-11-05T11-54-46-574Z/normalized-main-navigation/source-bundle.json",
+        import.meta.url,
+      ),
+    )
+  : syntheticReleaseSource();
+if (capturedSource)
+  assert.equal(sha256(source), "60f95f002b0b0f1da1ad4145b7a8d02f14ab19066e9bd3a18bd9b3563a71427e");
+console.log(
+  capturedSource
+    ? "SOURCE captured private rehearsal"
+    : "SOURCE synthetic CI fixture; not live content evidence",
+);
 const bundle = JSON.parse(source);
 
 // Schema reviewed independently of the release executor on a separate owned instance.

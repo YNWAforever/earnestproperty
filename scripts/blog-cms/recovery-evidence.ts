@@ -2,6 +2,7 @@ import { createHash, createPublicKey, verify } from "node:crypto";
 import { z } from "zod";
 import { canonical, fingerprint } from "../../src/lib/blog/reconcile";
 import { productionTargetSchema } from "./production-evidence";
+import { MIGRATION_VERSIONS } from "../../src/lib/control-plane/migration-versions.js";
 import {
   referenceManifestSchema,
   uploadReferenceSchema,
@@ -62,6 +63,13 @@ const contextSchema = z
     approvalSha256: hash,
     cleanupApprovalSha256: hash,
     tableNames: z.array(text).min(1),
+    schemaProfile: z
+      .object({
+        phase: z.enum(["pre-migration", "post-migration"]),
+        schemaSha256: hash,
+        migrationLedgerSha256: hash,
+      })
+      .strict(),
     mediaTarget: z.object({ storeId: text, host, prefix, count, bytes: count }).strict(),
     destination,
     snapshotId: text,
@@ -74,7 +82,9 @@ const contextSchema = z
   })
   .strict();
 const table = z.object({ name: text, rows: count, sha256: hash }).strict();
-const databaseState = z.object({ schemaSha256: hash, tables: z.array(table).min(1) }).strict();
+const databaseState = z
+  .object({ schemaSha256: hash, tables: z.array(table).min(1), absentRelations: z.array(text) })
+  .strict();
 const object = z.object({ key, bytes: count, sha256: hash, metadataSha256: hash }).strict();
 const recordSchema = z
   .object({
@@ -175,14 +185,16 @@ const envelopeSchema = z
   .object({ record: recordSchema, signature: z.string().regex(/^[A-Za-z0-9+/]{86}==$/) })
   .strict();
 const MAX_WINDOW = 21600000;
-const REQUIRED_TABLES = [
-  "app_migrations",
-  "articles",
-  "cms_content_revisions",
+const BLOG_TABLES = [
   "blog_categories",
   "blog_settings",
   "blog_featured_articles",
   "blog_legacy_category_map",
+].map((n) => "public." + n);
+const LEGACY_TABLES = [
+  "app_migrations",
+  "articles",
+  "cms_content_revisions",
   "media_assets",
   "media_upload_intents",
 ].map((n) => "public." + n);
@@ -296,16 +308,56 @@ export function createRecoveryReceipt(
     "RESTORE_ISOLATION",
   );
   // System identity is recorded exactly for both targets. Physical clones may share it: it is NOT an isolation test.
+  const preMigration = c.schemaProfile.phase === "pre-migration";
+  const requiredTables = preMigration ? LEGACY_TABLES : [...LEGACY_TABLES, ...BLOG_TABLES];
+  const absentRelations = preMigration ? BLOG_TABLES : [];
   fail(
     unique(c.tableNames) &&
-      REQUIRED_TABLES.every((n) => c.tableNames.includes(n)) &&
-      c.tableNames.some((n) => !REQUIRED_TABLES.includes(n)),
+      requiredTables.every((n) => c.tableNames.includes(n)) &&
+      absentRelations.every((n) => !c.tableNames.includes(n)) &&
+      c.tableNames.some((n) => ![...LEGACY_TABLES, ...BLOG_TABLES].includes(n)),
     "FULL_CATALOG",
   );
   for (const state of [db.baseline, db.restored]) {
     const names = state.tables.map((t) => t.name);
     fail(unique(names) && same([...names].sort(), [...c.tableNames].sort()), "TABLE_COVERAGE");
+    fail(
+      unique(state.absentRelations) &&
+        same([...state.absentRelations].sort(), [...absentRelations].sort()),
+      "TABLE_COVERAGE",
+    );
+    const ledger = state.tables.find((t) => t.name === "public.app_migrations")!;
+    fail(
+      state.schemaSha256 === c.schemaProfile.schemaSha256 &&
+        ledger.rows === (preMigration ? 95 : 98) &&
+        ledger.sha256 === c.schemaProfile.migrationLedgerSha256,
+      "SCHEMA_PROFILE",
+    );
   }
+  // The independently reviewed phase pins both the full schema and the exact ledger bytes.
+  const ledgerBytes = artifacts.get(c.schemaProfile.migrationLedgerSha256);
+  fail(
+    ledgerBytes instanceof Uint8Array &&
+      sha256(ledgerBytes) === c.schemaProfile.migrationLedgerSha256,
+    "SCHEMA_PROFILE",
+  );
+  let ledgerRows: unknown;
+  try {
+    ledgerRows = JSON.parse(Buffer.from(ledgerBytes!).toString("utf8"));
+  } catch {
+    throw new Error("RECOVERY_SCHEMA_PROFILE");
+  }
+  const ledger = z.array(z.object({ version: text }).passthrough()).safeParse(ledgerRows);
+  fail(
+    ledger.success &&
+      same(ledger.data, ledgerRows) &&
+      canonical(ledgerRows) === Buffer.from(ledgerBytes!).toString("utf8") &&
+      same(
+        ledger.data?.map((r) => r.version).sort(),
+        [...MIGRATION_VERSIONS.slice(0, preMigration ? 95 : 98)].sort(),
+      ),
+    "SCHEMA_PROFILE",
+  );
   const sortedState = (state: z.infer<typeof databaseState>) => ({
     ...state,
     tables: [...state.tables].sort((a, b) => a.name.localeCompare(b.name)),
@@ -375,6 +427,7 @@ export function createRecoveryReceipt(
     excludedReferenceValues: c.excludedReferenceValues,
     manifest: m.referenceManifest,
     uploads: m.uploads,
+    schemaPhase: c.schemaProfile.phase,
   });
   const copies = m.restore.objects;
   fail(
@@ -416,6 +469,7 @@ export function createRecoveryReceipt(
     m.restore.isolationEvidenceSha256,
     cleanup.evidenceSha256,
     ...referenceArchiveHashes,
+    c.schemaProfile.migrationLedgerSha256,
     ...m.objects.map((o) => o.sha256),
   ];
   for (const digest of archiveHashes) {

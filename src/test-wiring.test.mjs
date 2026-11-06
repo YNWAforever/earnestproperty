@@ -5,6 +5,64 @@ import test from "node:test";
 
 const root = process.cwd();
 
+test("blog release gates run offline, in Chromium, and on owned PG18 in exact-head CI", async () => {
+  const { createRequire } = await import("node:module");
+  const workflow = createRequire(import.meta.url)("js-yaml").load(
+    readFileSync(join(root, ".github/workflows/ci.yml"), "utf8"),
+  );
+  const scripts = JSON.parse(readFileSync(join(root, "package.json"), "utf8")).scripts;
+  const steps = workflow.jobs.ci.steps;
+  const invoked = steps
+    .flatMap((step) =>
+      [...(step.run ?? "").matchAll(/npm run ([\w:-]+)/g)].map((m) => scripts[m[1]] ?? ""),
+    )
+    .join("\n");
+  for (const file of [
+    "production-adapter.test.ts",
+    "release-controls.test.ts",
+    "release-packet.test.ts",
+    "production-executor.test.mjs",
+    "recovery-evidence.test.ts",
+    "hosted-contract.test.ts",
+    "hosted-scenario.test.ts",
+    "hosted-mutation-cleanup.test.ts",
+    "hosted-journal.test.ts",
+    "hosted-recovery.test.ts",
+  ])
+    assert.ok(invoked.includes("scripts/blog-cms/" + file), file);
+  const install = steps.findIndex((step) =>
+    step.run?.includes("playwright install --with-deps chromium"),
+  );
+  for (const file of ["hosted-browser-boundary.test.ts", "hosted-recovery-browser.test.ts"]) {
+    const index = steps.findIndex(
+      (step) => step.run && scripts[step.run.replace("npm run ", "")]?.includes(file),
+    );
+    assert.ok(install >= 0 && index > install, file);
+    assert.ok(steps[index]["timeout-minutes"] <= 10);
+  }
+  const owned = workflow.jobs["no-link-local-postgres"].steps;
+  const run = owned.findIndex(
+    (step) =>
+      step.run &&
+      scripts[step.run.replace("npm run ", "")]?.includes(
+        "scripts/blog-cms/owned-release.integration.mjs",
+      ),
+  );
+  assert.ok(run >= 0, "owned release suite");
+  assert.ok(owned[run]["timeout-minutes"] <= 10);
+  const pin = readFileSync(join(root, "src/lib/neon/owned-postgres-images.ts"), "utf8").match(
+    /PINNED_POSTGRES_18\s*=\s*"([^"]+)"/,
+  )[1];
+  assert.ok(owned.findIndex((step) => step.run === "docker pull " + pin) < run);
+  assert.ok(owned.some((step) => step.run === "docker pull " + pin));
+  assert.doesNotMatch(
+    owned[run].run + JSON.stringify(owned[run].env ?? {}),
+    /secrets\.|DATABASE_URL/,
+  );
+  const runner = readFileSync(join(root, "scripts/blog-cms/owned-release.integration.mjs"), "utf8");
+  assert.match(runner, /syntheticReleaseSource/);
+});
+
 /**
  * This repo has no aggregate `npm test`. Tests are split by runner -- `.mjs`
  * under `node --test`, `.ts`/`.tsx` under `bun test` -- and invoked through

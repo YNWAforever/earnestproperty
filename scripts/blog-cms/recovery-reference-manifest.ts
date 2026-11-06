@@ -54,7 +54,7 @@ const rowSchemas = {
       id: text,
       cover_image: z.string().nullable(),
       content: z.string().nullable(),
-      content_format: z.enum(["legacy-text", "editor-json-v1"]),
+      content_format: z.enum(["legacy-text", "editor-json-v1"]).optional(),
     })
     .passthrough(),
   cms_content_revisions: z
@@ -102,6 +102,7 @@ function sourceValues(row: Record<string, unknown>) {
 type Scope = { storeId: string; host: string; prefix: string };
 type Table = { name: string; rows: number; sha256: string };
 export function validateReferenceManifest(input: {
+  schemaPhase: "pre-migration" | "post-migration";
   tables: Table[];
   artifacts: ReadonlyMap<string, Uint8Array>;
   source: Scope;
@@ -150,7 +151,9 @@ export function validateReferenceManifest(input: {
   const uploads: z.infer<typeof uploadReferenceSchema>[] = [];
   const archiveHashes: string[] = [];
   for (const source of referenceTables) {
-    const table = input.tables.find((t) => t.name === "public." + source)!;
+    const table = input.tables.find((t) => t.name === "public." + source);
+    requireEvidence(!!table, "TABLE_MISSING");
+    if (!table) throw new Error("RECOVERY_REFERENCE_TABLE_MISSING");
     const bytes = input.artifacts.get(table.sha256);
     requireEvidence(bytes instanceof Uint8Array, "CAPTURE_MISSING");
     let raw: unknown;
@@ -174,6 +177,8 @@ export function validateReferenceManifest(input: {
     if (source === "media_upload_intents")
       requireEvidence(input.uploads.rowsSha256 === table.sha256, "UPLOAD_DIGEST");
     for (const row of rows.data) {
+      if (source === "articles" && input.schemaPhase === "post-migration")
+        requireEvidence(row.content_format !== undefined, "CAPTURE_SCHEMA");
       const refs = sourceValues(row).map(({ path, value, decoded }) => ({
         path,
         value,

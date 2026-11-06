@@ -302,6 +302,29 @@ this tooling neither provisions that authority nor changes executor gates.
 
 Focused offline verification:
 
+The reviewed recovery context must contain `schemaProfile.phase` (`pre-migration`
+or `post-migration`), `schemaProfile.schemaSha256` (full schema), and
+`schemaProfile.migrationLedgerSha256` (canonical captured ledger archive bytes).
+The release's required backup is **pre-migration**, before atomic 95→98 execution.
+Its baseline and restored `absentRelations` arrays must explicitly name
+`public.blog_categories`, `public.blog_settings`, `public.blog_featured_articles`
+and `public.blog_legacy_category_map`; none may occur in the present table catalog.
+Post-migration requires all four present and `absentRelations: []`. Both phases
+require all legacy tables and unaffected-table coverage. Ledger row count and
+exact version identities must match 95 or 98 respectively. Original legacy
+article rows may lack `content_format` before migration; do not manufacture it.
+The strengthened v2 contract rejects old contexts/evidence missing these fields;
+re-review and reseal them, never normalize signed input in place.
+
 ```text
 bun test --no-env-file scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/release-controls.test.ts scripts/blog-cms/release-packet.test.ts scripts/blog-cms/writer-control-register.test.ts
 ```
+
+Exact-head CI runs `test:blog:release:guards`, `test:blog:hosted:guards`, the real
+loopback Chromium `test:blog:hosted:browser` after browser installation, and
+`test:blog:release:owned:db` on the pinned PG18 image. These gates make no provider
+calls. The owned-release test defaults to a portable synthetic 112-article fixture;
+it proves transaction/rollback/retry behavior, not production source acceptance.
+The existing exact private capture rehearsal remains explicitly available as
+`node scripts/blog-cms/owned-release.integration.mjs --captured-source` when its
+ignored, checksum-bound capture is present. CI never requires that private file.
