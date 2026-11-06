@@ -192,6 +192,9 @@ export async function listFeaturedArticles({ data }: { data: ArticleQuery }) {
 }
 
 export async function getFeaturedArticle({ data }: { data: { id: string } }) {
+  await new Promise((resolve) => setTimeout(resolve, fixture.previewDelayMs));
+  if (fixture.failPreviewIds.includes(data.id))
+    throw new ServerFnResponseError("BLOG_UNAVAILABLE", 503);
   const a = records.find((x) => x.id === data.id);
   if (!a) throw new ServerFnResponseError("Not found", 404);
   return structuredClone(publishedSummary(a));
