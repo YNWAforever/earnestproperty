@@ -108,6 +108,24 @@ await withOwnedPostgres(
       await unchanged();
       console.log("PASS packet, source, target, implementation, migration and baseline seals");
 
+      // PL/pgSQL string bodies do not record this call in pg_depend. The
+      // articles trigger and its immediate function stay byte-identical.
+      const helper = (
+        await query(
+          "SELECT pg_get_functiondef('ep_queue_knowledge_repair(ai_knowledge_source_type,text)'::regprocedure) definition",
+        )
+      )[0].definition;
+      await query(helper.replace("BEGIN", "BEGIN\n  NULL; -- fixture drift"));
+      try {
+        await assert.rejects(run(), /RELEASE_SCHEMA/);
+        assert.equal(Number((await query("SELECT count(*) n FROM app_migrations"))[0].n), 95);
+        assert.deepEqual(await effects(), baselineEffects);
+      } finally {
+        await query(helper);
+      }
+      await unchanged();
+      console.log("PASS changed transitive trigger helper rejected before mutation");
+
       const writer = await pool.connect();
       try {
         await writer.query("BEGIN");

@@ -44,13 +44,43 @@ const baselineVersions = MIGRATION_VERSIONS.filter(
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
 // Fingerprint definitions and security attributes, with stable names rather than cluster OIDs.
-// Only release dependencies in public are in scope; unrelated data never enters the packet.
+// Relations are scoped to the release. Opaque function bodies may call helpers
+// across schemas, so their fallback deliberately seals more routine definitions.
 async function releaseSchema(client: BlogSqlSession) {
   const rows = (
     await client.query(
-      `WITH relations AS (
+      `WITH RECURSIVE relations AS (
         SELECT c.* FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
         WHERE n.nspname='public' AND c.relname=ANY($1::text[])
+      ), routine_roots AS (
+        SELECT t.tgfoid AS oid FROM pg_trigger t JOIN relations c ON c.oid=t.tgrelid
+        UNION
+        SELECT d.refobjid FROM pg_depend d WHERE d.refclassid='pg_proc'::regclass AND (
+          (d.classid='pg_attrdef'::regclass AND d.objid IN (
+            SELECT a.oid FROM pg_attrdef a JOIN relations c ON c.oid=a.adrelid))
+          OR (d.classid='pg_constraint'::regclass AND d.objid IN (
+            SELECT x.oid FROM pg_constraint x JOIN relations c ON c.oid=x.conrelid))
+          OR (d.classid='pg_class'::regclass AND d.objid IN (
+            SELECT i.indexrelid FROM pg_index i JOIN relations c ON c.oid=i.indrelid))
+          OR (d.classid='pg_policy'::regclass AND d.objid IN (
+            SELECT p.oid FROM pg_policy p JOIN relations c ON c.oid=p.polrelid))
+        )
+      ), routine_dependencies(oid) AS (
+        SELECT oid FROM routine_roots
+        UNION
+        SELECT d.refobjid FROM routine_dependencies r JOIN pg_depend d ON d.objid=r.oid
+        WHERE d.classid='pg_proc'::regclass AND d.refclassid='pg_proc'::regclass
+      ), routine_scope AS (
+        SELECT oid FROM routine_dependencies
+        UNION
+        -- PostgreSQL does not record function calls in PL/pgSQL or string SQL
+        -- bodies. Such a body can also use dynamic SQL or change search_path.
+        -- Seal every non-bootstrap routine (FirstNormalObjectId = 16384) for
+        -- that opaque case; a name parser would miss valid runtime dispatch.
+        SELECT p.oid FROM pg_proc p WHERE p.oid>=16384 AND EXISTS (
+          SELECT 1 FROM routine_dependencies d JOIN pg_proc r ON r.oid=d.oid
+          WHERE r.oid>=16384 AND r.prosqlbody IS NULL
+        )
       )
       SELECT jsonb_build_object(
         'name', c.relname, 'kind', c.relkind, 'owner', pg_get_userbyid(c.relowner),
@@ -75,12 +105,19 @@ async function releaseSchema(client: BlogSqlSession) {
       ) AS definition, c.relname AS name
       FROM relations c
       UNION ALL
-      SELECT jsonb_build_object('function', p.proname, 'owner',pg_get_userbyid(p.proowner),
-        'acl',p.proacl,'definition',pg_get_functiondef(p.oid)),
-        'function:'||p.proname||'('||pg_get_function_identity_arguments(p.oid)||')'
-      FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
-      WHERE n.nspname='public' AND p.prokind='f'
-        AND (starts_with(p.proname,'blog_') OR starts_with(p.proname,'cms_'))
+      SELECT jsonb_build_object('schema',n.nspname,'routine',p.proname,'kind',p.prokind,
+        'owner',pg_get_userbyid(p.proowner),'acl',p.proacl,'language',l.lanname,
+        'definition',CASE WHEN p.prokind<>'a' THEN pg_get_functiondef(p.oid)
+          ELSE jsonb_build_array(a.aggtransfn::regprocedure::text,a.aggfinalfn::regprocedure::text,
+            a.aggcombinefn::regprocedure::text,a.aggserialfn::regprocedure::text,
+            a.aggdeserialfn::regprocedure::text,a.aggmtransfn::regprocedure::text,
+            a.aggminvtransfn::regprocedure::text,a.aggmfinalfn::regprocedure::text,
+            a.agginitval,a.aggminitval)::text END),
+        'routine:'||format('%I.%I(%s)',n.nspname,p.proname,pg_get_function_identity_arguments(p.oid))
+      FROM routine_scope r JOIN pg_proc p ON p.oid=r.oid
+      JOIN pg_namespace n ON n.oid=p.pronamespace JOIN pg_language l ON l.oid=p.prolang
+      LEFT JOIN pg_aggregate a ON a.aggfnoid=p.oid
+      WHERE p.oid>=16384
       ORDER BY name`,
       [schemaTables],
     )
