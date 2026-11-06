@@ -20,6 +20,10 @@ export const sha256 = (bytes: string | Uint8Array) =>
 const semanticsPaths = [
   "scripts/blog-cms/production-adapter.ts",
   "src/lib/neon/blog-import.ts",
+  "src/lib/neon/blog-import-transaction.ts",
+  "src/lib/neon/blog-release-packet.ts",
+  "src/lib/neon/blog-release-transaction.ts",
+  "scripts/blog-cms/release-controls.ts",
   "src/lib/blog/reconcile.ts",
   "src/lib/blog/import-snapshots.ts",
   "src/lib/blog/article-codec.ts",
@@ -104,7 +108,7 @@ export function prepareProductionPacket(input: {
       ...plan.unresolved,
       ...plan.conflicts.map((c) => "conflict:" + c.slug + ":" + c.reason),
       ...REQUIRED_CONTROLS,
-      "production-executor-not-implemented",
+      "trusted-production-target-controls-unavailable",
     ],
   };
   return deepFreeze({ ...body, manifestFingerprint: fingerprint(body) });
@@ -166,11 +170,17 @@ export function reviewProductionPacket(packet: ProductionPacket, approvedDigest:
     integrity: "MATCH" as const,
     executionAuthorized: false as const,
     blockers: [
-      ...new Set([...packet.blockers, ...REQUIRED_CONTROLS, "production-executor-not-implemented"]),
+      ...new Set([
+        ...packet.blockers,
+        ...REQUIRED_CONTROLS,
+        "trusted-production-target-controls-unavailable",
+      ]),
     ],
   };
 }
 
 export function executeProductionRelease(..._untrusted: unknown[]): never {
-  throw new Error("PRODUCTION_EXECUTION_UNAVAILABLE: offline preparation only");
+  // No trusted production evidence provider, direct TLS role or writer fence
+  // has been provisioned. Do not accept these controls from the caller.
+  throw new Error("PRODUCTION_EXECUTION_UNAVAILABLE: trusted target controls are not provisioned");
 }

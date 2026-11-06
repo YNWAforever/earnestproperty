@@ -167,7 +167,7 @@ test("preparation preserves all source articles and keeps missing database expli
 test("deterministic, recursively frozen manifest binds source and implementation", () => {
   expect(prepareProductionPacket(input())).toEqual(packet);
   expect(Object.isFrozen(packet.plan.insert[0])).toBe(true);
-  expect(packet.semantics).toHaveLength(10);
+  expect(packet.semantics).toHaveLength(14);
   expect(reviewProductionPacket(packet, packet.manifestFingerprint).integrity).toBe("MATCH");
 });
 for (const key of Object.keys(PRODUCTION_TARGET)) {
