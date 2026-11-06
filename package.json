@@ -158,7 +158,10 @@
     "test:blog-cms": "node --test scripts/blog-cms/acceptance-identity.test.mjs && bun test --no-env-file scripts/blog-cms/writer-control-register.test.ts scripts/blog-cms/verify-manifest.test.ts src/lib/blog/presentation.test.ts src/lib/blog/content.test.ts src/components/blog/ArticleBody.test.tsx src/lib/blog/reconcile.test.ts src/lib/blog/import-snapshots.test.ts src/components/admin/blog/BlogManager.test.tsx",
     "test:blog-cms:db": "bun test --no-env-file src/lib/neon/blog-schema.integration.test.ts src/lib/neon/blog-repository.integration.test.ts src/lib/neon/blog-import.integration.test.ts src/lib/blog/public.integration.test.ts src/lib/blog/cms-acceptance.integration.test.ts",
     "acceptance:blog-cms:http": "node scripts/test-blog-cms-http.mjs",
-    "acceptance:blog-cms:build": "node scripts/blog-cms/build-acceptance.mjs"
+    "acceptance:blog-cms:build": "node scripts/blog-cms/build-acceptance.mjs",
+    "test:blog:hosted:guards": "bun test --no-env-file scripts/blog-cms/hosted-contract.test.ts scripts/blog-cms/hosted-scenario.test.ts",
+    "blog:hosted": "bun run --no-env-file scripts/blog-cms/hosted-cli.ts",
+    "typecheck:blog:hosted": "tsc --noEmit -p tsconfig.hosted-acceptance.json"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1115.0",
