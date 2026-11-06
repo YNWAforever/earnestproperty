@@ -1,5 +1,31 @@
 import { z } from "zod";
 
+// Trusted review baseline, not loaded from the submitted register or caller options.
+// Changing this active generation requires code review of the evidence bytes/capture
+// provenance and validity window. Revision 02 fixes the packet, NOT its freshness.
+const reviewedProposal = {
+  generation: "blog-cms-writer-proposal-20261106-02",
+  observedAt: "2026-11-06T20:40:47.6592322+08:00",
+  expiresAt: "2026-11-07T12:40:47Z",
+  observations: [
+    {
+      path: "writer-read-only-observations.json",
+      capturedAt: "2026-11-06T20:40:47.6592322+08:00",
+      sha256: "d8b4cd2f2cf9832c3bfac4aff65372156b7978789d7eba0324d528655fbcead7",
+    },
+    {
+      path: "release-provider-metadata.json",
+      capturedAt: "2026-11-05T12:48:55.205Z",
+      sha256: "f1081ba76f6b850eaf0dd5d1fa8555276f5a7b7344c2a78ba1bdc32b17ce616b",
+    },
+    {
+      path: "recovery-blob-metadata.json",
+      capturedAt: null, // No capture timestamp in the evidence; never fabricate freshness.
+      sha256: "74dbe44a20bfead1a9e6e35a5430ffb86cf1deba1564fc81aa9429af7f1d8a98",
+    },
+  ],
+} as const;
+
 // Reviewed coverage is independent of the submitted register. Newly discovered resources
 // require a reviewed catalog revision, not an extra self-declared "covered" row.
 const resourcesByWriter: Readonly<Record<string, readonly string[]>> = {
@@ -101,6 +127,34 @@ const schema = z
       })
       .strict(),
     activationApproval: z.null(),
+    acceptanceAccess: z
+      .object({
+        action: z.literal("ADMIT-ACCEPTANCE-ONLY"),
+        status: z.literal("BLOCKED_SEPARATE_APPROVAL_REQUIRED"),
+        before: z.literal("REOPEN-WRITERS"),
+        maxDurationMinutes: z.literal(30),
+        generalWritersEnabled: z.literal(false),
+        inspectedDeploymentId: z.literal("dpl_CdBSXxdBMMjY6muGmCU6wkxktdY5"),
+        releaseDeploymentId: z.null(),
+        proposedActors: z
+          .array(
+            z
+              .object({
+                name: z.literal("Willy"),
+                staffId: z.null(),
+                authUserId: z.null(),
+                sourceIp: z.null(),
+              })
+              .strict(),
+          )
+          .length(1),
+        approval: z.null(),
+        permittedOperations: list,
+        preservedExclusions: list,
+        auditEvidence: list,
+        closeConditions: list,
+      })
+      .strict(),
     reopenApproval: z.null(),
     inventoryComplete: z.literal(false),
     observations: z
@@ -113,6 +167,7 @@ const schema = z
               "recovery-blob-metadata.json",
             ]),
             sha256: digest,
+            capturedAt: timestamp.nullable(),
           })
           .strict(),
       )
@@ -141,6 +196,7 @@ export function assessWriterControlRegister(input: unknown, now: number) {
   const blockers = [
     "ACTIVATION_APPROVAL_MISSING",
     "LIVE_FENCE_UNPROVEN",
+    "ACCEPTANCE_ACCESS_REQUIRES_SEPARATE_APPROVAL",
     "INVENTORY_INCOMPLETE",
     "REOPEN_REQUIRES_SEPARATE_APPROVAL",
   ];
@@ -148,6 +204,21 @@ export function assessWriterControlRegister(input: unknown, now: number) {
   if (!parsed.success) errors.push("INVALID_REGISTER");
   else {
     const register = parsed.data;
+    if (register.generation !== reviewedProposal.generation) errors.push("UNREVIEWED_GENERATION");
+    if (
+      register.observedAt !== reviewedProposal.observedAt ||
+      register.expiresAt !== reviewedProposal.expiresAt
+    )
+      errors.push("UNREVIEWED_WINDOW");
+    for (const expected of reviewedProposal.observations) {
+      const observation = register.observations.find((item) => item.path === expected.path);
+      if (
+        !observation ||
+        observation.sha256 !== expected.sha256 ||
+        observation.capturedAt !== expected.capturedAt
+      )
+        errors.push("UNREVIEWED_EVIDENCE");
+    }
     const start = Date.parse(register.observedAt);
     const expiry = Date.parse(register.expiresAt);
     if (

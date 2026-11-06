@@ -3,7 +3,7 @@
   "state": "BLOCKED_NOT_ACTIVATED",
   "owner": "Willy",
   "sourceHead": "52fe2f456d993fd3b0b715d846c45322a5e04526",
-  "generation": "blog-cms-writer-proposal-20261106-01",
+  "generation": "blog-cms-writer-proposal-20261106-02",
   "observedAt": "2026-11-06T20:40:47.6592322+08:00",
   "expiresAt": "2026-11-07T12:40:47Z",
   "target": {
@@ -21,15 +21,18 @@
   "observations": [
     {
       "path": "writer-read-only-observations.json",
-      "sha256": "d8b4cd2f2cf9832c3bfac4aff65372156b7978789d7eba0324d528655fbcead7"
+      "sha256": "d8b4cd2f2cf9832c3bfac4aff65372156b7978789d7eba0324d528655fbcead7",
+      "capturedAt": "2026-11-06T20:40:47.6592322+08:00"
     },
     {
       "path": "release-provider-metadata.json",
-      "sha256": "f1081ba76f6b850eaf0dd5d1fa8555276f5a7b7344c2a78ba1bdc32b17ce616b"
+      "sha256": "f1081ba76f6b850eaf0dd5d1fa8555276f5a7b7344c2a78ba1bdc32b17ce616b",
+      "capturedAt": "2026-11-05T12:48:55.205Z"
     },
     {
       "path": "recovery-blob-metadata.json",
-      "sha256": "74dbe44a20bfead1a9e6e35a5430ffb86cf1deba1564fc81aa9429af7f1d8a98"
+      "sha256": "74dbe44a20bfead1a9e6e35a5430ffb86cf1deba1564fc81aa9429af7f1d8a98",
+      "capturedAt": null
     }
   ],
   "writerVariables": {
@@ -1194,7 +1197,7 @@
       "control": {
         "status": "proposed",
         "steps": [
-          "Deny all application ingress on every deployment plus sustained database identity fence; maintain across migration, import, deployment verification and acceptance.",
+          "Deny general application ingress on every deployment plus the sustained database identity fence. Before general reopening, only a separately approved ADMIT-ACCEPTANCE-ONLY phase may grant exact actor/deployment/operation exceptions; all other writers remain excluded.",
           "Do not substitute staff roles, UI hiding, advisory/table locks or a boolean flag for privileged writer exclusion."
         ]
       },
@@ -1209,7 +1212,7 @@
         "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
       ],
       "reopenSteps": [
-        "After separate reopen approval, admit only acceptance actors first; restore saved access and verify expected artifact before general staff access."
+        "Complete the separately approved, bounded acceptance-access phase before requesting REOPEN-WRITERS. Close its exceptions and retain the fence; only subsequent general-reopen approval restores saved staff/runtime access."
       ]
     },
     {
@@ -1236,7 +1239,7 @@
       "control": {
         "status": "proposed",
         "steps": [
-          "Deny all application ingress on every deployment plus sustained database identity fence; maintain across migration, import, deployment verification and acceptance.",
+          "Deny general application ingress on every deployment plus the sustained database identity fence. Before general reopening, only a separately approved ADMIT-ACCEPTANCE-ONLY phase may grant exact actor/deployment/operation exceptions; all other writers remain excluded.",
           "Do not substitute staff roles, UI hiding, advisory/table locks or a boolean flag for privileged writer exclusion."
         ]
       },
@@ -1251,7 +1254,7 @@
         "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
       ],
       "reopenSteps": [
-        "After separate reopen approval, admit only acceptance actors first; restore saved access and verify expected artifact before general staff access."
+        "Complete the separately approved, bounded acceptance-access phase before requesting REOPEN-WRITERS. Close its exceptions and retain the fence; only subsequent general-reopen approval restores saved staff/runtime access."
       ]
     },
     {
@@ -1279,7 +1282,7 @@
       "control": {
         "status": "proposed",
         "steps": [
-          "Deny all application ingress on every deployment plus sustained database identity fence; maintain across migration, import, deployment verification and acceptance.",
+          "Deny general application ingress on every deployment plus the sustained database identity fence. Before general reopening, only a separately approved ADMIT-ACCEPTANCE-ONLY phase may grant exact actor/deployment/operation exceptions; all other writers remain excluded.",
           "Do not substitute staff roles, UI hiding, advisory/table locks or a boolean flag for privileged writer exclusion."
         ]
       },
@@ -1294,7 +1297,7 @@
         "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
       ],
       "reopenSteps": [
-        "After separate reopen approval, admit only acceptance actors first; restore saved access and verify expected artifact before general staff access."
+        "Complete the separately approved, bounded acceptance-access phase before requesting REOPEN-WRITERS. Close its exceptions and retain the fence; only subsequent general-reopen approval restores saved staff/runtime access."
       ]
     },
     {
@@ -1321,7 +1324,7 @@
       "control": {
         "status": "proposed",
         "steps": [
-          "Deny all application ingress on every deployment plus sustained database identity fence; maintain across migration, import, deployment verification and acceptance.",
+          "Deny general application ingress on every deployment plus the sustained database identity fence. Before general reopening, only a separately approved ADMIT-ACCEPTANCE-ONLY phase may grant exact actor/deployment/operation exceptions; all other writers remain excluded.",
           "Do not substitute staff roles, UI hiding, advisory/table locks or a boolean flag for privileged writer exclusion."
         ]
       },
@@ -1336,7 +1339,7 @@
         "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
       ],
       "reopenSteps": [
-        "After separate reopen approval, admit only acceptance actors first; restore saved access and verify expected artifact before general staff access."
+        "Complete the separately approved, bounded acceptance-access phase before requesting REOPEN-WRITERS. Close its exceptions and retain the fence; only subsequent general-reopen approval restores saved staff/runtime access."
       ]
     },
     {
@@ -1362,7 +1365,7 @@
       "control": {
         "status": "proposed",
         "steps": [
-          "Deny all application ingress on every deployment plus sustained database identity fence; maintain across migration, import, deployment verification and acceptance.",
+          "Deny general application ingress on every deployment plus the sustained database identity fence. Before general reopening, only a separately approved ADMIT-ACCEPTANCE-ONLY phase may grant exact actor/deployment/operation exceptions; all other writers remain excluded.",
           "Do not substitute staff roles, UI hiding, advisory/table locks or a boolean flag for privileged writer exclusion."
         ]
       },
@@ -1377,7 +1380,7 @@
         "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
       ],
       "reopenSteps": [
-        "After separate reopen approval, admit only acceptance actors first; restore saved access and verify expected artifact before general staff access."
+        "Complete the separately approved, bounded acceptance-access phase before requesting REOPEN-WRITERS. Close its exceptions and retain the fence; only subsequent general-reopen approval restores saved staff/runtime access."
       ]
     },
     {
@@ -1485,25 +1488,29 @@
           "Signed recovery receipt can finalize metadata on retry without re-uploading; UPLOAD_METADATA_PENDING/UPLOAD_OUTCOME_UNKNOWN are not safe drain success."
         ],
         "gaps": [
-          "Live Blob token-consumer mapping, pending operations and effective reversible provider control missing; no token values may be retrieved."
+          "Current retry callers, pending intent/receipt inventory, DB role/session mapping and exact application/DB deny controls are missing; no receipt or secret values may be retrieved for this preparation."
         ]
       },
       "control": {
         "status": "proposed",
         "steps": [
-          "Hold retries/finalizers and snapshot pending intent/object/reference mappings privately; reconcile with no new writes until a separate approval.",
-          "Table locks and application authorization cannot fence Vercel Blob."
+          "Hold /api/admin/media/upload receipt retries at application ingress before repo.claim, and retain DB writer isolation for both repo.claim and repo.complete. A valid recovery receipt skips Blob PUT and can update metadata while storage denies remain active.",
+          "Preserve pending intent/object/reference mappings privately. Keep receipt retries excluded during acceptance access; do not reconcile by writing until separately approved."
         ]
       },
       "proofSteps": [
-        "Verify old app/preview/development/import/CLI credentials cannot mutate this store using an approved no-persistent-object-write probe; retain provider deny and stable object/reference inventory."
+        "Under a separate exact probe approval, submit a valid existing pending recovery receipt with its matching uploadId/file/actor to /api/admin/media/upload on each former deployment path; prove application denial before repo.claim or repo.complete, including authenticated retry and acceptance-actor attempts. An invalid receipt rejection is not fence proof.",
+        "Independently prove DB denial for the former runtime/direct finalizer identity at repo.claim and repo.complete, binding the exact Neon project/branch/endpoint/database/role/session and intent/asset IDs. A Blob denial is not evidence for this path.",
+        "Capture consistent read-only before/after projections and counts/digests of media_upload_intents and media_assets, including url/completed_at and related rows, correlated to each denied retry and after drain. Require unchanged metadata and zero committed finalizations, including delayed retries. Rollback-only probe results alone do not prove the request was denied; retain the actual deny source. If safe proof cannot be performed, remain BLOCKED."
       ],
       "drainCriteria": [
-        "Zero executing finalizers; every pending/unknown intent has reviewed held disposition, object bytes and references preserved."
+        "Zero executing/leased finalizers or delayed retry callbacks. Every pending/unknown intent has a reviewed held disposition with unchanged media_upload_intents/media_assets and preserved object references/bytes. Neither acceptance access nor expiration releases held retries."
       ],
       "retainedEvidence": [
         "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
-        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads.",
+        "Retain restricted held-retry disposition per intent/upload ID and hashed receipt reference: owning actor, target DB identity, prior metadata digest, object/reference status, hold reason, retry/lease counts and explicit no-replay decision until separately approved. Do not store raw recovery receipts in this register.",
+        "Retain authenticated application-denial traces correlated with DB denial/audit evidence and before/after metadata digests; Blob PUT-denial evidence is supplementary only."
       ],
       "reopenSteps": [
         "After distinct reopen approval restore only saved access; reconcile held operations individually with idempotency and content hashes; never bulk delete, overwrite or retry unknown outcomes."
@@ -1595,5 +1602,39 @@
         "After distinct reopen approval restore only saved access; reconcile held operations individually with idempotency and content hashes; never bulk delete, overwrite or retry unknown outcomes."
       ]
     }
-  ]
+  ],
+  "acceptanceAccess": {
+    "action": "ADMIT-ACCEPTANCE-ONLY",
+    "status": "BLOCKED_SEPARATE_APPROVAL_REQUIRED",
+    "before": "REOPEN-WRITERS",
+    "maxDurationMinutes": 30,
+    "generalWritersEnabled": false,
+    "inspectedDeploymentId": "dpl_CdBSXxdBMMjY6muGmCU6wkxktdY5",
+    "releaseDeploymentId": null,
+    "proposedActors": [
+      {
+        "name": "Willy",
+        "staffId": null,
+        "authUserId": null,
+        "sourceIp": null
+      }
+    ],
+    "approval": null,
+    "permittedOperations": [
+      "Only separately approved public GET /blog and exact article URLs, and private listBlogArticles/getBlogAdminState/getArticlePreview/getBlogCategoryOptions reads on the exact accepted artifact. Bind each method/path/server-function ID and resource ID before admission.",
+      "No mutation permission by default. Any required acceptance mutation needs an explicit bounded extension naming the actor, function, fixture/row IDs, expected effects and separately reviewed recovery; untested writes remain NOT_RUN."
+    ],
+    "preservedExclusions": [
+      "All general staff, old/preview/development deployments, generic CMS/copilot writes, jobs, schedules, direct SQL/imports, privileged consoles, media upload/receipt finalization/variants/deletion and access-management writers remain fenced.",
+      "No global role/credential restoration, broad domain reopening, bootstrap writes, new sessions for unlisted actors, queue release or public bearer bypass."
+    ],
+    "auditEvidence": [
+      "Exact release deployment/hostname/artifact, existing actor staff/auth IDs and source IP, allowed operation/record matrix, approval ID, start/end UTC, current fence generation and register hash.",
+      "Per-request authenticated principal, function/path/method, record IDs, outcome, correlated DB session, before/after state digests, denied excluded-writer probes and exception removal readback; no bearer tokens or raw receipts."
+    ],
+    "closeConditions": [
+      "Fail closed at the approved expiry (maximum 30 minutes), actor/deployment/generation drift, failed acceptance or attempted excluded operation: remove only acceptance exceptions and retain the sustained fence.",
+      "Close and verify the temporary exception before requesting separate general reopening; acceptance approval never authorizes general writers."
+    ]
+  }
 }

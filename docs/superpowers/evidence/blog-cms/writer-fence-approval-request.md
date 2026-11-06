@@ -8,11 +8,11 @@ The [register](writer-control-register.json) contains 36 identified proposed
 controls, each with observed pre-state, explicit gaps, source references, control
 steps, proof, drain criteria, retained evidence and reopening steps. It is bound
 to inspected source head `52fe2f456d993fd3b0b715d846c45322a5e04526` and proposal
-generation `blog-cms-writer-proposal-20261106-01`. Eventual activation must bind
+generation `blog-cms-writer-proposal-20261106-02`. Eventual activation must bind
 the final reviewed release head and packet as well.
 
 Current register bytes SHA-256:
-`c18e38ba38248e76d932b750baec11e28181c8c49479e0168b276832b51a0150`.
+`e007ed888bd367d9083b42ea288ac95814df35bc5372262eefd2d480aca550d5`.
 Refreshing any pre-state requires a new hash and review, not reuse of this digest.
 
 ## Evidence boundary and expiry
@@ -37,7 +37,15 @@ Unknown state remains a blocker, never an assumed zero or disabled state.
 
 Proposal expiry is `2026-11-07T12:40:47Z`, at most 24 hours after the latest
 observation. Expiry invalidates proposal use; it never releases external controls.
-Refresh and issue a new generation after expiry or any pre-state/inventory change.
+Generation 02 amends this proposal; it retains the original evidence and expiry,
+and does not claim a new capture or renewed validity window. Generation 01 is
+retired. The validator pins the active generation, exact observation digests,
+per-observation capture times (including unknown/null for Blob), and both window
+endpoints to private constants in its reviewed source catalog. Submitted JSON
+cannot select a trust baseline. A timestamp edit, rehashed observation, or new
+generation label alone is rejected. Renewal requires fresh evidence with verified
+capture provenance and a separately code-reviewed active catalog/generation update;
+copying old evidence into a new window is not a refresh.
 Tests use an explicit historical clock, not a claim of present freshness. Actual
 activation approval and fence evidence require separately bounded windows.
 
@@ -154,7 +162,7 @@ Required approval record (every field mandatory; **currently absent**):
 
 ```text
 action = ACTIVATE-WRITER-FENCE
-proposalGeneration = blog-cms-writer-proposal-20261106-01
+proposalGeneration = blog-cms-writer-proposal-20261106-02
 registerSha256 = hash of the exact reviewed writer-control-register.json bytes
 releaseHead / releasePacketSha256 = exact reviewed candidate and packet
 target = exact Vercel/GitHub/Cloudflare/Neon/Blob resources above
@@ -191,6 +199,8 @@ The pure `assessWriterControlRegister` validator always returns
 not live completeness or proof. It cannot discover live writers, sign receipts
 or issue a capability. Unknown `fence=true` fields, missing/duplicate/unknown
 writers, wrong target/resources and missing generation/expiry/pre-state fail.
+The private reviewed evidence catalog additionally rejects substituted digests,
+fabricated capture times, changed windows and retired/unreviewed generations.
 
 The existing executor still needs independently authenticated target, approval,
 recovery and `production-fence-v1` envelopes. Only the provisioned independent
@@ -206,12 +216,103 @@ and public/private acceptance. Table locks protect the transaction only and end
 at COMMIT; they cannot cover old instances, privileged SQL or Blob writes.
 Application/staff authorization remains useful but is not a sustained fence.
 
-## Request B: REOPEN-WRITERS (separate approval)
+## Request B: ADMIT-ACCEPTANCE-ONLY (before general reopening)
+
+The sequence is activation/drain/proof, separately approved bounded acceptance
+access, closure of that exception, then a distinct general-reopen decision.
+Acceptance admission does **not** require general-reopen approval. It requires
+an established sustained fence and approved artifact activation, and cannot
+restore general writers. No acceptance access has been approved or enabled.
+
+The inspected deployment is `dpl_CdBSXxdBMMjY6muGmCU6wkxktdY5` at
+`earnestproperty-iatgxp51a-ynwaforevers-projects.vercel.app`, project
+`prj_hNaDYmYGeJhBY00vxsC2A0E5Fon5`. It is only the captured baseline, not an
+assertion that the release candidate is deployed there. `releaseDeploymentId`
+remains null: before approval, supply the actual immutable release deployment,
+hostname, artifact hash and exact alias mapping. A different deployment needs a
+new reviewed binding, not a project-wide exception.
+
+Willy is the proposed named acceptance operator, **not an approved actor by
+virtue of ownership**. His exact existing `staffId`, `authUserId` and restricted
+source IP are not captured and remain null. No one can be admitted until these
+identifiers are filled in a separately reviewed private actor manifest; no role,
+team or “all admins” wildcard is allowed. Name the independent verifier and any
+additional actor separately with the same identity mapping. Do not retrieve
+tokens to populate the manifest.
+
+Default permitted operations are public GET `/blog` and an enumerated list of
+article URLs, plus private `listBlogArticles`, `getBlogAdminState`,
+`getArticlePreview` and `getBlogCategoryOptions` reads. Resolve these to exact
+deployed method/path/server-function IDs and permitted article/scope IDs before
+approval. Use already-bound staff identities; block bootstrap, role updates and
+session-issuing side effects. If a read cannot avoid these writes, keep it blocked.
+No upload or valid-receipt retry is included. Required mutation acceptance is
+NOT_RUN until a separately approved extension enumerates the actor, function,
+fixture/row IDs, expected DB effects and recovery plan. Never convert a read
+exception into unrestricted CMS credentials or claim untested acceptance passed.
+
+```text
+action = ADMIT-ACCEPTANCE-ONLY
+activeFenceGeneration / fenceReceiptSha256 / registerSha256 = verified bindings
+releaseDeploymentId / immutableHostname / artifactSha256 / aliasMapSha256 = exact candidate
+actorsManifestSha256 = exact named staff/auth IDs and source IPs; no wildcard
+allowedOperationsSha256 = methods, paths/function IDs, record IDs and expected effects
+startsAt / expiresAt = separate UTC window, maximum 30 minutes
+operator / independentVerifier / approver / approvalReference = explicit identities
+temporaryControlIds / closurePlanSha256 = exact narrowly scoped exceptions and removal
+preservedExclusionsSha256 / auditEvidenceLocation = verified deny set and retained audit
+```
+
+All general staff, old/preview/development instances, CMS/copilot writers, GitHub
+jobs/dispatch/reruns, cron/alarms, SQL/import/console writers, access-management
+paths, Blob PUT/delete/variant work and receipt finalizers stay fenced. Do not
+restore a shared runtime owner credential or grant general network admission.
+If actor/operation isolation cannot be independently enforced, acceptance stays
+BLOCKED rather than weakening the fence.
+
+Retain approval and current-fence readbacks; exact principal and source IP,
+deployment/artifact, method/function and record IDs for every request; outcomes,
+DB session correlation and before/after state digests; continued-denial probes
+for excluded writers; and final exception-removal readback. No bearer tokens or
+raw recovery receipts belong in the register. On expiry, failure, attempted
+excluded operation, actor/deployment/generation drift or audit loss, remove only
+the acceptance exception and retain all general controls. Close it and verify
+drain before requesting general reopening. Its expiry closes access; unlike
+the proposal's expiry, it never restores saved general access.
+
+### Receipt-finalization proof during the fence and acceptance phase
+
+A valid recovery receipt skips `put` in `createMediaUploadService` and reaches
+`repo.complete`; `repo.claim` also touches `media_upload_intents` before receipt
+validation. Prove application denial of a separately approved valid pending
+receipt retry at `/api/admin/media/upload` before either DB call, including
+authenticated former-writer and acceptance-actor attempts on each applicable
+deployment. Invalid-receipt errors or Blob-store denial are not proof of this
+boundary. Keep receipt retries excluded from the acceptance allowlist.
+
+Independently bind the DB denial to project `dawn-meadow-79190048`, branch
+`br-polished-sea-aom4i1ct`, verified endpoint, `neondb`, former runtime/finalizer
+role/session and exact intent/asset IDs. Retain consistent read-only before/after
+counts and full relevant row digests of `media_upload_intents` and `media_assets`,
+including `url`/`completed_at`, with request/audit correlation and a post-drain
+check for delayed commits. Require unchanged metadata and zero committed
+finalizations; rollback alone does not prove an actual fence denial. Use only
+separately authorized safe probes; if safe denial proof cannot be collected,
+remain BLOCKED. No such probe or DB connection is executed by this preparation.
+
+Retain held-retry dispositions per intent/upload ID and hashed receipt reference,
+actor, DB target identity, pre-state digest, object/reference state, pending
+lease/retry counts and hold reason. Do not persist raw receipts in this register.
+Every held retry remains held through acceptance, with no automatic replay on
+expiry or reopening; reconciliation requires its own approved operation.
+
+## Request C: REOPEN-WRITERS (separate approval)
 
 Activation never implies reopening. No reopen approval exists. Request only after
 backup/restore proof, exact import/migration receipt, approved artifact activation,
-public checks and private acceptance pass, and an independent verifier confirms
-the same fence generation remains active.
+public checks and private acceptance pass through Request B (including separately
+approved mutations if required), and an independent verifier confirms the
+acceptance exception is closed and the same sustained fence remains active.
 
 ```text
 action = REOPEN-WRITERS
@@ -219,6 +320,7 @@ activeFenceGeneration / activeFenceReceiptSha256 = verified current fence
 registerSha256 / preStateArchiveSha256 = exact activated controls and saved states
 releaseHead / deploymentId / releaseReceiptSha256 = accepted candidate/outcome
 acceptanceEvidenceSha256 / recoveryEvidenceSha256 = reviewed successful evidence
+acceptanceAccessApprovalSha256 / closureReceiptSha256 = separate phase approval and closure
 restorationPlanSha256 = per-resource exact payloads and ordered steps
 heldWorkDispositionSha256 = reviewed queue/intent/checkpoint decisions
 startsAt / expiresAt = separately approved UTC window
@@ -226,8 +328,8 @@ operator / independentVerifier / approver / approvalReference = named identities
 allowedActions = only the restoration steps below for registered resources
 ```
 
-Order: verify accepted deployment/aliases under restricted acceptance access;
-restore approved runtime admission; restore saved staff and application ingress
+Order: verify the completed acceptance evidence, closed exception and accepted
+deployment/aliases; restore approved runtime admission; restore saved staff and application ingress
 state; recheck acceptance; reconcile held media/jobs individually; restore only
 originally enabled workflows, variables, dispatchers, triggers/alarms; prove
 retired writers remain denied; release privileged-operator freeze last. No blind

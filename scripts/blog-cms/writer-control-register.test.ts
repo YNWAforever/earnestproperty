@@ -5,6 +5,88 @@ import { assessWriterControlRegister } from "./writer-control-register";
 const now = Date.parse("2026-11-06T13:00:00Z");
 const clone = () => structuredClone(register);
 
+test("syntactically valid substituted evidence digests cannot validate", () => {
+  for (const observation of register.observations) {
+    const candidate = clone();
+    candidate.observations.find((item) => item.path === observation.path)!.sha256 = "0".repeat(64);
+    const result = assessWriterControlRegister(candidate, now);
+    expect(result.validProposal).toBe(false);
+    expect(result.productionAuthorized).toBe(false);
+  }
+});
+
+test("old evidence cannot receive a renewed window in the same generation", () => {
+  const candidate = clone();
+  candidate.observedAt = "2026-11-07T12:40:47Z";
+  candidate.expiresAt = "2026-11-08T12:40:47Z";
+  expect(assessWriterControlRegister(candidate, now + 86_400_000).validProposal).toBe(false);
+  const extended = clone();
+  extended.expiresAt = "2026-11-07T12:40:47.500Z";
+  expect(assessWriterControlRegister(extended, now).validProposal).toBe(false);
+});
+
+test("caller-selected new generation cannot renew old evidence or replace the reviewed catalog", () => {
+  const candidate = clone();
+  candidate.generation = "blog-cms-writer-proposal-20261107-03";
+  candidate.observedAt = "2026-11-07T12:40:47Z";
+  candidate.expiresAt = "2026-11-08T12:40:47Z";
+  expect(assessWriterControlRegister(candidate, now + 86_400_000).validProposal).toBe(false);
+  candidate.observations.forEach((item) => {
+    item.sha256 = "1".repeat(64);
+  });
+  expect(assessWriterControlRegister(candidate, now + 86_400_000).validProposal).toBe(false);
+});
+
+test("retired generation 01 is not the active reviewed proposal", () => {
+  const candidate = clone();
+  candidate.generation = "blog-cms-writer-proposal-20261106-01";
+  expect(assessWriterControlRegister(candidate, now).validProposal).toBe(false);
+});
+
+test("capture times are pinned to reviewed evidence, including an unknown Blob capture time", () => {
+  for (let index = 0; index < register.observations.length; index++) {
+    const candidate = clone();
+    candidate.observations[index].capturedAt = "2026-11-06T13:00:00Z";
+    const result = assessWriterControlRegister(candidate, now);
+    expect(result.errors).toContain("UNREVIEWED_EVIDENCE");
+    expect(result.productionAuthorized).toBe(false);
+  }
+  const missing = clone();
+  delete (missing.observations[0] as Record<string, unknown>).capturedAt;
+  expect(assessWriterControlRegister(missing, now).validProposal).toBe(false);
+});
+
+test("renewal requires a code-reviewed catalog change, not caller-supplied trust", () => {
+  const candidate = clone();
+  candidate.generation = "blog-cms-writer-proposal-20261107-03";
+  expect(assessWriterControlRegister(candidate, now).errors).toContain("UNREVIEWED_GENERATION");
+  expect(
+    assessWriterControlRegister({ ...candidate, reviewedProposal: candidate }, now).validProposal,
+  ).toBe(false);
+  // The amended generation is reviewed against the same old bytes, with no new lease.
+  expect(assessWriterControlRegister(register, now).validProposal).toBe(true);
+  expect(
+    assessWriterControlRegister(register, Date.parse("2026-11-07T12:40:47Z")).validProposal,
+  ).toBe(false);
+});
+
+test("acceptance access cannot become general reopening or owner-implied approval", () => {
+  for (const edit of [
+    { generalWritersEnabled: true },
+    { before: "AFTER_REOPEN" },
+    { approval: { approver: "Willy" } },
+    { maxDurationMinutes: 120 },
+    { releaseDeploymentId: "unreviewed-deployment" },
+  ]) {
+    const result = assessWriterControlRegister(
+      { ...clone(), acceptanceAccess: { ...register.acceptanceAccess, ...edit } },
+      now,
+    );
+    expect(result.validProposal).toBe(false);
+    expect(result.productionAuthorized).toBe(false);
+  }
+});
+
 test("a complete proposal remains blocked and cannot authorize production", () => {
   const result = assessWriterControlRegister(register, now);
   expect(result.validProposal).toBe(true);

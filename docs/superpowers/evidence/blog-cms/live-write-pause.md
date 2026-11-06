@@ -2,10 +2,14 @@
 
 The concrete task-5 deliverables are the sanitized
 [36-control register](writer-control-register.json) and the
-[separate activation and reopening requests](writer-fence-approval-request.md).
+[separate activation, bounded acceptance-access and reopening requests](writer-fence-approval-request.md).
 They supersede the preliminary proposal below where it lacks exact scope or
 pre-state. The register is a **BLOCKED_NOT_ACTIVATED proposal**, never live proof
 or an execution capability. Willy remains owner without action approval.
+Amended generation 02 pins the original evidence/capture times and expiry; it
+does not refresh them. Acceptance access has its own narrowly scoped approval
+before general reopening. Valid upload-receipt retries require application and
+DB metadata denial proof; Blob denial alone cannot prove finalization is fenced.
 
 Captured GitHub metadata shows `OWNER_PUBLICATION_DAILY_ENABLED=true`,
 `OWNER_PUBLICATION_MANUAL_APPLY_ENABLED=true`, `PROPERTY_SYNC_DAILY_ENABLED=true`,
