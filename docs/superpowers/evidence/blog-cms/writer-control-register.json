@@ -1,0 +1,1599 @@
+{
+  "format": "earnest-writer-control-proposal-v1",
+  "state": "BLOCKED_NOT_ACTIVATED",
+  "owner": "Willy",
+  "sourceHead": "52fe2f456d993fd3b0b715d846c45322a5e04526",
+  "generation": "blog-cms-writer-proposal-20261106-01",
+  "observedAt": "2026-11-06T20:40:47.6592322+08:00",
+  "expiresAt": "2026-11-07T12:40:47Z",
+  "target": {
+    "vercelProject": "prj_hNaDYmYGeJhBY00vxsC2A0E5Fon5",
+    "vercelTeam": "team_qvzlsFmfCsLkgItSypqHjw3z",
+    "githubRepository": "YNWAforever/earnestproperty",
+    "neonProject": "dawn-meadow-79190048",
+    "neonBranch": "br-polished-sea-aom4i1ct",
+    "database": "neondb",
+    "blobStore": "store_sEHe3hQ90qGByxQA"
+  },
+  "activationApproval": null,
+  "reopenApproval": null,
+  "inventoryComplete": false,
+  "observations": [
+    {
+      "path": "writer-read-only-observations.json",
+      "sha256": "d8b4cd2f2cf9832c3bfac4aff65372156b7978789d7eba0324d528655fbcead7"
+    },
+    {
+      "path": "release-provider-metadata.json",
+      "sha256": "f1081ba76f6b850eaf0dd5d1fa8555276f5a7b7344c2a78ba1bdc32b17ce616b"
+    },
+    {
+      "path": "recovery-blob-metadata.json",
+      "sha256": "74dbe44a20bfead1a9e6e35a5430ffb86cf1deba1564fc81aa9429af7f1d8a98"
+    }
+  ],
+  "writerVariables": {
+    "IMPORT_BLOB_TARGET_ENV": "production",
+    "IMPORT_TARGET_ENV": "production",
+    "OWNER_PUBLICATION_DAILY_ENABLED": "true",
+    "OWNER_PUBLICATION_MANUAL_APPLY_ENABLED": "true",
+    "PROPERTY_SYNC_DAILY_ENABLED": "true",
+    "PROPERTY_SYNC_EXPECTED_BRANCH": "main",
+    "PROPERTY_SYNC_OBSERVABILITY_ENABLED": "true"
+  },
+  "writers": [
+    {
+      "id": "vercel-current",
+      "owner": "Willy",
+      "resources": [
+        "earnestproperty-iatgxp51a-ynwaforevers-projects.vercel.app"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/vercel",
+        "src/lib/neon/admin-cms.ts",
+        "src/lib/neon/blog-admin.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Captured 2026-11-05T12:48:55.205Z: dpl_CdBSXxdBMMjY6muGmCU6wkxktdY5, READY, production/main.",
+          "Password protection disabled; SSO all_except_custom_domains; trusted IPs disabled. SSO access is not a writer fence."
+        ],
+        "gaps": [
+          "Current alias mapping, deployment-specific bypasses, invocation counts and effective deny mechanism are not captured."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "After separate approval, apply a verified provider ingress deny covering ALL requests to earnestproperty-iatgxp51a-ynwaforevers-projects.vercel.app, including TanStack server functions, direct API/cron calls and authorized/bypass callers.",
+          "Use broad application downtime unless an independently proven method-level rule covers every hashed server function; freeze alias/promotion changes."
+        ]
+      },
+      "proofSteps": [
+        "Verify effective rule and alias mapping for this exact hostname and deployment; probe authenticated and unauthenticated routes under an approved no-persistent-write protocol.",
+        "Reject approval if protection exemptions, immutable URLs or bypass credentials still admit a writer."
+      ],
+      "drainCriteria": [
+        "Zero in-flight/queued invocations for this deployment; no writer transactions or media operations remain; recheck after maximum invocation duration."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After distinct reopen approval, restore the saved rule/protection/alias state only for this hostname; verify approved artifact mapping before enabling traffic."
+      ]
+    },
+    {
+      "id": "vercel-alias-1",
+      "owner": "Willy",
+      "resources": [
+        "www.earnestproperty.com"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/vercel",
+        "src/lib/neon/admin-cms.ts",
+        "src/lib/neon/blog-admin.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Captured 2026-11-05T12:48:55.205Z: dpl_CdBSXxdBMMjY6muGmCU6wkxktdY5, READY, production/main.",
+          "Password protection disabled; SSO all_except_custom_domains; trusted IPs disabled. SSO access is not a writer fence."
+        ],
+        "gaps": [
+          "Current alias mapping, deployment-specific bypasses, invocation counts and effective deny mechanism are not captured."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "After separate approval, apply a verified provider ingress deny covering ALL requests to www.earnestproperty.com, including TanStack server functions, direct API/cron calls and authorized/bypass callers.",
+          "Use broad application downtime unless an independently proven method-level rule covers every hashed server function; freeze alias/promotion changes."
+        ]
+      },
+      "proofSteps": [
+        "Verify effective rule and alias mapping for this exact hostname and deployment; probe authenticated and unauthenticated routes under an approved no-persistent-write protocol.",
+        "Reject approval if protection exemptions, immutable URLs or bypass credentials still admit a writer."
+      ],
+      "drainCriteria": [
+        "Zero in-flight/queued invocations for this deployment; no writer transactions or media operations remain; recheck after maximum invocation duration."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After distinct reopen approval, restore the saved rule/protection/alias state only for this hostname; verify approved artifact mapping before enabling traffic."
+      ]
+    },
+    {
+      "id": "vercel-alias-2",
+      "owner": "Willy",
+      "resources": [
+        "earnestproperty.vercel.app"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/vercel",
+        "src/lib/neon/admin-cms.ts",
+        "src/lib/neon/blog-admin.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Captured 2026-11-05T12:48:55.205Z: dpl_CdBSXxdBMMjY6muGmCU6wkxktdY5, READY, production/main.",
+          "Password protection disabled; SSO all_except_custom_domains; trusted IPs disabled. SSO access is not a writer fence."
+        ],
+        "gaps": [
+          "Current alias mapping, deployment-specific bypasses, invocation counts and effective deny mechanism are not captured."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "After separate approval, apply a verified provider ingress deny covering ALL requests to earnestproperty.vercel.app, including TanStack server functions, direct API/cron calls and authorized/bypass callers.",
+          "Use broad application downtime unless an independently proven method-level rule covers every hashed server function; freeze alias/promotion changes."
+        ]
+      },
+      "proofSteps": [
+        "Verify effective rule and alias mapping for this exact hostname and deployment; probe authenticated and unauthenticated routes under an approved no-persistent-write protocol.",
+        "Reject approval if protection exemptions, immutable URLs or bypass credentials still admit a writer."
+      ],
+      "drainCriteria": [
+        "Zero in-flight/queued invocations for this deployment; no writer transactions or media operations remain; recheck after maximum invocation duration."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After distinct reopen approval, restore the saved rule/protection/alias state only for this hostname; verify approved artifact mapping before enabling traffic."
+      ]
+    },
+    {
+      "id": "vercel-alias-3",
+      "owner": "Willy",
+      "resources": [
+        "earnestproperty.com"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/vercel",
+        "src/lib/neon/admin-cms.ts",
+        "src/lib/neon/blog-admin.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Captured 2026-11-05T12:48:55.205Z: dpl_CdBSXxdBMMjY6muGmCU6wkxktdY5, READY, production/main.",
+          "Password protection disabled; SSO all_except_custom_domains; trusted IPs disabled. SSO access is not a writer fence."
+        ],
+        "gaps": [
+          "Current alias mapping, deployment-specific bypasses, invocation counts and effective deny mechanism are not captured."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "After separate approval, apply a verified provider ingress deny covering ALL requests to earnestproperty.com, including TanStack server functions, direct API/cron calls and authorized/bypass callers.",
+          "Use broad application downtime unless an independently proven method-level rule covers every hashed server function; freeze alias/promotion changes."
+        ]
+      },
+      "proofSteps": [
+        "Verify effective rule and alias mapping for this exact hostname and deployment; probe authenticated and unauthenticated routes under an approved no-persistent-write protocol.",
+        "Reject approval if protection exemptions, immutable URLs or bypass credentials still admit a writer."
+      ],
+      "drainCriteria": [
+        "Zero in-flight/queued invocations for this deployment; no writer transactions or media operations remain; recheck after maximum invocation duration."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After distinct reopen approval, restore the saved rule/protection/alias state only for this hostname; verify approved artifact mapping before enabling traffic."
+      ]
+    },
+    {
+      "id": "vercel-alias-4",
+      "owner": "Willy",
+      "resources": [
+        "earnestproperty-ynwaforevers-projects.vercel.app"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/vercel",
+        "src/lib/neon/admin-cms.ts",
+        "src/lib/neon/blog-admin.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Captured 2026-11-05T12:48:55.205Z: dpl_CdBSXxdBMMjY6muGmCU6wkxktdY5, READY, production/main.",
+          "Password protection disabled; SSO all_except_custom_domains; trusted IPs disabled. SSO access is not a writer fence."
+        ],
+        "gaps": [
+          "Current alias mapping, deployment-specific bypasses, invocation counts and effective deny mechanism are not captured."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "After separate approval, apply a verified provider ingress deny covering ALL requests to earnestproperty-ynwaforevers-projects.vercel.app, including TanStack server functions, direct API/cron calls and authorized/bypass callers.",
+          "Use broad application downtime unless an independently proven method-level rule covers every hashed server function; freeze alias/promotion changes."
+        ]
+      },
+      "proofSteps": [
+        "Verify effective rule and alias mapping for this exact hostname and deployment; probe authenticated and unauthenticated routes under an approved no-persistent-write protocol.",
+        "Reject approval if protection exemptions, immutable URLs or bypass credentials still admit a writer."
+      ],
+      "drainCriteria": [
+        "Zero in-flight/queued invocations for this deployment; no writer transactions or media operations remain; recheck after maximum invocation duration."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After distinct reopen approval, restore the saved rule/protection/alias state only for this hostname; verify approved artifact mapping before enabling traffic."
+      ]
+    },
+    {
+      "id": "vercel-alias-5",
+      "owner": "Willy",
+      "resources": [
+        "earnestproperty-git-main-ynwaforevers-projects.vercel.app"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/vercel",
+        "src/lib/neon/admin-cms.ts",
+        "src/lib/neon/blog-admin.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Captured 2026-11-05T12:48:55.205Z: dpl_CdBSXxdBMMjY6muGmCU6wkxktdY5, READY, production/main.",
+          "Password protection disabled; SSO all_except_custom_domains; trusted IPs disabled. SSO access is not a writer fence."
+        ],
+        "gaps": [
+          "Current alias mapping, deployment-specific bypasses, invocation counts and effective deny mechanism are not captured."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "After separate approval, apply a verified provider ingress deny covering ALL requests to earnestproperty-git-main-ynwaforevers-projects.vercel.app, including TanStack server functions, direct API/cron calls and authorized/bypass callers.",
+          "Use broad application downtime unless an independently proven method-level rule covers every hashed server function; freeze alias/promotion changes."
+        ]
+      },
+      "proofSteps": [
+        "Verify effective rule and alias mapping for this exact hostname and deployment; probe authenticated and unauthenticated routes under an approved no-persistent-write protocol.",
+        "Reject approval if protection exemptions, immutable URLs or bypass credentials still admit a writer."
+      ],
+      "drainCriteria": [
+        "Zero in-flight/queued invocations for this deployment; no writer transactions or media operations remain; recheck after maximum invocation duration."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After distinct reopen approval, restore the saved rule/protection/alias state only for this hostname; verify approved artifact mapping before enabling traffic."
+      ]
+    },
+    {
+      "id": "vercel-other",
+      "owner": "Willy",
+      "resources": [
+        "prj_hNaDYmYGeJhBY00vxsC2A0E5Fon5"
+      ],
+      "sources": [
+        "writer-read-only-observations.json#/vercelEnvMetadata",
+        "release-provider-metadata.json#/gitDeploymentMetadata"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Git createDeployments enabled; production branch main. Blob token metadata targets production, preview and development.",
+          "Only one deployment and five aliases were captured; historical/preview URLs are NOT fully enumerated."
+        ],
+        "gaps": [
+          "Complete paginated deployment/alias inventory, old builds, previews, access bypasses and production credential consumers missing."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Before approval enumerate every deployment/alias that has production DB or Blob access, add exact rows and reviewed catalog entries, and capture each pre-state.",
+          "Apply ingress and credential isolation to all such instances, including retired URLs; freeze Git deployments/promotions and provider-console changes for the window."
+        ]
+      },
+      "proofSteps": [
+        "Cross-check full provider inventories with credential metadata; every discovered URL must have a denied probe and drained invocation receipt."
+      ],
+      "drainCriteria": [
+        "Zero unknown URLs/consumers and zero old-instance requests or transactions."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore only captured previously enabled controls; keep retired deployments isolated and do not expose unverified preview writers."
+      ]
+    },
+    {
+      "id": "github-owner",
+      "owner": "Willy",
+      "resources": [
+        ".github/workflows/property-sync-daily.yml#owner-publish"
+      ],
+      "sources": [
+        ".github/workflows/property-sync-daily.yml",
+        "writer-read-only-observations.json#/githubWriterVariableValues"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Schedule 0 1 * * * UTC; manual owner-publication and owner-publication-dry-run; owner-publish timeout 90 minutes.",
+          "OWNER_PUBLICATION_DAILY_ENABLED=true; OWNER_PUBLICATION_MANUAL_APPLY_ENABLED=true; IMPORT_TARGET_ENV=production; IMPORT_BLOB_TARGET_ENV=production.",
+          "Workflow active in captured metadata; recent completed runs are not current drain evidence."
+        ],
+        "gaps": [
+          "Current running/queued/waiting/retry runs across every ref and caller identities missing; repository versus environment/organization secret mappings incomplete."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "After separate approval disable .github/workflows/property-sync-daily.yml at repository YNWAforever/earnestproperty for both schedule and workflow_dispatch, freeze edits/re-enable/rerun authority, and block upstream dashboard/API dispatch.",
+          "Set OWNER_PUBLICATION_DAILY_ENABLED, OWNER_PUBLICATION_MANUAL_APPLY_ENABLED, PROPERTY_SYNC_DAILY_ENABLED and PROPERTY_SYNC_OBSERVABILITY_ENABLED to false as defense in depth; preserve exact pre-state. Keep IMPORT_TARGET_ENV and IMPORT_BLOB_TARGET_ENV unchanged.",
+          "Wait for already admitted jobs to complete under oversight; any cancellation is a separately enumerated approval, never assumed. Isolate production credentials from old/rerun jobs."
+        ]
+      },
+      "proofSteps": [
+        "Read back workflow disabled_manually and exact variable values; verify no alternate-ref or API/rerun path can start a production writer."
+      ],
+      "drainCriteria": [
+        "No active, queued, waiting or retry jobs for owner-publish across all refs; inspect the entire concurrency group, finalizers and DB/Blob activity, not just latest completed run."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After reopen approval restore only captured variables and workflow active state; recheck queue before enablement, do not replay stale queued jobs automatically."
+      ]
+    },
+    {
+      "id": "github-pipeline",
+      "owner": "Willy",
+      "resources": [
+        ".github/workflows/property-sync-daily.yml#preflight,collect,ingest,publish,verify"
+      ],
+      "sources": [
+        ".github/workflows/property-sync-daily.yml",
+        "writer-read-only-observations.json#/githubWriterVariableValues"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Manual shadow/apply/replay-shadow/replay-apply/publication-only; shared concurrency property-sync-agent-540, cancel-in-progress=false.",
+          "Ingest/publication can consume DATABASE_URL_UNPOOLED and BLOB_READ_WRITE_TOKEN; shadow naming is not credential isolation.",
+          "Workflow active in captured metadata; recent completed runs are not current drain evidence."
+        ],
+        "gaps": [
+          "Current running/queued/waiting/retry runs across every ref and caller identities missing; repository versus environment/organization secret mappings incomplete."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "After separate approval disable .github/workflows/property-sync-daily.yml at repository YNWAforever/earnestproperty for both schedule and workflow_dispatch, freeze edits/re-enable/rerun authority, and block upstream dashboard/API dispatch.",
+          "Set OWNER_PUBLICATION_DAILY_ENABLED, OWNER_PUBLICATION_MANUAL_APPLY_ENABLED, PROPERTY_SYNC_DAILY_ENABLED and PROPERTY_SYNC_OBSERVABILITY_ENABLED to false as defense in depth; preserve exact pre-state. Keep IMPORT_TARGET_ENV and IMPORT_BLOB_TARGET_ENV unchanged.",
+          "Wait for already admitted jobs to complete under oversight; any cancellation is a separately enumerated approval, never assumed. Isolate production credentials from old/rerun jobs."
+        ]
+      },
+      "proofSteps": [
+        "Read back workflow disabled_manually and exact variable values; verify no alternate-ref or API/rerun path can start a production writer."
+      ],
+      "drainCriteria": [
+        "No active, queued, waiting or retry jobs for preflight,collect,ingest,publish,verify across all refs; inspect the entire concurrency group, finalizers and DB/Blob activity, not just latest completed run."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After reopen approval restore only captured variables and workflow active state; recheck queue before enablement, do not replay stale queued jobs automatically."
+      ]
+    },
+    {
+      "id": "github-record",
+      "owner": "Willy",
+      "resources": [
+        ".github/workflows/property-sync-daily.yml#record"
+      ],
+      "sources": [
+        ".github/workflows/property-sync-daily.yml",
+        "writer-read-only-observations.json#/githubWriterVariableValues"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "PROPERTY_SYNC_OBSERVABILITY_ENABLED=true; record persists execution metadata even outside publication, including failed manual runs; timeout 10 minutes.",
+          "Workflow active in captured metadata; recent completed runs are not current drain evidence."
+        ],
+        "gaps": [
+          "Current running/queued/waiting/retry runs across every ref and caller identities missing; repository versus environment/organization secret mappings incomplete."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "After separate approval disable .github/workflows/property-sync-daily.yml at repository YNWAforever/earnestproperty for both schedule and workflow_dispatch, freeze edits/re-enable/rerun authority, and block upstream dashboard/API dispatch.",
+          "Set OWNER_PUBLICATION_DAILY_ENABLED, OWNER_PUBLICATION_MANUAL_APPLY_ENABLED, PROPERTY_SYNC_DAILY_ENABLED and PROPERTY_SYNC_OBSERVABILITY_ENABLED to false as defense in depth; preserve exact pre-state. Keep IMPORT_TARGET_ENV and IMPORT_BLOB_TARGET_ENV unchanged.",
+          "Wait for already admitted jobs to complete under oversight; any cancellation is a separately enumerated approval, never assumed. Isolate production credentials from old/rerun jobs."
+        ]
+      },
+      "proofSteps": [
+        "Read back workflow disabled_manually and exact variable values; verify no alternate-ref or API/rerun path can start a production writer."
+      ],
+      "drainCriteria": [
+        "No active, queued, waiting or retry jobs for record across all refs; inspect the entire concurrency group, finalizers and DB/Blob activity, not just latest completed run."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After reopen approval restore only captured variables and workflow active state; recheck queue before enablement, do not replay stale queued jobs automatically."
+      ]
+    },
+    {
+      "id": "github-migration-drift",
+      "owner": "Willy",
+      "resources": [
+        ".github/workflows/migration-drift.yml"
+      ],
+      "sources": [
+        ".github/workflows/migration-drift.yml",
+        "scripts/neon/check-migration-drift.mjs",
+        "writer-read-only-observations.json#/githubWorkflows"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Active; push main migration changes and manual dispatch; SELECT-only drift checker consumes DATABASE_URL_UNPOOLED/DATABASE_URL, whose privilege isolation is unproven."
+        ],
+        "gaps": [
+          "Actual credential role/target mapping and current active run inventory missing; secret names absent from the snapshot do not prove absence at other scopes."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Conservative proposal: pause this workflow for the maintenance window and deny reruns/manual starts until target/role isolation is attested. No workflow is changed by this packet.",
+          "An exclusion for proven disposable or least-privilege read-only execution requires a revised exact register and separate approval; code SELECTs alone do not constrain owner credentials."
+        ]
+      },
+      "proofSteps": [
+        "Read back pause or approved isolated-target exclusion and credential-consumer mapping without retrieving values."
+      ],
+      "drainCriteria": [
+        "No remaining production-capable job/session; bounded read-only checks must not hold cutover locks."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore exactly the captured active state after separate reopen approval; retain any approved isolation."
+      ]
+    },
+    {
+      "id": "github-watchdog",
+      "owner": "Willy",
+      "resources": [
+        ".github/workflows/property-sync-watchdog.yml"
+      ],
+      "sources": [
+        ".github/workflows/property-sync-watchdog.yml",
+        "scripts/mls/sync-watchdog.mjs",
+        "writer-read-only-observations.json#/githubWorkflows"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Active; schedule 15 0 * * * UTC and manual dispatch; PROPERTY_SYNC_DAILY_ENABLED=true; readSyncAuthority uses DATABASE_URL_UNPOOLED."
+        ],
+        "gaps": [
+          "Actual credential role/target mapping and current active run inventory missing; secret names absent from the snapshot do not prove absence at other scopes."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Conservative proposal: pause this workflow for the maintenance window and deny reruns/manual starts until target/role isolation is attested. No workflow is changed by this packet.",
+          "An exclusion for proven disposable or least-privilege read-only execution requires a revised exact register and separate approval; code SELECTs alone do not constrain owner credentials."
+        ]
+      },
+      "proofSteps": [
+        "Read back pause or approved isolated-target exclusion and credential-consumer mapping without retrieving values."
+      ],
+      "drainCriteria": [
+        "No remaining production-capable job/session; bounded read-only checks must not hold cutover locks."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore exactly the captured active state after separate reopen approval; retain any approved isolation."
+      ]
+    },
+    {
+      "id": "github-price-status",
+      "owner": "Willy",
+      "resources": [
+        ".github/workflows/property-price-status-sync.yml"
+      ],
+      "sources": [
+        ".github/workflows/property-price-status-sync.yml",
+        "scripts/property-sync/price_status_locked.mjs",
+        "writer-read-only-observations.json#/githubWorkflows"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Active; schedule 0 23 * * * UTC; manual dispatch bypasses PRICE_STATUS_SYNC_ENABLED schedule gate; READ ONLY code with PRICE_STATUS_SYNC_READONLY_DATABASE_URL."
+        ],
+        "gaps": [
+          "Actual credential role/target mapping and current active run inventory missing; secret names absent from the snapshot do not prove absence at other scopes."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Conservative proposal: pause this workflow for the maintenance window and deny reruns/manual starts until target/role isolation is attested. No workflow is changed by this packet.",
+          "An exclusion for proven disposable or least-privilege read-only execution requires a revised exact register and separate approval; code SELECTs alone do not constrain owner credentials."
+        ]
+      },
+      "proofSteps": [
+        "Read back pause or approved isolated-target exclusion and credential-consumer mapping without retrieving values."
+      ],
+      "drainCriteria": [
+        "No remaining production-capable job/session; bounded read-only checks must not hold cutover locks."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore exactly the captured active state after separate reopen approval; retain any approved isolation."
+      ]
+    },
+    {
+      "id": "github-ci",
+      "owner": "Willy",
+      "resources": [
+        ".github/workflows/ci.yml"
+      ],
+      "sources": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/ci.yml",
+        "writer-read-only-observations.json#/githubWorkflows"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Active; push/pull_request; local service/owned fixture tests; source does not provision production DB credentials. Exclusion still requires current consumer attestation."
+        ],
+        "gaps": [
+          "Actual credential role/target mapping and current active run inventory missing; secret names absent from the snapshot do not prove absence at other scopes."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Conservative proposal: pause this workflow for the maintenance window and deny reruns/manual starts until target/role isolation is attested. No workflow is changed by this packet.",
+          "An exclusion for proven disposable or least-privilege read-only execution requires a revised exact register and separate approval; code SELECTs alone do not constrain owner credentials."
+        ]
+      },
+      "proofSteps": [
+        "Read back pause or approved isolated-target exclusion and credential-consumer mapping without retrieving values."
+      ],
+      "drainCriteria": [
+        "No remaining production-capable job/session; bounded read-only checks must not hold cutover locks."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore exactly the captured active state after separate reopen approval; retain any approved isolation."
+      ]
+    },
+    {
+      "id": "github-acceptance",
+      "owner": "Willy",
+      "resources": [
+        ".github/workflows/property-sync-acceptance.yml"
+      ],
+      "sources": [
+        ".github/workflows/property-sync-acceptance.yml",
+        ".github/workflows/property-sync-acceptance.yml",
+        "writer-read-only-observations.json#/githubWorkflows"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Active manual acceptance; ASTRA_TEST_DATABASE_URL and disposable-target guard; not presumed a production writer or presumed safe solely from its name."
+        ],
+        "gaps": [
+          "Actual credential role/target mapping and current active run inventory missing; secret names absent from the snapshot do not prove absence at other scopes."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Conservative proposal: pause this workflow for the maintenance window and deny reruns/manual starts until target/role isolation is attested. No workflow is changed by this packet.",
+          "An exclusion for proven disposable or least-privilege read-only execution requires a revised exact register and separate approval; code SELECTs alone do not constrain owner credentials."
+        ]
+      },
+      "proofSteps": [
+        "Read back pause or approved isolated-target exclusion and credential-consumer mapping without retrieving values."
+      ],
+      "drainCriteria": [
+        "No remaining production-capable job/session; bounded read-only checks must not hold cutover locks."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore exactly the captured active state after separate reopen approval; retain any approved isolation."
+      ]
+    },
+    {
+      "id": "github-dispatch",
+      "owner": "Willy",
+      "resources": [
+        "YNWAforever/earnestproperty"
+      ],
+      "sources": [
+        "src/lib/mls/dispatch-property-sync.mjs",
+        "src/routes/api.admin.control-plane.jobs.$id.retry.ts",
+        "src/lib/control-plane/jobs.server.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Application and operator dispatch/retry paths can enqueue new work. Provider permissions and complete workflow inventory are not frozen by repository variables."
+        ],
+        "gaps": [
+          "Dispatch token consumers, environment protections, organization runners and re-enable authority unenumerated."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Block application enqueue/retry/dispatch at ingress and freeze GitHub UI/API changes, new workflows and reruns for all production credential consumers; enumerate holder identities without secrets."
+        ]
+      },
+      "proofSteps": [
+        "Verify deny at application and provider dispatch boundaries, including authorized operators; compare workflow inventory with captured six paths."
+      ],
+      "drainCriteria": [
+        "No unaccounted dispatchers, runners or delayed callbacks."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore captured dispatcher access only after queues have been reviewed; no bulk retry."
+      ]
+    },
+    {
+      "id": "cloudflare-cron",
+      "owner": "Willy",
+      "resources": [
+        "earnestproperty-cron"
+      ],
+      "sources": [
+        "workers/cron/wrangler.jsonc",
+        "workers/cron/src/index.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Repository crons: */10 0-13 * * * and 0 14-23 * * * UTC; SITE_ORIGIN=https://www.earnestproperty.com; workers_dev=true.",
+          "The supplied writer JSON has no Cloudflare deployment/trigger fields: these are source-config observations, not verified live trigger state."
+        ],
+        "gaps": [
+          "Live account/script version, cron configuration and effective control pre-state missing."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "After approval capture and remove the exact live cron triggers; block manual scheduled invocations and provider edits; pair with the job-consumer and wake controls."
+        ]
+      },
+      "proofSteps": [
+        "Read back no active triggers and reject scheduled/manual execution; source JSON alone is not proof."
+      ],
+      "drainCriteria": [
+        "No scheduled invocation in flight; alarms and downstream work meet separate drain criteria."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore exact captured cron expressions only after consumer backlog review; do not infer live schedule from local wrangler config."
+      ]
+    },
+    {
+      "id": "cloudflare-wake-consumers",
+      "owner": "Willy",
+      "resources": [
+        "JOB_WAKE:service",
+        "JOB_WAKE:general"
+      ],
+      "sources": [
+        "workers/cron/src/job-alarm.js",
+        "workers/cron/src/index.ts",
+        "src/lib/control-plane/job-handlers.server.ts",
+        "src/lib/control-plane/service-worker.server.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "POST /wake/service and /wake/general signal durable alarms; cron sweep can re-arm idle/exhausted lanes.",
+          "Consumers: /api/admin/whatsapp/service-worker and /api/admin/control-plane/worker; CRON_SECRET authorization is not maintenance fencing."
+        ],
+        "gaps": [
+          "Durable alarm IDs/state, nextDueAt, queue/lease/retry counts, direct worker callers and registered live handler inventory missing."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Deny both wake endpoints and both Vercel consumers including authorized direct callers; suspend captured alarms without deleting queued jobs; freeze job enqueue/retry APIs.",
+          "Capture job IDs and checkpoints; allow only specifically approved drain before declaring fence active."
+        ]
+      },
+      "proofSteps": [
+        "Prove wake, direct bearer consumer and alarm paths cannot claim a job; inspect both lane alarms and leases after maximum retry/invocation horizon."
+      ],
+      "drainCriteria": [
+        "Zero running/leased/claimed jobs and in-flight side effects; pending/retry jobs inventoried and held, with no automatic release."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Review held jobs for staleness and duplication; restore exact alarm/consumer access under reopen approval, then re-arm approved lanes."
+      ]
+    },
+    {
+      "id": "cloudflare-mls",
+      "owner": "Willy",
+      "resources": [
+        "earnest-mls-container",
+        "earnest-mls-runner"
+      ],
+      "sources": [
+        "workers/mls-container/wrangler.jsonc",
+        "workers/mls-container/wrangler.scheduled.jsonc",
+        "workers/mls-container/src/workflow.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Repository account e387dfbeded3deb5b8f0023a78a660b5; production; scheduled mode shadow; publish=false; public fetch returns 404.",
+          "Workflow binding MLS_RUN_WORKFLOW and container binding MLS_RUN_CONTAINER can still use DB and, for publishing, Blob credentials. Local scheduled config contains no cron."
+        ],
+        "gaps": [
+          "Live workflow instances, container state, secrets consumers and provider schedule/control inventory missing."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Freeze provider workflow creation/retries and stop new container admissions after separate approval; isolate production credential access, including shadow ingestion and direct workflow API callers."
+        ]
+      },
+      "proofSteps": [
+        "Verify exact script/workflow versions, admission deny and existing instance/checkpoint inventory."
+      ],
+      "drainCriteria": [
+        "Zero running/retrying workflow/container steps with production credentials; preserve checkpoints and evidence bucket objects."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore only pre-existing controls; keep publish disabled if captured false, and individually approve any held replay."
+      ]
+    },
+    {
+      "id": "db-owner",
+      "owner": "Willy",
+      "resources": [
+        "neondb_owner"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/writerMetadata",
+        "src/lib/neon/db.server.ts",
+        "scripts/blog-cms/production-evidence.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Owns articles, cms_content_revisions, media_assets and app_migrations; LOGIN, CREATEROLE, CREATEDB and BYPASSRLS observed. REVOKE ordinary grants cannot fence an owner.",
+          "Role observations captured 2026-11-05; not a current grant or membership attestation."
+        ],
+        "gaps": [
+          "Current role memberships, grant/owner matrix, connection holders and distinct release identity missing."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Require an owner-reviewed exact identity/credential separation plan before activation approval: runtime identities cannot be the release owner; enumerate every principal and saved role/grant state.",
+          "Request only specifically enumerated new-connection denies/credential isolation and existing-session drain, with exclusive privileged-operator freeze. No speculative role/grant SQL is authorized by this packet.",
+          "If privileged provider access cannot be independently held and audited, stop: database/application locks cannot establish this fence."
+        ]
+      },
+      "proofSteps": [
+        "Independent operator verifies old runtime/direct SQL credentials cannot mutate through tables, routines, owner bypass or role switching; compare effective privileges and target identity without secret values."
+      ],
+      "drainCriteria": [
+        "No non-release writer connections/transactions; no held waiter can commit after locks release; privilege/owner changes remain frozen through acceptance."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Separate reopen approval restores only documented effective access; do not grant extra privileges or revive obsolete shared credentials. Keep release identity constrained and retire it by an approved plan."
+      ]
+    },
+    {
+      "id": "db-runtime",
+      "owner": "Willy",
+      "resources": [
+        "DATABASE_URL",
+        "DATABASE_URL_UNPOOLED",
+        "IMPORT_DATABASE_URL"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/writerMetadata",
+        "src/lib/neon/db.server.ts",
+        "scripts/blog-cms/production-evidence.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Vercel/GitHub metadata confirms these credential names; role separation and all credential holders unproven. A shared owner allowlist admits old applications too.",
+          "Role observations captured 2026-11-05; not a current grant or membership attestation."
+        ],
+        "gaps": [
+          "Current role memberships, grant/owner matrix, connection holders and distinct release identity missing."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Require an owner-reviewed exact identity/credential separation plan before activation approval: runtime identities cannot be the release owner; enumerate every principal and saved role/grant state.",
+          "Request only specifically enumerated new-connection denies/credential isolation and existing-session drain, with exclusive privileged-operator freeze. No speculative role/grant SQL is authorized by this packet.",
+          "If privileged provider access cannot be independently held and audited, stop: database/application locks cannot establish this fence."
+        ]
+      },
+      "proofSteps": [
+        "Independent operator verifies old runtime/direct SQL credentials cannot mutate through tables, routines, owner bypass or role switching; compare effective privileges and target identity without secret values."
+      ],
+      "drainCriteria": [
+        "No non-release writer connections/transactions; no held waiter can commit after locks release; privilege/owner changes remain frozen through acceptance."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Separate reopen approval restores only documented effective access; do not grant extra privileges or revive obsolete shared credentials. Keep release identity constrained and retire it by an approved plan."
+      ]
+    },
+    {
+      "id": "db-privileged",
+      "owner": "Willy",
+      "resources": [
+        "cloud_admin",
+        "neon_service"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/writerMetadata",
+        "src/lib/neon/db.server.ts",
+        "scripts/blog-cms/production-evidence.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "cloud_admin observed SUPERUSER; neon_service observed CREATEROLE/CREATEDB/BYPASSRLS; provider privileged access is outside application authorization.",
+          "Role observations captured 2026-11-05; not a current grant or membership attestation."
+        ],
+        "gaps": [
+          "Current role memberships, grant/owner matrix, connection holders and distinct release identity missing."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Require an owner-reviewed exact identity/credential separation plan before activation approval: runtime identities cannot be the release owner; enumerate every principal and saved role/grant state.",
+          "Request only specifically enumerated new-connection denies/credential isolation and existing-session drain, with exclusive privileged-operator freeze. No speculative role/grant SQL is authorized by this packet.",
+          "If privileged provider access cannot be independently held and audited, stop: database/application locks cannot establish this fence."
+        ]
+      },
+      "proofSteps": [
+        "Independent operator verifies old runtime/direct SQL credentials cannot mutate through tables, routines, owner bypass or role switching; compare effective privileges and target identity without secret values."
+      ],
+      "drainCriteria": [
+        "No non-release writer connections/transactions; no held waiter can commit after locks release; privilege/owner changes remain frozen through acceptance."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Separate reopen approval restores only documented effective access; do not grant extra privileges or revive obsolete shared credentials. Keep release identity constrained and retire it by an approved plan."
+      ]
+    },
+    {
+      "id": "db-other-roles",
+      "owner": "Willy",
+      "resources": [
+        "neon_auth",
+        "migration_monitor"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/writerMetadata",
+        "src/lib/neon/db.server.ts",
+        "scripts/blog-cms/production-evidence.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Both observed LOGIN without CREATEROLE/BYPASSRLS; effective memberships, grants, SECURITY DEFINER access and writable auth effects not fully captured.",
+          "Role observations captured 2026-11-05; not a current grant or membership attestation."
+        ],
+        "gaps": [
+          "Current role memberships, grant/owner matrix, connection holders and distinct release identity missing."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Require an owner-reviewed exact identity/credential separation plan before activation approval: runtime identities cannot be the release owner; enumerate every principal and saved role/grant state.",
+          "Request only specifically enumerated new-connection denies/credential isolation and existing-session drain, with exclusive privileged-operator freeze. No speculative role/grant SQL is authorized by this packet.",
+          "If privileged provider access cannot be independently held and audited, stop: database/application locks cannot establish this fence."
+        ]
+      },
+      "proofSteps": [
+        "Independent operator verifies old runtime/direct SQL credentials cannot mutate through tables, routines, owner bypass or role switching; compare effective privileges and target identity without secret values."
+      ],
+      "drainCriteria": [
+        "No non-release writer connections/transactions; no held waiter can commit after locks release; privilege/owner changes remain frozen through acceptance."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Separate reopen approval restores only documented effective access; do not grant extra privileges or revive obsolete shared credentials. Keep release identity constrained and retire it by an approved plan."
+      ]
+    },
+    {
+      "id": "db-sessions",
+      "owner": "Willy",
+      "resources": [
+        "neondb"
+      ],
+      "sources": [
+        "release-provider-metadata.json#/writerMetadata",
+        "src/lib/neon/db.server.ts",
+        "scripts/blog-cms/production-evidence.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Captured 13 idle neondb_owner sessions and one active owner session (includes collector); idle is not drained."
+        ],
+        "gaps": [
+          "Current PID/application/client/transaction inventory and per-session disposition missing."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Deny new admissions before waiting for old sessions; identify release session separately. Prefer bounded natural drain; list exact PIDs and expected impact in a separate approval if termination is necessary."
+        ]
+      },
+      "proofSteps": [
+        "Two independent session/lock/transaction observations with no non-release writer or queued lock waiter; prove old connection attempts denied."
+      ],
+      "drainCriteria": [
+        "Zero non-release capable sessions and write transactions, including idle-in-transaction and pooler clients; no automatic session termination."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Reopen approved runtime admissions after acceptance; never resurrect a terminated session or replay its uncertain transaction."
+      ]
+    },
+    {
+      "id": "direct-tools",
+      "owner": "Willy",
+      "resources": [
+        "scripts/neon/apply-migrations.mjs",
+        "scripts/blog-cms/production-executor.ts",
+        "scripts/mls/owner-publication.mjs"
+      ],
+      "sources": [
+        "scripts/neon/apply-migrations.mjs",
+        "scripts/blog-cms/production-adapter.ts",
+        "scripts/blog-cms/production-executor.ts",
+        "scripts/mls/import-saved-capture.mjs",
+        "scripts/media/backfill-remote-variants.mjs"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Migration, blog import, saved-capture/owner publication, MLS and media backfill tools can bypass web authorization with credentials.",
+          "Existing production executor requires independently signed mapping/approval/recovery/fence evidence and rechecks the fence. This register does not issue that evidence."
+        ],
+        "gaps": [
+          "Local/CI SQL clients, scripts, credentials holders and provider automation inventory incomplete."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Freeze all direct tools/SQL/import/migration use for listed holders; isolate old credentials and admit only a separately approved release identity/artifact/packet.",
+          "Review trigger and function dependencies, migration ledger and receipt paths; table locks remain a bounded transaction defense only."
+        ]
+      },
+      "proofSteps": [
+        "Attest each holder and former tool denial; bind authorized release artifact, target, packet and evidence generation under independent signing authority."
+      ],
+      "drainCriteria": [
+        "No outstanding tools, transactions, retries or imports; uncertain outcomes reconciled without blind retry."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore only individually approved tool access; migration/import execution still needs its own action approval."
+      ]
+    },
+    {
+      "id": "provider-consoles",
+      "owner": "Willy",
+      "resources": [
+        "Neon:dawn-meadow-79190048",
+        "Vercel:prj_hNaDYmYGeJhBY00vxsC2A0E5Fon5",
+        "GitHub:YNWAforever/earnestproperty",
+        "Cloudflare:e387dfbeded3deb5b8f0023a78a660b5"
+      ],
+      "sources": [
+        "release-provider-metadata.json",
+        "writer-read-only-observations.json",
+        "workers/mls-container/wrangler.jsonc"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Console owners, organization administrators, API/service principals and emergency access can undo application controls. Willy is owner, not activation approval."
+        ],
+        "gaps": [
+          "Exact operator identities, delegated permissions, break-glass protocol and provider audit feed missing."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Name all privileged operators and establish independently witnessed exclusive-change freeze across SQL editor, credentials, routing, schedules, storage and role changes; monitor audit changes throughout."
+        ]
+      },
+      "proofSteps": [
+        "Retain operator acknowledgments and audit feed references; any unreviewed privileged change invalidates generation."
+      ],
+      "drainCriteria": [
+        "No unapproved console/API operation or active SQL editor transaction."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Release operator freeze only with explicit reopen approval and reviewed audit trail."
+      ]
+    },
+    {
+      "id": "cms-generic",
+      "owner": "Willy",
+      "resources": [
+        "cms_mutate:save,publish,restore,archive"
+      ],
+      "sources": [
+        "src/lib/neon/admin-cms.server.ts",
+        "src/lib/neon/cms-revisions.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Generic revisions cover estate/article/video/faq/media; save/publish/restore/archive and shared revision projections affect more than blog."
+        ],
+        "gaps": [
+          "Exact deployed old/new route/function IDs, outstanding requests and live pre-state missing; repository code is not deployed-state proof."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Deny all application ingress on every deployment plus sustained database identity fence; maintain across migration, import, deployment verification and acceptance.",
+          "Do not substitute staff roles, UI hiding, advisory/table locks or a boolean flag for privileged writer exclusion."
+        ]
+      },
+      "proofSteps": [
+        "Under separately approved probe protocol, verify each listed mutation from admin/manager/agent and old deployment paths is rejected; retain no-persistent-write rollback evidence and actual denial source."
+      ],
+      "drainCriteria": [
+        "Zero outstanding server functions, DB transactions and queued callbacks; preserve drafts/revisions and confirm no writer can resume after transaction locks release."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After separate reopen approval, admit only acceptance actors first; restore saved access and verify expected artifact before general staff access."
+      ]
+    },
+    {
+      "id": "cms-copilot",
+      "owner": "Willy",
+      "resources": [
+        "content-copilot:proposals,drafts,publish,audit"
+      ],
+      "sources": [
+        "src/lib/ai/content-copilot-repository.server.ts",
+        "src/lib/ai/content-copilot-admin.ts",
+        "src/lib/ai/content-copilot.server.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Start/complete/fail/decide proposals and audit/usage persist; draft/publish integration reaches shared CMS revisions; in-flight AI responses may write after traffic pauses."
+        ],
+        "gaps": [
+          "Exact deployed old/new route/function IDs, outstanding requests and live pre-state missing; repository code is not deployed-state proof."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Deny all application ingress on every deployment plus sustained database identity fence; maintain across migration, import, deployment verification and acceptance.",
+          "Do not substitute staff roles, UI hiding, advisory/table locks or a boolean flag for privileged writer exclusion."
+        ]
+      },
+      "proofSteps": [
+        "Under separately approved probe protocol, verify each listed mutation from admin/manager/agent and old deployment paths is rejected; retain no-persistent-write rollback evidence and actual denial source."
+      ],
+      "drainCriteria": [
+        "Zero outstanding server functions, DB transactions and queued callbacks; preserve drafts/revisions and confirm no writer can resume after transaction locks release."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After separate reopen approval, admit only acceptance actors first; restore saved access and verify expected artifact before general staff access."
+      ]
+    },
+    {
+      "id": "blog-articles",
+      "owner": "Willy",
+      "resources": [
+        "blog_save_article",
+        "blog_project_article_revision"
+      ],
+      "sources": [
+        "src/lib/neon/blog-admin.server.ts",
+        "src/lib/neon/blog-repository.server.ts",
+        "neon/migrations/20261105140000_blog_repository_mutations.sql"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Article save, draft, publication/archive/restore through CMS and projection triggers; actor checks are authorization only."
+        ],
+        "gaps": [
+          "Exact deployed old/new route/function IDs, outstanding requests and live pre-state missing; repository code is not deployed-state proof."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Deny all application ingress on every deployment plus sustained database identity fence; maintain across migration, import, deployment verification and acceptance.",
+          "Do not substitute staff roles, UI hiding, advisory/table locks or a boolean flag for privileged writer exclusion."
+        ]
+      },
+      "proofSteps": [
+        "Under separately approved probe protocol, verify each listed mutation from admin/manager/agent and old deployment paths is rejected; retain no-persistent-write rollback evidence and actual denial source."
+      ],
+      "drainCriteria": [
+        "Zero outstanding server functions, DB transactions and queued callbacks; preserve drafts/revisions and confirm no writer can resume after transaction locks release."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After separate reopen approval, admit only acceptance actors first; restore saved access and verify expected artifact before general staff access."
+      ]
+    },
+    {
+      "id": "blog-settings-features",
+      "owner": "Willy",
+      "resources": [
+        "blog_save_settings",
+        "blog_prune_features"
+      ],
+      "sources": [
+        "src/lib/neon/blog-repository.server.ts",
+        "neon/migrations/20261105140000_blog_repository_mutations.sql"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Settings save replaces ordered featured IDs; article operations prune features; global/category scopes and revisions must remain closed together."
+        ],
+        "gaps": [
+          "Exact deployed old/new route/function IDs, outstanding requests and live pre-state missing; repository code is not deployed-state proof."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Deny all application ingress on every deployment plus sustained database identity fence; maintain across migration, import, deployment verification and acceptance.",
+          "Do not substitute staff roles, UI hiding, advisory/table locks or a boolean flag for privileged writer exclusion."
+        ]
+      },
+      "proofSteps": [
+        "Under separately approved probe protocol, verify each listed mutation from admin/manager/agent and old deployment paths is rejected; retain no-persistent-write rollback evidence and actual denial source."
+      ],
+      "drainCriteria": [
+        "Zero outstanding server functions, DB transactions and queued callbacks; preserve drafts/revisions and confirm no writer can resume after transaction locks release."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After separate reopen approval, admit only acceptance actors first; restore saved access and verify expected artifact before general staff access."
+      ]
+    },
+    {
+      "id": "blog-categories",
+      "owner": "Willy",
+      "resources": [
+        "blog_save_category"
+      ],
+      "sources": [
+        "src/lib/neon/blog-repository.server.ts",
+        "neon/migrations/20261105140000_blog_repository_mutations.sql"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Category creation/update and navigation visibility/order use blog_save_category; preserve settings, category map, mutation requests and import receipt state."
+        ],
+        "gaps": [
+          "Exact deployed old/new route/function IDs, outstanding requests and live pre-state missing; repository code is not deployed-state proof."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Deny all application ingress on every deployment plus sustained database identity fence; maintain across migration, import, deployment verification and acceptance.",
+          "Do not substitute staff roles, UI hiding, advisory/table locks or a boolean flag for privileged writer exclusion."
+        ]
+      },
+      "proofSteps": [
+        "Under separately approved probe protocol, verify each listed mutation from admin/manager/agent and old deployment paths is rejected; retain no-persistent-write rollback evidence and actual denial source."
+      ],
+      "drainCriteria": [
+        "Zero outstanding server functions, DB transactions and queued callbacks; preserve drafts/revisions and confirm no writer can resume after transaction locks release."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After separate reopen approval, admit only acceptance actors first; restore saved access and verify expected artifact before general staff access."
+      ]
+    },
+    {
+      "id": "staff-access",
+      "owner": "Willy",
+      "resources": [
+        "staff_users",
+        "staff_roles",
+        "neon_auth.session"
+      ],
+      "sources": [
+        "src/lib/neon/auth.server.ts",
+        "src/lib/neon/staff-lifecycle.server.ts",
+        "src/lib/neon/staff-identity-actions.server.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "requireStaffAccess resolves bearer sessions from neon_auth.session and checks active staff/roles; lifecycle can deactivate/reactivate and identity actions can revoke sessions.",
+          "Bootstrap/identity binding may write even on an authorization/read path; hiding editor controls or blocking only POST is insufficient."
+        ],
+        "gaps": [
+          "Current staff activation/role assignments, session expiry/revocation state and access administrators missing; do not capture bearer tokens."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Block lifecycle/role/invite/reactivation/bootstrap and session-issuing admin paths with broad ingress and privileged control; snapshot access states without personal values in this register.",
+          "Default proposal makes no staff deactivation/session revocation. Any such changes require an exact separate per-identity approval and restoration map."
+        ]
+      },
+      "proofSteps": [
+        "Verify existing and fresh sessions cannot reach mutations or reactivate access; verify bootstrap/identity-binding cannot escape the fence."
+      ],
+      "drainCriteria": [
+        "No in-flight auth callbacks, staff mutations or privileged access-management transactions; existing session validity is not fence proof."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "Restore only saved active/inactive and role states under reopen approval; revoked sessions require new login, never reconstruction of tokens."
+      ]
+    },
+    {
+      "id": "blob-upload",
+      "owner": "Willy",
+      "resources": [
+        "/api/admin/media/upload"
+      ],
+      "sources": [
+        "src/routes/api.admin.media.upload.ts",
+        "src/lib/media/media-upload-service.ts",
+        "src/lib/media/vercel-blob.mjs"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Multipart route claims intent, uploads public object then finalizes metadata; independent external PUT may succeed while DB finalization fails."
+        ],
+        "gaps": [
+          "Live Blob token-consumer mapping, pending operations and effective reversible provider control missing; no token values may be retrieved."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Deny uploads before intent claim and isolate all Blob write credential consumers; do not delete objects to simulate a pause.",
+          "Table locks and application authorization cannot fence Vercel Blob."
+        ]
+      },
+      "proofSteps": [
+        "Verify old app/preview/development/import/CLI credentials cannot mutate this store using an approved no-persistent-object-write probe; retain provider deny and stable object/reference inventory."
+      ],
+      "drainCriteria": [
+        "Zero in-flight PUT/multipart operations; all intents accounted for; unknown upload outcomes block proof."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After distinct reopen approval restore only saved access; reconcile held operations individually with idempotency and content hashes; never bulk delete, overwrite or retry unknown outcomes."
+      ]
+    },
+    {
+      "id": "blob-finalization",
+      "owner": "Willy",
+      "resources": [
+        "media_upload_intents",
+        "media_assets"
+      ],
+      "sources": [
+        "src/lib/media/media-upload-service.ts",
+        "src/lib/media/media-upload-repository.server.ts"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Signed recovery receipt can finalize metadata on retry without re-uploading; UPLOAD_METADATA_PENDING/UPLOAD_OUTCOME_UNKNOWN are not safe drain success."
+        ],
+        "gaps": [
+          "Live Blob token-consumer mapping, pending operations and effective reversible provider control missing; no token values may be retrieved."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Hold retries/finalizers and snapshot pending intent/object/reference mappings privately; reconcile with no new writes until a separate approval.",
+          "Table locks and application authorization cannot fence Vercel Blob."
+        ]
+      },
+      "proofSteps": [
+        "Verify old app/preview/development/import/CLI credentials cannot mutate this store using an approved no-persistent-object-write probe; retain provider deny and stable object/reference inventory."
+      ],
+      "drainCriteria": [
+        "Zero executing finalizers; every pending/unknown intent has reviewed held disposition, object bytes and references preserved."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After distinct reopen approval restore only saved access; reconcile held operations individually with idempotency and content hashes; never bulk delete, overwrite or retry unknown outcomes."
+      ]
+    },
+    {
+      "id": "blob-variants",
+      "owner": "Willy",
+      "resources": [
+        "scripts/media/backfill-remote-variants.mjs",
+        "media_variant_sets"
+      ],
+      "sources": [
+        "scripts/media/backfill-remote-variants.mjs",
+        "src/lib/media/remote-variants.mjs",
+        "src/lib/media/remote-variants-db.mjs",
+        "src/lib/media/vercel-blob.mjs"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Remote variant backfill --apply writes Blob and DB; variant-prefix allowOverwrite exists. Local generate-responsive.mjs is filesystem-only and not evidence of a live job."
+        ],
+        "gaps": [
+          "Live Blob token-consumer mapping, pending operations and effective reversible provider control missing; no token values may be retrieved."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Hold backfills and all variant-producing import jobs; isolate credentials and preserve checkpoints and source/variant mappings.",
+          "Table locks and application authorization cannot fence Vercel Blob."
+        ]
+      },
+      "proofSteps": [
+        "Verify old app/preview/development/import/CLI credentials cannot mutate this store using an approved no-persistent-object-write probe; retain provider deny and stable object/reference inventory."
+      ],
+      "drainCriteria": [
+        "Zero active variant PUT/overwrite/metadata operations; failed and pending variants inventoried, no automatic retry."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After distinct reopen approval restore only saved access; reconcile held operations individually with idempotency and content hashes; never bulk delete, overwrite or retry unknown outcomes."
+      ]
+    },
+    {
+      "id": "blob-delete-console",
+      "owner": "Willy",
+      "resources": [
+        "store_sEHe3hQ90qGByxQA"
+      ],
+      "sources": [
+        "recovery-blob-metadata.json",
+        "src/lib/media/vercel-blob.mjs"
+      ],
+      "preState": {
+        "status": "partial",
+        "basis": "repository-and-captured-provider",
+        "facts": [
+          "Captured store earnestproperty-media, public, hkg1, available; linked to production/preview/development.",
+          "Repository Blob adapter exposes PUT, not delete; external SDK/CLI/provider-console deletes and token holders remain possible."
+        ],
+        "gaps": [
+          "Live Blob token-consumer mapping, pending operations and effective reversible provider control missing; no token values may be retrieved."
+        ]
+      },
+      "control": {
+        "status": "proposed",
+        "steps": [
+          "Freeze provider/CLI deletes, overwrites and token changes for this store; capture exact provider-enforceable credential deny plan before approval. If there is no reversible deny, stop for a separate credential-change design.",
+          "Table locks and application authorization cannot fence Vercel Blob."
+        ]
+      },
+      "proofSteps": [
+        "Verify old app/preview/development/import/CLI credentials cannot mutate this store using an approved no-persistent-object-write probe; retain provider deny and stable object/reference inventory."
+      ],
+      "drainCriteria": [
+        "Zero in-flight deletion/overwrite/provider jobs; complete consumer inventory and object/reference manifest retained."
+      ],
+      "retainedEvidence": [
+        "Retain sanitized before/after resource state, operator, UTC timestamps, generation, register SHA-256 and approval reference.",
+        "Retain per-resource rejection/drain receipts and hashes in restricted release evidence; never tokens, connection strings, session contents or article payloads."
+      ],
+      "reopenSteps": [
+        "After distinct reopen approval restore only saved access; reconcile held operations individually with idempotency and content hashes; never bulk delete, overwrite or retry unknown outcomes."
+      ]
+    }
+  ]
+}
