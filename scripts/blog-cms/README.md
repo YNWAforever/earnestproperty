@@ -138,3 +138,73 @@ The second command starts and cleans up its own pinned container; it accepts no 
 Task5 source/owned-fixture acceptance does not establish live inventory, live schema,
 browser/editor acceptance, deployment or release completeness. Tasks8/9 own broader
 acceptance and cutover, after controller review and separate target-specific authorization.
+
+## Offline recovery/media evidence
+
+`recovery-evidence.ts` validates a strict signed evidence package and emits a
+checksum-sealed receipt. It does not perform a recovery drill or authorize
+production. The context must be independently reviewed, including the public
+verification key, final release HEAD, exact packet digest, full target identity,
+full table catalog, source store/host/prefix/count/bytes, approved destination,
+names, isolation label, approval hashes and validity window. Never use a public
+key supplied by an untrusted evidence submitter as the trust baseline.
+
+Start from
+`docs/superpowers/evidence/blog-cms/recovery-context.template.json`; its null
+fields are intentional blockers. The companion `recovery-approval-request.md`
+specifies the exact proposed actions and required external approvals. Refresh
+metadata before approval; the captured 1,789 objects and 226,336,431 bytes are
+not guaranteed current. A local blog-table snapshot cannot replace the provider
+snapshot/full-database restore package.
+
+The complete evidence record shape is the strict schema in
+`recovery-evidence.ts`; `recovery-evidence.test.ts` supplies a fully synthetic
+example with ephemeral test signing keys. An independent authority seals the
+complete record, including its reviewed `contextSha256`, as `{record, signature}`
+using Ed25519 over the UTF-8 `canonical(record)` representation. No signing key is
+accepted by the CLI. All times are integer Unix milliseconds. Evidence windows
+must fit the context window and last at most 21,600,000 ms; observation chronology,
+snapshot history/retention and current receipt expiry are checked independently.
+
+Keep the complete package in restricted local evidence storage. Archive files
+and original media bytes go in one directory, each named by its lowercase
+64-character SHA-256 without extension; no directories, symlinks or arbitrary
+filenames are accepted there. Required archive bytes are rehashed. Media bytes
+also match recorded lengths. The signed destination readback archive must prove
+those same bytes were read from the isolated destination. Table/privacy/metadata
+digests are compared as signed attestations backed by the verification archives;
+the tool cannot infer raw export provenance or inspect a live provider. The
+authority must review full canonicalization, pagination and complete row/metadata
+coverage before sealing. Opaque archive hashes alone do not authenticate a
+provider; the independently trusted signature is required as well.
+
+CLI JSON inputs are limited to 16 MiB each; total archive bytes to 512 MiB. Larger
+packages fail closed and require a separately reviewed streaming implementation;
+never drop objects or evidence to fit the limit. The reviewed table catalog must
+include all schemas/tables, including unaffected tables; the validator checks exact
+catalog membership and complete before/after counts and fingerprints, not samples.
+
+```text
+bun run --no-env-file scripts/blog-cms/recovery-receipt.ts issue --context .private-sync-evidence/blog-recovery/context.json --evidence .private-sync-evidence/blog-recovery/evidence.json --artifacts .private-sync-evidence/blog-recovery/artifacts --receipt .private-sync-evidence/blog-recovery/receipt.json
+bun run --no-env-file scripts/blog-cms/recovery-receipt.ts verify --context .private-sync-evidence/blog-recovery/context.json --evidence .private-sync-evidence/blog-recovery/evidence.json --artifacts .private-sync-evidence/blog-recovery/artifacts --receipt .private-sync-evidence/blog-recovery/receipt.json
+```
+
+There are no provider, credential, environment-loading, signing, apply, cleanup
+or clock-override switches. Receipt output must be a new file under
+`.private-sync-evidence/blog-recovery/`; overwrites, traversal and symlink/junction
+output ancestors fail. Both modes revalidate the complete package. `verify`
+requires the existing receipt to match the validated package and remain current.
+Standard output contains only status, authorization=false, receipt hash and
+expiry; failures report a generic error, never raw private evidence. Exit 0 means
+offline verification succeeded; exit 1 means rejection. Output always retains
+`productionAuthorized: false` and `closure: REQUIRES_INDEPENDENT_REVIEW`.
+
+This receipt cannot be submitted as the executor's `production-recovery-v1`
+envelope. Independent recovery authority review and signing remain separate;
+this tooling neither provisions that authority nor changes executor gates.
+
+Focused offline verification:
+
+```text
+bun test --no-env-file scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/release-controls.test.ts scripts/blog-cms/release-packet.test.ts scripts/blog-cms/writer-control-register.test.ts
+```

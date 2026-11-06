@@ -28,3 +28,29 @@ A local scan of the sealed 112-record registry found zero populated cover-image 
 | Suspected broad corruption | Restore to a separate branch for comparison first. Replacing production or switching endpoints requires a separate explicit recovery approval with data-loss window and unaffected-work analysis. |
 
 Willy is the user-confirmed database/recovery and platform/deployment owner. Acceptable recovery time/data-loss window, fresh snapshot identity, isolated restore receipt and external-media recovery proof remain missing. Owner assignment does not approve backup creation, restoration or production changes. These gates cannot be marked PASS from read-only metadata or the local rehearsal.
+
+## Offline recovery/media evidence tooling — 2026-11-06
+
+Implementation: `scripts/blog-cms/recovery-evidence.ts` and
+`scripts/blog-cms/recovery-receipt.ts`. These tools only read supplied local files
+and write a new private offline receipt. They do not connect to Neon or Blob,
+sign evidence, retrieve credentials, create resources, restore/finalize, copy or
+delete objects, or grant production authority.
+
+See the [exact approval request](recovery-approval-request.md), including the
+captured shared Blob store and missing identity, timing, isolation and budget
+fields. The [context template](recovery-context.template.json) is intentionally
+incomplete and must fail validation. Follow the [CLI instructions](../../../../scripts/blog-cms/README.md#offline-recoverymedia-evidence).
+
+Validation requires independently trusted Ed25519-sealed evidence, complete local
+archive bytes, exact candidate/target binding, a maximum six-hour window,
+provider-ready snapshot, new isolated restore, complete database/catalog/ledger/
+privacy/unaffected-table comparisons, full media inventory and byte/metadata
+comparison, referenced uploads, and separately approved cleanup readbacks.
+Receipts expire and revalidation rechecks the signature, policy, archives and
+current time. No asserted boolean satisfies any evidence gate.
+
+**External evidence and release closure remain BLOCKED.** A successful synthetic
+test or offline receipt does not independently prove provider actions occurred.
+Raw evidence provenance and the reviewed authority/context remain external trust
+requirements. Local blog-table snapshots remain insufficient for full recovery.
