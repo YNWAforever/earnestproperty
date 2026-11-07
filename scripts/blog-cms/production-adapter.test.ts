@@ -167,7 +167,7 @@ test("preparation preserves all source articles and keeps missing database expli
 test("deterministic, recursively frozen manifest binds source and implementation", () => {
   expect(prepareProductionPacket(input())).toEqual(packet);
   expect(Object.isFrozen(packet.plan.insert[0])).toBe(true);
-  expect(packet.semantics).toHaveLength(10);
+  expect(packet.semantics).toHaveLength(18);
   expect(reviewProductionPacket(packet, packet.manifestFingerprint).integrity).toBe("MATCH");
 });
 for (const key of Object.keys(PRODUCTION_TARGET)) {
@@ -243,7 +243,7 @@ test("rehashed fabricated plan and implementation bindings fail review", () => {
     "PRODUCTION_SEMANTICS_CHANGED",
   );
 });
-test("self-asserted approval, backup, fence and receipt never authorize execution", () => {
+test("self-asserted approval, backup, fence and receipt never authorize execution", async () => {
   const p = structuredClone(packet);
   p.blockers = [];
   p.executionAuthorized = true;
@@ -252,15 +252,16 @@ test("self-asserted approval, backup, fence and receipt never authorize executio
   expect(reviewProductionPacket(p, p.manifestFingerprint).executionAuthorized).toBe(false);
   let calls = 0;
   for (let retry = 0; retry < 2; retry++) {
-    expect(() =>
-      executeProductionRelease(p, {
+    await expect(
+      executeProductionRelease({
+        packet: p,
         approved: true,
         backup: true,
         fence: true,
         receipt: { writes: 0 },
         query: () => calls++,
       }),
-    ).toThrow("PRODUCTION_EXECUTION_UNAVAILABLE");
+    ).rejects.toThrow("PRODUCTION_REQUEST");
   }
   expect(calls).toBe(0);
 });

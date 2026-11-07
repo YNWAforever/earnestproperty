@@ -83,3 +83,22 @@ const categoryOptionsServer = createServerFn({ method: "GET" })
   });
 export const getBlogCategoryOptions = async () =>
   callStaffServerFn(categoryOptionsServer, { data: {} });
+
+const featuredListServer = createServerFn({ method: "GET" })
+  .inputValidator((data: ArticleQuery) => parseBlogRequest(() => articleQuerySchema.parse(data)))
+  .handler(async ({ data }) => {
+    privateHeaders();
+    return blogRequest(async () => (await server()).listFeaturedArticles(data, getRequest()));
+  });
+const featuredArticleServer = createServerFn({ method: "GET" })
+  .inputValidator((data: { id: string }) =>
+    parseBlogRequest(() => z.object({ id: articleIdSchema }).strict().parse(data)),
+  )
+  .handler(async ({ data }) => {
+    privateHeaders();
+    return blogRequest(async () => (await server()).getFeaturedArticle(data.id, getRequest()));
+  });
+export const listFeaturedArticles = async (options: { data: ArticleQuery }) =>
+  callStaffServerFn(featuredListServer, options);
+export const getFeaturedArticle = async (options: { data: { id: string } }) =>
+  callStaffServerFn(featuredArticleServer, options);

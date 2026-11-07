@@ -1,6 +1,6 @@
 # Production backup and recovery package
 
-Status: **metadata verified; fresh backup and restore proof outstanding**. Production unchanged.
+Status: **offline evidence validation implementation-ready; external recovery/media evidence BLOCKED**. Historical metadata below was read-only. No fresh production snapshot, isolated restore, media copy or cleanup has occurred; production is unchanged.
 
 Read-only provider metadata collected on 2026-11-05 reports project `dawn-meadow-79190048`, production branch `br-polished-sea-aom4i1ct`, PostgreSQL 18, history retention **21,600 seconds (six hours)** and an empty snapshot schedule. Eight manual snapshots exist, all dated October 26; newest is `snap-wispy-flower-aos73lyq`, created 2026-10-26T12:54:18Z. Neither their presence nor the retention setting proves this release can be restored.
 
@@ -28,3 +28,61 @@ A local scan of the sealed 112-record registry found zero populated cover-image 
 | Suspected broad corruption | Restore to a separate branch for comparison first. Replacing production or switching endpoints requires a separate explicit recovery approval with data-loss window and unaffected-work analysis. |
 
 Willy is the user-confirmed database/recovery and platform/deployment owner. Acceptable recovery time/data-loss window, fresh snapshot identity, isolated restore receipt and external-media recovery proof remain missing. Owner assignment does not approve backup creation, restoration or production changes. These gates cannot be marked PASS from read-only metadata or the local rehearsal.
+
+## Offline recovery/media evidence tooling — 2026-11-06
+
+Implementation: `scripts/blog-cms/recovery-evidence.ts` and
+`scripts/blog-cms/recovery-receipt.ts`. These tools only read supplied local files
+and write a new private offline receipt. They do not connect to Neon or Blob,
+sign evidence, retrieve credentials, create resources, restore/finalize, copy or
+delete objects, or grant production authority.
+
+See the [exact approval request](recovery-approval-request.md), including the
+captured shared Blob store and missing identity, timing, isolation and budget
+fields. The [context template](recovery-context.template.json) is intentionally
+incomplete and must fail validation. Follow the [CLI instructions](../../../../scripts/blog-cms/README.md#offline-recoverymedia-evidence).
+
+Validation requires independently trusted Ed25519-sealed evidence, complete local
+archive bytes, exact candidate/target binding, a maximum six-hour window,
+provider-ready snapshot, new isolated restore, complete database/catalog/ledger/
+privacy/unaffected-table comparisons, full media inventory and byte/metadata
+comparison, referenced uploads, and separately approved cleanup readbacks.
+Receipts expire and revalidation rechecks the signature, policy, archives and
+current time. No asserted boolean satisfies any evidence gate.
+
+**External evidence and release closure remain BLOCKED.** A successful synthetic
+test or offline receipt does not independently prove provider actions occurred.
+Raw evidence provenance and the reviewed authority/context remain external trust
+requirements. Local blog-table snapshots remain insufficient for full recovery.
+
+Fix round 1 hardens this contract to v2: exact returned snapshot/restore and
+cleanup identities are pinned in the final reviewed context; all upload reference
+identities, pathnames and held dispositions are derived from database-bound row
+captures. A complete typed manifest covers uploads, standalone media assets,
+articles and all CMS revision media sources. Original canonical signed bytes are
+verified without trimming or schema normalization. V1 records are rejected;
+reprovisioned context, applicable approvals and resealing are required. These
+local fixes do not clear any external evidence or approval gate.
+
+Fix round 2 replaces media regex extraction with bounded Markdown, HTML and CSS
+parsing. Encoded URLs are interpreted before inventory/exclusion classification,
+while original encoded values remain bound in the signed evidence. Unresolved,
+malformed, dynamic or unsupported media syntax is rejected instead of yielding
+empty coverage. External recovery/media evidence and approvals remain blocked.
+
+Fix round 3 rejects document-level HTML tokens before tree construction and
+audits all source start tags/attributes against inspected nodes. Silently dropped
+`body`/`html`/`head` or contextual carriers cannot become empty coverage. Valid
+supported fragments still use the same signed raw-source bindings; no browser
+rendering or external recovery action is introduced.
+
+Final-review fix requires an independently reviewed `schemaProfile` in the context:
+`phase`, full `schemaSha256` and exact `migrationLedgerSha256`. The release backup
+uses `pre-migration`: ledger 95 and explicit absence of the four new blog tables
+in both baseline and restore. `post-migration` requires those tables and ledger 98.
+Both phases require the legacy article/revision/media tables and unaffected-table
+coverage. Ledger archives must contain the exact migration versions for the phase.
+Legacy article captures may omit `content_format` only before migration; their
+original signed rows and archive bytes are retained without adding a default.
+Existing contexts/evidence missing the profile or `absentRelations` fail closed
+and need independent review and resealing. External recovery remains BLOCKED.

@@ -68,6 +68,11 @@ jobs:
 
       - run: npm run test:blog
       - run: npm run test:blog-cms
+      - run: npm run test:blog:release:guards
+        timeout-minutes: 10
+      - run: npm run test:blog:hosted:guards
+        timeout-minutes: 5
+      - run: npm run typecheck:blog:hosted
       - run: npm run test:videos
       - run: npm run test:homepage
       - run: npm run test:mls
@@ -80,6 +85,8 @@ jobs:
       - run: npm run test:property-sync:release
       - name: Install Chromium for isolated source-sync UI
         run: npx playwright install --with-deps chromium
+      - run: npm run test:blog:hosted:browser
+        timeout-minutes: 5
       - run: npm run test:property-sync:ui
       - run: npm run test:youtube-sync:ui
       - run: npm run test:property-maintenance:ui
@@ -198,6 +205,10 @@ jobs:
       - run: npm run test:whatsapp-enquiries:db
       - run: npm run test:cms:db
       - run: npm run test:blog-cms:db
+      - run: docker pull pgvector/pgvector@sha256:2547711f871f5d4c02b2dfc7ff86f3eddc438d00a23854cd449513f4ef1af79b
+        timeout-minutes: 5
+      - run: npm run test:blog:release:owned:db
+        timeout-minutes: 10
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:
