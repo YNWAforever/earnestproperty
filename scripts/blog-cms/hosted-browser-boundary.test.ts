@@ -7,6 +7,70 @@ import { VIEWPORTS } from "../../e2e/a11y-checks";
 import { chromium } from "@playwright/test";
 import { installReadBoundary, BrowserBoundaryError } from "./hosted-browser-boundary";
 
+test(
+  "LOCAL_BROWSER: queued reads stay bounded and drain after a rejected redirect",
+  { timeout: 30000 },
+  async () => {
+    let active = 0,
+      peak = 0,
+      completed = 0;
+    const server = createServer((req, res) => {
+      if (req.url === "/") {
+        res.setHeader("content-type", "text/html");
+        res.end("<!doctype html><title>Queue regression</title>");
+        return;
+      }
+      active++;
+      peak = Math.max(peak, active);
+      setTimeout(() => {
+        active--;
+        completed++;
+        if (req.url === "/asset/0") res.writeHead(302, { location: "https://unapproved.invalid/" });
+        res.end("asset");
+      }, 50);
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const browser = await chromium.launch({ headless: true });
+    try {
+      const context = await browser.newContext({ serviceWorkers: "block" });
+      const errors: unknown[] = [];
+      await installReadBoundary(
+        context,
+        {
+          appOrigin: origin,
+          authOrigin: "https://auth.invalid",
+          blobOrigin: "https://blob.invalid",
+        },
+        () => {},
+        (e) => errors.push(e),
+      );
+      const page = await context.newPage();
+      await page.goto(origin);
+      const results = await page.evaluate(() =>
+        Promise.all(
+          Array.from({ length: 12 }, (_, i) =>
+            fetch(`/asset/${i}`)
+              .then((r) => r.text())
+              .catch(() => "blocked"),
+          ),
+        ),
+      );
+      assert.equal(completed, 12);
+      assert.ok(peak > 1 && peak <= 4, `Unexpected concurrency: ${peak}`);
+      assert.equal(results.filter((x) => x === "asset").length, 11);
+      assert.equal(results[0], "blocked");
+      assert.equal(errors.length, 1);
+      assert.ok(errors[0] instanceof BrowserBoundaryError);
+      assert.equal(errors[0].code, "BROWSER_REDIRECT_ORIGIN_REFUSED");
+    } finally {
+      await browser.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  },
+);
+
 for (const resource of [
   "document",
   "script",

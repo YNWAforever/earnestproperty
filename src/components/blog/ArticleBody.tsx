@@ -1,4 +1,5 @@
 import { articleHeadingEntries } from "../../lib/blog/headings";
+import { resolveImageSource } from "../../lib/media/isolated-images";
 import { createElement, type ReactNode } from "react";
 import { validateArticleBody, validateSupplementalLinks } from "../../lib/blog/content";
 import type {
@@ -39,7 +40,7 @@ function renderNode(node: EditorNode, key: string, headingIds: Map<EditorNode, s
     return (
       <img
         key={key}
-        src={node.attrs.src}
+        src={resolveImageSource(node.attrs.src)}
         alt={node.attrs.alt ?? ""}
         title={node.attrs.title ?? undefined}
         width={node.attrs.width ?? undefined}

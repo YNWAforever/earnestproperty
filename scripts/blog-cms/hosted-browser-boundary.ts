@@ -102,13 +102,23 @@ export async function installReadBoundary(
   failed: (error: unknown) => void,
   excluded: (frame: ExcludedFrame) => void = () => {},
 ) {
+  // route.fetch bypasses the browser's normal connection scheduling. Bound the
+  // intercepted reads so image-heavy pages do not exhaust the transport timeout.
+  let active = 0;
+  const waiting: Array<() => void> = [];
   await context.route("**/*", async (route) => {
+    if (active >= 4) await new Promise<void>((resolve) => waiting.push(resolve));
+    else active++;
     try {
       const result = await forwardReadOnly(route, policy, guard);
       if (result) excluded(result);
     } catch (error) {
       failed(error);
       await route.abort("blockedbyclient");
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
     }
   });
 }

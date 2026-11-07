@@ -34,6 +34,7 @@ import {
 } from "./hosted-contract";
 import { readBrowserStates, runHostedBrowser, runHostedRecovery } from "./hosted-browser";
 import { runCmsScenario, type HostedIO } from "./hosted-scenario";
+import { hostedSessionBindingSql } from "./hosted-session-binding";
 
 type Row = Record<string, unknown>;
 type Db = {
@@ -452,12 +453,10 @@ export async function executeHosted(
       );
       validateTriggerInventory(triggers as { table_name: string; name: string; enabled: string }[]);
       for (const role of roles) {
-        const rows = await query(
-          `SELECT s."userId" AS user_id, st.id::text AS staff_id, array_agg(r.role::text ORDER BY r.role::text) AS roles
-        FROM neon_auth.session s JOIN staff_users st ON st.auth_user_id=s."userId" JOIN staff_roles r ON r.staff_user_id=st.id
-        WHERE s.token=$1 AND s."expiresAt">$2::timestamptz AND st.active GROUP BY s."userId",st.id`,
-          [env[`HOSTED_${role.toUpperCase()}_SESSION`], approval.expiresAt],
-        );
+        const rows = await query(hostedSessionBindingSql, [
+          env[`HOSTED_${role.toUpperCase()}_SESSION`],
+          approval.expiresAt,
+        ]);
         assert.deepEqual(
           rows,
           [{ user_id: p.actors[role].userId, staff_id: p.actors[role].staffId, roles: [role] }],
