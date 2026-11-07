@@ -184,7 +184,7 @@ const recordSchema = z
 const envelopeSchema = z
   .object({ record: recordSchema, signature: z.string().regex(/^[A-Za-z0-9+/]{86}==$/) })
   .strict();
-const MAX_WINDOW = 21600000;
+export const MAX_WINDOW = 21600000;
 const BLOG_TABLES = [
   "blog_categories",
   "blog_settings",

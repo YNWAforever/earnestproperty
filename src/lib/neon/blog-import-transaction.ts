@@ -6,8 +6,17 @@ import { encodeArticle } from "../blog/article-codec";
 
 export type BlogSnapshotIdentity = Readonly<{ identity: string; systemIdentifier: string }>;
 export type BlogSqlSession = {
-  query: (sql: string, params?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }>;
+  query: (
+    sql: string,
+    params?: unknown[],
+  ) => Promise<{ rows: Record<string, unknown>[]; rowCount?: number | null }>;
 };
+// The caller already holds the import or release table locks. The CAS predicate
+// still has to change exactly one row; a miss is not a successful write.
+async function casUpdate(client: BlogSqlSession, sql: string, params: unknown[]) {
+  const result = await client.query(sql, params);
+  if (result.rowCount !== 1) throw new Error("IMPORT_CAS_MISMATCH");
+}
 type Row = Record<string, unknown>;
 export const blogSnapshotTables: Record<string, string> = {
   articles: "id",
@@ -142,7 +151,8 @@ export async function mutateBlogImport(
           row.seo_description !== null
         )
           throw new Error("IMPORT_CATEGORY_CONFLICT");
-        await client.query(
+        await casUpdate(
+          client,
           "UPDATE blog_categories SET navigation_order=$1,version=version+1 WHERE id=$2 AND version=$3",
           [c.navigationOrder, old.id, c.version],
         );
@@ -168,7 +178,8 @@ export async function mutateBlogImport(
     if (row.category_id != null || row.category == null) continue;
     const c = plan.inventory.categories.find((c) => c.key === row.category);
     if (!c) throw new Error("IMPORT_UNRESOLVED_CATEGORY");
-    await client.query(
+    await casUpdate(
+      client,
       "UPDATE articles SET category_id=$1 WHERE id=$2 AND version=$3 AND category_id IS NULL",
       [categoryIds.get(c.id), row.id, row.version],
     );
@@ -291,7 +302,8 @@ export async function mutateBlogImport(
       throw new Error("IMPORT_SETTINGS_AUTHORITATIVE");
     const id = String(old?.id ?? randomUUID());
     if (old)
-      await client.query(
+      await casUpdate(
+        client,
         "UPDATE blog_settings SET heading=$1,introduction=$2,seo_title=$3,seo_description=$4,version=version+1 WHERE id=$5 AND version=$6",
         [...Object.values(page), id, setting.version],
       );

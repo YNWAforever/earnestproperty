@@ -65,7 +65,7 @@ mock.module(new URL("../../src/lib/neon/blog-release-transaction.ts", import.met
       assert.equal(target.identity, PRODUCTION_IDENTITY);
       assert.equal(inputs.bundle.sourceRevision, "fixture");
       if (revokeDuringCore) currentFence = undefined;
-      return { packetSha256: inputs.packetSha256, writes: 112 };
+      return coreResult ?? { packetSha256: inputs.packetSha256, writes: 112 };
     },
   },
 });
@@ -90,6 +90,7 @@ function fixture(edit = {}) {
   trace.length = 0;
   configured = true;
   revokeDuringCore = false;
+  coreResult = undefined;
   const now = Date.now();
   const sourceBytes = Buffer.from(JSON.stringify({ sourceRevision: "fixture" }));
   const packet = {
@@ -173,7 +174,7 @@ function fixture(edit = {}) {
   return request;
 }
 
-let session, activeClient, peer, revokeDuringCore;
+let session, activeClient, peer, revokeDuringCore, coreResult;
 function stubTransport(t) {
   t.mock.method(pg, "Client", function (options) {
     assert.equal(options.host, target.host);
@@ -398,6 +399,99 @@ for (const [label, edits, change, error] of [
     assert.deepEqual(trace, []);
   });
 }
+
+test("a changed receipt retry rolls back instead of committing success", async (t) => {
+  const request = fixture();
+  coreResult = { packetSha256: sha(request.packetBytes), writes: 0, verification: "changed" };
+  stubTransport(t);
+  await assert.rejects(executeProductionRelease(request), /RELEASE_VERIFICATION_CHANGED/);
+  assert.equal(trace.includes("COMMIT"), false);
+  assert.deepEqual(trace.slice(-3), ["core", "ROLLBACK", "end"]);
+});
+
+test("an unchanged receipt retry still commits with zero writes", async (t) => {
+  const request = fixture();
+  const receipt = { packetSha256: sha(request.packetBytes), writes: 0, verification: "unchanged" };
+  coreResult = receipt;
+  stubTransport(t);
+  assert.deepEqual(await executeProductionRelease(request), receipt);
+  assert.equal(trace.includes("ROLLBACK"), false);
+  assert.deepEqual(trace.slice(-5), ["core", "session", "fence-read", "COMMIT", "end"]);
+});
+
+const EVIDENCE_MAX_WINDOW_MS = 21_600_000;
+test("the production evidence maximum matches the recovery evidence maximum", async () => {
+  const { PRODUCTION_EVIDENCE_MAX_WINDOW_MS } = await import("./production-evidence.ts");
+  const { MAX_WINDOW } = await import("./recovery-evidence.ts");
+  assert.equal(PRODUCTION_EVIDENCE_MAX_WINDOW_MS, EVIDENCE_MAX_WINDOW_MS);
+  assert.equal(MAX_WINDOW, EVIDENCE_MAX_WINDOW_MS);
+});
+
+test("a signed window of exactly six hours inside the recovery and fence intersection commits", async (t) => {
+  const expiresAt = Date.now() + 240_000;
+  const span = { startsAt: expiresAt - EVIDENCE_MAX_WINDOW_MS, expiresAt };
+  const request = fixture({ mapping: span, recovery: span, fence: span, approval: span });
+  stubTransport(t);
+  assert.equal((await executeProductionRelease(request)).writes, 112);
+  assert.equal(trace.at(-2), "COMMIT");
+});
+
+test("a mapping window may start before the fence when approval stays inside recovery and fence", async (t) => {
+  const expiresAt = Date.now() + 240_000;
+  const request = fixture({
+    mapping: { startsAt: expiresAt - EVIDENCE_MAX_WINDOW_MS, expiresAt },
+  });
+  stubTransport(t);
+  assert.equal((await executeProductionRelease(request)).writes, 112);
+  assert.equal(trace.at(-2), "COMMIT");
+});
+
+for (const kind of ["mapping", "approval", "recovery", "fence"]) {
+  test("rejects a " + kind + " window longer than the recovery evidence maximum", async (t) => {
+    const expiresAt = Date.now() + 240_000;
+    const request = fixture({
+      [kind]: { startsAt: expiresAt - EVIDENCE_MAX_WINDOW_MS - 1, expiresAt },
+    });
+    stubTransport(t);
+    await assert.rejects(executeProductionRelease(request), /PRODUCTION_EVIDENCE_WINDOW/);
+    assert.deepEqual(trace, []);
+  });
+}
+
+test("rejects approval that extends past the recovery and fence intersection", async (t) => {
+  const startsAt = Date.now() - 1000;
+  const expiresAt = Date.now() + 120_000;
+  const request = fixture({
+    recovery: { startsAt, expiresAt },
+    fence: { startsAt, expiresAt },
+    approval: { startsAt, expiresAt: expiresAt + 1 },
+  });
+  stubTransport(t);
+  await assert.rejects(executeProductionRelease(request), /PRODUCTION_EVIDENCE_WINDOW/);
+  assert.deepEqual(trace, []);
+});
+
+test("rejects approval that starts before the recovery and fence intersection", async (t) => {
+  const startsAt = Date.now() - 1000;
+  const expiresAt = Date.now() + 120_000;
+  const request = fixture({
+    recovery: { startsAt, expiresAt },
+    fence: { startsAt: startsAt + 500, expiresAt },
+    approval: { startsAt, expiresAt },
+  });
+  stubTransport(t);
+  await assert.rejects(executeProductionRelease(request), /PRODUCTION_EVIDENCE_WINDOW/);
+  assert.deepEqual(trace, []);
+});
+
+test("a fresh window shorter than the required remaining time still fails", async (t) => {
+  const expiresAt = Date.now() + 30_000;
+  const span = { startsAt: expiresAt - EVIDENCE_MAX_WINDOW_MS, expiresAt };
+  const request = fixture({ mapping: span, recovery: span, fence: span, approval: span });
+  stubTransport(t);
+  await assert.rejects(executeProductionRelease(request), /PRODUCTION_EVIDENCE_WINDOW/);
+  assert.deepEqual(trace, []);
+});
 
 test("refuses inherited connection configuration", async (t) => {
   const request = fixture();

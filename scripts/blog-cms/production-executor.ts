@@ -208,6 +208,9 @@ async function consume(capability: Capability) {
     proof.assertCurrentFence(loadCurrentFence());
     proof.assertFresh(Date.now());
     const result = await runBlogRelease(client, identity, inputs);
+    // Drift is a failed retry. The core already leaves writes at zero; committing
+    // that result would report success to the caller.
+    if (result.verification === "changed") throw new Error("RELEASE_VERIFICATION_CHANGED");
     await checkSession(client, proof, backendPid);
     proof.assertCurrentFence(loadCurrentFence());
     proof.assertFresh(Date.now());

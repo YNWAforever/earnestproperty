@@ -5,6 +5,10 @@ import { canonical, fingerprint } from "../../src/lib/blog/reconcile";
 import { PRODUCTION_TARGET } from "./production-target";
 
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
+// Recovery evidence rejects a signed window longer than six hours. Production
+// approval is valid only inside the overlapping recovery and fence windows, and
+// no signed production window may run longer than that same bound.
+export const PRODUCTION_EVIDENCE_MAX_WINDOW_MS = 21_600_000;
 const text = z.string().min(1).max(256);
 const integer = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
 const windowFields = { startsAt: integer, expiresAt: integer };
@@ -186,6 +190,17 @@ export function authenticateProductionRequest(
     canonical(fence.record.target) !== canonical(target)
   )
     throw new Error("PRODUCTION_EVIDENCE_BINDING");
+  for (const record of [mapping.record, approval.record, recovery.record, fence.record]) {
+    if (
+      record.expiresAt <= record.startsAt ||
+      record.expiresAt - record.startsAt > PRODUCTION_EVIDENCE_MAX_WINDOW_MS
+    )
+      throw new Error("PRODUCTION_EVIDENCE_WINDOW");
+  }
+  const opensAt = Math.max(recovery.record.startsAt, fence.record.startsAt);
+  const closesAt = Math.min(recovery.record.expiresAt, fence.record.expiresAt);
+  if (approval.record.startsAt < opensAt || approval.record.expiresAt > closesAt)
+    throw new Error("PRODUCTION_EVIDENCE_WINDOW");
 
   return {
     target,
