@@ -21,23 +21,22 @@ const firstHref = (selector: string, from: string) => async (page: Page) => {
 
 export const PAGES: Target[] = [
   { name: "1 home", path: "/" },
-  { name: "2 listings all", path: "/listings?deal=all&page=1" },
-  { name: "3 listings sale page 2", path: "/listings?deal=sale&page=2&sort=newest" },
-  { name: "4 listings rent", path: "/listings?deal=rent&page=1&sort=newest" },
+  // Use the route's canonical URLs: explicit defaults trigger a server redirect,
+  // which the hosted verifier deliberately refuses before following another hop.
+  { name: "2 listings all", path: "/listings" },
+  { name: "3 listings sale page 2", path: "/listings?deal=sale&page=2" },
+  { name: "4 listings rent", path: "/listings?deal=rent" },
   {
     // Discovered from the sale list (not deal=all, which is newest first and can be a rent
     // listing, duplicating page 6), so the sale layout -- the 計月供 bar and mortgage teaser -- is
     // always scanned.
     name: "5 property sale (first card on sale listings)",
-    path: firstHref('a[href^="/property/"]', "/listings?deal=sale&page=1&sort=newest"),
+    path: firstHref('a[href^="/property/"]', "/listings?deal=sale"),
   },
   {
     name: "6 property rent (first card on rent listings)",
     path: async (page) => {
-      const href = await firstHref(
-        'a[href^="/property/"]',
-        "/listings?deal=rent&page=1&sort=newest",
-      )(page);
+      const href = await firstHref('a[href^="/property/"]', "/listings?deal=rent")(page);
       return href ? `${href.split("?")[0]}?deal=rent` : null;
     },
   },
