@@ -65,8 +65,6 @@ async function service(input: unknown) {
 }
 mock.module("./blog-admin.server", () => ({
   listBlogArticles: service,
-  listFeaturedArticles: service,
-  getFeaturedArticle: service,
   saveBlogArticle: service,
   saveBlogSettings: service,
   saveBlogCategory: service,
@@ -82,24 +80,8 @@ beforeEach(() => {
   serviceCalls = 0;
   serviceFailure = undefined;
 });
-test("feature projections retain private headers and serialized auth failures", async () => {
-  for (const call of [
-    () =>
-      api.listFeaturedArticles({ data: { search: "", state: "published", page: 1, pageSize: 25 } }),
-    () => api.getFeaturedArticle({ data: { id: "11111111-1111-4111-8111-111111111111" } }),
-  ]) {
-    serviceFailure = undefined;
-    await call();
-    expect(headers.get("cache-control")).toBe("private, no-store");
-    expect(headers.get("x-robots-tag")).toBe("noindex, nofollow");
-    serviceFailure = new Response("Forbidden", { status: 403 });
-    await expect(call()).rejects.toMatchObject({ status: 403, message: "Forbidden" });
-  }
-});
 const calls: Array<[string, () => Promise<unknown>]> = [
   ["list", () => api.listBlogArticles({ data: { page: 0 } as never })],
-  ["featured list", () => api.listFeaturedArticles({ data: { page: 0 } as never })],
-  ["featured article", () => api.getFeaturedArticle({ data: { id: "invalid" } })],
   ["article", () => api.saveBlogArticle({ data: {} as never })],
   ["settings", () => api.saveBlogSettings({ data: {} as never })],
   ["category", () => api.saveBlogCategory({ data: {} as never })],

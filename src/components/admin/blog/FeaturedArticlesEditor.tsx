@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { getFeaturedArticle, listFeaturedArticles } from "@/lib/neon/blog-admin";
+import { getArticlePreview, listBlogArticles } from "@/lib/neon/blog-admin";
 import type { ArticlePage, Scope } from "@/lib/blog/types";
 import { articleError, eligibleFeature } from "./blog-editor-state";
 export function FeaturedArticlesEditor({
@@ -27,7 +27,7 @@ export function FeaturedArticlesEditor({
     let active = true;
     setTitleErrors({});
     for (const id of selectedIds ? selectedIds.split(",") : []) {
-      void getFeaturedArticle({ data: { id } })
+      void getArticlePreview({ data: { id } })
         .then((article) => {
           if (active) setTitles((previous) => ({ ...previous, [id]: article.title }));
         })
@@ -44,7 +44,7 @@ export function FeaturedArticlesEditor({
     let active = true;
     setError("");
     setResult(null);
-    listFeaturedArticles({ data: { search, state: "published", categoryId, page, pageSize: 25 } })
+    listBlogArticles({ data: { search, state: "published", categoryId, page, pageSize: 25 } })
       .then((data) => {
         if (active) {
           setResult(data);

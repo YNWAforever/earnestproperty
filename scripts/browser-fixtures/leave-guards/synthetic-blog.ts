@@ -156,47 +156,6 @@ export async function getArticlePreview({ data }: { data: { id: string } }) {
   if (!a) throw new ServerFnResponseError("Not found", 404);
   return structuredClone(a);
 }
-const publishedSummary = (a: ArticleRecord) => ({
-  id: a.id,
-  slug: a.slug,
-  title: a.title,
-  excerpt: a.excerpt,
-  categoryId: a.categoryId,
-  published: a.published,
-  publishedAt: a.publishedAt,
-  createdAt: a.createdAt,
-  coverImage: a.coverImage,
-  coverAlt: a.coverAlt,
-});
-
-export async function listFeaturedArticles({ data }: { data: ArticleQuery }) {
-  const q = articleQuerySchema.parse(data);
-  const now = Date.now();
-  const items = records.filter(
-    (a) =>
-      a.published &&
-      (a.publishedAt === null || Date.parse(a.publishedAt) <= now) &&
-      (!q.categoryId || a.categoryId === q.categoryId) &&
-      (a.title + " " + a.slug + " " + categories.find((c) => c.id === a.categoryId)?.name).includes(
-        q.search,
-      ),
-  );
-  return structuredClone({
-    items: items.slice((q.page - 1) * q.pageSize, q.page * q.pageSize).map(publishedSummary),
-    total: items.length,
-    page: q.page,
-    pageSize: q.pageSize,
-  });
-}
-
-export async function getFeaturedArticle({ data }: { data: { id: string } }) {
-  await new Promise((resolve) => setTimeout(resolve, fixture.previewDelayMs));
-  if (fixture.failPreviewIds.includes(data.id))
-    throw new ServerFnResponseError("BLOG_UNAVAILABLE", 503);
-  const a = records.find((x) => x.id === data.id);
-  if (!a) throw new ServerFnResponseError("Not found", 404);
-  return structuredClone(publishedSummary(a));
-}
 export async function saveBlogArticle({ data }: { data: SaveArticleCommand }) {
   const c = saveArticleSchema.parse(data);
   fixture.commands.push(structuredClone(c));

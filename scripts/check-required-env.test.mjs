@@ -228,8 +228,7 @@ test("every non-VITE env var read in src/ or scripts/ is documented in .env.exam
   const HARNESS_ONLY = /(^|_)TEST(_|$)|BROWSER|FIXTURE|^PLAYWRIGHT_|^MIGRATION_|^RECORD_|^MODE$/;
   // Files that only exercise the code; they are excluded from the "must be documented" direction.
   const isHarnessFile = (path) =>
-    /\.(test|spec)\.|(^|\/)test-[^/]*$|(^|\/)(acceptance|browser-fixtures)\//.test(path) ||
-    /^scripts\/blog-cms\/hosted-[^/]+$/.test(path);
+    /\.(test|spec)\.|(^|\/)test-[^/]*$|(^|\/)(acceptance|browser-fixtures)\//.test(path);
 
   // Tracked files only: CI creates untracked trees (e.g. a Python .venv under
   // scripts/property-sync) whose third-party env reads are not ours to document.

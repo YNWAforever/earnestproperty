@@ -1,8 +1,8 @@
-# Production executor design and live gates
+# Remaining production executor implementation contract
 
-This is the original implementation contract, retained as design history. **Task 4 implemented the shared transaction core, owned PG18.6 rehearsal and authenticated production entry point locally; production execution remains BLOCKED.** The owned importer remains restricted to inspected owned Docker targets. The production entry point fails closed without independently provisioned authority, dedicated credential/role, verified provider/direct TLS target binding, current packet/schema/recovery evidence and an externally enforced sustained writer fence. The offline draft manifest does not grant any of these. The task-4 executor report records implementation and focused verification; its local proof does not establish production readiness.
+This is the concrete implementation boundary for the release package. **Not implemented, not approved to execute.** The offline draft adapter cannot write. The existing `src/lib/neon/blog-import.ts` remains restricted to inspected owned Docker targets.
 
-## Original design constraints retained
+## Reuse without weakening the owned guard
 
 Extract the current snapshot, plan validation and mutation/receipt sequence into an internal transaction core. Keep connection construction and capability storage outside it. The owned entry point must continue to inspect its exact container/image/name/loopback, database/system identifier and environment exclusions before invoking the core. Re-run its full target-guard and actual PG17/PG18 regressions after extraction.
 
@@ -10,7 +10,7 @@ The separate production entry point must construct its own capability from an ex
 
 No currently selected production identity permits safe fencing by itself: the runtime owner is shared, and allowing it also allows old writers. Final role/credential design must follow the named database/platform owners' writer-control review. This dependency is why a hypothetical generic production client is not supplied as a runnable release tool.
 
-## Original transaction boundary, rehearsed locally
+## Transaction boundary to implement and rehearse
 
 1. Validate the exact approved release packet, source bytes, full application/operational-code identity, migration byte hashes, target identity, expiry/window, backup restoration receipt and sustained-fence generation. Absence is a stop, never an override flag.
 2. Use one pinned direct connection. Set bounded lock/statement/idle-in-transaction timeouts; verify session database/role/endpoint association. Acquire the advisory blog lock where available and the existing baseline table/ledger locks before the first content-changing statement. Acquire corresponding new-table locks after DDL. Check potential existing generic CMS lock order to avoid deadlock.
@@ -20,7 +20,7 @@ No currently selected production identity permits safe fencing by itself: the ru
 6. Commit an atomic durable receipt bound to the approved production release fingerprint and actual post-import state. On retry or lost response, verify the matching receipt before treating expected post-import changes as stale input; report newer editorial drift with zero repair writes. The receipt must distinguish migration and import completion and support recovery when a COMMIT response is lost.
 7. Release transaction locks only after verified commit. The external sustained fence must remain effective across connection loss, process exit, artifact activation, CDN checks and explicit reopening. No finally-block may automatically reopen production.
 
-## Required acceptance matrix for external release gates
+## Required acceptance matrix
 
 | Case | Required result |
 | --- | --- |
@@ -35,4 +35,4 @@ No currently selected production identity permits safe fencing by itself: the ru
 | New private drafts, publication edits or withdrawal after release | Retry reports drift and preserves newer work |
 | Targeted repair with stale/current CAS token | Stale rejected; current repair changes only approved fields |
 
-The owned PG18.6 transaction rehearsal has been run with synthetic roles/fence controls. An explicitly approved isolated Neon test, independent production authority/target/credential proof, live recovery and fence evidence, and a fresh full source/build receipt remain outstanding. Local test injection is not exposed as the production capability constructor; historical preparation receipts cannot certify the current candidate.
+Test first with a newly owned PG18 target using the real transaction core and distinct synthetic roles/fence controls, then in an explicitly approved isolated Neon environment. Local test injection is not exposed as the production capability constructor. Independent review and a fresh full source/build receipt are required after implementation; the current preparation receipt cannot certify future executor code.

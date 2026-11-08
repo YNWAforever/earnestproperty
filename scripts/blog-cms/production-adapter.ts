@@ -1,4 +1,4 @@
-/** Offline draft preparation. Execution uses the separate trusted construction boundary. */
+/** Offline preparation only. No connection, SQL callback, environment loader or executor. */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { buildImportPlan, canonical, fingerprint } from "../../src/lib/blog/reconcile";
@@ -6,10 +6,13 @@ import type { DatabaseSnapshot } from "../../src/lib/blog/reconcile";
 import { inventoryFromSnapshots } from "../../src/lib/blog/import-snapshots";
 import type { SourceBundle } from "../../src/lib/blog/import-snapshots";
 
-import { PRODUCTION_IDENTITY, PRODUCTION_TARGET } from "./production-target";
-export { PRODUCTION_IDENTITY, PRODUCTION_TARGET } from "./production-target";
-export { executeProductionRelease } from "./production-executor";
-
+export const PRODUCTION_TARGET = Object.freeze({
+  projectId: "dawn-meadow-79190048",
+  branchId: "br-polished-sea-aom4i1ct",
+  endpointId: "ep-divine-frost-aokzrg7f",
+  database: "neondb",
+});
+export const PRODUCTION_IDENTITY = Object.values(PRODUCTION_TARGET).join(":");
 export const sha256 = (bytes: string | Uint8Array) =>
   createHash("sha256").update(bytes).digest("hex");
 
@@ -17,14 +20,6 @@ export const sha256 = (bytes: string | Uint8Array) =>
 const semanticsPaths = [
   "scripts/blog-cms/production-adapter.ts",
   "src/lib/neon/blog-import.ts",
-  "src/lib/neon/blog-import-transaction.ts",
-  "src/lib/neon/blog-release-packet.ts",
-  "src/lib/neon/blog-release-transaction.ts",
-  "scripts/blog-cms/release-controls.ts",
-  "scripts/blog-cms/production-executor.ts",
-  "scripts/blog-cms/production-evidence.ts",
-  "scripts/blog-cms/production-authority.ts",
-  "scripts/blog-cms/production-target.ts",
   "src/lib/blog/reconcile.ts",
   "src/lib/blog/import-snapshots.ts",
   "src/lib/blog/article-codec.ts",
@@ -109,7 +104,7 @@ export function prepareProductionPacket(input: {
       ...plan.unresolved,
       ...plan.conflicts.map((c) => "conflict:" + c.slug + ":" + c.reason),
       ...REQUIRED_CONTROLS,
-      "trusted-production-target-controls-unavailable",
+      "production-executor-not-implemented",
     ],
   };
   return deepFreeze({ ...body, manifestFingerprint: fingerprint(body) });
@@ -165,17 +160,17 @@ export function reviewProductionPacket(packet: ProductionPacket, approvedDigest:
     if (!bound || sha256(readFileSync(new URL("../../" + path, import.meta.url))) !== bound.sha256)
       throw new Error("PRODUCTION_SEMANTICS_CHANGED");
   }
-  // A preparation draft can never authorize writes. The execution entry point
-  // separately authenticates an exact release packet and operational evidence.
+  // Unconditional: neither rewritten flags nor a caller's evidence assertions can
+  // produce a capability. A future executor needs independent operational proofs.
   return {
     integrity: "MATCH" as const,
     executionAuthorized: false as const,
     blockers: [
-      ...new Set([
-        ...packet.blockers,
-        ...REQUIRED_CONTROLS,
-        "trusted-production-target-controls-unavailable",
-      ]),
+      ...new Set([...packet.blockers, ...REQUIRED_CONTROLS, "production-executor-not-implemented"]),
     ],
   };
+}
+
+export function executeProductionRelease(..._untrusted: unknown[]): never {
+  throw new Error("PRODUCTION_EXECUTION_UNAVAILABLE: offline preparation only");
 }

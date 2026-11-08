@@ -198,7 +198,7 @@ function AgentProfilePage() {
 
           <aside className="border-t pt-6 md:border-l md:border-t-0 md:pl-6 md:pt-0">
             <h2 className="text-base font-semibold">直接聯絡</h2>
-            {note ? <p className="mt-2 text-sm leading-5 text-muted-foreground">{note}</p> : null}
+            {note ? <p className="mt-2 text-xs leading-5 text-muted-foreground">{note}</p> : null}
             <div className="mt-4 grid gap-2">
               {phoneHref ? (
                 <Button asChild variant="outline" className="w-full justify-start">

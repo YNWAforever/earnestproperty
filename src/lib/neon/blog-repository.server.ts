@@ -98,63 +98,14 @@ export async function listBlogArticles(
   query: ArticleQuery,
   actor: StaffAccess,
 ): Promise<ArticlePage> {
-  return listArticleProjection(query, actor, false);
-}
-
-export async function listFeaturedArticles(
-  query: ArticleQuery,
-  actor: StaffAccess,
-): Promise<ArticlePage> {
-  return listArticleProjection(query, actor, true);
-}
-
-// Read the live row directly: blog_article_document intentionally prefers the caller's draft.
-const publishedDocument = "to_jsonb(a) || jsonb_build_object('payload',to_jsonb(a))";
-export async function getFeaturedArticle(id: string, actor: StaffAccess) {
-  parseBlog(() => articleIdSchema.parse(id));
-  return operation(async () => {
-    await actorCheck(actor);
-    const [row] = await queryRows(
-      `SELECT ${publishedDocument} AS d FROM articles a WHERE id=$1::uuid`,
-      [id],
-    );
-    if (!row) throw new Error("BLOG_NOT_FOUND");
-    return articleSummary(row.d as Record<string, unknown>);
-  });
-}
-
-function articleSummary(raw: Record<string, unknown>) {
-  const a = decodeArticle(raw);
-  return {
-    id: a.id,
-    slug: a.slug,
-    title: a.title,
-    excerpt: a.excerpt,
-    categoryId: a.categoryId,
-    published: a.published,
-    publishedAt: a.publishedAt,
-    createdAt: a.createdAt,
-    coverImage: a.coverImage,
-    coverAlt: a.coverAlt,
-  };
-}
-
-async function listArticleProjection(
-  query: ArticleQuery,
-  actor: StaffAccess,
-  published: boolean,
-): Promise<ArticlePage> {
   const q = parseBlog(() => articleQuerySchema.parse(query));
   return operation(async () => {
     await actorCheck(actor);
     // One statement/snapshot owns rows and count, including pages beyond the last row.
-    const documents = published
-      ? `SELECT ${publishedDocument} AS d FROM articles a WHERE a.published AND (a.published_at IS NULL OR a.published_at <= now())`
-      : "SELECT blog_article_document(id,$1::uuid) AS d FROM ids";
     const [row] = await queryRows(
       `WITH ids AS (
       SELECT id FROM articles UNION SELECT resource_id FROM cms_content_revisions WHERE resource_type='article' AND state='draft' AND draft_retired_at IS NULL AND created_by=$1::uuid
-    ), documents AS MATERIALIZED (${documents}), filtered AS (
+    ), documents AS MATERIALIZED (SELECT blog_article_document(id,$1::uuid) AS d FROM ids), filtered AS (
       SELECT d FROM documents LEFT JOIN blog_categories category ON category.id=(d->'payload'->>'category_id')::uuid
       WHERE ($2::text='' OR d->'payload'->>'title' ILIKE $2 OR d->'payload'->>'slug' ILIKE $2
         OR category.name ILIKE $2 OR category.key ILIKE $2)
@@ -171,7 +122,21 @@ async function listArticleProjection(
         (q.page - 1) * q.pageSize,
       ],
     );
-    const items = (row.documents as Record<string, unknown>[]).map(articleSummary);
+    const items = (row.documents as Record<string, unknown>[]).map((raw) => {
+      const a = decodeArticle(raw);
+      return {
+        id: a.id,
+        slug: a.slug,
+        title: a.title,
+        excerpt: a.excerpt,
+        categoryId: a.categoryId,
+        published: a.published,
+        publishedAt: a.publishedAt,
+        createdAt: a.createdAt,
+        coverImage: a.coverImage,
+        coverAlt: a.coverAlt,
+      };
+    });
     return { items, total: Number(row.total), page: q.page, pageSize: q.pageSize };
   });
 }

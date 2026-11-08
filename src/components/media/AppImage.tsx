@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import responsiveImages from "@/lib/media/responsive-images.generated.json";
 import { responsiveSrcSet } from "@/lib/media/responsive-srcset.mjs";
 import type { VariantSet } from "@/lib/media/remote-variants.mjs";
-import { resolveImageSource, resolveImageSrcSet } from "@/lib/media/isolated-images";
 
 export interface AppImageProps extends Omit<
   React.ImgHTMLAttributes<HTMLImageElement>,
@@ -64,8 +63,8 @@ const AppImage = React.forwardRef<HTMLImageElement, AppImageProps>(
     return (
       <img
         ref={ref}
-        src={resolveImageSource(src)}
-        srcSet={resolveImageSrcSet(srcSet ?? remoteSrcSet ?? responsive?.srcSet)}
+        src={src}
+        srcSet={srcSet ?? remoteSrcSet ?? responsive?.srcSet}
         sizes={sizes ?? (remoteSrcSet || responsive ? "100vw" : undefined)}
         alt={alt}
         width={width}

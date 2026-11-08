@@ -1,32 +1,4 @@
-# Production writer control register and approval packet
-
-Task 5's register and validator are **implementation-ready locally**; no live
-fence activation, drain, per-writer denial proof or reopening has occurred.
-The concrete task-5 deliverables are the sanitized
-[36-control register](writer-control-register.json) and the
-[separate activation, bounded acceptance-access and reopening requests](writer-fence-approval-request.md).
-They supersede the preliminary proposal below where it lacks exact scope or
-pre-state. The register is a **BLOCKED_NOT_ACTIVATED proposal**, never live proof
-or an execution capability. Willy remains owner without action approval.
-Amended generation 02 pins the original evidence/capture times and expiry; it
-does not refresh them. Acceptance access has its own narrowly scoped approval
-before general reopening. Valid upload-receipt retries require application and
-DB metadata denial proof; Blob denial alone cannot prove finalization is fenced.
-
-Captured GitHub metadata shows `OWNER_PUBLICATION_DAILY_ENABLED=true`,
-`OWNER_PUBLICATION_MANUAL_APPLY_ENABLED=true`, `PROPERTY_SYNC_DAILY_ENABLED=true`,
-`PROPERTY_SYNC_OBSERVABILITY_ENABLED=true`, `IMPORT_TARGET_ENV=production` and
-`IMPORT_BLOB_TARGET_ENV=production`. Publication, manual dispatch and metadata
-finalizers therefore require concrete controls. Current run/queue drain is not
-proven. The supplied writer JSON contains no Cloudflare trigger fields; the
-register labels cron expressions as repository configuration pending live proof.
-
-Exact provider ingress rules, complete deployment/credential-holder inventory,
-database identity isolation and Blob deny mechanisms remain unresolved external
-steps requiring owner review and separate approval. No provider changes are made
-or inferred. Unknown writers/state cannot be cleared by `fence=true`.
-
-## Preliminary design retained for context
+# Production writer pause and reopening proposal
 
 Status: **designed, not activated or proven**. No production permissions, sessions, jobs, triggers or access states were changed. This document is not an executable maintenance switch.
 

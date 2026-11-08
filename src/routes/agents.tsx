@@ -519,7 +519,7 @@ function AgentDirectoryCard({
         {agent.bio ? (
           <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{agent.bio}</p>
         ) : null}
-        {note ? <p className="mt-3 text-sm text-muted-foreground">{note}</p> : null}
+        {note ? <p className="mt-3 text-xs text-muted-foreground">{note}</p> : null}
         <div className="mt-5 flex flex-wrap gap-2">
           {agent.public_slug ? (
             <Button asChild variant="outline" size="sm">
