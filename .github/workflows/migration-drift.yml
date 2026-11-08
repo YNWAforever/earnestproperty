@@ -1,26 +1,33 @@
-# Check migration drift when migration files change or an operator asks for it.
-# A daily database check would wake Neon even when no migration changed.
+# Checks that every migration in the repo is recorded in the target database.
 #
-# Runs on pull_request as well as push, so drift is visible while the change is
-# still reviewable. The push trigger alone is too late: on 2026-11-06 this
-# workflow went red on the merge commit `1d38be96` while Vercel had already
-# deployed the same commit, taking /blog, 62 estate pages and /sitemap.xml down.
-# The build-time counterpart of this check lives in
-# scripts/neon/build-migration-gate.mjs and runs as part of `prebuild`.
+# Why this is a required-status-check candidate, not just a notification:
+# on 2026-11-06 the blog CMS code merged and deployed while the three migrations
+# it depends on were never applied. This workflow DID go red -- on the merge
+# commit `1d38be96`, 84 seconds before Vercel created the production deployment.
+# It changed nothing, because the check ran after merge and was not required.
+# /blog, all 112 article URLs, 62 estate pages and /sitemap.xml were down for
+# two days. See docs/incidents/2026-11-06-code-before-schema.md.
 #
-# To make this a real gate rather than a notification, add "Migration drift" to
-# the branch protection rules for `main` as a required status check.
+# Two layers now cover this:
+#   1. build-time -- scripts/neon/build-migration-gate.mjs runs in `prebuild` and
+#      FAILS a production Vercel build when the database is behind the code, so
+#      the previous working deployment keeps serving.
+#   2. review-time -- this workflow, required on `main`, so the same signal is
+#      red before anything merges.
+#
+# The pull_request trigger deliberately has NO path filter. A required check that
+# only runs for some pull requests would sit "expected" forever on every other
+# one and block the merge queue instead of protecting it. The whole check is two
+# read-only SELECTs, so running it on every PR is cheap.
 name: Migration drift
 
 on:
+  pull_request:
   push:
     branches: [main]
-    paths:
-      - "neon/migrations/**"
-      - "src/lib/control-plane/migration-versions.js"
-      - "scripts/neon/build-migration-gate.mjs"
-      - ".github/workflows/migration-drift.yml"
-  pull_request:
+    # Post-merge backstop: only when something that can change the answer moved.
+    # This one keeps the path filter -- it is not a required check, and there is
+    # no reason to wake Neon for a docs-only merge.
     paths:
       - "neon/migrations/**"
       - "src/lib/control-plane/migration-versions.js"
@@ -28,15 +35,16 @@ on:
       - ".github/workflows/migration-drift.yml"
   workflow_dispatch:
 
-# Two pushes to main in quick succession would otherwise race to report on the
-# same database. Only the newest answer is worth having. Pull requests get their
-# own group so a PR check cannot cancel the post-merge backstop.
+# Two runs on the same ref would otherwise race to report on the same database.
+# Pull requests get their own group so a PR check cannot cancel the post-merge
+# backstop.
 concurrency:
   group: migration-drift-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  check:
+  # The job id is the check name branch protection requires. Keep it stable.
+  migration-drift:
     runs-on: ubuntu-latest
     permissions:
       contents: read

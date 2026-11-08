@@ -109,7 +109,28 @@ test("prebuild runs the gate, after the existing required-env check", () => {
 // push to main, which is too late to stop the deployment that followed.
 test("the drift workflow also runs on pull requests", () => {
   const workflow = read(".github/workflows/migration-drift.yml");
-  assert.match(workflow, /pull_request:/, "must be reviewable before merge");
+  // pull_request must be a BARE trigger with no path filter. A required check
+  // that only runs for some pull requests stays "expected" forever on the rest
+  // and blocks them instead of protecting them, which is worse than no gate.
+  assert.match(
+    workflow,
+    /^on:\n {2}pull_request:\n {2}push:/m,
+    "pull_request must have no path filter so the required check always reports",
+  );
+  // The job id is the check name branch protection requires. Renaming it
+  // silently detaches the gate.
+  assert.match(
+    workflow,
+    /^ {2}migration-drift:\n {4}runs-on:/m,
+    "the migration-drift job id must stay stable for branch protection",
+  );
+  // The push trigger is the post-merge backstop, not a required check, so it
+  // keeps its path filter and does not wake Neon for a docs-only merge.
+  assert.match(
+    workflow,
+    /push:\n {4}branches: \[main\][\s\S]*?paths:/,
+    "the post-merge backstop keeps its path filter",
+  );
   assert.match(workflow, /neon\/migrations\/\*\*/, "must still cover migration changes");
   assert.match(workflow, /migration-versions\.js/, "must cover the manifest too");
 });
