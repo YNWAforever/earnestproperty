@@ -38,9 +38,11 @@ const schemaTables = [
   "staff_roles",
   "audit_logs",
 ];
-const baselineVersions = MIGRATION_VERSIONS.filter(
-  (version) => !releaseMigrations.some((name) => name === version),
-);
+// The replay baseline is everything applied *before* the packet, not "the live manifest
+// minus the packet": a migration added after the release must not move the historical
+// baseline of this 95 -> 98 rehearsal.
+const releaseStart = MIGRATION_VERSIONS.indexOf(releaseMigrations[0]);
+const baselineVersions = releaseStart < 0 ? [] : MIGRATION_VERSIONS.slice(0, releaseStart);
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
 // Fingerprint definitions and security attributes, with stable names rather than cluster OIDs.
