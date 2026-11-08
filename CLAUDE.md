@@ -19,7 +19,7 @@ those plugins; duplicates break the app.
 
 ```
 npm run dev      # vite dev
-npm run build    # vite build (runs scripts/check-required-env.mjs as prebuild)
+npm run build    # vite build (prebuild: required-env check + migration drift gate)
 npm run lint     # eslint . (prettier runs as an eslint rule)
 npm run format   # prettier --write .
 npx tsc --noEmit # typecheck — `npm run build` does NOT typecheck
@@ -91,6 +91,13 @@ vercel.ts         Vercel config-as-TS: redirects + security headers (from script
 - Missing `VITE_CONTACT_WHATSAPP_PHONE` / `_PHONE_DISPLAY` / `_PHONE_TEL` silently
   degrades every WhatsApp CTA to `/contact`. `prebuild` fails Vercel builds on it;
   local dev only warns. See `.env.example`.
+- **Never merge code that depends on an unapplied migration.** Production Vercel
+  builds run `scripts/neon/build-migration-gate.mjs` (in `prebuild`): it diffs
+  `MIGRATION_VERSIONS` against `app_migrations` and **fails the build** when the
+  database is behind. Previews only warn; local/CI builds skip. Escape hatch:
+  `MIGRATION_DRIFT_GATE=warn|off`. The 2026-11-06 blog CMS incident (merged code,
+  unapplied schema → `/blog`, 62 estate pages and `/sitemap.xml` down for two
+  days) is exactly what this blocks — see `docs/incidents/2026-11-06-code-before-schema.md`.
 - Vercel runs only daily incremental YouTube (`0 19 * * *`). Jobs drain through post-commit wakes (when
   `OPS_WAKE_URL` is set) plus a cron sweep from `workers/cron/` (every 10 minutes
   08:00-22:00 HKT, hourly overnight); both drain `ops_jobs` under a lease, so overlap is safe.
