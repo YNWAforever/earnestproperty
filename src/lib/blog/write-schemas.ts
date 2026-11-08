@@ -1,4 +1,5 @@
 import { ARTICLE_SLUG_MAX_LENGTH, validateCategoryKey } from "./validation";
+import { isAllowedImportUrl } from "./link-import";
 import { z } from "zod";
 import {
   validateArticleBody,
@@ -120,6 +121,18 @@ export const blogCategorySchema = z
   })
   .strict();
 export const articleIdSchema = z.string().uuid();
+
+/** Paste-a-link import: public https article pages only (see isAllowedImportUrl). */
+export const createArticleFromLinkSchema = z
+  .object({
+    url: z
+      .string()
+      .trim()
+      .min(1)
+      .max(4096)
+      .refine(isAllowedImportUrl, "只支援公開的 https 文章連結"),
+  })
+  .strict();
 
 /** The old UI still sends scalar snake_case payloads. Validate without losing omitted-field semantics. */
 export function validateLegacyArticlePayload(payload: Record<string, unknown>) {

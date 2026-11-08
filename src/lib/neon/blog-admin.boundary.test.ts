@@ -73,6 +73,7 @@ mock.module("./blog-admin.server", () => ({
   getBlogAdminState: service,
   getArticlePreview: service,
   getBlogCategoryOptions: service,
+  createArticleFromLink: service,
 }));
 const api = await import("./blog-admin");
 const { callStaffServerFn } = await import("./staff-server-fn");
@@ -106,6 +107,7 @@ const calls: Array<[string, () => Promise<unknown>]> = [
   ["state", () => callStaffServerFn(endpoints[4], { data: { spoof: "admin" } })],
   ["options", () => callStaffServerFn(endpoints[6], { data: { spoof: "admin" } })],
   ["preview", () => api.getArticlePreview({ data: { id: "invalid" } })],
+  ["create from link", () => api.createArticleFromLink({ data: {} as never })],
 ];
 for (const [name, call] of calls)
   test(`${name}: actual validator emits safe 422 through browser boundary`, async () => {

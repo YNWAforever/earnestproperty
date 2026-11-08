@@ -69,6 +69,17 @@ export function articleInput(a: ArticleRecord): ArticleInput {
 export function changeQuery(q: ArticleQuery, patch: Partial<ArticleQuery>): ArticleQuery {
   return { ...q, ...patch, page: patch.page ?? 1 };
 }
+/** Paste-a-link import: a 422 means the page could not be read, not that a save failed. */
+export function linkImportError(error: unknown): string {
+  if (error instanceof ServerFnResponseError) {
+    if (error.status === 422)
+      return "未能讀取這個連結（可能被網站阻擋、不是文章頁，或「晉誠成交」分類未建立）；沒有建立任何文章。";
+    if (error.status === 401 || error.status === 403) return "登入或權限不足，未能建立文章。";
+    if (error.status >= 500)
+      return "伺服器暫時未能讀取連結，沒有建立任何文章。請稍後再試；如持續出現，請通知技術同事。";
+  }
+  return "未能讀取連結，沒有建立任何文章。請檢查網絡後再試。";
+}
 export function articleError(error: unknown): string {
   if (error instanceof ServerFnResponseError) {
     if (error.status === 409)

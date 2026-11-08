@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import * as api from "@/lib/neon/blog-admin";
 import type {
   ArticlePage,
@@ -15,7 +15,7 @@ import { useDirtyCloseGuard } from "@/hooks/use-unsaved-changes-guard";
 import { ArticleEditor } from "./ArticleEditor";
 import { BlogSettingsEditor } from "./BlogSettingsEditor";
 import { BlogCategoryManager } from "./BlogCategoryManager";
-import { articleError, changeQuery } from "./blog-editor-state";
+import { articleError, changeQuery, linkImportError } from "./blog-editor-state";
 type View = "articles" | "settings" | "categories";
 export function BlogManager({ canPublish }: { canPublish: boolean }) {
   const [view, setView] = useState<View>("articles");
@@ -38,6 +38,10 @@ export function BlogManager({ canPublish }: { canPublish: boolean }) {
     [openError, setOpenError] = useState("");
   const [settings, setSettings] = useState<BlogSettings | null>(null);
   const [dirty, setDirty] = useState(false);
+  const [linkUrl, setLinkUrl] = useState(""),
+    [linkBusy, setLinkBusy] = useState(false),
+    [linkError, setLinkError] = useState(""),
+    [linkNotice, setLinkNotice] = useState("");
   const nextAction = useRef<() => void>(() => {});
   const guard = useDirtyCloseGuard({
     isDirty: dirty,
@@ -107,6 +111,26 @@ export function BlogManager({ canPublish }: { canPublish: boolean }) {
       if (active.current && request === openSequence.current) setOpenError(articleError(err));
     } finally {
       if (active.current && request === openSequence.current) setOpening(false);
+    }
+  }
+  async function createFromLink(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const url = linkUrl.trim();
+    if (!url || linkBusy || !options) return;
+    setLinkBusy(true);
+    setLinkError("");
+    setLinkNotice("");
+    try {
+      const article = await api.createArticleFromLink({ data: { url } });
+      if (!active.current) return;
+      setLinkUrl("");
+      setLinkNotice("已建立草稿並打開編輯器；請核對內容後發布。");
+      setEditor({ article });
+      await refresh().catch(() => {});
+    } catch (error) {
+      if (active.current) setLinkError(linkImportError(error));
+    } finally {
+      if (active.current) setLinkBusy(false);
     }
   }
   function navigate(v: View) {
@@ -197,6 +221,23 @@ export function BlogManager({ canPublish }: { canPublish: boolean }) {
               新增文章
             </Button>
           </div>
+          <form
+            onSubmit={createFromLink}
+            className="flex flex-wrap items-center gap-2 rounded-md border border-dashed p-3"
+          >
+            <Input
+              aria-label="文章連結"
+              className="min-w-0 flex-1"
+              placeholder="貼上文章連結（例如 https://hk.on.cc/…）"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+            />
+            <Button type="submit" disabled={!options || linkBusy || !linkUrl.trim()}>
+              {linkBusy ? "讀取中…" : "由連結建立草稿"}
+            </Button>
+          </form>
+          {linkError ? <p role="alert">{linkError}</p> : null}
+          {linkNotice ? <p role="status">{linkNotice}</p> : null}
           {listError ? (
             <div role="alert">
               未能更新文章清單；下列資料可能不是最新。{listError}
