@@ -169,7 +169,9 @@ try {
 
 const after = await coverage();
 const bad = after.filter((row) => Number(row.candidate_count) !== 1);
-console.log(`post-check: ${after.length - bad.length} / ${after.length} listings have exactly one link`);
+console.log(
+  `post-check: ${after.length - bad.length} / ${after.length} listings have exactly one link`,
+);
 if (bad.length) {
   console.error("NOT CLEAN:", JSON.stringify(bad.slice(0, 10)));
   await client.end();

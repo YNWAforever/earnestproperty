@@ -14,8 +14,7 @@ import {
 } from "./website-link-codes.mjs";
 
 const root = process.cwd();
-const dataUrl = (source) =>
-  "data:text/javascript;base64," + Buffer.from(source).toString("base64");
+const dataUrl = (source) => "data:text/javascript;base64," + Buffer.from(source).toString("base64");
 const transpile = (source) =>
   ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 },
@@ -24,7 +23,12 @@ const transpile = (source) =>
 // link-batch-policy.ts is rewritten to its resolved file URL.
 const zodUrl = pathToFileURL(createRequire(import.meta.url).resolve("zod")).href;
 
-const listing = (publicListingNo, deal_type, candidate_count = 0, id = `id-${publicListingNo}`) => ({
+const listing = (
+  publicListingNo,
+  deal_type,
+  candidate_count = 0,
+  id = `id-${publicListingNo}`,
+) => ({
   property_id: id,
   public_listing_no: publicListingNo,
   deal_type,
@@ -94,10 +98,7 @@ test("the placement key is byte-identical to what canonicalBatchRow produces", a
     channelId,
   );
 
-  assert.equal(
-    websitePlacementKey({ channelId, publicListingNo, dealType }),
-    batch.placementKey,
-  );
+  assert.equal(websitePlacementKey({ channelId, publicListingNo, dealType }), batch.placementKey);
 });
 
 test("the placement key changes with every part of the identity", () => {
