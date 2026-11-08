@@ -102,6 +102,31 @@ async function fetchResource(
     );
   }
   if (request.resourceType === "article") {
+    // CMS v2 keeps unpublished edits in cms_content_revisions and writes `articles` only on
+    // publish. The editor shows the author's live draft when there is one, so the copilot
+    // reads the same record: without this, every never-published draft (e.g. one created
+    // from a pasted link) answered COPILOT_RESOURCE_NOT_FOUND, and an edited published
+    // article would be described to the model by its old published copy.
+    const draft = await first(
+      queryRows(
+        `SELECT r.resource_id AS id, r.payload->>'slug' AS slug, r.payload->>'title' AS title,
+        r.payload->>'excerpt' AS excerpt, r.payload->>'content' AS content,
+        r.payload->>'seo_title' AS seo_title, r.payload->>'seo_description' AS seo_description,
+        (SELECT c.key FROM blog_categories c WHERE c.id = NULLIF(r.payload->>'category_id','')::uuid) AS category,
+        COALESCE((r.payload->>'reading_minutes')::int, 1) AS reading_minutes,
+        COALESCE(a.published, false) AS published, a.published_at,
+        r.created_at AS updated_at,
+        ep_content_source_revision('article', r.resource_id) AS source_db_revision
+       FROM cms_content_revisions r
+       LEFT JOIN articles a ON a.id = r.resource_id
+       WHERE r.resource_type = 'article' AND r.resource_id = $1
+         AND r.state = 'draft' AND r.draft_retired_at IS NULL AND r.created_by = $2
+       ORDER BY r.version_number DESC
+       LIMIT 1`,
+        [request.resourceId, actor.staffId],
+      ),
+    );
+    if (draft) return draft;
     return first(
       queryRows(
         `SELECT id, slug, title, excerpt, content, category, reading_minutes,
