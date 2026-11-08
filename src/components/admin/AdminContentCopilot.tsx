@@ -112,6 +112,7 @@ const errorMessages: Record<string, string> = {
   COPILOT_CONTENT_TOO_LONG: "內容過長，AI 未能處理。請先縮短描述後再試。",
   OPENCODE_GO_TIMEOUT: "AI 服務未能在 30 秒內完成。請減少選擇欄位後重試；如持續失敗可先手動編輯。",
   OPENCODE_GO_HTTP_ERROR: "AI 服務暫時未能接受請求，請稍後再試。",
+  OPENCODE_GO_UNAUTHORIZED: "AI 服務的 API 金鑰已失效或未獲授權，請聯絡管理員更新 AI 金鑰。",
   OPENCODE_GO_RESPONSE_INVALID: "AI 回覆格式不正確，請重新產生建議。",
   COPILOT_TIMEOUT: "AI 回應逾時。請重試一次；如持續逾時請減少選擇的欄位。",
   VALIDATION_ERROR: "提交的資料不正確，請重新載入頁面後再試。",

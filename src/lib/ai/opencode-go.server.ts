@@ -1,7 +1,16 @@
 import "@tanstack/react-start/server-only";
 
+import { randomUUID } from "node:crypto";
 import { extractStructuredJson } from "./content-copilot.ts";
 import type { ContentCopilotConfig } from "./content-copilot-config.server.ts";
+
+/**
+ * OpenCode Go asks clients to identify themselves instead of sending a generic
+ * HTTP-library user agent, and to send one stable `x-opencode-session` per
+ * conversation. It answers `400 MissingSessionID` without the header, which the
+ * copilot used to surface as a generic "AI 服務暫時未能接受請求".
+ */
+const OPENCODE_GO_USER_AGENT = "earnest-property-cms-copilot/1.0";
 
 const OPENCODE_GO_TIMEOUT_MS = 30_000;
 const OPENCODE_GO_MAX_RETRIES = 2;
@@ -15,6 +24,7 @@ type OpenCodeGoError =
   | "OPENCODE_GO_NOT_CONFIGURED"
   | "OPENCODE_GO_TIMEOUT"
   | "OPENCODE_GO_HTTP_ERROR"
+  | "OPENCODE_GO_UNAUTHORIZED"
   | "OPENCODE_GO_RESPONSE_INVALID"
   | "OPENCODE_GO_GENERATION_FAILED";
 
@@ -40,6 +50,8 @@ export function createOpenCodeGoClient({
     async generateProposal(input: {
       system: string;
       prompt: string;
+      /** One stable id per conversation; the proposal id when the service has one. */
+      sessionId?: string;
     }): Promise<OpenCodeGoProposalResult> {
       if (!config.enabled || !config.baseUrl || !config.apiKey || !config.model) {
         return failedResult(null, 0, "OPENCODE_GO_NOT_CONFIGURED");
@@ -54,6 +66,8 @@ export function createOpenCodeGoClient({
             headers: {
               authorization: `Bearer ${config.apiKey}`,
               "content-type": "application/json",
+              "user-agent": OPENCODE_GO_USER_AGENT,
+              "x-opencode-session": input.sessionId ?? randomUUID(),
             },
             body: JSON.stringify({
               model: config.model,
@@ -74,8 +88,22 @@ export function createOpenCodeGoClient({
           sleepImpl,
         );
 
-        if (!response.ok)
+        if (response.status === 401 || response.status === 403) {
+          // An expired or revoked key is not a transient outage: say so instead of
+          // telling staff to "try again later" forever.
+          console.error("[copilot] provider_unauthorized", {
+            status: response.status,
+            model: config.model,
+          });
+          return failedResult(config.model, elapsedSince(startedAt), "OPENCODE_GO_UNAUTHORIZED");
+        }
+        if (!response.ok) {
+          console.error("[copilot] provider_http_error", {
+            status: response.status,
+            model: config.model,
+          });
           return failedResult(config.model, elapsedSince(startedAt), "OPENCODE_GO_HTTP_ERROR");
+        }
 
         const providerResult = await parseProviderResponse(response);
         if (!providerResult)
