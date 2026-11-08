@@ -82,8 +82,7 @@ test("blog routes render real indexed articles", () => {
 
   assert.match(queries, /fetchPublishedArticles/);
   assert.match(queries, /fetchArticleBySlug/);
-  assert.match(blog, /getPublicBlogPage/);
-  assert.match(blog, /settings.heading/);
+  assert.match(blog, /深井買樓全攻略 2026/);
   assert.match(detail, /Article/);
   assert.match(detail, /BreadcrumbList/);
 });

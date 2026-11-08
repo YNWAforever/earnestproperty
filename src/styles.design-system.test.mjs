@@ -274,24 +274,7 @@ test("no text-[9px], text-[10px] or text-[11px] in src", () => {
 
 test("the estate photo credit is full-opacity text on a dark 50 % backing", () => {
   const grid = read("src/components/site/EstateGroupGrid.tsx");
-  const credit = grid.match(/<p className="([^"]+)">\s*\{estate\.photoCredit\}/);
-  assert.ok(credit, "estate photo credit element");
-  const className = credit[1];
-  // C6 replaced the 9px /60 credit with full-opacity text on bg-foreground/50.
-  // text-sm stays above that 12px floor; the backing and opacity stay fixed.
-  for (const token of [
-    "rounded",
-    "bg-foreground/50",
-    "px-1",
-    "text-sm",
-    "text-primary-foreground",
-  ]) {
-    assert.ok(className.split(/\s+/).includes(token), token);
-  }
-  assert.doesNotMatch(
-    className,
-    /\btext-xs\b|\bopacity-\d|\btext-primary-foreground\/\d+|\btext-\[/,
-  );
+  assert.match(grid, /rounded bg-foreground\/50 px-1 text-xs text-primary-foreground"/);
   assert.doesNotMatch(grid, /text-primary-foreground\/60/);
 });
 

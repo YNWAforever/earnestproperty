@@ -59,7 +59,6 @@ export const config: VercelConfig = {
       "codex/youtube-daily-sync-20261016": false,
       "codex/fix-public-floor-band": false,
       "codex/parser-native-writer-safety-20261023": false,
-      "codex/blog-cms-release": false,
     },
   },
   headers: SECURITY_HEADERS,

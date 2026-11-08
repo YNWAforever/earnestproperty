@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
-import { registerHooks } from "node:module";
 
 import { estateSeo } from "../content/seo.ts";
 import { estateRegistry, estatesWithPage } from "../content/estate-registry.ts";
@@ -181,20 +180,20 @@ function sources(overrides = {}) {
   };
 }
 
-test("registry-only article has no public lastmod", async () => {
+test("static article lastmod = authored date", async () => {
   const { lastmodFor } = await lastmodModule();
-  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", sources()), null);
+  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", sources()), "2026-06-22");
 });
 
-test("only a live CMS row supplies an article lastmod", async () => {
+test("a CMS row's updated_at wins over the authored date", async () => {
   const { lastmodFor } = await lastmodModule();
   const withCms = sources({
     articles: { "sham-tseng-buying-guide-2026": "2026-09-30T08:15:00.000Z" },
   });
   assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", withCms), "2026-09-30");
-  // No date is invented from a retained import/reference registry.
+  // A CMS row with no updated_at does not erase the authored date.
   const nullCms = sources({ articles: { "sham-tseng-buying-guide-2026": null } });
-  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", nullCms), null);
+  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", nullCms), "2026-06-22");
   assert.equal(
     lastmodFor("/estate/bellagio", sources({ estates: { bellagio: "2026-08-01T00:00:00.000Z" } })),
     "2026-08-01",
@@ -227,8 +226,8 @@ test("lastmod is the Hong Kong calendar date, not the UTC one", async () => {
   );
   // The route hands lastmodFor the full timestamp, not a UTC date it sliced itself.
   assert.doesNotMatch(readSitemapSource(), /updated_at\?\.slice\(0, 10\)/);
-  // Registry-only article dates do not become public lastmods.
-  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", sources()), null);
+  // An authored calendar date is used as written.
+  assert.equal(lastmodFor("/blog/sham-tseng-buying-guide-2026", sources()), "2026-06-22");
 });
 
 test("a page with no tracked date has no lastmod element", async () => {
@@ -251,66 +250,6 @@ test("the route no longer reads the clock for lastmod", () => {
   assert.doesNotMatch(source, /generatedAt/);
   assert.doesNotMatch(source, /new Date\(/);
   assert.match(source, /from "@\/lib\/sitemap-lastmod\.js"/);
-  assert.doesNotMatch(source, /articlePublishedAt|publishedBlogArticles/);
+  assert.match(source, /articlePublishedAt\(article\)/);
   assert.match(source, /fetchSitemapTimestamps/);
-});
-
-test("actual sitemap handler refreshes DB article set, preserves policy route and fails unavailable", async () => {
-  let articles = { "saved-article": "2026-01-01T00:00:00Z", "escaped&slug": null };
-  let fail = false;
-  const moduleUrl = (source) => `data:text/javascript,${encodeURIComponent(source)}`;
-  globalThis.__task7SitemapReads = {
-    timestamps: async () => {
-      if (fail) throw new Error("offline");
-      return { estates: {}, articles };
-    },
-  };
-  const hooks = registerHooks({
-    resolve(specifier, context, next) {
-      const replacements = {
-        "@tanstack/react-router": moduleUrl(
-          "export const createFileRoute = id => options => ({id,...options});",
-        ),
-        "@/lib/blog/public": moduleUrl(
-          'export const blogNoStoreHeaders = () => ({"Cache-Control":"no-store","CDN-Cache-Control":"no-store","Vercel-CDN-Cache-Control":"no-store"});',
-        ),
-        "@/content/castle-peak-road": new URL("../content/castle-peak-road.ts", import.meta.url)
-          .href,
-        "@/content/seo": new URL("../content/seo.ts", import.meta.url).href,
-        "@/lib/sitemap-lastmod.js": new URL("../lib/sitemap-lastmod.js", import.meta.url).href,
-        "@/lib/neon/public-data.server": moduleUrl(
-          "export const fetchSitemapTimestamps = () => globalThis.__task7SitemapReads.timestamps(); export const fetchSitemapListings = async () => []; export const listPublicAgentProfiles = async () => [];",
-        ),
-        "@/lib/queries": moduleUrl(
-          "export const fetchPublishedArticlesByCategory = async () => []; export const fetchRecentTransactions = async () => [];",
-        ),
-      };
-      return replacements[specifier]
-        ? { url: replacements[specifier], shortCircuit: true }
-        : next(specifier, context);
-    },
-  });
-  try {
-    const { Route } = await import(new URL("./sitemap[.]xml.ts?task7", import.meta.url).href);
-    const first = await Route.server.handlers.GET();
-    assert.equal(first.status, 200);
-    for (const key of ["Cache-Control", "CDN-Cache-Control", "Vercel-CDN-Cache-Control"])
-      assert.equal(first.headers.get(key), "no-store");
-    const xml = await first.text();
-    assert.match(xml, /\/blog\/saved-article/);
-    assert.match(xml, /escaped&amp;slug/);
-    assert.match(xml, /\/blog\/editorial-standards/);
-    articles = {};
-    const withdrawn = await (await Route.server.handlers.GET()).text();
-    assert.doesNotMatch(withdrawn, /saved-article|sham-tseng-buying-guide-2026/);
-    assert.match(withdrawn, /\/blog\/editorial-standards/);
-    fail = true;
-    const failed = await Route.server.handlers.GET();
-    assert.equal(failed.status, 503);
-    assert.equal(failed.headers.get("cache-control"), "no-store");
-    assert.equal(await failed.text(), "BLOG_UNAVAILABLE");
-  } finally {
-    hooks.deregister();
-    delete globalThis.__task7SitemapReads;
-  }
 });

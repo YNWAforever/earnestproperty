@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import {
   decideOwnerTarget,
   ownerDecision,
@@ -107,7 +108,7 @@ test("source_updated_at uses the local calendar day, including east of UTC", () 
   assert.equal(sameField(null, null, "source_updated_at"), true);
   assert.equal(sameField(day, "2026-10-24", "source_updated_at"), false);
   const script = `
-    import { sameField } from ${JSON.stringify(new URL("../../src/lib/mls/owner-publication.mjs", import.meta.url).href)};
+    import { sameField } from ${JSON.stringify(fileURLToPath(new URL("../../src/lib/mls/owner-publication.mjs", import.meta.url)))};
     const day = new Date(2026, 9, 25);
     const utcDay = day.toISOString().slice(0, 10);
     if (utcDay === "2026-10-25") {

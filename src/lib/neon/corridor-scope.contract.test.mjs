@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import ts from "typescript";
-import { unexpectedBlogReadUrl } from "./test-helpers/unexpected-blog-read.mjs";
 
 import { getCastlePeakRoadSegment } from "../../content/castle-peak-road.ts";
 
@@ -26,27 +25,6 @@ import { getCastlePeakRoadSegment } from "../../content/castle-peak-road.ts";
 // that logic in the test.
 
 const root = process.cwd();
-
-test("non-blog harness rejects unexpected blog reads before querying", async () => {
-  const calls = [];
-  const { module: server } = await loadPublicDataServer(async (...args) => {
-    calls.push(args);
-    return [];
-  });
-  for (const readBlog of [
-    () => server.fetchPublishedArticles(),
-    () => server.fetchArticleBySlug({ slug: "unexpected" }),
-    () => server.fetchSitemapTimestamps(),
-  ]) {
-    await assert.rejects(readBlog, /Unexpected blog read in a non-blog public-data test/);
-  }
-  assert.deepEqual(calls, [], "the blog callback must never reach even the fixture DB");
-  const queries = await loadQueriesForFixtureCorridorRows([]);
-  await assert.rejects(
-    () => queries.fetchPublishedArticles(),
-    /Unexpected blog read in a non-blog public-data test/,
-  );
-});
 
 test("homepage feeds accept the expanded estate registry with deduplicated SQL scope", async () => {
   const calls = [];
@@ -109,7 +87,6 @@ async function loadPublicDataServer(query) {
   const executable = inlineRelativeImports(
     transpile(read("src/lib/neon/public-data.server.ts"))
       .replace('import "@tanstack/react-start/server-only";', "")
-      .replace('from "./blog-public.server"', `from "${unexpectedBlogReadUrl}"`)
       .replace('from "./db.server"', `from "${dbUrl}"`),
     "src/lib/neon",
   );
@@ -212,7 +189,6 @@ async function loadQueriesForFixtureCorridorRows(fixtureRows, queryLog = null) {
   );
 
   const queriesSource = transpile(read("src/lib/queries.ts"))
-    .replace('from "./neon/blog-public"', `from "${unexpectedBlogReadUrl}"`)
     .replace('from "@/lib/neon/public-data"', `from "${dataUrl(publicDataStubSource)}"`)
     .replace('from "@/content/castle-peak-road"', `from "${castlePeakRoadUrl}"`)
     .replace('from "@/content/estate-registry"', `from "${estateRegistryUrl}"`)

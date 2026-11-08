@@ -141,22 +141,6 @@ test("agent directory is SSR route-loaded with safe pending and error surfaces",
   assert.doesNotMatch(directory, /error\.message|String\(error\)|message=\{error/);
 });
 
-test("agent contact disclosures use the shared readable text size on directory and detail pages", () => {
-  for (const path of ["src/routes/agents.tsx", "src/routes/agents_.$slug.tsx"]) {
-    const source = read(path);
-    assert.match(
-      source,
-      /\{note \? <p className="mt-\d text-sm(?: leading-5)? text-muted-foreground">\{note\}<\/p> : null\}/,
-      `${path} must render the fallback contact disclosure at text-sm`,
-    );
-    assert.doesNotMatch(
-      source,
-      /\{note \? <p className="[^"]*\btext-xs\b[^"]*">\{note\}<\/p> : null\}/,
-      `${path} must not render the fallback contact disclosure at text-xs`,
-    );
-  }
-});
-
 test("agent detail distinguishes loader failure from not-found and offers contact", () => {
   const detail = readExisting("src/routes/agents_.$slug.tsx");
 

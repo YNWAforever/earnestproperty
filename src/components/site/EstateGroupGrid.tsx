@@ -75,7 +75,7 @@ function EstateCard({
           <p className="text-xs opacity-80">{meta}</p>
         </div>
         {estate.photo && estate.photoCredit ? (
-          <p className="absolute bottom-1 right-2 rounded bg-foreground/50 px-1 text-sm text-primary-foreground">
+          <p className="absolute bottom-1 right-2 rounded bg-foreground/50 px-1 text-xs text-primary-foreground">
             {estate.photoCredit}
           </p>
         ) : null}

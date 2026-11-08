@@ -16,10 +16,6 @@ await build({
   resolve: {
     alias: [
       {
-        find: /^@\/lib\/neon\/blog-admin$/,
-        replacement: resolve(workspace, "scripts/browser-fixtures/leave-guards/synthetic-blog.ts"),
-      },
-      {
         find: /^@\/lib\/neon\/(inbox-directory|whatsapp-readiness|staff-endpoints|staff-reference-admin|whatsapp-service-policy|whatsapp-test-notification)$/,
         replacement: resolve(
           workspace,

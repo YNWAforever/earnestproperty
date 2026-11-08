@@ -512,8 +512,15 @@ test("empty /transactions and /estate-reviews are dropped from the sitemap and n
   const estateReviews = readFileSync("src/routes/estate-reviews.tsx", "utf8");
 
   assert.match(sitemap, /transactions\.length > 0 \? "\/transactions" : null/);
-  assert.match(sitemap, /estateReviewArticles\.length > 0 \? "\/estate-reviews" : null/);
-  assert.doesNotMatch(sitemap, /publishedBlogArticles|staticEstateReviewCount/);
+  // /estate-reviews now ships a static 屋苑開箱 floor, so it is only empty
+  // when BOTH the CMS query and the static set are -- the gate widened with
+  // it rather than going away. The head keeps its own noindex gate below,
+  // which the floor simply stops firing.
+  assert.match(sitemap, /estateReviewArticles\.length > 0 \|\| staticEstateReviewCount\(\)/);
+  // A function, not a module-level constant: 28 屋苑開箱 articles are scheduled
+  // for future dates, so the count has to be taken per request.
+  assert.match(sitemap, /function staticEstateReviewCount\(\)/);
+  assert.match(sitemap, /publishedBlogArticles\(\)\.filter\(/);
   assert.doesNotMatch(
     sitemap,
     /^\s*"\/transactions",\s*$/m,

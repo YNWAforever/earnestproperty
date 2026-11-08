@@ -7,7 +7,8 @@
  * Sources, most specific first:
  * - `/property/*`: the listing row's `updated_at`.
  * - `/estate/*`: the estate row's `updated_at`.
- * - `/blog/*`: the CMS article's `updated_at`, or no date when absent.
+ * - `/blog/*`: the CMS article's `updated_at`, else the static article's
+ *   authored date (`articlePublishedAt`).
  * - everything else (home, hubs, agents ...): no tracked date, so null.
  *
  * Dates are Hong Kong calendar dates: a timestamp that carries a zone (`Z`,
@@ -48,7 +49,7 @@ function own(record, key) {
 /**
  * @param {string} path
  * @param {{ listings: Map<string, string|null>, estates: Record<string, string|null>,
- *           articles: Record<string, string|null> }} sources
+ *           articles: Record<string, string|null>, staticArticles: Record<string, string> }} sources
  * @returns {string | null}  YYYY-MM-DD, or null to omit <lastmod>
  */
 export function lastmodFor(path, sources) {
@@ -58,7 +59,7 @@ export function lastmodFor(path, sources) {
   }
   if (path.startsWith("/blog/")) {
     const slug = path.slice("/blog/".length);
-    return day(own(sources.articles, slug));
+    return day(own(sources.articles, slug)) ?? day(own(sources.staticArticles, slug));
   }
   return null;
 }

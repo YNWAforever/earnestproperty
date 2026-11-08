@@ -1,5 +1,0 @@
-{
-  "extends": "./tsconfig.json",
-  "include": ["scripts/blog-cms/hosted-*.ts", "e2e/a11y-checks.ts"],
-  "compilerOptions": { "types": ["node", "bun", "vite/client"] }
-}

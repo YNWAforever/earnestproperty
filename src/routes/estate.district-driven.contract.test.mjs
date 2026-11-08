@@ -7,9 +7,8 @@ const source = readFileSync(new URL("./estate.$slug.tsx", import.meta.url), "utf
 test("comparison links wait for a published estate record during migration rollout", () => {
   // Exercise the route's real projection without importing its live DB loader/JSX.
   const start = source.indexOf("comparableEntries.map((entry, index) => {");
-  const endMatch = /\r?\n    return \{\r?\n      estate,/.exec(source.slice(start));
-  assert.ok(start > 0 && endMatch && endMatch.index > 0);
-  const end = start + endMatch.index;
+  const end = source.indexOf("\n    return {\n      estate,", start);
+  assert.ok(start > 0 && end > start);
   const expression = source.slice(start, end).trim().replace(/;$/, "");
   const project = new Function("comparableEntries", "comparableRecords", `return ${expression};`);
   const [pending, published, placeholder] = project(
