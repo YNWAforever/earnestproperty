@@ -54,6 +54,7 @@ const table: [string, Call, unknown[]][] = [
   ["blog getBlogAdminState", blog.getBlogAdminState, []],
   ["blog getBlogCategoryOptions", blog.getBlogCategoryOptions, []],
   ["blog getArticlePreview", blog.getArticlePreview, [{ data: { id: uuid } }]],
+  ["blog createArticleFromLink", blog.createArticleFromLink, [{ data: {} }]],
   ["youtube-status fetchYouTubeSyncStatus", youtubeStatus.fetchYouTubeSyncStatus, []],
   [
     "whatsapp-link-management getWhatsappTrackingLinksPage",

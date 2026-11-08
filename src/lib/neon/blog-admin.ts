@@ -9,6 +9,7 @@ import {
   blogSettingsSchema,
   blogCategorySchema,
   articleIdSchema,
+  createArticleFromLinkSchema,
 } from "../blog/write-schemas";
 import type { ArticleQuery, SaveArticleCommand, BlogSettings, BlogCategory } from "../blog/types";
 const server = () => import("./blog-admin.server");
@@ -102,3 +103,15 @@ export const listFeaturedArticles = async (options: { data: ArticleQuery }) =>
   callStaffServerFn(featuredListServer, options);
 export const getFeaturedArticle = async (options: { data: { id: string } }) =>
   callStaffServerFn(featuredArticleServer, options);
+
+// Kept last so the registration order (and the boundary test's endpoint indexes) stays stable.
+const createFromLinkServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { url: string }) =>
+    parseBlogRequest(() => createArticleFromLinkSchema.parse(data)),
+  )
+  .handler(async ({ data }) => {
+    privateHeaders();
+    return blogRequest(async () => (await server()).createArticleFromLink(data, getRequest()));
+  });
+export const createArticleFromLink = async (options: { data: { url: string } }) =>
+  callStaffServerFn(createFromLinkServer, options);
