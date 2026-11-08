@@ -1531,6 +1531,7 @@ function PageLink({
     <Link
       to="/listings"
       search={(prev: Record<string, unknown>) => ({ ...prev, page })}
+      activeOptions={{ exact: true }}
       className={`inline-flex h-11 min-w-11 items-center justify-center rounded-md border px-3 text-sm font-medium transition ${
         active
           ? "border-primary bg-primary text-primary-foreground"
