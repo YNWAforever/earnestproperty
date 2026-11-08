@@ -54,6 +54,23 @@ test("AT-02 wrong or missing expected channel/app never ingests", async () => {
     assert.equal(calls, 0);
   }
 });
+test("a scope mismatch is logged so a silent 403 stays diagnosable", async (t) => {
+  const warnings = [];
+  t.mock.method(console, "warn", (...args) => warnings.push(args.join(" ")));
+  const r = await handleWoztellWebhook(request({ ...payload, channel: "other" }), {
+    config,
+    ingest: async () => {
+      throw new Error("must not ingest");
+    },
+  });
+  assert.equal(r.status, 403);
+  const line = warnings.find((entry) => entry.includes("REJECTED (403): scope mismatch"));
+  assert.ok(line, `expected a 403 warning, got ${JSON.stringify(warnings)}`);
+  assert.match(line, /event channelId: other/);
+  assert.match(line, /expected channelId: fixture-channel/);
+  // Ids and sizes only -- never message content.
+  assert.equal(line.includes("Synthetic"), false);
+});
 test("Trusted live origin cannot be overridden by signed payload content", async () => {
   let origin;
   const r = await handleWoztellWebhook(request({ ...payload, origin: "history_import" }), {
