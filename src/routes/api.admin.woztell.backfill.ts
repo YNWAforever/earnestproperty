@@ -1,18 +1,19 @@
 import "@tanstack/react-start/server-only";
 import { createFileRoute } from "@tanstack/react-router";
 import { requireStaffAccess } from "@/lib/neon/auth.server";
+import { providerChannelId } from "@/lib/whatsapp-enquiries/wa-config.server";
 import { startHistoryImport } from "@/lib/woztell/history-import.server";
 export const Route = createFileRoute("/api/admin/woztell/backfill")({
   server: {
     handlers: {
       POST: async ({ request }) => {
         const staff = await requireStaffAccess(request, ["admin"]);
-        if (!process.env.WOZTELL_OPEN_API_TOKEN || !process.env.WOZTELL_CHANNEL_ID)
+        if (!process.env.WOZTELL_OPEN_API_TOKEN || !providerChannelId())
           return Response.json(
             {
               ok: false,
               error: "WOZTELL_HISTORY_CONFIGURATION_REQUIRED",
-              hint: "WOZTELL_OPEN_API_TOKEN is separate from WOZTELL_BOT_ACCESS_TOKEN; configure api:admin scope and WOZTELL_CHANNEL_ID.",
+              hint: "WOZTELL_OPEN_API_TOKEN is separate from WOZTELL_BOT_ACCESS_TOKEN; configure api:admin scope and the company channel (WOZTELL_CHANNEL_ID / EP_WA_COMPANY_CHANNEL_ID).",
             },
             { status: 503 },
           );

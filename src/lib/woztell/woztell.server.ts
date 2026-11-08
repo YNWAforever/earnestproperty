@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 import crypto from "node:crypto";
 import { boundedProviderFetch } from "./provider-fetch.ts";
 import { parseWoztellProviderResult } from "./provider-result.ts";
+import { providerChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
 
 export type NormalizedWoztellEvent = {
   direction: "inbound" | "outbound";
@@ -387,7 +388,7 @@ export function woztellConfig() {
   return {
     enabled: woztellEnabled(),
     accessToken: process.env.WOZTELL_BOT_ACCESS_TOKEN,
-    channelId: process.env.WOZTELL_CHANNEL_ID,
+    channelId: providerChannelId() ?? undefined,
     channelSecret: process.env.WOZTELL_CHANNEL_SECRET,
   };
 }
@@ -406,7 +407,8 @@ export async function sendWoztellResponse(input: {
   if (!config.accessToken || !config.channelId) {
     return {
       ok: false,
-      error: "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID",
+      error:
+        "Missing WOZTELL_BOT_ACCESS_TOKEN or company channel (WOZTELL_CHANNEL_ID / EP_WA_COMPANY_CHANNEL_ID)",
       stage: "preflight" as const,
     };
   }

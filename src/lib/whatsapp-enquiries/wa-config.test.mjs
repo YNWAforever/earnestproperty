@@ -5,6 +5,7 @@ import {
   companyPhone,
   inboxVerificationRef,
   legacyWaNamesInUse,
+  providerChannelId,
   resetLegacyNameLog,
   routingEnabled,
   trackedLinksEnabled,
@@ -151,6 +152,27 @@ test("channel: old-only, new-only, both (old wins), neither is null", () => {
   );
   assert.equal(companyChannelId({}), null);
   assert.equal(companyChannelId({ EP_WA_COMPANY_CHANNEL_ID: "", WOZTELL_CHANNEL_ID: "" }), null);
+});
+
+test("provider channel: surviving name wins, legacy name is the fallback, mode is irrelevant", () => {
+  assert.equal(providerChannelId({ WOZTELL_CHANNEL_ID: "new-channel" }), "new-channel");
+  assert.equal(providerChannelId({ EP_WA_COMPANY_CHANNEL_ID: "old-channel" }), "old-channel");
+  assert.equal(
+    providerChannelId({
+      WOZTELL_CHANNEL_ID: "new-channel",
+      EP_WA_COMPANY_CHANNEL_ID: "old-channel",
+    }),
+    "new-channel",
+  );
+  // Provider modules are gated by their own switches, not by the enquiry mode, and
+  // General Preview still has to reach its configured channel.
+  for (const mode of [undefined, "", "off"]) {
+    const env = { WOZTELL_CHANNEL_ID: "new-channel" };
+    if (mode !== undefined) env.EP_WA_ENQUIRY_MODE = mode;
+    assert.equal(providerChannelId(env), "new-channel", `mode ${mode}`);
+  }
+  assert.equal(providerChannelId({}), null);
+  assert.equal(providerChannelId({ WOZTELL_CHANNEL_ID: "", EP_WA_COMPANY_CHANNEL_ID: "" }), null);
 });
 
 test("channel fallback to WOZTELL_CHANNEL_ID is ignored when EP_WA_ENQUIRY_MODE is unset or off", () => {

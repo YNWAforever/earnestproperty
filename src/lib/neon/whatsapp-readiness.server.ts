@@ -5,6 +5,7 @@ import type { StaffAccess } from "./auth.server.ts";
 import { assessStaffReadiness, assessWhatsappRuntime } from "./whatsapp-readiness-policy.ts";
 import type { StaffReadinessInput, StaffWhatsappReadiness } from "./whatsapp-readiness.types.ts";
 import { staffWhatsappAlertRuntime } from "../whatsapp-enquiries/staff-notifications.server.ts";
+import { providerChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
 import { createInboxApi } from "../woztell/inbox-api.server.ts";
 import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transport.server.ts";
 
@@ -44,7 +45,7 @@ export function currentWhatsappReadinessRuntime(): Runtime {
     notificationsEnabled: notification.enabled,
     inboxProviderVerified,
     staffTransportVerified:
-      staffTransportVerified && process.env.WOZTELL_CHANNEL_ID === notification.channelId,
+      staffTransportVerified && providerChannelId() === notification.channelId,
     templateContractVerified: notification.template !== null,
   };
 }

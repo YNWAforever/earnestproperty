@@ -13,6 +13,9 @@ const WOZTELL_VARS = [
   "WOZTELL_CHANNEL_SECRET",
   "WOZTELL_BOT_ACCESS_TOKEN",
 ];
+// The legacy company-channel name is a fallback for the provider channel, so it has
+// to be cleared too or a developer shell could make a "missing channel" case healthy.
+const CLEARED_VARS = [...WOZTELL_VARS, "EP_WA_COMPANY_CHANNEL_ID"];
 const COMPLETE = {
   WOZTELL_ENABLED: "true",
   WOZTELL_APP_ID: "fixture-app",
@@ -24,10 +27,10 @@ const COMPLETE = {
 function woztellWith(env) {
   // Restore key by key in place; replacing process.env with a plain object drops
   // Node's env semantics (string coercion, Windows case-insensitivity).
-  const keys = [...new Set([...WOZTELL_VARS, ...Object.keys(env)])];
+  const keys = [...new Set([...CLEARED_VARS, ...Object.keys(env)])];
   const saved = keys.map((key) => [key, Object.hasOwn(process.env, key), process.env[key]]);
   try {
-    for (const name of WOZTELL_VARS) delete process.env[name];
+    for (const name of CLEARED_VARS) delete process.env[name];
     Object.assign(process.env, env);
     return environmentChecks().find((check) => check.key === "woztell");
   } finally {
@@ -54,6 +57,14 @@ test("woztell health is healthy only with app id, channel id, secret and token",
     delete env[name];
     assert.equal(woztellWith(env).status, "failed", `${name} missing`);
   }
+});
+
+test("the legacy company channel name satisfies the channel requirement", () => {
+  const env = { ...COMPLETE, EP_WA_COMPANY_CHANNEL_ID: "legacy-channel" };
+  delete env.WOZTELL_CHANNEL_ID;
+  const row = woztellWith(env);
+  assert.equal(row.status, "healthy");
+  assert.equal(row.details.channelId, true);
 });
 
 test("disabled woztell stays degraded", () => {

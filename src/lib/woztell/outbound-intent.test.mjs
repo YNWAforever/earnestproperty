@@ -415,7 +415,7 @@ test("definite rejections and config errors are failed", async () => {
   }
   for (const error of [
     "WOZTELL_ENABLED is not true",
-    "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID",
+    "Missing WOZTELL_BOT_ACCESS_TOKEN or company channel (WOZTELL_CHANNEL_ID / EP_WA_COMPANY_CHANNEL_ID)",
   ])
     assert.deepEqual(await deliverTwice({ ok: false, error, stage: "preflight" }), {
       state: "failed",

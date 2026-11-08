@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { sendWoztellResponse } from "./woztell.server.ts";
 import { parseWoztellProviderResult } from "./provider-result.ts";
+import { providerChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
 import type { StaffNotificationTransport } from "../whatsapp-enquiries/staff-notifications.server.ts";
 /** Dedicated STAFF destination, outside the customer-bound outbox. Configuration does not imply approval. */
 export function createStaffWhatsAppTransport(
@@ -20,7 +21,7 @@ export function createStaffWhatsAppTransport(
       try {
         if (
           process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED !== "true" ||
-          scope.channelId !== process.env.WOZTELL_CHANNEL_ID
+          scope.channelId !== providerChannelId()
         )
           throw new Error("STAFF_WHATSAPP_SCOPE_UNVERIFIED");
         await scope.beforeSend();

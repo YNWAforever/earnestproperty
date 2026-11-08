@@ -14,6 +14,7 @@ function startImport(row) {
   const module = { exports: {} };
   const mocks = {
     "../control-plane/job-wake.server.ts": { wakeAfterCommit: (lane) => wakes.push(lane) },
+    "../whatsapp-enquiries/wa-config.server.ts": { providerChannelId: () => "channel-1" },
     "node:crypto": { createHash },
     "./woztell-history.server.ts": {},
     "../neon/db.server.ts": {

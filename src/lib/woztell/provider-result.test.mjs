@@ -273,7 +273,8 @@ test("sendWoztellResponse reports a configuration failure as stage preflight wit
     process.env.WOZTELL_ENABLED = "true";
     assert.deepEqual(await sendWoztellResponse(input), {
       ok: false,
-      error: "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID",
+      error:
+        "Missing WOZTELL_BOT_ACCESS_TOKEN or company channel (WOZTELL_CHANNEL_ID / EP_WA_COMPANY_CHANNEL_ID)",
       stage: "preflight",
     });
     assert.equal(network.mock.callCount(), 0);

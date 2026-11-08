@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { queryRows, getSql, dateOrNull, stringOrEmpty, stringOrNull } from "../neon/db.server";
+import { providerChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
 import type { StaffAccess } from "../neon/auth.server";
 import type { CrmAnalysisRunMeta } from "./ai-types";
 export type CrmAnalysisRunRow = Record<string, unknown> & {
@@ -21,7 +22,7 @@ export async function beginCrmAnalysisRun(
     .parse(requestId ?? randomUUID());
   const rows = await queryRows<{ run: CrmAnalysisRunRow }>(
     "SELECT ep_begin_crm_analysis_run($1::uuid,$2::uuid,$3::uuid,$4,$5) AS run",
-    [runId, leadId, actor.staffId, actor.authUserId, process.env.WOZTELL_CHANNEL_ID || null],
+    [runId, leadId, actor.staffId, actor.authUserId, providerChannelId()],
   );
   if (!rows[0]?.run) throw Object.assign(new Error("CRM_AI_DENIED"), { code: "CRM_AI_DENIED" });
   return rows[0].run;
@@ -29,13 +30,7 @@ export async function beginCrmAnalysisRun(
 export function crmAnalysisGuard(run: CrmAnalysisRunRow, leadId: string, actor: StaffAccess) {
   return {
     statement: "SELECT ep_assert_crm_analysis_run($1::uuid,$2::uuid,$3::uuid,$4,$5)",
-    params: [
-      run.id,
-      leadId,
-      actor.staffId,
-      actor.authUserId,
-      process.env.WOZTELL_CHANNEL_ID || null,
-    ],
+    params: [run.id, leadId, actor.staffId, actor.authUserId, providerChannelId()],
   };
 }
 export function crmAnalysisError(error: unknown): string | null {
@@ -59,7 +54,7 @@ export async function cancelCrmAnalysisRun(leadId: string, runId: string, actor:
       leadId,
       actor.staffId,
       actor.authUserId,
-      process.env.WOZTELL_CHANNEL_ID || null,
+      providerChannelId(),
     ]),
     tx.query(
       `INSERT INTO crm_ai_analysis_runs(id,lead_id,actor_staff_id,source_fingerprint,prompt_version,schema_version,status,completed_at,validation_code)
@@ -67,7 +62,7 @@ export async function cancelCrmAnalysisRun(leadId: string, runId: string, actor:
       ON CONFLICT(id) DO UPDATE SET status=CASE WHEN crm_ai_analysis_runs.status='running' THEN 'cancelled' ELSE crm_ai_analysis_runs.status END,
         completed_at=COALESCE(crm_ai_analysis_runs.completed_at,now()),validation_code=CASE WHEN crm_ai_analysis_runs.status='running' THEN 'CANCELLED_BY_ACTOR' ELSE crm_ai_analysis_runs.validation_code END
       WHERE crm_ai_analysis_runs.actor_staff_id=$3 AND crm_ai_analysis_runs.lead_id=$2 RETURNING *`,
-      [runId, leadId, actor.staffId, process.env.WOZTELL_CHANNEL_ID || null],
+      [runId, leadId, actor.staffId, providerChannelId()],
     ),
   ]);
   if (!rows[0]) throw Object.assign(new Error("CRM_AI_DENIED"), { code: "CRM_AI_DENIED" });
