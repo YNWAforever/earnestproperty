@@ -5,45 +5,29 @@
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { readFileSync } from "node:fs";
-import { createHash, randomUUID } from "node:crypto";
-import { articleInput, buildImportPlan, fingerprint, canonical } from "../blog/reconcile";
+import { createHash } from "node:crypto";
+import { fingerprint } from "../blog/reconcile";
 import type { DatabaseSnapshot, ImportPlan } from "../blog/reconcile";
-import { encodeArticle } from "../blog/article-codec";
+import {
+  assertPlan,
+  captureBlogSnapshot,
+  checkedReceipt,
+  completeOwnedImport,
+  mutateBlogImport,
+  readReceipt,
+} from "./blog-import-transaction";
+import type { ImportReceipt } from "./blog-import-transaction";
+import { captureBlogRelease, runBlogRelease } from "./blog-release-transaction";
+import { readReleaseInputs } from "./blog-release-packet";
+export type { ImportReceipt } from "./blog-import-transaction";
 import { isOwnedPostgresImage } from "./owned-postgres-images";
 
 type Row = Record<string, unknown>;
 type Client = {
   query: (sql: string, params?: unknown[]) => Promise<{ rows: Row[] }>;
-  release: () => void;
+  release: (discard?: boolean) => void;
 };
 type Pool = { connect: () => Promise<Client>; end: () => Promise<void> };
-const tables: Record<string, string> = {
-  articles: "id",
-  cms_content_revisions: "id",
-  blog_categories: "id",
-  blog_settings: "id",
-  blog_featured_articles: "scope_id,article_id",
-  blog_legacy_category_map: "legacy_key",
-  app_migrations: "version",
-};
-export type ImportReceipt = {
-  fingerprint: string;
-  targetIdentity: string;
-  sourceRevision: string;
-  sourceDigest: string | null;
-  backupSha256: string;
-  inserted: {
-    temporaryId: string;
-    id: string;
-    slug: string;
-    fingerprint: string;
-    revisionId: string;
-  }[];
-  counts: { articles: number; categories: number; settings: number; normalized: number };
-  afterFingerprint: string;
-  writes: number;
-  verification: "unchanged" | "changed";
-};
 export type VerifiedImportTarget = Readonly<{
   identity: string;
   systemIdentifier: string;
@@ -179,84 +163,11 @@ async function transaction<T>(
     client.release();
   }
 }
-async function capture(
-  client: Client,
-  target: VerifiedImportTarget,
-  pageSize = 100,
-): Promise<DatabaseSnapshot> {
-  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 1000)
-    throw new Error("IMPORT_PAGE_SIZE");
-  const data: DatabaseSnapshot["tables"] = {};
-  for (const [table, order] of Object.entries(tables)) {
-    const where = table === "cms_content_revisions" ? " WHERE resource_type='article'" : "";
-    const count = Number((await client.query("SELECT count(*) n FROM " + table + where)).rows[0].n);
-    const rows: Row[] = [];
-    for (let offset = 0; offset < count; offset += pageSize) {
-      const page = (
-        await client.query(
-          "SELECT to_jsonb(t) row FROM " +
-            table +
-            " t" +
-            where +
-            " ORDER BY " +
-            order +
-            " LIMIT $1 OFFSET $2",
-          [pageSize, offset],
-        )
-      ).rows;
-      if (!page.length) throw new Error("IMPORT_INCOMPLETE_PAGE:" + table);
-      rows.push(...page.map((r) => r.row as Row));
-    }
-    if (
-      rows.length !== count ||
-      new Set(rows.map((r) => canonical(order.split(",").map((k) => r[k])))).size !== count
-    )
-      throw new Error("IMPORT_INCOMPLETE_COUNT:" + table);
-    data[table] = rows;
-  }
-  const body = {
-    targetIdentity: target.identity,
-    systemIdentifier: target.systemIdentifier,
-    tables: data,
-  };
-  return { ...body, fingerprint: fingerprint(body) };
-}
 export async function snapshotDatabase(
   target: VerifiedImportTarget,
   pageSize = 100,
 ): Promise<DatabaseSnapshot> {
-  return transaction(target, false, (client) => capture(client, target, pageSize));
-}
-function assertPlan(plan: ImportPlan, target: VerifiedImportTarget) {
-  if (buildImportPlan(plan.inventory).fingerprint !== plan.fingerprint)
-    throw new Error("IMPORT_MANIFEST");
-  const rebuilt = buildImportPlan(plan.inventory);
-  if (canonical(rebuilt) !== canonical(plan)) throw new Error("IMPORT_MANIFEST");
-  if (plan.inventory.targetIdentity !== target.identity) throw new Error("IMPORT_TARGET");
-}
-async function readReceipt(client: Client, plan: ImportPlan): Promise<ImportReceipt | null> {
-  const rows = (
-    await client.query("SELECT receipt FROM blog_import_receipts WHERE fingerprint=$1", [
-      plan.fingerprint,
-    ])
-  ).rows;
-  return rows.length ? (rows[0].receipt as ImportReceipt) : null;
-}
-async function checkedReceipt(
-  client: Client,
-  target: VerifiedImportTarget,
-  plan: ImportPlan,
-  receipt: ImportReceipt,
-): Promise<ImportReceipt> {
-  if (receipt.targetIdentity !== target.identity || receipt.fingerprint !== plan.fingerprint)
-    throw new Error("IMPORT_RECEIPT_TARGET");
-  const now = await capture(client, target);
-  // Report drift without any repair/write, including edits, deleted records and revised settings.
-  return {
-    ...receipt,
-    writes: 0,
-    verification: now.fingerprint === receipt.afterFingerprint ? "unchanged" : "changed",
-  };
+  return transaction(target, false, (client) => captureBlogSnapshot(client, target, pageSize));
 }
 export async function verifyImport(
   plan: ImportPlan,
@@ -284,222 +195,86 @@ export async function applyImport(
   return transaction(target, true, async (client) => {
     const prior = await readReceipt(client, plan);
     if (prior) return checkedReceipt(client, target, plan, prior);
-    const before = await capture(client, target);
+    const before = await captureBlogSnapshot(client, target);
     if (before.fingerprint !== plan.inventory.database!.fingerprint)
       throw new Error("IMPORT_STALE");
-    const categoryIds = new Map<string, string>(),
-      articleIds = new Map<string, string>();
-    const counts = { articles: 0, categories: 0, settings: 0, normalized: 0 };
-    for (const c of plan.inventory.categories) {
-      const old = before.tables.blog_categories.find((r) => r.key === c.key);
-      if (old) {
-        if (old.id !== c.id || Number(old.version) !== c.version)
-          throw new Error("IMPORT_CATEGORY_VERSION");
-        categoryIds.set(c.id, String(old.id));
-        // Existing metadata is authoritative; only controller-approved placeholder ordering is initialized.
-        if (old.name !== c.name || old.hidden !== c.hidden)
-          throw new Error("IMPORT_CATEGORY_CONFLICT");
-        if (old.navigation_order !== c.navigationOrder) {
-          const row = before.tables.blog_settings.find((r) => r.category_id === old.id);
-          if (
-            old.version !== 1 ||
-            row?.version !== 1 ||
-            row.heading !== c.key ||
-            row.introduction !== "" ||
-            row.seo_title !== null ||
-            row.seo_description !== null
-          )
-            throw new Error("IMPORT_CATEGORY_CONFLICT");
-          await client.query(
-            "UPDATE blog_categories SET navigation_order=$1,version=version+1 WHERE id=$2 AND version=$3",
-            [c.navigationOrder, old.id, c.version],
-          );
-          counts.categories++;
-        }
-      } else {
-        if (c.version !== 0 || c.settingsVersion !== 0) throw new Error("IMPORT_CATEGORY_VERSION");
-        const id = randomUUID();
-        categoryIds.set(c.id, id);
-        await client.query(
-          "INSERT INTO blog_categories(id,key,name,navigation_order,hidden) VALUES($1,$2,$3,$4,$5)",
-          [id, c.key, c.name, c.navigationOrder, c.hidden],
-        );
-        counts.categories++;
-        await client.query(
-          "INSERT INTO blog_legacy_category_map(legacy_key,category_id) VALUES($1,$2)",
-          [c.key, id],
-        );
-      }
-    }
-    // Normalize only missing references, with whole-snapshot freshness AND per-row version CAS.
-    for (const row of before.tables.articles) {
-      if (row.category_id != null || row.category == null) continue;
-      const c = plan.inventory.categories.find((c) => c.key === row.category);
-      if (!c) throw new Error("IMPORT_UNRESOLVED_CATEGORY");
-      await client.query(
-        "UPDATE articles SET category_id=$1 WHERE id=$2 AND version=$3 AND category_id IS NULL",
-        [categoryIds.get(c.id), row.id, row.version],
-      );
-      counts.normalized++;
-    }
-    const inserted: ImportReceipt["inserted"] = [];
-    for (const a of plan.insert) {
-      const id = randomUUID(),
-        revisionId = randomUUID();
-      const input = {
-        ...articleInput(a),
-        categoryId: a.categoryId === null ? null : (categoryIds.get(a.categoryId) ?? a.categoryId),
-      };
-      const category =
-        input.categoryId === null
-          ? null
-          : plan.inventory.categories.find((c) => categoryIds.get(c.id) === input.categoryId)?.key;
-      if (input.categoryId !== null && !category) throw new Error("IMPORT_CATEGORY_UNRESOLVED");
-      const collisions = (
-        await client.query(
-          "SELECT id FROM articles WHERE id=$1 OR slug=$2 UNION ALL SELECT resource_id FROM cms_content_revisions WHERE resource_type='article' AND (resource_id=$1 OR payload->>'slug'=$2)",
-          [id, a.slug],
-        )
-      ).rows;
-      if (collisions.length) throw new Error("IMPORT_EXISTING_HISTORY");
-      const payload: Record<string, unknown> = {
-        ...encodeArticle(input),
-        category: category ?? null,
-      };
-      await client.query(
-        `INSERT INTO articles(id,slug,title,excerpt,content,category,category_id,published,published_at,cover_image,cover_alt,content_format,supplemental_links,editorial_metadata,reading_minutes,seo_title,seo_description,slug_locked,version)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::jsonb,$14::jsonb,$15,$16,$17,true,1)`,
-        [
-          id,
-          a.slug,
-          a.title,
-          a.excerpt,
-          payload.content,
-          category ?? null,
-          input.categoryId,
-          a.published,
-          a.publishedAt,
-          a.coverImage,
-          a.coverAlt,
-          a.body.format,
-          JSON.stringify(a.links),
-          JSON.stringify(a.editorial),
-          a.readingMinutes,
-          a.seoTitle,
-          a.seoDescription,
-        ],
-      );
-      await client.query(
-        `INSERT INTO cms_content_revisions(id,resource_type,resource_id,version_number,state,payload,validation_summary,published_at)
-    VALUES($1,'article',$2,1,$3,$4::jsonb,$5::jsonb,$6)`,
-        [
-          revisionId,
-          id,
-          a.published ? "published" : "archived",
-          JSON.stringify(payload),
-          JSON.stringify({
-            import: {
-              fingerprint: plan.fingerprint,
-              sourceRevision: plan.inventory.sourceRevision,
-              sourceFingerprint: fingerprint(a),
-            },
-          }),
-          a.publishedAt,
-        ],
-      );
-      articleIds.set(a.id, id);
-      inserted.push({
-        temporaryId: a.id,
-        id,
-        slug: a.slug,
-        fingerprint: fingerprint(a),
-        revisionId,
-      });
-      counts.articles++;
-    }
-    for (const setting of plan.inventory.settings) {
-      const scopeId =
-        setting.scope.kind === "main"
-          ? null
-          : (categoryIds.get(setting.scope.categoryId) ?? setting.scope.categoryId);
-      const old = before.tables.blog_settings.find(
-        (r) => r.scope_kind === setting.scope.kind && r.category_id === scopeId,
-      );
-      if ((old && Number(old.version) !== setting.version) || (!old && setting.version !== 0))
-        throw new Error("IMPORT_SETTINGS_VERSION");
-      const featureIds = setting.featuredIds.map((id) => articleIds.get(id) ?? id);
-      const page = {
-        heading: setting.heading,
-        introduction: setting.introduction,
-        seo_title: setting.seoTitle,
-        seo_description: setting.seoDescription,
-      };
-      const oldFeatures = before.tables.blog_featured_articles
-        .filter((r) => r.scope_id === old?.id)
-        .sort((a, b) => Number(a.position) - Number(b.position))
-        .map((r) => String(r.article_id));
-      if (
-        old &&
-        Object.entries(page).every(([k, v]) => old[k] === v) &&
-        canonical(oldFeatures) === canonical(featureIds)
-      )
-        continue;
-      if (
-        old &&
-        (old.version !== 1 ||
-          old.introduction !== "" ||
-          old.seo_title !== null ||
-          old.seo_description !== null ||
-          oldFeatures.length ||
-          old.heading !==
-            (setting.scope.kind === "main"
-              ? "樓市資訊"
-              : plan.inventory.categories.find((c) => categoryIds.get(c.id) === scopeId)?.key))
-      )
-        throw new Error("IMPORT_SETTINGS_AUTHORITATIVE");
-      const id = String(old?.id ?? randomUUID());
-      if (old)
-        await client.query(
-          "UPDATE blog_settings SET heading=$1,introduction=$2,seo_title=$3,seo_description=$4,version=version+1 WHERE id=$5 AND version=$6",
-          [...Object.values(page), id, setting.version],
-        );
-      else
-        await client.query(
-          "INSERT INTO blog_settings(id,scope_kind,category_id,heading,introduction,seo_title,seo_description) VALUES($1,$2,$3,$4,$5,$6,$7)",
-          [id, setting.scope.kind, scopeId, ...Object.values(page)],
-        );
-      for (const [position, articleId] of featureIds.entries()) {
-        const eligible = (
-          await client.query(
-            "SELECT id FROM articles WHERE id=$1 AND published AND (published_at IS NULL OR published_at<=now()) AND ($2::uuid IS NULL OR category_id=$2)",
-            [articleId, scopeId],
-          )
-        ).rows;
-        if (!eligible.length) throw new Error("IMPORT_INELIGIBLE_FEATURE");
-        await client.query(
-          "INSERT INTO blog_featured_articles(scope_id,article_id,position) VALUES($1,$2,$3)",
-          [id, articleId, position],
-        );
-      }
-      counts.settings++;
-    }
-    const after = await capture(client, target);
-    const receipt: ImportReceipt = {
-      fingerprint: plan.fingerprint,
-      targetIdentity: target.identity,
-      sourceRevision: plan.inventory.sourceRevision,
-      sourceDigest: plan.inventory.sourceDigest ?? null,
-      backupSha256: approval.backupSha256,
-      inserted,
-      counts,
-      afterFingerprint: after.fingerprint,
-      writes: counts.articles,
-      verification: "unchanged",
-    };
-    await client.query(
-      "INSERT INTO blog_import_receipts(fingerprint,target_identity,receipt) VALUES($1,$2,$3::jsonb)",
-      [plan.fingerprint, target.identity, JSON.stringify(receipt)],
-    );
-    return receipt;
+    const result = await mutateBlogImport(client, plan, before);
+    return completeOwnedImport(client, target, plan, approval.backupSha256, result);
   });
+}
+
+// Separate 95->98 rehearsal entry points. They can only use the original owned capability.
+async function ownedReleaseTransaction<T>(
+  target: VerifiedImportTarget,
+  write: boolean,
+  run: (client: Client) => Promise<T>,
+): Promise<T> {
+  const client = await state(target).pool.connect();
+  let committing = false;
+  let discard = false;
+  try {
+    await client.query(write ? "BEGIN" : "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    // Leave pg_catalog implicit so it precedes public for built-in resolution
+    // while unqualified DDL still creates objects in public.
+    await client.query(`SET LOCAL search_path TO public, pg_temp;
+      SET LOCAL TIME ZONE 'UTC';
+      SET LOCAL DateStyle TO 'ISO, YMD';
+      SET LOCAL row_security TO off;
+      SET LOCAL lock_timeout TO '2s';
+      SET LOCAL statement_timeout TO '30s';
+      SET LOCAL idle_in_transaction_session_timeout TO '10s';
+      SET LOCAL transaction_timeout TO '90s'`);
+    if ((await dbIdentity(client)) !== target.systemIdentifier)
+      throw new Error("IMPORT_TARGET_CHANGED");
+    const session = async () =>
+      (
+        await client.query(
+          "SELECT session_user AS role, current_setting('server_version_num') AS version, pg_backend_pid() AS pid",
+        )
+      ).rows[0];
+    const before = await session();
+    if (before.role !== "postgres" || before.version !== "180006")
+      throw new Error("RELEASE_OWNED_PG18_6_REQUIRED");
+    const result = await run(client);
+    const after = await session();
+    if (after.pid !== before.pid || after.role !== before.role || after.version !== before.version)
+      throw new Error("RELEASE_SESSION");
+    committing = true;
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    // If COMMIT was sent, its outcome is ambiguous. Discard the session and let a
+    // fresh invocation resolve the matching durable receipt under the same locks.
+    discard = committing;
+    if (!committing) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        discard = true;
+      }
+    }
+    throw error;
+  } finally {
+    client.release(discard);
+  }
+}
+
+export function snapshotOwnedBlogRelease(
+  target: VerifiedImportTarget,
+  phase: "baseline" | "migrated",
+) {
+  return ownedReleaseTransaction(target, false, (client) =>
+    captureBlogRelease(client, target, phase),
+  );
+}
+
+export async function applyOwnedBlogRelease(
+  target: VerifiedImportTarget,
+  packetBytes: Uint8Array,
+  expectedPacketSha256: string,
+  sourceBytes: Uint8Array,
+) {
+  state(target);
+  const inputs = readReleaseInputs(target, packetBytes, expectedPacketSha256, sourceBytes);
+  return ownedReleaseTransaction(target, true, (client) => runBlogRelease(client, target, inputs));
 }

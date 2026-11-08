@@ -138,3 +138,193 @@ The second command starts and cleans up its own pinned container; it accepts no 
 Task5 source/owned-fixture acceptance does not establish live inventory, live schema,
 browser/editor acceptance, deployment or release completeness. Tasks8/9 own broader
 acceptance and cutover, after controller review and separate target-specific authorization.
+
+## Offline recovery/media evidence
+
+`recovery-evidence.ts` validates a strict signed evidence package and emits a
+checksum-sealed receipt. It does not perform a recovery drill or authorize
+production. The context must be independently reviewed, including the public
+verification key, final release HEAD, exact packet digest, full target identity,
+full table catalog, source store/host/prefix/count/bytes, approved destination,
+names, isolation label, approval hashes and validity window. Never use a public
+key supplied by an untrusted evidence submitter as the trust baseline.
+
+The v2 context additionally pins the exact returned `snapshotId`, complete
+`restoredTarget`, and `cleanupIdentity` (complete restored target, destination
+identity and exact ordered deletion keys). Internal agreement among submitted
+snapshot/restore/copy/cleanup records cannot substitute for these approved
+bindings. Returned-ID changes require reprovisioning the reviewed context,
+amending applicable approvals and resealing its binding in the evidence record.
+V1 contexts/evidence/receipts are rejected; there is no automatic migration.
+
+Start from
+`docs/superpowers/evidence/blog-cms/recovery-context.template.json`; its null
+fields are intentional blockers. The companion `recovery-approval-request.md`
+specifies the exact proposed actions and required external approvals. Refresh
+metadata before approval; the captured 1,789 objects and 226,336,431 bytes are
+not guaranteed current. A local blog-table snapshot cannot replace the provider
+snapshot/full-database restore package.
+
+The complete evidence record shape is the strict schema in
+`recovery-evidence.ts`; `recovery-evidence.test.ts` supplies a fully synthetic
+example with ephemeral test signing keys. An independent authority seals the
+complete record, including its reviewed `contextSha256`, as `{record, signature}`
+using Ed25519 over the UTF-8 `canonical(record)` representation. No signing key is
+accepted by the CLI. All times are integer Unix milliseconds. Evidence windows
+must fit the context window and last at most 21,600,000 ms; observation chronology,
+snapshot history/retention and current receipt expiry are checked independently.
+
+Use `blog-recovery-context-v2` and `blog-recovery-evidence-v2`; outputs are
+`blog-recovery-receipt-v2`. The verifier authenticates original `canonical(record)`
+bytes, rejects schema transformations and rejects padded identifiers, even if
+resealed. No field is silently trimmed into a valid signed value.
+
+Keep the complete package in restricted local evidence storage. Archive files
+and original media bytes go in one directory, each named by its lowercase
+64-character SHA-256 without extension; no directories, symlinks or arbitrary
+filenames are accepted there. Required archive bytes are rehashed. Media bytes
+also match recorded lengths. The signed destination readback archive must prove
+those same bytes were read from the isolated destination. Table/privacy/metadata
+digests are compared as signed attestations backed by the verification archives;
+the tool cannot infer raw export provenance or inspect a live provider. The
+authority must review full canonicalization, pagination and complete row/metadata
+coverage before sealing. Opaque archive hashes alone do not authenticate a
+provider; the independently trusted signature is required as well.
+
+`recovery-reference-manifest.ts` requires complete raw row captures for
+`media_upload_intents`, `media_assets`, `articles` and `cms_content_revisions`.
+Each archive contains the full table's rows, with all captured columns, sorted by
+exact `id` using code-unit ordering. Its exact UTF-8 bytes are `canonical(rows)`
+with no newline, and SHA-256 equals the table fingerprint in both database
+states. Duplicate/out-of-order IDs, missing archives, counts, altered bytes and
+incompatible row shapes fail. These private row archives are included in the
+receipt's required archive hashes; they are not merely hash-shaped assertions.
+
+`media.referenceManifest` is an ordered array grouped as upload intents, media
+assets, articles, then CMS revisions, and sorted by row ID within each group.
+Every row has `{source, rowId, rowSha256, references}`, including rows with no
+media. Reference entries contain `{path, value, storeId, objectKey, disposition}`.
+Paths use JSON Pointer escaping, with `/@json` when traversing JSON encoded in a
+string; values are exact captured strings. The verifier independently derives
+this manifest by scanning every row field, nested JSON/editor sources and
+HTML/Markdown media in legacy text. Object fields are traversed in code-unit
+order; each text field's distinct source values are sorted the same way.
+
+Every source-host URL must resolve to an existing key in the exact reviewed
+store/host/prefix. References in standalone assets or unpublished/historical
+revisions are equally mandatory. External/static values (including conservatively
+detected non-media links) require an exact `excludedReferenceValues` entry in the
+reviewed context and use `reviewed-external`; source-host URLs cannot use this
+exception. In-scope entries use `inventory`. Encoded/noncanonical source URLs,
+ambiguous composite media values and unsupported captures must be reconciled or
+handled by a reviewed extractor extension before acceptance, not silently
+treated as missing/zero references.
+
+`uploads.rowsSha256` must equal the captured upload table fingerprint. Its
+references must exactly match captured IDs/pathnames, URL/completion state and
+inventory presence. Each includes `pathname` and one disposition:
+`completed-object`, `pending-object-held`, or `pending-absent-held`. An absent
+pending object has a null `objectKey` but retains its real pathname. A present
+pending object must be inventoried/copied and held; arbitrary nulls cannot hide
+it. Completion requires a URL, completion timestamp and matching object pathname.
+These are evidence dispositions only; no upload/finalization retry is performed.
+
+Fix round 2 uses `recovery-media-syntax.ts` to parse media syntax before URL
+classification. Marked resolves inline, full-reference, collapsed-reference and
+shortcut Markdown images; parse5 reads HTML attributes with source locations;
+PostCSS and its value parser read inline CSS and `url(...)` sources. Decimal,
+hexadecimal and named HTML character references are decoded for classification
+only. An encoded source-store URL must resolve within the same exact inventory
+and cannot become `reviewed-external`, even with an exact exclusion entry.
+
+The manifest still binds original values, not decoded replacements. HTML URL
+attributes and Markdown destinations retain their original encoded destination;
+when Markdown unescapes a destination, the original token/definition-containing
+text is retained. CSS references retain the complete original style/background
+attribute or scalar CSS value. Multiple CSS URLs may therefore have the same
+original value but different resolved object keys. Sources sort by original
+value, then interpreted destination, and duplicate pairs are collapsed. Raw row
+hashes and signature verification remain unchanged. Replacing an original
+encoded manifest value with its decoded equivalent fails manifest comparison.
+
+This is a deliberately bounded parser contract. Unresolved or duplicate Markdown
+references, malformed HTML/attributes, `srcset`, CSS escapes/comments, dynamic
+CSS functions (`var`, `image-set`, etc.), stylesheets/imports, SVG/embedded/dynamic
+HTML, repeated encoding, percent-encoded candidates and control characters are
+rejected as `RECOVERY_REFERENCE_SYNTAX`. Quoted URL-like CSS values outside
+`url(...)` are rejected rather than counted as empty coverage. These syntax
+failures occur before external exclusions and cannot be waived by one. Support
+for an additional form requires a reviewed parser extension and tests.
+
+The five parser packages are exact direct development dependencies promoted from
+versions already present in the lockfile; no package version or integrity changed.
+
+Fix round 3 rejects document-level HTML before fragment tree construction:
+doctypes and `html`, `head`, `body`, `frameset`, `frame`, `meta`, `title` and
+`noscript` tags (including closing tags) are unsupported. An existing object or
+external exclusion cannot waive this boundary. This prevents document-wrapper
+attributes from disappearing silently during fragment parsing.
+
+The pinned parse5 parser also records each actual source start tag and its
+decoded attributes before tree construction, then matches them by source offset
+against the nodes inspected for media. Any discarded, merged or rewritten source
+tag/attribute fails `RECOVERY_REFERENCE_SYNTAX`, including carriers dropped in
+an incompatible parent. Parser-created structural nodes such as an implicit
+`tbody` do not count as source evidence. Comments and quoted attribute text are
+not mistaken for tags. The parser subclass/factory and token-to-tree coverage
+are checked fail-closed; a parse5 upgrade requires re-verifying this contract.
+This remains bounded fragment validation, not arbitrary document rendering.
+
+CLI JSON inputs are limited to 16 MiB each; total archive bytes to 512 MiB. Larger
+packages fail closed and require a separately reviewed streaming implementation;
+never drop objects or evidence to fit the limit. The reviewed table catalog must
+include all schemas/tables, including unaffected tables; the validator checks exact
+catalog membership and complete before/after counts and fingerprints, not samples.
+
+```text
+bun run --no-env-file scripts/blog-cms/recovery-receipt.ts issue --context .private-sync-evidence/blog-recovery/context.json --evidence .private-sync-evidence/blog-recovery/evidence.json --artifacts .private-sync-evidence/blog-recovery/artifacts --receipt .private-sync-evidence/blog-recovery/receipt.json
+bun run --no-env-file scripts/blog-cms/recovery-receipt.ts verify --context .private-sync-evidence/blog-recovery/context.json --evidence .private-sync-evidence/blog-recovery/evidence.json --artifacts .private-sync-evidence/blog-recovery/artifacts --receipt .private-sync-evidence/blog-recovery/receipt.json
+```
+
+There are no provider, credential, environment-loading, signing, apply, cleanup
+or clock-override switches. Receipt output must be a new file under
+`.private-sync-evidence/blog-recovery/`; overwrites, traversal and symlink/junction
+output ancestors fail. Both modes revalidate the complete package. `verify`
+requires the existing receipt to match the validated package and remain current.
+Standard output contains only status, authorization=false, receipt hash and
+expiry; failures report a generic error, never raw private evidence. Exit 0 means
+offline verification succeeded; exit 1 means rejection. Output always retains
+`productionAuthorized: false` and `closure: REQUIRES_INDEPENDENT_REVIEW`.
+
+This receipt cannot be submitted as the executor's `production-recovery-v1`
+envelope. Independent recovery authority review and signing remain separate;
+this tooling neither provisions that authority nor changes executor gates.
+
+Focused offline verification:
+
+The reviewed recovery context must contain `schemaProfile.phase` (`pre-migration`
+or `post-migration`), `schemaProfile.schemaSha256` (full schema), and
+`schemaProfile.migrationLedgerSha256` (canonical captured ledger archive bytes).
+The release's required backup is **pre-migration**, before atomic 95→98 execution.
+Its baseline and restored `absentRelations` arrays must explicitly name
+`public.blog_categories`, `public.blog_settings`, `public.blog_featured_articles`
+and `public.blog_legacy_category_map`; none may occur in the present table catalog.
+Post-migration requires all four present and `absentRelations: []`. Both phases
+require all legacy tables and unaffected-table coverage. Ledger row count and
+exact version identities must match 95 or 98 respectively. Original legacy
+article rows may lack `content_format` before migration; do not manufacture it.
+The strengthened v2 contract rejects old contexts/evidence missing these fields;
+re-review and reseal them, never normalize signed input in place.
+
+```text
+bun test --no-env-file scripts/blog-cms/recovery-evidence.test.ts scripts/blog-cms/release-controls.test.ts scripts/blog-cms/release-packet.test.ts scripts/blog-cms/writer-control-register.test.ts
+```
+
+Exact-head CI runs `test:blog:release:guards`, `test:blog:hosted:guards`, the real
+loopback Chromium `test:blog:hosted:browser` after browser installation, and
+`test:blog:release:owned:db` on the pinned PG18 image. These gates make no provider
+calls. The owned-release test defaults to a portable synthetic 112-article fixture;
+it proves transaction/rollback/retry behavior, not production source acceptance.
+The existing exact private capture rehearsal remains explicitly available as
+`node scripts/blog-cms/owned-release.integration.mjs --captured-source` when its
+ignored, checksum-bound capture is present. CI never requires that private file.

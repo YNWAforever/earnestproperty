@@ -4,6 +4,9 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { withOwnedPostgres } from "./acceptance/owned-postgres-test.mjs";
+import { PINNED_POSTGRES_18 } from "../src/lib/neon/owned-postgres-images.ts";
+
+const ownedOptions = process.argv.includes("--pg18") ? { image: PINNED_POSTGRES_18 } : {};
 
 for (const key of [
   "DATABASE_URL",
@@ -13,7 +16,8 @@ for (const key of [
   "ASTRA_TEST_DATABASE_URL",
 ])
   assert.ok(!process.env[key], "Owned-only suite refuses " + key);
-await withOwnedPostgres(async ({ containerId, query }) => {
+const withImportTestPostgres = (run) => withOwnedPostgres(run, ownedOptions);
+await withImportTestPostgres(async ({ containerId, query }) => {
   const { verifyImportTarget, snapshotDatabase, applyImport, verifyImport } =
     await import("../src/lib/neon/blog-import.ts");
   const { inventoryFromSnapshots } = await import("../src/lib/blog/import-snapshots.ts");

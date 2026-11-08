@@ -3,6 +3,21 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
+import React, { createElement } from "react";
+import { renderToString } from "react-dom/server";
+import { load } from "cheerio";
+import {
+  Link,
+  RouterProvider,
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  stripSearchParams,
+} from "@tanstack/react-router";
+import { z } from "zod";
+import { fallback, zodValidator } from "@tanstack/zod-adapter";
+import { LISTINGS_SEARCH_DEFAULTS } from "../lib/public-search-defaults.ts";
 
 // Source-scan regression tests for /listings' UI shell (mobile filter
 // drawer, active-filter chips, grid/list toggle, loading/error states).
@@ -14,6 +29,73 @@ const source = (await readFile(new URL("./listings.tsx", import.meta.url), "utf8
   /\r\n/g,
   "\n",
 );
+
+test("rendered pagination marks only the current numbered page and preserves listing filters", async () => {
+  const schemaStart = source.indexOf("const searchSchema = z.object({");
+  const schemaEnd = source.indexOf("});", schemaStart) + 3;
+  const sort = source.match(/^const SORT_OPTIONS = .*;$/m)[0];
+  const schemaJs = ts.transpileModule(
+    `${sort}\n${source.slice(schemaStart, schemaEnd)}\nreturn searchSchema;`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022 } },
+  ).outputText;
+  const schema = new Function("z", "fallback", schemaJs)(z, fallback);
+  const markup = source.slice(source.indexOf("function Pagination("));
+  const js = ts.transpileModule(markup + "\nexports.Pagination = Pagination;", {
+    compilerOptions: {
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.CommonJS,
+      jsx: ts.JsxEmit.React,
+    },
+  }).outputText;
+  const exports = {};
+  const icon = () => createElement("svg", { "aria-hidden": true });
+  new Function("exports", "React", "Link", "ChevronLeft", "ChevronRight", js)(
+    exports,
+    React,
+    Link,
+    icon,
+    icon,
+  );
+  for (const [current, total, deal, unfiltered = false] of [
+    [1, 5, "sale"],
+    [2, 2, "sale"],
+    [2, 2, "sale", true],
+    [3, 5, "rent"],
+    [5, 5, "sale"],
+  ]) {
+    const root = createRootRoute();
+    const route = createRoute({
+      getParentRoute: () => root,
+      path: "/listings",
+      validateSearch: zodValidator(schema),
+      search: { middlewares: [stripSearchParams(LISTINGS_SEARCH_DEFAULTS)] },
+      component: () => createElement(exports.Pagination, { current, total }),
+    });
+    const href = `/listings?deal=${deal}${unfiltered ? "" : "&estate=bellagio&sort=price_asc"}${current === 1 ? "" : `&page=${current}`}`;
+    const router = createRouter({
+      routeTree: root.addChildren([route]),
+      history: createMemoryHistory({ initialEntries: [href] }),
+      isServer: true,
+    });
+    await router.load();
+    const $ = load(renderToString(createElement(RouterProvider, { router })));
+    const marked = $('nav[aria-label="分頁"] [aria-current="page"]');
+    assert.equal(marked.length, 1, `page ${current} of ${total}`);
+    assert.equal(marked.text(), String(current));
+    for (const a of $("nav a").toArray()) {
+      const url = new URL($(a).attr("href"), "https://local.invalid");
+      assert.equal(url.pathname, "/listings");
+      assert.equal(url.searchParams.get("deal"), deal);
+      assert.equal(url.searchParams.get("estate"), unfiltered ? null : "bellagio");
+      assert.equal(url.searchParams.get("sort"), unfiltered ? null : "price_asc");
+      const page = Number(url.searchParams.get("page") ?? 1);
+      assert.ok(page >= 1 && page <= total);
+      if ($(a).attr("aria-label") === "上一頁") assert.equal(page, current - 1);
+      else if ($(a).attr("aria-label") === "下一頁") assert.equal(page, current + 1);
+      else assert.equal(page, Number($(a).text()));
+    }
+  }
+});
 
 // buildActiveFilterChips() is a plain, dependency-light function (no JSX,
 // no router/React imports needed at runtime) sandwiched between two other
