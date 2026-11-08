@@ -57,9 +57,19 @@ function without(name, overrides = {}) {
   return env;
 }
 
-const intakeGaps = ["WOZTELL_APP_ID", "WOZTELL_CHANNEL_ID", "WOZTELL_CHANNEL_SECRET"].map(
-  (name) => ({ name, env: without(name) }),
-);
+const intakeGaps = [
+  { name: "WOZTELL_APP_ID", env: without("WOZTELL_APP_ID") },
+  // The company channel is satisfied by either accepted name, so the gap is both unset.
+  {
+    name: "WOZTELL_CHANNEL_ID",
+    env: {
+      ...COMPLETE,
+      WOZTELL_CHANNEL_ID: undefined,
+      EP_WA_COMPANY_CHANNEL_ID: undefined,
+    },
+  },
+  { name: "WOZTELL_CHANNEL_SECRET", env: without("WOZTELL_CHANNEL_SECRET") },
+];
 const trackedGaps = [
   // Neither accepted channel name: WOZTELL_CHANNEL_ID is also an intake value, so
   // intake stays off here to isolate the tracked-link check.
@@ -148,6 +158,12 @@ test("complete production configuration passes and never prints values", () => {
   assert.equal(r.status, 0, r.output);
   for (const value of Object.values(COMPLETE).filter((v) => v !== "true"))
     assert.ok(!r.output.includes(value), `output leaks ${value}`);
+});
+
+test("production: deleting the legacy WOZTELL_CHANNEL_ID does not block the build", () => {
+  const r = run({ ...COMPLETE, WOZTELL_CHANNEL_ID: undefined });
+  assert.equal(r.status, 0, r.output);
+  assert.ok(!r.output.includes("fx10a-company-channel"), "channel value not printed");
 });
 
 test("local builds are unaffected", () => {
