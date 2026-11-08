@@ -97,12 +97,25 @@ export async function handleWoztellWebhook(
     return Response.json({ ok: false, error: "INVALID_JSON" }, { status: 400 });
   }
   const event = normalizeWoztellEvent(payload);
+  const scopeConsistent = consistentScope(payload, config);
   if (
-    !consistentScope(payload, config) ||
+    !scopeConsistent ||
     (config.channelId && event.channelId !== config.channelId) ||
     (config.appId && event.appId !== config.appId)
-  )
+  ) {
+    // Without this line a scope mismatch is invisible: the provider keeps retrying,
+    // no receipt is stored, and the inbox simply goes quiet. Ids and sizes only, never
+    // message content.
+    console.warn(
+      "[woztell] webhook REJECTED (403): scope mismatch. " +
+        `consistent: ${scopeConsistent}; ` +
+        `event channelId: ${event.channelId ?? "MISSING"}; ` +
+        `expected channelId: ${config.channelId ?? "NOT SET"}; ` +
+        `event appId: ${event.appId ?? "MISSING"}; ` +
+        `expected appId: ${config.appId ?? "NOT SET"}; body bytes: ${raw.length}`,
+    );
     return Response.json({ ok: false, error: "WOZTELL_SCOPE_MISMATCH" }, { status: 403 });
+  }
 
   // Injected ingest is used by existing isolated contract tests. The production
   // path always commits a minimum receipt before optional transcript/workflow work.
