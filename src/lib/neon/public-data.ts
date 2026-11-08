@@ -1,3 +1,6 @@
+import { setResponseHeader } from "@tanstack/react-start/server";
+import { blogNoStoreHeaders } from "../blog/public";
+import { blogRequest } from "./blog-response";
 import { createServerFn } from "@tanstack/react-start";
 
 import type {
@@ -184,14 +187,16 @@ export const fetchNeonRecentTransactionsCount = createServerFn({ method: "GET" }
 
 export const fetchNeonPublishedArticles = createServerFn({ method: "GET" }).handler(async () => {
   const neonData = await import("./public-data.server");
-  return neonData.fetchPublishedArticles();
+  for (const [key, value] of Object.entries(blogNoStoreHeaders())) setResponseHeader(key, value);
+  return blogRequest(() => neonData.fetchPublishedArticles());
 });
 
 export const fetchNeonArticleBySlug = createServerFn({ method: "GET" })
   .inputValidator((data: { slug: string }) => data)
   .handler(async ({ data }) => {
     const neonData = await import("./public-data.server");
-    return neonData.fetchArticleBySlug(data);
+    for (const [key, value] of Object.entries(blogNoStoreHeaders())) setResponseHeader(key, value);
+    return blogRequest(() => neonData.fetchArticleBySlug(data));
   });
 
 export const fetchNeonEstateDirectory = createServerFn({ method: "GET" }).handler(async () => {

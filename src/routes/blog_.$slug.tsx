@@ -1,3 +1,10 @@
+import { getPublicBlogArticle } from "@/lib/neon/blog-public";
+import { blogNoStoreHeaders } from "@/lib/blog/public";
+import { ArticleBody } from "@/components/blog/ArticleBody";
+import { articleHeadings } from "@/lib/blog/headings";
+import { BlogUnavailable, BlogNotFound } from "@/components/blog/BlogUnavailable";
+import { AppImage } from "@/components/media/AppImage";
+import type { ValidatedArticleBody } from "@/lib/blog/types";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Clock } from "lucide-react";
 
@@ -10,14 +17,7 @@ import {
 } from "@/components/site/BlogEstateComparisonTable";
 import { Breadcrumbs } from "@/components/site/Breadcrumbs";
 import { PageHero } from "@/components/site/PageHero";
-import { SiteLink } from "@/components/site/SiteLink";
-import {
-  articlePublishedAt,
-  EDITORIAL_AUTHOR,
-  publishedBlogArticles,
-  type BlogArticleSection,
-} from "@/content/blog-articles";
-import { getEstateEntry } from "@/content/estate-registry";
+import { estateRegistry } from "@/content/estate-registry";
 import { SITE_URL, authored, canonicalLink } from "@/content/seo";
 import {
   DESCRIPTION_MAX_UNITS,
@@ -26,7 +26,7 @@ import {
   truncateToWidth,
 } from "@/content/seo-budget.js";
 import { absoluteUrl, articleSchema } from "@/lib/schema";
-import { fetchArticleBySlug, fetchEstateBySlug } from "@/lib/queries";
+import { fetchEstateBySlug } from "@/lib/queries";
 import { jsonLdScript } from "@/lib/schema";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 import { blogCorridorLinks } from "@/lib/corridor-links";
@@ -35,7 +35,8 @@ type ArticleDetail = {
   slug: string;
   title: string;
   excerpt: string | null;
-  sections: readonly BlogArticleSection[];
+  body: ValidatedArticleBody;
+  coverAlt: string | null;
   cover_image: string | null;
   category: string | null;
   reading_minutes: number | null;
@@ -44,7 +45,7 @@ type ArticleDetail = {
    * discarded; head() prefers them over the derived pair. */
   seo_title?: string | null;
   seo_description?: string | null;
-  published_at: string;
+  published_at: string | null;
   updated_at?: string | null;
   author: string;
   reviewer: string | null;
@@ -53,51 +54,20 @@ type ArticleDetail = {
   links?: readonly { href: string; label: string }[];
 };
 
-/** A CMS-edited article only ever supplies a flat `content` string -- there is
- * no admin UI for authoring sections/ToC/answer-summary yet. Splitting it into
- * a single, heading-less section keeps the same body-rendering path working
- * for both sources, and the ToC (2+ sections) simply doesn't show for it. */
-function sectionsFromDbContent(content: string | null): readonly BlogArticleSection[] | null {
-  if (!content) return null;
-  const paragraphs = content
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean);
-  return paragraphs.length > 0 ? [{ heading: "", paragraphs }] : null;
-}
-
-function fallbackArticle(slug: string) {
-  // publishedBlogArticles, not blogArticles: a scheduled 屋苑開箱 article must
-  // be genuinely unreachable before its date, not merely absent from the
-  // listings. The loader throws notFound() when this returns null, so its URL
-  // 404s until it publishes -- which is also why the sitemap only lists the
-  // published ones.
-  return publishedBlogArticles().find((item) => item.slug === slug) ?? null;
-}
-
-/** ToC anchor ids. Headings here are zh-HK prose with no ASCII content, so a
- * plain ASCII slugify always collapses to "" -- the index suffix is what
- * actually keeps ids unique and present, not the slugified text itself. */
-function sectionAnchorId(heading: string, index: number): string {
-  const ascii = heading
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-+|-+$)/g, "");
-  return ascii.length > 0 ? `${ascii}-${index}` : `section-${index}`;
-}
-
 async function resolveCompareEstates(
   slugs: readonly string[] | undefined,
 ): Promise<EstateComparisonRow[]> {
   if (!slugs || slugs.length === 0) return [];
   return Promise.all(
     slugs.map(async (slug) => {
-      const entry = getEstateEntry(slug);
-      const record = await fetchEstateBySlug(slug).catch(() => null);
+      const record = await fetchEstateBySlug(slug);
+      // Editable references may be DB-only or no longer published. The public
+      // record owns names/page availability; registry labels are optional context.
+      const entry = estateRegistry.find((candidate) => candidate.slug === slug);
       return {
-        slug,
-        nameZh: entry.nameZh,
-        hasPage: entry.hasPage,
+        slug: record?.slug ?? slug,
+        nameZh: record?.name_zh ?? entry?.nameZh ?? slug,
+        hasPage: record !== null,
         avgPsf: record ? Number(record.avg_saleable_psf ?? 0) || null : null,
         totalUnits: record?.total_units ?? null,
         yearCompleted: record?.year_completed ?? null,
@@ -116,54 +86,28 @@ async function resolveCompareEstates(
 // public path is unchanged (/blog/$slug), so no redirect is needed.
 export const Route = createFileRoute("/blog_/$slug")({
   loader: async ({ params }) => {
-    const registryArticle = fallbackArticle(params.slug);
-    const dbArticle = await fetchArticleBySlug(params.slug).catch(() => null);
-
-    const article: ArticleDetail | null = registryArticle
-      ? {
-          slug: registryArticle.slug,
-          title: dbArticle?.title || registryArticle.title,
-          excerpt: dbArticle?.excerpt ?? registryArticle.excerpt,
-          sections: sectionsFromDbContent(dbArticle?.content ?? null) ?? registryArticle.sections,
-          cover_image: dbArticle?.cover_image ?? null,
-          category: dbArticle?.category ?? registryArticle.category,
-          reading_minutes: dbArticle?.reading_minutes ?? registryArticle.readingMinutes,
-          seo_title: dbArticle?.seo_title ?? null,
-          seo_description: dbArticle?.seo_description ?? null,
-          published_at: dbArticle?.published_at ?? articlePublishedAt(registryArticle),
-          updated_at: dbArticle?.updated_at ?? null,
-          author: registryArticle.author,
-          reviewer: registryArticle.reviewer,
-          sourcesNote: registryArticle.sourcesNote,
-          answerSummary: registryArticle.answerSummary,
-          links: registryArticle.links,
-        }
-      : dbArticle
-        ? {
-            slug: dbArticle.slug,
-            title: dbArticle.title,
-            excerpt: dbArticle.excerpt,
-            sections: sectionsFromDbContent(dbArticle.content) ?? [],
-            cover_image: dbArticle.cover_image,
-            category: dbArticle.category,
-            reading_minutes: dbArticle.reading_minutes,
-            seo_title: dbArticle.seo_title,
-            seo_description: dbArticle.seo_description,
-            published_at: dbArticle.published_at,
-            updated_at: dbArticle.updated_at,
-            author: EDITORIAL_AUTHOR,
-            reviewer: null,
-            sourcesNote: "",
-            answerSummary: "",
-          }
-        : null;
-
-    // An unknown slug used to render "文章不存在" with HTTP 200 and a
-    // self-canonical -- an unbounded space of indexable soft-404s. Every
-    // other dynamic route (estate, agent, segment, property) 404s here.
-    if (!article) throw notFound();
-
-    const compareEstates = await resolveCompareEstates(registryArticle?.compareEstateSlugs);
+    const record = await getPublicBlogArticle(params.slug);
+    if (!record) throw notFound();
+    const article: ArticleDetail = {
+      slug: record.slug,
+      title: record.title,
+      excerpt: record.excerpt,
+      body: record.body,
+      cover_image: record.coverImage,
+      coverAlt: record.coverAlt,
+      category: record.categoryName ?? record.category,
+      reading_minutes: record.readingMinutes,
+      seo_title: record.seoTitle,
+      seo_description: record.seoDescription,
+      published_at: record.publishedAt,
+      updated_at: record.updatedAt,
+      author: record.editorial.author ?? "晉誠地產編輯團隊",
+      reviewer: record.editorial.reviewer,
+      sourcesNote: record.editorial.sourcesNote ?? "",
+      answerSummary: record.editorial.answerSummary ?? "",
+      links: record.links,
+    };
+    const compareEstates = await resolveCompareEstates(record.editorial.compareEstateSlugs);
 
     return { article, compareEstates, slug: params.slug };
   },
@@ -221,6 +165,13 @@ export const Route = createFileRoute("/blog_/$slug")({
       links: [canonicalLink(`/blog/${loaderData.slug}`)],
     };
   },
+  headers: blogNoStoreHeaders,
+  staleTime: 0,
+  gcTime: 0,
+  preload: false,
+  shouldReload: true,
+  errorComponent: BlogUnavailable,
+  notFoundComponent: BlogNotFound,
   component: BlogArticlePage,
 });
 
@@ -264,9 +215,7 @@ function BlogArticlePage() {
       article.links,
     ),
   ];
-  const sectionAnchors = article.sections.map((section, index) =>
-    sectionAnchorId(section.heading, index),
-  );
+  const headings = articleHeadings(article.body);
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -342,14 +291,14 @@ function BlogArticlePage() {
         <article className="max-w-3xl">
           <AnswerSummaryCallout summary={article.answerSummary} />
 
-          {article.sections.length >= 2 && (
+          {headings.length >= 2 && (
             <nav aria-label="目錄" className="mt-8 rounded-md border bg-muted/30 p-4">
               <h2 className="text-sm font-semibold">目錄</h2>
               <ol className="mt-2 space-y-1 text-sm">
-                {article.sections.map((section, index) => (
-                  <li key={sectionAnchors[index]}>
-                    <a href={`#${sectionAnchors[index]}`} className="text-primary hover:underline">
-                      {section.heading}
+                {headings.map((section) => (
+                  <li key={section.id}>
+                    <a href={`#${section.id}`} className="text-primary hover:underline">
+                      {section.text}
                     </a>
                   </li>
                 ))}
@@ -357,39 +306,20 @@ function BlogArticlePage() {
             </nav>
           )}
 
+          {article.cover_image && (
+            <AppImage
+              src={article.cover_image}
+              alt={article.coverAlt ?? article.title}
+              width={1000}
+              height={600}
+              className="mt-8 rounded-lg"
+            />
+          )}
           <div className="prose prose-neutral mt-8 max-w-none">
-            {article.sections.map((section, index) => (
-              <section key={sectionAnchors[index]} id={sectionAnchors[index]}>
-                {section.heading && (
-                  <h2 className="text-xl font-bold text-foreground">{section.heading}</h2>
-                )}
-                {section.paragraphs.map((paragraph, paragraphIndex) => (
-                  <p key={paragraphIndex} className="leading-8 text-foreground/85">
-                    {paragraph}
-                  </p>
-                ))}
-              </section>
-            ))}
+            <ArticleBody body={article.body} links={relatedLinks} />
           </div>
 
           {compareEstates.length > 0 && <BlogEstateComparisonTable estates={compareEstates} />}
-
-          {relatedLinks.length > 0 && (
-            <nav className="mt-10 rounded-lg border bg-muted/30 p-5">
-              <h2 className="text-sm font-semibold">延伸閱讀</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {relatedLinks.map((link) => (
-                  <SiteLink
-                    key={link.href}
-                    href={link.href}
-                    className="rounded-md border bg-background px-3 py-2 text-sm font-medium hover:border-primary hover:text-primary"
-                  >
-                    {link.label}
-                  </SiteLink>
-                ))}
-              </div>
-            </nav>
-          )}
         </article>
       </Container>
     </div>

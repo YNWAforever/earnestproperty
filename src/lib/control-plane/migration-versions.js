@@ -130,6 +130,9 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20261013100000_contact_identity_review.sql",
   "20261026170000_listing_estate_content.sql",
   "20261026210000_corridor_estate_editorial_quality.sql",
+  "20261105120000_blog_presentation_contracts.sql",
+  "20261105140000_blog_repository_mutations.sql",
+  "20261105160000_blog_import_receipts.sql",
 ]);
 
 /**

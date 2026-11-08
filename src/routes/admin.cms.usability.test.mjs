@@ -30,7 +30,7 @@ test("server search empty state describes full category and retains clear action
   assert.match(html, /清除搜尋/);
 });
 test("both revision editors have saved payload tracking and explicit confirmation", () => {
-  for (const kind of ["Estate", "Article"]) {
+  for (const kind of ["Estate"]) {
     const body = source
       .slice(
         source.indexOf(`function ${kind}Dialog(`),
@@ -85,7 +85,7 @@ test("upload pending disables all editor actions and replaces saved feedback", (
 });
 
 test("estate and article close guards and submit paths include pending upload", () => {
-  for (const kind of ["Estate", "Article"]) {
+  for (const kind of ["Estate"]) {
     const body = source.slice(source.indexOf(`function ${kind}Dialog(`)).split("\nfunction ")[0];
     assert.match(body, /isDirty: isDirty \|\| imageUploading/);
     assert.match(body, /onUploadingChange=\{setImageUploading\}/);
@@ -187,7 +187,7 @@ test("restore asks first and is hidden on draft rows and for agents", () => {
   const button = history.indexOf("還原", guard);
   assert.ok(button > guard, "the 還原 button sits inside the guard");
   assert.match(history.slice(guard, button), /onClick=\{\(\) => onRequestRestore\(revision\)\}/);
-  for (const kind of ["Estate", "Article"]) {
+  for (const kind of ["Estate"]) {
     const body = source.slice(source.indexOf(`function ${kind}Dialog(`)).split("\nfunction ")[0];
     assert.match(body, /useCmsCanRestore\(\)/, `${kind} reads the staff session role`);
     assert.match(body, /<CmsRestoreConfirm/, `${kind} confirms before restoring`);
@@ -219,7 +219,7 @@ test("compare no longer prints raw JSON", () => {
 });
 
 test("restore baseline is never null while a record is open, and the dialog closes rather than unmounting", () => {
-  for (const kind of ["Estate", "Article"]) {
+  for (const kind of ["Estate"]) {
     const body = source.slice(source.indexOf(`function ${kind}Dialog(`)).split("\nfunction ")[0];
     assert.match(body, /useOpeningSnapshot\(/, `${kind} keeps the form as it was opened`);
     assert.match(body, /openingForm=\{opening/);
@@ -303,4 +303,27 @@ test("FAQ delete says it can be restored and archived rows offer 還原", () => 
     assert.ok(estateEditor.includes(phrase), `estate editor is missing ${phrase}`);
   }
   assert.doesNotMatch(estateEditor, /刪除後無法還原/);
+});
+
+// Article behavior is additionally exercised by the real owned-browser fixture.
+test("blog editor retains saved baseline, guarded uploads, compare and confirmed restore", () => {
+  const article = readFileSync(
+    new URL("../components/admin/blog/ArticleEditor.tsx", import.meta.url),
+    "utf8",
+  );
+  for (const contract of [
+    "useDirtyCloseGuard",
+    "useRouteLeaveGuard",
+    "CmsPublicationCompare",
+    "CmsRestoreConfirm",
+    "encodeArticle(baseline)",
+    "onUploadingChange={setInlineUploading}",
+    "onUploadingChange={setCoverUploading}",
+    "const uploading = inlineUploading || coverUploading",
+    "busy || uploading",
+  ]) {
+    assert.ok(article.includes(contract), `missing ${contract}`);
+  }
+  assert.match(article, /canPublish/);
+  assert.match(article, /savedDraft=/);
 });

@@ -36,7 +36,6 @@ test("TransactionForm mounts the leave guard on real edits and re-baselines (flu
 for (const [name, closeGuard] of [
   ["CmsVideoDialog", "videoDirty"],
   ["EstateDialog", "isDirty || imageUploading"],
-  ["ArticleDialog", "isDirty || imageUploading"],
   ["FaqDialog", "faqDirty"],
 ]) {
   test(`${name} mounts a leave guard on the same dirty state as its close guard`, () => {
@@ -51,6 +50,22 @@ for (const [name, closeGuard] of [
     has(source, "{leaveGuard}", `${name} must render {leaveGuard}`);
   });
 }
+
+test("ArticleEditor guards unsaved edits, uploads and saves across close and navigation", () => {
+  const source = read("src/components/admin/blog/ArticleEditor.tsx");
+  has(
+    source,
+    "useRouteLeaveGuard(dirty || busy || uploading)",
+    "ArticleEditor must guard dirty edits, active saves and uploads",
+  );
+  has(
+    source,
+    "useDirtyCloseGuard({ isDirty: dirty || uploading, onClose })",
+    "ArticleEditor close guard must use the same dirty and upload state",
+  );
+  has(source, "{guard.dialog}", "ArticleEditor must render the close guard dialog");
+  has(source, "{leave.dialog}", "ArticleEditor must render the route leave dialog");
+});
 
 test("the blasts workspace guards unsaved campaign and audience drafts", () => {
   const source = read("src/routes/admin.blasts.tsx");

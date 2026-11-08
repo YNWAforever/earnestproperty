@@ -235,12 +235,33 @@ export const cmsPublishSchema = z
   })
   .strict() satisfies z.ZodType<CmsPublishInput>;
 
+const cmsArticleMutationTokensSchema = z
+  .object({
+    requestId: z.string().uuid(),
+    expectedVersion: z.number().int().nonnegative(),
+    editState: z
+      .object({
+        resourceId: z.string().uuid(),
+        draftRevisionId: z.string().uuid().nullable(),
+        draftVersion: z.number().int().nullable(),
+        draftEditVersion: z.number().int().nullable(),
+        currentPublishedVersion: z.number().int().nullable(),
+        basePublishedVersion: z.number().int().nullable(),
+        restoredFromRevisionId: z.string().uuid().nullable(),
+      })
+      .strict(),
+  })
+  .strict();
 export const cmsRestoreSchema = z
-  .object({ revisionId: text })
+  .object({ revisionId: text, articleTokens: cmsArticleMutationTokensSchema.optional() })
   .strict() satisfies z.ZodType<CmsRestoreInput>;
 
 export const cmsArchiveSchema = z
-  .object({ resourceType: cmsResourceType, resourceId: text })
+  .object({
+    resourceType: cmsResourceType,
+    resourceId: text,
+    articleTokens: cmsArticleMutationTokensSchema.optional(),
+  })
   .strict() satisfies z.ZodType<CmsArchiveInput>;
 
 // ---- Campaigns ------------------------------------------------------------

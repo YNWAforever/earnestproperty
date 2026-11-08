@@ -24,7 +24,7 @@ def capture():
 
 
 def html():
-    return (FIXTURES / "propertyhk-agentblog.html").read_text()
+    return (FIXTURES / "propertyhk-agentblog.html").read_text(encoding="utf-8")
 
 
 def empty_html():

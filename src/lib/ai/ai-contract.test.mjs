@@ -190,7 +190,9 @@ function assertBrowserSafeSource(scanRoot = root) {
       // reject using those app credentials as a fallback.
       file !== "src/lib/mls/neon-db.mjs" &&
       file !== "src/lib/mls/neon-lock.mjs" &&
-      file !== "src/lib/mls/saved-capture-import.mjs",
+      file !== "src/lib/mls/saved-capture-import.mjs" &&
+      // Owned-only blog CLI likewise names URL variables solely to reject them.
+      file !== "src/lib/neon/blog-import.ts",
   );
 
   for (const file of browserSafeFiles) {
@@ -204,6 +206,14 @@ function assertBrowserSafeSource(scanRoot = root) {
 
 test("AI, Neon, Woztell, and Blob secret names stay out of browser-safe source", () => {
   assertBrowserSafeSource();
+});
+
+test("the owned blog importer is not imported by application source", () => {
+  const importers = sourceFiles("src").filter((file) => {
+    if (file.includes(".test.") || file === "src/lib/neon/blog-import.ts") return false;
+    return /["'][^"']*blog-import(?:\.ts)?["']/.test(read(file));
+  });
+  assert.deepEqual(importers, []);
 });
 
 test("the owner-capture importer is not imported by application source", () => {

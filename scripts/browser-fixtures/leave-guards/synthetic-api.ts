@@ -11,7 +11,10 @@ import {
   adminTransactionSchema,
 } from "../../../src/lib/neon/admin-write-schemas";
 
-export const membership = { role: "agent", binding: "20000000-0000-4000-8000-000000000001" };
+export const membership = {
+  role: sessionStorage.getItem("blog-fixture-role") ?? "agent",
+  binding: "20000000-0000-4000-8000-000000000001",
+};
 export async function fetchStaffSession() {
   return { status: "ok", staffId: membership.binding, roles: [membership.role] };
 }
