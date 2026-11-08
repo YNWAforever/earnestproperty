@@ -301,7 +301,7 @@ test.describe("Task6 blog editor fixture", () => {
     await blog(page).getByLabel("搜尋標題、slug 或分類").fill("第二次修改");
     await expect(blog(page).getByText("共 1 篇 · 第 1 / 1 頁")).toBeVisible();
   });
-  test("409 preserves typed text; 503 retry keeps receipt; failed reads never become empty", async ({
+  test("409 preserves typed text; 503 reports a server failure; failed reads never become empty", async ({
     page,
   }) => {
     await open(page, "/admin/cms?tab=articles");
@@ -317,7 +317,15 @@ test.describe("Task6 blog editor fixture", () => {
       window.blogFixture.failSave = 503;
     });
     await editor(page).getByRole("button", { name: "儲存草稿" }).click();
-    await expect(editor(page).getByRole("alert")).toContainText("修改已保留");
+    // 503 is the server, not the edit: the copy must say the edit was NOT saved.
+    // It used to say "修改已保留…重試會沿用相同操作編號", which claimed a save outcome
+    // the request never established and hid the 2026-11-06 outage behind a retry
+    // prompt. The typed text still has to survive, and the retry still has to reuse
+    // the same operation id — that is the receipt contract, and it is unchanged.
+    const alert = editor(page).getByRole("alert");
+    await expect(alert).toContainText("並沒有儲存");
+    await expect(alert).not.toContainText("修改已保留");
+    await expect(editor(page).getByLabel("標題", { exact: true })).toHaveValue("不可以遺失");
     await editor(page).getByRole("button", { name: "儲存草稿" }).click();
     const commands = await page.evaluate(() => window.blogFixture.commands);
     expect(commands[1].requestId).toBe(commands[2].requestId);
