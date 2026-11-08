@@ -67,7 +67,6 @@ jobs:
       - run: npm run test:ui-inventory
 
       - run: npm run test:blog
-      - run: npm run test:blog-cms
       - run: npm run test:videos
       - run: npm run test:homepage
       - run: npm run test:mls
@@ -161,9 +160,6 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.12
       - run: npm ci
       # Full-schema golden uses only a new loopback container, synthetic data and
       # fake provider ports. No DATABASE_URL or provider secret is supplied.
@@ -197,7 +193,6 @@ jobs:
       - run: npm run test:property-sync:publication:owned:db
       - run: npm run test:whatsapp-enquiries:db
       - run: npm run test:cms:db
-      - run: npm run test:blog-cms:db
   browser-handoff:
     runs-on: ubuntu-latest
     permissions:

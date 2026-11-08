@@ -1,5 +1,3 @@
-import { blogNoStoreHeaders } from "@/lib/blog/public";
-import { BlogUnavailable } from "@/components/blog/BlogUnavailable";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { BookOpen, Building2, MessageCircle } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -11,6 +9,7 @@ import { PageHero } from "@/components/site/PageHero";
 import { EstateReviewGuides } from "@/components/site/EstateReviewGuides";
 import { Button } from "@/components/ui/button";
 import { whatsappUrl } from "@/config/site";
+import { articlePublishedAt, publishedBlogArticles } from "@/content/blog-articles";
 import { getEstateEntry } from "@/content/estate-registry";
 import { SITE_URL, canonicalLink, pageSeo } from "@/content/seo";
 import { itemListSchema, jsonLdScript } from "@/lib/schema";
@@ -23,16 +22,39 @@ import {
 const DISTRICT_FILTERS = ["全部", "深井", "青山公路", "汀九"] as const;
 type DistrictFilter = (typeof DISTRICT_FILTERS)[number];
 
+/**
+ * The static 屋苑開箱 set, in the shape the DB query returns.
+ *
+ * /blog already falls back to `blogArticles` when the `articles` table is
+ * empty; this page did not, and nothing has ever seeded an `articles` row, so
+ * 最新屋苑文章 rendered its empty state (and the page noindexed itself) on a
+ * site with 22 real estate pages behind it. A CMS article still wins outright,
+ * exactly as on /blog -- this is the floor, not a cap.
+ */
+function fallbackArticles(): ArticleSummary[] {
+  // Computed per request, not at module load: 28 of the 屋苑開箱 articles are
+  // scheduled for future dates, so a module-level list would freeze the set at
+  // server boot and only grow when something happened to redeploy.
+  return publishedBlogArticles()
+    .filter((article) => article.category === "屋苑開箱")
+    .map((article) => ({
+      slug: article.slug,
+      title: article.title,
+      excerpt: article.excerpt,
+      cover_image: null,
+      category: article.category,
+      reading_minutes: article.readingMinutes,
+      published_at: articlePublishedAt(article),
+    }));
+}
+
 export const Route = createFileRoute("/estate-reviews")({
   loader: async () => {
     const [articles, estates] = await Promise.all([
-      fetchPublishedArticlesByCategory("屋苑開箱"),
+      fetchPublishedArticlesByCategory("屋苑開箱").catch(() => [] as ArticleSummary[]),
       fetchEstateOptions(),
     ]);
-    return {
-      articles,
-      estates,
-    };
+    return { articles: articles.length ? articles : fallbackArticles(), estates };
   },
   head: ({ loaderData }) => ({
     meta: [
@@ -52,12 +74,6 @@ export const Route = createFileRoute("/estate-reviews")({
     ],
     links: [canonicalLink("/estate-reviews")],
   }),
-  headers: blogNoStoreHeaders,
-  staleTime: 0,
-  gcTime: 0,
-  preload: false,
-  shouldReload: true,
-  errorComponent: BlogUnavailable,
   component: EstateReviewsPage,
 });
 

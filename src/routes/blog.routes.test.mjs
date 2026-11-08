@@ -6,24 +6,6 @@ import test from "node:test";
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
 
-test("public CMS surfaces never import runtime article registry or cache publication snapshots", () => {
-  for (const file of [
-    "blog.tsx",
-    "blog_.$slug.tsx",
-    "estate-reviews.tsx",
-    "estate.$slug.tsx",
-    "sitemap[.]xml.ts",
-    "llms[.]txt.ts",
-  ]) {
-    const source = read("src/routes/" + file);
-    assert.doesNotMatch(source, /content\/blog-articles|fallbackArticle|publishedBlogArticles/);
-    assert.match(source, /blogNoStoreHeaders/, file);
-  }
-  assert.match(read("src/routes/blog.tsx"), /getPublicBlogPage/);
-  assert.match(read("src/routes/blog_.$slug.tsx"), /getPublicBlogArticle/);
-  assert.match(read("src/routes/blog_.$slug.tsx"), /<ArticleBody/);
-});
-
 test("blog detail is a root-owned non-nested route that can render independently", () => {
   const detailPath = "src/routes/blog_.$slug.tsx";
   const routeTree = read("src/routeTree.gen.ts");
@@ -129,12 +111,12 @@ test("blog article template renders a ToC that anchors each section heading", ()
   assert.match(source, /aria-label="目錄"/, "article should render a ToC nav");
   assert.match(
     source,
-    /headings\.length >= 2/,
+    /article\.sections\.length >= 2/,
     "ToC should only render for 2+ sections (a single-section article doesn't need one)",
   );
   assert.match(
     source,
-    /href=\{`#\$\{section\.id\}`\}/,
+    /href=\{`#\$\{sectionAnchors\[index\]\}`\}/,
     "each ToC entry should link to its section's anchor id",
   );
 });
@@ -184,23 +166,49 @@ test("blog article template mounts the live comparison table when compareEstateS
   );
 });
 
-test("blog category navigation is settings-driven and exact, with server pagination", () => {
+// P5e1 Task 5: /blog gained category filter chips, a search box, and richer
+// card metadata (author, published date, cover image).
+test("blog list renders a category filter for every named category plus an 全部 option", () => {
   const source = read("src/routes/blog.tsx");
-  assert.match(source, /categories/);
-  assert.match(source, /name: "全部"/);
-  assert.match(source, /category: c.key, page: 1/);
-  assert.match(source, /activeOptions=\{\{ exact: true \}\}/);
-  assert.match(source, /role="group" aria-label="按分類篩選文章"/);
-  assert.match(source, /aria-label="文章分頁"/);
-  assert.match(source, /title=\{settings.heading\}/);
-  assert.match(source, /lead=\{settings.introduction\}/);
+  assert.match(
+    source,
+    /CATEGORY_FILTERS = \["全部", \.\.\.BLOG_CATEGORIES\]/,
+    "category filter should cover 全部 plus every BLOG_CATEGORIES entry, not a hand-picked subset",
+  );
 });
 
-test("blog cards retain page search, author/date and authored cover alt", () => {
+test("blog filters are links with exact matching and no aria-pressed", () => {
   const source = read("src/routes/blog.tsx");
-  assert.match(source, /type="search"/);
-  assert.match(source, /搜尋本頁文章/);
-  assert.match(source, /article.author \?\? "晉誠地產編輯團隊"/);
-  assert.match(source, /formatHkDate\(article.publishedAt\)/);
-  assert.match(source, /alt=\{article.coverAlt \?\? article.title\}/);
+  assert.doesNotMatch(source, /aria-pressed/);
+  assert.match(source, /activeOptions=\{\{ exact: true \}\}/);
+  assert.match(source, /role="group" aria-label="按分類篩選文章"/);
+});
+
+test("blog list renders a client-side search box over the loaded articles", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(source, /type="search"/, "search input should exist");
+  assert.match(
+    source,
+    /matchesSearch\(searchQuery, \[article\.title, article\.excerpt, article\.category\]\)/,
+    "search should filter by title/excerpt/category, no new DB query",
+  );
+});
+
+test("blog list cards show author (defaulting to the editorial byline) and published date", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(
+    source,
+    /\{article\.author \?\? EDITORIAL_AUTHOR\}/,
+    "DB-sourced articles with no author column should default to the org byline, not a per-article guess",
+  );
+  assert.match(source, /formatHkDate\(article\.published_at\)/);
+});
+
+test("blog list cards render a cover image only when one exists", () => {
+  const source = read("src/routes/blog.tsx");
+  assert.match(
+    source,
+    /\{article\.cover_image && \(\s*<AppImage/,
+    "cover image should be conditionally rendered, not a fallback box on every card",
+  );
 });

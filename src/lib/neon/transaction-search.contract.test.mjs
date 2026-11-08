@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import ts from "typescript";
-import { unexpectedBlogReadUrl } from "./test-helpers/unexpected-blog-read.mjs";
 
 // Same harness as listing-search.contract.test.mjs: public-data.server.ts is
 // loaded as a data: URL module with getSql() stubbed to a recorder, so these
@@ -42,7 +41,6 @@ async function importPublicDataServerWithInjectedQuery(query) {
   const executable = inlineRelativeImports(
     transpile(read("src/lib/neon/public-data.server.ts"))
       .replace('import "@tanstack/react-start/server-only";', "")
-      .replace('from "./blog-public.server"', `from "${unexpectedBlogReadUrl}"`)
       .replace('from "./db.server"', `from "${dbUrl}"`),
     "src/lib/neon",
   );

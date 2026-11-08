@@ -1,4 +1,3 @@
-import { publicCall } from "./neon/blog-public";
 import type { VariantSet } from "./media/remote-variants.mjs";
 import type { PublicOffering } from "./property-public";
 import {
@@ -641,12 +640,12 @@ export type ArticleSummary = {
   cover_image: string | null;
   category: string | null;
   reading_minutes: number | null;
-  published_at: string | null;
+  published_at: string;
   updated_at?: string | null;
 };
 
 export async function fetchPublishedArticles(): Promise<ArticleSummary[]> {
-  return (await publicCall(() => fetchNeonPublishedArticles())) as ArticleSummary[];
+  return (await fetchNeonPublishedArticles()) as ArticleSummary[];
 }
 
 export async function fetchPublishedArticlesByCategory(
@@ -657,7 +656,7 @@ export async function fetchPublishedArticlesByCategory(
 }
 
 export async function fetchArticleBySlug(slug: string) {
-  return publicCall(() => fetchNeonArticleBySlug({ data: { slug } }));
+  return fetchNeonArticleBySlug({ data: { slug } });
 }
 
 export type RecentTransaction = NeonTransactionRow;

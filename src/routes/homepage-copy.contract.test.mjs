@@ -185,12 +185,13 @@ test("homepage does not claim listings were published today", () => {
 const CDN_CACHED_ROUTES = [
   "castle-peak-road.$segment.tsx",
   "castle-peak-road.index.tsx",
+  "estate.$slug.tsx",
   "index.tsx",
   "listings.tsx",
   "property.$listingNo.tsx",
 ];
 
-test("only the five allowlisted route files call publicPageCacheHeaders", async () => {
+test("only the six allowlisted route files call publicPageCacheHeaders", async () => {
   const { readdir } = await import("node:fs/promises");
   const files = (await readdir(new URL("./", import.meta.url))).filter((name) =>
     /\.tsx?$/.test(name),
@@ -210,13 +211,6 @@ test("only the five allowlisted route files call publicPageCacheHeaders", async 
   }
 });
 
-test("estate pages use no-store headers for live CMS article references", async () => {
-  const estate = await readFile(new URL("./estate.$slug.tsx", import.meta.url), "utf8");
-  assert.match(estate, /^\s*headers: blogNoStoreHeaders,/m);
-  assert.match(estate, /await getPublicRelatedArticles\(estate.slug\)/);
-  assert.doesNotMatch(estate, /publicPageCacheHeaders/);
-});
-
 test("__root.tsx has no headers option", async () => {
   const root = await readFile(new URL("./__root.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(root, /^\s*headers\s*:/m);
@@ -224,12 +218,7 @@ test("__root.tsx has no headers option", async () => {
 });
 
 test("no public route reads the request, cookies or headers during SSR", async () => {
-  for (const name of [
-    ...CDN_CACHED_ROUTES,
-    "estate.$slug.tsx",
-    "castle-peak-road.tsx",
-    "__root.tsx",
-  ]) {
+  for (const name of [...CDN_CACHED_ROUTES, "castle-peak-road.tsx", "__root.tsx"]) {
     const text = await readFile(new URL(`./${name}`, import.meta.url), "utf8");
     for (const reader of [
       "getRequest",
@@ -249,7 +238,13 @@ test("no public route reads the request, cookies or headers during SSR", async (
 // returning undefined does not clear its parent's. So a route nested under a
 // cached route would silently inherit the CDN header unless it is reviewed
 // into the allowlist or explicitly opts out with `private, no-store`.
-const CACHED_PARENT_PREFIXES = ["castle-peak-road.", "listings.", "property.$listingNo.", "index."];
+const CACHED_PARENT_PREFIXES = [
+  "castle-peak-road.",
+  "listings.",
+  "property.$listingNo.",
+  "estate.$slug.",
+  "index.",
+];
 
 function nestedRouteViolation(name, text) {
   if (!/\.tsx?$/.test(name) || /\.test\./.test(name)) return null;
@@ -285,7 +280,7 @@ test("no route nested under a cached route can inherit the CDN header", async ()
     /listings/,
   );
   assert.match(nestedRouteViolation("property.$listingNo.print.tsx", ""), /property/);
-  assert.equal(nestedRouteViolation("estate.$slug.reviews.tsx", ""), null);
+  assert.match(nestedRouteViolation("estate.$slug.reviews.tsx", ""), /estate/);
   assert.match(nestedRouteViolation("castle-peak-road.$segment.map.tsx", ""), /castle-peak-road/);
   assert.equal(
     nestedRouteViolation(
@@ -303,12 +298,7 @@ test("no route nested under a cached route can inherit the CDN header", async ()
 // layout) import directly, plus the server modules their loaders reach.
 test("components and loader helpers rendered on cached routes never read the request", async () => {
   const srcRoot = new URL("../", import.meta.url);
-  const routeFiles = [
-    ...CDN_CACHED_ROUTES,
-    "estate.$slug.tsx",
-    "castle-peak-road.tsx",
-    "__root.tsx",
-  ];
+  const routeFiles = [...CDN_CACHED_ROUTES, "castle-peak-road.tsx", "__root.tsx"];
   const modules = new Set([
     "lib/neon/db.server.ts",
     "lib/neon/public-data.server.ts",

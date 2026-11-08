@@ -15,7 +15,6 @@ export default tseslint.config(
       ".audit",
       ".task-logs/**",
       ".private-sync-evidence/**",
-      ".superpowers/**",
       ".venv-sync/**",
       "scripts/property-sync/.venv/**",
     ],

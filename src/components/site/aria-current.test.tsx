@@ -1,4 +1,4 @@
-import { beforeEach, expect, mock, test } from "bun:test";
+import { expect, test } from "bun:test";
 import {
   createMemoryHistory,
   createRootRoute,
@@ -12,67 +12,10 @@ import { createElement, Fragment } from "react";
 import { renderToString } from "react-dom/server";
 
 import { publishedBlogArticles } from "@/content/blog-articles";
-import { BlogRepositoryError } from "@/lib/blog/errors";
-import type { PublicBlogArticle } from "@/lib/neon/blog-public.server";
+import { Route as BlogPostRoute } from "@/routes/blog_.$slug";
 
 import { SiteFooter } from "./SiteFooter";
 import { SiteHeader } from "./SiteHeader";
-
-const registryArticle = publishedBlogArticles()[0];
-const article: PublicBlogArticle = {
-  id: "aria-current-article",
-  slug: registryArticle.slug,
-  title: "CMS 公開文章導覽測試",
-  excerpt: "公開文章摘要",
-  categoryId: "market",
-  category: "成交分析",
-  categoryName: "成交分析",
-  published: true,
-  publishedAt: "2026-01-01T00:00:00Z",
-  createdAt: "2026-01-01T00:00:00Z",
-  updatedAt: null,
-  coverImage: null,
-  coverAlt: null,
-  readingMinutes: 1,
-  seoTitle: null,
-  seoDescription: null,
-  body: { format: "legacy-text", text: "已儲存的公開文章內容。" },
-  links: [],
-  editorial: {
-    author: "測試編輯",
-    reviewer: null,
-    sourcesNote: null,
-    answerSummary: null,
-    compareEstateSlugs: [],
-  },
-  version: 0,
-  slugLocked: true,
-  editState: {
-    resourceId: "aria-current-article",
-    draftRevisionId: null,
-    draftVersion: null,
-    draftEditVersion: null,
-    currentPublishedVersion: null,
-    basePublishedVersion: null,
-    restoredFromRevisionId: null,
-  },
-};
-let unavailable = false;
-mock.module("@/lib/neon/blog-public", () => ({
-  // queries.ts imports this for legacy article reads; this route must not use it.
-  publicCall: async () => {
-    throw new Error("Unexpected legacy blog read in the aria-current harness");
-  },
-  getPublicBlogArticle: async (slug: string) => {
-    if (slug !== article.slug) throw new Error(`Unexpected article slug: ${slug}`);
-    if (unavailable) throw new BlogRepositoryError("BLOG_UNAVAILABLE", 503);
-    return structuredClone(article);
-  },
-}));
-const { Route: BlogPostRoute } = await import("@/routes/blog_.$slug");
-beforeEach(() => {
-  unavailable = false;
-});
 
 // FX-16 F-09 / I-1. TanStack Router sets aria-current="page" on any <Link> whose
 // destination is a prefix of the current path, after (and over) the caller's own
@@ -91,8 +34,8 @@ function buildRouter(url: string) {
       ),
   });
   // Mirrors routeTree.gen.ts, under a minimal root (the real __root renders the
-  // document shell). The real loader receives the CMS fixture through the public
-  // read boundary; an unavailable read must render the route's error component.
+  // document shell). The loader's DB read rejects outside Start and falls back to
+  // the bundled article, as it does when the database is unreachable.
   const blogPost = BlogPostRoute.update({
     id: "/blog_/$slug",
     path: "/blog/$slug",
@@ -125,6 +68,7 @@ function currentLinks($: CheerioAPI, value: string) {
     .get();
 }
 
+const article = publishedBlogArticles()[0];
 const postPath = `/blog/${article.slug}`;
 
 test("market menu features 晉誠最新成交 before YouTube and preserves its blog category", async () => {
@@ -159,16 +103,6 @@ test("a blog post: section-root links (header menu, breadcrumb, footer) are not 
   expect($('header a[href="/blog"]').length).toBeGreaterThan(0);
   blogLinks.each((_, el) => expect($(el).attr("aria-current")).toBeUndefined());
   expect($('footer a[href="/"]').attr("aria-current")).toBeUndefined();
-});
-
-test("a blog outage renders unavailable instead of the bundled article", async () => {
-  unavailable = true;
-  const $ = await renderAt(postPath);
-  expect($('main [role="alert"] h1').text()).toBe("文章暫時未能載入");
-  expect($('main [role="alert"] button[type="button"]').text()).toBe("重試");
-  expect($("main").text()).not.toContain(article.title);
-  expect($("main").text()).not.toContain(registryArticle.title);
-  expect($("[data-article-body]").length).toBe(0);
 });
 
 test('a header section link keeps aria-current="true" under the router', async () => {

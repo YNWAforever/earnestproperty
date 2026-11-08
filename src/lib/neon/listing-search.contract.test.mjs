@@ -4,7 +4,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import ts from "typescript";
-import { unexpectedBlogReadUrl } from "./test-helpers/unexpected-blog-read.mjs";
 import { pathToFileURL } from "node:url";
 
 // Same harness as agent-profiles.contract.test.mjs: public-data.server.ts is
@@ -43,7 +42,6 @@ async function importPublicDataServerWithInjectedQuery(query) {
   const executable = inlineRelativeImports(
     transpile(read("src/lib/neon/public-data.server.ts"))
       .replace('import "@tanstack/react-start/server-only";', "")
-      .replace('from "./blog-public.server"', `from "${unexpectedBlogReadUrl}"`)
       .replace('from "./db.server"', `from "${dbUrl}"`)
       .replace(
         'import("../mls/public-source-metadata.mjs")',
@@ -562,7 +560,6 @@ async function loadListingQueries(searchListings) {
   `;
 
   const queriesSource = transpile(read("src/lib/queries.ts"))
-    .replace('from "./neon/blog-public"', `from "${unexpectedBlogReadUrl}"`)
     .replace('from "@/lib/neon/public-data"', `from "${dataUrl(publicDataStubSource)}"`)
     .replace('from "@/content/castle-peak-road"', `from "${dataUrl(castlePeakRoadStubSource)}"`)
     .replace('from "@/content/estate-registry"', `from "${dataUrl(estateRegistryStubSource)}"`)

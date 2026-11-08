@@ -1,5 +1,4 @@
 import "@tanstack/react-start/server-only";
-import { publicBlogRead } from "./blog-public.server";
 import {
   canonicalListingCte,
   CURRENT_PUBLIC_OFFERING_ORDER,
@@ -1363,22 +1362,18 @@ export async function fetchSitemapTimestamps(): Promise<{
   estates: Record<string, string | null>;
   articles: Record<string, string | null>;
 }> {
-  return publicBlogRead(async () => {
-    const [estateRows, articleRows] = await Promise.all([
-      sql().query("SELECT slug, updated_at FROM estates WHERE published = true"),
-      sql().query(
-        "SELECT slug, updated_at FROM articles WHERE published = true AND (published_at IS NULL OR published_at <= now()) AND slug <> 'editorial-standards'",
-      ),
-    ]);
-    return {
-      estates: Object.fromEntries(
-        estateRows.map((row) => [stringOrEmpty(row.slug), dateOrNull(row.updated_at)]),
-      ),
-      articles: Object.fromEntries(
-        articleRows.map((row) => [stringOrEmpty(row.slug), dateOrNull(row.updated_at)]),
-      ),
-    };
-  });
+  const [estateRows, articleRows] = await Promise.all([
+    sql().query("SELECT slug, updated_at FROM estates WHERE published = true"),
+    sql().query("SELECT slug, updated_at FROM articles WHERE published = true"),
+  ]);
+  return {
+    estates: Object.fromEntries(
+      estateRows.map((row) => [stringOrEmpty(row.slug), dateOrNull(row.updated_at)]),
+    ),
+    articles: Object.fromEntries(
+      articleRows.map((row) => [stringOrEmpty(row.slug), dateOrNull(row.updated_at)]),
+    ),
+  };
 }
 
 /**
@@ -1765,66 +1760,62 @@ export async function fetchRecentTransactionsCount(
 }
 
 export async function fetchPublishedArticles() {
-  return publicBlogRead(async () => {
-    const rows = await sql().query(
-      `
-    SELECT a.slug, a.title, a.excerpt, a.cover_image, c.key AS category, a.reading_minutes, a.published_at, a.updated_at, a.seo_title, a.seo_description
-    FROM articles a LEFT JOIN blog_categories c ON c.id=a.category_id
-    WHERE a.published = true AND (a.published_at IS NULL OR a.published_at <= now()) AND a.slug <> 'editorial-standards'
-    ORDER BY a.published_at DESC NULLS LAST, a.created_at DESC, a.id ASC
+  const rows = await sql().query(
+    `
+    SELECT slug, title, excerpt, cover_image, category, reading_minutes, published_at, updated_at
+    FROM articles
+    WHERE published = true
+    ORDER BY published_at DESC NULLS LAST, created_at DESC
     `,
-    );
-    return rows.map((row) => ({
-      slug: stringOrEmpty(row.slug),
-      title: stringOrEmpty(row.title),
-      excerpt: stringOrNull(row.excerpt),
-      cover_image: stringOrNull(row.cover_image),
-      category: stringOrNull(row.category),
-      reading_minutes: numberOrNull(row.reading_minutes),
-      // The admin CMS has collected these two per article since
-      // 20260623090000_neon_admin_crm_whatsapp.sql, and nothing ever selected
-      // them -- so every hand-written article SEO 標題/描述 was written to the
-      // database and silently discarded. blog_.$slug.tsx's head() reads them now.
-      seo_title: stringOrNull(row.seo_title),
-      seo_description: stringOrNull(row.seo_description),
-      published_at: dateOrNull(row.published_at),
-      updated_at: dateOrNull(row.updated_at),
-    }));
-  });
+  );
+  return rows.map((row) => ({
+    slug: stringOrEmpty(row.slug),
+    title: stringOrEmpty(row.title),
+    excerpt: stringOrNull(row.excerpt),
+    cover_image: stringOrNull(row.cover_image),
+    category: stringOrNull(row.category),
+    reading_minutes: numberOrNull(row.reading_minutes),
+    // The admin CMS has collected these two per article since
+    // 20260623090000_neon_admin_crm_whatsapp.sql, and nothing ever selected
+    // them -- so every hand-written article SEO 標題/描述 was written to the
+    // database and silently discarded. blog_.$slug.tsx's head() reads them now.
+    seo_title: stringOrNull(row.seo_title),
+    seo_description: stringOrNull(row.seo_description),
+    published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
+    updated_at: dateOrNull(row.updated_at),
+  }));
 }
 
 export async function fetchArticleBySlug(input: { slug: string }) {
-  return publicBlogRead(async () => {
-    const rows = await sql().query(
-      `
-    SELECT a.slug, a.title, a.excerpt, a.content, a.cover_image, c.key AS category, a.reading_minutes,
-      a.published_at, a.updated_at, a.seo_title, a.seo_description
-    FROM articles a LEFT JOIN blog_categories c ON c.id=a.category_id
-    WHERE a.slug = $1 AND a.published = true AND (a.published_at IS NULL OR a.published_at <= now()) AND a.slug <> 'editorial-standards'
+  const rows = await sql().query(
+    `
+    SELECT slug, title, excerpt, content, cover_image, category, reading_minutes,
+      published_at, updated_at, seo_title, seo_description
+    FROM articles
+    WHERE slug = $1 AND published = true
     LIMIT 1
     `,
-      [input.slug],
-    );
-    const row = rows[0];
-    if (!row) return null;
-    return {
-      slug: stringOrEmpty(row.slug),
-      title: stringOrEmpty(row.title),
-      excerpt: stringOrNull(row.excerpt),
-      content: stringOrNull(row.content),
-      cover_image: stringOrNull(row.cover_image),
-      category: stringOrNull(row.category),
-      reading_minutes: numberOrNull(row.reading_minutes),
-      // The admin CMS has collected these two per article since
-      // 20260623090000_neon_admin_crm_whatsapp.sql, and nothing ever selected
-      // them -- so every hand-written article SEO 標題/描述 was written to the
-      // database and silently discarded. blog_.$slug.tsx's head() reads them now.
-      seo_title: stringOrNull(row.seo_title),
-      seo_description: stringOrNull(row.seo_description),
-      published_at: dateOrNull(row.published_at),
-      updated_at: dateOrNull(row.updated_at),
-    };
-  });
+    [input.slug],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    slug: stringOrEmpty(row.slug),
+    title: stringOrEmpty(row.title),
+    excerpt: stringOrNull(row.excerpt),
+    content: stringOrNull(row.content),
+    cover_image: stringOrNull(row.cover_image),
+    category: stringOrNull(row.category),
+    reading_minutes: numberOrNull(row.reading_minutes),
+    // The admin CMS has collected these two per article since
+    // 20260623090000_neon_admin_crm_whatsapp.sql, and nothing ever selected
+    // them -- so every hand-written article SEO 標題/描述 was written to the
+    // database and silently discarded. blog_.$slug.tsx's head() reads them now.
+    seo_title: stringOrNull(row.seo_title),
+    seo_description: stringOrNull(row.seo_description),
+    published_at: dateOrNull(row.published_at) ?? new Date().toISOString(),
+    updated_at: dateOrNull(row.updated_at),
+  };
 }
 
 export async function fetchEstateDirectory(): Promise<
