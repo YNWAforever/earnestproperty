@@ -260,6 +260,107 @@ test(
           );
         },
       );
+      await t.test("a never-published article draft is a valid copilot source", async () => {
+        await query(
+          "UPDATE ai_content_proposals SET status='failed' WHERE requested_by=$1 AND status='generating'",
+          [manager.id],
+        );
+        await query("UPDATE staff_users SET auth_user_id='synthetic-manager' WHERE id=$1", [
+          manager.id,
+        ]);
+        const [draft] = await query("SELECT gen_random_uuid() AS id");
+        await query(
+          `INSERT INTO cms_content_revisions(resource_type,resource_id,version_number,state,payload,created_by)
+             VALUES('article',$1::uuid,1,'draft',$2::jsonb,$3)`,
+          [
+            draft.id,
+            JSON.stringify({
+              slug: "qa-draft-" + number++,
+              title: "草稿標題",
+              content: "草稿正文",
+            }),
+            manager.id,
+          ],
+        );
+        // CMS v2 writes `articles` only on publish, so this draft has no projection row.
+        const [articlesRow] = await query("SELECT count(*)::int AS n FROM articles WHERE id=$1", [
+          draft.id,
+        ]);
+        assert.equal(articlesRow.n, 0);
+        const [{ revision }] = await query(
+          "SELECT ep_content_source_revision('article',$1::uuid) revision",
+          [draft.id],
+        );
+        assert.match(revision, /^[0-9a-f]{32}$/);
+        const [{ snapshot }] = await query(
+          "SELECT ep_assert_content_snapshot('article',$1::uuid,$2::uuid,$3,$4) snapshot",
+          [draft.id, manager.id, "synthetic-manager", revision],
+        );
+        assert.equal(snapshot, revision);
+
+        // Editing the draft moves the source revision, so a captured proposal goes stale.
+        await query(
+          `UPDATE cms_content_revisions
+             SET payload=jsonb_set(payload,'{title}','"改過的標題"')
+             WHERE resource_type='article' AND resource_id=$1::uuid`,
+          [draft.id],
+        );
+        const [{ revision: changed }] = await query(
+          "SELECT ep_content_source_revision('article',$1::uuid) revision",
+          [draft.id],
+        );
+        assert.notEqual(changed, revision);
+        await assert.rejects(
+          query("SELECT ep_assert_content_snapshot('article',$1::uuid,$2::uuid,$3,$4)", [
+            draft.id,
+            manager.id,
+            "synthetic-manager",
+            revision,
+          ]),
+          /COPILOT_STALE_PROPOSAL/,
+        );
+
+        // Drafts stay private: another manager cannot use them as a source.
+        const [other] = await query(
+          "INSERT INTO staff_users(auth_user_id,email) VALUES('synthetic-other','qa-other@example.invalid') RETURNING id",
+        );
+        await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager')", [other.id]);
+        await assert.rejects(
+          query("SELECT ep_assert_content_snapshot('article',$1::uuid,$2::uuid,$3,$4)", [
+            draft.id,
+            other.id,
+            "synthetic-other",
+            changed,
+          ]),
+          /COPILOT_FORBIDDEN/,
+        );
+
+        // The proposal pipeline accepts the draft id end to end.
+        const request = {
+          resourceType: "article",
+          resourceId: draft.id,
+          action: "improve",
+          selectedFields: ["title"],
+          tone: "professional_property",
+          targetLanguage: "zh-HK",
+          researchMode: "internal",
+        };
+        const row = await repo.startContentProposal({
+          staffId: manager.id,
+          authUserId: "synthetic-manager",
+          request,
+          sourceFingerprint: await buildContentFingerprint({ title: "改過的標題" }),
+          sourceDbRevision: changed,
+          knowledgeDependencies: [],
+          promptVersion: "content-copilot-v1",
+        });
+        assert.equal(row.resourceId, draft.id);
+        await repo.failContentProposal({
+          staffId: manager.id,
+          proposalId: row.id,
+          errorCode: "QA_DRAFT_SOURCE",
+        });
+      });
       for (const phase of ["completion", "apply"]) {
         await t.test("authenticated account binding change rejects " + phase, async () => {
           await query("UPDATE staff_users SET auth_user_id='synthetic-manager' WHERE id=$1", [
