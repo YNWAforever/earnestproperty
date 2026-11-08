@@ -70,6 +70,7 @@ export type ContentCopilotServiceDeps = {
     prompt: string;
     context: LoadedContentContext;
     evidence: ContentCopilotEvidence[];
+    sessionId?: string;
   }) => Promise<GenerationResult>;
   startProposal?: (input: Record<string, unknown>) => Promise<ProposalRecord>;
   completeProposal?: (input: Record<string, unknown>) => Promise<ProposalRecord>;
@@ -133,6 +134,9 @@ export function createContentCopilotService(deps: ContentCopilotServiceDeps = {}
           prompt: buildUserPrompt(normalized, context, evidence),
           context,
           evidence,
+          // One conversation per proposal: the provider uses this for routing and
+          // prompt caching, and rejects requests that omit it.
+          sessionId: proposalRecord.id,
         });
         if (!generated.ok || !generated.value) {
           await failProposal({
@@ -480,7 +484,7 @@ async function defaultResearch(input: { query: string; maxResults: number }) {
   const module = await import("./tavily-research.server.ts");
   return module.createTavilyResearchClient({ apiKey: config }).search(input);
 }
-async function defaultGenerate(input: { system: string; prompt: string }) {
+async function defaultGenerate(input: { system: string; prompt: string; sessionId?: string }) {
   const configModule = await import("./content-copilot-config.server.ts");
   const module = await import("./opencode-go.server.ts");
   return module

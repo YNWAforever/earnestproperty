@@ -43,6 +43,68 @@ test("OpenCode client posts to normalized chat completions endpoint", async () =
   });
   assert.deepEqual(result.value, { patches: [{ claimType: "subjective" }] });
   assert.deepEqual(result.usageMetadata, { inputTokens: 4, outputTokens: 5, totalTokens: 9 });
+  assert.equal(requests[0].init.headers["user-agent"], "earnest-property-cms-copilot/1.0");
+  assert.match(requests[0].init.headers["x-opencode-session"], /^[0-9a-f-]{36}$/);
+});
+
+test("OpenCode client reuses the conversation session id it is given", async () => {
+  const headers = [];
+  const client = createOpenCodeGoClient({
+    config: enabledConfig,
+    fetchImpl: async (_, init) => {
+      headers.push(init.headers);
+      return new Response(
+        JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }),
+        {
+          status: 200,
+        },
+      );
+    },
+  });
+
+  await client.generateProposal({ system: "rules", prompt: "record", sessionId: "proposal-123" });
+
+  assert.equal(headers[0]["x-opencode-session"], "proposal-123");
+});
+
+test("OpenCode client reports an expired key as unauthorized", async () => {
+  const logged = [];
+  const originalError = console.error;
+  console.error = (...args) => logged.push(args);
+  try {
+    let attempts = 0;
+    const client = createOpenCodeGoClient({
+      config: enabledConfig,
+      sleepImpl: async () => undefined,
+      fetchImpl: async () => {
+        attempts += 1;
+        return new Response(
+          JSON.stringify({
+            error: {
+              type: "authentication_error",
+              code: "api_key_expired",
+              message: "This API key has expired.",
+            },
+          }),
+          { status: 401 },
+        );
+      },
+    });
+
+    const result = await client.generateProposal({ system: "rules", prompt: "record" });
+
+    // A dead credential is not a transient outage: it must not be retried or
+    // reported as "try again later".
+    assert.equal(result.ok, false);
+    assert.equal(result.error, "OPENCODE_GO_UNAUTHORIZED");
+    assert.equal(attempts, 1);
+    assert.deepEqual(logged[0], [
+      "[copilot] provider_unauthorized",
+      { status: 401, model: "go-content" },
+    ]);
+  } finally {
+    console.error = originalError;
+  }
 });
 
 test("OpenCode client retries 429 twice", async () => {
