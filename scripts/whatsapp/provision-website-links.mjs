@@ -26,22 +26,27 @@
  * - One transaction: either every planned link exists afterwards or none does.
  * - Idempotent: a listing that already has exactly one usable link is skipped, so
  *   re-running after a partial run provisions only what is missing.
- * - The company channel is discovered from the existing verified website link
- *   rather than assumed from env, so it is by construction the channel the site
- *   matches against.
+ * - The company channel is read from the same env rule the site uses
+ *   (`EP_WA_COMPANY_CHANNEL_ID`, else `WOZTELL_CHANNEL_ID` while
+ *   `EP_WA_ENQUIRY_MODE` is observe/active), or from `--channel`. It is never
+ *   inferred from an existing link: on 2026-10-30 the production channel changed
+ *   and the one old verified link still carried the retired channel, which is
+ *   exactly how a run can provision 628 links that the redirect then rejects.
+ *   Readable links already on a different channel abort the run.
  * - After the write it re-runs the same coverage query the site uses and refuses
  *   to report success unless every canonical listing has exactly one candidate.
  *
  * Usage:
- *   node scripts/whatsapp/provision-website-links.mjs                # dry run
- *   node scripts/whatsapp/provision-website-links.mjs --apply
- *   node scripts/whatsapp/provision-website-links.mjs --apply --expect 628
+ *   EP_WA_COMPANY_CHANNEL_ID=<id> node scripts/whatsapp/provision-website-links.mjs
+ *   EP_WA_COMPANY_CHANNEL_ID=<id> node scripts/whatsapp/provision-website-links.mjs --apply
+ *   node scripts/whatsapp/provision-website-links.mjs --apply --expect 628 --channel <id>
  */
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 
 import { buildWebsiteCoverageQuery } from "../../src/lib/neon/whatsapp-coverage-query.mjs";
+import { resolveCompanyChannel } from "./company-channel.mjs";
 import { planWebsiteLinks } from "./website-link-codes.mjs";
 
 const ENV_FILE = ".env.local";
@@ -80,28 +85,27 @@ if (expectIndex >= 0 && !Number.isInteger(expectCount)) {
 const client = new Client({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
 await client.connect();
 
-/** The channel the site actually matches on: the one on its one verified website link. */
-async function discoverChannel() {
-  const { rows: verified } = await client.query(
-    `SELECT DISTINCT v.channel_id
-       FROM whatsapp_tracking_link_versions v
-       JOIN whatsapp_tracking_links l ON l.id = v.link_id AND l.current_version = v.version
-      WHERE v.placement_source = 'website'
-        AND v.entry_point_type = 'sales'
-        AND v.placement_verified_at IS NOT NULL
-        AND v.enabled`,
-  );
-  if (verified.length !== 1) {
-    throw new Error(
-      `expected exactly one verified website channel, found ${verified.length}: ` +
-        JSON.stringify(verified.map((row) => row.channel_id)),
-    );
-  }
-  return verified[0].channel_id;
-}
+const { channelId, source: channelSource } = resolveCompanyChannel({ env, argv: process.argv });
+console.log(`company channel: ${channelId} (from ${channelSource})`);
 
-const channelId = await discoverChannel();
-console.log(`company channel: ${channelId}`);
+// A readable link on another channel means a previous run used a different
+// company channel. Provisioning now would duplicate codes and leave the old
+// links inert; move them to a new version first.
+const { rows: foreignChannels } = await client.query(
+  `SELECT v.channel_id, count(*)::int AS n
+     FROM whatsapp_tracking_links l
+     JOIN whatsapp_tracking_link_versions v ON v.link_id = l.id AND l.current_version = v.version
+    WHERE l.code LIKE 'web-%' AND v.channel_id <> $1
+    GROUP BY v.channel_id
+    ORDER BY n DESC`,
+  [channelId],
+);
+if (foreignChannels.length) {
+  throw new Error(
+    `readable links already exist on another channel: ${JSON.stringify(foreignChannels)}. ` +
+      `The company channel changed; re-version those links to ${channelId} before provisioning.`,
+  );
+}
 
 const coverage = async () =>
   (await client.query(buildWebsiteCoverageQuery(), [channelId, null, null, null])).rows;
