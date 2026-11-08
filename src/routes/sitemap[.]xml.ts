@@ -99,7 +99,6 @@ export const Route = createFileRoute("/sitemap.xml")({
             // sitemap answered 503 BLOG_UNAVAILABLE instead of shipping without the
             // blog URLs. Losing 112 article URLs is bad; losing the sitemap is worse.
             fetchPublishedArticlesByCategory("屋苑開箱").catch((error: unknown) => {
-              degraded = true;
               console.error(
                 "[sitemap] fetchPublishedArticlesByCategory failed; shipping sitemap without estate-review articles",
                 error,
@@ -107,7 +106,6 @@ export const Route = createFileRoute("/sitemap.xml")({
               return [] as Awaited<ReturnType<typeof fetchPublishedArticlesByCategory>>;
             }),
             fetchSitemapTimestamps().catch((error: unknown) => {
-              degraded = true;
               console.error(
                 "[sitemap] fetchSitemapTimestamps failed; shipping sitemap without CMS lastmod values",
                 error,

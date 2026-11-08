@@ -304,11 +304,24 @@ test("actual sitemap handler refreshes DB article set, preserves policy route an
     const withdrawn = await (await Route.server.handlers.GET()).text();
     assert.doesNotMatch(withdrawn, /saved-article|sham-tseng-buying-guide-2026/);
     assert.match(withdrawn, /\/blog\/editorial-standards/);
+    // A failing blog/CMS source must degrade the sitemap, not delete it.
+    //
+    // This used to assert 503 BLOG_UNAVAILABLE: one unguarded source took the
+    // whole sitemap down. On 2026-11-06 that is exactly what happened -- an
+    // unapplied blog migration made fetchSitemapTimestamps throw and every URL,
+    // including the money listing pages, disappeared from /sitemap.xml. Shipping
+    // a sitemap without the blog URLs is strictly better than shipping no
+    // sitemap, so the contract is now 200 + degraded content.
     fail = true;
     const failed = await Route.server.handlers.GET();
-    assert.equal(failed.status, 503);
+    assert.equal(failed.status, 200);
     assert.equal(failed.headers.get("cache-control"), "no-store");
-    assert.equal(await failed.text(), "BLOG_UNAVAILABLE");
+    const degraded = await failed.text();
+    // The origin depends on the resolved site origin, so match paths only.
+    assert.match(degraded, /<loc>[^<]*\/<\/loc>/, "the homepage survives");
+    assert.match(degraded, /<loc>[^<]*\/listings<\/loc>/, "the money listing page survives");
+    assert.match(degraded, /\/blog\/editorial-standards/);
+    assert.doesNotMatch(degraded, /\/blog\/saved-article/, "article URLs are unavailable");
   } finally {
     hooks.deregister();
     delete globalThis.__task7SitemapReads;
