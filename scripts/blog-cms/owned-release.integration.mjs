@@ -14,6 +14,13 @@ const { sha256 } = await import("./production-adapter.ts");
 const { releaseArtifacts, releaseMigrations } =
   await import("../../src/lib/neon/blog-release-packet.ts");
 
+// The release is a historical 95 -> 98 replay. Both owned instances must be built from
+// the migrations that existed at release time, not from the live manifest: a migration
+// added later (e.g. one replacing a guard function) would otherwise change the sealed
+// schema of the "after" reference and make the replay fail for the wrong reason.
+const releaseStart = MIGRATION_VERSIONS.indexOf(releaseMigrations[0]);
+const baselineMigrationVersions = MIGRATION_VERSIONS.slice(0, releaseStart);
+
 const urlKeys = [
   "DATABASE_URL",
   "DATABASE_URL_UNPOOLED",
@@ -68,7 +75,10 @@ await withOwnedPostgres(
       await target.close();
     }
   },
-  { image: PINNED_POSTGRES_18, migrationVersions: MIGRATION_VERSIONS },
+  {
+    image: PINNED_POSTGRES_18,
+    migrationVersions: [...baselineMigrationVersions, ...releaseMigrations],
+  },
 );
 
 await withOwnedPostgres(
@@ -133,7 +143,10 @@ await withOwnedPostgres(
       await query(helper.replace("BEGIN", "BEGIN\n  NULL; -- fixture drift"));
       try {
         await assert.rejects(run(), /RELEASE_SCHEMA/);
-        assert.equal(Number((await query("SELECT count(*) n FROM app_migrations"))[0].n), 95);
+        assert.equal(
+          Number((await query("SELECT count(*) n FROM app_migrations"))[0].n),
+          baselineMigrationVersions.length,
+        );
         assert.deepEqual(await effects(), baselineEffects);
       } finally {
         await query(helper);
@@ -271,7 +284,7 @@ await withOwnedPostgres(
       await target.close();
     }
   },
-  { image: PINNED_POSTGRES_18, migrationVersions: MIGRATION_VERSIONS.slice(0, 95) },
+  { image: PINNED_POSTGRES_18, migrationVersions: baselineMigrationVersions },
 );
 
 for (const id of ownedIds) {
