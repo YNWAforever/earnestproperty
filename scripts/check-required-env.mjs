@@ -41,7 +41,15 @@ const REQUIRED_FOR_WHATSAPP_CTAS = [
   "VITE_CONTACT_PHONE_DISPLAY",
   "VITE_CONTACT_PHONE_TEL",
 ];
-const WHATSAPP_INTEGRATION = ["WOZTELL_APP_ID", "WOZTELL_CHANNEL_ID", "WOZTELL_CHANNEL_SECRET"];
+const WHATSAPP_INTEGRATION = [
+  ["WOZTELL_APP_ID"],
+  // The company channel has two accepted names. Production keeps EP_WA_COMPANY_CHANNEL_ID
+  // (the value it changed to on 2026-10-30) and providerChannelId() falls back to it, so
+  // either name satisfies the integration requirement -- deleting the legacy
+  // WOZTELL_CHANNEL_ID must not block a production build.
+  ["WOZTELL_CHANNEL_ID", "EP_WA_COMPANY_CHANNEL_ID"],
+  ["WOZTELL_CHANNEL_SECRET"],
+];
 
 const vercelEnv = process.env.VERCEL_ENV;
 const isVercelDeploy = vercelEnv === "production" || vercelEnv === "preview";
@@ -120,8 +128,9 @@ if (isVercelDeploy) {
   // company phone number.
   const problems = [];
   if (process.env.WOZTELL_ENABLED === "true") {
-    for (const name of WHATSAPP_INTEGRATION) {
-      if (!process.env[name]?.trim()) problems.push(`${name} is not set (WOZTELL_ENABLED=true)`);
+    for (const names of WHATSAPP_INTEGRATION) {
+      if (!names.some((name) => process.env[name]?.trim()))
+        problems.push(`${names.join(" / ")} is not set (WOZTELL_ENABLED=true)`);
     }
   }
   const isSet = (value) => typeof value === "string" && value.length > 0;
