@@ -21,6 +21,7 @@ function backfillHandler(calls) {
         return { id: "run-1", completed: false };
       },
     },
+    "@/lib/whatsapp-enquiries/wa-config.server": { providerChannelId: () => "test" },
   };
   const mockRequire = (specifier) => {
     if (specifier === "@tanstack/react-start/server-only") return {};

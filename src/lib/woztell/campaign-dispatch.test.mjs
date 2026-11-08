@@ -294,7 +294,8 @@ test("a 401 re-queues the undispatched recipient and stops the run", async () =>
 test("missing configuration still re-queues and stops exactly as before", async () => {
   const { run, updates } = runOneSend(async () => ({
     ok: false,
-    error: "Missing WOZTELL_BOT_ACCESS_TOKEN or WOZTELL_CHANNEL_ID",
+    error:
+      "Missing WOZTELL_BOT_ACCESS_TOKEN or company channel (WOZTELL_CHANNEL_ID / EP_WA_COMPANY_CHANNEL_ID)",
   }));
   await assert.rejects(run, (error) => error.code === "WOZTELL_CONFIGURATION_UNAVAILABLE");
   assert.deepEqual(updates, [["1", "queued", "WOZTELL_CONFIGURATION_UNAVAILABLE"]]);

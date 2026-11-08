@@ -14,13 +14,17 @@ export const CONFIGURATION = [
   [
     "woztell.bot",
     "WozTell channel and Bot API settings",
-    [["WOZTELL_BOT_ACCESS_TOKEN"], ["WOZTELL_CHANNEL_ID"], ["WOZTELL_CHANNEL_SECRET"]],
+    [
+      ["WOZTELL_BOT_ACCESS_TOKEN"],
+      ["WOZTELL_CHANNEL_ID", "EP_WA_COMPANY_CHANNEL_ID"],
+      ["WOZTELL_CHANNEL_SECRET"],
+    ],
     "WOZTELL_ENABLED",
   ],
   [
     "woztell.history",
     "WozTell Open API settings",
-    [["WOZTELL_OPEN_API_TOKEN"], ["WOZTELL_CHANNEL_ID"]],
+    [["WOZTELL_OPEN_API_TOKEN"], ["WOZTELL_CHANNEL_ID", "EP_WA_COMPANY_CHANNEL_ID"]],
     "WOZTELL_ENABLED",
   ],
   ["blob", "Vercel Blob store token", [["BLOB_READ_WRITE_TOKEN"]]],

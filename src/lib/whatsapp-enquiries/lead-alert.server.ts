@@ -13,6 +13,7 @@ import {
   type StaffNotificationTransport,
 } from "./staff-notifications.server.ts";
 import { staffDestinationKey, staffDestinationNotACustomer } from "./staff-recipient-guard.ts";
+import { providerChannelId } from "./wa-config.server.ts";
 
 /**
  * FX-05b: one staff WhatsApp alert per new lead.
@@ -159,7 +160,7 @@ export async function handleLeadStaffAlert(
       ? "notifications_disabled"
       : !runtime.template
         ? "template_not_configured"
-        : !runtime.channelId || runtime.channelId !== process.env.WOZTELL_CHANNEL_ID
+        : !runtime.channelId || runtime.channelId !== providerChannelId()
           ? "channel_unverified"
           : !transport?.verificationRef || !transport.sendStaffWhatsApp
             ? "transport_capability_unverified"

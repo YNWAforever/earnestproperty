@@ -18,6 +18,7 @@ import {
 } from "@/lib/neon/db.server";
 
 import type { CrmAiProfile, CrmAiTag } from "./ai-types";
+import { providerChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
 import {
   canAutoApplyAiTag,
   classifyAiTagSafety,
@@ -249,7 +250,7 @@ export async function fetchCrmAiProfile(input: { leadId?: string; contactId?: st
        AND ($2::uuid IS NULL OR p.contact_id = $2::uuid)
      ORDER BY p.updated_at DESC, p.created_at DESC
      LIMIT 1`,
-    [input.leadId ?? null, input.contactId ?? null, process.env.WOZTELL_CHANNEL_ID || null],
+    [input.leadId ?? null, input.contactId ?? null, providerChannelId()],
   );
   const tags = await queryRows(
     `WITH ranked AS (
@@ -272,7 +273,7 @@ export async function fetchCrmAiProfile(input: { leadId?: string; contactId?: st
   const [latestRun] = input.leadId
     ? await queryRows(
         "SELECT r.*,ep_crm_analysis_source_revision(r.lead_id,$2) AS current_source_fingerprint FROM crm_ai_analysis_runs r WHERE lead_id=$1 ORDER BY started_at DESC,id DESC LIMIT 1",
-        [input.leadId, process.env.WOZTELL_CHANNEL_ID || null],
+        [input.leadId, providerChannelId()],
       )
     : [];
 
@@ -311,7 +312,7 @@ export async function approveCrmAiTag(
         input.tagId,
         actor.staffId,
         actor.authUserId,
-        process.env.WOZTELL_CHANNEL_ID || null,
+        providerChannelId(),
         input.approve,
       ]),
       tx.query(
@@ -368,7 +369,7 @@ async function fetchLeadInput(leadId: string): Promise<LeadInput | null> {
      WHERE l.id = $1
      GROUP BY l.id, c.id
      LIMIT 1`,
-    [leadId, process.env.WOZTELL_CHANNEL_ID || null],
+    [leadId, providerChannelId()],
   );
   const row = rows[0];
   if (!row) return null;

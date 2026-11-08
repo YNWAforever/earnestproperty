@@ -1,9 +1,10 @@
 import "@tanstack/react-start/server-only";
 import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 import { createHash } from "node:crypto";
+import { providerChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
 import { fetchWoztellHistoryPage, chatNodeToEvent } from "./woztell-history.server.ts";
 export async function startHistoryImport(staffId: string, mode: "forward" | "backward") {
-  const channel = process.env.WOZTELL_CHANNEL_ID;
+  const channel = providerChannelId();
   if (!channel || !process.env.WOZTELL_OPEN_API_TOKEN)
     throw new Error("WOZTELL_HISTORY_CONFIGURATION_REQUIRED");
   const id = createHash("sha256")
@@ -58,7 +59,7 @@ export async function runHistoryImportPage(
     },
     async fetchPage(p: HistoryJobPayload) {
       const token = process.env.WOZTELL_OPEN_API_TOKEN;
-      if (!token || p.channelId !== process.env.WOZTELL_CHANNEL_ID)
+      if (!token || p.channelId !== providerChannelId())
         throw new Error("WOZTELL_HISTORY_CONFIGURATION_REQUIRED");
       return fetchWoztellHistoryPage({
         token,

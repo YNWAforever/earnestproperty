@@ -62,6 +62,24 @@ export function companyChannelId(env: Env = process.env): string | null {
   return modeSet && isSet(env.WOZTELL_CHANNEL_ID) ? env.WOZTELL_CHANNEL_ID : null;
 }
 
+/**
+ * The channel provider calls target: `WOZTELL_CHANNEL_ID` (the surviving name) while
+ * set, else the legacy `EP_WA_COMPANY_CHANNEL_ID`. Unlike `companyChannelId()` this is
+ * deliberately not gated on the enquiry mode: provider modules are gated by their own
+ * switches (`WOZTELL_ENABLED`, transport verification), and General Preview still needs
+ * to talk to its configured channel. Reading the surviving name first keeps today's
+ * behaviour byte-for-byte while both names are set, and keeps provider calls working
+ * once only the legacy name remains.
+ */
+export function providerChannelId(env: Env = process.env): string | null {
+  if (isSet(env.WOZTELL_CHANNEL_ID)) return env.WOZTELL_CHANNEL_ID;
+  if (isSet(env.EP_WA_COMPANY_CHANNEL_ID)) {
+    legacy("EP_WA_COMPANY_CHANNEL_ID");
+    return env.EP_WA_COMPANY_CHANNEL_ID;
+  }
+  return null;
+}
+
 /** Old switch wins while set ("false" still turns links off); else on in observe/active. */
 export function trackedLinksEnabled(env: Env = process.env): boolean {
   if (isSet(env.EP_WA_TRACKED_LINKS_ENABLED)) {

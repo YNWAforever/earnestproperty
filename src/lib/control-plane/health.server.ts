@@ -3,6 +3,7 @@ import "@tanstack/react-start/server-only";
 // node --test suite imports it without a build step.
 import { MIGRATION_VERSIONS, pendingMigrations } from "./migration-versions.js";
 import { assessJobQueueHealth, jobQueueThresholds } from "./job-queue-health.ts";
+import { providerChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
 
 export type HealthStatus = "healthy" | "degraded" | "failed";
 
@@ -85,7 +86,7 @@ export function environmentChecks(): HealthCheck[] {
   const woztell = {
     enabled: process.env.WOZTELL_ENABLED === "true",
     accessToken: present(process.env.WOZTELL_BOT_ACCESS_TOKEN),
-    channelId: present(process.env.WOZTELL_CHANNEL_ID),
+    channelId: present(providerChannelId() ?? undefined),
     appId: present(process.env.WOZTELL_APP_ID),
     channelSecret: present(process.env.WOZTELL_CHANNEL_SECRET),
   };
