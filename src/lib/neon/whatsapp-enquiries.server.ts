@@ -21,6 +21,11 @@ import {
 } from "../whatsapp-enquiries/public-context.ts";
 import { websiteCandidateLateral } from "./whatsapp-coverage-query.mjs";
 import {
+  classifyTrackingGaps,
+  trackingGapLogEntries,
+  unprovisionedLogDue,
+} from "../whatsapp-enquiries/tracking-gap-log.mjs";
+import {
   redirectBucketKey,
   redirectCapacity,
   redirectCapacityDecision,
@@ -321,17 +326,29 @@ export async function resolveTrackingLinks(
     code: row.code ? String(row.code) : null,
   }));
   const resolved = resolveWebsiteActions(offers, candidates, companyPhone);
-  const gaps = candidates.filter((candidate) => candidate.candidateCount !== 1);
-  if (gaps.length)
-    console.warn(
-      "WA_TRACKING_LINK_GAP",
-      JSON.stringify(
-        gaps
-          .slice(0, 50)
-          .map((item) => ({ propertyId: item.propertyId, candidates: item.candidateCount })),
-      ),
-    );
+  logTrackingCoverage(candidates);
   return { enabled, fallbackHref, ...resolved };
+}
+
+/**
+ * Coverage logging for the listings on one page.
+ *
+ * "No listing has a link" is a configuration state (tracking was never
+ * provisioned) and is logged at most once per instance per interval. "Some
+ * listings have a link and some do not" is a regression and is always logged.
+ * The previous code treated both as the same per-request warning, which at
+ * production traffic buried real errors behind ~one line per property page view.
+ */
+let lastUnprovisionedTrackingLogAt = 0;
+function logTrackingCoverage(
+  candidates: ReadonlyArray<{ propertyId: string; candidateCount: number }>,
+) {
+  for (const entry of trackingGapLogEntries(classifyTrackingGaps(candidates))) {
+    const now = Date.now();
+    if (entry.throttled && !unprovisionedLogDue(now, lastUnprovisionedTrackingLogAt)) continue;
+    if (entry.throttled) lastUnprovisionedTrackingLogAt = now;
+    console.warn(entry.code, JSON.stringify(entry.payload));
+  }
 }
 
 type TrackedRedirectStage = "config" | "rate" | "link" | "offer" | "phone" | "alias" | "open";
