@@ -16,6 +16,7 @@ mock.module("@tanstack/react-start", () => {
 });
 mock.module("@tanstack/react-start/server", () => ({
   getRequest: () => new Request("https://fixture"),
+  setResponseHeader: () => undefined,
 }));
 mock.module("@/auth", () => ({
   withStaffAuthHeaders: async (o: Record<string, unknown> = {}) => ({
@@ -44,7 +45,15 @@ const modules = {
 
 const youtubeStatus = await load("../youtube-sync/youtube-status");
 
+const blog = await load("./blog-admin");
 const table: [string, Call, unknown[]][] = [
+  ["blog listBlogArticles", blog.listBlogArticles, [{ data: {} }]],
+  ["blog saveBlogArticle", blog.saveBlogArticle, [{ data: {} }]],
+  ["blog saveBlogSettings", blog.saveBlogSettings, [{ data: {} }]],
+  ["blog saveBlogCategory", blog.saveBlogCategory, [{ data: {} }]],
+  ["blog getBlogAdminState", blog.getBlogAdminState, []],
+  ["blog getBlogCategoryOptions", blog.getBlogCategoryOptions, []],
+  ["blog getArticlePreview", blog.getArticlePreview, [{ data: { id: uuid } }]],
   ["youtube-status fetchYouTubeSyncStatus", youtubeStatus.fetchYouTubeSyncStatus, []],
   [
     "whatsapp-link-management getWhatsappTrackingLinksPage",

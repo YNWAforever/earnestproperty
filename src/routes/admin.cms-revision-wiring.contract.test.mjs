@@ -23,29 +23,28 @@ test("video, FAQ, and media still use the old admin-data.ts direct-write path", 
   assert.match(source, /deleteAdminFaq/);
 });
 
-test("ArticleDialog no longer exposes a manual published toggle", () => {
-  const start = source.indexOf("function ArticleDialog(");
-  assert.notEqual(start, -1);
-  const end = source.indexOf("\nfunction ", start + 1);
-  const articleDialogBody = source.slice(start, end === -1 ? undefined : end);
-  assert.doesNotMatch(articleDialogBody, /published_at/);
-  assert.doesNotMatch(
-    articleDialogBody,
-    /checked=\{article\.published\}/,
-    "the manual 發布 Switch must be removed -- publish is now an explicit action, not a form field",
-  );
+const editor = readFileSync(
+  join(process.cwd(), "src/components/admin/blog/ArticleEditor.tsx"),
+  "utf8",
+);
+const manager = readFileSync(
+  join(process.cwd(), "src/components/admin/blog/BlogManager.tsx"),
+  "utf8",
+);
+test("Articles entry delegates to the role-aware blog manager", () => {
+  assert.match(source, /<BlogManager canPublish=/);
+  assert.match(manager, /saveBlogArticle/);
+  assert.match(manager, /getBlogCategoryOptions/);
+  assert.match(editor, /儲存草稿/);
+  assert.match(editor, /更新已發布文章/);
+  assert.match(editor, /取消發布/);
+  assert.doesNotMatch(editor, /checked=\{.*published/);
 });
-
-test("both dialogs offer a distinct save-draft and publish action", () => {
-  assert.match(source, /handleSaveEstateDraft/);
-  assert.match(source, /handlePublishEstate/);
-  assert.match(source, /handleSaveArticleDraft/);
-  assert.match(source, /handlePublishArticle/);
-});
-
-test("both dialogs offer restore and archive actions", () => {
+test("both editors preserve restore and publication confirmation", () => {
   assert.match(source, /handleRestoreEstateRevision/);
   assert.match(source, /handleArchiveEstate/);
-  assert.match(source, /handleRestoreArticleRevision/);
-  assert.match(source, /handleArchiveArticle/);
+  assert.match(editor, /restoreAdminCmsRevision/);
+  assert.match(editor, /CmsRestoreConfirm/);
+  assert.match(editor, /AdminConfirmDialog/);
+  assert.match(editor, /reviewDraftRevisionId/);
 });

@@ -1,3 +1,5 @@
+import "../../../scripts/acceptance/owned-postgres-test.mjs";
+const articleValidation = await import("../blog/write-schemas.ts");
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -46,6 +48,7 @@ function injected({ roles = ["admin"], fail = false } = {}) {
     published_at: "2026-09-05",
   };
   const modules = {
+    "../blog/write-schemas": articleValidation,
     "./public-estate-options-cache": { invalidatePublicEstateOptions() {} },
     "@tanstack/react-start/server-only": {},
     "@tanstack/react-start/server": { getRequest: () => ({}) },
@@ -61,6 +64,7 @@ function injected({ roles = ["admin"], fail = false } = {}) {
         if (sql.startsWith("SELECT resource_type"))
           return [{ resource_type: "article", resource_id: "resource" }];
         if (fail) throw Error("injected_database_failure");
+        if (sql.startsWith("SELECT payload")) return [{ payload: row.payload }];
         return [{ revision: row }];
       },
       stringOrEmpty: (v) => (v == null ? "" : String(v)),
@@ -135,17 +139,18 @@ test("publish and archive make exactly one atomic mutation request, no separate 
   for (const operation of ["publishAdminCmsRevision", "archiveAdminCmsResource"]) {
     const { api, calls } = injected();
     await api[operation](mutationInput, {});
-    assert.equal(calls.length, 1);
-    assert.match(calls[0].sql, /SELECT cms_mutate/);
+    assert.equal(calls.filter((c) => c.sql.startsWith("SELECT cms_mutate")).length, 1);
+    assert.ok(calls.every((c) => c.sql.startsWith("SELECT")));
   }
 });
-test("restore uses only identity before atomic mutation and returns database current publication base", async () => {
+test("restore validates historical content before atomic mutation and returns database current publication base", async () => {
   const { api, calls } = injected();
   const saved = await api.restoreAdminCmsRevision({ revisionId: "history" }, {});
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   assert.match(calls[0].sql, /SELECT resource_type, resource_id/);
-  assert.equal(calls[1].params[0], "restore");
-  assert.equal(calls[1].params[7], "history");
+  assert.match(calls[1].sql, /SELECT payload/);
+  assert.equal(calls[2].params[0], "restore");
+  assert.equal(calls[2].params[7], "history");
   assert.equal(saved.editState.basePublishedVersion, 3);
   assert.equal(saved.editState.restoredFromRevisionId, "history");
 });
@@ -153,7 +158,11 @@ test("database failure propagates for all operations without a successful or sep
   for (const operation of operations) {
     const { api, calls } = injected({ fail: true });
     await assert.rejects(api[operation](mutationInput, {}), /injected_database_failure/);
-    assert.equal(calls.filter((c) => c.sql.startsWith("SELECT cms_mutate")).length, 1);
+    assert.ok(calls.every((c) => c.sql.startsWith("SELECT")));
+    assert.equal(
+      calls.filter((c) => c.sql.startsWith("SELECT cms_mutate")).length,
+      ["publishAdminCmsRevision", "restoreAdminCmsRevision"].includes(operation) ? 0 : 1,
+    );
   }
 });
 test("all SQL mutation reads follow shared resource lock; history has database uniqueness and immutability", () => {

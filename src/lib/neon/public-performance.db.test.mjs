@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import ts from "typescript";
+import { unexpectedBlogReadUrl } from "./test-helpers/unexpected-blog-read.mjs";
 import { neon } from "@neondatabase/serverless";
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
@@ -36,6 +37,7 @@ async function importPublicDataServerWithInjectedQuery(query) {
   let executable = inlineRelativeImports(
     transpile(read("src/lib/neon/public-data.server.ts"))
       .replace('import "@tanstack/react-start/server-only";', "")
+      .replace('from "./blog-public.server"', `from "${unexpectedBlogReadUrl}"`)
       .replace('from "./db.server"', `from "${dbUrl}"`),
     "src/lib/neon",
   );
@@ -50,6 +52,18 @@ async function importPublicDataServerWithInjectedQuery(query) {
 }
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
+test("public performance loader executes real listing SQL without a database", async () => {
+  const calls = [];
+  const server = await importPublicDataServerWithInjectedQuery(async (text, params) => {
+    calls.push({ text, params });
+    return /count\(\*\)/.test(text) ? [{ total: 0 }] : [];
+  });
+  const result = await server.searchListings({ deal: "all", page: 1, pageSize: 12 });
+  assert.equal(result.total, 0);
+  assert.equal(calls.length, 2);
+  assert.match(calls[0].text, /count\(\*\)/);
+});
+
 test(
   "isolated PostgreSQL fixture: unified pages preserve current offerings, withdrawals, aliases and independent deal counts",
   { skip: !databaseUrl },

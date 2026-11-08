@@ -1,3 +1,5 @@
+import { getPublicRelatedArticles } from "@/lib/neon/blog-public";
+import { blogNoStoreHeaders } from "@/lib/blog/public";
 import {
   publicPropertyNo,
   propertyPriceSummary,
@@ -32,7 +34,6 @@ import { getEstateRegisteredTransactions } from "@/content/eprc-transactions-sna
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
 import { getSchoolNet, schoolNetCodeForDistrict } from "@/content/school-nets";
 import { SITE_URL, SITE_OG_IMAGE, authored, canonicalLink, estateSeo } from "@/content/seo";
-import { publishedBlogArticles, type BlogArticleMeta } from "@/content/blog-articles";
 import { formatHkDate } from "@/lib/format";
 import {
   fetchCmsVideos,
@@ -51,7 +52,6 @@ import { deriveEstateTag } from "@/lib/video-tags.js";
 import { renderableFaqs } from "@/lib/faq";
 import { jsonLdScript } from "@/lib/schema";
 import { buildContext, useTrackPageView } from "@/lib/analytics/events";
-import { publicPageCacheHeaders } from "@/lib/http/public-cache.js";
 
 type EstateDetail = NonNullable<Awaited<ReturnType<typeof fetchEstateBySlug>>>;
 
@@ -81,8 +81,7 @@ export const Route = createFileRoute("/estate/$slug")({
     // already exists on every public agent profile (agents_.$slug.tsx reads
     // the forward direction); deriveEstateTag parses the same "＃屋苑名" video
     // title marker videos.tsx already filters on, matched against this
-    // estate's real Chinese name; compareEstateSlugs is the static field
-    // blog-articles.ts already carries per article.
+    // estate's real Chinese name. Related articles use live CMS comparison references.
     const relatedAgents = agentProfiles.filter((agent) =>
       agent.served_estate_slugs.includes(estate.slug),
     );
@@ -91,9 +90,19 @@ export const Route = createFileRoute("/estate/$slug")({
     );
     // Only articles that are actually public: linking an estate page to a
     // scheduled article would point at a URL that still 404s.
-    const relatedArticles = publishedBlogArticles().filter((article) =>
-      article.compareEstateSlugs?.includes(estate.slug),
-    );
+    //
+    // Related articles are decoration; the estate page is the product. Before
+    // 2026-11-06 this was an unguarded await, so a blog-module failure (there, a
+    // missing blog schema) took all 62 estate pages down with it. A page that
+    // renders without its "related reading" strip is strictly better than a 500
+    // on the money page, so this failure is logged and swallowed.
+    const relatedArticles = await getPublicRelatedArticles(estate.slug).catch((error: unknown) => {
+      console.error(
+        "[estate] getPublicRelatedArticles failed; rendering without related articles",
+        error,
+      );
+      return [];
+    });
     // A comparable's real facts (avg PSF / units / year / developer) live in
     // the DB, not the registry -- combine each entry with its fetched record
     // here so the route/component only ever deal with one flat shape. A
@@ -212,7 +221,11 @@ export const Route = createFileRoute("/estate/$slug")({
       </Link>
     </div>
   ),
-  headers: publicPageCacheHeaders,
+  headers: blogNoStoreHeaders,
+  staleTime: 0,
+  gcTime: 0,
+  preload: false,
+  shouldReload: true,
   component: EstatePage,
 });
 
@@ -236,7 +249,7 @@ function EstatePage() {
     comparableEstates: EstateComparisonRow[];
     relatedAgents: NeonPublicAgentProfile[];
     relatedVideos: CmsVideo[];
-    relatedArticles: BlogArticleMeta[];
+    relatedArticles: Array<{ slug: string; title: string }>;
   };
   const seo = estateSeo[estate.slug as keyof typeof estateSeo];
   const content = getEstatePageContent(estate.slug);
@@ -602,7 +615,7 @@ function EstatePage() {
       {/* P7e: entity links to agent/video/article -- all three are reverse
           lookups over data the app already fetches elsewhere (agents'
           served_estate_slugs, videos' "＃屋苑名" title marker, articles'
-          compareEstateSlugs), not new SQL. Renders nothing for a
+          compareEstateSlugs). Renders nothing for a
           sub-section with zero matches rather than an empty placeholder. */}
       {relatedAgents.length > 0 || relatedVideos.length > 0 || relatedArticles.length > 0 ? (
         <Container className="py-8">

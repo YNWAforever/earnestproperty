@@ -3,6 +3,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { createRequire } from "node:module";
 import ts from "typescript";
 import { z } from "zod";
 import { fallback, zodValidator } from "@tanstack/zod-adapter";
@@ -138,6 +139,46 @@ test("non-default filters are kept", () => {
   ];
   for (const [href, schema, searchDefaults] of cases) {
     assert.equal(canonicalHref(href, schema, searchDefaults), href, href);
+  }
+});
+
+test("a11y listing targets and property discovery use canonical URLs without losing filters", async () => {
+  const source = readFileSync(new URL("../../e2e/a11y-checks.ts", import.meta.url), "utf8");
+  const js = ts.transpileModule(source, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  const exports = {};
+  new Function("require", "exports", js)(createRequire(import.meta.url), exports);
+  const targets = exports.PAGES.slice(1, 6);
+  const requested = [];
+  const page = {
+    async goto(path) {
+      requested.push(path);
+      return { status: () => 200 };
+    },
+    locator() {
+      return {
+        count: async () => 1,
+        first: () => ({ getAttribute: async () => "/property/local-check" }),
+      };
+    },
+  };
+  const details = [];
+  for (const target of targets) {
+    if (typeof target.path === "string") requested.push(target.path);
+    else details.push(await target.path(page));
+  }
+  assert.equal(exports.PAGES.length, 27, "keep the complete shared page matrix");
+  assert.deepEqual(requested, [
+    "/listings",
+    "/listings?deal=sale&page=2",
+    "/listings?deal=rent",
+    "/listings?deal=sale",
+    "/listings?deal=rent",
+  ]);
+  assert.deepEqual(details, ["/property/local-check", "/property/local-check?deal=rent"]);
+  for (const href of requested) {
+    assert.equal(canonicalHref(href, listingsSchema, LISTINGS_SEARCH_DEFAULTS), href, href);
   }
 });
 

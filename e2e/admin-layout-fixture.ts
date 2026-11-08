@@ -21,13 +21,13 @@ export function createAdminLayoutFixture(suite: string) {
   const browserErrors = new WeakMap<Page, string[]>();
   test.beforeAll(async () => {
     assert.ok(!process.env.PLAYWRIGHT_BASE_URL, "Owned fixture refuses remote targets");
+    await mkdir(artifactRoot, { recursive: true });
     assert.equal(
       spawnSync(process.execPath, ["scripts/browser-fixtures/build-admin-layout.mjs"], {
         stdio: "inherit",
       }).status,
       0,
     );
-    await mkdir(artifactRoot, { recursive: true });
     const root = resolve(".audit/admin-layout-browser");
     server = createServer(async (request, response) => {
       try {
@@ -104,7 +104,7 @@ export function createAdminLayoutFixture(suite: string) {
   });
   test.afterAll(async () => {
     if (server) await new Promise<void>((done) => server.close(() => done()));
-    await mkdir(".audit/admin-ux-20261013", { recursive: true });
+    await mkdir(artifactRoot, { recursive: true });
     const manifest = JSON.stringify(
       {
         ...source,
@@ -159,6 +159,7 @@ export function createAdminLayoutFixture(suite: string) {
           sessionStorage.setItem("daily-work-role", role);
           sessionStorage.setItem("property-fixture-actor", role);
           sessionStorage.setItem("no-link-fixture-role", role);
+          sessionStorage.setItem("blog-fixture-role", role);
           sessionStorage.setItem("sync-fixture-role", role);
           if (storageFailure) {
             const fail = () => {

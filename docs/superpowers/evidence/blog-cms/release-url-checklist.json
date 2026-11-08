@@ -1,0 +1,585 @@
+{
+  "status": "EXPECTED_NOT_LIVE_ACCEPTANCE",
+  "sourceRevision": "8b49d0a21c867c401c4d41db393e43c8db76a74d",
+  "articles": [
+    {
+      "path": "/blog/sham-tseng-buying-guide-2026",
+      "expectedStatus": 200,
+      "slug": "sham-tseng-buying-guide-2026"
+    },
+    {
+      "path": "/blog/bellagio-vs-sea-crest-villa-vs-hong-kong-garden",
+      "expectedStatus": 200,
+      "slug": "bellagio-vs-sea-crest-villa-vs-hong-kong-garden"
+    },
+    {
+      "path": "/blog/bellagio-renting-guide",
+      "expectedStatus": 200,
+      "slug": "bellagio-renting-guide"
+    },
+    {
+      "path": "/blog/hong-kong-garden-renting-guide",
+      "expectedStatus": 200,
+      "slug": "hong-kong-garden-renting-guide"
+    },
+    {
+      "path": "/blog/sea-crest-villa-renting-guide",
+      "expectedStatus": 200,
+      "slug": "sea-crest-villa-renting-guide"
+    },
+    {
+      "path": "/blog/hoi-wan-hin-renting-guide",
+      "expectedStatus": 200,
+      "slug": "hoi-wan-hin-renting-guide"
+    },
+    {
+      "path": "/blog/lido-garden-renting-guide",
+      "expectedStatus": 200,
+      "slug": "lido-garden-renting-guide"
+    },
+    {
+      "path": "/blog/castle-peak-villas-vs-ching-lai-waan-villas",
+      "expectedStatus": 200,
+      "slug": "castle-peak-villas-vs-ching-lai-waan-villas"
+    },
+    {
+      "path": "/blog/pearl-island-estates-comparison",
+      "expectedStatus": 200,
+      "slug": "pearl-island-estates-comparison"
+    },
+    {
+      "path": "/blog/tuen-mun-court-vs-elegant-villa",
+      "expectedStatus": 200,
+      "slug": "tuen-mun-court-vs-elegant-villa"
+    },
+    {
+      "path": "/blog/nga-tak-yuen-vs-ching-yung-toi",
+      "expectedStatus": 200,
+      "slug": "nga-tak-yuen-vs-ching-yung-toi"
+    },
+    {
+      "path": "/blog/deauville-vs-kwun-hoi-villas",
+      "expectedStatus": 200,
+      "slug": "deauville-vs-kwun-hoi-villas"
+    },
+    {
+      "path": "/blog/fei-yeung-vs-oma-by-the-sea",
+      "expectedStatus": 200,
+      "slug": "fei-yeung-vs-oma-by-the-sea"
+    },
+    {
+      "path": "/blog/napa-vs-ocean-camino",
+      "expectedStatus": 200,
+      "slug": "napa-vs-ocean-camino"
+    },
+    {
+      "path": "/blog/bayview-terrace-vs-hoi-wai-garden",
+      "expectedStatus": 200,
+      "slug": "bayview-terrace-vs-hoi-wai-garden"
+    },
+    {
+      "path": "/blog/nam-ngon-vs-palm-cove",
+      "expectedStatus": 200,
+      "slug": "nam-ngon-vs-palm-cove"
+    },
+    {
+      "path": "/blog/hoi-king-garden-vs-ching-yung-toi",
+      "expectedStatus": 200,
+      "slug": "hoi-king-garden-vs-ching-yung-toi"
+    },
+    {
+      "path": "/blog/kwan-lun-vs-oi-kam-waan",
+      "expectedStatus": 200,
+      "slug": "kwan-lun-vs-oi-kam-waan"
+    },
+    {
+      "path": "/blog/chui-king-garden-vs-fiona-garden",
+      "expectedStatus": 200,
+      "slug": "chui-king-garden-vs-fiona-garden"
+    },
+    {
+      "path": "/blog/hoi-ching-hin-vs-oi-kam-waan",
+      "expectedStatus": 200,
+      "slug": "hoi-ching-hin-vs-oi-kam-waan"
+    },
+    {
+      "path": "/blog/long-beach-gardens-vs-riviera",
+      "expectedStatus": 200,
+      "slug": "long-beach-gardens-vs-riviera"
+    },
+    {
+      "path": "/blog/l-aquatique-vs-hong-kong-garden",
+      "expectedStatus": 200,
+      "slug": "l-aquatique-vs-hong-kong-garden"
+    },
+    {
+      "path": "/blog/bellagio-estate-review",
+      "expectedStatus": 200,
+      "slug": "bellagio-estate-review"
+    },
+    {
+      "path": "/blog/hong-kong-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "hong-kong-garden-estate-review"
+    },
+    {
+      "path": "/blog/sea-crest-villa-estate-review",
+      "expectedStatus": 200,
+      "slug": "sea-crest-villa-estate-review"
+    },
+    {
+      "path": "/blog/lido-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "lido-garden-estate-review"
+    },
+    {
+      "path": "/blog/rhine-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "rhine-garden-estate-review"
+    },
+    {
+      "path": "/blog/hoi-wan-hin-estate-review",
+      "expectedStatus": 200,
+      "slug": "hoi-wan-hin-estate-review"
+    },
+    {
+      "path": "/blog/tai-wah-hin-estate-review",
+      "expectedStatus": 200,
+      "slug": "tai-wah-hin-estate-review"
+    },
+    {
+      "path": "/blog/hoi-wan-toi-estate-review",
+      "expectedStatus": 200,
+      "slug": "hoi-wan-toi-estate-review"
+    },
+    {
+      "path": "/blog/chun-wong-kui-estate-review",
+      "expectedStatus": 200,
+      "slug": "chun-wong-kui-estate-review"
+    },
+    {
+      "path": "/blog/lung-tang-kok-estate-review",
+      "expectedStatus": 200,
+      "slug": "lung-tang-kok-estate-review"
+    },
+    {
+      "path": "/blog/mun-ming-shan-estate-review",
+      "expectedStatus": 200,
+      "slug": "mun-ming-shan-estate-review"
+    },
+    {
+      "path": "/blog/wong-gam-hoi-ngon-estate-review",
+      "expectedStatus": 200,
+      "slug": "wong-gam-hoi-ngon-estate-review"
+    },
+    {
+      "path": "/blog/oi-kam-hoi-ngon-estate-review",
+      "expectedStatus": 200,
+      "slug": "oi-kam-hoi-ngon-estate-review"
+    },
+    {
+      "path": "/blog/tai-yu-estate-review",
+      "expectedStatus": 200,
+      "slug": "tai-yu-estate-review"
+    },
+    {
+      "path": "/blog/wong-gam-hoi-waan-estate-review",
+      "expectedStatus": 200,
+      "slug": "wong-gam-hoi-waan-estate-review"
+    },
+    {
+      "path": "/blog/sing-tai-estate-review",
+      "expectedStatus": 200,
+      "slug": "sing-tai-estate-review"
+    },
+    {
+      "path": "/blog/seong-yuen-estate-review",
+      "expectedStatus": 200,
+      "slug": "seong-yuen-estate-review"
+    },
+    {
+      "path": "/blog/the-carmel-estate-review",
+      "expectedStatus": 200,
+      "slug": "the-carmel-estate-review"
+    },
+    {
+      "path": "/blog/oma-oma-estate-review",
+      "expectedStatus": 200,
+      "slug": "oma-oma-estate-review"
+    },
+    {
+      "path": "/blog/lin-shan-estate-review",
+      "expectedStatus": 200,
+      "slug": "lin-shan-estate-review"
+    },
+    {
+      "path": "/blog/long-tou-waan-estate-review",
+      "expectedStatus": 200,
+      "slug": "long-tou-waan-estate-review"
+    },
+    {
+      "path": "/blog/tai-tou-waan-estate-review",
+      "expectedStatus": 200,
+      "slug": "tai-tou-waan-estate-review"
+    },
+    {
+      "path": "/blog/bayview-terrace-estate-review",
+      "expectedStatus": 200,
+      "slug": "bayview-terrace-estate-review"
+    },
+    {
+      "path": "/blog/castle-peak-villas-estate-review",
+      "expectedStatus": 200,
+      "slug": "castle-peak-villas-estate-review"
+    },
+    {
+      "path": "/blog/ching-lai-waan-villas-estate-review",
+      "expectedStatus": 200,
+      "slug": "ching-lai-waan-villas-estate-review"
+    },
+    {
+      "path": "/blog/ching-yung-toi-estate-review",
+      "expectedStatus": 200,
+      "slug": "ching-yung-toi-estate-review"
+    },
+    {
+      "path": "/blog/chui-king-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "chui-king-garden-estate-review"
+    },
+    {
+      "path": "/blog/chun-wo-sea-view-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "chun-wo-sea-view-garden-estate-review"
+    },
+    {
+      "path": "/blog/chung-yuet-waan-estate-review",
+      "expectedStatus": 200,
+      "slug": "chung-yuet-waan-estate-review"
+    },
+    {
+      "path": "/blog/fei-yeung-estate-review",
+      "expectedStatus": 200,
+      "slug": "fei-yeung-estate-review"
+    },
+    {
+      "path": "/blog/hoi-ching-hin-estate-review",
+      "expectedStatus": 200,
+      "slug": "hoi-ching-hin-estate-review"
+    },
+    {
+      "path": "/blog/hoi-king-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "hoi-king-garden-estate-review"
+    },
+    {
+      "path": "/blog/hoi-wai-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "hoi-wai-garden-estate-review"
+    },
+    {
+      "path": "/blog/hoi-yu-estate-review",
+      "expectedStatus": 200,
+      "slug": "hoi-yu-estate-review"
+    },
+    {
+      "path": "/blog/kwan-lun-estate-review",
+      "expectedStatus": 200,
+      "slug": "kwan-lun-estate-review"
+    },
+    {
+      "path": "/blog/kwun-hoi-villas-estate-review",
+      "expectedStatus": 200,
+      "slug": "kwun-hoi-villas-estate-review"
+    },
+    {
+      "path": "/blog/lung-chu-island-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "lung-chu-island-garden-estate-review"
+    },
+    {
+      "path": "/blog/monte-carlo-villas-estate-review",
+      "expectedStatus": 200,
+      "slug": "monte-carlo-villas-estate-review"
+    },
+    {
+      "path": "/blog/nam-ngon-estate-review",
+      "expectedStatus": 200,
+      "slug": "nam-ngon-estate-review"
+    },
+    {
+      "path": "/blog/napa-estate-review",
+      "expectedStatus": 200,
+      "slug": "napa-estate-review"
+    },
+    {
+      "path": "/blog/nga-tak-yuen-estate-review",
+      "expectedStatus": 200,
+      "slug": "nga-tak-yuen-estate-review"
+    },
+    {
+      "path": "/blog/ocean-camino-estate-review",
+      "expectedStatus": 200,
+      "slug": "ocean-camino-estate-review"
+    },
+    {
+      "path": "/blog/oi-kam-waan-estate-review",
+      "expectedStatus": 200,
+      "slug": "oi-kam-waan-estate-review"
+    },
+    {
+      "path": "/blog/oma-by-the-sea-estate-review",
+      "expectedStatus": 200,
+      "slug": "oma-by-the-sea-estate-review"
+    },
+    {
+      "path": "/blog/palm-cove-estate-review",
+      "expectedStatus": 200,
+      "slug": "palm-cove-estate-review"
+    },
+    {
+      "path": "/blog/pun-lung-bun-do-estate-review",
+      "expectedStatus": 200,
+      "slug": "pun-lung-bun-do-estate-review"
+    },
+    {
+      "path": "/blog/royal-cove-tower-estate-review",
+      "expectedStatus": 200,
+      "slug": "royal-cove-tower-estate-review"
+    },
+    {
+      "path": "/blog/royal-dragon-villa-estate-review",
+      "expectedStatus": 200,
+      "slug": "royal-dragon-villa-estate-review"
+    },
+    {
+      "path": "/blog/seaside-castle-estate-review",
+      "expectedStatus": 200,
+      "slug": "seaside-castle-estate-review"
+    },
+    {
+      "path": "/blog/yu-chui-yuen-estate-review",
+      "expectedStatus": 200,
+      "slug": "yu-chui-yuen-estate-review"
+    },
+    {
+      "path": "/blog/l-aquatique-estate-review",
+      "expectedStatus": 200,
+      "slug": "l-aquatique-estate-review"
+    },
+    {
+      "path": "/blog/deauville-estate-review",
+      "expectedStatus": 200,
+      "slug": "deauville-estate-review"
+    },
+    {
+      "path": "/blog/long-beach-gardens-estate-review",
+      "expectedStatus": 200,
+      "slug": "long-beach-gardens-estate-review"
+    },
+    {
+      "path": "/blog/riviera-estate-review",
+      "expectedStatus": 200,
+      "slug": "riviera-estate-review"
+    },
+    {
+      "path": "/blog/both-wealth-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "both-wealth-garden-estate-review"
+    },
+    {
+      "path": "/blog/fiona-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "fiona-garden-estate-review"
+    },
+    {
+      "path": "/blog/dragon-inn-court-estate-review",
+      "expectedStatus": 200,
+      "slug": "dragon-inn-court-estate-review"
+    },
+    {
+      "path": "/blog/tuen-mun-court-estate-review",
+      "expectedStatus": 200,
+      "slug": "tuen-mun-court-estate-review"
+    },
+    {
+      "path": "/blog/elegant-villa-estate-review",
+      "expectedStatus": 200,
+      "slug": "elegant-villa-estate-review"
+    },
+    {
+      "path": "/blog/pearl-island-bungalow-estate-review",
+      "expectedStatus": 200,
+      "slug": "pearl-island-bungalow-estate-review"
+    },
+    {
+      "path": "/blog/pearl-garden-estate-review",
+      "expectedStatus": 200,
+      "slug": "pearl-garden-estate-review"
+    },
+    {
+      "path": "/blog/peak-castle-estate-review",
+      "expectedStatus": 200,
+      "slug": "peak-castle-estate-review"
+    },
+    {
+      "path": "/blog/sham-tseng-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "sham-tseng-estate-reviews"
+    },
+    {
+      "path": "/blog/bellagio-vs-sea-crest-villa",
+      "expectedStatus": 200,
+      "slug": "bellagio-vs-sea-crest-villa"
+    },
+    {
+      "path": "/blog/castle-peak-road-house-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "castle-peak-road-house-estate-reviews"
+    },
+    {
+      "path": "/blog/tsing-lung-tau-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "tsing-lung-tau-estate-reviews"
+    },
+    {
+      "path": "/blog/rhine-garden-vs-lido-garden",
+      "expectedStatus": 200,
+      "slug": "rhine-garden-vs-lido-garden"
+    },
+    {
+      "path": "/blog/low-density-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "low-density-estate-reviews"
+    },
+    {
+      "path": "/blog/so-kwun-wat-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "so-kwun-wat-estate-reviews"
+    },
+    {
+      "path": "/blog/rhine-terrace-vs-rhine-garden",
+      "expectedStatus": 200,
+      "slug": "rhine-terrace-vs-rhine-garden"
+    },
+    {
+      "path": "/blog/sea-view-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "sea-view-estate-reviews"
+    },
+    {
+      "path": "/blog/castle-peak-bay-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "castle-peak-bay-estate-reviews"
+    },
+    {
+      "path": "/blog/ocean-pointe-vs-bellagio",
+      "expectedStatus": 200,
+      "slug": "ocean-pointe-vs-bellagio"
+    },
+    {
+      "path": "/blog/clubhouse-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "clubhouse-estate-reviews"
+    },
+    {
+      "path": "/blog/siu-lam-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "siu-lam-estate-reviews"
+    },
+    {
+      "path": "/blog/anglers-bay-vs-ocean-pointe",
+      "expectedStatus": 200,
+      "slug": "anglers-bay-vs-ocean-pointe"
+    },
+    {
+      "path": "/blog/car-park-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "car-park-estate-reviews"
+    },
+    {
+      "path": "/blog/tai-lam-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "tai-lam-estate-reviews"
+    },
+    {
+      "path": "/blog/royal-sea-crest-vs-sea-crest-villa",
+      "expectedStatus": 200,
+      "slug": "royal-sea-crest-vs-sea-crest-villa"
+    },
+    {
+      "path": "/blog/first-home-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "first-home-estate-reviews"
+    },
+    {
+      "path": "/blog/hong-kong-garden-vs-lung-tang-court",
+      "expectedStatus": 200,
+      "slug": "hong-kong-garden-vs-lung-tang-court"
+    },
+    {
+      "path": "/blog/rental-yield-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "rental-yield-estate-reviews"
+    },
+    {
+      "path": "/blog/bloomsway-vs-le-pont",
+      "expectedStatus": 200,
+      "slug": "bloomsway-vs-le-pont"
+    },
+    {
+      "path": "/blog/newer-estate-reviews",
+      "expectedStatus": 200,
+      "slug": "newer-estate-reviews"
+    },
+    {
+      "path": "/blog/avignon-vs-bloomsway",
+      "expectedStatus": 200,
+      "slug": "avignon-vs-bloomsway"
+    },
+    {
+      "path": "/blog/aegean-coast-vs-the-royale",
+      "expectedStatus": 200,
+      "slug": "aegean-coast-vs-the-royale"
+    },
+    {
+      "path": "/blog/gold-coast-vs-gold-coast-bay",
+      "expectedStatus": 200,
+      "slug": "gold-coast-vs-gold-coast-bay"
+    },
+    {
+      "path": "/blog/hillgrove-vs-aqua-blue",
+      "expectedStatus": 200,
+      "slug": "hillgrove-vs-aqua-blue"
+    },
+    {
+      "path": "/blog/the-carmel-vs-oma-oma",
+      "expectedStatus": 200,
+      "slug": "the-carmel-vs-oma-oma"
+    },
+    {
+      "path": "/blog/palatial-coast-vs-aqua-blue",
+      "expectedStatus": 200,
+      "slug": "palatial-coast-vs-aqua-blue"
+    }
+  ],
+  "pages": [
+    "/blog",
+    "/blog?category=%E8%B2%B7%E6%A8%93%E6%94%BB%E7%95%A5",
+    "/blog?category=%E7%A7%9F%E6%A8%93%E6%94%BB%E7%95%A5",
+    "/blog?category=%E5%B1%8B%E8%8B%91%E9%96%8B%E7%AE%B1",
+    "/blog?category=%E5%B1%8B%E8%8B%91%E6%AF%94%E8%BC%83",
+    "/blog?category=%E6%88%90%E4%BA%A4%E5%88%86%E6%9E%90",
+    "/blog?category=%E7%A4%BE%E5%8D%80%E7%94%9F%E6%B4%BB",
+    "/blog?category=%E5%B8%82%E5%A0%B4%E8%A9%95%E8%AB%96"
+  ],
+  "excludedPolicy": "/blog/editorial-standards",
+  "checks": [
+    "exact slug preserved",
+    "canonical URL correct",
+    "content and metadata match approved manifest",
+    "no duplicated featured article",
+    "private draft absent from public response",
+    "sitemap and llms match publication eligibility"
+  ]
+}

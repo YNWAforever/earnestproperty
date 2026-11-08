@@ -16,6 +16,7 @@ await build({
   envPrefix: "OWNED_LEAVE_GUARDS_",
   resolve: {
     alias: [
+      { find: /^@\/lib\/neon\/blog-admin$/, replacement: resolve(root, "synthetic-blog.ts") },
       {
         find: /^@\/lib\/neon\/staff-checklist$/,
         replacement: resolve(

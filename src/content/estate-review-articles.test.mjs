@@ -368,7 +368,12 @@ test("routes and the sitemap read the published set, not the authored set", () =
     "src/routes/sitemap[.]xml.ts",
   ]) {
     const source = readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
-    assert.match(source, /publishedBlogArticles\(/, `${path} must gate on publishedBlogArticles`);
+    assert.doesNotMatch(
+      source,
+      /content\/blog-articles/,
+      `${path} must read authoritative DB publications`,
+    );
+    assert.match(source, /blogNoStoreHeaders/, `${path} must not cache publication snapshots`);
     // Checked against the import list rather than the file text, so a comment
     // that merely names the ungated export does not trip it.
     const imports = source.match(/import\s[\s\S]*?from\s+"@\/content\/blog-articles";/g) ?? [];

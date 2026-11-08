@@ -1,0 +1,51 @@
+{
+  "format": "blog-recovery-context-v2",
+  "target": {
+    "projectId": "dawn-meadow-79190048",
+    "branchId": "br-polished-sea-aom4i1ct",
+    "endpointId": null,
+    "host": null,
+    "port": 5432,
+    "database": "neondb",
+    "role": null,
+    "systemIdentifier": null,
+    "serverVersion": null
+  },
+  "packetSha256": null,
+  "releaseHead": null,
+  "startsAt": null,
+  "expiresAt": null,
+  "evidencePublicKey": null,
+  "approvalSha256": null,
+  "cleanupApprovalSha256": null,
+  "tableNames": null,
+  "schemaProfile": {
+    "phase": "pre-migration",
+    "schemaSha256": null,
+    "migrationLedgerSha256": null
+  },
+  "mediaTarget": {
+    "storeId": "store_sEHe3hQ90qGByxQA",
+    "host": null,
+    "prefix": "",
+    "count": 1789,
+    "bytes": 226336431
+  },
+  "destination": {
+    "strategy": "separate-store",
+    "storeId": null,
+    "host": null,
+    "prefix": "recovery/blog-cms-858458194fc3-01/"
+  },
+  "snapshotId": null,
+  "restoredTarget": null,
+  "cleanupIdentity": {
+    "target": null,
+    "destination": null,
+    "deletedKeys": null
+  },
+  "excludedReferenceValues": [],
+  "snapshotName": "blog-cms-858458194fc3-recovery-01",
+  "restoreBranchName": "blog-cms-858458194fc3-restore-01",
+  "isolationLabel": "blog-cms-recovery-858458194fc3-01"
+}
