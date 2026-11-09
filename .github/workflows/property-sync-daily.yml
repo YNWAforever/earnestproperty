@@ -467,6 +467,9 @@ jobs:
           PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
       - name: Backfill correspondent agents for the new listings
+        # Best effort: the listings are already published, so an agent-mapping miss must not
+        # fail the sync run.
+        continue-on-error: true
         shell: bash
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
@@ -592,6 +595,9 @@ jobs:
           node --input-type=module -e 'import { readFileSync } from "node:fs"; const report = JSON.parse(readFileSync(process.argv[1], "utf8")); if (report.mode !== "APPLY" || !report.result) throw new Error("OWNER_PUBLICATION_REPORT_INVALID"); const published = report.result.published?.length ?? 0; const current = report.result.alreadyPublished?.length ?? 0; const unknown = report.result.unknown?.length ?? 0; const held = report.result.held?.length ?? 0; const inventory = report.homepageInventory; if (unknown || (published + current < 1 && !inventory?.result)) throw new Error("OWNER_PUBLICATION_WROTE_NOTHING"); console.log(JSON.stringify({ published, alreadyPublished: current, held, homepageInventory: inventory }));' owner-output/owner-publication.json >> "$GITHUB_STEP_SUMMARY"
           if [ "$status" -eq 2 ]; then echo "Owner policy held some rows. Eligible listings were created, updated, or already current. The private report lists the holds." >> "$GITHUB_STEP_SUMMARY"; fi
       - name: Backfill correspondent agents for the published listings
+        # Best effort: the listings are already published, so an agent-mapping miss must not
+        # fail the sync run.
+        continue-on-error: true
         if: env.MODE == 'owner-publication'
         shell: bash
         env:
