@@ -79,8 +79,11 @@ export function createOpenCodeGoClient({
               stream: false,
               max_tokens: 8192,
               // OpenCode Go ignores DeepSeek's native thinking toggle. Its gateway
-              // requires reasoning_effort=none to avoid lengthy reasoning for copy edits.
-              ...(config.model.startsWith("deepseek-v4-") ? { reasoning_effort: "none" } : {}),
+              // requires reasoning_effort=none to avoid lengthy reasoning for copy edits,
+              // which otherwise runs past the 30s request deadline. Match the whole
+              // `deepseek-v4` family: the provider retired `deepseek-v4-flash` in favour
+              // of `deepseek-v4.1-flash`, which must get the same treatment.
+              ...(config.model.startsWith("deepseek-v4") ? { reasoning_effort: "none" } : {}),
               response_format: { type: "json_object" },
             }),
           },

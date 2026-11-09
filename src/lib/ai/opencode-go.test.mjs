@@ -295,19 +295,25 @@ test("OpenCode client keeps malformed provider responses behind a stable error",
 });
 
 test("OpenCode Go DeepSeek requests disable reasoning using the gateway parameter", async () => {
-  let body;
-  const client = createOpenCodeGoClient({
-    config: { ...enabledConfig, model: "deepseek-v4-flash" },
-    fetchImpl: async (_, init) => {
-      body = JSON.parse(init.body);
-      return new Response(
-        JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }),
-      );
-    },
-  });
-  await client.generateProposal({ system: "rules", prompt: "record" });
-  assert.equal(body.reasoning_effort, "none");
-  assert.equal(body.max_tokens, 8192);
+  const bodies = {};
+  for (const model of ["deepseek-v4-flash", "deepseek-v4.1-flash", "go-content"]) {
+    const client = createOpenCodeGoClient({
+      config: { ...enabledConfig, model },
+      fetchImpl: async (_, init) => {
+        bodies[model] = JSON.parse(init.body);
+        return new Response(
+          JSON.stringify({ choices: [{ message: { content: '{"patches":[]}' } }] }),
+        );
+      },
+    });
+    await client.generateProposal({ system: "rules", prompt: "record" });
+  }
+  // The provider retired deepseek-v4-flash in favour of deepseek-v4.1-flash; both are
+  // the same family and both must turn thinking off or generation outlives the deadline.
+  assert.equal(bodies["deepseek-v4-flash"].reasoning_effort, "none");
+  assert.equal(bodies["deepseek-v4.1-flash"].reasoning_effort, "none");
+  assert.equal(bodies["go-content"].reasoning_effort, undefined);
+  assert.equal(bodies["deepseek-v4.1-flash"].max_tokens, 8192);
 });
 
 test("retries share one deadline rather than starting another full wait", async () => {
