@@ -11,6 +11,7 @@ import { buildPropertyInquiryPayload } from "@/components/property/property-deci
 import { submitPublicForm } from "@/lib/public-form-submit";
 import { FormStatus, type FormStatusState } from "@/components/site/FormStatus";
 import { HoneypotField } from "@/components/site/HoneypotField";
+import type { NeonPublicAgentProfile } from "@/lib/neon/public-data.types";
 
 const inquirySchema = z.object({
   name: z.string().trim().min(1, "請輸入姓名").max(120, "姓名過長"),
@@ -36,13 +37,17 @@ const PROPERTY_FORM_STATUS_ID = "property-form-status";
 export function PropertyInquiryForm({
   propertyId,
   listingNo,
+  agents = [],
 }: {
   propertyId: string;
   listingNo?: string;
+  /** The listing's correspondent agents; the visitor picks which colleague gets the lead. */
+  agents?: NeonPublicAgentProfile[];
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
   const [status, setStatus] = useState<FormStatusState>({ kind: "idle" });
+  const [selectedAgentId, setSelectedAgentId] = useState(agents[0]?.id ?? "");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -76,6 +81,7 @@ export function PropertyInquiryForm({
             },
             propertyId,
             listingNo,
+            agentId: selectedAgentId || undefined,
             consentWhatsapp,
           }),
           website,
@@ -95,6 +101,35 @@ export function PropertyInquiryForm({
 
   return (
     <form onSubmit={handleSubmit} className="relative space-y-3">
+      {agents.length > 0 ? (
+        <fieldset>
+          <legend className="mb-2 text-sm font-medium">聯絡代理</legend>
+          <div className="space-y-2">
+            {agents.map((agent) => {
+              const label = agent.name_zh ?? agent.name_en ?? "代理";
+              return (
+                <label
+                  key={agent.id}
+                  className="flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm has-[:checked]:border-primary"
+                >
+                  <input
+                    type="radio"
+                    name="agentId"
+                    value={agent.id}
+                    checked={selectedAgentId === agent.id}
+                    onChange={() => setSelectedAgentId(agent.id)}
+                    className="accent-primary"
+                  />
+                  <span className="font-medium">{label}</span>
+                  {agent.job_title ? (
+                    <span className="text-xs text-muted-foreground">{agent.job_title}</span>
+                  ) : null}
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      ) : null}
       <div>
         <Label htmlFor="name">姓名 *</Label>
         <Input id="name" name="name" required maxLength={120} placeholder="陳先生" />

@@ -1,7 +1,7 @@
 import { leadAlertEnqueueCte } from "./lead-alert-enqueue.js";
 import { phoneMatchSql, phoneSpellingTiebreakSql } from "../phone.js";
 
-export function deriveWebsiteInquiryRouting(listing) {
+export function deriveWebsiteInquiryRouting(listing, chosenAgentId = null) {
   if (!listing) {
     return {
       propertyId: null,
@@ -12,7 +12,10 @@ export function deriveWebsiteInquiryRouting(listing) {
 
   return {
     propertyId: listing.id,
-    assignedAgentId: listing.agentActive && listing.agentId ? listing.agentId : null,
+    // The visitor's choice (already validated against property_agents) wins over the
+    // listing's own agent, so the new-lead alert reaches the colleague they picked.
+    assignedAgentId:
+      chosenAgentId ?? (listing.agentActive && listing.agentId ? listing.agentId : null),
     intent: listing.dealType === "rent" ? "renter" : "buyer",
   };
 }
@@ -65,6 +68,33 @@ export async function persistWebsiteInquiry(query, input) {
         (byte) => byte.toString(16).padStart(2, "0"),
       ).join("")
     : null;
+  // The visitor may pick one of the listing's correspondent agents (property_agents).
+  // Only a real correspondent agent of this property is honoured, so a crafted request can
+  // never route a lead to an arbitrary colleague; anything else falls back to the listing's
+  // own agent_id. The table is additive: probe before reading so pre-migration databases and
+  // old deployments keep working.
+  let requestedAgentId = null;
+  const rawAgentId = typeof input.agentId === "string" ? input.agentId.trim() : "";
+  if (
+    rawAgentId &&
+    propertyId &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawAgentId)
+  ) {
+    const [agentTable] = await query(
+      `SELECT to_regclass('property_agents') IS NOT NULL AS available`,
+    );
+    if (agentTable?.available === true) {
+      const rows = await query(
+        `SELECT a.staff_id FROM property_agents a
+         JOIN staff_users s ON s.id = a.staff_id AND s.active = true
+           AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true
+         WHERE a.property_id = $1::uuid AND a.staff_id = $2::uuid
+         LIMIT 1`,
+        [propertyId, rawAgentId],
+      );
+      requestedAgentId = rows[0]?.staff_id ?? null;
+    }
+  }
   const submissionCte = submissionId
     ? `submission AS (
       INSERT INTO website_inquiry_submissions (submission_id, payload_hash)
@@ -115,12 +145,17 @@ export async function persistWebsiteInquiry(query, input) {
   const baseParamCount = submissionId ? 10 : 8;
   const botBody = `$${baseParamCount + 1}`;
   const botFlag = `$${baseParamCount + 2}::boolean`;
+  // Validated above: null unless the visitor's choice is a correspondent agent of this
+  // listing. When there is no choice the SQL carries a literal NULL, so the statement and its
+  // parameter list are byte-identical to the pre-agent build.
+  const chosenAgentParam = requestedAgentId ? `$${baseParamCount + 3}::uuid` : "NULL::uuid";
   const rows = await query(
     `
     WITH resolved_listing AS (
       SELECT
         p.id AS property_id,
-        s.id AS assigned_agent_id,
+        -- The visitor's chosen correspondent agent wins; otherwise the listing's own agent.
+        COALESCE(${chosenAgentParam}, s.id) AS assigned_agent_id,
         CASE WHEN p.deal_type = 'rent' THEN 'renter' ELSE 'buyer' END AS intent
       FROM properties p
       LEFT JOIN staff_users s ON s.id = p.agent_id AND s.active = true
@@ -199,6 +234,7 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
       ...(submissionId ? [submissionId, payloadHash] : []),
       SUSPECTED_BOT_NOTE,
       input.suspectedBot === true,
+      ...(requestedAgentId ? [requestedAgentId] : []),
     ],
   );
 

@@ -365,7 +365,10 @@ function PropertyPage() {
   // mortgage widget for rentals.
   const dealPrice = isRent ? property.rent : property.price;
 
-  const agent = property.profiles;
+  // The listing's correspondent agents (captured from the source listing) drive both the
+  // contact card and the enquiry routing; the primary agent is the fallback profile.
+  const correspondentAgents = property.agents ?? [];
+  const agent = correspondentAgents[0] ?? property.profiles;
   const estate = property.estates;
   // Only a usable slug yields estate links (FX-13 L-05: /estate/null hits).
   const estateHref = estatePath(estate?.slug);
@@ -955,6 +958,7 @@ function PropertyPage() {
                     key={property.id}
                     propertyId={property.id}
                     listingNo={publicListingNo}
+                    agents={correspondentAgents}
                   />
                 </CardContent>
               </Card>

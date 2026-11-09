@@ -40,6 +40,9 @@ export const STAFF_OWNERSHIP_COLUMNS = [
   // verification_state/verified_at, which never move). Reassigned by the
   // same staff-handover flow properties.agent_id already goes through.
   { table: "transactions", column: "agent_id" },
+  // The correspondent agents captured from the 28hse / property.hk listing. A departure must
+  // hand these over too, otherwise the listing keeps notifying someone who has left.
+  { table: "property_agents", column: "staff_id" },
 ] as const satisfies readonly StaffOwnershipColumn[];
 
 /**

@@ -19,7 +19,13 @@ export function getPropertyDecision({ dealType, price }) {
   };
 }
 
-export function buildPropertyInquiryPayload({ form, propertyId, listingNo, consentWhatsapp }) {
+export function buildPropertyInquiryPayload({
+  form,
+  propertyId,
+  listingNo,
+  consentWhatsapp,
+  agentId,
+}) {
   return {
     name: form.name,
     phone: form.phone,
@@ -28,6 +34,9 @@ export function buildPropertyInquiryPayload({ form, propertyId, listingNo, conse
     property_id: propertyId,
     // The public number the visitor saw (C-15); a malformed one is simply not sent.
     ...(isValidWebsiteListingNo(listingNo) ? { listingNo } : {}),
+    // The correspondent agent the visitor picked; the server only honours ids that
+    // property_agents lists for this property.
+    ...(typeof agentId === "string" && agentId ? { agentId } : {}),
     consentWhatsapp,
   };
 }

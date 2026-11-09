@@ -13,7 +13,7 @@ import {
   staffReassignStatements,
 } from "./staff-ownership.ts";
 
-test("ownership covers exactly the seven current-assignment columns", () => {
+test("ownership covers exactly the eight current-assignment columns", () => {
   assert.deepEqual(
     STAFF_OWNERSHIP_COLUMNS.map((entry) => `${entry.table}.${entry.column}`).sort(),
     [
@@ -22,6 +22,7 @@ test("ownership covers exactly the seven current-assignment columns", () => {
       "inquiries.assigned_agent_id",
       "live_agent_sessions.assigned_agent_id",
       "properties.agent_id",
+      "property_agents.staff_id",
       "transactions.agent_id",
       "whatsapp_conversations.assigned_agent_id",
     ],

@@ -60,3 +60,91 @@ test("concurrent public retry creates one linked contact, lead and inquiry", asy
     }
   });
 });
+
+test("a listing enquiry routes to the correspondent agent the visitor picked", async () => {
+  await dbTargetOrOwned(async ({ sql, owned }) => {
+    if (!owned) {
+      assert.equal(process.env.CRM_TEST_DATABASE_CONFIRMED, "true");
+      assert.notEqual(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL);
+      assert.notEqual(process.env.TEST_DATABASE_URL, process.env.DATABASE_URL_UNPOOLED);
+    }
+    const schema = "astra_agents_" + randomUUID().replaceAll("-", "");
+    const tables =
+      /\b(website_inquiry_submissions|property_agents|properties|staff_users|crm_contacts|crm_leads|inquiries)\b/g;
+    const query = (text, params = []) =>
+      sql.query(text.replace(tables, '"' + schema + '".$1'), params);
+    await sql.query('CREATE SCHEMA "' + schema + '"');
+    try {
+      for (const statement of [
+        "CREATE TABLE staff_users (id uuid PRIMARY KEY, active boolean, show_on_website boolean)",
+        "CREATE TABLE properties (id uuid PRIMARY KEY, agent_id uuid, deal_type text, status text, listing_no text)",
+        "CREATE TABLE property_agents (property_id uuid, position smallint, staff_id uuid, source text)",
+        "CREATE TABLE crm_contacts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text, phone text, normalized_phone text UNIQUE, email text, source text, opt_in_whatsapp boolean DEFAULT false, updated_at timestamptz DEFAULT now())",
+        "CREATE TABLE crm_leads (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), contact_id uuid, property_id uuid, assigned_agent_id uuid, stage text, intent text, source text, note text)",
+        "CREATE TABLE inquiries (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), crm_lead_id uuid, marketing_consent_requested boolean, consent_copy_version text, source text, property_id uuid, intent text, name text, phone text, email text, message text, assigned_agent_id uuid, crm_contact_id uuid, public_listing_no text)",
+        "CREATE TABLE website_inquiry_submissions (submission_id uuid PRIMARY KEY, payload_hash text, inquiry_id uuid DEFAULT gen_random_uuid(), created_at timestamptz DEFAULT now())",
+      ])
+        await query(statement);
+      const propertyId = randomUUID();
+      const listingAgent = randomUUID();
+      const correspondent = randomUUID();
+      const outsider = randomUUID();
+      for (const [id, active, show] of [
+        [listingAgent, true, true],
+        [correspondent, true, true],
+        [outsider, true, true],
+      ])
+        await query("INSERT INTO staff_users (id, active, show_on_website) VALUES ($1,$2,$3)", [
+          id,
+          active,
+          show,
+        ]);
+      await query(
+        "INSERT INTO properties (id, agent_id, deal_type, status, listing_no) VALUES ($1,$2,'sale','active','A-AGENT')",
+        [propertyId, listingAgent],
+      );
+      await query(
+        "INSERT INTO property_agents (property_id, position, staff_id, source) VALUES ($1,1,$2,'28hse_agent_540')",
+        [propertyId, correspondent],
+      );
+      const base = {
+        name: "Synthetic",
+        phone: "85261110000",
+        normalizedPhone: "85261110000",
+        email: null,
+        message: "Synthetic",
+        consentWhatsapp: false,
+        propertyId,
+      };
+
+      // The visitor's chosen correspondent agent gets the lead (and therefore the alert).
+      await persistWebsiteInquiry(query, {
+        ...base,
+        submissionId: randomUUID(),
+        agentId: correspondent,
+      });
+      const [chosen] = await query(
+        "SELECT assigned_agent_id FROM crm_leads ORDER BY assigned_agent_id LIMIT 1",
+      );
+      assert.equal(chosen.assigned_agent_id, correspondent);
+
+      // A staff member who is not a correspondent agent of this listing is ignored.
+      await persistWebsiteInquiry(query, {
+        ...base,
+        submissionId: randomUUID(),
+        phone: "85262220000",
+        normalizedPhone: "85262220000",
+        agentId: outsider,
+      });
+      const leads = await query(
+        "SELECT assigned_agent_id FROM crm_leads ORDER BY assigned_agent_id",
+      );
+      assert.deepEqual(
+        leads.map((row) => row.assigned_agent_id).sort(),
+        [listingAgent, correspondent].sort(),
+      );
+    } finally {
+      await sql.query('DROP SCHEMA "' + schema + '" CASCADE');
+    }
+  });
+});

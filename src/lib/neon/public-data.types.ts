@@ -138,6 +138,9 @@ export type NeonPropertyRow = {
   updated_at: string | null;
   estates: NeonEstateSnapshot | null;
   profiles: NeonStaffProfile | null;
+  /** Up to two correspondent agents captured from the source listing (property_agents).
+   * The listing page shows them and the enquiry records which one the visitor chose. */
+  agents?: NeonPublicAgentProfile[];
 };
 
 export type NeonListingSearchResult = {

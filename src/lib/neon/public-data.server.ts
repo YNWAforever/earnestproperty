@@ -1213,7 +1213,29 @@ export async function fetchPropertyByListingNo(input: {
       .filter((offer) => offer.status === "active")
       .map((offer) => offer.id),
   );
-  return { ...property, ...sourceMetadata, source_location: sourceLocation };
+  // Additive table: probe before reading so a database that has not run
+  // 20261110030000_property_correspondent_agents.sql still serves the page.
+  const [agentSchema] = await sql().query(
+    `SELECT to_regclass('property_agents') IS NOT NULL AS available`,
+  );
+  const agents: NeonPublicAgentProfile[] =
+    agentSchema?.available === true
+      ? (
+          await sql().query(
+            `SELECT a.position, ${publicAgentProfileColumns}
+             FROM property_agents a
+             JOIN staff_users s ON s.id = a.staff_id
+               AND s.active = true
+               AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true
+             WHERE a.property_id = $1::uuid
+             ORDER BY a.position`,
+            [property.id],
+          )
+        )
+          .map(mapPublicAgentProfile)
+          .filter((agent): agent is NeonPublicAgentProfile => Boolean(agent))
+      : [];
+  return { ...property, ...sourceMetadata, source_location: sourceLocation, agents };
 }
 export async function fetchPropertyByLegacyDetailId(input: {
   oldId: string;

@@ -608,11 +608,15 @@ const websiteInquirySchema = z
     // here; createWebsiteInquiry keeps only a valid number and a UUID.
     listingNo: z.string().max(80).optional().catch(undefined),
     property_id: z.string().max(80).optional().catch(undefined),
+    // The correspondent agent the visitor picked. Shape-checked here and validated against
+    // property_agents in SQL; a bad value can never fail the enquiry.
+    agentId: z.string().max(80).optional().catch(undefined),
     consentWhatsapp: z.boolean().default(false),
     // Invisible honeypot: any type or length is accepted, so it can never fail a submission.
     website: z.unknown().optional(),
   })
-  // Public, untrusted path: never accept a caller-supplied agent assignment.
+  // Public, untrusted path: no free-form agent assignment is accepted -- only the id of an
+  // agent that property_agents lists for this property survives (see website-inquiry.js).
   .strip();
 
 export type WebsiteInquiryInput = Omit<z.infer<typeof websiteInquirySchema>, "submissionId">;

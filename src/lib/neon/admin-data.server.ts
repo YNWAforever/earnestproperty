@@ -4881,10 +4881,15 @@ export async function createWebsiteInquiry(input: {
   message?: string | null;
   listingNo?: string | null;
   property_id?: string | null;
+  /** The correspondent agent the visitor picked on the listing page. Only honoured when
+   * the staff member really is a correspondent agent of that property (checked in SQL). */
+  agentId?: string | null;
   consentWhatsapp?: boolean;
   suspectedBot?: boolean;
 }) {
-  // Public, untrusted path: agent assignment is never accepted from the client.
+  // Public, untrusted path: an agent choice is only ever honoured after property_agents
+  // confirms the staff member corresponds to this listing, so it can never assign a lead to
+  // an arbitrary colleague.
   const normalizedPhone = normalizeAdminPhone(input.phone);
   const email = input.email ? input.email : null;
   const message = input.message ? input.message : null;
@@ -4899,6 +4904,10 @@ export async function createWebsiteInquiry(input: {
   const requestedPropertyId = WEBSITE_INQUIRY_UUID.test(rawPropertyId) ? rawPropertyId : null;
   if (rawPropertyId && !requestedPropertyId)
     console.warn("INQUIRY_LISTING_REF_DROPPED", { field: "property_id" });
+  const rawAgentId = typeof input.agentId === "string" ? input.agentId.trim() : "";
+  const requestedAgentId = WEBSITE_INQUIRY_UUID.test(rawAgentId) ? rawAgentId : null;
+  if (rawAgentId && !requestedAgentId)
+    console.warn("INQUIRY_LISTING_REF_DROPPED", { field: "agentId" });
   const result = await persistWebsiteInquiry(queryRows, {
     submissionId: input.submissionId,
     name: input.name,
@@ -4908,6 +4917,7 @@ export async function createWebsiteInquiry(input: {
     message,
     listingNo: requestedListingNo,
     propertyId: requestedPropertyId,
+    agentId: requestedAgentId,
     consentWhatsapp: optInWhatsapp,
     suspectedBot: input.suspectedBot === true,
   });
