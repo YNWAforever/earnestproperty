@@ -13,7 +13,13 @@
  *
  * Flags: --source=28hse|propertyhk|all (default all), --limit=N, --dry-run,
  *        --force (refetch even when the property already has two agents),
+ *        --since-days=N (28hse only: only properties created in the last N days),
  *        --delay-ms=4500 (between source fetches; Firecrawl allows ~15-20/min).
+ *
+ * The propertyhk run also fills the branch 主管 as the second correspondent (Property.hk
+ * names only one agent), and the cross-listed listings get their Property.hk agent from the
+ * recorded observation. Both need no fetch, so the daily owner-publication workflow runs
+ * `--source=propertyhk` after publishing to keep new listings covered.
  */
 import { readFileSync, existsSync } from "node:fs";
 import { pathToFileURL } from "node:url";
@@ -73,12 +79,34 @@ export function extract28hseAgentLicences(html) {
 /** The 28hse "放盤聯絡人" names next to each licence block, in page order. */
 export function extract28hseAgentNames(html) {
   const names = [];
-  const pattern = /放盤聯絡人\s*([^<]{2,30})/g;
+  const pattern = /放盤聯絡人\s*(?:<\/?[a-z][^>]*>\s*)*([^<]{2,30})/g;
   for (const match of String(html ?? "").matchAll(pattern)) {
     const name = match[1].replace(/\s+/g, " ").trim();
     if (name) names.push(name);
   }
   return names;
+}
+
+/**
+ * The branch 主管 who fills the second correspondent slot. Property.hk names only the listing
+ * agent, so the senior 營業經理 of that agent's branch stands in as the second colleague; when
+ * the agent already is the manager, the branch's next colleague by display order is used.
+ * Pure: `branchStaff` rows are `staff_users` shaped, so `node --test` covers the rule.
+ */
+export function pickBranchManager(branchStaff, currentStaffId) {
+  const eligible = (branchStaff ?? []).filter((row) => row.id !== currentStaffId);
+  if (eligible.length === 0) return null;
+  const rank = (row) => {
+    if (/營業經理/.test(String(row.job_title ?? ""))) return 0;
+    if (row.is_duty_manager) return 1;
+    return 2;
+  };
+  return [...eligible].sort(
+    (a, b) =>
+      rank(a) - rank(b) ||
+      Number(a.display_order ?? 0) - Number(b.display_order ?? 0) ||
+      String(a.id).localeCompare(String(b.id)),
+  )[0];
 }
 
 /** property.hk detail URL → staff public slug. */
@@ -138,24 +166,31 @@ async function main() {
   const dryRun = argv.includes("--dry-run");
   const force = argv.includes("--force");
   const delayMs = Number(argValue(argv, "delay-ms", "4500"));
+  const sinceDays = Number(argValue(argv, "since-days", "0")) || 0;
   if (!["28hse", "propertyhk", "all"].includes(source)) throw new Error("bad --source");
 
   const env = loadEnv();
-  const databaseUrl = env.DATABASE_URL_UNPOOLED || env.DATABASE_URL;
+  const databaseUrl = env.DATABASE_URL_UNPOOLED || env.DATABASE_URL || env.IMPORT_DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
   const apiKey = env.FIRECRAWL_API_KEY;
   if (!apiKey && source !== "propertyhk") throw new Error("FIRECRAWL_API_KEY is required");
   const sql = neon(databaseUrl);
 
   const staff = await sql`
-    SELECT id, licence_no, public_slug, name_en, active, coalesce((to_jsonb(staff_users)->>'show_on_website')::boolean, false) AS show_on_website
+    SELECT id, licence_no, public_slug, name_en, branch, job_title, is_duty_manager, display_order,
+           active, coalesce((to_jsonb(staff_users)->>'show_on_website')::boolean, false) AS show_on_website
     FROM staff_users WHERE active`;
   const byLicence = new Map();
   const bySlug = new Map();
+  const byBranch = new Map();
   for (const row of staff) {
     const licence = normalizeLicence(row.licence_no);
     if (licence) byLicence.set(licence, row);
     if (row.public_slug) bySlug.set(row.public_slug, row);
+    if (row.show_on_website && row.branch) {
+      if (!byBranch.has(row.branch)) byBranch.set(row.branch, []);
+      byBranch.get(row.branch).push(row);
+    }
   }
   console.log(`staff: ${staff.length} active, ${byLicence.size} with a licence`);
 
@@ -239,6 +274,7 @@ async function main() {
       JOIN mls_source_state s ON s.property_id = p.id AND s.source = '28hse_agent_540'
       WHERE p.source_url ~ '/(buy|rent)/[^/]+/property-[0-9]+/?$'
         AND p.status = 'active'
+        AND (${sinceDays}::int = 0 OR p.created_at > now() - make_interval(days => ${sinceDays}::int))
       ORDER BY p.listing_no`;
     const todo = force ? properties : properties.filter((row) => row.agent_count < 2);
     const limited = limit ? todo.slice(0, limit) : todo;
@@ -354,8 +390,41 @@ async function main() {
     }
   }
 
+  // Property.hk names only the listing agent; store the branch 主管 as the second correspondent
+  // so every Property.hk listing (including cross-listed old-site stock) offers two colleagues.
+  async function runBranchManager() {
+    const rows = await sql`
+      SELECT p.id, p.listing_no, a.staff_id AS agent_id, s.branch
+      FROM properties p
+      JOIN property_agents a ON a.property_id = p.id AND a.position = 1
+      JOIN staff_users s ON s.id = a.staff_id
+      WHERE p.status = 'active'
+        AND a.source = 'propertyhk'
+        AND (SELECT count(*) FROM property_agents x WHERE x.property_id = p.id) = 1
+        AND s.branch IS NOT NULL
+      ORDER BY p.listing_no`;
+    console.log(`branch manager: ${rows.length} listings with a single Property.hk agent`);
+    for (const row of rows) {
+      const manager = pickBranchManager(byBranch.get(row.branch), row.agent_id);
+      if (!manager) {
+        skipped += 1;
+        continue;
+      }
+      await merge(row.id, [
+        {
+          staffId: manager.id,
+          source: "branch_manager",
+          sourceName: manager.name_en,
+          sourceLicenceNo: normalizeLicence(manager.licence_no),
+          sourceRef: row.branch,
+        },
+      ]);
+    }
+  }
+
   if (source === "28hse" || source === "all") await run28hse();
   if (source === "propertyhk" || source === "all") await runPropertyhk();
+  if (source === "propertyhk" || source === "all") await runBranchManager();
 
   console.log(
     JSON.stringify(

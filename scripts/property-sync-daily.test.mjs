@@ -77,7 +77,7 @@ test("DB and media credentials are restricted to the intended stages and guarded
   }
   assert.deepEqual(
     dbSteps.map((s) => s.name),
-    ["preflight", "ingest", "publish", "record"],
+    ["preflight", "ingest", "publish", "publish", "record"],
   );
   assert.match(dbSteps[0].step.run, /read-sync-authority/);
   assert.ok(!/--apply/.test(dbSteps[0].step.run));
@@ -89,11 +89,15 @@ test("DB and media credentials are restricted to the intended stages and guarded
   assert.match(w.jobs.publish.if, /needs.collect.result == 'success'/);
   assert.match(w.jobs.publish.if, /publication-only/);
   assert.match(w.jobs.record.if, /PROPERTY_SYNC_OBSERVABILITY_ENABLED/);
-  assert.match(dbSteps[3].step.run, /record-sync-execution/);
+  assert.match(dbSteps[2].step.run, /publish-daily-listings/);
+  assert.match(dbSteps[3].step.run, /backfill-property-agents\.mjs --source=all/);
+  assert.match(dbSteps[3].step.run, /--since-days=60/);
+  assert.equal(dbSteps[3].step["continue-on-error"], true);
+  assert.match(dbSteps[4].step.run, /record-sync-execution/);
   assert.ok(
-    !/crawl|run_28hse_sync|publish-daily-listings|apply-source-snapshot/.test(dbSteps[3].step.run),
+    !/crawl|run_28hse_sync|publish-daily-listings|apply-source-snapshot/.test(dbSteps[4].step.run),
   );
-  assert.ok(dbSteps[3].step.env.PROPERTY_SYNC_EXPECTED_DATABASE_HOST);
+  assert.ok(dbSteps[4].step.env.PROPERTY_SYNC_EXPECTED_DATABASE_HOST);
 });
 test("accepted snapshot chronology and private failure evidence survive the staged handoff", async () => {
   const w = await workflow();
@@ -429,6 +433,16 @@ test("scheduled runs publish the approved owner capture and do not collect or us
   assert.match(text, /OWNER_PUBLICATION_WROTE_NOTHING/);
   assert.match(text, /secrets\.IMPORT_DATABASE_URL/);
   assert.match(text, /secrets\.IMPORT_BLOB_READ_WRITE_TOKEN/);
+  const ownerBackfill = owner.steps.find(
+    (step) => step.name === "Backfill correspondent agents for the published listings",
+  );
+  assert.ok(ownerBackfill);
+  assert.equal(ownerBackfill.if, "env.MODE == 'owner-publication'");
+  assert.equal(ownerBackfill["continue-on-error"], true);
+  assert.deepEqual(ownerBackfill.env, {
+    IMPORT_DATABASE_URL: "${{ secrets.IMPORT_DATABASE_URL }}",
+  });
+  assert.match(ownerBackfill.run, /backfill-property-agents\.mjs --source=propertyhk$/);
   assert.doesNotMatch(
     text,
     /secrets\.DATABASE_URL|secrets\.BLOB_READ_WRITE_TOKEN|FIRECRAWL|run_28hse_sync|PROPERTY_SYNC_28HSE_TRANSPORT/,
