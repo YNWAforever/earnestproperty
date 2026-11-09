@@ -596,12 +596,13 @@ jobs:
           if [ "$status" -eq 2 ]; then echo "Owner policy held some rows. Eligible listings were created, updated, or already current. The private report lists the holds." >> "$GITHUB_STEP_SUMMARY"; fi
       - name: Backfill correspondent agents for the published listings
         # Best effort: the listings are already published, so an agent-mapping miss must not
-        # fail the sync run.
+        # fail the sync run. The scheduled path keeps using the import credential, never the
+        # app DATABASE_URL.
         continue-on-error: true
         if: env.MODE == 'owner-publication'
         shell: bash
         env:
-          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          IMPORT_DATABASE_URL: ${{ secrets.IMPORT_DATABASE_URL }}
         run: node scripts/property-sync/backfill-property-agents.mjs --source=propertyhk
       - name: Read owner capture without writing
         if: env.MODE == 'owner-publication-dry-run'

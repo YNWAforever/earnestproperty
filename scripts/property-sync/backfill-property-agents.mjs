@@ -170,7 +170,7 @@ async function main() {
   if (!["28hse", "propertyhk", "all"].includes(source)) throw new Error("bad --source");
 
   const env = loadEnv();
-  const databaseUrl = env.DATABASE_URL_UNPOOLED || env.DATABASE_URL;
+  const databaseUrl = env.DATABASE_URL_UNPOOLED || env.DATABASE_URL || env.IMPORT_DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
   const apiKey = env.FIRECRAWL_API_KEY;
   if (!apiKey && source !== "propertyhk") throw new Error("FIRECRAWL_API_KEY is required");
