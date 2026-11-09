@@ -25,8 +25,8 @@ const article: PublicBlogArticle = {
   title: "CMS 公開文章導覽測試",
   excerpt: "公開文章摘要",
   categoryId: "market",
-  category: "成交分析",
-  categoryName: "成交分析",
+  category: "晉誠成交",
+  categoryName: "晉誠成交",
   published: true,
   publishedAt: "2026-01-01T00:00:00Z",
   createdAt: "2026-01-01T00:00:00Z",
@@ -135,7 +135,7 @@ test("market menu features 晉誠最新成交 before YouTube and preserves its b
 
   const destination = new URL(links.first().attr("href")!, "https://x.test");
   expect(destination.pathname).toBe("/blog");
-  expect(destination.searchParams.get("category")).toBe("成交分析");
+  expect(destination.searchParams.get("category")).toBe("晉誠成交");
 });
 
 test("a blog post: section-root links (header menu, breadcrumb, footer) are not the current page", async () => {
@@ -152,11 +152,17 @@ test("a blog post: section-root links (header menu, breadcrumb, footer) are not 
   expect(section.length).toBeGreaterThan(0);
   expect(section.text()).toContain("市場資訊");
 
-  // Every /blog link -- header menu, breadcrumb, footer -- carries no aria-current.
-  const blogLinks = $('a[href="/blog"]');
-  expect($('nav[aria-label="頁面路徑"] a[href="/blog"]').length).toBe(1);
+  // The post's trail names its category, so the breadcrumb links the category page
+  // (and never claims to be the current page).
+  const breadcrumb = $('nav[aria-label="頁面路徑"] a[href^="/blog?category="]');
+  expect(breadcrumb.length).toBe(1);
+  expect(new URL(breadcrumb.attr("href")!, "https://x.test").searchParams.get("category")).toBe(
+    "晉誠成交",
+  );
   expect($('footer a[href="/blog"]').length).toBe(1);
   expect($('header a[href="/blog"]').length).toBeGreaterThan(0);
+  // Every /blog link -- header menu, footer -- carries no aria-current.
+  const blogLinks = $('a[href="/blog"]');
   blogLinks.each((_, el) => expect($(el).attr("aria-current")).toBeUndefined());
   expect($('footer a[href="/"]').attr("aria-current")).toBeUndefined();
 });

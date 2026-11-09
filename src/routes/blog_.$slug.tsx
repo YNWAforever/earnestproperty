@@ -39,6 +39,8 @@ type ArticleDetail = {
   coverAlt: string | null;
   cover_image: string | null;
   category: string | null;
+  /** Stable category key for links; `category` is the (renameable) display name. */
+  categoryKey: string | null;
   reading_minutes: number | null;
   /** Hand-written per-article SEO copy from the admin CMS. Collected since
    * 20260623090000 and never selected until now, so every authored value was
@@ -96,6 +98,7 @@ export const Route = createFileRoute("/blog_/$slug")({
       cover_image: record.coverImage,
       coverAlt: record.coverAlt,
       category: record.categoryName ?? record.category,
+      categoryKey: record.category,
       reading_minutes: record.readingMinutes,
       seo_title: record.seoTitle,
       seo_description: record.seoDescription,
@@ -208,6 +211,11 @@ function BlogArticlePage() {
   }
 
   const url = `${SITE_URL}/blog/${article.slug}`;
+  // A post belongs to its category, not to the blog root: a 晉誠成交 story must read as
+  // 晉誠成交 in the trail and in the BreadcrumbList, never as the generic 市場分析.
+  const categoryKey = article.categoryKey?.trim() || null;
+  const categoryLabel = article.category?.trim() || categoryKey || "市場分析";
+  const categoryHref = categoryKey ? `/blog?category=${encodeURIComponent(categoryKey)}` : "/blog";
   const relatedLinks = [
     ...(article.links ?? []),
     ...blogCorridorLinks(
@@ -238,7 +246,12 @@ function BlogArticlePage() {
         "@type": "BreadcrumbList",
         itemListElement: [
           { "@type": "ListItem", position: 1, name: "首頁", item: SITE_URL },
-          { "@type": "ListItem", position: 2, name: "Blog", item: `${SITE_URL}/blog` },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: categoryLabel,
+            item: `${SITE_URL}${categoryHref}`,
+          },
           { "@type": "ListItem", position: 3, name: article.title, item: url },
         ],
       },
@@ -256,7 +269,7 @@ function BlogArticlePage() {
           <Breadcrumbs
             items={[
               { label: "首頁", href: "/" },
-              { label: "市場分析", href: "/blog" },
+              { label: categoryLabel, href: categoryHref },
               { label: article.title },
             ]}
           />
