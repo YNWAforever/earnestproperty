@@ -525,3 +525,29 @@ PostgreSQL trigger/constraint or production acceptance evidence. Before any sepa
 execution, revalidate the named database/policy/baseline/quota and frozen IDs; publication,
 media and any receipt-bound rollback require their own explicit approval. Never use a fabricated
 sold/absence record or a restamped old capture as a rollback shortcut.
+
+## Correspondent agents per listing (`property_agents`)
+
+Each published listing carries up to two correspondent agents in `property_agents`
+(position 1..2). The listing page shows them as a 聯絡代理 choice, and a website enquiry stores
+the chosen agent on `inquiries.assigned_agent_id` / `crm_leads.assigned_agent_id`, so the
+new-lead staff WhatsApp alert targets that colleague.
+
+`backfill-property-agents.mjs` fills the slots from the sources. It is incremental (only
+properties with fewer than two agents) and idempotent (a merge keeps the existing slots):
+
+- 28hse `/agent/540`: the detail page names two agents by EAA licence
+  (`代理個人牌照號碼: S-xxxxxx`), mapped through `staff_users.licence_no`. Needs the approved
+  Firecrawl basic transport (`--delay-ms` spaces the requests).
+- Property.hk: the detail URL carries the agent blog
+  (`/asking_detail/<branch>/<agent>/<id>.html`), mapped through
+  `config/propertyhk-agents.json`. No fetch. Cross-listed 28hse stock takes its Property.hk
+  agent from the recorded observation `final_url`.
+- Branch 主管: Property.hk names only the listing agent, so the senior 營業經理 of that agent's
+  branch fills the second slot (`source = 'branch_manager'`).
+
+Automation: the daily owner-publication workflow runs `--source=propertyhk` after publishing,
+and the manual 28hse apply run adds `--source=all --since-days=60` after publication, so new
+listings get their correspondents without a separate manual backfill. `--since-days` bounds the
+28hse fetches to recently created listings; dead source URLs (redirected to an estate page)
+never produce agents and are left for withdrawal/manual assignment.
