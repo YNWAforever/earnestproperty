@@ -187,6 +187,50 @@ async function main() {
     written += 1;
   }
 
+  /** Keep the agents a property already has and fill the free slots from `incoming`. */
+  async function merge(propertyId, incoming) {
+    const existing = await sql`
+      SELECT staff_id, source, source_name, source_licence_no, source_ref
+      FROM property_agents WHERE property_id = ${propertyId}::uuid ORDER BY position`;
+    const combined = [];
+    const seen = new Set();
+    const candidates = [
+      ...existing.map((row) => ({
+        staffId: row.staff_id,
+        source: row.source,
+        sourceName: row.source_name,
+        sourceLicenceNo: row.source_licence_no,
+        sourceRef: row.source_ref,
+      })),
+      ...incoming,
+    ];
+    for (const agent of candidates) {
+      if (!agent || seen.has(agent.staffId)) continue;
+      seen.add(agent.staffId);
+      combined.push(agent);
+    }
+    const next = combined.slice(0, 2);
+    const unchanged =
+      next.length === existing.length &&
+      next.every((agent, index) => agent.staffId === existing[index].staff_id);
+    if (unchanged) {
+      skipped += 1;
+      return;
+    }
+    if (dryRun) {
+      written += 1;
+      return;
+    }
+    await sql`DELETE FROM property_agents WHERE property_id = ${propertyId}::uuid`;
+    for (const [index, agent] of next.entries()) {
+      await sql`
+        INSERT INTO property_agents (property_id, position, staff_id, source, source_name, source_licence_no, source_ref)
+        VALUES (${propertyId}::uuid, ${index + 1}, ${agent.staffId}::uuid, ${agent.source},
+                ${agent.sourceName ?? null}, ${agent.sourceLicenceNo ?? null}, ${agent.sourceRef ?? null})`;
+    }
+    written += 1;
+  }
+
   async function run28hse() {
     const properties = await sql`
       SELECT DISTINCT p.id, p.listing_no, p.source_url,
@@ -256,7 +300,7 @@ async function main() {
         });
         continue;
       }
-      await upsert(property.id, [
+      await merge(property.id, [
         {
           staffId: match.id,
           source: "propertyhk",
@@ -265,6 +309,48 @@ async function main() {
           sourceRef: slug,
         },
       ]);
+    }
+
+    // Cross-listed: a 28hse-sourced property that also appears on Property.hk takes its
+    // correspondent agent(s) from the recorded observation final_url
+    // (/asking_detail/<branch>/<agent>/<id>.html) — no fetch needed, the slug is stored.
+    // Existing 28hse agents keep their slot; property.hk agents fill the remaining one.
+    const crossListed = await sql`
+      SELECT p.id, p.listing_no,
+        array_agg(DISTINCT o.payload->>'final_url') AS urls,
+        (SELECT count(*)::int FROM property_agents a WHERE a.property_id = p.id) AS agent_count
+      FROM properties p
+      JOIN property_source_links l ON l.property_id = p.id AND l.source = 'propertyhk'
+      JOIN listing_source_observations o
+        ON o.source = 'propertyhk' AND o.external_listing_id = l.external_listing_id
+      WHERE o.payload->>'final_url' LIKE 'https://www.property.hk/asking_detail/%'
+      GROUP BY p.id, p.listing_no
+      ORDER BY p.listing_no`;
+    const crossTodo = force ? crossListed : crossListed.filter((row) => row.agent_count < 2);
+    console.log(
+      `propertyhk (cross-listed): ${crossListed.length} properties, ${crossTodo.length} to fill`,
+    );
+    for (const property of crossTodo) {
+      const agents = [];
+      for (const url of property.urls ?? []) {
+        let slug = null;
+        try {
+          slug = propertyhkAgentSlug(url);
+        } catch {
+          slug = null;
+        }
+        const publicSlug = slug ? PROPERTYHK_AGENT_SLUGS[slug] : null;
+        const match = publicSlug ? bySlug.get(publicSlug) : null;
+        if (!match) continue;
+        agents.push({
+          staffId: match.id,
+          source: "propertyhk",
+          sourceName: match.name_en,
+          sourceLicenceNo: normalizeLicence(match.licence_no),
+          sourceRef: slug,
+        });
+      }
+      await merge(property.id, agents);
     }
   }
 
