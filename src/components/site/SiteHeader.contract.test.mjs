@@ -9,7 +9,7 @@ const sheetSource = await readFile(new URL("../ui/sheet.tsx", import.meta.url), 
 test("market featured links share their order with the mobile menu", () => {
   const market = headerSource.slice(headerSource.indexOf('id: "market",'));
   const featured = market.slice(market.indexOf("featured: ["), market.indexOf("links: ["));
-  assert.match(featured, /href: "\/blog\?category=成交分析",\s*label: "晉誠最新成交"/);
+  assert.match(featured, /href: "\/blog\?category=晉誠成交",\s*label: "晉誠最新成交"/);
   assert.ok(featured.indexOf("晉誠最新成交") < featured.indexOf("YouTube影片"));
   assert.match(headerSource, /const base = \[\.\.\.menu\.featured, \.\.\.menu\.links\]/);
   assert.match(headerSource, /menuMobileItems\(menu\)\.map/);
