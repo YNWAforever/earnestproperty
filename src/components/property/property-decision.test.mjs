@@ -90,6 +90,30 @@ test("browser inquiry payload allow-lists fields and cannot select an agent", as
   assert.equal("assigned_agent_id" in payload, false);
 });
 
+test("browser inquiry payload carries only the explicitly chosen correspondent agent", async () => {
+  const { buildPropertyInquiryPayload } = await import(moduleUrl);
+  const base = {
+    form: {
+      name: "陳先生",
+      phone: "9123 4567",
+      email: "",
+      message: "",
+      agent_id: "attacker-selected-agent",
+    },
+    propertyId: "11111111-1111-4111-8111-111111111111",
+    consentWhatsapp: false,
+  };
+
+  assert.equal("agentId" in buildPropertyInquiryPayload(base), false);
+  assert.equal(
+    buildPropertyInquiryPayload({ ...base, agentId: "22222222-2222-4222-8222-222222222222" })
+      .agentId,
+    "22222222-2222-4222-8222-222222222222",
+  );
+  // The free-form form fields still never leak into the payload.
+  assert.equal("agent_id" in buildPropertyInquiryPayload({ ...base, agentId: "" }), false);
+});
+
 test("property layout renders mobile contact immediately after media without duplicating the form", async () => {
   assert.equal(existsSync(layoutModuleUrl), true, "property media/contact layout must exist");
   const { PropertyMediaContactLayout } = await import(layoutModuleUrl);

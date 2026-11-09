@@ -13,6 +13,7 @@ export type WebsiteInquiryRouting = {
 
 export function deriveWebsiteInquiryRouting(
   listing: WebsiteInquiryListing | null,
+  chosenAgentId?: string | null,
 ): WebsiteInquiryRouting;
 
 export const WEBSITE_LISTING_NO_PATTERN: RegExp;
@@ -28,6 +29,8 @@ export type WebsiteInquiryPersistenceInput = {
   message: string | null;
   listingNo: string | null;
   propertyId: string | null;
+  /** One of the listing's correspondent agents, when the visitor picked one. */
+  agentId?: string | null;
   consentWhatsapp: boolean;
   /** Honeypot flag: adds a timeline note and an audit row; never drops the enquiry. */
   suspectedBot?: boolean;

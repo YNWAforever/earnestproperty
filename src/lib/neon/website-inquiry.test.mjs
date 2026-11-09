@@ -44,6 +44,30 @@ test("active rental listings assign only active staff and derive renter intent",
   );
 });
 
+test("a visitor-chosen correspondent agent receives the lead", async () => {
+  assert.equal(existsSync(moduleUrl), true, "website inquiry routing helper must exist");
+  const { deriveWebsiteInquiryRouting } = await import(moduleUrl);
+
+  // The choice is only passed in after property_agents confirmed the staff member
+  // corresponds to this listing; it wins over the listing's own agent.
+  assert.deepEqual(
+    deriveWebsiteInquiryRouting(
+      {
+        id: "property-sale",
+        dealType: "sale",
+        agentId: "listing-agent",
+        agentActive: true,
+      },
+      "chosen-agent",
+    ),
+    {
+      propertyId: "property-sale",
+      assignedAgentId: "chosen-agent",
+      intent: "buyer",
+    },
+  );
+});
+
 test("inactive or missing staff never receive an automatic assignment", async () => {
   assert.equal(existsSync(moduleUrl), true, "website inquiry routing helper must exist");
   const { deriveWebsiteInquiryRouting } = await import(moduleUrl);

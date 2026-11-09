@@ -22,6 +22,8 @@ export function buildPropertyInquiryPayload(input: {
   };
   propertyId: string;
   listingNo?: string | null;
+  /** The correspondent agent the visitor picked (validated server-side). */
+  agentId?: string | null;
   consentWhatsapp: boolean;
 }): {
   name: string;
@@ -30,5 +32,6 @@ export function buildPropertyInquiryPayload(input: {
   message: string;
   property_id: string;
   listingNo?: string;
+  agentId?: string;
   consentWhatsapp: boolean;
 };
