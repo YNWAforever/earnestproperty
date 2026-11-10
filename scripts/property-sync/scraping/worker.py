@@ -407,6 +407,34 @@ def extract_28_company_number(html):
     return next(iter(numbers), None)
 
 
+def extract_28_agent_contacts(soup):
+    """The advertisement's 放盤聯絡人 cards: display name and EAA licence, page order.
+
+    The detail fetch already happens for price/area; the licence numbers it renders are
+    the correspondent agents' identity, so they are carried on the same record instead of
+    a second per-listing fetch. The agency card is outside .contactsDiv and is not read.
+    A licence without a readable name is still kept (the licence is the identity).
+    """
+    contacts = []
+    for item in soup.select(".contactsDiv"):
+        licence = None
+        for node in item.select(".less_span"):
+            match = re.search(r"代理個人牌照號碼[:：]?\s*([SE]-\d{6})", text(node.get_text(" ")))
+            if match:
+                licence = match[1].upper()
+                break
+        if licence is None:
+            continue
+        name = None
+        header = item.select_one("h4")
+        if header is not None:
+            for badge in header.select(".nameCardBtn"):
+                badge.extract()
+            name = text(header.get_text(" ")) or None
+        contacts.append({"name": name, "licence": licence})
+    return contacts[:2]
+
+
 def verify_28_detail_identity(s, record):
     """Bind a live document to the index advertisement without inferring a unit."""
     try:
@@ -656,6 +684,7 @@ def parse_28_detail(html, record, *, require_live_identity=False):
     layout_evidence = extract_28_layout_evidence(
         location_text or raw.get("district") or raw.get("estate")
     )
+    agent_contacts = extract_28_agent_contacts(s)
     r = {
         **record,
         "source_status": "delisted" if reason else "active",
@@ -671,6 +700,7 @@ def parse_28_detail(html, record, *, require_live_identity=False):
             "detail_identity": identity,
             "json_ld": json_ld,
             "layout_evidence": layout_evidence,
+            "agent_contacts": agent_contacts,
             "source_conflicts": [],
         },
     }

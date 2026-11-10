@@ -6,6 +6,7 @@ import {
   extract28hseAgentNames,
   is28hseDetailGone,
   normalizeLicence,
+  payloadAgentListings,
   pickBranchManager,
   propertyhkAgentSlug,
 } from "./backfill-property-agents.mjs";
@@ -107,4 +108,51 @@ test("pickBranchManager uses the next colleague when the agent is the manager", 
   assert.equal(pickBranchManager(branchStaff, "manager").id, "senior");
   assert.equal(pickBranchManager([{ id: "manager" }], "manager"), null);
   assert.equal(pickBranchManager([], "agent"), null);
+});
+
+test("payloadAgentListings reads the contacts the sync already parsed from detail pages", () => {
+  const payload = {
+    source: "28hse",
+    listings: [
+      {
+        property_id: "4052109",
+        deal_type: "sale",
+        source_url: "https://www.28hse.com/buy/apartment/property-4052109",
+        raw_payload: {
+          agent_contacts: [
+            { name: "朱倩敏 Mun Chu", licence: "E-421644" },
+            { name: "鄧錦雄 Terence Tang", licence: "e 070754" },
+          ],
+        },
+      },
+      { property_id: "4044249", deal_type: "rent", source_url: "https://x/", raw_payload: {} },
+      {
+        property_id: "4035759",
+        deal_type: "other",
+        raw_payload: { agent_contacts: [{ licence: "E-421644" }] },
+      },
+      {
+        property_id: "",
+        deal_type: "rent",
+        raw_payload: { agent_contacts: [{ licence: "E-421644" }] },
+      },
+    ],
+  };
+  assert.deepEqual(payloadAgentListings(payload), [
+    {
+      externalId: "4052109",
+      dealType: "sale",
+      sourceUrl: "https://www.28hse.com/buy/apartment/property-4052109",
+      contacts: [
+        { name: "朱倩敏 Mun Chu", licence: "E-421644" },
+        { name: "鄧錦雄 Terence Tang", licence: "E-070754" },
+      ],
+    },
+  ]);
+});
+
+test("payloadAgentListings rejects a payload from another source", () => {
+  assert.throws(() => payloadAgentListings({ source: "propertyhk", listings: [] }), {
+    message: "payload_source_mismatch",
+  });
 });

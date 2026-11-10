@@ -466,22 +466,17 @@ jobs:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
-      - name: Backfill correspondent agents for the new listings
-        # Best effort: the listings are already published, so an agent-mapping miss must not
-        # fail the sync run. --withdraw-gone needs the owner-approved admin actor variable.
+      - name: Fill correspondent agents from the sync detail pages
+        # The 28hse collector already fetched each listing's detail page and carried the agent
+        # licences in the frozen payload, so this needs no source fetch. Best effort: the
+        # listings are already published, so an agent-mapping miss must not fail the sync run.
         continue-on-error: true
         shell: bash
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
-          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
-          WITHDRAW_ACTOR: ${{ vars.PROPERTY_AGENTS_WITHDRAW_ACTOR }}
         run: |
           set -euo pipefail
-          args=(--source=all --since-days=60 --limit=400)
-          if [ -n "${WITHDRAW_ACTOR:-}" ]; then
-            args+=(--withdraw-gone "--withdraw-actor=$WITHDRAW_ACTOR")
-          fi
-          node scripts/property-sync/backfill-property-agents.mjs "${args[@]}"
+          node scripts/property-sync/backfill-property-agents.mjs --source=28hse --from-payload="$PAYLOAD"
       - name: Pin private publication result
         shell: bash
         run: |-

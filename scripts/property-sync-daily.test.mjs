@@ -90,10 +90,12 @@ test("DB and media credentials are restricted to the intended stages and guarded
   assert.match(w.jobs.publish.if, /publication-only/);
   assert.match(w.jobs.record.if, /PROPERTY_SYNC_OBSERVABILITY_ENABLED/);
   assert.match(dbSteps[2].step.run, /publish-daily-listings/);
-  assert.match(dbSteps[3].step.run, /args=\(--source=all --since-days=60 --limit=400\)/);
-  assert.match(dbSteps[3].step.run, /backfill-property-agents\.mjs "\$\{args\[@\]\}"/);
-  assert.match(dbSteps[3].step.run, /--withdraw-gone/);
-  assert.equal(dbSteps[3].step.env.WITHDRAW_ACTOR, "${{ vars.PROPERTY_AGENTS_WITHDRAW_ACTOR }}");
+  assert.match(
+    dbSteps[3].step.run,
+    /backfill-property-agents\.mjs --source=28hse --from-payload="\$PAYLOAD"/,
+  );
+  assert.equal(dbSteps[3].step.env.FIRECRAWL_API_KEY, undefined);
+  assert.equal(dbSteps[3].step.env.WITHDRAW_ACTOR, undefined);
   assert.equal(dbSteps[3].step["continue-on-error"], true);
   assert.match(dbSteps[4].step.run, /record-sync-execution/);
   assert.ok(
