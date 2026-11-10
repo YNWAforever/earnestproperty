@@ -55,7 +55,14 @@ Set these in GitHub settings. Do not put the secret values in Vercel or in git.
 | `IMPORT_BLOB_READ_WRITE_TOKEN`           | secret   | Blob read/write token whose store id matches `IMPORT_BLOB_STORE_ID`                       |
 | `FIRECRAWL_API_KEY_2`                    | secret   | optional backup Firecrawl key for the collect step (the adapter rotates on a 402)         |
 
-`PROPERTY_SYNC_EVIDENCE_REPO` and `PROPERTY_SYNC_EVIDENCE_TOKEN` stay as they are for the private `property-sync-evidence` release. The owner job does not receive `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, `BLOB_READ_WRITE_TOKEN`, or `FIRECRAWL_API_KEY`. The importer rejects an `IMPORT_*` value that is simultaneously present under those ordinary names, and it rejects a pooler URL.
+The collect job (manual apply) and the correspondent-agents refresh job declare the `Production`
+environment, which has no protection rules, so the optional backup key `FIRECRAWL_API_KEY_2` may
+be stored there as an environment secret; a repository secret works too.
+`PROPERTY_SYNC_EVIDENCE_REPO` and `PROPERTY_SYNC_EVIDENCE_TOKEN` stay as they are for the
+private `property-sync-evidence` release. The owner job does not receive `DATABASE_URL`,
+`DATABASE_URL_UNPOOLED`, `BLOB_READ_WRITE_TOKEN`, or `FIRECRAWL_API_KEY`. The importer rejects
+an `IMPORT_*` value that is simultaneously present under those ordinary names, and it rejects a
+pooler URL.
 
 Pack the bundle from the capture directory that contains `import_ready.frozen.json` and `photos/<source-id>/`:
 

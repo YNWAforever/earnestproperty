@@ -21,6 +21,9 @@ permissions:
   contents: read
 jobs:
   refresh:
+    # The Production environment carries the optional backup Firecrawl key (FIRECRAWL_API_KEY_2);
+    # the environment has no protection rules, so the daily refresh is not gated.
+    environment: Production
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:

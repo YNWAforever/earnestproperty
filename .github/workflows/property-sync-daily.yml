@@ -164,6 +164,9 @@ jobs:
   collect:
     # Manual HTTP collection only. The 09:00 Asia/Hong_Kong schedule never enters this job
     # and does not use Firecrawl or PROPERTY_SYNC_28HSE_TRANSPORT.
+    # The Production environment carries the optional backup Firecrawl key (FIRECRAWL_API_KEY_2);
+    # it has no protection rules, so a manual apply run is not gated by it.
+    environment: Production
     runs-on: ubuntu-latest
     timeout-minutes: 120
     permissions:
