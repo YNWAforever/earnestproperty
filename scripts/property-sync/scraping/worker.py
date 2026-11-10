@@ -381,11 +381,17 @@ def parse_28_index(html, deal):
     return list(links.values()), terminal, total
 
 
+CANONICAL_COMPANY_NUMBER = re.compile(r"[A-Z][0-9]{6}")
+
+
 def extract_28_company_number(html):
     """Read the explicit agent-provided number, never the advertisement ID.
 
-    Missing labels are unobserved. An explicit but malformed or conflicting
-    label rejects the detail so it cannot supply identity or absence evidence.
+    Missing labels are unobserved. A malformed label or contradictory page rejects the
+    detail so it cannot supply identity or absence evidence. A single explicit value that
+    is not the canonical agency number (a source typo such as "R07628r") is also
+    unobserved: the listing keeps its unit identity, and ingestion holds it for review
+    instead of rejecting a whole full snapshot over one mistyped number.
     """
     soup = BeautifulSoup(html, "html.parser")
     numbers = set()
@@ -404,7 +410,8 @@ def extract_28_company_number(html):
         numbers.add(match[1].upper())
     if len(numbers) > 1:
         raise WorkerError("conflicting_agency_property_no")
-    return next(iter(numbers), None)
+    value = next(iter(numbers), None)
+    return value if value and CANONICAL_COMPANY_NUMBER.fullmatch(value) else None
 
 
 def extract_28_agent_contacts(soup):
