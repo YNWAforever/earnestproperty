@@ -14,6 +14,9 @@
  * Flags: --source=28hse|propertyhk|all (default all), --limit=N, --dry-run,
  *        --force (refetch even when the property already has two agents),
  *        --since-days=N (28hse only: only properties created in the last N days),
+ *        --withdraw-gone (28hse only: mark a listing inactive when its detail URL now redirects
+ *        to an estate page and it has no Property.hk advertisement; needs
+ *        --withdraw-actor=<staff uuid>, the owner-approved admin actor recorded in audit_logs),
  *        --delay-ms=4500 (between source fetches; Firecrawl allows ~15-20/min).
  *
  * The propertyhk run also fills the branch 主管 as the second correspondent (Property.hk
@@ -109,6 +112,28 @@ export function pickBranchManager(branchStaff, currentStaffId) {
   )[0];
 }
 
+/**
+ * A 28hse detail fetch that is no longer the listing itself: the URL redirected to an estate
+ * page, or the page no longer carries the listing markers. Challenge/blocked pages are small
+ * and are treated as a fetch failure, never as "gone", so a bad scrape cannot withdraw stock.
+ */
+export function is28hseDetailGone({ requestedUrl, finalUrl, html }) {
+  const text = String(html ?? "");
+  if (text.length < 2000) return false;
+  if (finalUrl) {
+    const normalize = (value) => {
+      try {
+        const url = new URL(value);
+        return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+      } catch {
+        return String(value);
+      }
+    };
+    if (normalize(finalUrl) !== normalize(requestedUrl)) return true;
+  }
+  return !/代理個人牌照號碼|放盤聯絡人/.test(text);
+}
+
 /** property.hk detail URL → staff public slug. */
 export function propertyhkAgentSlug(url) {
   const match = /^\/asking_detail\/([a-z]+\/[a-z0-9_-]+)\/\d{1,12}\.html$/.exec(
@@ -155,7 +180,13 @@ async function fetchFirecrawl(url, apiKey) {
         `firecrawl_http_${response.status}: ${String(body?.error ?? "").slice(0, 120)}`,
       );
     }
-    return String(body?.data?.rawHtml ?? "");
+    const data = body?.data ?? {};
+    const metadata = data.metadata ?? {};
+    return {
+      html: String(data.rawHtml ?? ""),
+      finalUrl: metadata.url ?? metadata.sourceURL ?? null,
+      statusCode: Number.isInteger(metadata.statusCode) ? metadata.statusCode : null,
+    };
   }
 }
 
@@ -165,13 +196,22 @@ async function main() {
   const limit = Number(argValue(argv, "limit", "0")) || 0;
   const dryRun = argv.includes("--dry-run");
   const force = argv.includes("--force");
+  const withdrawGone = argv.includes("--withdraw-gone");
+  const withdrawActor = argValue(argv, "withdraw-actor", "");
   const delayMs = Number(argValue(argv, "delay-ms", "4500"));
   const sinceDays = Number(argValue(argv, "since-days", "0")) || 0;
+  // "null" targets the legacy stock whose source_site is empty but whose source_url is 28hse.
+  const sourceSite = argValue(argv, "source-site", "");
   if (!["28hse", "propertyhk", "all"].includes(source)) throw new Error("bad --source");
 
   const env = loadEnv();
   const databaseUrl = env.DATABASE_URL_UNPOOLED || env.DATABASE_URL || env.IMPORT_DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
+  if (
+    withdrawGone &&
+    !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(withdrawActor)
+  )
+    throw new Error("--withdraw-gone requires --withdraw-actor=<staff uuid>");
   const apiKey = env.FIRECRAWL_API_KEY;
   if (!apiKey && source !== "propertyhk") throw new Error("FIRECRAWL_API_KEY is required");
   const sql = neon(databaseUrl);
@@ -196,6 +236,8 @@ async function main() {
 
   let written = 0;
   let skipped = 0;
+  let withdrawn = 0;
+  const gone = [];
   const failures = [];
 
   async function upsert(propertyId, agents) {
@@ -267,14 +309,25 @@ async function main() {
   }
 
   async function run28hse() {
+    // Any active property that points at a 28hse detail page, not only the ones the 28hse sync
+    // tracked in mls_source_state: listings created by the owner capture carry a 28hse URL
+    // without a source-state row, and they used to be skipped forever.
     const properties = await sql`
       SELECT DISTINCT p.id, p.listing_no, p.source_url,
-        (SELECT count(*)::int FROM property_agents a WHERE a.property_id = p.id) AS agent_count
+        (SELECT count(*)::int FROM property_agents a WHERE a.property_id = p.id) AS agent_count,
+        EXISTS (SELECT 1 FROM property_source_links l
+                WHERE l.property_id = p.id AND l.source = 'propertyhk') AS has_propertyhk_link,
+        (SELECT min(m.public_listing_no) FROM property_public_members m
+         WHERE m.property_id = p.id) AS public_listing_no
       FROM properties p
-      JOIN mls_source_state s ON s.property_id = p.id AND s.source = '28hse_agent_540'
-      WHERE p.source_url ~ '/(buy|rent)/[^/]+/property-[0-9]+/?$'
-        AND p.status = 'active'
+      WHERE p.status = 'active'
+        AND p.source_url ~ '^https://www\.28hse\.com/(buy|rent)/[^/]+/property-[0-9]+/?$'
+        AND (p.source_site = '28hse'
+             OR EXISTS (SELECT 1 FROM mls_source_state s
+                        WHERE s.property_id = p.id AND s.source = '28hse_agent_540'))
         AND (${sinceDays}::int = 0 OR p.created_at > now() - make_interval(days => ${sinceDays}::int))
+        AND (${sourceSite} = '' OR (${sourceSite} = 'null' AND p.source_site IS NULL)
+             OR p.source_site = ${sourceSite})
       ORDER BY p.listing_no`;
     const todo = force ? properties : properties.filter((row) => row.agent_count < 2);
     const limited = limit ? todo.slice(0, limit) : todo;
@@ -283,9 +336,39 @@ async function main() {
     );
     for (const [index, property] of limited.entries()) {
       try {
-        const html = await fetchFirecrawl(property.source_url, apiKey);
-        const licences = extract28hseAgentLicences(html);
-        const names = extract28hseAgentNames(html);
+        const fetched = await fetchFirecrawl(property.source_url, apiKey);
+        if (is28hseDetailGone({ requestedUrl: property.source_url, ...fetched })) {
+          gone.push({
+            property: property.listing_no,
+            sourceUrl: property.source_url,
+            finalUrl: fetched.finalUrl,
+            statusCode: fetched.statusCode,
+          });
+          // A listing with a live Property.hk advertisement is not withdrawn: the 28hse
+          // listing being gone does not mean the property is off the market. The withdrawal
+          // goes through the same admin function the admin UI uses (audit log + source
+          // snapshot + ownership fence), never a bare UPDATE.
+          if (withdrawGone && !property.has_propertyhk_link && !dryRun) {
+            if (!property.public_listing_no) {
+              failures.push({
+                property: property.listing_no,
+                error: "withdraw_unavailable:no_public_listing_no",
+              });
+            } else {
+              await sql`
+                SELECT admin_property_manage(
+                  ${property.public_listing_no},
+                  admin_property_group_version(${property.public_listing_no}),
+                  'all',
+                  '{"status":"inactive"}'::jsonb,
+                  ${withdrawActor}::uuid)`;
+              withdrawn += 1;
+            }
+          }
+          continue;
+        }
+        const licences = extract28hseAgentLicences(fetched.html);
+        const names = extract28hseAgentNames(fetched.html);
         const agents = licences.map((licence, position) => {
           const match = byLicence.get(licence);
           return match
@@ -428,7 +511,16 @@ async function main() {
 
   console.log(
     JSON.stringify(
-      { dryRun, written, skipped, failures: failures.slice(0, 20), failureCount: failures.length },
+      {
+        dryRun,
+        written,
+        skipped,
+        withdrawn,
+        goneCount: gone.length,
+        gone: gone.slice(0, 20),
+        failures: failures.slice(0, 20),
+        failureCount: failures.length,
+      },
       null,
       1,
     ),

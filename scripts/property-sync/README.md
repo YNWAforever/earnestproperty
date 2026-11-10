@@ -547,7 +547,16 @@ properties with fewer than two agents) and idempotent (a merge keeps the existin
   branch fills the second slot (`source = 'branch_manager'`).
 
 Automation: the daily owner-publication workflow runs `--source=propertyhk` after publishing,
-and the manual 28hse apply run adds `--source=all --since-days=60` after publication, so new
-listings get their correspondents without a separate manual backfill. `--since-days` bounds the
-28hse fetches to recently created listings; dead source URLs (redirected to an estate page)
-never produce agents and are left for withdrawal/manual assignment.
+the manual 28hse apply run adds `--source=all --since-days=60` after publication, and the
+`Correspondent agents refresh` workflow runs daily (recent listings, `--limit=2`) and weekly
+(legacy 28hse stock, `--limit=40`). New listings therefore get their correspondents without a
+separate manual backfill. `--since-days` bounds the 28hse fetches to recently created listings.
+
+A 28hse detail URL that now redirects to an estate page is a delisted listing: `--withdraw-gone`
+marks it inactive through `admin_property_manage` (audit log + source snapshot + ownership fence),
+never a bare `UPDATE`. It needs `--withdraw-actor=<staff uuid>`, the owner-approved admin account;
+the workflows take it from the `PROPERTY_AGENTS_WITHDRAW_ACTOR` repository variable and skip the
+withdrawal when it is unset. A listing with a live Property.hk advertisement is never withdrawn.
+Challenge/blocked pages are treated as fetch failures, not as gone. The legacy owner-capture
+28hse stock is targeted with `--source-site=null`; once its redirects are verified it can be
+withdrawn in one pass (`--limit` bounds each run).
