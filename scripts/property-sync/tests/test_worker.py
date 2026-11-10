@@ -643,6 +643,21 @@ class CompanyNumberTests(unittest.TestCase):
     def test_equal_duplicate_labels_are_consistent(self):
         self.assertEqual(self.extract('<div>物業編號: C020617 (代理提供)</div>'*2), "C020617")
 
+    def test_non_canonical_value_is_unobserved_not_fatal(self):
+        # 28hse listing 4080102 shows "物業編號: R07628r" (agent typo). One mistyped
+        # number must not reject a full snapshot: the listing is still collected and
+        # ingestion holds it for review.
+        for label in ["物業編號: R07628r (代理提供)", "物業編號: R07628 (代理提供)"]:
+            with self.subTest(label=label):
+                self.assertIsNone(self.extract('<div class="sub header">'+label+'</div>'))
+
+    def test_non_canonical_value_keeps_the_parsed_record(self):
+        html=(Path(__file__).parent/'fixtures'/'28hse-company-number-structure.html').read_text(encoding='utf-8')
+        html=html.replace('C020617','R07628r').replace('4003829','4080102')
+        record=w.parse_28_detail(html, {'property_id':'4080102','deal_type':'sale'})
+        self.assertIsNone(record.get('agency_property_no'))
+        self.assertEqual(record['property_id'], '4080102')
+
     def test_captured_structure_wires_observation_without_changing_ad_identity(self):
         html=(Path(__file__).parent/'fixtures'/'28hse-company-number-structure.html').read_text(encoding='utf-8')
         for ident in ['4003829', '4003830']:
