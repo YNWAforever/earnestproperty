@@ -13,6 +13,26 @@ API_URL = "https://api.firecrawl.dev/v2/scrape"
 ORIGIN = "https://www.28hse.com"
 SOURCE_BODY_LIMIT = 2 * 1024 * 1024
 PROVIDER_BODY_LIMIT = 16 * 1024 * 1024
+# A plan's credits can run out mid-run; the numbered backups let a collection continue on
+# another approved key instead of failing the whole sync.
+KEY_ENV_SUFFIXES = ("", "_2", "_3", "_4", "_5")
+
+
+def firecrawl_tokens():
+    """The approved Firecrawl key pool.
+
+    `FIRECRAWL_API_KEYS` (comma separated) wins; otherwise `FIRECRAWL_API_KEY` plus the
+    numbered backups `FIRECRAWL_API_KEY_2`..`_5`. Invalid entries are ignored, never used.
+    """
+    raw = os.environ.get("FIRECRAWL_API_KEYS", "")
+    values = [part.strip() for part in raw.split(",")] if raw else []
+    values += [os.environ.get(f"FIRECRAWL_API_KEY{suffix}", "") for suffix in KEY_ENV_SUFFIXES]
+    tokens = []
+    for token in values:
+        if token and token not in tokens and len(token) <= 1024 and not re.search(r"\s", token):
+            tokens.append(token)
+    return tokens
+
 
 
 def approved_url(url):
@@ -48,8 +68,8 @@ class FirecrawlBasic:
 
     def __call__(self, url):
         approved_url(url)
-        token = os.environ.get("FIRECRAWL_API_KEY", "")
-        if not token or len(token) > 1024 or re.search(r"\s", token):
+        tokens = firecrawl_tokens()
+        if not tokens:
             raise WorkerError("firecrawl_key_required")
         robots = urlsplit(url).path == "/robots.txt"
         field = "markdown" if robots else "rawHtml"
@@ -63,25 +83,32 @@ class FirecrawlBasic:
             "onlyMainContent": False,
             "timeout": 25000,
         }
-        try:
-            status, _, raw = self.request(
-                API_URL, json.dumps(options).encode(), token, max_bytes=PROVIDER_BODY_LIMIT
-            )
-        except (URLError, TimeoutError, OSError):
-            raise TransportError("firecrawl_provider_network_failed", retryable=True) from None
-        except WorkerError as error:
-            if str(error) == "response_too_large":
-                raise TransportError("firecrawl_provider_response_too_large") from None
-            raise
-        # Request evidence omits Authorization; provider bytes remain private.
-        self.evidence.append({
-            "request": options,
-            "provider_status": status,
-            "body_base64": base64.b64encode(raw).decode("ascii"),
-            "body_sha256": hashlib.sha256(raw).hexdigest(),
-        })
-        if self.checkpoint:
-            self.checkpoint.provider_response(url, status, raw)
+        status, raw = None, b""
+        for token in tokens:
+            try:
+                status, _, raw = self.request(
+                    API_URL, json.dumps(options).encode(), token, max_bytes=PROVIDER_BODY_LIMIT
+                )
+            except (URLError, TimeoutError, OSError):
+                raise TransportError("firecrawl_provider_network_failed", retryable=True) from None
+            except WorkerError as error:
+                if str(error) == "response_too_large":
+                    raise TransportError("firecrawl_provider_response_too_large") from None
+                raise
+            # Request evidence omits Authorization; provider bytes remain private.
+            self.evidence.append({
+                "request": options,
+                "provider_status": status,
+                "body_base64": base64.b64encode(raw).decode("ascii"),
+                "body_sha256": hashlib.sha256(raw).hexdigest(),
+            })
+            if self.checkpoint:
+                self.checkpoint.provider_response(url, status, raw)
+            # 402 means this key's plan credits are exhausted; the next pooled key may still
+            # have its own allowance. Any other status is final for this request.
+            if status == 402:
+                continue
+            break
         if status != 200:
             raise TransportError(
                 f"firecrawl_provider_http_{status}",

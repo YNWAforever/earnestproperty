@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   extract28hseAgentLicences,
   extract28hseAgentNames,
+  firecrawlKeys,
   is28hseDetailGone,
   normalizeLicence,
   payloadAgentListings,
@@ -155,4 +156,21 @@ test("payloadAgentListings rejects a payload from another source", () => {
   assert.throws(() => payloadAgentListings({ source: "propertyhk", listings: [] }), {
     message: "payload_source_mismatch",
   });
+});
+
+test("firecrawlKeys reads the comma pool then the numbered backups", () => {
+  assert.deepEqual(firecrawlKeys({ FIRECRAWL_API_KEY: "primary" }), ["primary"]);
+  assert.deepEqual(firecrawlKeys({ FIRECRAWL_API_KEY: "primary", FIRECRAWL_API_KEY_2: "backup" }), [
+    "primary",
+    "backup",
+  ]);
+  assert.deepEqual(
+    firecrawlKeys({ FIRECRAWL_API_KEYS: " pool-a , pool-b ", FIRECRAWL_API_KEY: "primary" }),
+    ["pool-a", "pool-b", "primary"],
+  );
+  assert.deepEqual(
+    firecrawlKeys({ FIRECRAWL_API_KEY: " primary ", FIRECRAWL_API_KEY_2: "primary" }),
+    ["primary"],
+  );
+  assert.deepEqual(firecrawlKeys({}), []);
 });

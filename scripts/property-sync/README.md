@@ -241,10 +241,13 @@ Live adapter verification (2026-09-07): the authorized agent 540 response uses t
 The default remains `transport: "http"`. To select the optional adapter, set
 `sources.28hse.transport` to `firecrawl-basic` in a deployment-owned config, or
 set `PROPERTY_SYNC_28HSE_TRANSPORT=firecrawl-basic` for the 28Hse CLI.
-`FIRECRAWL_API_KEY` is read from the environment; there is no key in config,
-request evidence or command arguments. The daily workflow forwards the
-repository variable `PROPERTY_SYNC_28HSE_TRANSPORT` (default `http`) and secret
-`FIRECRAWL_API_KEY` only to the collection step. This code does not create or
+``FIRECRAWL_API_KEY` is read from the environment; there is no key in config,
+request evidence or command arguments. Backup keys use the same scope:
+`FIRECRAWL_API_KEY_2`..`_5` (or one comma-separated `FIRECRAWL_API_KEYS`). A plan's
+credits can run out mid-run, so the adapter rotates to the next pooled key when the
+provider answers `402`; every other status stays final. The daily workflow forwards the
+repository variable `PROPERTY_SYNC_28HSE_TRANSPORT` (default `http`) and secrets
+`FIRECRAWL_API_KEY`/`FIRECRAWL_API_KEY_2` only to the collection step. This code does not create or
 change either setting, enable a schedule, or grant ingestion/publication authority.
 Validate the opt-in with an explicitly authorized dry-run before activation.
 

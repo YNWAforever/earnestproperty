@@ -190,33 +190,56 @@ function loadEnv() {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function fetchFirecrawl(url, apiKey) {
-  // Firecrawl's plan rate limit is ~15-20 requests/minute; a 429 is waited out rather than
-  // counted as a failed property.
-  for (let attempt = 0; ; attempt += 1) {
-    const response = await fetch(FIRECRAWL_API_URL, {
-      method: "POST",
-      headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ url, ...FIRECRAWL_OPTIONS }),
-    });
-    const body = await response.json().catch(() => null);
-    if (response.status === 429 && attempt < 4) {
-      await sleep(60_000);
-      continue;
-    }
-    if (!response.ok || !body?.success) {
-      throw new Error(
-        `firecrawl_http_${response.status}: ${String(body?.error ?? "").slice(0, 120)}`,
-      );
-    }
-    const data = body?.data ?? {};
-    const metadata = data.metadata ?? {};
-    return {
-      html: String(data.rawHtml ?? ""),
-      finalUrl: metadata.url ?? metadata.sourceURL ?? null,
-      statusCode: Number.isInteger(metadata.statusCode) ? metadata.statusCode : null,
-    };
+/**
+ * The approved Firecrawl key pool. `FIRECRAWL_API_KEYS` (comma separated) wins; otherwise
+ * `FIRECRAWL_API_KEY` plus the numbered backups `FIRECRAWL_API_KEY_2`..`_5`. A plan's
+ * credits can run out mid-backfill, so the next key continues instead of failing the run.
+ */
+export function firecrawlKeys(env = {}) {
+  const raw = String(env.FIRECRAWL_API_KEYS ?? "");
+  const values = raw ? raw.split(",") : [];
+  for (const suffix of ["", "_2", "_3", "_4", "_5"]) {
+    values.push(env[`FIRECRAWL_API_KEY${suffix}`] ?? "");
   }
+  return [...new Set(values.map((value) => String(value).trim()).filter(Boolean))];
+}
+
+async function fetchFirecrawl(url, apiKeys) {
+  let exhausted = 0;
+  for (const apiKey of apiKeys) {
+    // Firecrawl's plan rate limit is ~15-20 requests/minute; a 429 is waited out rather than
+    // counted as a failed property.
+    for (let attempt = 0; ; attempt += 1) {
+      const response = await fetch(FIRECRAWL_API_URL, {
+        method: "POST",
+        headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
+        body: JSON.stringify({ url, ...FIRECRAWL_OPTIONS }),
+      });
+      const body = await response.json().catch(() => null);
+      if (response.status === 402) {
+        // This key's plan credits are exhausted; the next pooled key may have its own.
+        exhausted += 1;
+        break;
+      }
+      if (response.status === 429 && attempt < 4) {
+        await sleep(60_000);
+        continue;
+      }
+      if (!response.ok || !body?.success) {
+        throw new Error(
+          `firecrawl_http_${response.status}: ${String(body?.error ?? "").slice(0, 120)}`,
+        );
+      }
+      const data = body?.data ?? {};
+      const metadata = data.metadata ?? {};
+      return {
+        html: String(data.rawHtml ?? ""),
+        finalUrl: metadata.url ?? metadata.sourceURL ?? null,
+        statusCode: Number.isInteger(metadata.statusCode) ? metadata.statusCode : null,
+      };
+    }
+  }
+  throw new Error(`firecrawl_credits_exhausted: ${exhausted} of ${apiKeys.length} pooled keys`);
 }
 
 async function main() {
@@ -244,9 +267,10 @@ async function main() {
     !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(withdrawActor)
   )
     throw new Error("--withdraw-gone requires --withdraw-actor=<staff uuid>");
-  const apiKey = env.FIRECRAWL_API_KEY;
-  if (!apiKey && source !== "propertyhk" && !fromPayload)
+  const apiKeys = firecrawlKeys(env);
+  if (!apiKeys.length && source !== "propertyhk" && !fromPayload)
     throw new Error("FIRECRAWL_API_KEY is required");
+  console.log(`firecrawl keys: ${apiKeys.length} pooled`);
   const sql = neon(databaseUrl);
 
   const staff = await sql`
@@ -369,7 +393,7 @@ async function main() {
     );
     for (const [index, property] of limited.entries()) {
       try {
-        const fetched = await fetchFirecrawl(property.source_url, apiKey);
+        const fetched = await fetchFirecrawl(property.source_url, apiKeys);
         if (is28hseDetailGone({ requestedUrl: property.source_url, ...fetched })) {
           gone.push({
             property: property.listing_no,
