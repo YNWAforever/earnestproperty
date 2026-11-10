@@ -21,6 +21,9 @@ permissions:
   contents: read
 jobs:
   refresh:
+    # The Production environment carries the optional backup Firecrawl key (FIRECRAWL_API_KEY_2);
+    # the environment has no protection rules, so the daily refresh is not gated.
+    environment: Production
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -43,6 +46,7 @@ jobs:
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          FIRECRAWL_API_KEY_2: ${{ secrets.FIRECRAWL_API_KEY_2 }}
           WITHDRAW_ACTOR: ${{ vars.PROPERTY_AGENTS_WITHDRAW_ACTOR }}
         run: |
           set -euo pipefail
@@ -61,6 +65,7 @@ jobs:
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          FIRECRAWL_API_KEY_2: ${{ secrets.FIRECRAWL_API_KEY_2 }}
           WITHDRAW_ACTOR: ${{ vars.PROPERTY_AGENTS_WITHDRAW_ACTOR }}
         run: |
           set -euo pipefail

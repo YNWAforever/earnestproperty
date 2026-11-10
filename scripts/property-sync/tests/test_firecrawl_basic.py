@@ -325,3 +325,49 @@ def test_provider_page_ceiling_is_rejected_before_collection():
     cfg.update(transport="firecrawl-basic", max_pages=1001)
     with pytest.raises(w.WorkerError, match="configuration_page_limit"):
         w.validate_config("28hse", cfg)
+
+def pool_module(monkeypatch, tokens):
+    for suffix in ("", "_2", "_3", "_4", "_5"):
+        monkeypatch.delenv(f"FIRECRAWL_API_KEY{suffix}", raising=False)
+    monkeypatch.delenv("FIRECRAWL_API_KEYS", raising=False)
+    for name, value in tokens.items():
+        monkeypatch.setenv(name, value)
+    return module()
+
+
+def test_key_pool_reads_comma_list_then_numbered_backups(monkeypatch):
+    pool = pool_module(monkeypatch, {"FIRECRAWL_API_KEY": "primary", "FIRECRAWL_API_KEY_2": "backup"})
+    assert pool.firecrawl_tokens() == ["primary", "backup"]
+    monkeypatch.setenv("FIRECRAWL_API_KEYS", "pool-a, pool-b")
+    assert pool.firecrawl_tokens() == ["pool-a", "pool-b", "primary", "backup"]
+
+
+def test_exhausted_key_rotates_to_the_next_pooled_key(monkeypatch):
+    pool = pool_module(monkeypatch, {"FIRECRAWL_API_KEY": "primary", "FIRECRAWL_API_KEY_2": "backup"})
+    seen = []
+
+    def request(endpoint, payload, token, *, max_bytes=None):
+        seen.append(token)
+        if token == "primary":
+            return 402, {}, b'{"success":false,"error":"Payment Required"}'
+        return 200, {}, json.dumps(response(SALE)).encode()
+
+    provider = pool.FirecrawlBasic(request=request)
+    status, _, body = provider(SALE)
+    assert status == 200 and body == HTML.encode()
+    assert seen == ["primary", "backup"]
+    assert [entry["provider_status"] for entry in provider.evidence] == [402, 200]
+    assert "primary" not in json.dumps(provider.evidence)
+
+
+def test_all_exhausted_keys_raise_a_non_retryable_transport_error(monkeypatch):
+    pool = pool_module(monkeypatch, {"FIRECRAWL_API_KEY": "primary", "FIRECRAWL_API_KEY_2": "backup"})
+
+    def request(endpoint, payload, token, *, max_bytes=None):
+        return 402, {}, b'{"success":false,"error":"Payment Required"}'
+
+    provider = pool.FirecrawlBasic(request=request)
+    with pytest.raises(w.TransportError) as info:
+        provider(SALE)
+    assert "firecrawl_provider_http_402" in str(info.value)
+    assert info.value.retryable is False
