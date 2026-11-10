@@ -26,6 +26,12 @@ def module():
     return importlib.import_module("scraping.firecrawl")
 
 
+@pytest.fixture(autouse=True)
+def _no_rate_limit_sleep(monkeypatch):
+    # A real 429 waits a minute for the plan window; tests never sleep.
+    monkeypatch.setattr(module(), "RATE_LIMIT_SLEEP_SECONDS", 0)
+
+
 def response(url, html=HTML, source_status=200):
     field = "markdown" if url.endswith("/robots.txt") else "rawHtml"
     return {
@@ -261,9 +267,12 @@ def test_unsupported_transport_fails_configuration(source, value):
         w.validate_config(source, cfg)
 
 
-@pytest.mark.parametrize("provider_status,attempts", [(401, 1), (403, 1), (429, 1), (503, 3)])
+@pytest.mark.parametrize("provider_status,attempts", [(401, 1), (403, 1), (429, 2), (503, 3)])
 def test_provider_failures_obey_fetcher_attempt_budget_without_fallback(monkeypatch, provider_status, attempts):
     monkeypatch.setenv("FIRECRAWL_API_KEY", "test-only-key")
+    # A 429 is waited out by the adapter itself (bounded); every other failure keeps the
+    # fetcher attempt budget. The wait is zeroed so the suite stays fast.
+    monkeypatch.setattr(module(), "RATE_LIMIT_SLEEP_SECONDS", 0)
     calls = []
     def request(endpoint, payload, token, *, max_bytes=None):
         assert endpoint == API
@@ -371,3 +380,52 @@ def test_all_exhausted_keys_raise_a_non_retryable_transport_error(monkeypatch):
         provider(SALE)
     assert "firecrawl_provider_http_402" in str(info.value)
     assert info.value.retryable is False
+
+def test_exhausted_key_is_skipped_on_later_requests(monkeypatch):
+    pool = pool_module(monkeypatch, {"FIRECRAWL_API_KEY": "primary", "FIRECRAWL_API_KEY_2": "backup"})
+    seen = []
+
+    def request(endpoint, payload, token, *, max_bytes=None):
+        seen.append(token)
+        if token == "primary":
+            return 402, {}, b'{"success":false,"code":"insufficient_credits"}'
+        return 200, {}, json.dumps(response(SALE)).encode()
+
+    provider = pool.FirecrawlBasic(request=request)
+    for _ in range(3):
+        status, _, body = provider(SALE)
+        assert status == 200 and body == HTML.encode()
+    # The exhausted key is only probed once, so the run does not double its provider calls.
+    assert seen == ["primary", "backup", "backup", "backup"]
+
+
+def test_rate_limited_request_waits_and_retries(monkeypatch):
+    pool = pool_module(monkeypatch, {"FIRECRAWL_API_KEY": "primary"})
+    monkeypatch.setattr(pool, "RATE_LIMIT_SLEEP_SECONDS", 0)
+    attempts = []
+
+    def request(endpoint, payload, token, *, max_bytes=None):
+        attempts.append(token)
+        if len(attempts) == 1:
+            return 429, {}, b'{"success":false,"error":"Rate limit exceeded"}'
+        return 200, {}, json.dumps(response(SALE)).encode()
+
+    provider = pool.FirecrawlBasic(request=request)
+    status, _, body = provider(SALE)
+    assert status == 200 and body == HTML.encode()
+    assert [entry["provider_status"] for entry in provider.evidence] == [429, 200]
+
+
+def test_persistent_rate_limit_fails_closed_after_the_bounded_wait(monkeypatch):
+    pool = pool_module(monkeypatch, {"FIRECRAWL_API_KEY": "primary"})
+    monkeypatch.setattr(pool, "RATE_LIMIT_SLEEP_SECONDS", 0)
+
+    def request(endpoint, payload, token, *, max_bytes=None):
+        return 429, {}, b'{"success":false,"error":"Rate limit exceeded"}'
+
+    provider = pool.FirecrawlBasic(request=request)
+    with pytest.raises(w.TransportError) as info:
+        provider(SALE)
+    assert "firecrawl_provider_http_429" in str(info.value)
+    assert info.value.retryable is False
+    assert len(provider.evidence) == pool.RATE_LIMIT_ATTEMPTS

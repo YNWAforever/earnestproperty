@@ -251,6 +251,10 @@ repository variable `PROPERTY_SYNC_28HSE_TRANSPORT` (default `http`) and secrets
 change either setting, enable a schedule, or grant ingestion/publication authority.
 Validate the opt-in with an explicitly authorized dry-run before activation.
 
+A plan key that answers `402` is skipped for the rest of the run (so the pool does not double the`r
+provider call rate), and a `429` rate-limit answer is waited out once (60s) before the page fails`r
+closed. The 28Hse pacing stays at one request every 6-8s to stay under the provider limit.
+
 The adapter calls only `https://api.firecrawl.dev/v2/scrape`, using `proxy: basic`,
 `maxAge: 0`, `storeInCache: false`, `skipTlsVerification: false` and a 25-second
 provider timeout within the existing HTTP timeout. There is no auto/enhanced
