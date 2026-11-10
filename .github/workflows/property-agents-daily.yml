@@ -1,0 +1,71 @@
+name: Correspondent agents refresh
+"on":
+  schedule:
+    # 10:00 Asia/Hong_Kong daily: fill the correspondents of newly published listings.
+    - cron: "0 2 * * *"
+    # 11:30 Asia/Hong_Kong Sunday: legacy 28hse stock liveness (detail URLs that now redirect
+    # to an estate page are withdrawn through the admin path).
+    - cron: "30 3 * * 0"
+  workflow_dispatch:
+    inputs:
+      scope:
+        type: choice
+        options:
+          - recent
+          - legacy
+        default: recent
+concurrency:
+  group: property-agents-refresh
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install locked bridge dependencies
+        shell: bash
+        run: |-
+          set -euo pipefail
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Fill correspondents for recent listings
+        # Best effort: the listings are already published, so an agent-mapping miss must not
+        # fail the refresh. Firecrawl is bounded by --limit.
+        continue-on-error: true
+        if: github.event.schedule != '30 3 * * 0' && inputs.scope != 'legacy'
+        shell: bash
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          WITHDRAW_ACTOR: ${{ vars.PROPERTY_AGENTS_WITHDRAW_ACTOR }}
+        run: |
+          set -euo pipefail
+          args=(--source=all --since-days=45 --limit=2)
+          if [ -n "${WITHDRAW_ACTOR:-}" ]; then
+            args+=(--withdraw-gone "--withdraw-actor=$WITHDRAW_ACTOR")
+          fi
+          node scripts/property-sync/backfill-property-agents.mjs "${args[@]}"
+      - name: Verify legacy 28hse stock and withdraw gone listings
+        # The legacy owner-capture stock carries a 28hse URL without a source-state row; its
+        # detail page now redirects to an estate page. Bounded so one run cannot exhaust the
+        # Firecrawl plan.
+        continue-on-error: true
+        if: github.event.schedule == '30 3 * * 0' || inputs.scope == 'legacy'
+        shell: bash
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          WITHDRAW_ACTOR: ${{ vars.PROPERTY_AGENTS_WITHDRAW_ACTOR }}
+        run: |
+          set -euo pipefail
+          args=(--source=28hse --source-site=null --limit=40)
+          if [ -n "${WITHDRAW_ACTOR:-}" ]; then
+            args+=(--withdraw-gone "--withdraw-actor=$WITHDRAW_ACTOR")
+          fi
+          node scripts/property-sync/backfill-property-agents.mjs "${args[@]}"

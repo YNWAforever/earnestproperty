@@ -4,6 +4,7 @@ import { test } from "node:test";
 import {
   extract28hseAgentLicences,
   extract28hseAgentNames,
+  is28hseDetailGone,
   normalizeLicence,
   pickBranchManager,
   propertyhkAgentSlug,
@@ -45,6 +46,31 @@ test("propertyhkAgentSlug reads the agent blog slug from an asking_detail URL", 
   );
   assert.equal(propertyhkAgentSlug("https://www.property.hk/asking_detail/100.html"), null);
   assert.throws(() => propertyhkAgentSlug("not a url"));
+});
+
+test("is28hseDetailGone treats a redirect to an estate page as gone", () => {
+  const url = "https://www.28hse.com/buy/apartment/property-4052109";
+  const live = `<html><body>代理個人牌照號碼: S-098767${"x".repeat(2500)}</body></html>`;
+  assert.equal(is28hseDetailGone({ requestedUrl: url, finalUrl: url, html: live }), false);
+  assert.equal(is28hseDetailGone({ requestedUrl: url, finalUrl: `${url}/`, html: live }), false);
+  assert.equal(
+    is28hseDetailGone({
+      requestedUrl: url,
+      finalUrl: "https://www.28hse.com/buy/apartment/a3/dg52/c26587",
+      html: `${"x".repeat(3000)}帝御樓盤`,
+    }),
+    true,
+  );
+  // A listing page that lost its markup is also gone.
+  assert.equal(
+    is28hseDetailGone({ requestedUrl: url, finalUrl: url, html: "x".repeat(3000) }),
+    true,
+  );
+  // A small challenge/blocked page is a fetch failure, never "gone".
+  assert.equal(
+    is28hseDetailGone({ requestedUrl: url, finalUrl: url, html: "<html>Just a moment</html>" }),
+    false,
+  );
 });
 
 test("pickBranchManager prefers the branch 營業經理", () => {

@@ -90,8 +90,10 @@ test("DB and media credentials are restricted to the intended stages and guarded
   assert.match(w.jobs.publish.if, /publication-only/);
   assert.match(w.jobs.record.if, /PROPERTY_SYNC_OBSERVABILITY_ENABLED/);
   assert.match(dbSteps[2].step.run, /publish-daily-listings/);
-  assert.match(dbSteps[3].step.run, /backfill-property-agents\.mjs --source=all/);
-  assert.match(dbSteps[3].step.run, /--since-days=60/);
+  assert.match(dbSteps[3].step.run, /args=\(--source=all --since-days=60 --limit=400\)/);
+  assert.match(dbSteps[3].step.run, /backfill-property-agents\.mjs "\$\{args\[@\]\}"/);
+  assert.match(dbSteps[3].step.run, /--withdraw-gone/);
+  assert.equal(dbSteps[3].step.env.WITHDRAW_ACTOR, "${{ vars.PROPERTY_AGENTS_WITHDRAW_ACTOR }}");
   assert.equal(dbSteps[3].step["continue-on-error"], true);
   assert.match(dbSteps[4].step.run, /record-sync-execution/);
   assert.ok(
@@ -522,4 +524,33 @@ test("scheduled runs publish the approved owner capture and do not collect or us
     assert.ok(directory.startsWith(join(tmpdir(), "property-sync-owner-gate-")));
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("agents refresh workflow is bounded and withdraws through the owner-approved actor", async () => {
+  const { createRequire } = await import("node:module");
+  const yaml = createRequire(import.meta.url)("js-yaml");
+  const workflow = yaml.load(
+    readFileSync(
+      new URL("../.github/workflows/property-agents-daily.yml", import.meta.url),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(workflow.on.schedule, [{ cron: "0 2 * * *" }, { cron: "30 3 * * 0" }]);
+  assert.equal(workflow.concurrency.group, "property-agents-refresh");
+  const steps = workflow.jobs.refresh.steps;
+  const recent = steps.find((s) => s.name === "Fill correspondents for recent listings");
+  const legacy = steps.find(
+    (s) => s.name === "Verify legacy 28hse stock and withdraw gone listings",
+  );
+  assert.match(recent.run, /--source=all --since-days=45 --limit=2/);
+  assert.match(legacy.run, /--source=28hse --source-site=null --limit=40/);
+  for (const step of [recent, legacy]) {
+    assert.equal(step["continue-on-error"], true);
+    assert.equal(step.env.WITHDRAW_ACTOR, "${{ vars.PROPERTY_AGENTS_WITHDRAW_ACTOR }}");
+    assert.match(step.run, /--withdraw-gone "--withdraw-actor=\$WITHDRAW_ACTOR"/);
+  }
+  assert.match(recent.if, /github\.event\.schedule != '30 3 \* \* 0'/);
+  assert.match(legacy.if, /github\.event\.schedule == '30 3 \* \* 0'/);
+  const text = JSON.stringify(workflow);
+  assert.ok(!/npm run build|playwright|wrangler|migrate|send-message/.test(text));
 });

@@ -468,17 +468,20 @@ jobs:
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
       - name: Backfill correspondent agents for the new listings
         # Best effort: the listings are already published, so an agent-mapping miss must not
-        # fail the sync run.
+        # fail the sync run. --withdraw-gone needs the owner-approved admin actor variable.
         continue-on-error: true
         shell: bash
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
-        run: >-
+          WITHDRAW_ACTOR: ${{ vars.PROPERTY_AGENTS_WITHDRAW_ACTOR }}
+        run: |
           set -euo pipefail
-
-          node scripts/property-sync/backfill-property-agents.mjs --source=all --since-days=60
-          --limit=400
+          args=(--source=all --since-days=60 --limit=400)
+          if [ -n "${WITHDRAW_ACTOR:-}" ]; then
+            args+=(--withdraw-gone "--withdraw-actor=$WITHDRAW_ACTOR")
+          fi
+          node scripts/property-sync/backfill-property-agents.mjs "${args[@]}"
       - name: Pin private publication result
         shell: bash
         run: |-
