@@ -537,8 +537,13 @@ new-lead staff WhatsApp alert targets that colleague.
 properties with fewer than two agents) and idempotent (a merge keeps the existing slots):
 
 - 28hse `/agent/540`: the detail page names two agents by EAA licence
-  (`代理個人牌照號碼: S-xxxxxx`), mapped through `staff_users.licence_no`. Needs the approved
-  Firecrawl basic transport (`--delay-ms` spaces the requests).
+  (`代理個人牌照號碼: S-xxxxxx`), mapped through `staff_users.licence_no`. The **sync collector
+  already fetches that detail page** for price/area, and `parse_28_detail` now carries the
+  `放盤聯絡人` cards on the record as `raw_payload.agent_contacts`, so a normal 28hse sync run
+  writes the correspondents from its frozen payload (`--source=28hse --from-payload=<request>`)
+  with **no extra fetch**. The Firecrawl detail fetch is only needed for listings the sync did
+  not crawl (owner-capture stock, legacy rows): `--source=28hse` (`--delay-ms` spaces the
+  requests).
 - Property.hk: the detail URL carries the agent blog
   (`/asking_detail/<branch>/<agent>/<id>.html`), mapped through
   `config/propertyhk-agents.json`. No fetch. Cross-listed 28hse stock takes its Property.hk
@@ -546,11 +551,13 @@ properties with fewer than two agents) and idempotent (a merge keeps the existin
 - Branch 主管: Property.hk names only the listing agent, so the senior 營業經理 of that agent's
   branch fills the second slot (`source = 'branch_manager'`).
 
-Automation: the daily owner-publication workflow runs `--source=propertyhk` after publishing,
-the manual 28hse apply run adds `--source=all --since-days=60` after publication, and the
+Automation: the manual 28hse apply run fills correspondents from its own frozen payload
+(`--source=28hse --from-payload="$PAYLOAD"`, no Firecrawl) right after publication, the daily
+owner-publication workflow runs `--source=propertyhk` after publishing, and the
 `Correspondent agents refresh` workflow runs daily (recent listings, `--limit=2`) and weekly
-(legacy 28hse stock, `--limit=40`). New listings therefore get their correspondents without a
-separate manual backfill. `--since-days` bounds the 28hse fetches to recently created listings.
+(legacy 28hse stock, `--limit=40`) with the Firecrawl detail fetch for the owner-capture stock
+that no sync payload covers. New listings therefore get their correspondents without a separate
+manual backfill. `--since-days` bounds the 28hse fetches to recently created listings.
 
 A 28hse detail URL that now redirects to an estate page is a delisted listing: `--withdraw-gone`
 marks it inactive through `admin_property_manage` (audit log + source snapshot + ownership fence),

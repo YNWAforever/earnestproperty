@@ -17,6 +17,8 @@
  *        --withdraw-gone (28hse only: mark a listing inactive when its detail URL now redirects
  *        to an estate page and it has no Property.hk advertisement; needs
  *        --withdraw-actor=<staff uuid>, the owner-approved admin actor recorded in audit_logs),
+ *        --from-payload=<path> (read the agent contacts the 28hse sync already parsed from each
+ *        detail page, so no Firecrawl fetch is made),
  *        --delay-ms=4500 (between source fetches; Firecrawl allows ~15-20/min).
  *
  * The propertyhk run also fills the branch 主管 as the second correspondent (Property.hk
@@ -134,6 +136,33 @@ export function is28hseDetailGone({ requestedUrl, finalUrl, html }) {
   return !/代理個人牌照號碼|放盤聯絡人/.test(text);
 }
 
+/**
+ * The agent contacts the 28hse collector already fetched on each listing's detail page
+ * (`raw_payload.agent_contacts`, added by the sync's detail parse). Reading the frozen
+ * sync payload means the correspondent agents cost no extra Firecrawl fetch.
+ */
+export function payloadAgentListings(payload) {
+  if (payload?.source !== "28hse") throw new Error("payload_source_mismatch");
+  const listings = Array.isArray(payload.listings) ? payload.listings : [];
+  return listings
+    .map((listing) => ({
+      externalId: String(listing?.property_id ?? ""),
+      dealType:
+        listing?.deal_type === "sale" || listing?.deal_type === "rent" ? listing.deal_type : null,
+      sourceUrl: typeof listing?.source_url === "string" ? listing.source_url : null,
+      contacts: (Array.isArray(listing?.raw_payload?.agent_contacts)
+        ? listing.raw_payload.agent_contacts
+        : []
+      )
+        .map((contact) => ({
+          name: typeof contact?.name === "string" && contact.name.trim() ? contact.name : null,
+          licence: normalizeLicence(contact?.licence),
+        }))
+        .filter((contact) => contact.licence),
+    }))
+    .filter((listing) => listing.externalId && listing.dealType && listing.contacts.length);
+}
+
 /** property.hk detail URL → staff public slug. */
 export function propertyhkAgentSlug(url) {
   const match = /^\/asking_detail\/([a-z]+\/[a-z0-9_-]+)\/\d{1,12}\.html$/.exec(
@@ -202,7 +231,10 @@ async function main() {
   const sinceDays = Number(argValue(argv, "since-days", "0")) || 0;
   // "null" targets the legacy stock whose source_site is empty but whose source_url is 28hse.
   const sourceSite = argValue(argv, "source-site", "");
+  // The 28hse sync payload already carries the detail-page agent contacts (no extra fetch).
+  const fromPayload = argValue(argv, "from-payload", "");
   if (!["28hse", "propertyhk", "all"].includes(source)) throw new Error("bad --source");
+  if (fromPayload && source === "all") throw new Error("--from-payload requires --source=28hse");
 
   const env = loadEnv();
   const databaseUrl = env.DATABASE_URL_UNPOOLED || env.DATABASE_URL || env.IMPORT_DATABASE_URL;
@@ -213,7 +245,8 @@ async function main() {
   )
     throw new Error("--withdraw-gone requires --withdraw-actor=<staff uuid>");
   const apiKey = env.FIRECRAWL_API_KEY;
-  if (!apiKey && source !== "propertyhk") throw new Error("FIRECRAWL_API_KEY is required");
+  if (!apiKey && source !== "propertyhk" && !fromPayload)
+    throw new Error("FIRECRAWL_API_KEY is required");
   const sql = neon(databaseUrl);
 
   const staff = await sql`
@@ -394,6 +427,50 @@ async function main() {
     }
   }
 
+  /**
+   * Write the correspondents the 28hse sync already parsed from each listing's detail page.
+   * The payload is the frozen sync request, so the agent data costs no extra source fetch.
+   */
+  async function runFromPayload(path) {
+    // Tolerate a UTF-8 BOM (the frozen payload itself is written without one).
+    const payload = JSON.parse(readFileSync(path, "utf8").replace(/^\uFEFF/, ""));
+    const listings = payloadAgentListings(payload);
+    console.log(`28hse payload: ${listings.length} listings with detail-page agent contacts`);
+    for (const listing of listings) {
+      const agents = [];
+      for (const contact of listing.contacts.slice(0, 2)) {
+        const match = byLicence.get(contact.licence);
+        if (!match) continue;
+        agents.push({
+          staffId: match.id,
+          source: "28hse_agent_540",
+          sourceName: contact.name ?? match.name_en,
+          sourceLicenceNo: contact.licence,
+          sourceRef: listing.sourceUrl,
+        });
+      }
+      if (agents.length === 0) {
+        skipped += 1;
+        failures.push({
+          property: listing.externalId,
+          error: `unmapped_agent_licence:${listing.contacts.map((contact) => contact.licence).join(",")}`,
+        });
+        continue;
+      }
+      const links = await sql`
+        SELECT property_id FROM property_source_links
+        WHERE source = '28hse_agent_540'
+          AND external_listing_id = ${listing.externalId}
+          AND deal_type::text = ${listing.dealType}
+          AND status = 'active'`;
+      if (links.length === 0) {
+        failures.push({ property: listing.externalId, error: "no_property_link" });
+        continue;
+      }
+      for (const link of links) await merge(link.property_id, agents);
+    }
+  }
+
   async function runPropertyhk() {
     const properties = await sql`
       SELECT DISTINCT p.id, p.listing_no, p.source_url,
@@ -505,14 +582,19 @@ async function main() {
     }
   }
 
-  if (source === "28hse" || source === "all") await run28hse();
-  if (source === "propertyhk" || source === "all") await runPropertyhk();
-  if (source === "propertyhk" || source === "all") await runBranchManager();
+  if (fromPayload) {
+    await runFromPayload(fromPayload);
+  } else {
+    if (source === "28hse" || source === "all") await run28hse();
+    if (source === "propertyhk" || source === "all") await runPropertyhk();
+    if (source === "propertyhk" || source === "all") await runBranchManager();
+  }
 
   console.log(
     JSON.stringify(
       {
         dryRun,
+        mode: fromPayload ? "sync-payload" : "source-fetch",
         written,
         skipped,
         withdrawn,
