@@ -6,7 +6,7 @@
  * blocks staff WhatsApp outside the 24-hour window; it never falls back to TEXT.
  */
 
-export type StaffAlertTemplateParam = "name" | "source" | "link";
+export type StaffAlertTemplateParam = "name" | "source" | "phone" | "link";
 export type StaffAlertTemplate = {
   name: string;
   language: string;
@@ -19,7 +19,7 @@ export type StaffTemplateResponse = {
   components: [{ type: "body"; parameters: { type: "text"; text: string }[] }];
 };
 
-const PARAMS: readonly StaffAlertTemplateParam[] = ["name", "source", "link"];
+const PARAMS: readonly StaffAlertTemplateParam[] = ["name", "source", "phone", "link"];
 const KEYS = new Set(["name", "language", "params"]);
 
 export function parseStaffAlertTemplate(raw: string | undefined): StaffAlertTemplate | null {
@@ -59,13 +59,31 @@ export function sanitizeTemplateParam(
   return clean(value ?? "") || clean(fallback) || "-";
 }
 
+/** The customer number staff call back. Woztell contacts arrive as one run of
+ * digits (`85291234567`); the alert shows them grouped and callable, and a
+ * number that is absent stays empty so the fallback applies. */
+export function formatCustomerPhone(value: string | null | undefined): string {
+  const digits = String(value ?? "").replace(/\D+/g, "");
+  if (!digits) return "";
+  if (digits.length === 11 && digits.startsWith("852")) {
+    return `+852 ${digits.slice(3, 7)} ${digits.slice(7)}`;
+  }
+  return `+${digits}`;
+}
+
 const FALLBACK: Record<StaffAlertTemplateParam, string> = {
   name: "未提供姓名",
   source: "新查詢",
+  phone: "電話未提供",
   link: "請登入後台查看",
 };
 // A link is an opaque URL; a short cap would cut it into a dead link.
-const MAX: Record<StaffAlertTemplateParam, number> = { name: 60, source: 60, link: 1000 };
+const MAX: Record<StaffAlertTemplateParam, number> = {
+  name: 60,
+  source: 60,
+  phone: 40,
+  link: 1000,
+};
 
 export function buildStaffTemplateResponse(
   t: StaffAlertTemplate,

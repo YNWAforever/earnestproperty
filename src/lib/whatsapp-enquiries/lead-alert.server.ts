@@ -6,7 +6,10 @@ import { queryRows, transactionRows } from "../neon/db.server.ts";
 import { LEAD_ALERT_JOB_TYPE, LEAD_ALERT_RECONCILE_JOB_TYPE } from "../neon/lead-alert-enqueue.js";
 import { retryableJobError } from "../control-plane/job-handlers.server.ts";
 import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transport.server.ts";
-import { buildStaffTemplateResponse } from "../woztell/staff-alert-template.ts";
+import {
+  buildStaffTemplateResponse,
+  formatCustomerPhone,
+} from "../woztell/staff-alert-template.ts";
 import {
   staffWhatsappAlertRuntime,
   type StaffNotificationRuntime,
@@ -140,7 +143,7 @@ export async function handleLeadStaffAlert(
     await context.checkpoint();
     summary.unknown += (await reconcile(leadId, query, context)).unknown;
     [lead] = await query(
-      "SELECT l.id,l.source,l.property_id,p.listing_no,c.name,EXISTS(SELECT 1 FROM crm_activities a WHERE a.lead_id=l.id AND a.activity_type='suspected_bot') AS suspected_bot FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE l.id=$1::uuid",
+      "SELECT l.id,l.source,l.property_id,p.listing_no,c.name,c.phone AS contact_phone,EXISTS(SELECT 1 FROM crm_activities a WHERE a.lead_id=l.id AND a.activity_type='suspected_bot') AS suspected_bot FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE l.id=$1::uuid",
       [leadId],
     );
     // lead_missing: attempt.lead_id references crm_leads, so no row can be kept;
@@ -209,6 +212,7 @@ export async function handleLeadStaffAlert(
   const template = buildStaffTemplateResponse(runtime.template!, {
     name: String(lead.name ?? ""),
     source: sourceLabel(lead),
+    phone: formatCustomerPhone(lead.contact_phone as string | null | undefined),
     link: `${origin}/admin/leads?lead=${leadId}`,
   });
   const message = `新查詢：${sourceLabel(lead)}`; // evidence only; the template is always sent

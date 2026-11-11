@@ -52,7 +52,10 @@ async function seedNotificationFixture(
 
   await query("INSERT INTO staff_users(id) VALUES($1)", [staff]);
   await query("INSERT INTO staff_roles VALUES($1,'agent')", [staff]);
-  await query("INSERT INTO crm_contacts(id,name) VALUES($1,'Synthetic')", [contact]);
+  await query(
+    "INSERT INTO crm_contacts(id,name,phone,normalized_phone) VALUES($1,'Synthetic','85291005322','85291005322')",
+    [contact],
+  );
   await query(
     "INSERT INTO whatsapp_conversations(id,contact_id,channel_id,woztell_member_id) VALUES($1,$2,'fixture','customer')",
     [conv, contact],
@@ -1226,7 +1229,7 @@ test("staff WhatsApp dispatch guards on owned Postgres", { timeout: 300000 }, as
       const template = {
         name: "staff_lead_alert",
         language: "zh_HK",
-        params: ["name", "source", "link"],
+        params: ["name", "source", "phone", "link"],
       };
       const runtime = (configured) => ({
         enabled: true,
@@ -1359,6 +1362,7 @@ test("staff WhatsApp dispatch guards on owned Postgres", { timeout: 300000 }, as
               parameters: [
                 { type: "text", text: "WhatsApp 客戶" },
                 { type: "text", text: "WhatsApp 查詢" },
+                { type: "text", text: "+852 9100 5322" },
                 { type: "text", text: workLink },
               ],
             },

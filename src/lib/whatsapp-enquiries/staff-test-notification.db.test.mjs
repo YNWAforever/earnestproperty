@@ -23,7 +23,7 @@ const actor = { staffId: actorId, roles: ["admin"] };
 const approvedTemplate = JSON.stringify({
   name: "staff_lead_alert",
   language: "zh_HK",
-  params: ["name", "source", "link"],
+  params: ["name", "source", "phone", "link"],
 });
 const baseEnv = {
   EP_WA_ENQUIRY_MODE: "active",
@@ -466,6 +466,7 @@ test("staff test notification outside 24h sends the configured template", async 
           parameters: [
             { type: "text", text: "測試" },
             { type: "text", text: "測試通知" },
+            { type: "text", text: "測試電話" },
             { type: "text", text: "https://earnest.example.invalid/admin/whatsapp-settings" },
           ],
         },
@@ -551,6 +552,7 @@ const expectedTestTemplate = {
       parameters: [
         { type: "text", text: "測試" },
         { type: "text", text: "測試通知" },
+        { type: "text", text: "測試電話" },
         { type: "text", text: "https://earnest.example.invalid/admin/whatsapp-settings" },
       ],
     },

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildStaffTemplateResponse,
+  formatCustomerPhone,
   parseStaffAlertTemplate,
   sanitizeTemplateParam,
 } from "./staff-alert-template.ts";
@@ -10,18 +11,23 @@ import { describeTemplateParameters } from "./template-preview.ts";
 const approved = JSON.stringify({
   name: "staff_lead_alert",
   language: "zh_HK",
-  params: ["name", "source", "link"],
+  params: ["name", "source", "phone", "link"],
 });
 
 test("parses the approved template and rejects malformed or unknown params", () => {
   assert.deepEqual(parseStaffAlertTemplate(approved), {
     name: "staff_lead_alert",
     language: "zh_HK",
-    params: ["name", "source", "link"],
+    params: ["name", "source", "phone", "link"],
   });
   assert.deepEqual(
     parseStaffAlertTemplate(JSON.stringify({ name: "a1_b", language: "en", params: ["link"] })),
     { name: "a1_b", language: "en", params: ["link"] },
+  );
+  // The phone variable is allowed so staff can call the customer back.
+  assert.deepEqual(
+    parseStaffAlertTemplate(JSON.stringify({ name: "a1_b", language: "zh_HK", params: ["phone"] })),
+    { name: "a1_b", language: "zh_HK", params: ["phone"] },
   );
   const reject = (value) => assert.equal(parseStaffAlertTemplate(value), null, String(value));
   reject(undefined);
@@ -31,7 +37,6 @@ test("parses the approved template and rejects malformed or unknown params", () 
   reject("{}");
   reject("[]");
   reject("null");
-  reject(JSON.stringify({ name: "staff_lead_alert", language: "zh_HK", params: ["phone"] }));
   reject(JSON.stringify({ name: "staff_lead_alert", language: "zh_HK", params: ["name", "name"] }));
   reject(JSON.stringify({ name: "staff_lead_alert", language: "zh-HK", params: ["name"] }));
   reject(JSON.stringify({ name: "staff_lead_alert", language: "chinese", params: ["name"] }));
@@ -92,6 +97,7 @@ test("builds the Meta body components in configured order", () => {
   const response = buildStaffTemplateResponse(template, {
     name: "陳\n先生",
     source: "網站查詢",
+    phone: "85291234567",
     link: "https://earnest.example.invalid/admin/leads?lead=00000000-0000-4000-8000-000000000001",
   });
   assert.deepEqual(response, {
@@ -121,15 +127,47 @@ test("builds the Meta body components in configured order", () => {
   const empty = buildStaffTemplateResponse(parseStaffAlertTemplate(approved), {
     name: "",
     source: " ",
+    phone: "",
     link: "",
   });
   for (const parameter of empty.components[0].parameters) assert.ok(parameter.text.trim());
+});
+
+test("phone is sent in the approved order when the template carries it", () => {
+  const template = parseStaffAlertTemplate(
+    JSON.stringify({
+      name: "staff_lead_alert",
+      language: "zh_HK",
+      params: ["name", "source", "phone", "link"],
+    }),
+  );
+  const response = buildStaffTemplateResponse(template, {
+    name: "陳先生",
+    source: "網站查詢",
+    phone: "+852 9123 4567",
+    link: "https://earnest.example.invalid/admin/leads",
+  });
+  assert.deepEqual(
+    response.components[0].parameters.map((parameter) => parameter.text),
+    ["陳先生", "網站查詢", "+852 9123 4567", "https://earnest.example.invalid/admin/leads"],
+  );
+});
+
+test("a customer phone is grouped for calling and never invented", () => {
+  assert.equal(formatCustomerPhone("85291234567"), "+852 9123 4567");
+  assert.equal(formatCustomerPhone("+852 9123 4567"), "+852 9123 4567");
+  assert.equal(formatCustomerPhone("13812345678"), "+13812345678");
+  assert.equal(formatCustomerPhone(""), "");
+  assert.equal(formatCustomerPhone("  "), "");
+  assert.equal(formatCustomerPhone(null), "");
+  assert.equal(formatCustomerPhone(undefined), "");
 });
 
 test("the lead alert name fallback is 未提供姓名 (M-4 copy table)", () => {
   const response = buildStaffTemplateResponse(parseStaffAlertTemplate(approved), {
     name: " ",
     source: "網站查詢",
+    phone: "+852 9123 4567",
     link: "https://earnest.example.invalid/admin/leads",
   });
   assert.equal(response.components[0].parameters[0].text, "未提供姓名");

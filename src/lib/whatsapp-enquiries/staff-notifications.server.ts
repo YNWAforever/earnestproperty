@@ -7,6 +7,7 @@ import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transpor
 import { createInboxApi } from "../woztell/inbox-api.server.ts";
 import {
   buildStaffTemplateResponse,
+  formatCustomerPhone,
   parseStaffAlertTemplate,
   type StaffAlertTemplate,
   type StaffTemplateResponse,
@@ -90,7 +91,7 @@ export async function captureStaffReady(inquiryId: string, query = queryRows) {
   return query("SELECT wa_capture_staff_ready($1::uuid) notification_id", [inquiryId]);
 }
 const eligibility = `n.work_state IN ('pending','acknowledged') AND i.status NOT IN ('closed','resolved','spam') AND i.first_human_response_at IS NULL AND NOT i.association_review AND n.recipient_staff_id=w.confirmed_staff_id AND n.assignment_version=w.assignment_version AND n.activation_generation=$2::uuid AND a.ended_at IS NULL AND w.channel_id=$3 AND s.active AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent')) AND m.eligible AND m.retired_at IS NULL AND EXISTS(SELECT 1 FROM whatsapp_assignment_requests r WHERE r.id=w.pending_assignment_id AND r.state='confirmed' AND r.version=n.assignment_version AND r.desired_staff_id=n.recipient_staff_id AND r.evidence->>'authoritative'='true')`;
-const joins = `FROM staff_notification_intents n JOIN inquiries i ON i.id=n.inquiry_id JOIN whatsapp_conversations w ON w.id=n.conversation_id JOIN staff_users s ON s.id=n.recipient_staff_id JOIN whatsapp_staff_channels m ON m.staff_id=s.id AND m.channel_id=w.channel_id JOIN whatsapp_enquiry_activations a ON a.id=n.activation_generation`;
+const joins = `FROM staff_notification_intents n JOIN inquiries i ON i.id=n.inquiry_id JOIN whatsapp_conversations w ON w.id=n.conversation_id LEFT JOIN crm_contacts c ON c.id=w.contact_id JOIN staff_users s ON s.id=n.recipient_staff_id JOIN whatsapp_staff_channels m ON m.staff_id=s.id AND m.channel_id=w.channel_id JOIN whatsapp_enquiry_activations a ON a.id=n.activation_generation`;
 export async function dispatchStaffNotification(
   notificationId: string,
   options: { checkpoint: () => Promise<void>; job?: { jobId: string; workerId: string } },
@@ -112,7 +113,7 @@ export async function dispatchStaffNotification(
   }
   await options.checkpoint();
   const [n] = await query(
-    `SELECT n.*,w.channel_id,w.woztell_member_id,m.inbox_user_id,m.folder_id ${joins} WHERE n.id=$1::uuid AND ${eligibility}`,
+    `SELECT n.*,w.channel_id,w.woztell_member_id,m.inbox_user_id,m.folder_id,c.phone AS contact_phone ${joins} WHERE n.id=$1::uuid AND ${eligibility}`,
     [notificationId, runtime.generationId, runtime.channelId],
   );
   if (!n) {
@@ -307,6 +308,7 @@ export async function dispatchStaffNotification(
                 : buildStaffTemplateResponse(runtime.template, {
                     name: "WhatsApp 客戶",
                     source: "WhatsApp 查詢",
+                    phone: formatCustomerPhone(n.contact_phone as string | null | undefined),
                     link: workLink!,
                   }),
               beforeSend: boundary,
