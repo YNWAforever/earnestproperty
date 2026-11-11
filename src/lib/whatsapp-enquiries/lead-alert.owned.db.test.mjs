@@ -22,7 +22,7 @@ const handlerSource = () =>
 const approvedTemplate = JSON.stringify({
   name: "staff_lead_alert",
   language: "zh_HK",
-  params: ["name", "source", "link"],
+  params: ["name", "source", "phone", "link"],
 });
 // Synthetic references only (mirrors staff-test-notification.db.test.mjs:24-41).
 const baseEnv = {
@@ -72,10 +72,10 @@ async function seedEndpoint(query, staffId, channel, destination, { lastInboundA
   return row;
 }
 
-async function seedLead(query, { assigned = null, name = "陳大文" } = {}) {
+async function seedLead(query, { assigned = null, name = "陳大文", phone = "synthetic" } = {}) {
   const [contact] = await query(
-    "INSERT INTO crm_contacts(name,phone,normalized_phone) VALUES($1,'synthetic',$2) RETURNING id",
-    [name, `cust-${randomUUID()}`],
+    "INSERT INTO crm_contacts(name,phone,normalized_phone) VALUES($1,$2,$3) RETURNING id",
+    [name, phone, `cust-${randomUUID()}`],
   );
   const [lead] = await query(
     "INSERT INTO crm_leads(contact_id,assigned_agent_id,source) VALUES($1,$2,'website') RETURNING id",
@@ -703,7 +703,7 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         );
       });
 
-      const expectedTemplate = (leadId, name = "陳大文") => ({
+      const expectedTemplate = (leadId, name = "陳大文", phone = "電話未提供") => ({
         type: "TEMPLATE",
         elementName: "staff_lead_alert",
         languageCode: "zh_HK",
@@ -713,6 +713,7 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
             parameters: [
               { type: "text", text: name },
               { type: "text", text: "網站查詢" },
+              { type: "text", text: phone },
               {
                 type: "text",
                 text: `https://earnest.example.invalid/admin/leads?lead=${leadId}`,
@@ -734,6 +735,18 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         const serialized = JSON.stringify(provider.calls[0]);
         assert.doesNotMatch(serialized, /"TEXT"/);
         assert.doesNotMatch(serialized, /cust-/);
+      });
+
+      await t.test("outside 24h → the alert carries the customer phone", async () => {
+        const channel = scenario();
+        await staffWithEndpoint(channel, { duty: true, roles: ["manager"] });
+        const leadId = await seedLead(query, { phone: "85291234567" });
+        const provider = fakeProvider();
+        await run(leadId, await leasedJob(query, leadId), provider);
+        assert.equal(provider.calls.length, 1);
+        assert.deepEqual(provider.calls[0].response, [
+          expectedTemplate(leadId, "陳大文", "+852 9123 4567"),
+        ]);
       });
 
       await t.test(
