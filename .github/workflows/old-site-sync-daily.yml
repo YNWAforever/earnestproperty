@@ -1,0 +1,99 @@
+name: Old-site inventory sync
+
+# Phase 1 of the legacy-site sync plan: mirror www.earnestproperty.com.hk/property/
+# (the company's own listing front-end) into the new site's properties table,
+# with no Firecrawl credits. The 28hse stream stays on its own workflow; this one
+# never touches the 28hse frozen-payload/publication gates.
+#
+# Apply is deliberately double-gated: the repo variable OLD_SITE_SYNC_APPLY must
+# be "true", and a manual dispatch must ask for mode=apply. A scheduled run
+# therefore stays a dry-run until an operator flips the variable, and the first
+# real run is always an explicit choice.
+"on":
+  schedule:
+    # 05:45 Asia/Hong_Kong daily, before the owner starts publishing in the morning.
+    - cron: "45 21 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run reports only; apply writes to production"
+        type: choice
+        options:
+          - dry-run
+          - apply
+        default: dry-run
+      max_details:
+        description: "Detail pages to fetch this run (all 635 today; raise only with reason)"
+        type: string
+        default: "2000"
+      from_dir:
+        description: "Optional offline replay directory (repo-relative, e.g. artifacts/old-site-replay)"
+        type: string
+        default: ""
+
+concurrency:
+  group: old-site-inventory-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install locked dependencies
+        shell: bash
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Sync the legacy inventory
+        shell: bash
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          OLD_SITE_ORIGIN: ${{ vars.OLD_SITE_ORIGIN || 'https://www.earnestproperty.com.hk' }}
+          OLD_SITE_DELAY_MS: "250"
+          OLD_SITE_TIMEOUT_MS: "20000"
+        run: |
+          set -euo pipefail
+          mode="${{ github.event.inputs.mode }}"
+          if [ -z "$mode" ]; then
+            if [ "${{ vars.OLD_SITE_SYNC_APPLY }}" = "true" ]; then
+              mode=apply
+            else
+              mode=dry-run
+            fi
+          fi
+          if [ "$mode" = "apply" ] && [ "${{ vars.OLD_SITE_SYNC_APPLY }}" != "true" ]; then
+            echo "::error::OLD_SITE_SYNC_APPLY is not 'true'; refusing an apply run."
+            exit 2
+          fi
+          args=()
+          [ "$mode" = "apply" ] && args+=(--apply)
+          args+=(--max-details "${{ github.event.inputs.max_details || '2000' }}")
+          if [ -n "${{ github.event.inputs.from_dir }}" ]; then
+            args+=(--from-dir "${{ github.event.inputs.from_dir }}")
+          fi
+          echo "Old-site sync mode=${mode}"
+          node scripts/property-sync/old-site-sync.mjs "${args[@]}"
+
+      - name: Upload run report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: old-site-sync-${{ github.run_id }}
+          path: |
+            artifacts/old-site-sync/**
+            artifacts/old-site-agents/**
+            artifacts/old-site-locations/**
+            artifacts/old-site-estate-stats/**
+          if-no-files-found: ignore
+          retention-days: 14

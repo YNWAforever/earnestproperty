@@ -135,6 +135,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20261105160000_blog_import_receipts.sql",
   "20261109070000_content_copilot_article_drafts.sql",
   "20261110030000_property_correspondent_agents.sql",
+  "20261112030000_old_site_inventory_capture.sql",
 ]);
 
 /**
