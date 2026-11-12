@@ -41,7 +41,8 @@ test("legacy MLS upsert persists canonical identity for insert and correction", 
       last_scraped_at: "2026-09-06",
     },
   ]);
-  assert.match(calls[0].statement, /last_scraped_at, canonical_property_no/);
-  assert.match(calls[0].statement, /canonical_property_no = EXCLUDED\.canonical_property_no/);
-  assert.equal(calls[0].params[29], "B054645");
+  assert.match(calls[0].statement, /SELECT listing_no, source_site/);
+  assert.match(calls[1].statement, /last_scraped_at, canonical_property_no/);
+  assert.match(calls[1].statement, /canonical_property_no = EXCLUDED\.canonical_property_no/);
+  assert.equal(calls[1].params[29], "B054645");
 });

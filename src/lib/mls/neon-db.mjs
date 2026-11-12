@@ -48,6 +48,12 @@ function rowValues(row) {
     row.last_seen_at,
     row.last_scraped_at,
     row.canonical_property_no,
+    row.unit_no ?? null,
+    row.year_completed ?? null,
+    row.lease_expiry_year ?? null,
+    row.property_use ?? null,
+    row.remarks ?? null,
+    row.source_payload ?? null,
   ];
 }
 
@@ -77,6 +83,10 @@ export function createNeonMlsDb(sql) {
     async listEstateIdsBySlug() {
       const rows = await sql.query("SELECT id, slug FROM estates");
       return new Map(rows.map((row) => [row.slug, row.id]));
+    },
+
+    async listEstates() {
+      return sql.query("SELECT id, slug, name_zh, name_en, aliases, district_slug FROM estates");
     },
 
     async getLatestSyncRun() {
@@ -109,7 +119,53 @@ export function createNeonMlsDb(sql) {
     },
 
     async upsertProperties(rows) {
+      // `properties.listing_no` is unique across every source, and the
+      // Property.hk branch feed generates the same `<canonical>-<detailId>-<S|R>`
+      // id for the same underlying listing. Those rows are already live under
+      // `source_site='propertyhk'`; inserting them again would violate the
+      // unique key (aborting the middle of the batch) and create a second public
+      // identity for the same unit. Skip + report them instead: the existing
+      // row keeps serving the listing, exactly like the 28hse duplicate policy.
+      const listingNos = rows.map((row) => row.listing_no);
+      const existingRows = listingNos.length
+        ? await sql.query(
+            `
+            SELECT listing_no, source_site, legacy_detail_id, deal_type::text AS deal_type,
+                   ingestion_owner
+            FROM properties
+            WHERE listing_no = ANY($1::text[])
+            `,
+            [listingNos],
+          )
+        : [];
+      const existingByListingNo = new Map(
+        existingRows.map((existing) => [existing.listing_no, existing]),
+      );
+      const conflicts = [];
+      let count = 0;
       for (const row of rows) {
+        const existing = existingByListingNo.get(row.listing_no);
+        // `ingestion_owner='no-hermes-v2'` rows are fenced by the DB trigger
+        // (aaa_mls_ingestion_owner_fence) against the legacy writer; the v2
+        // feed owns their facts, so the legacy sync must not touch them.
+        const sameOwner =
+          !existing ||
+          (existing.source_site === row.source_site &&
+            String(existing.legacy_detail_id ?? "") === String(row.legacy_detail_id ?? "") &&
+            existing.deal_type === row.deal_type &&
+            (existing.ingestion_owner ?? "legacy") === "legacy");
+        if (!sameOwner) {
+          conflicts.push({
+            listing_no: row.listing_no,
+            canonical_property_no: row.canonical_property_no ?? null,
+            deal_type: row.deal_type,
+            existing_source_site: existing.source_site ?? null,
+            existing_legacy_detail_id: existing.legacy_detail_id ?? null,
+            existing_deal_type: existing.deal_type ?? null,
+            existing_ingestion_owner: existing.ingestion_owner ?? null,
+          });
+          continue;
+        }
         await sql.query(
           `
           INSERT INTO properties (
@@ -117,13 +173,15 @@ export function createNeonMlsDb(sql) {
             price, rent, saleable_area, gross_area, bedrooms, bathrooms, floor, orientation,
             features, description, images, status, featured, legacy_detail_id,
             legacy_property_no, legacy_url, legacy_source_indexes, source_site, source_url,
-            source_updated_at, last_seen_at, last_scraped_at, canonical_property_no
+            source_updated_at, last_seen_at, last_scraped_at, canonical_property_no,
+            unit_no, year_completed, lease_expiry_year, property_use, remarks, source_payload
           )
           VALUES (
             $1, $2, $3, $4::deal_type, $5, $6, $7,
             $8, $9, $10, $11, $12, $13, $14, $15,
             $16, $17, $18, $19::property_status, $20, $21,
-            $22, $23, $24, $25, $26, $27, $28, $29, $30
+            $22, $23, $24, $25, $26, $27, $28, $29, $30,
+            $31, $32, $33, $34, $35, $36
           )
           ON CONFLICT (legacy_detail_id, deal_type) DO UPDATE SET
             listing_no = EXCLUDED.listing_no,
@@ -140,7 +198,12 @@ export function createNeonMlsDb(sql) {
             bedrooms = EXCLUDED.bedrooms,
             bathrooms = EXCLUDED.bathrooms,
             floor = EXCLUDED.floor,
+            unit_no = EXCLUDED.unit_no,
             orientation = EXCLUDED.orientation,
+            year_completed = EXCLUDED.year_completed,
+            lease_expiry_year = EXCLUDED.lease_expiry_year,
+            property_use = EXCLUDED.property_use,
+            remarks = EXCLUDED.remarks,
             features = EXCLUDED.features,
             description = EXCLUDED.description,
             images = EXCLUDED.images,
@@ -154,17 +217,33 @@ export function createNeonMlsDb(sql) {
             source_updated_at = EXCLUDED.source_updated_at,
             last_seen_at = EXCLUDED.last_seen_at,
             last_scraped_at = EXCLUDED.last_scraped_at,
+            source_payload = EXCLUDED.source_payload,
             updated_at = now()
           `,
           rowValues(row),
         );
+        count += 1;
       }
-      return { count: rows.length };
+      return { count, conflicts };
     },
 
-    async deactivateMissing({ sourceSite, seenLegacyIds, nowIso }) {
-      if (!seenLegacyIds.length) {
+    async deactivateMissing({
+      sourceSite,
+      seenLegacyIds,
+      seenPairs,
+      protectedLegacyIds,
+      nowIso,
+      allowLowCoverage = false,
+    }) {
+      if (!Array.isArray(seenLegacyIds) || !seenLegacyIds.length) {
         return { count: 0, skipped: "NO_DISCOVERED_IDS" };
+      }
+      const pairAwareSweep = Array.isArray(seenPairs);
+      if (pairAwareSweep && !seenPairs.length) {
+        // An empty pair set would make the NOT EXISTS predicate match every
+        // active row and deactivate the whole source. Refuse even after the
+        // coverage guard.
+        return { count: 0, skipped: "NO_SEEN_PAIRS" };
       }
 
       // A "full sync" is only as trustworthy as its discovery pass, and this
@@ -210,7 +289,7 @@ export function createNeonMlsDb(sql) {
       // No active inventory yet (first import) => nothing to protect.
       const coverage = activeCount === 0 ? 1 : seenCount / activeCount;
 
-      if (coverage < MIN_DEACTIVATION_COVERAGE) {
+      if (coverage < MIN_DEACTIVATION_COVERAGE && !allowLowCoverage) {
         return {
           count: 0,
           skipped: "DISCOVERY_COVERAGE_TOO_LOW",
@@ -220,6 +299,40 @@ export function createNeonMlsDb(sql) {
           discovered: seenLegacyIds.length,
         };
       }
+      const coverageOverride = coverage < MIN_DEACTIVATION_COVERAGE;
+
+      if (pairAwareSweep) {
+        // Pair-aware sweep: a listing can be valid for one deal type while the
+        // other deal-type row is genuinely gone (sale kept, rent removed), so
+        // only exact (legacy_detail_id, deal_type) pairs keep a row active.
+        // `protectedLegacyIds` are the discovered ids this run did not upsert
+        // (partial runs, failed details) and must never be swept.
+        const pairIds = seenPairs.map(([id]) => String(id));
+        const pairTypes = seenPairs.map(([, dealType]) => String(dealType));
+        const protectedIds = Array.isArray(protectedLegacyIds)
+          ? protectedLegacyIds.map(String)
+          : [];
+        const rows = await sql.query(
+          `
+          UPDATE properties
+          SET status = 'inactive', updated_at = $5
+          WHERE source_site = $1
+            AND legacy_detail_id IS NOT NULL
+            AND status <> 'inactive'
+            AND ingestion_owner = 'legacy'
+            AND legacy_detail_id <> ALL($4::text[])
+            AND NOT EXISTS (
+              SELECT 1
+              FROM unnest($2::text[], $3::text[]) AS p(id, deal_type)
+              WHERE p.id = properties.legacy_detail_id
+                AND p.deal_type = properties.deal_type::text
+            )
+          RETURNING id
+          `,
+          [sourceSite, pairIds, pairTypes, protectedIds, nowIso],
+        );
+        return { count: rows.length, coverage, coverageOverride };
+      }
 
       const rows = await sql.query(
         `
@@ -227,12 +340,13 @@ export function createNeonMlsDb(sql) {
         SET status = 'inactive', updated_at = $3
         WHERE source_site = $1
           AND legacy_detail_id IS NOT NULL
+          AND ingestion_owner = 'legacy'
           AND legacy_detail_id <> ALL($2::text[])
         RETURNING id
         `,
         [sourceSite, seenLegacyIds, nowIso],
       );
-      return { count: rows.length };
+      return { count: rows.length, coverage, coverageOverride };
     },
   };
 }

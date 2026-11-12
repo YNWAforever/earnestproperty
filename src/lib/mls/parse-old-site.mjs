@@ -85,10 +85,89 @@ export function parseDetailTable($) {
 
     const key = normalizeText($(cells[0]).text());
     const value = normalizeText($(cells[1]).text());
-    if (key && key !== "項目") fields[key] = value;
+    if (!key || key === "項目") return;
+    // The enquiry form further down the page repeats some labels (notably
+    // 聯絡電話) with an empty value. Keep the first non-empty value rather
+    // than letting a later blank row erase real detail-table data; later
+    // non-empty values still win, preserving the original last-wins behaviour.
+    if (!value && key in fields) return;
+    fields[key] = value;
   });
 
   return fields;
+}
+
+/**
+ * Detail-table labels we are willing to persist into `source_payload.rawFields`.
+ * Kept here (rather than in the normalizer) so both the parser and the
+ * normalizer agree on which raw labels exist on the legacy detail page.
+ */
+export const DETAIL_FIELD_LABELS = Object.freeze([
+  "更新日期",
+  "物業用途",
+  "地區",
+  "街道 (英)",
+  "街道 (中)",
+  "大廈 (英)",
+  "大廈 (中)",
+  "層數",
+  "單位",
+  "建築面積",
+  "實用面積",
+  "售價",
+  "出租價",
+  "呎售(建築/實用)",
+  "呎租(建築/實用)",
+  "入伙年份",
+  "地契年期",
+  "聯絡人",
+  "聯絡電話",
+  "座向景觀",
+  "座向",
+  "間格",
+  "間隔",
+  "裝修",
+  "備註",
+]);
+
+function pickField(fields, ...labels) {
+  for (const label of labels) {
+    const value = fields[label];
+    if (value) return value;
+  }
+  return null;
+}
+
+function parseYearValue(value) {
+  const match = normalizeText(value).match(/(?:^|\D)(\d{4})(?:\D|$)/);
+  return match ? Number(match[1]) : null;
+}
+
+function parsePsfPair(value) {
+  const [grossRaw, saleableRaw] = normalizeText(value).split("/");
+  return {
+    gross: parseMoneyToHkd(grossRaw ?? ""),
+    saleable: parseMoneyToHkd(saleableRaw ?? ""),
+  };
+}
+
+function splitContactText(value) {
+  return normalizeText(value)
+    .split(/[,，、/]/)
+    .map(normalizeText)
+    .filter(Boolean);
+}
+
+/** Split 聯絡人 on comma-like separators, e.g. "VINCY 林詠斯, 海韻分行". */
+export function splitContactNames(value) {
+  return splitContactText(value);
+}
+
+/** Split 聯絡電話 on comma-like separators and keep digits only. */
+export function splitContactPhones(value) {
+  return splitContactText(value)
+    .map((entry) => entry.replace(/[^\d]/g, ""))
+    .filter(Boolean);
 }
 
 function extractLegacyDetailId(sourceUrl) {
@@ -167,6 +246,10 @@ export function parseListingDetail(html, sourceUrl) {
   const fields = parseDetailTable($);
   const roomText = fields["間格"] || fields["間隔"] || null;
   const roomCounts = parseRoomCounts(roomText);
+  const salePsf = parsePsfPair(pickField(fields, "呎售(建築/實用)", "呎售"));
+  const rentPsf = parsePsfPair(pickField(fields, "呎租(建築/實用)", "呎租"));
+  const contactName = fields["聯絡人"] || null;
+  const contactPhone = fields["聯絡電話"] || null;
 
   return {
     sourceUrl,
@@ -190,14 +273,24 @@ export function parseListingDetail(html, sourceUrl) {
     saleableArea: parseAreaFeet(fields["實用面積"]),
     salePriceHkd: parseMoneyToHkd(fields["售價"]),
     rentHkd: parseMoneyToHkd(fields["出租價"]),
+    salePsfGross: salePsf.gross,
+    salePsfSaleable: salePsf.saleable,
+    rentPsfGross: rentPsf.gross,
+    rentPsfSaleable: rentPsf.saleable,
+    yearCompleted: parseYearValue(pickField(fields, "入伙年份")),
+    leaseExpiryYear: parseYearValue(pickField(fields, "地契年期")),
     orientation: fields["座向景觀"] || fields["座向"] || null,
     decoration: fields["裝修"] || null,
     remarks: fields["備註"] || null,
-    contactName: fields["聯絡人"] || null,
-    contactPhone: fields["聯絡電話"] || null,
+    contactName,
+    contactPhone,
+    contactNames: splitContactNames(contactName),
+    contactPhones: splitContactPhones(contactPhone),
     bedrooms: roomCounts.bedrooms,
     livingRooms: roomCounts.livingRooms,
+    layoutText: roomText,
     roomText,
+    rawFields: fields,
     images: extractImageUrls($),
   };
 }
@@ -231,4 +324,96 @@ export function parseLegacyDetail(html, url) {
     sourceUpdatedAt: detail.sourceUpdatedAt,
     sourceLanguage: url.includes("/eng/") ? "en" : "tc",
   };
+}
+
+/**
+ * District labels that can lead the "大廈名稱" cell of the legacy listing
+ * index, e.g. "荃灣&nbsp;縉皇居 第01座". Anything else is treated as the
+ * building name itself instead of a district.
+ */
+const LISTING_DISTRICT_LABELS = Object.freeze([
+  "荃灣",
+  "屯門",
+  "長沙灣",
+  "深井",
+  "汀九",
+  "青龍頭",
+  "馬灣",
+]);
+
+function parseListingAreaCell(value) {
+  const raw = normalizeText(value);
+  if (!raw || raw === "--") return null;
+  const match = raw.match(/([\d,]+)\s*(?:呎|平方呎|ft)?/i);
+  if (!match) return null;
+  const area = Number(match[1].replace(/,/g, ""));
+  return Number.isFinite(area) && area > 0 ? area : null;
+}
+
+function parseListingCellText(cells, index) {
+  return normalizeText(cells.eq(index).text());
+}
+
+function listingDistrictName(building) {
+  const [firstToken] = building.split(" ").filter(Boolean);
+  return firstToken && LISTING_DISTRICT_LABELS.includes(firstToken) ? firstToken : null;
+}
+
+function readListingRow($, row, seenDetailIds, baseUrl) {
+  const cells = $(row).children("td");
+  if (cells.length < 12) return null;
+
+  const checkboxValue = cells.eq(0).find("input[name^='cbox' i]").attr("value");
+  const detailHref = $(row).find("a[href*='/property-detail/']").first().attr("href");
+  const detailId = checkboxValue || detailHref?.match(/property-detail\/(\d+)\.html/i)?.[1] || null;
+  if (!detailId || !detailHref) return null;
+  if (seenDetailIds.has(detailId)) return null;
+  seenDetailIds.add(detailId);
+
+  const building = parseListingCellText(cells, 4);
+  const salePriceHkd = parseMoneyToHkd(parseListingCellText(cells, 8));
+  const rentHkd = parseMoneyToHkd(parseListingCellText(cells, 9));
+  const dealTypes = [];
+  if (salePriceHkd != null) dealTypes.push("sale");
+  if (rentHkd != null) dealTypes.push("rent");
+  const sourceUpdatedAt = parseListingCellText(cells, 2) || null;
+  const propertyUse = parseListingCellText(cells, 3) || null;
+  const floor = parseListingCellText(cells, 5) || null;
+  const canonicalPropertyNo = parseListingCellText(cells, 10) || null;
+
+  return {
+    detailId,
+    detailUrl: absoluteUrl(detailHref, baseUrl),
+    sourceUpdatedAt,
+    propertyUse,
+    districtName: listingDistrictName(building),
+    building,
+    floor,
+    grossArea: parseListingAreaCell(parseListingCellText(cells, 6)),
+    saleableArea: parseListingAreaCell(parseListingCellText(cells, 7)),
+    salePriceHkd,
+    rentHkd,
+    canonicalPropertyNo,
+    hasVr: /\bVR\b/i.test(parseListingCellText(cells, 1)),
+    dealTypes,
+  };
+}
+
+/**
+ * Parse the listing-card rows of the legacy index page (`/property/`,
+ * `/property/c1/`, ...). Each row carries the detail id, the card's building
+ * label (district + estate), areas, both possible prices and the legacy
+ * property number. Deduplicated by detail id.
+ */
+export function parseListingRows(html, baseUrl) {
+  const $ = load(html);
+  const seenDetailIds = new Set();
+  const rows = [];
+
+  $("tr").each((_, row) => {
+    const parsed = readListingRow($, row, seenDetailIds, baseUrl);
+    if (parsed) rows.push(parsed);
+  });
+
+  return rows;
 }

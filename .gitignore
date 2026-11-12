@@ -69,3 +69,7 @@ src/lib/neon/.admin-transactions-contract-tmp/
 # Keep a local `bun install` from re-adding a second lockfile.
 bun.lockb
 bun.lock
+artifacts/old-site-sync/
+artifacts/old-site-agents/
+artifacts/old-site-locations/
+artifacts/old-site-estate-stats/

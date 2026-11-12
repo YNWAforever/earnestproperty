@@ -23,6 +23,22 @@ function fixture(name) {
   );
 }
 
+/**
+ * Synthetic index page with enough distinct detail ids to clear the importer's
+ * MIN_DISCOVERED_FOR_SWEEP guard (the committed fixture only has 10 rows, and a
+ * 10-id discovery pass is refused as too small to trust for a sweep).
+ */
+function syntheticIndexHtml(count, firstDetailId = "6709182") {
+  const ids = [firstDetailId];
+  for (let index = 1; ids.length < count; index += 1) {
+    ids.push(String(8_000_000 + index));
+  }
+  const anchors = ids
+    .map((id) => `<a href="/property-detail/${id}.html" class="tnimage">Listing ${id}</a>`)
+    .join("\n");
+  return `<html><body>${anchors}</body></html>`;
+}
+
 test("parseListingIndex discovers unique property-detail URLs", () => {
   const links = parseListingIndex(
     fixture("property-index-c1.html"),
@@ -282,7 +298,7 @@ test("partial sync does not deactivate listings beyond maxDetails", async () => 
 });
 
 test("fullSync deactivates against the full discovered legacy id set", async () => {
-  const indexHtml = fixture("property-index-c1.html");
+  const indexHtml = syntheticIndexHtml(300);
   const detailHtml = fixture("property-detail-6709182.html");
   const fetched = new Map([
     ["https://www.earnestproperty.com/property/c1", indexHtml],
@@ -304,7 +320,7 @@ test("fullSync deactivates against the full discovered legacy id set", async () 
   });
 
   // Only 1 detail fetched, but fullSync passes EVERY discovered legacy id
-  // (all 10) to deactivateMissing so unscraped listings are not swept.
+  // (all 300) to deactivateMissing so unscraped listings are not swept.
   const result = await importer.sync({
     seedUrls: ["https://www.earnestproperty.com/property/c1"],
     maxDetails: 1,
@@ -312,7 +328,8 @@ test("fullSync deactivates against the full discovered legacy id set", async () 
   });
 
   assert.equal(result.deactivationSkipped, false);
-  assert.equal(seenLegacyIds.length, 10);
+  assert.equal(result.deactivationBlocked, null);
+  assert.equal(seenLegacyIds.length, 300);
   assert.ok(seenLegacyIds.includes("6709182"));
 });
 

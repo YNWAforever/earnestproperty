@@ -1,4 +1,9 @@
-import { splitFeatureText } from "./parse-old-site.mjs";
+import {
+  DETAIL_FIELD_LABELS,
+  splitContactNames,
+  splitContactPhones,
+  splitFeatureText,
+} from "./parse-old-site.mjs";
 
 const ESTATE_PATTERNS = [
   ["bellagio", [/碧堤半島/i, /BELLAGIO/i]],
@@ -102,6 +107,53 @@ function titleFor(detail, dealType) {
   return `${building} ${action} #${baseListingNo(detail)}`;
 }
 
+function titleEnFor(detail, dealType) {
+  const buildingEn = cleanNull(detail.buildingEn);
+  if (!buildingEn) return null;
+  const action = dealType === "rent" ? "租盤" : "售盤";
+  return `${buildingEn} ${action} #${baseListingNo(detail)}`;
+}
+
+function contactList(detail, key, legacyKey, splitter) {
+  if (Array.isArray(detail[key]) && detail[key].length) return detail[key];
+  return splitter(detail[legacyKey] ?? "");
+}
+
+function rawFieldsFor(detail) {
+  const source = detail.rawFields && typeof detail.rawFields === "object" ? detail.rawFields : {};
+  const rawFields = {};
+  for (const label of DETAIL_FIELD_LABELS) {
+    const value = source[label];
+    if (typeof value === "string" && value) rawFields[label] = value;
+  }
+  return rawFields;
+}
+
+function sourcePayloadFor(detail, nowIso) {
+  const payload = {
+    parser: "old-site-detail/v1",
+    capturedAt: nowIso,
+    canonicalPropertyNo: detail.legacyPropertyNo ?? null,
+    rawFields: rawFieldsFor(detail),
+    contacts: {
+      names: contactList(detail, "contactNames", "contactName", splitContactNames),
+      phones: contactList(detail, "contactPhones", "contactPhone", splitContactPhones),
+    },
+    psf: {
+      saleGross: detail.salePsfGross ?? null,
+      saleSaleable: detail.salePsfSaleable ?? null,
+      rentGross: detail.rentPsfGross ?? null,
+      rentSaleable: detail.rentPsfSaleable ?? null,
+    },
+    yearCompleted: Number.isInteger(detail.yearCompleted) ? detail.yearCompleted : null,
+    leaseExpiryYear: Number.isInteger(detail.leaseExpiryYear) ? detail.leaseExpiryYear : null,
+    propertyUse: cleanNull(detail.propertyUse),
+    unitNo: cleanNull(detail.unit),
+  };
+  if (!detail.legacyPropertyNo) payload.canonicalMissing = true;
+  return payload;
+}
+
 function dealTypesFor(detail) {
   const dealTypes = [];
   if (detail.salePriceHkd) dealTypes.push("sale");
@@ -161,16 +213,26 @@ export function normalizeListingDetail(detail, options = {}) {
   }
 
   const estateIdsBySlug = options.estateIdsBySlug ?? new Map();
-  const estateSlug = resolveEstateSlug(detail);
-  const estateId = estateSlug ? (estateIdsBySlug.get(estateSlug) ?? null) : null;
-  const districtSlug = inferDistrictSlug(detail);
   const nowIso = options.nowIso ?? new Date().toISOString();
   const dealTypes = dealTypesFor(detail);
+  const sourcePayload = sourcePayloadFor(detail, nowIso);
+
+  let estateId = null;
+  let districtSlug = null;
+  if (typeof options.resolveLocation === "function") {
+    const location = options.resolveLocation(detail) ?? {};
+    estateId = location.estateId ?? null;
+    districtSlug = location.districtSlug ?? null;
+  } else {
+    const estateSlug = resolveEstateSlug(detail);
+    estateId = estateSlug ? (estateIdsBySlug.get(estateSlug) ?? null) : null;
+    districtSlug = inferDistrictSlug(detail);
+  }
 
   return dealTypes.map((dealType) => ({
     listing_no: listingNo(detail, dealType),
     title_zh: titleFor(detail, dealType),
-    title_en: null,
+    title_en: titleEnFor(detail, dealType),
     deal_type: dealType,
     estate_id: estateId,
     district_slug: districtSlug,
@@ -182,14 +244,21 @@ export function normalizeListingDetail(detail, options = {}) {
     bedrooms: detail.bedrooms,
     bathrooms: null,
     floor: cleanNull(detail.floor),
+    unit_no: cleanNull(detail.unit),
     orientation: cleanNull(detail.orientation),
+    year_completed: Number.isInteger(detail.yearCompleted) ? detail.yearCompleted : null,
+    lease_expiry_year: Number.isInteger(detail.leaseExpiryYear) ? detail.leaseExpiryYear : null,
+    property_use: cleanNull(detail.propertyUse),
+    remarks: cleanNull(detail.remarks),
     features: featuresFor(detail),
     description: descriptionFor(detail, dealType),
     images: detail.images?.length ? detail.images : null,
+    source_payload: sourcePayload,
     status: "active",
     featured: false,
     legacy_detail_id: detail.legacyDetailId,
     legacy_property_no: detail.legacyPropertyNo,
+    canonical_property_no: detail.legacyPropertyNo ?? null,
     legacy_url: detail.sourceUrl,
     legacy_source_indexes: options.legacySourceIndexes ?? [],
     source_site: "earnestproperty-old-site",
