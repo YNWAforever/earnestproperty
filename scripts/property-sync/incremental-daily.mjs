@@ -183,6 +183,22 @@ async function download(name, directory) {
 async function upload(path) {
   await gh(["release", "upload", "property-sync-evidence", path, "--repo", evidenceRepo()]);
 }
+export function requestAssetForBundle(asset) {
+  const match = /^incremental-bundle-([0-9]+)-([1-9][0-9]*)\.tar\.gz$/.exec(asset ?? "");
+  if (!match) throw Error("INVALID_INCREMENTAL_BUNDLE_ASSET");
+  return `request-${match[1]}-${match[2]}.json`;
+}
+async function pinRequestAlias(root, prepared, assets) {
+  const name = requestAssetForBundle(prepared.bundle_asset);
+  const body = await readFile(join(root, "bundle/request.json"));
+  const path = join(root, name);
+  await writeFile(path, body);
+  if (!assets.some((entry) => entry.name === name)) await upload(path);
+  const readback = await download(name, join(root, "request-alias-readback"));
+  if (sha256(body) !== sha256(await readFile(readback)))
+    throw Error("INCREMENTAL_REQUEST_ALIAS_MISMATCH");
+  return { ...prepared, request_asset: name };
+}
 async function checkPrivateEvidence() {
   const repo = JSON.parse(await gh(["api", `repos/${evidenceRepo()}`]));
   if (repo.private !== true) throw Error("EVIDENCE_REPOSITORY_MUST_BE_PRIVATE");
@@ -271,7 +287,12 @@ export async function prepare(root, replayAsset) {
     const archive = await download(replayAsset, join(root, "download"));
     await unpackBundle(archive, join(root, "bundle"));
     decodeSnapshot(await json(join(root, "bundle/request.json")), { incremental: true });
-    await save(join(root, "prepared.json"), { replay: true, bundle_asset: replayAsset, archive });
+    const prepared = await pinRequestAlias(
+      root,
+      { replay: true, bundle_asset: replayAsset, archive },
+      assets,
+    );
+    await save(join(root, "prepared.json"), prepared);
     return;
   }
   const incrementalIsCurrent =
@@ -431,7 +452,12 @@ export async function collect(root) {
   const readback = await download(asset, join(root, "pin-readback"));
   if (sha256(await readFile(readback)) !== sha256(await readFile(archive)))
     throw Error("INCREMENTAL_PIN_READBACK_FAILED");
-  await save(join(root, "prepared.json"), { ...prepared, bundle_asset: asset, archive });
+  const pinned = await pinRequestAlias(
+    root,
+    { ...prepared, bundle_asset: asset, archive },
+    await checkPrivateEvidence(),
+  );
+  await save(join(root, "prepared.json"), pinned);
 }
 
 export async function reconcileUnknownReceipt(payload, { read = readReceipt } = {}) {
@@ -597,12 +623,15 @@ export async function safeSummary(root) {
     indexFinishedAt: report?.index_finished_at ?? null,
     lastFreshDetailAt: report?.last_fresh_detail_at ?? null,
     detailCandidates: report?.selected_count ?? 0,
-    detailFetched: report?.fetched_count ?? 0,
+    detailFetched: prepared?.replay ? 0 : (report?.fetched_count ?? 0),
+    captureDetailFetched: report?.fetched_count ?? 0,
+    reusedCapture: prepared?.replay === true,
     unchangedSkipped: report?.unchanged_count ?? 0,
     pendingDetails: report?.pending_count ?? 0,
     deferredRefresh: report?.deferred_refresh_count ?? 0,
     withdrawalCandidates: report?.withdrawal_candidate_count ?? 0,
-    providerRequests: report?.requests_used ?? 0,
+    providerRequests: prepared?.replay ? 0 : (report?.requests_used ?? 0),
+    captureProviderRequests: report?.requests_used ?? 0,
     fullSnapshot: false,
     absenceAllowed: false,
     receiptId: receipt?.receipt_id ?? null,
@@ -661,7 +690,8 @@ export async function record(root) {
     };
   if (payload && stages.collection.status === "succeeded") {
     stages.collection.startedAt = new Date(payload.meta.incremental.index_started_at).toISOString();
-    stages.collection.finishedAt = new Date(
+    stages.collection.finishedAt = new Date(payload.scraped_at).toISOString();
+    stages.collection.indexFinishedAt = new Date(
       payload.meta.incremental.index_finished_at,
     ).toISOString();
     stages.collection.pagesRead = payload.meta.pages.length;
@@ -680,8 +710,8 @@ export async function record(root) {
     workflowAttempt: Number(context.attempt),
     gitSha: context.gitSha,
     requestHash: payload ? hashPayload(payload) : undefined,
-    privateEvidenceRef: prepared?.bundle_asset
-      ? { requestAsset: prepared.bundle_asset }
+    privateEvidenceRef: prepared?.request_asset
+      ? { requestAsset: prepared.request_asset }
       : undefined,
     stages,
     counts: {
