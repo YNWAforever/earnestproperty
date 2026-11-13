@@ -7,6 +7,8 @@ import { ingestSnapshot } from "./ingestion-service.mjs";
 import { batch, row } from "./ingestion-test-fixtures.mjs";
 import { incrementalBatch, member } from "./incremental-test-fixtures.mjs";
 import { readSyncAuthority } from "../../../scripts/mls/read-sync-authority.mjs";
+import { recordSyncRun } from "./sync-run-repository.mjs";
+import { requestAssetForBundle } from "../../../scripts/property-sync/incremental-daily.mjs";
 
 test(
   "owned PostgreSQL incremental receipts preserve full authority, missing inventory and staff guards",
@@ -58,6 +60,7 @@ test(
         "20260906120000_admin_property_management.sql",
         "20260907120000_propertyhk_ingestion_v2.sql",
         "20260909120000_source_promotion_tiers.sql",
+        "20261001120000_property_sync_operations.sql",
       ]) {
         await q("BEGIN");
         await q(readFileSync("neon/migrations/" + name, "utf8"));
@@ -219,6 +222,74 @@ test(
             (error) => error.code === "incremental_mode_required",
           );
           await q("UPDATE mls_ingestion_policies SET publish_enabled=true");
+        },
+      );
+      await t.test(
+        "native metadata stores the exact JSON alias for shadow and accepted partial runs",
+        async () => {
+          const [receipt] = await q(
+            "SELECT id,source,scope_id,payload_hash FROM mls_ingestion_receipts WHERE NOT full_snapshot AND response->>'incremental'='true' ORDER BY accepted_at DESC LIMIT 1",
+          );
+          assert.ok(receipt);
+          const bundleAsset = "incremental-bundle-43486723927-1.tar.gz";
+          const summary = {
+            source: receipt.source,
+            scopeId: receipt.scope_id,
+            incremental: true,
+            workflowRunId: "43486723927",
+            workflowAttempt: 1,
+            gitSha: "a".repeat(40),
+            requestHash: receipt.payload_hash,
+            privateEvidenceRef: { requestAsset: requestAssetForBundle(bundleAsset) },
+            stages: {
+              collection: { status: "succeeded" },
+              ingestion: { status: "blocked", errorCode: "DRY_RUN_NO_WRITES" },
+              publication: { status: "pending" },
+              verification: { status: "pending" },
+            },
+            counts: { canonicalCreated: 0, canonicalUpdated: 0, published: 0 },
+            finishedAt: new Date().toISOString(),
+          };
+          await assert.rejects(
+            recordSyncRun({
+              client: c,
+              runId: randomUUID(),
+              summary: { ...summary, privateEvidenceRef: { requestAsset: bundleAsset } },
+            }),
+            (error) =>
+              error.code === "23514" &&
+              error.constraint === "property_sync_runs_request_asset_check",
+          );
+          const shadowRun = randomUUID();
+          await recordSyncRun({ client: c, runId: shadowRun, summary });
+          assert.equal(
+            (await q("SELECT request_asset FROM property_sync_runs WHERE id=$1", [shadowRun]))[0]
+              .request_asset,
+            "request-43486723927-1.json",
+          );
+          const applied = {
+            ...summary,
+            workflowRunId: "43486723928",
+            stages: {
+              ...summary.stages,
+              ingestion: { status: "succeeded", receiptId: receipt.id },
+            },
+          };
+          await assert.rejects(
+            recordSyncRun({
+              client: c,
+              runId: randomUUID(),
+              summary: { ...applied, incremental: false },
+            }),
+            /RECEIPT_IDENTITY_REQUIRED/,
+          );
+          const appliedRun = randomUUID();
+          await recordSyncRun({ client: c, runId: appliedRun, summary: applied });
+          assert.equal(
+            (await q("SELECT receipt_id FROM property_sync_runs WHERE id=$1", [appliedRun]))[0]
+              .receipt_id,
+            receipt.id,
+          );
         },
       );
       await t.test(

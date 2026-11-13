@@ -12,6 +12,7 @@ import {
   reconcileUnknownReceipt,
   publicationRetryPairs,
   cacheWithPublicationRetries,
+  requestAssetForBundle,
 } from "./incremental-daily.mjs";
 import { hashPayload } from "../../src/lib/mls/ingestion-contract.mjs";
 import { incrementalBatch } from "../../src/lib/mls/incremental-test-fixtures.mjs";
@@ -47,6 +48,15 @@ function collectorPayload({ empty = false } = {}) {
   });
   return payload;
 }
+
+test("immutable bundle maps to the schema-compatible exact JSON request reference", () => {
+  assert.equal(
+    requestAssetForBundle("incremental-bundle-43486723927-1.tar.gz"),
+    "request-43486723927-1.json",
+  );
+  for (const value of ["../request.json", "request-123-1.json", "incremental-bundle-123-0.tar.gz"])
+    assert.throws(() => requestAssetForBundle(value), /INVALID_INCREMENTAL_BUNDLE_ASSET/);
+});
 
 test("lost apply responses keep uncertainty and reconcile only the exact committed receipt", async () => {
   await assert.rejects(
@@ -272,6 +282,19 @@ test("public artifact contains counts and evidence references, never private raw
     assert.equal(summary.rentIdsSeen, 50);
     assert.equal(summary.indexPagesVerified, 20);
     assert.equal(summary.newCandidates, 0);
+    const report = JSON.parse(await readFile(join(bundle, "report.json"), "utf8"));
+    await writeFile(
+      join(bundle, "report.json"),
+      JSON.stringify({ ...report, requests_used: 52, fetched_count: 27 }),
+    );
+    await writeFile(join(directory, "prepared.json"), JSON.stringify({ replay: true }));
+    await safeSummary(directory);
+    const replay = JSON.parse(await readFile(join(directory, "summary.json"), "utf8"));
+    assert.equal(replay.reusedCapture, true);
+    assert.equal(replay.providerRequests, 0);
+    assert.equal(replay.detailFetched, 0);
+    assert.equal(replay.captureProviderRequests, 52);
+    assert.equal(replay.captureDetailFetched, 27);
   } finally {
     assert.ok(directory.startsWith(join(tmpdir(), "ep-incremental-summary-")));
     await rm(directory, { recursive: true, force: true });
