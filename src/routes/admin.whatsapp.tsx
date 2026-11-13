@@ -26,7 +26,7 @@ import {
   useState,
 } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { AlertTriangle, Clock3, History, MessageCircle, RefreshCw, Send } from "lucide-react";
+import { AlertTriangle, History, MessageCircle, RefreshCw, Send } from "lucide-react";
 import { toast } from "sonner";
 
 import { AdminConfirmDialog } from "@/components/admin/AdminConfirmDialog";
@@ -34,7 +34,6 @@ import { AdminDetailPanel } from "@/components/admin/AdminDetailPanel";
 import { AdminEmptyState } from "@/components/admin/AdminEmptyState";
 import { AdminError, AdminShell } from "@/components/admin/AdminShell";
 import { AdminStatusSelect } from "@/components/admin/AdminStatusSelect";
-import { AdminToolbar } from "@/components/admin/AdminToolbar";
 import { OptOutEvidenceNotice } from "@/components/admin/whatsapp/OptOutEvidenceNotice";
 import { ResolveUnknownOutboundDialog } from "@/components/admin/whatsapp/ResolveUnknownOutboundDialog";
 import {
@@ -1161,7 +1160,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
     <AdminShell
       contentWidth="wide"
       title="WhatsApp 收件匣"
-      description="查看客戶訊息、指派負責代理及回覆；對話列表每分鐘自動更新，亦可按「重新整理」即時讀取。"
+      description=""
       actions={
         <>
           {/* History import. Deliberately not automatic: it reaches out to
@@ -1202,131 +1201,136 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
         </>
       }
     >
-      {user ? (
-        <StaffNotificationPanel
-          key={user.id}
-          refreshKey={handoffRefreshKey}
-          onOpen={(item) => {
-            openConversation(item.conversationId);
-            setEnquirySelections((current) => ({
-              ...current,
-              [item.conversationId]: item.inquiryId,
-            }));
-            setWhatsappSearch({
-              conversation: item.conversationId,
-              enquiry: item.inquiryId,
-              notification: item.id,
-            });
-          }}
-        />
-      ) : null}
-      <AdminToolbar
-        filters={
-          <>
-            <Input
-              value={queryDraft}
-              onChange={(event) => setQueryDraft(event.target.value)}
-              onCompositionStart={() => {
-                queryCompositionActive.current = true;
-                setQueryIsComposing(true);
-              }}
-              onCompositionEnd={(event) => {
-                queryCompositionActive.current = false;
-                setQueryDraft(event.currentTarget.value);
-                setQueryIsComposing(false);
-              }}
-              placeholder="搜尋姓名、電話、樓盤或訊息"
-              aria-label="搜尋 WhatsApp 對話"
-              className="h-11 w-full sm:w-56 lg:h-9"
-            />
-            <AdminStatusSelect
-              ariaLabel="按對話狀態篩選"
-              value={inboxStatus}
-              options={inboxStatusFilterOptions}
-              onChange={(value) =>
-                setWhatsappSearch({ status: value === "all" ? undefined : value })
-              }
-            />
-            <Badge variant="outline" className="h-11 gap-1.5 px-3 lg:h-9">
-              <Clock3 className="h-3.5 w-3.5" />
-              24 小時回覆窗口
-            </Badge>
-            {/* Staff-facing wording: this used to read "WOZTELL_ENABLED: false",
+      <div
+        data-whatsapp-inbox
+        className="grid h-[calc(100dvh-8rem)] min-h-[28rem] min-w-0 gap-4 lg:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]"
+      >
+        <Card className="min-h-0 min-w-0 overflow-hidden">
+          <CardContent className="flex h-full min-h-0 flex-col p-0">
+            <div className="max-h-[55%] shrink-0 space-y-3 overflow-y-auto border-b p-3">
+              {user ? (
+                <details className="rounded-md border px-3 py-2">
+                  <summary className="cursor-pointer text-sm font-medium">我的接手工作</summary>
+                  <StaffNotificationPanel
+                    key={user.id}
+                    refreshKey={handoffRefreshKey}
+                    onOpen={(item) => {
+                      openConversation(item.conversationId);
+                      setEnquirySelections((current) => ({
+                        ...current,
+                        [item.conversationId]: item.inquiryId,
+                      }));
+                      setWhatsappSearch({
+                        conversation: item.conversationId,
+                        enquiry: item.inquiryId,
+                        notification: item.id,
+                      });
+                    }}
+                  />
+                </details>
+              ) : null}
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    value={queryDraft}
+                    onChange={(event) => setQueryDraft(event.target.value)}
+                    onCompositionStart={() => {
+                      queryCompositionActive.current = true;
+                      setQueryIsComposing(true);
+                    }}
+                    onCompositionEnd={(event) => {
+                      queryCompositionActive.current = false;
+                      setQueryDraft(event.currentTarget.value);
+                      setQueryIsComposing(false);
+                    }}
+                    placeholder="搜尋姓名、電話、樓盤或訊息"
+                    aria-label="搜尋 WhatsApp 對話"
+                    className="h-11 w-full lg:h-9"
+                  />
+                  <AdminStatusSelect
+                    ariaLabel="按對話狀態篩選"
+                    value={inboxStatus}
+                    options={inboxStatusFilterOptions}
+                    onChange={(value) =>
+                      setWhatsappSearch({ status: value === "all" ? undefined : value })
+                    }
+                  />
+                  {/* Staff-facing wording: this used to read "WOZTELL_ENABLED: false",
                 which tells a non-technical agent neither what is wrong nor what
                 to do. The variable name stays in the title for support. */}
-            <Badge
-              variant={
-                woztellEnabled ? "secondary" : woztellEnabled === false ? "destructive" : "outline"
-              }
-              className="h-11 px-3 lg:h-9"
-              title="WOZTELL_ENABLED"
-            >
-              WhatsApp 發送：
-              {woztellEnabled === null
-                ? "檢查中"
-                : woztellEnabled
-                  ? "可用"
-                  : "暫停（請聯絡技術支援）"}
-            </Badge>
-          </>
-        }
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            {listUpdatedAt ? (
-              <span className="text-xs text-muted-foreground">
-                最後更新 {formatClock(listUpdatedAt)}
-              </span>
-            ) : null}
-          </div>
-        }
-      />
+                  <Badge
+                    variant={
+                      woztellEnabled
+                        ? "secondary"
+                        : woztellEnabled === false
+                          ? "destructive"
+                          : "outline"
+                    }
+                    className="h-11 px-3 lg:h-9"
+                    title="WOZTELL_ENABLED"
+                  >
+                    WhatsApp 發送：
+                    {woztellEnabled === null
+                      ? "檢查中"
+                      : woztellEnabled
+                        ? "可用"
+                        : "暫停（請聯絡技術支援）"}
+                  </Badge>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {listUpdatedAt ? (
+                    <span className="text-xs text-muted-foreground">
+                      最後更新 {formatClock(listUpdatedAt)}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
 
-      {listCursor ? (
-        <p className="text-sm text-muted-foreground">
-          你正查看較舊頁面。按「第一頁」查看最新活動。
-        </p>
-      ) : null}
-      <div className="flex items-center gap-2">
-        <Button
-          variant="outline"
-          disabled={!listCursor || loadingRows}
-          onClick={() => void refreshConversations(null)}
-        >
-          第一頁
-        </Button>
-        <Button
-          variant="outline"
-          disabled={!nextListCursor || loadingRows}
-          onClick={() => void refreshConversations(nextListCursor)}
-        >
-          下一頁
-        </Button>
-      </div>
-      {error ? <AdminError message={error} /> : null}
-
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(18rem,24rem)_minmax(0,1fr)]">
-        <Card className="min-w-0">
-          <CardContent className="p-0">
-            <ConversationList
-              rows={filteredRows}
-              totalLoaded={listTotal}
-              awaitingCount={awaitingCount}
-              showingAwaitingOnly={inboxStatus === "awaiting"}
-              onShowAwaiting={() => setWhatsappSearch({ status: "awaiting" })}
-              hasFilters={hasInboxFilters}
-              onClearFilters={() => {
-                setQueryDraft("");
-                setWhatsappSearch({ q: undefined, status: undefined });
-              }}
-              selectedId={selectedId}
-              loading={loadingRows}
-              onOpen={openConversation}
-            />
+              {listCursor ? (
+                <p className="text-sm text-muted-foreground">
+                  你正查看較舊頁面。按「第一頁」查看最新活動。
+                </p>
+              ) : null}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  disabled={!listCursor || loadingRows}
+                  onClick={() => void refreshConversations(null)}
+                >
+                  第一頁
+                </Button>
+                <Button
+                  variant="outline"
+                  disabled={!nextListCursor || loadingRows}
+                  onClick={() => void refreshConversations(nextListCursor)}
+                >
+                  下一頁
+                </Button>
+              </div>
+              {error ? <AdminError message={error} /> : null}
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <ConversationList
+                rows={filteredRows}
+                totalLoaded={listTotal}
+                awaitingCount={awaitingCount}
+                showingAwaitingOnly={inboxStatus === "awaiting"}
+                onShowAwaiting={() => setWhatsappSearch({ status: "awaiting" })}
+                hasFilters={hasInboxFilters}
+                onClearFilters={() => {
+                  setQueryDraft("");
+                  setWhatsappSearch({ q: undefined, status: undefined });
+                }}
+                selectedId={selectedId}
+                loading={loadingRows}
+                onOpen={openConversation}
+              />
+            </div>
           </CardContent>
         </Card>
 
-        <Card className="hidden min-w-0 lg:block">
-          <CardContent className="p-0">
+        <Card className="hidden min-h-0 min-w-0 overflow-hidden lg:block">
+          <CardContent className="h-full min-h-0 p-0">
             <ConversationWorkspace
               selectedEnquiryId={selectedId ? (enquirySelections[selectedId] ?? "") : ""}
               onEnquirySelect={(id) => {
@@ -1390,6 +1394,7 @@ function AdminWhatsappWorkspace({ identity }: { identity: string }) {
       </div>
 
       <AdminDetailPanel
+        layout="workspace"
         open={!isDesktop && panelOpen}
         title={panelTitle}
         description={panelDescription}
@@ -1707,7 +1712,14 @@ function ConversationWorkspace({
   if (loading && !detail) return <Skeleton className="h-[32rem] w-full rounded-none" />;
   if (error)
     return selectedEnquiryId ? (
-      <EnquiryOnlyPanel inquiryId={selectedEnquiryId} />
+      <div
+        role="region"
+        aria-label="查詢訊息"
+        tabIndex={0}
+        className="h-full min-h-0 overflow-y-auto overscroll-contain"
+      >
+        <EnquiryOnlyPanel inquiryId={selectedEnquiryId} />
+      </div>
     ) : (
       <div className="p-4">
         <AdminError message={error} />
@@ -1736,12 +1748,12 @@ function ConversationWorkspace({
   const identityReview = Boolean(detail.identity_review_id);
 
   return (
-    <div className="flex h-[calc(100dvh-9rem)] min-h-0 max-h-[44rem] flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden">
       {/* Plain divs, not <header>/<footer>: nested inside AdminShell's own
           <header> and the outer site <header>/<footer>, the semantic tags
           produced three "banner" and two "contentinfo" landmarks on one page,
           which a screen reader's landmark navigation cannot disambiguate. */}
-      <div className="border-b p-4">
+      <div className="shrink-0 border-b p-4 pr-14 lg:pr-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
@@ -1811,19 +1823,26 @@ function ConversationWorkspace({
       {/* Sibling keys must differ. With the conditional notice slot above, a shared
           key={detail.id} sent React's keyed reconcile path to drop one fiber: every
           refresh leaked another 查詢跟進 block and remounted the timeline. */}
-      <WhatsappEnquiryContext
-        key={`enquiry:${detail.id}`}
-        conversationId={detail.id}
-        refreshKey={
-          detail.last_message_at +
-          ":" +
-          detail.messages.map((m) => m.id + ":" + m.status).join(",") +
-          ":" +
-          savingConversation
-        }
-        selectedId={selectedEnquiryId}
-        onSelect={onEnquirySelect}
-      />
+      <details
+        key={`enquiry-panel:${detail.id}`}
+        className="max-h-[24dvh] shrink-0 overflow-y-auto border-b"
+      >
+        <summary className="cursor-pointer px-4 py-2 text-sm font-medium">查詢跟進</summary>
+        <WhatsappEnquiryContext
+          hideHeading
+          key={`enquiry:${detail.id}`}
+          conversationId={detail.id}
+          refreshKey={
+            detail.last_message_at +
+            ":" +
+            detail.messages.map((m) => m.id + ":" + m.status).join(",") +
+            ":" +
+            savingConversation
+          }
+          selectedId={selectedEnquiryId}
+          onSelect={onEnquirySelect}
+        />
+      </details>
       <MessageTimeline
         key={`timeline:${detail.id}`}
         messages={detail.messages}
@@ -1833,9 +1852,9 @@ function ConversationWorkspace({
       />
 
       <div className="max-h-[36dvh] shrink-0 overflow-y-auto border-t bg-background p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <div className="mb-2 text-xs leading-5 text-muted-foreground">
           回覆只可在客戶最後一次來訊後 24 小時內發送。
-          {windowRemaining ? <span className="block">{windowRemaining}</span> : null}
+          {windowRemaining ? <span className="ml-2 inline-block">{windowRemaining}</span> : null}
           {availability.reason ? (
             <span className="block font-medium text-destructive">{availability.reason}</span>
           ) : null}
@@ -1883,8 +1902,8 @@ function ConversationWorkspace({
         ) : null}
         {identityReview ? null : (
           <>
-            <div className="grid gap-3">
-              <label htmlFor={replyInputId} className="text-sm font-semibold">
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2">
+              <label htmlFor={replyInputId} className="col-span-2 text-sm font-semibold">
                 回覆客戶
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
                   按「傳送回覆」才會發送
@@ -1893,7 +1912,8 @@ function ConversationWorkspace({
               <Textarea
                 id={replyInputId}
                 aria-label="WhatsApp 回覆"
-                rows={4}
+                rows={2}
+                className="min-h-16 text-base"
                 value={replyBody}
                 // Only the send itself disables the composer. Disabling on any
                 // in-flight mutation meant changing 負責代理 froze the textarea the
@@ -1904,7 +1924,7 @@ function ConversationWorkspace({
                 placeholder="輸入回覆內容"
                 onChange={(event) => onReplyBodyChange(event.target.value)}
               />
-              <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t bg-background py-2">
+              <div className="sticky bottom-0 flex flex-col items-end gap-1 bg-background">
                 <span
                   id={replyCountId}
                   className={[
@@ -2196,7 +2216,10 @@ function MessageTimeline({
           pinned.current = e.scrollHeight - e.scrollTop - e.clientHeight < 80;
         }
       }}
-      className="min-h-0 flex-1 overflow-y-auto p-4"
+      role="log"
+      aria-label="WhatsApp 訊息"
+      tabIndex={0}
+      className="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain bg-muted/20 p-4"
       style={{ overflowAnchor: "none" }}
     >
       {olderCursor ? (
@@ -2233,7 +2256,7 @@ function MessageBubble({ message }: { message: AdminConversationMessageRow }) {
       <div
         role={failed ? "alert" : undefined}
         className={[
-          "max-w-[86%] rounded-lg border px-3 py-2 text-sm shadow-sm",
+          "min-w-0 max-w-[90%] rounded-lg border px-3 py-2 text-base leading-6 shadow-sm [overflow-wrap:anywhere]",
           failed
             ? "border-destructive bg-destructive/10 text-foreground"
             : outbound

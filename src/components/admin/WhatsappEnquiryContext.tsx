@@ -14,11 +14,13 @@ export function WhatsappEnquiryContext({
   refreshKey,
   selectedId,
   onSelect,
+  hideHeading = false,
 }: {
   conversationId: string;
   refreshKey?: string;
   selectedId: string;
   onSelect: (id: string) => void;
+  hideHeading?: boolean;
 }) {
   const [result, setResult] = useState<Awaited<ReturnType<typeof getWhatsappAssignment>> | null>(
     null,
@@ -108,7 +110,7 @@ export function WhatsappEnquiryContext({
         className="max-h-32 shrink-0 space-y-2 overflow-y-auto border-b bg-muted/20 p-4"
         aria-label="查詢及分派證據"
       >
-        <h3 className="font-semibold">查詢跟進</h3>
+        {hideHeading ? null : <h3 className="font-semibold">查詢跟進</h3>}
         <p className="text-xs text-muted-foreground">
           配對建議：
           {context.proposedStaffName ?? (context.proposed ? "同事名稱待核實" : "需要總台人工處理")}

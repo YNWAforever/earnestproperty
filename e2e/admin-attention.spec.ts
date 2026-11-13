@@ -595,6 +595,7 @@ test("a list poll leaves 我的接手工作 alone, while 重新整理 still re-r
   page,
 }) => {
   await open(page);
+  await page.locator("summary").filter({ hasText: "我的接手工作" }).click();
   const handoffs = page.getByRole("region", { name: "我的接手工作" });
   await expect(handoffs.getByText("此頁沒有你的接手工作。")).toBeVisible();
   await expect(handoffs.getByText(CHECKING_HANDOFFS)).toHaveCount(0);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { resolve, sep, extname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test, expect, type Page } from "@playwright/test";
@@ -30,6 +30,7 @@ const errors = new WeakMap<Page, string[]>();
 
 test.beforeAll(async () => {
   assert.ok(!process.env.PLAYWRIGHT_BASE_URL, "This suite owns its isolated target");
+  await mkdir(".audit/remediation-20261003", { recursive: true });
   assert.equal(
     spawnSync(
       process.execPath,
@@ -136,10 +137,102 @@ async function open(page: Page, mode = "rules", id = ids.a) {
   await page.addInitScript((value) => {
     sessionStorage.setItem("no-link-fixture-actor", "agent-a");
     sessionStorage.setItem("no-link-fixture-ai", value);
+    if (value === "enquiry-only") sessionStorage.setItem("no-link-fixture-long-enquiry", "true");
   }, mode);
-  await page.goto(origin + `/admin/whatsapp?conversation=${id}`);
-  await expect(reply(page)).toBeVisible();
+  await page.goto(
+    origin +
+      `/admin/whatsapp?conversation=${id}${mode === "enquiry-only" ? "&enquiry=30000000-0000-4000-8000-000000000001" : ""}`,
+  );
+  if (mode === "enquiry-only")
+    await expect(
+      page.getByRole("region", { name: "查詢專用視圖" }).filter({ visible: true }),
+    ).toBeVisible();
+  else await expect(reply(page)).toBeVisible();
 }
+for (const { width, height, minimum } of [
+  { width: 1366, height: 768, minimum: 260 },
+  { width: 1280, height: 720, minimum: 200 },
+  { width: 1024, height: 768, minimum: 140 },
+  { width: 768, height: 768, minimum: 280 },
+  { width: 390, height: 844, minimum: 400 },
+  { width: 390, height: 540, minimum: 130 },
+]) {
+  test.describe(`readable conversation ${width}x${height}`, () => {
+    test.use({ viewport: { width, height } });
+    test("messages have usable space without scrolling the page past controls", async ({
+      page,
+    }) => {
+      await open(page);
+      const log = page.getByRole("log", { name: "WhatsApp 訊息" }).filter({ visible: true });
+      await expect
+        .poll(() =>
+          log.evaluate((element) => {
+            const box = element.getBoundingClientRect();
+            return Math.max(0, Math.min(innerHeight, box.bottom) - Math.max(0, box.top));
+          }),
+        )
+        .toBeGreaterThanOrEqual(minimum);
+      // A long bubble can exceed the keyboard viewport; its newest end stays visible.
+      await expect(log.locator("article").last()).toBeInViewport({ ratio: 0.5 });
+      await expect
+        .poll(() =>
+          log.evaluate(
+            (element) => element.scrollHeight - element.scrollTop - element.clientHeight,
+          ),
+        )
+        .toBeLessThan(2);
+      const send = page
+        .getByRole("button", { name: "傳送回覆", exact: true })
+        .filter({ visible: true });
+      await expect(send).toBeInViewport({ ratio: 0.99 });
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        width,
+      );
+      const body = log.locator("article p").last();
+      expect(
+        await body.evaluate((element) => parseFloat(getComputedStyle(element).fontSize)),
+      ).toBeGreaterThanOrEqual(16);
+      await body.evaluate((element) => {
+        element.textContent =
+          "https://example.invalid/" + "long-reference".repeat(80) + "\n中文訊息繼續換行";
+      });
+      expect(await log.evaluate((element) => element.scrollWidth)).toBeLessThanOrEqual(
+        await log.evaluate((element) => element.clientWidth),
+      );
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+        width,
+      );
+      await log.focus();
+      await log.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await page.keyboard.press("PageDown");
+      await expect.poll(() => log.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+    });
+  });
+}
+
+for (const width of [1280, 390]) {
+  test.describe(`query-only fallback ${width}`, () => {
+    test.use({ viewport: { width, height: 720 } });
+    test("restricted enquiry messages remain scrollable to the last item", async ({ page }) => {
+      await open(page, "enquiry-only", "10000000-0000-4000-8000-000000000003");
+      const pane = page
+        .getByRole("region", { name: "查詢訊息", exact: true })
+        .filter({ visible: true });
+      await expect(pane.locator("li")).toHaveCount(48);
+      await expect(reply(page)).toHaveCount(0);
+      expect(await pane.evaluate((element) => element.scrollHeight)).toBeGreaterThan(
+        await pane.evaluate((element) => element.clientHeight),
+      );
+      await pane.locator("li").last().scrollIntoViewIfNeeded();
+      await expect(pane.locator("li").last()).toBeInViewport({ ratio: 0.95 });
+      expect(await pane.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+      await expect(page.getByText("合成訊息 30", { exact: false })).toHaveCount(0);
+    });
+  });
+}
+
 const reply = (page: Page) => page.getByLabel("WhatsApp 回覆").filter({ visible: true });
 const suggestions = (page: Page) =>
   page.locator("summary").filter({ hasText: /^查看/ }).filter({ visible: true }).locator("..");

@@ -1,8 +1,14 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 // Operator-prepared synthetic staging fixtures only; no provider calls or auth bypass.
 const fixturePath = process.env.STAFF_HANDOFF_BROWSER_FIXTURE;
 const f = fixturePath ? JSON.parse(readFileSync(fixturePath, "utf8")) : null;
+async function revealHandoff(page: Page) {
+  const summary = page.locator("summary").filter({ hasText: "我的接手工作" });
+  await expect(summary).toBeVisible();
+  if (!(await summary.evaluate((element) => element.parentElement?.hasAttribute("open"))))
+    await summary.click();
+}
 test.describe("staff handoff actual authenticated application", () => {
   test.skip(
     !f,
@@ -17,12 +23,14 @@ test.describe("staff handoff actual authenticated application", () => {
     try {
       const page = await a.newPage();
       await page.goto(f.url);
+      await revealHandoff(page);
       const card = page.locator(`[data-notification-id="${f.firstNotificationId}"]`);
       await expect(card).toContainText(f.requestedName);
       await expect(card).toContainText("仍待人手回覆");
       await expect(card.getByRole("button", { name: "確認接手", exact: true })).toBeVisible();
       const other = await b.newPage();
       await other.goto(f.url);
+      await revealHandoff(other);
       await expect(other.getByRole("heading", { name: "我的接手工作" })).toBeVisible();
       await expect(other.locator(`[data-notification-id="${f.firstNotificationId}"]`)).toHaveCount(
         0,
@@ -30,6 +38,7 @@ test.describe("staff handoff actual authenticated application", () => {
       await page.request.get(f.url);
       await page.request.head(f.url);
       await page.reload();
+      await revealHandoff(page);
       await expect(card.getByRole("button", { name: "確認接手", exact: true })).toBeVisible();
       await card.getByRole("button", { name: "確認接手", exact: true }).click();
       await page.getByLabel("接手工作狀態").selectOption("all");
@@ -47,6 +56,7 @@ test.describe("staff handoff actual authenticated application", () => {
     try {
       const p = await c.newPage();
       await p.goto(f.url);
+      await revealHandoff(p);
       const e2 = p.locator(`[data-notification-id="${f.secondNotificationId}"]`);
       await expect(e2.getByRole("button", { name: "確認接手", exact: true })).toBeVisible();
       await p.getByRole("button", { name: "更新接手工作" }).click();
@@ -68,6 +78,7 @@ test.describe("staff handoff actual authenticated application", () => {
     try {
       const p = await c.newPage();
       await p.goto(f.staleUrl);
+      await revealHandoff(p);
       await p.getByLabel("接手工作狀態").selectOption("all");
       const stale = p.locator(`[data-notification-id="${f.staleNotificationId}"]`);
       await expect(stale).toContainText("已轉交");

@@ -338,11 +338,19 @@ const adminStorage = {
 
 const fitsWidth = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
+async function reveal(page: Page, label: string) {
+  const summary = page.locator("summary").filter({ hasText: label }).filter({ visible: true });
+  await expect(summary).toBeVisible();
+  if (!(await summary.evaluate((element) => element.parentElement?.hasAttribute("open"))))
+    await summary.click();
+}
 // Below 1024 px the conversation opens as a dialog over the inbox; close it to reach the panel.
 async function closeConversationIfMobile(page: Page, width: number) {
-  if (width >= 1024) return;
-  await page.getByRole("button", { name: "關閉", exact: true }).filter({ visible: true }).click();
-  await expect(page.getByRole("region", { name: "查詢及分派證據" })).toHaveCount(0);
+  if (width < 1024) {
+    await page.getByRole("button", { name: "關閉", exact: true }).filter({ visible: true }).click();
+    await expect(page.getByRole("region", { name: "查詢及分派證據" })).toHaveCount(0);
+  }
+  await reveal(page, "我的接手工作");
 }
 
 for (const width of [1440, 375]) {
@@ -352,6 +360,7 @@ for (const width of [1440, 375]) {
     const height = width < 768 ? 812 : 900;
     await page.setViewportSize({ width, height });
     await open(page, ids.a, agentStorage);
+    await reveal(page, "查詢跟進");
     const evidence = page.getByRole("region", { name: "查詢及分派證據" });
     await expect(evidence).toContainText("已確認負責人：合成同事甲");
     for (const gone of ["技術資料", "支援診斷", "接手支援診斷"])
@@ -377,6 +386,8 @@ for (const width of [1440, 375]) {
     const adminPage = await page.context().newPage();
     await adminPage.setViewportSize({ width, height });
     await open(adminPage, ids.a, adminStorage);
+    await reveal(adminPage, "查詢跟進");
+    if (width >= 1024) await reveal(adminPage, "我的接手工作");
     await expect(adminPage.getByRole("region", { name: "查詢及分派證據" })).toContainText(
       "已確認負責人：合成同事甲",
     );

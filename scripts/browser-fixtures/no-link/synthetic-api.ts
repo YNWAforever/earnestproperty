@@ -446,16 +446,23 @@ export async function fetchWhatsappEnquiryDetail(inquiryId: string) {
       canExport: actor === "manager",
       historyScope: "enquiry",
     },
-    messages: [
-      {
-        id: inquiryId,
-        text:
-          inquiryId === ids.enquiry
-            ? "本次合成原文甲：碧堤半島 28Hse ID:4033349"
-            : "本次合成原文乙：另一盤 ID:4033350",
-        createdAt: now,
-      },
-    ],
+    messages:
+      sessionStorage.getItem("no-link-fixture-long-enquiry") === "true"
+        ? Array.from({ length: 48 }, (_, index) => ({
+            id: `${inquiryId}-${index}`,
+            createdAt: now,
+            text: `查詢範圍訊息 ${index + 1}：本次樓盤查詢的合成資料。`.repeat(4),
+          }))
+        : [
+            {
+              id: inquiryId,
+              text:
+                inquiryId === ids.enquiry
+                  ? "本次合成原文甲：碧堤半島 28Hse ID:4033349"
+                  : "本次合成原文乙：另一盤 ID:4033350",
+              createdAt: now,
+            },
+          ],
     context: {
       inquiryId,
       version: record.version,

@@ -55,6 +55,12 @@ const ids = {
   staff: "20000000-0000-4000-8000-000000000001",
 };
 const url = (id) => `${origin}/admin/whatsapp${id ? `?conversation=${id}` : ""}`;
+async function reveal(page, label) {
+  const summary = page.locator("summary").filter({ hasText: label }).filter({ visible: true });
+  await expect(summary).toBeVisible();
+  if (!(await summary.evaluate((element) => element.parentElement.hasAttribute("open"))))
+    await summary.click();
+}
 async function open(page, target) {
   await page.goto(target);
   await page.evaluate(() => document.fonts.ready);
@@ -225,6 +231,7 @@ try {
   });
   await check("verified staff names replace ordinary UUIDs", 1280, async (page) => {
     await open(page, url(ids.a));
+    await reveal(page, "查詢跟進");
     const evidence = page.getByRole("region", { name: "查詢及分派證據" });
     await expect(evidence).toContainText("已確認負責人：合成同事甲");
     await expect(evidence).toContainText("指定同事：合成同事甲");
@@ -239,6 +246,7 @@ try {
       sessionStorage.setItem("no-link-fixture-role", "admin");
     });
     await page.reload();
+    await reveal(page, "查詢跟進");
     await expect(evidence).toContainText("已確認負責人：合成同事甲");
     await page.getByRole("button", { name: "技術資料", exact: true }).click();
     await expect(
@@ -303,6 +311,7 @@ try {
   });
   await check("pane resize preserves reading older messages", 390, async (page) => {
     await open(page, url(ids.a));
+    await reveal(page, "查詢跟進");
     await expect(page.getByRole("region", { name: "查詢及分派證據" })).toContainText(
       "已確認負責人",
     );
@@ -346,6 +355,7 @@ try {
   await check("missing staff names stay unverified", 1280, async (page) => {
     await page.addInitScript(() => sessionStorage.setItem("no-link-fixture-names", "missing"));
     await open(page, url(ids.a));
+    await reveal(page, "查詢跟進");
     const evidence = page.getByRole("region", { name: "查詢及分派證據" });
     await expect(evidence).toContainText("負責同事名稱待核實");
     await expect(evidence).toContainText("指定同事名稱待核實");
@@ -354,6 +364,7 @@ try {
   await check("unknown assignment is not labelled confirmed", 1280, async (page) => {
     await page.addInitScript(() => sessionStorage.setItem("no-link-fixture-assignment", "unknown"));
     await open(page, url(ids.a));
+    await reveal(page, "查詢跟進");
     await expect(page.getByRole("region", { name: "查詢及分派證據" })).toContainText(
       "分派：結果待核實",
     );
@@ -1046,6 +1057,7 @@ try {
       .context()
       .addInitScript(() => sessionStorage.setItem("no-link-fixture-enquiry-review", "true"));
     await open(page, url(target));
+    await reveal(page, "查詢跟進");
     await page
       .getByRole("button", { name: "查看及修正本次查詢" })
       .filter({ visible: true })
@@ -1154,6 +1166,7 @@ try {
         reason: "原指定文字待重新核實",
       });
       await page.reload();
+      await reveal(page, "查詢跟進");
       await page
         .getByRole("button", { name: "查看及修正本次查詢" })
         .filter({ visible: true })
@@ -1161,6 +1174,7 @@ try {
       await expect(dialog).toContainText("版本 1");
       await page.evaluate(() => sessionStorage.setItem("no-link-fixture-actor", "agent-a"));
       await page.reload();
+      await reveal(page, "查詢跟進");
       await page
         .getByRole("button", { name: "查看及修正本次查詢" })
         .filter({ visible: true })
@@ -1316,6 +1330,7 @@ try {
         .getByRole("button", { name: /合成客戶甲/ })
         .filter({ visible: true })
         .click();
+      await reveal(page, "查詢跟進");
       await page
         .getByRole("button", { name: "查看及修正本次查詢" })
         .filter({ visible: true })
@@ -1717,6 +1732,7 @@ try {
   const openStaffWork = async (page) => {
     await page.addInitScript(() => sessionStorage.setItem("no-link-fixture-staff-work", "true"));
     await open(page, url());
+    await reveal(page, "我的接手工作");
     const panel = page.getByRole("region", { name: "我的接手工作" });
     await expect(panel.getByRole("button", { name: "確認接手", exact: true })).toBeVisible();
     return panel;
@@ -1748,6 +1764,7 @@ try {
       await expect(panel).toContainText("仍待人手回覆");
       await expect(panel).toContainText("不代表同事手機通知");
       await page.reload();
+      await reveal(page, "我的接手工作");
       await page.getByLabel("接手工作狀態").selectOption("all");
       await expect(page.getByRole("region", { name: "我的接手工作" })).toContainText("已確認接手");
     },
@@ -1821,6 +1838,7 @@ try {
         sessionStorage.setItem("no-link-fixture-role", "admin");
       });
       await page.reload();
+      await reveal(page, "我的接手工作");
       await expect(panel).toContainText("A074714");
       await panel.getByRole("button", { name: "技術資料", exact: true }).click();
       expect(await panel.innerText()).toContain("30000000-0000-4000-8000-000000000001");
@@ -1936,6 +1954,7 @@ try {
     await expect(panel).toContainText("此頁沒有你的接手工作");
     await page.evaluate(() => sessionStorage.setItem("no-link-fixture-actor", "agent-b"));
     await page.reload();
+    await reveal(page, "我的接手工作");
     await page.getByLabel("接手工作狀態").selectOption("all");
     await expect(page.getByRole("region", { name: "我的接手工作" })).toContainText(
       "此頁沒有你的接手工作",
