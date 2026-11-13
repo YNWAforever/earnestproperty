@@ -68,8 +68,13 @@ export function validateRunSummary(summary) {
 export function deriveSyncHealth(summary, now = Date.now()) {
   if (summary.readFailed) return "unknown";
   const states = Object.values(summary.stages ?? {}).map((s) => s.status);
-  const accepted = Date.parse(summary.lastAcceptedFullAt ?? "");
-  if (Number.isFinite(accepted) && now - accepted >= 30 * 3600000) return "stale";
+  const incremental = summary.incrementalEnabled === true;
+  const accepted = Date.parse(
+    (incremental ? summary.lastAcceptedIncrementalAt : summary.lastAcceptedFullAt) ?? "",
+  );
+  const staleHours = incremental ? (summary.incrementalStaleHours ?? 30) : 30;
+  if (!Number.isFinite(staleHours) || staleHours <= 0) return "unknown";
+  if (Number.isFinite(accepted) && now - accepted >= staleHours * 3600000) return "stale";
   if (states.includes("unknown")) return "unknown";
   if (states.includes("blocked")) return "blocked";
   if (states.some((s) => s === "failed" || s === "cancelled")) return "failed";

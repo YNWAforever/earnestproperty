@@ -314,6 +314,28 @@ def strongest_grade(*values):
     return ""
 
 
+def observable_28_index_card(anchor):
+    """Whitelist observable card facts; clocks, views and position are not facts here."""
+    card = anchor.find_parent(class_="property_item")
+    if card is None:
+        return {"title": text(anchor.get_text())}
+
+    def content(selector):
+        node = card.select_one(selector)
+        return text(node.get_text(" ", strip=True)) if node else None
+
+    image = card.select_one(".image img")
+    return {
+        "title": content(".header a.detail_page, .header a"),
+        "price_text": content(".extra .red.label, .extra .green.label, .extra .price, [data-price]"),
+        "area_text": content(".areaUnitPrice"),
+        "location_text": content(".district_area"),
+        "tags": sorted(set(text(node.get_text(" ", strip=True))
+                           for node in card.select(".tagLabels .label"))),
+        "image_url": image.get("src") if image else None,
+    }
+
+
 def parse_28_index(html, deal):
     s = soup_checked(html)
     names = [text(n.get_text()).lower() for n in s.select("h1")]
@@ -347,7 +369,8 @@ def parse_28_index(html, deal):
         if not m:
             continue
         ident = m[1]
-        title = text(a.get_text())
+        observation = observable_28_index_card(a)
+        title = observation.get("title") or text(a.get_text())
         url = "https://www.28hse.com" + candidate.path.rstrip("/")
         if ident in links and links[ident]["source_url"] != url:
             raise WorkerError("conflicting_url")
@@ -369,6 +392,7 @@ def parse_28_index(html, deal):
                 "title": title,
                 "deal_type": deal,
                 "promotion_tier_raw": grade,
+                "index_observation": observation,
             }
         else:
             links[ident]["promotion_tier_raw"] = grade

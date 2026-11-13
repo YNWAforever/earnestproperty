@@ -22,6 +22,7 @@ import {
   SnapshotError,
 } from "./ingestion-contract.mjs";
 import { evaluateSnapshotGate } from "./source-snapshot-gates.mjs";
+import { incrementalCounts, incrementalReceiptFields } from "./incremental-contract.mjs";
 import { chooseRelationship, selectSourceFields } from "./source-selection.mjs";
 import { assertPatchTarget, assertPatchExpectation } from "./controlled-patch-guards.mjs";
 import {
@@ -94,6 +95,7 @@ function verifiedOptions(policy, options = {}) {
     return {
       aliases: policy.config.aliases,
       controlledPatch: options.controlledPatch === true,
+      incremental: options.incremental === true,
     };
   const rule = policy.config.source_url_identity;
   if (
@@ -112,6 +114,7 @@ function verifiedOptions(policy, options = {}) {
     idScope: policy.id_scope,
     aliases: policy.config.aliases,
     controlledPatch: options.controlledPatch === true,
+    incremental: options.incremental === true,
     verifySourceUrl: (record, url) => {
       const id = String(record.property_id).trim();
       if (!/^[A-Za-z0-9_-]+$/.test(id)) return false;
@@ -148,6 +151,7 @@ export async function applyIngestion(client, payload, options = {}) {
   let batch = decodeSnapshot(payload, {
     idScope: "global",
     controlledPatch: options.controlledPatch === true,
+    incremental: options.incremental === true,
     allowLegacyPatchReplay: true,
   });
   let reviewPlan = validateReviewPlan(batch, options);
@@ -267,7 +271,10 @@ export async function applyIngestion(client, payload, options = {}) {
       {
         absenceEnabled: policy.config.absence_enabled === true,
       },
-      { controlledPatch: options.controlledPatch === true },
+      {
+        controlledPatch: options.controlledPatch === true,
+        incremental: options.incremental === true,
+      },
     );
     if (!gate.allowed)
       throw new SnapshotError("incomplete_snapshot", 422, { reasons: gate.reasons });
@@ -1035,7 +1042,19 @@ export async function applyIngestion(client, payload, options = {}) {
       status: gate.full ? "success" : "partial_success",
       full_snapshot: gate.full,
       receipt_id: receiptId,
+      ...incrementalReceiptFields(batch),
+      ...(batch.incremental
+        ? {
+            accepted_at: (
+              await q(
+                "SELECT to_char(accepted_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS accepted_at FROM mls_ingestion_receipts WHERE id=$1",
+                [receiptId],
+              )
+            )[0].accepted_at,
+          }
+        : {}),
       summary: {
+        ...incrementalCounts(batch),
         advertisement_count: batch.advertisementCount,
         offer_count: batch.offerCount,
         rejected_count: batch.rejects.length,
@@ -1055,7 +1074,7 @@ export async function applyIngestion(client, payload, options = {}) {
       "UPDATE listing_sync_runs SET status=$2,finished_at=now(),counts=$3,source_status=$4 WHERE id=$1",
       [
         runId,
-        gate.full ? "healthy" : "degraded",
+        gate.full || batch.incremental ? "healthy" : "degraded",
         json(response.summary),
         json({
           [batch.source]: {
@@ -1063,6 +1082,14 @@ export async function applyIngestion(client, payload, options = {}) {
             scope: batch.scopeId,
             policy_version: POLICY,
             publisher: "python-snapshot-v2",
+            ...(batch.incremental
+              ? {
+                  ...incrementalReceiptFields(batch),
+                  counts: incrementalCounts(batch),
+                  index_membership: batch.meta.incremental.index_membership,
+                  candidates: batch.meta.incremental.candidates,
+                }
+              : {}),
           },
         }),
       ],

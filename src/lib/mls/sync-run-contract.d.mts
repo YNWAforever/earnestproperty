@@ -37,6 +37,10 @@ export interface SyncRunSummary {
   startedAt?: string;
   finishedAt?: string;
   lastAcceptedFullAt?: string | null;
+  lastAcceptedIncrementalAt?: string | null;
+  incremental?: boolean;
+  incrementalEnabled?: boolean;
+  incrementalStaleHours?: number;
   enabled?: boolean;
   readFailed?: boolean;
   dryRun?: boolean;

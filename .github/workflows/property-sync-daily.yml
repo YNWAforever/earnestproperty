@@ -1,7 +1,7 @@
-name: Daily owner-capture publication
+name: Daily property sync
 "on":
   schedule:
-    # 09:00 Asia/Hong_Kong. Actions cron is UTC. This schedule does not collect 28hse.
+    # 09:00 Asia/Hong_Kong. Live index deltas require the separate incremental gate.
     - cron: "0 1 * * *"
   workflow_dispatch:
     inputs:
@@ -15,6 +15,8 @@ name: Daily owner-capture publication
           - publication-only
           - owner-publication
           - owner-publication-dry-run
+          - incremental-shadow
+          - incremental-apply
         default: shadow
       scope:
         default: agent:540
@@ -46,6 +48,8 @@ env:
   POLICY_APPROVED: ${{ vars.PROPERTY_SYNC_POLICY_APPROVED }}
   MANUAL_APPLY_ENABLED: ${{ vars.PROPERTY_SYNC_MANUAL_APPLY_ENABLED }}
   OWNER_DAILY_ENABLED: ${{ vars.OWNER_PUBLICATION_DAILY_ENABLED }}
+  INCREMENTAL_DAILY_ENABLED: ${{ vars.PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED }}
+  INCREMENTAL_MANUAL_ENABLED: ${{ vars.PROPERTY_SYNC_28HSE_INCREMENTAL_MANUAL_APPLY_ENABLED }}
   OWNER_MANUAL_ENABLED: ${{ vars.OWNER_PUBLICATION_MANUAL_APPLY_ENABLED }}
   OWNER_INPUT_SHA256: ${{ vars.OWNER_PUBLICATION_INPUT_SHA256 }}
   OWNER_CAPTURE_ASSET: ${{ vars.OWNER_PUBLICATION_CAPTURE_ASSET }}
@@ -95,7 +99,13 @@ jobs:
           gh release view property-sync-evidence >/dev/null
 
           case "$MODE" in
-           shadow|replay-shadow) ;;
+           shadow|replay-shadow|incremental-shadow) ;;
+           incremental-apply)
+            test "$GITHUB_EVENT_NAME" = workflow_dispatch
+            test "$INCREMENTAL_MANUAL_ENABLED" = true
+            test "$POLICY_APPROVED" = python-v2.2
+            [[ "$REPLAY_ASSET" =~ ^incremental-bundle-[0-9]+-[0-9]+\.tar\.gz$ ]]
+            ;;
            apply|replay-apply|publication-only)
             case "$GITHUB_EVENT_NAME" in
              schedule) exit 1 ;;
@@ -107,7 +117,7 @@ jobs:
             case "$MODE" in
              owner-publication)
               case "$GITHUB_EVENT_NAME" in
-               schedule) test "$OWNER_DAILY_ENABLED" = true ;;
+               schedule) test "$OWNER_DAILY_ENABLED" = true || test "$INCREMENTAL_DAILY_ENABLED" = true ;;
                workflow_dispatch) test "$OWNER_MANUAL_ENABLED" = true ;;
                *) exit 1 ;;
               esac
@@ -121,7 +131,7 @@ jobs:
           esac
         id: evidence-gate
       - name: Reconcile private baseline against read-only current database receipt
-        if: env.MODE != 'owner-publication' && env.MODE != 'owner-publication-dry-run'
+        if: env.MODE != 'owner-publication' && env.MODE != 'owner-publication-dry-run' && !startsWith(env.MODE, 'incremental-')
         shell: bash
         run: >-
           set -euo pipefail
@@ -156,7 +166,7 @@ jobs:
         if: always()
         shell: bash
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" >> "$GITHUB_OUTPUT"
-    if: github.event_name == 'workflow_dispatch' || vars.PROPERTY_SYNC_DAILY_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' || vars.PROPERTY_SYNC_DAILY_ENABLED == 'true' || vars.PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED == 'true'
     outputs:
       baseline: ${{ steps.baseline.outputs.baseline }}
       started_at: ${{ steps.execution-start.outputs.at }}
@@ -298,7 +308,7 @@ jobs:
         run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" >> "$GITHUB_OUTPUT"
     needs:
       - preflight
-    if: needs.preflight.result == 'success' && github.event_name != 'schedule' && inputs.mode != 'owner-publication' && inputs.mode != 'owner-publication-dry-run'
+    if: needs.preflight.result == 'success' && github.event_name != 'schedule' && inputs.mode != 'owner-publication' && inputs.mode != 'owner-publication-dry-run' && !startsWith(inputs.mode, 'incremental-')
     env:
       BASELINE_ASSET: ${{ needs.preflight.outputs.baseline }}
     outputs:
@@ -411,7 +421,7 @@ jobs:
       - collect
     env:
       HANDOFF_ASSET: ${{ needs.collect.outputs.handoff }}
-    if: needs.collect.result == 'success' && inputs.mode != 'publication-only' && github.event_name != 'schedule' && inputs.mode != 'owner-publication' && inputs.mode != 'owner-publication-dry-run'
+    if: needs.collect.result == 'success' && inputs.mode != 'publication-only' && github.event_name != 'schedule' && inputs.mode != 'owner-publication' && inputs.mode != 'owner-publication-dry-run' && !startsWith(inputs.mode, 'incremental-')
     outputs:
       started_at: ${{ steps.execution-start.outputs.at }}
       finished_at: ${{ steps.execution-finish.outputs.at }}
@@ -523,7 +533,7 @@ jobs:
       contents: read
     needs:
       - preflight
-    if: needs.preflight.result == 'success' && (github.event_name == 'schedule' || inputs.mode == 'owner-publication' || inputs.mode == 'owner-publication-dry-run')
+    if: needs.preflight.result == 'success' && ((github.event_name == 'schedule' && vars.PROPERTY_SYNC_DAILY_ENABLED == 'true' && vars.OWNER_PUBLICATION_DAILY_ENABLED == 'true') || inputs.mode == 'owner-publication' || inputs.mode == 'owner-publication-dry-run')
     steps:
       - id: execution-start
         shell: bash
@@ -682,8 +692,9 @@ jobs:
           Ingestion:$INGESTION_RESULT Publication:$PUBLICATION_RESULT
           OwnerPublication:$OWNER_RESULT" >> "$GITHUB_STEP_SUMMARY"
 
-          echo 'Scheduled 09:00 Asia/Hong_Kong runs use owner-capture publication only. They do not
-          collect 28hse and do not use Firecrawl.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'The owner-capture branch reuses approved evidence. The separately gated incremental
+          job reads fresh indexes and fetches changed details; inspect its own summary for live
+          collection and incremental receipt status.' >> "$GITHUB_STEP_SUMMARY"
 
           echo 'Failed or unknown stages preserve existing inventory. Replay the verified frozen
           handoff; publication-only does not collect or ingest.' >> "$GITHUB_STEP_SUMMARY"
@@ -714,7 +725,7 @@ jobs:
     if: always() && needs.preflight.result == 'success'
 
   record:
-    if: always() && vars.PROPERTY_SYNC_OBSERVABILITY_ENABLED == 'true' && github.event_name != 'schedule' && inputs.mode != 'owner-publication' && inputs.mode != 'owner-publication-dry-run'
+    if: always() && vars.PROPERTY_SYNC_OBSERVABILITY_ENABLED == 'true' && github.event_name != 'schedule' && inputs.mode != 'owner-publication' && inputs.mode != 'owner-publication-dry-run' && !startsWith(inputs.mode, 'incremental-')
     needs: [preflight, collect, ingest, publish, verify]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -758,3 +769,99 @@ jobs:
           PROPERTY_SYNC_EXPECTED_BRANCH: ${{ vars.PROPERTY_SYNC_EXPECTED_BRANCH }}
           RECORD_NEEDS: ${{ toJSON(needs) }}
           RECORD_OPERATION_ID: ${{ inputs.operation_id }}
+
+  incremental:
+    if: >-
+      needs.preflight.result == 'success' &&
+      ((github.event_name == 'schedule' && vars.PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED == 'true') ||
+      inputs.mode == 'incremental-shadow' || inputs.mode == 'incremental-apply')
+    needs: [preflight]
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      INCREMENTAL_APPLY: ${{ github.event_name == 'schedule' || inputs.mode == 'incremental-apply' }}
+      PROPERTY_SYNC_EXPECTED_BRANCH: ${{ vars.PROPERTY_SYNC_EXPECTED_BRANCH }}
+      PROPERTY_SYNC_INCREMENTAL_MAX_DETAIL: ${{ vars.PROPERTY_SYNC_INCREMENTAL_MAX_DETAIL || '100' }}
+      PROPERTY_SYNC_INCREMENTAL_MAX_REQUESTS: ${{ vars.PROPERTY_SYNC_INCREMENTAL_MAX_REQUESTS || '250' }}
+      PROPERTY_SYNC_INCREMENTAL_CACHE_TTL_DAYS: ${{ vars.PROPERTY_SYNC_INCREMENTAL_CACHE_TTL_DAYS || '7' }}
+      PROPERTY_SYNC_INCREMENTAL_MAX_REFRESH: ${{ vars.PROPERTY_SYNC_INCREMENTAL_MAX_REFRESH || '40' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Install locked incremental helpers
+        run: |
+          python -m pip install -r scripts/property-sync/requirements.txt
+          npm ci --ignore-scripts --no-audit --no-fund
+      - name: Restore cache against actual database authority
+        id: incremental-prepare
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+        run: |
+          args=(prepare)
+          if [ -n "$REPLAY_ASSET" ]; then args+=(--replay "$REPLAY_ASSET"); fi
+          node scripts/property-sync/incremental-daily.mjs "${args[@]}"
+      - name: Fetch changed details and pin private immutable evidence
+        id: incremental-collect
+        env:
+          PROPERTY_SYNC_28HSE_TRANSPORT: ${{ vars.PROPERTY_SYNC_28HSE_TRANSPORT || 'firecrawl-basic' }}
+          FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
+          FIRECRAWL_API_KEY_2: ${{ secrets.FIRECRAWL_API_KEY_2 }}
+        run: node scripts/property-sync/incremental-daily.mjs collect
+      - name: Validate or apply exact incremental request
+        id: incremental-ingest
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+        run: node scripts/property-sync/incremental-daily.mjs ingest --apply "$INCREMENTAL_APPLY"
+      - name: Publish eligible new drafts with existing staff protections
+        id: incremental-publish
+        if: env.INCREMENTAL_APPLY == 'true'
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+          BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+        run: node scripts/property-sync/incremental-daily.mjs publish
+      - name: Map agents from already captured details
+        if: env.INCREMENTAL_APPLY == 'true'
+        continue-on-error: true
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: node scripts/property-sync/backfill-property-agents.mjs --source=28hse --from-payload=.private-sync-evidence/incremental/bundle/request.json
+      - name: Verify public publication results
+        id: incremental-verify
+        if: env.INCREMENTAL_APPLY == 'true'
+        run: node scripts/property-sync/incremental-daily.mjs verify
+      - name: Accept cache only after receipt and public verification
+        id: incremental-accept
+        if: env.INCREMENTAL_APPLY == 'true'
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+        run: node scripts/property-sync/incremental-daily.mjs accept
+      - name: Record measured incremental stages
+        if: always()
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+        run: node scripts/property-sync/incremental-daily.mjs record
+      - name: Safe incremental summary
+        if: always()
+        run: node scripts/property-sync/incremental-daily.mjs summary
+      - uses: actions/upload-artifact@v4
+        if: always()
+        continue-on-error: true
+        with:
+          name: incremental-summary-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .private-sync-evidence/incremental/summary.json
+          retention-days: 30
+          if-no-files-found: ignore

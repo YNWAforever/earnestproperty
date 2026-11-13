@@ -1,5 +1,7 @@
 # Daily 28hse collection operations
 
+> 2026-11-14: the workflow also supports a separately gated **daily incremental** path. It reads fresh sale/rent indexes and fetches only new/changed/retry/periodic-verification details. See [incremental operation and rollout](28hse-incremental.md). The owner-capture schedule descriptions below refer to that existing branch; when the new incremental gate is enabled, the workflow also performs live collection in its isolated incremental job.
+
 T5 Phase 0 adds a separate manual-first `property-price-status-sync.yml` report
 workflow at 07:00 HKT, scheduled only when `PRICE_STATUS_SYNC_ENABLED=true` (default
 false). It consumes existing complete captures, waits on the shared MLS lock and

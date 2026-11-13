@@ -57,6 +57,7 @@ export type DecodedSnapshot = {
   received: number;
   advertisementCount: number;
   offerCount: number;
+  incremental: boolean;
 };
 export function canonicalJson(value: unknown): string;
 export function hashPayload(value: unknown): string;
@@ -72,6 +73,8 @@ export function decodeSnapshot(
   options?: {
     idScope?: string;
     controlledPatch?: boolean;
+    /** Trusted server/CLI option; never inferred from the request envelope. */
+    incremental?: boolean;
     aliases?: Record<string, string>;
     verifySourceUrl?: (record: Record<string, unknown>, url: URL) => boolean;
   },

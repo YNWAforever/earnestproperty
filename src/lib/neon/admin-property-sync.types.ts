@@ -38,6 +38,7 @@ export interface SyncCard {
   connected: boolean;
   lastCollectionAt: string | null;
   lastAcceptedFullAt: string | null;
+  lastAcceptedIncrementalAt?: string | null;
   lastPublishedAt: string | null;
   advertisements: number | null;
   backlog: number | null;

@@ -141,8 +141,9 @@ export async function publishDaily({
   onReport = async () => {},
   publicationPlan,
   publicationPlanHash,
+  incremental = false,
 }) {
-  let batch = decodeSnapshot(payload, { idScope: "global" });
+  let batch = decodeSnapshot(payload, { idScope: "global", incremental });
   if (
     !["28hse_agent_540", "propertyhk"].includes(batch.source) ||
     batch.scopeId !== (batch.source === "propertyhk" ? "branches:EPW,EPS,EPT" : "agent:540") ||
@@ -165,12 +166,25 @@ export async function publishDaily({
   const q = async (text, params = []) => (await client.query(text, params)).rows;
   const accepted = async () => {
     const r = await q(
-      `SELECT r.id FROM mls_ingestion_receipts r JOIN mls_ingestion_scopes s ON s.full_receipt_id=r.id
-      WHERE r.source=$1 AND r.scope_id=$2 AND r.payload_hash=$3 AND r.full_snapshot
-      AND r.response->>'success'='true' AND s.last_accepted_at=r.scraped_at`,
+      incremental
+        ? `SELECT r.id FROM mls_ingestion_receipts r JOIN mls_ingestion_scopes s
+          ON s.source=r.source AND s.scope_id=r.scope_id AND s.policy_version=r.policy_version
+          WHERE r.source=$1 AND r.scope_id=$2 AND r.payload_hash=$3 AND NOT r.full_snapshot
+          AND r.response->>'success'='true' AND r.response->>'incremental'='true'
+          AND r.response->>'incremental_mode'='index-delta-v1'
+          AND r.parser_version='python-v2.2' AND r.policy_version='no-hermes-v2'
+          AND s.last_accepted_at=r.scraped_at`
+        : `SELECT r.id FROM mls_ingestion_receipts r JOIN mls_ingestion_scopes s ON s.full_receipt_id=r.id
+          WHERE r.source=$1 AND r.scope_id=$2 AND r.payload_hash=$3 AND r.full_snapshot
+          AND r.response->>'success'='true' AND s.last_accepted_at=r.scraped_at`,
       [batch.source, batch.scopeId, batch.hash],
     );
-    if (r.length !== 1) throw Error("ACCEPTED_CURRENT_FULL_RECEIPT_REQUIRED");
+    if (r.length !== 1)
+      throw Error(
+        incremental
+          ? "ACCEPTED_CURRENT_INCREMENTAL_RECEIPT_REQUIRED"
+          : "ACCEPTED_CURRENT_FULL_RECEIPT_REQUIRED",
+      );
     return r[0].id;
   };
   const receiptId = await accepted();
