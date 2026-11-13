@@ -246,6 +246,16 @@ test("public artifact contains counts and evidence references, never private raw
         success: true,
         index_complete: true,
         membership_count: 256,
+        sale_ids_seen: 206,
+        rent_ids_seen: 50,
+        index_pages_verified: 20,
+        candidate_counts: {
+          new: 0,
+          changed: 0,
+          retry: 0,
+          cache_expired: 0,
+          contact: "PRIVATE PHONE",
+        },
         selected_count: 0,
         fetched_count: 0,
         unchanged_count: 256,
@@ -256,7 +266,12 @@ test("public artifact contains counts and evidence references, never private raw
     await safeSummary(directory);
     const text = await readFile(join(directory, "summary.json"), "utf8");
     assert.doesNotMatch(text, /PRIVATE HOME|PRIVATE PHONE|privateAddress|contact/);
-    assert.equal(JSON.parse(text).unchangedSkipped, 256);
+    const summary = JSON.parse(text);
+    assert.equal(summary.unchangedSkipped, 256);
+    assert.equal(summary.saleIdsSeen, 206);
+    assert.equal(summary.rentIdsSeen, 50);
+    assert.equal(summary.indexPagesVerified, 20);
+    assert.equal(summary.newCandidates, 0);
   } finally {
     assert.ok(directory.startsWith(join(tmpdir(), "ep-incremental-summary-")));
     await rm(directory, { recursive: true, force: true });

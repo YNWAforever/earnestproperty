@@ -813,6 +813,7 @@ jobs:
       - name: Fetch changed details and pin private immutable evidence
         id: incremental-collect
         env:
+          PROPERTY_SYNC_28HSE_TRANSPORT: ${{ vars.PROPERTY_SYNC_28HSE_TRANSPORT || 'firecrawl-basic' }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
           FIRECRAWL_API_KEY_2: ${{ secrets.FIRECRAWL_API_KEY_2 }}
         run: node scripts/property-sync/incremental-daily.mjs collect

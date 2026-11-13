@@ -13,6 +13,10 @@ def test_simultaneously_expired_cache_rolls_across_successful_days_without_full_
         original, fixtures=fixtures(), now=first, max_detail=1, max_refresh=1)
     assert report["success"] is True
     assert report["fetched_count"] == 1
+    assert report["candidate_counts"] == {"new": 0, "changed": 0, "retry": 0, "cache_expired": 1}
+    assert report["sale_ids_seen"] == report["rent_ids_seen"] == 1
+    assert report["index_pages_verified"] == 4
+    assert report["last_fresh_detail_at"] == first
     assert report["pending_count"] == 0
     assert report["deferred_refresh_count"] == 1
     assert original == before

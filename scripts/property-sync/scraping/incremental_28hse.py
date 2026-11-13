@@ -342,9 +342,21 @@ def collect_incremental(cache=None, *, fixtures=None, now=None, run_id=None,
                  "worker_rejected_count": 0, "rejected_records": [],
                  "completed_branches": [], "pages": pages, "incremental": incremental},
     }
+    reason_counts = dict.fromkeys(("new", "changed", "retry", "cache_expired"), 0)
+    for candidate in candidates:
+        for reason in reason_counts:
+            if reason in candidate["reasons"]:
+                reason_counts[reason] += 1
+                break
     report = {"success": complete, "mode": MODE, "run_id": payload["meta"]["run_id"],
               "index_complete": index_complete, "membership_count": len(members),
               "selected_count": len(candidates), "fetched_count": len(listings),
+              "sale_ids_seen": sum(row["deal_type"] == "sale" for row in members.values()),
+              "rent_ids_seen": sum(row["deal_type"] == "rent" for row in members.values()),
+              "index_pages_verified": sum(row["status"] in ("listings", "terminal") for row in pages),
+              "candidate_counts": reason_counts,
+              "index_started_at": now, "index_finished_at": index_finished_at,
+              "last_fresh_detail_at": max((row["detail_fetched_at"] for row in listings), default=None),
               "unchanged_count": len(unchanged), "pending_count": len(pending),
               "deferred_refresh_count": len(deferred_refresh),
               "withdrawal_candidate_count": len(missing), "eligible_for_absence": False,
