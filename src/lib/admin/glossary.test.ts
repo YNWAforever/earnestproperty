@@ -177,7 +177,8 @@ const APPROVED_PLACEMENTS: Array<[file: string, text: string]> = [
     'description="推廣活動：只用已審批範本、只發給已同意接收的客戶。"',
   ],
   ["src/routes/admin.blasts.tsx", '<Field label="負責代理">'],
-  ["src/routes/admin.whatsapp.tsx", "查看客戶訊息、指派負責代理及回覆；對話列表每分鐘自動更新"],
+  // The full-height inbox drops its explanatory subtitle; the owner selector keeps this term.
+  ["src/routes/admin.whatsapp.tsx", '<SelectTrigger aria-label="負責代理">'],
   ["src/routes/admin.whatsapp.tsx", '{ value: "unassigned", label: "未指派" }'],
   ["src/routes/admin.analytics.tsx", 'label="查詢紀錄"'],
   ["src/routes/admin.analytics.tsx", 'label="已連結客戶查詢的查詢紀錄"'],
