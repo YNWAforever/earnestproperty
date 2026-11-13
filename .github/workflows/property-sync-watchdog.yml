@@ -8,7 +8,7 @@ permissions:
   contents: read
 jobs:
   health:
-    if: vars.PROPERTY_SYNC_DAILY_ENABLED == 'true'
+    if: vars.PROPERTY_SYNC_DAILY_ENABLED == 'true' || vars.PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -22,4 +22,6 @@ jobs:
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+          PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED: ${{ vars.PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED }}
+          PROPERTY_SYNC_28HSE_INCREMENTAL_STALE_HOURS: ${{ vars.PROPERTY_SYNC_28HSE_INCREMENTAL_STALE_HOURS || '30' }}
         run: node scripts/mls/sync-watchdog.mjs >> "$GITHUB_STEP_SUMMARY"

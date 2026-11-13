@@ -1,7 +1,33 @@
 import { BRANCHES } from "./ingestion-contract.mjs";
+import { incrementalEnvelopeReasons } from "./incremental-contract.mjs";
 export function evaluateSnapshotGate(batch, baseline, policy = {}, mode = {}) {
   const m = batch.meta,
     reasons = [];
+  // This mode comes only from the trusted caller; envelope flags cannot select it.
+  if (mode.incremental === true) {
+    if (
+      mode.controlledPatch === true ||
+      batch.incremental !== true ||
+      batch.source !== "28hse_agent_540"
+    )
+      reasons.push("invalid_incremental_mode");
+    reasons.push(...incrementalEnvelopeReasons(batch.payload));
+    if (batch.rejects.length || batch.duplicates || batch.records.length !== batch.received)
+      reasons.push("incremental_decoder_rejections");
+    return {
+      allowed: reasons.length === 0,
+      full: false,
+      inferAbsence: false,
+      reasons: [...new Set(reasons)],
+    };
+  }
+  if (batch.incremental || Object.hasOwn(m, "incremental"))
+    return {
+      allowed: false,
+      full: false,
+      inferAbsence: false,
+      reasons: ["incremental_mode_required"],
+    };
   // Controlled patches are operator-authorized partial observations, never full snapshots.
   const controlledPatch = mode.controlledPatch === true;
   const patch = m.controlled_patch;

@@ -27,7 +27,10 @@ test("daily property workflow retains gated scheduling, privacy, branch and poli
   assert.ok(!/npm run build|playwright|wrangler|migrate|send-message/.test(text));
   for (const job of Object.values(w.jobs))
     for (const step of job.steps.filter((s) => s.uses === "actions/upload-artifact@v4")) {
-      assert.match(step.if, /github.event.repository.private == true/);
+      if (step.with.name.startsWith("incremental-summary-")) {
+        assert.equal(step.with.path, ".private-sync-evidence/incremental/summary.json");
+        assert.equal(step.if, "always()");
+      } else assert.match(step.if, /github.event.repository.private == true/);
       assert.equal(step["continue-on-error"], true);
     }
 });
@@ -71,8 +74,8 @@ test("DB and media credentials are restricted to the intended stages and guarded
   for (const [name, job] of Object.entries(w.jobs)) {
     assert.ok(!job.env?.DATABASE_URL_UNPOOLED);
     for (const step of job.steps) {
-      if (step.env?.DATABASE_URL_UNPOOLED) dbSteps.push({ name, step });
-      if (step.env?.BLOB_READ_WRITE_TOKEN) assert.equal(name, "publish");
+      if (step.env?.DATABASE_URL_UNPOOLED && name !== "incremental") dbSteps.push({ name, step });
+      if (step.env?.BLOB_READ_WRITE_TOKEN) assert.ok(["publish", "incremental"].includes(name));
     }
   }
   assert.deepEqual(
@@ -326,7 +329,7 @@ test("manual canary and scheduled apply require their own operator gates", async
     assert.equal(w.env.OWNER_CAPTURE_ASSET, "${{ vars.OWNER_PUBLICATION_CAPTURE_ASSET }}");
     assert.equal(
       w.jobs.preflight.if,
-      "github.event_name == 'workflow_dispatch' || vars.PROPERTY_SYNC_DAILY_ENABLED == 'true'",
+      "github.event_name == 'workflow_dispatch' || vars.PROPERTY_SYNC_DAILY_ENABLED == 'true' || vars.PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED == 'true'",
     );
   } finally {
     assert.ok(directory.startsWith(join(tmpdir(), "property-sync-apply-gate-")));
@@ -421,7 +424,7 @@ test("actual collection shell exports safe diagnostics while preserving failed e
   }
 });
 
-test("scheduled runs publish the approved owner capture and do not collect or use Firecrawl", async () => {
+test("the scheduled owner branch publishes approved capture without collecting or using Firecrawl", async () => {
   const w = await workflow();
   assert.deepEqual(w.on.schedule, [{ cron: "0 1 * * *" }]);
   assert.ok(w.on.workflow_dispatch.inputs.mode.options.includes("owner-publication"));

@@ -55,9 +55,21 @@ export async function readSyncAuthority({
    r.response->>'status' AS receipt_status,s.full_count,
    to_char(r.accepted_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS accepted_at,
    to_char(r.scraped_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS scraped_at,
-   to_char(s.last_accepted_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS last_accepted_at
+   to_char(s.last_accepted_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS last_accepted_at,
+    inc.id AS incremental_receipt_id,
+    to_char(inc.accepted_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS last_incremental_accepted_at,
+    to_char(inc.scraped_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS last_incremental_scraped_at,
+    inc.response->'summary' AS incremental_summary
    FROM mls_ingestion_policies p LEFT JOIN mls_ingestion_scopes s ON s.source=p.source AND s.scope_id=p.scope_id AND s.policy_version=p.policy_version
-   LEFT JOIN mls_ingestion_receipts r ON r.id=s.full_receipt_id AND r.source=p.source AND r.scope_id=p.scope_id AND r.policy_version=p.policy_version AND r.parser_version=p.parser_version
+   LEFT JOIN LATERAL (
+      SELECT i.id,i.accepted_at,i.scraped_at,i.response FROM mls_ingestion_receipts i
+      WHERE i.source=p.source AND i.scope_id=p.scope_id AND i.policy_version=p.policy_version
+      AND i.parser_version=p.parser_version AND NOT i.full_snapshot
+      AND i.response->>'incremental'='true' AND i.response->>'incremental_mode'='index-delta-v1'
+      AND i.response->>'success'='true' AND i.response->>'status'='partial_success'
+      ORDER BY i.accepted_at DESC,i.scraped_at DESC LIMIT 1
+    ) inc ON true
+    LEFT JOIN mls_ingestion_receipts r ON r.id=s.full_receipt_id AND r.source=p.source AND r.scope_id=p.scope_id AND r.policy_version=p.policy_version AND r.parser_version=p.parser_version
    WHERE p.source=$1 AND p.scope_id=$2 AND p.policy_version=$3`,
         [source, scopes[source], "no-hermes-v2"],
       )

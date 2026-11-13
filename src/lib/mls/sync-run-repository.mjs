@@ -36,7 +36,19 @@ export async function readSyncWorkspace({
   )
     throw Error("INVALID_PAGE");
   const receipts = await query(
-    `SELECT s.source,r.id AS receipt_id,r.scraped_at,r.accepted_at,r.response FROM mls_ingestion_scopes s JOIN mls_ingestion_receipts r ON r.id=s.full_receipt_id WHERE r.full_snapshot AND r.response->>'success'='true' ORDER BY s.source`,
+    `SELECT s.source,r.id AS receipt_id,r.scraped_at,r.accepted_at,r.response,
+      inc.id AS incremental_receipt_id,inc.scraped_at AS incremental_scraped_at,
+      inc.accepted_at AS incremental_accepted_at,inc.response AS incremental_response
+      FROM mls_ingestion_scopes s JOIN mls_ingestion_receipts r ON r.id=s.full_receipt_id
+      LEFT JOIN LATERAL (
+        SELECT i.id,i.scraped_at,i.accepted_at,i.response FROM mls_ingestion_receipts i
+        WHERE i.source=s.source AND i.scope_id=s.scope_id AND i.policy_version=s.policy_version
+          AND i.parser_version=r.parser_version AND NOT i.full_snapshot
+          AND i.response->>'success'='true' AND i.response->>'incremental'='true'
+          AND i.response->>'incremental_mode'='index-delta-v1'
+        ORDER BY i.accepted_at DESC,i.id DESC LIMIT 1
+      ) inc ON true
+      WHERE r.full_snapshot AND r.response->>'success'='true' ORDER BY s.source`,
   );
   const aggregates = await query(
     `SELECT s.source,count(DISTINCT s.external_listing_id)::int AS advertisements,count(DISTINCT p.id) FILTER(WHERE p.status='draft')::int AS backlog,count(DISTINCT p.id) FILTER(WHERE p.status='active')::int AS public_count FROM mls_source_state s LEFT JOIN properties p ON p.id=s.property_id WHERE s.source=ANY($1::text[]) GROUP BY s.source`,
@@ -61,7 +73,7 @@ export async function readSyncWorkspace({
  (SELECT r.id,r.source,r.scope_id,'ingestion',NULL,NULL,NULL,r.payload_hash,r.id,
  jsonb_build_object('collection',jsonb_build_object('status','succeeded','finishedAt',r.scraped_at),'ingestion',jsonb_build_object('status','succeeded','receiptId',r.id,'finishedAt',r.accepted_at)),
  '{}'::jsonb,jsonb_build_object('advertisementsObserved',r.response->'summary'->'advertisement_count','canonicalCreated',r.response->'summary'->'properties_created','canonicalUpdated',r.response->'summary'->'properties_changed'),'not_requested',NULL,r.accepted_at,r.accepted_at
- FROM mls_ingestion_receipts r WHERE r.full_snapshot AND r.response->>'success'='true' AND NOT EXISTS(SELECT 1 FROM property_sync_runs m WHERE m.receipt_id=r.id)
+ FROM mls_ingestion_receipts r WHERE (r.full_snapshot OR r.response->>'incremental'='true') AND r.response->>'success'='true' AND NOT EXISTS(SELECT 1 FROM property_sync_runs m WHERE m.receipt_id=r.id)
  AND ($1::timestamptz IS NULL OR (r.accepted_at,r.id)<($1::timestamptz,$2::uuid)) ORDER BY r.accepted_at DESC,r.id DESC LIMIT $3)
  ) SELECT * FROM recent ORDER BY started_at DESC,id DESC LIMIT $3`,
     [cursor?.at ?? null, cursor?.id ?? null, limit + 1],
@@ -91,7 +103,23 @@ export async function readSyncWorkspace({
           }
         : {});
     const acceptedAt = receipt?.accepted_at ? new Date(receipt.accepted_at).toISOString() : null;
-    let health = deriveSyncHealth({ lastAcceptedFullAt: acceptedAt, stages }, now);
+    const incrementalAt = receipt?.incremental_accepted_at
+      ? new Date(receipt.incremental_accepted_at).toISOString()
+      : null;
+    const incrementalEnabled =
+      source === SOURCES[0] &&
+      Boolean(incrementalAt) &&
+      Date.parse(receipt.incremental_scraped_at) >= Date.parse(receipt.scraped_at);
+    let health = deriveSyncHealth(
+      {
+        lastAcceptedFullAt: acceptedAt,
+        lastAcceptedIncrementalAt: incrementalAt,
+        incrementalEnabled,
+        incrementalStaleHours: 30,
+        stages,
+      },
+      now,
+    );
     if (run?.dispatch_status === "failed" && run.finished_at && health !== "stale")
       health = "failed";
     if (
@@ -119,10 +147,17 @@ export async function readSyncWorkspace({
       message:
         health === "healthy" && Number(agg?.backlog) > 0
           ? "已匯入，部分樓盤待上架"
-          : SYNC_HEALTH_COPY[health],
+          : health === "healthy" && incrementalEnabled
+            ? "已完成增量匯入"
+            : SYNC_HEALTH_COPY[health],
       connected: Boolean(receipt),
-      lastCollectionAt: receipt?.scraped_at ? new Date(receipt.scraped_at).toISOString() : null,
+      lastCollectionAt: receipt?.scraped_at
+        ? new Date(
+            incrementalEnabled ? receipt.incremental_scraped_at : receipt.scraped_at,
+          ).toISOString()
+        : null,
       lastAcceptedFullAt: acceptedAt,
+      lastAcceptedIncrementalAt: incrementalAt,
       lastPublishedAt: Number.isFinite(Date.parse(run?.last_published_at ?? ""))
         ? new Date(run.last_published_at).toISOString()
         : null,
@@ -261,8 +296,17 @@ export async function recordSyncRun({ client, runId, summary }) {
     const receiptId = stages.ingestion?.receiptId ?? previous?.receipt_id ?? null;
     if (receiptId) {
       const receipts = await q(
-        `SELECT id FROM mls_ingestion_receipts WHERE id=$1 AND source=$2 AND scope_id=$3 AND payload_hash=$4 AND full_snapshot AND response->>'success'='true'`,
-        [receiptId, summary.source, summary.scopeId, summary.requestHash],
+        `SELECT id FROM mls_ingestion_receipts WHERE id=$1 AND source=$2 AND scope_id=$3 AND payload_hash=$4
+          AND response->>'success'='true' AND (full_snapshot OR
+            ($5::boolean AND NOT full_snapshot AND response->>'incremental'='true'
+              AND response->>'incremental_mode'='index-delta-v1'))`,
+        [
+          receiptId,
+          summary.source,
+          summary.scopeId,
+          summary.requestHash,
+          summary.incremental === true,
+        ],
       );
       if (receipts.length !== 1) throw Error("RECEIPT_IDENTITY_REQUIRED");
     }

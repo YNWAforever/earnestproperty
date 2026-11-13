@@ -2,6 +2,7 @@ import { PROMOTION_TIERS, normalize28HsePromotionTier } from "./promotion-tier.m
 import { createHash } from "node:crypto";
 import { exactUnitIdentity } from "./unit-identity.mjs";
 import { validAtomicGuards } from "./controlled-patch-preconditions.mjs";
+import { incrementalEnvelopeReasons, validIncrementalCapture } from "./incremental-contract.mjs";
 export const POLICY_VERSION = "no-hermes-v2";
 export const BRANCHES = Object.freeze(["EPW", "EPS", "EPT"]);
 export class SnapshotError extends Error {
@@ -82,6 +83,15 @@ export function decodeSnapshot(input, options = {}) {
   )
     throw new SnapshotError("invalid_envelope");
   const controlledPatch = options.controlledPatch === true;
+  const incremental = options.incremental === true;
+  if (Object.hasOwn(b, "incremental")) throw new SnapshotError("invalid_incremental_envelope");
+  if (!incremental && Object.hasOwn(m, "incremental"))
+    throw new SnapshotError("incremental_mode_required");
+  if (incremental) {
+    if (controlledPatch) throw new SnapshotError("invalid_incremental_envelope");
+    const reasons = incrementalEnvelopeReasons(b);
+    if (reasons.length) throw new SnapshotError("invalid_incremental_envelope", 400, { reasons });
+  }
   const patchMeta = m.controlled_patch;
   if (controlledPatch) {
     if (
@@ -267,7 +277,10 @@ export function decodeSnapshot(input, options = {}) {
       const identity = exactUnitIdentity(r, options.aliases);
       let fetchedAt = b.scraped_at;
       const provider = r.raw_payload?.provider_provenance;
-      if (controlledPatch && patchMeta.evidence_mode === "saved-capture-v1") {
+      if (incremental) {
+        if (!validIncrementalCapture(r, b)) throw new SnapshotError("invalid_incremental_capture");
+        fetchedAt = r.captured_at;
+      } else if (controlledPatch && patchMeta.evidence_mode === "saved-capture-v1") {
         const stamp = r.captured_at;
         if (
           typeof stamp !== "string" ||
@@ -433,6 +446,7 @@ export function decodeSnapshot(input, options = {}) {
     throw new SnapshotError("invalid_controlled_patch");
   return {
     source,
+    incremental,
     wireSource: b.source,
     scopeId,
     policyVersion: POLICY_VERSION,

@@ -230,6 +230,12 @@ export function PropertySyncWorkspace({
                     <dt>最後成功採集</dt>
                     <dd>{date(card.lastCollectionAt)}</dd>
                   </div>
+                  {card.lastAcceptedIncrementalAt && (
+                    <div>
+                      <dt>最後增量匯入</dt>
+                      <dd>{date(card.lastAcceptedIncrementalAt)}</dd>
+                    </div>
+                  )}
                   <div>
                     <dt>最後完整匯入</dt>
                     <dd>{date(card.lastAcceptedFullAt)}</dd>

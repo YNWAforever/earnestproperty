@@ -4,13 +4,16 @@ import { evaluateSnapshotGate } from "./source-snapshot-gates.mjs";
 import { withMlsAdvisoryLock } from "./neon-lock.mjs";
 import { applyIngestion } from "./ingestion-repository.mjs";
 import { validateReviewPlan } from "./controlled-review-plan.mjs";
+import { incrementalCounts, incrementalReceiptFields } from "./incremental-contract.mjs";
 export function snapshotResponse(batch, gate, receiptId = null) {
   return {
     success: true,
     status: receiptId ? (gate.full ? "success" : "partial_success") : "dry_run",
     full_snapshot: gate.full,
     receipt_id: receiptId,
+    ...incrementalReceiptFields(batch),
     summary: {
+      ...incrementalCounts(batch),
       advertisement_count: batch.advertisementCount,
       offer_count: batch.offerCount,
       rejected_count: batch.rejects.length,
@@ -28,6 +31,7 @@ export async function ingestSnapshot(payload, options = {}) {
   const batch = decodeSnapshot(payload, {
     idScope: options.apply !== true && payload?.id_scope === "branch" ? "branch" : "global",
     controlledPatch: options.controlledPatch === true,
+    incremental: options.incremental === true,
     // Only exact-hash receipt recovery may use a pre-guard saved payload. A new
     // apply is strictly decoded again under the native transaction's locks.
     allowLegacyPatchReplay: options.apply === true,
@@ -42,6 +46,7 @@ export async function ingestSnapshot(payload, options = {}) {
       {},
       {
         controlledPatch: options.controlledPatch === true,
+        incremental: options.incremental === true,
       },
     );
     if (!gate.allowed)

@@ -3,6 +3,8 @@ export interface IngestionOptions {
   connectionString?: string;
   apply?: boolean;
   controlledPatch?: boolean;
+  /** Trusted server/CLI authority for index-delta-v1; always partial. */
+  incremental?: boolean;
   /** Server-only operator sidecar; never copied from request JSON. */
   reviewPlan?: Record<string, unknown>;
   reviewPlanHash?: string;
@@ -22,6 +24,11 @@ export interface IngestionResponse {
   status: "dry_run" | "success" | "partial_success";
   full_snapshot: boolean;
   receipt_id: string | null;
+  incremental?: true;
+  incremental_mode?: "index-delta-v1";
+  scraped_at?: string;
+  index_started_at?: string;
+  index_finished_at?: string;
   summary: {
     advertisement_count: number;
     offer_count: number;
@@ -33,6 +40,11 @@ export interface IngestionResponse {
     /** Changed fields on existing canonical properties; excludes initial creation. */
     fields_changed: number;
     unchanged_properties: number;
+    index_offer_count?: number;
+    index_advertisement_count?: number;
+    candidate_count?: number;
+    fresh_detail_count?: number;
+    unfetched_index_offer_count?: number;
   };
   rejects: Array<{ row_index: number; code: string }>;
 }

@@ -2,6 +2,28 @@ import test from "node:test";
 import assert from "node:assert/strict";
 const m = () => import("./sync-run-repository.mjs");
 const actor = { staffId: "10000000-0000-0000-0000-000000000001", roles: ["admin"] };
+test("fresh incremental receipt drives daily health while retaining the older full baseline", async () => {
+  const { readSyncWorkspace } = await m();
+  const { HSE_PUBLICATION_SOURCE } = await import("./publication-source-policy.mjs");
+  const receipt = {
+    source: HSE_PUBLICATION_SOURCE.source,
+    receipt_id: "full",
+    scraped_at: "2026-11-01T00:00:00Z",
+    accepted_at: "2026-11-01T00:01:00Z",
+    incremental_receipt_id: "delta",
+    incremental_scraped_at: "2026-11-10T16:00:00Z",
+    incremental_accepted_at: "2026-11-10T16:01:00Z",
+  };
+  const query = async (sql) => (sql.startsWith("SELECT s.source") ? [receipt] : []);
+  const result = await readSyncWorkspace({ actor, query, now: Date.parse("2026-11-11T04:00:00Z") });
+  assert.equal(result.cards[0].health, "healthy");
+  assert.equal(result.cards[0].lastAcceptedFullAt, "2026-11-01T00:01:00.000Z");
+  assert.equal(result.cards[0].lastAcceptedIncrementalAt, "2026-11-10T16:01:00.000Z");
+  assert.equal(result.cards[0].lastCollectionAt, "2026-11-10T16:00:00.000Z");
+  const stale = await readSyncWorkspace({ actor, query, now: Date.parse("2026-11-12T00:00:00Z") });
+  assert.equal(stale.cards[0].health, "stale");
+});
+
 test("sync read and dispatch require roles before any database/provider access", async () => {
   const { readSyncWorkspace, requestSyncOperation } = await m();
   let calls = 0;
