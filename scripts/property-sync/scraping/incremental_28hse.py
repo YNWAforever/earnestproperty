@@ -99,13 +99,14 @@ def validate_index_card(row):
         raise WorkerError("index_card_price_unobserved")
 
 
-def candidate_reasons(row, prior, now, ttl_days):
+def candidate_reasons(row, prior, now, ttl_days, previous_index_at=None):
     if not prior:
         return ["new"]
     reasons = []
     if prior.get("detail_index_fingerprint") != card_fingerprint(row):
         reasons.append("changed")
-    if prior.get("pending_retry") or not prior.get("detail_record"):
+    reappeared = previous_index_at is not None and prior.get("index_seen_at") != previous_index_at
+    if prior.get("pending_retry") or not prior.get("detail_record") or reappeared:
         reasons.append("retry")
     fetched = prior.get("detail_fetched_at")
     try:
@@ -232,9 +233,12 @@ def collect_incremental(cache=None, *, fixtures=None, now=None, run_id=None,
     index_finished_at = observed_at()
     index_complete = completed == ["sale", "rent"] and not errors
     candidates, unchanged = [], []
+    previous_index_at = cache.get("proposed_at") if cache.get("index_complete") else None
     for key, row in sorted(members.items()):
         prior = cache["entries"].get(key)
-        reasons = candidate_reasons(row, prior, now, ttl_days)
+        # A retained detail may predate the last complete membership even within TTL.
+        # Reappearing offers need fresh status/details; absence itself still changes no facts.
+        reasons = candidate_reasons(row, prior, now, ttl_days, previous_index_at)
         current = deepcopy(prior) if prior else {}
         current.update({field: deepcopy(row[field]) for field in (
             "property_id", "deal_type", "source_url", "index_fingerprint", "index_seen_at",
