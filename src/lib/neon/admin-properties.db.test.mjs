@@ -1,23 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
-import { neon } from "@neondatabase/serverless";
-import { assertDisposableNeonTestTarget } from "./disposable-test-target.mjs";
+import {
+  ownedNeonSql,
+  withOwnedPostgres,
+} from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import {
   buildAdminPropertyGroupsQuery,
   buildAdminManagedPropertyQuery,
   buildAdminSourceReviewQuery,
   mapAdminPropertyGroup,
 } from "./admin-properties.server.ts";
-const url = process.env.ASTRA_TEST_DATABASE_URL;
 const admin = { staffId: "10000000-0000-0000-0000-000000000001", roles: ["admin"] };
 const agent = { staffId: "10000000-0000-0000-0000-000000000001", roles: ["agent"] };
-test(
-  "grouped reads rank globally, page groups, retain history and deny sibling disclosure",
-  { skip: !url },
-  async () => {
-    await assertDisposableNeonTestTarget(url);
-    const db = neon(url),
+test("grouped reads rank globally, page groups, retain history and deny sibling disclosure", async () =>
+  withOwnedPostgres(async ({ pool }) => {
+    const db = ownedNeonSql(pool),
       schema = `admin_groups_${randomUUID().replaceAll("-", "")}`;
     const run = async (statement, params = []) => {
       const results = await db.transaction((tx) => [
@@ -33,7 +31,7 @@ test(
     try {
       await db.query(`CREATE SCHEMA ${schema}`);
       await run(
-        `CREATE TABLE properties(id uuid PRIMARY KEY,listing_no text,deal_type text,status text,title_zh text,estate_id uuid,agent_id uuid,price numeric,rent numeric,saleable_area numeric,images text[],source_updated_at timestamptz,last_seen_at timestamptz,updated_at timestamptz,created_at timestamptz)`,
+        `CREATE TABLE properties(id uuid PRIMARY KEY,listing_no text,deal_type text,status text,title_zh text,estate_id uuid,agent_id uuid,price numeric,rent numeric,saleable_area numeric,images text[],source_updated_at timestamptz,last_seen_at timestamptz,updated_at timestamptz,created_at timestamptz,source_authority text)`,
       );
       await run(
         `CREATE TABLE property_public_members(property_id uuid PRIMARY KEY,public_listing_no text)`,
@@ -152,5 +150,4 @@ test(
     } finally {
       await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     }
-  },
-);
+  }));

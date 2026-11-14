@@ -1,4 +1,5 @@
 import { writeSyncFields } from "./ingestion-batch-writes.mjs";
+import { CURRENT_PUBLIC_OFFERING_ORDER } from "../neon/public-listing-query.js";
 import { SnapshotError, canonicalJson } from "./ingestion-contract.mjs";
 export function companyPolicy(policy) {
   const rule = policy.config?.company_number_identity;
@@ -50,7 +51,7 @@ export async function companyRelationship(q, record, existing, relation, rule) {
   }
   const candidates = group
     ? await q(
-        "SELECT p.* FROM properties p JOIN property_public_members m ON m.property_id=p.id WHERE m.public_listing_no=$1 AND p.deal_type=$2 ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC",
+        `SELECT p.* FROM properties p JOIN property_public_members m ON m.property_id=p.id WHERE m.public_listing_no=$1 AND p.deal_type=$2 ORDER BY ${CURRENT_PUBLIC_OFFERING_ORDER}`,
         [group.public_listing_no, record.dealType],
       )
     : [];

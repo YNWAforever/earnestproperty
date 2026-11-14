@@ -12,7 +12,7 @@ test("overview counts current published property groups and sale/rent offers", a
       id text PRIMARY KEY, listing_no text, deal_type text NOT NULL,
       source_updated_at timestamp, last_seen_at timestamp, updated_at timestamp,
       created_at timestamp NOT NULL, status text NOT NULL, featured boolean NOT NULL DEFAULT false,
-      estate_id text, price numeric, rent numeric
+      estate_id text, price numeric, rent numeric, source_authority text
     );
     CREATE TABLE property_public_members (property_id text, public_listing_no text);
     CREATE TABLE estates (id text PRIMARY KEY);`);
@@ -43,7 +43,7 @@ test("overview count query returns zero on empty inventory", async () => {
       id text PRIMARY KEY, listing_no text, deal_type text NOT NULL,
       source_updated_at timestamp, last_seen_at timestamp, updated_at timestamp,
       created_at timestamp NOT NULL, status text NOT NULL, featured boolean NOT NULL DEFAULT false,
-      estate_id text, price numeric, rent numeric
+      estate_id text, price numeric, rent numeric, source_authority text
     );
     CREATE TABLE property_public_members (property_id text, public_listing_no text);
     CREATE TABLE estates (id text PRIMARY KEY);`);

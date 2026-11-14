@@ -3,6 +3,10 @@
 // A source with an unknown update date must not lose to a lower-priority import.
 const AUTHORITY_ORDER = "CASE WHEN p.source_authority = '28hse' THEN 0 ELSE 1 END";
 export const CURRENT_PUBLIC_OFFERING_ORDER = `${AUTHORITY_ORDER}, p.source_updated_at DESC NULLS LAST, p.last_seen_at DESC NULLS LAST, p.updated_at DESC NULLS LAST, p.created_at DESC, p.id ASC`;
+export function currentPublicOfferingOrder(alias = "p") {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) throw new Error("INVALID_OFFERING_ALIAS");
+  return CURRENT_PUBLIC_OFFERING_ORDER.replaceAll("p.", `${alias}.`);
+}
 export const LISTING_FRESHNESS_ORDER =
   "p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC, p.id ASC";
 

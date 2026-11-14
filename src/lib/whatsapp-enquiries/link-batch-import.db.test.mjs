@@ -22,7 +22,7 @@ test("bulk import lookup uses canonical current offers and exact source-scoped r
         source_updated_at timestamptz, last_seen_at timestamptz,
         updated_at timestamptz, created_at timestamptz,
         featured boolean DEFAULT false, estate_id uuid,
-        title_zh text, price numeric, rent numeric, agent_id uuid
+        title_zh text, price numeric, rent numeric, agent_id uuid, source_authority text
       );
       CREATE TABLE property_public_members(property_id uuid,public_listing_no text);
       CREATE TABLE estates(id uuid PRIMARY KEY);

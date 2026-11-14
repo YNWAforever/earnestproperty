@@ -6,7 +6,10 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import ts from "typescript";
 import { unexpectedBlogReadUrl } from "./test-helpers/unexpected-blog-read.mjs";
-import { neon } from "@neondatabase/serverless";
+import {
+  ownedNeonSql,
+  withOwnedPostgres,
+} from "../../../scripts/acceptance/owned-postgres-test.mjs";
 const root = process.cwd();
 const read = (path) => readFileSync(join(root, path), "utf8");
 
@@ -51,7 +54,6 @@ async function importPublicDataServerWithInjectedQuery(query) {
   return import(dataUrl(executable));
 }
 
-const databaseUrl = process.env.TEST_DATABASE_URL;
 test("public performance loader executes real listing SQL without a database", async () => {
   const calls = [];
   const server = await importPublicDataServerWithInjectedQuery(async (text, params) => {
@@ -64,18 +66,11 @@ test("public performance loader executes real listing SQL without a database", a
   assert.match(calls[0].text, /count\(\*\)/);
 });
 
-test(
-  "isolated PostgreSQL fixture: unified pages preserve current offerings, withdrawals, aliases and independent deal counts",
-  { skip: !databaseUrl },
-  async () => {
-    assert.equal(
-      process.env.PUBLIC_TEST_DATABASE_CONFIRMED,
-      "true",
-      "Explicit approved disposable target required",
-    );
+test("owned PostgreSQL fixture: unified pages preserve current offerings, withdrawals, aliases and independent deal counts", async () =>
+  withOwnedPostgres(async ({ pool }) => {
     const schema = "task8_" + randomUUID().replaceAll("-", "");
     assert.match(schema, /^task8_[a-f0-9]{32}$/);
-    const db = neon(databaseUrl);
+    const db = ownedNeonSql(pool);
     const query = async (statement, params = []) => {
       const results = await db.transaction((tx) => [
         tx.query("SELECT set_config('search_path',$1,true)", [schema + ",pg_catalog"]),
@@ -95,7 +90,7 @@ test(
    featured boolean,last_seen_at timestamptz,created_at timestamptz,updated_at timestamptz,source_site text,
    title_en text,gross_area numeric,floor text,orientation text,management_fee numeric,description text,
    floorplan_url text,legacy_detail_id text,legacy_property_no text,legacy_url text,source_url text,
-   source_updated_at timestamptz,last_scraped_at timestamptz,agent_id text)`);
+   source_updated_at timestamptz,last_scraped_at timestamptz,agent_id text,source_authority text)`);
       await query(
         `CREATE TABLE staff_users(id text PRIMARY KEY,active boolean,name_zh text,name_en text,phone text,whatsapp text,licence_no text,avatar_url text,branch text,bio text)`,
       );
@@ -371,8 +366,118 @@ test(
         false,
       );
       assert.deepEqual(await server.fetchEstates({ districtSlug: "market-district" }), []);
+
+      // Exercise the actual public APIs, including their independent ranking SQL,
+      // against an authority row whose source truthfully provides no update date.
+      await query(`INSERT INTO estates(id,slug,name_zh,district_slug,published)
+        VALUES('authority-estate','authority-estate','Authority fixture','authority-district',true)`);
+      await query(`INSERT INTO properties(id,listing_no,canonical_property_no,title_zh,deal_type,
+        district_slug,estate_id,status,source_authority,source_updated_at,last_seen_at,created_at,
+        price,saleable_area,bedrooms,floor,images,legacy_detail_id,description) VALUES
+        ('authority-sale','AUTHORITY-SALE','AUTHORITY-GROUP','Source house information','sale',
+          'authority-district','authority-estate','active','28hse',NULL,'2026-01-01','2026-01-01',
+          3000000,500,4,'12/F',ARRAY['https://example.com/authority.jpg'],'authority-id','Source description'),
+        ('authority-legacy','AUTHORITY-LEGACY','AUTHORITY-GROUP','Legacy house information','sale',
+          'authority-district','authority-estate','active',NULL,'2099-01-01','2099-01-01','2099-01-01',
+          9000000,900,1,'Low',ARRAY['https://example.com/legacy.jpg'],'authority-legacy-id','Legacy description')`);
+      await query("INSERT INTO property_public_groups VALUES('AUTHORITY-GROUP')");
+      await query(`INSERT INTO property_public_members VALUES
+        ('authority-sale','AUTHORITY-GROUP'),('authority-legacy','AUTHORITY-GROUP')`);
+      const authorityDetail = await server.fetchPropertyByListingNo({
+        listingNo: "AUTHORITY-GROUP",
+      });
+      assert.equal(authorityDetail.id, "authority-sale");
+      assert.equal(authorityDetail.title_zh, "Source house information");
+      assert.equal(authorityDetail.source_updated_at, null);
+      assert.equal(authorityDetail.saleable_area, 500);
+      assert.equal(authorityDetail.bedrooms, 4);
+      assert.equal(authorityDetail.floor, "12/F");
+      const authorityAlias = await server.fetchPropertyByLegacyDetailId({
+        oldId: "authority-legacy-id",
+      });
+      assert.deepEqual(authorityAlias, { listing_no: "AUTHORITY-GROUP" });
+      assert.equal(
+        (await server.fetchPropertyByListingNo({ listingNo: authorityAlias.listing_no })).id,
+        "authority-sale",
+        "a historical alias resolves to the authoritative current property",
+      );
+      assert.ok(
+        (await server.fetchSitemapListings()).some(
+          (row) => row.public_listing_no === "AUTHORITY-GROUP",
+        ),
+      );
+      const sourceEstate = await server.fetchEstateBySlug({ slug: "authority-estate" });
+      assert.equal(Number(sourceEstate.avg_saleable_psf), 6000);
+      assert.equal(sourceEstate.hero_image, "https://example.com/authority.jpg");
+      const sourceDirectory = (await server.fetchEstateDirectory()).rows.find(
+        (row) => row.slug === "authority-estate",
+      );
+      assert.equal(sourceDirectory.total, 1);
+      assert.equal(sourceDirectory.sale, 1);
+      assert.equal(sourceDirectory.rent, 0);
+      const sourceListEstate = (
+        await server.fetchEstates({ districtSlug: "authority-district" })
+      )[0];
+      assert.equal(Number(sourceListEstate.avg_saleable_psf), 6000);
+
+      await query(`INSERT INTO properties(id,listing_no,canonical_property_no,title_zh,deal_type,
+        estate_id,district_slug,status,featured,source_updated_at,last_seen_at,created_at,rent,description)
+        VALUES('authority-rent','AUTHORITY-RENT','AUTHORITY-GROUP','Newer featured rental','rent',
+          'authority-estate','authority-district','active',true,'2100-01-01','2100-01-01','2100-01-01',20000,'Rental copy')`);
+      await query("INSERT INTO property_public_members VALUES('authority-rent','AUTHORITY-GROUP')");
+      const crossDeal = await server.fetchPropertyByListingNo({ listingNo: "AUTHORITY-RENT" });
+      assert.equal(
+        crossDeal.id,
+        "authority-sale",
+        "shared detail facts prefer the authority across current sale and rent",
+      );
+      assert.deepEqual(crossDeal.offerings.map((row) => row.id).sort(), [
+        "authority-rent",
+        "authority-sale",
+      ]);
+      await query("UPDATE properties SET status='inactive' WHERE id='authority-sale'");
+      const rentDetail = await server.fetchPropertyByListingNo({ listingNo: "AUTHORITY-GROUP" });
+      assert.equal(
+        rentDetail.id,
+        "authority-rent",
+        "an active rental remains available after the authoritative sale withdraws",
+      );
+      assert.deepEqual(
+        rentDetail.offerings.map((row) => row.id),
+        ["authority-rent"],
+      );
+      assert.equal(
+        (await server.fetchEstateBySlug({ slug: "authority-estate" })).avg_saleable_psf,
+        null,
+      );
+      const rentDirectory = (await server.fetchEstateDirectory()).rows.find(
+        (row) => row.slug === "authority-estate",
+      );
+      assert.equal(rentDirectory.total, 1);
+      assert.equal(rentDirectory.sale, 0);
+      assert.equal(rentDirectory.rent, 1);
+      await query("UPDATE properties SET status='inactive' WHERE id='authority-rent'");
+      const withdrawnSource = await server.fetchPropertyByListingNo({
+        listingNo: "AUTHORITY-GROUP",
+      });
+      assert.equal(withdrawnSource.id, "authority-sale");
+      assert.equal(withdrawnSource.status, "inactive");
+      assert.deepEqual(withdrawnSource.offerings, []);
+      assert.equal(
+        await server.fetchPropertyByLegacyDetailId({ oldId: "authority-legacy-id" }),
+        null,
+      );
+      assert.ok(
+        !(await server.fetchSitemapListings()).some(
+          (row) => row.public_listing_no === "AUTHORITY-GROUP",
+        ),
+        "the newer active legacy sale cannot resurrect a withdrawn authoritative sale",
+      );
+      const emptySourceEstate = (await server.fetchEstateDirectory()).rows.find(
+        (row) => row.slug === "authority-estate",
+      );
+      assert.equal(emptySourceEstate.total, 0);
     } finally {
       await db.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
     }
-  },
-);
+  }));

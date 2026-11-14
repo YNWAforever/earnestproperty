@@ -3,6 +3,7 @@ import { publicBlogRead } from "./blog-public.server";
 import {
   canonicalListingCte,
   CURRENT_PUBLIC_OFFERING_ORDER,
+  currentPublicOfferingOrder,
   LISTING_FRESHNESS_ORDER,
 } from "./public-listing-query.js";
 
@@ -1132,7 +1133,7 @@ export async function fetchPropertyByListingNo(input: {
     ), ranked AS (
       SELECT p.id, ppm.public_listing_no, ROW_NUMBER() OVER (
         PARTITION BY ppm.public_listing_no, p.deal_type
-        ORDER BY p.source_updated_at DESC NULLS LAST, p.last_seen_at DESC NULLS LAST, p.updated_at DESC NULLS LAST, p.created_at DESC, p.id ASC
+        ORDER BY ${CURRENT_PUBLIC_OFFERING_ORDER}
       ) AS offering_rank
       FROM property_public_members ppm
       JOIN properties p ON p.id = ppm.property_id
@@ -1159,11 +1160,7 @@ export async function fetchPropertyByListingNo(input: {
         FROM current_offerings offering WHERE offering.status = 'active'), '[]'::jsonb) AS offerings
       FROM current_offerings
       ORDER BY (current_offerings.status = 'active') DESC,
-        current_offerings.source_updated_at DESC NULLS LAST,
-        current_offerings.last_seen_at DESC NULLS LAST,
-        current_offerings.updated_at DESC NULLS LAST,
-        current_offerings.created_at DESC,
-        current_offerings.id ASC
+        ${currentPublicOfferingOrder("current_offerings")}
       LIMIT 1
     )
     SELECT ${detailListingColumns}
@@ -1251,9 +1248,7 @@ export async function fetchPropertyByLegacyDetailId(input: {
         FROM (
           SELECT latest.status, ROW_NUMBER() OVER (
             PARTITION BY latest.deal_type
-            ORDER BY latest.source_updated_at DESC NULLS LAST,
-              latest.last_seen_at DESC NULLS LAST, latest.updated_at DESC NULLS LAST,
-              latest.created_at DESC, latest.id ASC
+            ORDER BY ${currentPublicOfferingOrder("latest")}
           ) AS offering_rank
           FROM property_public_members active_member
           JOIN properties latest ON latest.id = active_member.property_id
@@ -1361,9 +1356,7 @@ export async function fetchSitemapListings(): Promise<
       SELECT ppm.public_listing_no, p.status, p.updated_at,
         ROW_NUMBER() OVER (
           PARTITION BY ppm.public_listing_no, p.deal_type
-          ORDER BY p.source_updated_at DESC NULLS LAST,
-            p.last_seen_at DESC NULLS LAST, p.updated_at DESC NULLS LAST,
-            p.created_at DESC, p.id ASC
+          ORDER BY ${CURRENT_PUBLIC_OFFERING_ORDER}
         ) AS offering_rank
       FROM property_public_members ppm
       JOIN properties p ON p.id = ppm.property_id
@@ -1470,8 +1463,7 @@ const estateMarketJoin = `LEFT JOIN LATERAL (
   WITH ranked AS (
     SELECT p.*, ROW_NUMBER() OVER (
       PARTITION BY m.public_listing_no,p.deal_type
-      ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,
-        p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC
+      ORDER BY ${CURRENT_PUBLIC_OFFERING_ORDER}
     ) AS rank
     FROM properties p JOIN property_public_members m ON m.property_id=p.id
   ), current AS (SELECT * FROM ranked WHERE rank=1 AND status='active' AND estate_id=e.id)
@@ -1857,8 +1849,7 @@ export async function fetchEstateDirectory(): Promise<
  WITH ranked AS (
    SELECT p.*,m.public_listing_no,ROW_NUMBER() OVER(
     PARTITION BY m.public_listing_no,p.deal_type
-    ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,
-      p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC
+    ORDER BY ${CURRENT_PUBLIC_OFFERING_ORDER}
    ) AS rank
    FROM properties p JOIN property_public_members m ON m.property_id=p.id
  ), current AS (SELECT * FROM ranked WHERE rank=1 AND status='active')

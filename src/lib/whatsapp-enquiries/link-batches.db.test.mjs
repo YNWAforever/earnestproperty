@@ -41,7 +41,7 @@ test("batch migration commits 50+10, returns lost responses, and rejects changed
       CREATE TYPE staff_role AS ENUM ('admin','manager','agent','viewer');
       CREATE TABLE staff_users(id uuid PRIMARY KEY,active boolean,name_zh text,name_en text);
       CREATE TABLE staff_roles(staff_user_id uuid,role staff_role);
-      CREATE TABLE properties(id uuid PRIMARY KEY,title_zh text,deal_type text,status text,source_updated_at timestamptz,last_seen_at timestamptz,updated_at timestamptz,created_at timestamptz);
+      CREATE TABLE properties(id uuid PRIMARY KEY,title_zh text,deal_type text,status text,source_updated_at timestamptz,last_seen_at timestamptz,updated_at timestamptz,created_at timestamptz,source_authority text);
       CREATE TABLE property_public_members(property_id uuid,public_listing_no text);
       CREATE TABLE whatsapp_staff_channels(staff_id uuid,channel_id text,eligible boolean,retired_at timestamptz,verified_at timestamptz,verification_ref text,version integer NOT NULL DEFAULT 1);
       CREATE TABLE staff_external_references(id uuid PRIMARY KEY,namespace text,staff_id uuid,valid_from timestamptz,valid_until timestamptz,verified_at timestamptz);
@@ -233,6 +233,30 @@ test("batch migration commits 50+10, returns lost responses, and rejects changed
     assert.equal(loser.state, "committed");
     assert.equal(loser.rows[0].outcome, "reused");
     assert.equal(winner.rows[0].linkId, loser.rows[0].linkId);
+    const legacy = randomUUID();
+    await query(
+      "UPDATE properties SET source_authority='28hse',source_updated_at=null,last_seen_at=null,updated_at=null WHERE id=$1",
+      [propertyId],
+    );
+    await query(
+      "INSERT INTO properties(id,title_zh,deal_type,status,source_updated_at,created_at) VALUES($1,'Later legacy withdrawal','sale','withdrawn',now()+interval '1 day',now())",
+      [legacy],
+    );
+    await query("INSERT INTO property_public_members VALUES($1,'A074714')", [legacy]);
+    const preferred = makeRow("authority-current");
+    const authorityPreview = await previewWhatsappLinkBatch(
+      { batchId: randomUUID(), rows: [preferred] },
+      admin,
+      query,
+    );
+    assert.deepEqual(authorityPreview.counts, { create: 1, reuse: 0, blocked: 0 });
+    await query("UPDATE properties SET source_authority=null WHERE id=$1", [propertyId]);
+    const legacyPreview = await previewWhatsappLinkBatch(
+      { batchId: randomUUID(), rows: [preferred] },
+      admin,
+      query,
+    );
+    assert.deepEqual(legacyPreview.counts, { create: 0, reuse: 0, blocked: 1 });
   } finally {
     if (previous === undefined) delete process.env.EP_WA_COMPANY_CHANNEL_ID;
     else process.env.EP_WA_COMPANY_CHANNEL_ID = previous;
