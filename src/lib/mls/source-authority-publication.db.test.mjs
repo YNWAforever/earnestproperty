@@ -254,6 +254,60 @@ test("owned PostgreSQL source authority reconciles accepted native observations 
     );
 
     await t.test(
+      "verified orientation removes only contradictory feature tags and remains replayable",
+      async () => {
+        const target = await seedProperty("A910017");
+        await adminWrite(async (write) => {
+          await write("UPDATE properties SET features=$2::text[] WHERE id=$1", [
+            target.id,
+            ["連車位", "西南", "東南", "西南海景"],
+          ]);
+        });
+        const capture = authorityCapture([
+          { id: "9100017", ref: "A910017", values: { orientation: "東南" } },
+        ]);
+        const receipt = await accept(capture);
+        const report = await reconcileSourceAuthority(
+          client,
+          capture.payload,
+          options(capture, receipt),
+        );
+        assert.equal(report.published[0].propertyId, target.id);
+        const after = await jsonProperty(target.id);
+        assert.equal(after.orientation, "東南");
+        assert.deepEqual(after.features, ["連車位", "東南", "西南海景"]);
+        const provenance = (
+          await q(
+            "SELECT * FROM property_sync_fields WHERE property_id=$1 AND field_name='features'",
+            [target.id],
+          )
+        )[0];
+        assert.equal(provenance.policy_version, SOURCE_AUTHORITY_POLICY);
+        assert.equal(provenance.active_override, false);
+        const beforeReplay = await snapshot();
+        const replay = await reconcileSourceAuthority(
+          client,
+          capture.payload,
+          options(capture, receipt),
+        );
+        assert.equal(replay.alreadyPublic, 1);
+        assert.deepEqual(await snapshot(), beforeReplay);
+        await adminWrite(async (write) => {
+          await write("UPDATE properties SET features=array_append(features,'西南') WHERE id=$1", [
+            target.id,
+          ]);
+        });
+        const repaired = await reconcileSourceAuthority(
+          client,
+          capture.payload,
+          options(capture, receipt),
+        );
+        assert.equal(repaired.published.length, 1);
+        assert.deepEqual((await jsonProperty(target.id)).features, after.features);
+      },
+    );
+
+    await t.test(
       "manual property facts and JSON trigger overrides transfer while opposite deal and SEO remain",
       async () => {
         const target = await seedProperty("A910005", { price: 123, bedrooms: 1 });

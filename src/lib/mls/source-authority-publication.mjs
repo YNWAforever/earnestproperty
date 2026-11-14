@@ -45,6 +45,24 @@ const equal = (field, a, b) =>
     ? normalizeDecimal(a) === normalizeDecimal(b)
     : JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const present = (value) => value !== null && value !== undefined && value !== "";
+const directions = new Map([
+  ["北", "N"],
+  ["東北", "NE"],
+  ["東", "E"],
+  ["東南", "SE"],
+  ["南", "S"],
+  ["西南", "SW"],
+  ["西", "W"],
+  ["西北", "NW"],
+]);
+function orientationDirection(value) {
+  if (typeof value !== "string") return null;
+  const label = value
+    .trim()
+    .replace(/^座向\s*[:：]\s*/, "")
+    .toUpperCase();
+  return directions.get(label) ?? (/^(?:N|NE|E|SE|S|SW|W|NW)$/.test(label) ? label : null);
+}
 const fail = (code) => {
   throw Error(code);
 };
@@ -113,6 +131,14 @@ export function authorityValues(record, target, resolution) {
     )
       fail("SOURCE_AUTHORITY_PRECISION_UNSUPPORTED");
     values[column] = value;
+  }
+  const orientation = orientationDirection(record.fields.orientation);
+  if (orientation && Array.isArray(target?.features)) {
+    const features = target.features.filter((feature) => {
+      const direction = orientationDirection(feature);
+      return !direction || direction === orientation;
+    });
+    if (features.length !== target.features.length) values.features = features;
   }
   const description = record.raw.publication?.description ?? record.fields.description;
   if (typeof description === "string" && description.trim() && description.length <= 2000)
