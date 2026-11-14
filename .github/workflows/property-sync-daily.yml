@@ -830,6 +830,8 @@ jobs:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
           BLOB_READ_WRITE_TOKEN: ${{ secrets.BLOB_READ_WRITE_TOKEN }}
+          SOURCE_AUTHORITY_BLOB_TOKEN: ${{ secrets.IMPORT_BLOB_READ_WRITE_TOKEN }}
+          SOURCE_AUTHORITY_BLOB_HOST: ${{ vars.IMPORT_BLOB_HOST }}
         run: node scripts/property-sync/incremental-daily.mjs publish
       - name: Map agents from already captured details
         if: env.INCREMENTAL_APPLY == 'true'

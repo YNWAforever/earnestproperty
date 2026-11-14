@@ -78,6 +78,7 @@ jobs:
       - run: npm run test:mls
       - run: npm run test:property-sync
       - run: npm run test:property-sync:daily
+      - run: npm run test:property-sync:authority
       - run: npm run test:28hse-import
       - run: npm run test:owner-publication
       - run: npm run test:property-sync:admin
@@ -200,6 +201,7 @@ jobs:
       - run: npm run test:crm:db
       - run: npm run test:woztell:db
       - run: npm run test:property-sync:db
+      - run: npm run test:property-sync:authority:db
       - run: npm run test:28hse-import:db
       - run: npm run test:owner-publication:db
       - run: npm run test:property-sync:publication:owned:db

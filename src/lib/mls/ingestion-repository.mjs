@@ -24,6 +24,7 @@ import {
 import { evaluateSnapshotGate } from "./source-snapshot-gates.mjs";
 import { incrementalCounts, incrementalReceiptFields } from "./incremental-contract.mjs";
 import { chooseRelationship, selectSourceFields } from "./source-selection.mjs";
+import { SOURCE_AUTHORITY_POLICY } from "./source-authority-policy.mjs";
 import { assertPatchTarget, assertPatchExpectation } from "./controlled-patch-guards.mjs";
 import {
   validateReviewPlan,
@@ -721,7 +722,7 @@ export async function applyIngestion(client, payload, options = {}) {
     for (const propertyId of touched) {
       const property = (await q("SELECT * FROM properties WHERE id=$1", [propertyId]))[0];
       const sources = await q(
-        "SELECT s.*,o.fetched_at,ip.config AS policy_config,o.payload->'fields' AS fields,o.payload->'projection' AS projection,o.payload->>'sourceStatusReason' AS source_status_reason,o.payload->>'holdProjection' AS hold_projection,c.contact FROM mls_source_state s JOIN listing_source_observations o ON o.id=s.observation_id JOIN mls_ingestion_policies ip ON ip.source=s.source AND ip.scope_id=s.scope_id AND ip.policy_version=s.policy_version LEFT JOIN mls_source_contacts c ON c.source=s.source AND c.external_listing_id=s.external_listing_id AND c.deal_type=s.deal_type WHERE s.property_id=$1",
+        "SELECT s.*,o.fetched_at,ip.config AS policy_config,o.payload->'fields' AS fields,o.payload->'projection' AS projection,o.payload->>'sourceStatusReason' AS source_status_reason,o.payload->>'holdProjection' AS hold_projection,to_char(o.fetched_at AT TIME ZONE 'UTC','YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"') AS captured_at,c.contact FROM mls_source_state s JOIN listing_source_observations o ON o.id=s.observation_id JOIN mls_ingestion_policies ip ON ip.source=s.source AND ip.scope_id=s.scope_id AND ip.policy_version=s.policy_version LEFT JOIN mls_source_contacts c ON c.source=s.source AND c.external_listing_id=s.external_listing_id AND c.deal_type=s.deal_type WHERE s.property_id=$1",
         [propertyId],
       );
       // Any changed source identity holds the entire projection until operator review.
@@ -787,6 +788,7 @@ export async function applyIngestion(client, payload, options = {}) {
         externalId: representative.external_listing_id,
         dealType: representative.deal_type,
       };
+      const authorityResolutions = [];
       for (const conflict of selected.conflicts) {
         const key = hashPayload({
           propertyId,
@@ -809,7 +811,29 @@ export async function applyIngestion(client, payload, options = {}) {
             runId,
           ],
         );
+        if (
+          conflict.resolution === "keep_latest_28hse" &&
+          conflict.authority?.version === SOURCE_AUTHORITY_POLICY
+        ) {
+          await q(
+            "UPDATE mls_ingestion_conflicts SET review_status='reviewed' WHERE conflict_key=$1",
+            [key],
+          );
+          authorityResolutions.push({ conflict_key: key, ...conflict });
+        }
       }
+      if (authorityResolutions.length)
+        await q(
+          "INSERT INTO audit_logs(action,subject_type,subject_id,metadata) VALUES('mls.source_authority_selection','property',$1,$2::jsonb)",
+          [
+            propertyId,
+            JSON.stringify({
+              policy: SOURCE_AUTHORITY_POLICY,
+              run_id: runId,
+              resolutions: authorityResolutions,
+            }),
+          ],
+        );
       if (selected.ambiguous) {
         await review(reviewRecord, "ambiguous_sources", {}, representative.observation_id);
         continue;
@@ -865,7 +889,9 @@ export async function applyIngestion(client, payload, options = {}) {
             owned.selection_reason === "manual_override" ||
             (column === "description" &&
               owned.selection_reason === "operator_publication" &&
-              owned.policy_version === "daily-reviewed-publication-v1"))
+              ["daily-reviewed-publication-v1", SOURCE_AUTHORITY_POLICY].includes(
+                owned.policy_version,
+              )))
         ) {
           if (!owned && property[column] != null && property[column] !== "")
             await review(

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Every migration filename in neon/migrations, in apply order.
  *
  * ## Why this list exists at all
@@ -136,6 +136,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20261109070000_content_copilot_article_drafts.sql",
   "20261110030000_property_correspondent_agents.sql",
   "20261112030000_old_site_inventory_capture.sql",
+  "20261114040000_property_source_authority.sql",
 ]);
 
 /**

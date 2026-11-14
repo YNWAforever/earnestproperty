@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { chooseRelationship, selectSourceFields, selectWholeContact } from "./source-selection.mjs";
+import { SOURCE_28HSE } from "./source-contract.mjs";
+import { POLICY_VERSION } from "./ingestion-contract.mjs";
+import { SOURCE_AUTHORITY_POLICY } from "./source-authority-policy.mjs";
 const record = {
   source: "propertyhk",
   externalId: "p1",
@@ -54,6 +57,29 @@ test("material identity correction retains property and requests review", () => 
   assert.equal(r.holdProjection, true);
   assert.equal(r.reason, "identity_changed");
 });
+const authorityAd = (id, overrides = {}) => ({
+  source: SOURCE_28HSE,
+  external_listing_id: id,
+  observation_id: `observation-${id}`,
+  scope_id: "agent:540",
+  policy_version: POLICY_VERSION,
+  deal_type: "sale",
+  source_status: "active",
+  source_status_reason: null,
+  raw_identity: { agency_property_no: "C014574" },
+  fetched_at: "2026-11-14T02:00:00.123Z",
+  policy_config: {
+    company_number_identity: { approved: true },
+    source_authority: {
+      version: SOURCE_AUTHORITY_POLICY,
+      approved: true,
+      approval_ref: "USER:source-priority",
+    },
+  },
+  fields: { title: `Advertisement ${id}`, price: "100", estate: "Estate" },
+  ...overrides,
+});
+
 const primary = {
   source: "28hse_agent_540",
   observation_id: "p",
@@ -259,6 +285,166 @@ test("no authorized nullable winner emits an explicit clearing decision without 
   assert.equal(selection.clearFields.includes("district"), false);
   assert.equal(selection.provenance.description.reason, "no_authorized_source");
   assert.ok(selectSourceFields([{ ...primary, fields: {} }]).clearFields.includes("bathrooms"));
+});
+
+test("approved same-reference advertisements select the latest actual microsecond capture with an audit decision", () => {
+  const old = authorityAd("4097589", {
+    captured_at: "2026-11-14T02:00:00.123001Z",
+    fields: { price: "110", title: "Old", description: "Old description" },
+  });
+  const latest = authorityAd("4068170", {
+    captured_at: "2026-11-14T02:00:00.123002Z",
+    fields: { price: "100", title: "Latest", description: "Current description" },
+  });
+  const selected = selectSourceFields([old, latest]);
+  assert.deepEqual(selected, selectSourceFields([latest, old]));
+  assert.equal(selected.ambiguous, false);
+  assert.equal(selected.values.price, "100");
+  assert.equal(selected.values.description, "Current description");
+  assert.equal(selected.provenance.price.observationId, latest.observation_id);
+  assert.equal(selected.provenance.price.reason, "source_authority_latest");
+  const conflict = selected.conflicts.find((item) => item.field === "price");
+  assert.equal(conflict.resolution, "keep_latest_28hse");
+  assert.equal(conflict.primaryAdvertisementId, "4068170");
+  assert.equal(conflict.secondaryAdvertisementId, "4097589");
+  assert.equal(conflict.primaryObservedAt, latest.captured_at);
+  assert.equal(conflict.authority.approval_ref, "USER:source-priority");
+});
+
+test("equal approved capture times choose numeric advertisement ID descending", () => {
+  const nine = authorityAd("9", { fields: { price: "90" } });
+  const ten = authorityAd("10", { fields: { price: "100" } });
+  assert.equal(selectSourceFields([nine, ten]).values.price, "100");
+  assert.deepEqual(selectSourceFields([nine, ten]), selectSourceFields([ten, nine]));
+});
+
+test("missing authority identity, capture, scope or approval retains default conflicting-ad hold", () => {
+  for (const override of [
+    { raw_identity: {} },
+    { raw_identity: { agency_property_no: "invalid" } },
+    { raw_identity: { agency_property_no: "C014575" } },
+    { scope_id: null },
+    { scope_id: "agent:999" },
+    { policy_version: "unapproved" },
+    { deal_type: "rent" },
+    { fetched_at: null },
+    { captured_at: "invalid" },
+    { source_status: "unknown" },
+    { policy_config: { company_number_identity: { approved: true } } },
+    { policy_config: { source_authority: { approved: false } } },
+  ]) {
+    const first = authorityAd("4068170", { fields: { price: "110" } });
+    const invalid = authorityAd("4097589", { ...override, fields: { price: "100" } });
+    assert.equal(selectSourceFields([first, invalid]).ambiguous, true, JSON.stringify(override));
+  }
+  assert.throws(
+    () =>
+      selectSourceFields([
+        authorityAd("1", {
+          policy_config: {
+            source_authority: { approved: true, version: "unknown", approval_ref: "owner" },
+          },
+        }),
+      ]),
+    /invalid_source_authority_policy/,
+  );
+});
+
+test("authority does not change unapproved deterministic whole-advertisement selection", () => {
+  const old = authorityAd("4068170", {
+    policy_config: {},
+    fields: { price: "100", description: "Old" },
+  });
+  const fresh = authorityAd("4097589", {
+    policy_config: {},
+    captured_at: "2026-11-14T03:00:00Z",
+    fields: { price: "100", description: "New" },
+  });
+  // Legacy company approval is still required whenever a DB config was supplied.
+  old.policy_config.company_number_identity = { approved: true };
+  fresh.policy_config.company_number_identity = { approved: true };
+  assert.equal(selectSourceFields([fresh, old]).values.description, "Old");
+  assert.equal(selectSourceFields([fresh, { ...old, fields: { price: "120" } }]).ambiguous, true);
+});
+
+test("ambiguous lower-priority rows cannot quarantine approved primary data or supply missing values", () => {
+  const approved = authorityAd("4068170", {
+    fields: { price: "100", bedrooms: 0, saleable_area: null, floor: null },
+  });
+  const lower = {
+    ...secondary,
+    external_listing_id: "one",
+    unit_key: "one",
+    deal_type: "sale",
+    fields: { price: "200", saleable_area: "500", floor: "13" },
+  };
+  const other = {
+    ...lower,
+    external_listing_id: "two",
+    unit_key: "two",
+    fields: { price: "300", saleable_area: "600" },
+  };
+  for (const sources of [
+    [approved, lower, other],
+    [other, approved, lower],
+    [approved, { ...lower, source_status: "unknown" }],
+  ]) {
+    const selected = selectSourceFields(sources);
+    assert.equal(selected.ambiguous, false);
+    assert.equal(selected.values.price, "100");
+    assert.equal(selected.values.bedrooms, 0);
+    assert.equal(selected.values.saleable_area, undefined);
+    assert.equal(selected.values.floor, undefined);
+    assert.deepEqual(selected.clearFields, []);
+    assert.equal(selected.lifecycle, "active");
+  }
+  const notApproved = { ...approved, policy_config: {} };
+  assert.equal(selectSourceFields([notApproved, lower, other]).ambiguous, true);
+});
+
+test("lower-priority authority config cannot authorize an unapproved primary or replace a known fact", () => {
+  const unapproved = authorityAd("4068170", { policy_config: {}, fields: { price: "100" } });
+  const lower = {
+    ...secondary,
+    ...authorityAd("4097589"),
+    source: "propertyhk",
+    unit_key: "one",
+    fields: { price: "200" },
+  };
+  const conflict = selectSourceFields([unapproved, lower]);
+  assert.equal(conflict.values.price, "100");
+  assert.equal(conflict.provenance.price.reason, "primary");
+  assert.equal(
+    selectSourceFields([unapproved, lower, { ...lower, unit_key: "two" }]).ambiguous,
+    true,
+  );
+});
+
+test("approved latest lifecycle preserves inferred absence and explicit terminal chronology", () => {
+  const active = authorityAd("4068170", { captured_at: "2026-11-14T02:00:00Z" });
+  const inferred = authorityAd("4097589", {
+    source_status: "delisted",
+    captured_at: "2026-11-14T03:00:00Z",
+  });
+  assert.equal(selectSourceFields([active, inferred]).lifecycle, "active");
+  const sold = { ...inferred, source_status_reason: "sold" };
+  assert.equal(selectSourceFields([active, sold]).lifecycle, "inactive");
+  assert.equal(
+    selectSourceFields([{ ...active, captured_at: "2026-11-14T04:00:00Z" }, sold]).lifecycle,
+    "active",
+  );
+});
+
+test("approved source ordering never widens a controlled projection", () => {
+  const approved = authorityAd("4068170", {
+    projection: { mode: "controlled-patch-v1", fields: ["price"] },
+    fields: { price: "100", description: "Not approved here" },
+  });
+  const selected = selectSourceFields([approved, secondary]);
+  assert.equal(selected.values.price, "100");
+  assert.equal(selected.values.description, undefined);
+  assert.deepEqual(selected.clearFields, []);
+  assert.equal(selected.lifecycle, null);
 });
 
 test("verified Property.hk exact equivalent advertisements may share canonical with explicit consistency", () => {
