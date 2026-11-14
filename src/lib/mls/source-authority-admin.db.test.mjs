@@ -3,9 +3,11 @@ import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import {
   CURRENT_PUBLIC_OFFERING_ORDER,
+  LISTING_FRESHNESS_ORDER,
   canonicalListingCte,
 } from "../neon/public-listing-query.js";
 import { withAuthorityDatabase } from "./source-authority-db-fixtures.mjs";
+import { SOURCE_28HSE } from "./source-contract.mjs";
 
 // The fixture starts its own verified loopback PostgreSQL and applies the real
 // migration ledger. No environment-provided database target is accepted here.
@@ -375,6 +377,83 @@ test("owned PostgreSQL admin and handover select the same authoritative public o
           assert.equal(withdrawn.rows[0].reasonCode, "WA_LINK_PUBLIC_OFFER_UNAVAILABLE");
         }
         assert.equal(await countLinks(), linkCount);
+        assert.deepEqual(await aliases(ref), beforeAliases);
+      },
+    );
+    await t.test(
+      "cross-deal source authority selects house information without changing commercial group ordering",
+      async () => {
+        const ref = "A940008";
+        const sourceSale = await seedProperty(ref, {
+          listing_no: "AUTHORITY-CROSS-DEAL-SALE",
+          source_site: SOURCE_28HSE,
+          title_zh: "Authoritative sale house information",
+          deal_type: "sale",
+          source_authority: "28hse",
+          source_updated_at: null,
+          featured: false,
+          last_seen_at: "2026-01-01T00:00:00Z",
+          created_at: "2026-01-01T00:00:00Z",
+        });
+        const legacyRent = await seedProperty(ref, {
+          listing_no: "LEGACY-CROSS-DEAL-RENT",
+          title_zh: "Legacy rental house information",
+          deal_type: "rent",
+          featured: true,
+          source_updated_at: "2099-12-31T00:00:00Z",
+          last_seen_at: "2099-12-31T00:00:00Z",
+          created_at: "2099-12-31T00:00:00Z",
+        });
+        const featuredGroup = await seedProperty("A940009", {
+          featured: true,
+          last_seen_at: "2026-06-01T00:00:00Z",
+          created_at: "2026-06-01T00:00:00Z",
+        });
+        const recentGroup = await seedProperty("A940010", {
+          featured: false,
+          last_seen_at: "2026-11-01T00:00:00Z",
+          created_at: "2026-11-01T00:00:00Z",
+        });
+        const refs = [ref, "A940009", "A940010"];
+        const beforeAliases = await aliases(ref);
+        for (const candidateOrder of [LISTING_FRESHNESS_ORDER, "p.created_at DESC, p.id ASC"]) {
+          const cards = await q(
+            canonicalListingCte(
+              "current_offerings.public_listing_no = ANY($1::text[])",
+              false,
+              candidateOrder,
+            ) +
+              ` SELECT p.id,p.title_zh,p.source_updated_at,c.public_listing_no,c.listing_aliases,c.offerings FROM canonical c JOIN properties p ON p.id=c.id ORDER BY ${LISTING_FRESHNESS_ORDER}`,
+            [refs],
+          );
+          assert.deepEqual(
+            cards.map((row) => row.id),
+            [featuredGroup.id, recentGroup.id, sourceSale.id],
+            "ordinary featured and freshness ordering still ranks separate groups before the authoritative group",
+          );
+          const card = cards.find((row) => row.public_listing_no === ref);
+          assert.equal(card.id, sourceSale.id);
+          assert.equal(card.title_zh, "Authoritative sale house information");
+          assert.equal(card.source_updated_at, null);
+          assert.deepEqual(
+            [...card.listing_aliases].sort(),
+            [sourceSale.listing_no, legacyRent.listing_no].sort(),
+          );
+          assert.deepEqual(
+            card.offerings.map((offer) => offer.id).sort(),
+            [sourceSale.id, legacyRent.id].sort(),
+            "choosing shared house information retains both current deals",
+          );
+        }
+        const split = await q(
+          canonicalListingCte("current_offerings.public_listing_no=$1", true) +
+            " SELECT p.id FROM canonical c JOIN properties p ON p.id=c.id ORDER BY p.id",
+          [ref],
+        );
+        assert.deepEqual(
+          split.map((row) => row.id),
+          [sourceSale.id, legacyRent.id].sort(),
+        );
         assert.deepEqual(await aliases(ref), beforeAliases);
       },
     );

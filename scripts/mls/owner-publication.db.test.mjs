@@ -9,6 +9,7 @@ import sharp from "sharp";
 import { applyIngestion } from "../../src/lib/mls/ingestion-repository.mjs";
 import { batch as dailyBatch } from "../../src/lib/mls/ingestion-test-fixtures.mjs";
 import { withOwnedPostgres } from "../acceptance/owned-postgres-test.mjs";
+import { applySourceAuthorityColumn } from "./source-authority-fixture.mjs";
 import {
   buildSavedImportPlan,
   assertImportTarget,
@@ -70,6 +71,7 @@ test("owner capture: 22 drafts + 8 inactive in place,23 creates,2 choices,sold/s
         "20260909120000_source_promotion_tiers.sql",
       ])
         await q(await readFile(new URL("../../neon/migrations/" + file, import.meta.url), "utf8"));
+      await applySourceAuthorityColumn(client);
       await q("SELECT set_config('app.mls_writer_policy','no-hermes-v2',false)");
       await q(
         "INSERT INTO mls_ingestion_policies(source,scope_id,policy_version,parser_version,owner,publish_enabled,bootstrap_approved_at,bootstrap_approved_by) VALUES('28hse_agent_540','agent:540','no-hermes-v2','python-v2.2','no-hermes-v2',true,now(),'synthetic-owner')",
@@ -547,6 +549,7 @@ test("same owner-capture bundle does not reactivate a listing staff turned off",
         "20260909120000_source_promotion_tiers.sql",
       ])
         await q(await readFile(new URL("../../neon/migrations/" + file, import.meta.url), "utf8"));
+      await applySourceAuthorityColumn(client);
       await q("SELECT set_config('app.mls_writer_policy','no-hermes-v2',false)");
       await q(
         "INSERT INTO mls_ingestion_policies(source,scope_id,policy_version,parser_version,owner,publish_enabled,bootstrap_approved_at,bootstrap_approved_by) VALUES('28hse_agent_540','agent:540','no-hermes-v2','python-v2.2','no-hermes-v2',true,now(),'synthetic-owner')",

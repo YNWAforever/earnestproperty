@@ -709,7 +709,10 @@ test("newest prioritizes actual listing creation, including group representative
     rows.text.indexOf("eligible_candidates AS"),
     rows.text.indexOf("eligible_groups AS"),
   );
-  assert.match(candidates, /ORDER BY p\.created_at DESC, p\.id ASC/);
+  assert.match(
+    candidates,
+    /ORDER BY CASE WHEN p\.source_authority = '28hse' THEN 0 ELSE 1 END, p\.created_at DESC, p\.id ASC/,
+  );
   assert.doesNotMatch(candidates, /p\.featured DESC|p\.last_seen_at DESC/);
 });
 
