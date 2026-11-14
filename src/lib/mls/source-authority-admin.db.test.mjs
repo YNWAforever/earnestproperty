@@ -6,7 +6,7 @@ import {
   LISTING_FRESHNESS_ORDER,
   canonicalListingCte,
 } from "../neon/public-listing-query.js";
-import { withAuthorityDatabase } from "./source-authority-db-fixtures.mjs";
+import { withAuthorityDatabase } from "../../../scripts/acceptance/source-authority-db-fixtures.mjs";
 import { SOURCE_28HSE } from "./source-contract.mjs";
 
 // The fixture starts its own verified loopback PostgreSQL and applies the real

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
-import { withOwnedPostgres } from "../../../scripts/acceptance/owned-postgres-test.mjs";
-import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
-import { incrementalBatch, member } from "./incremental-test-fixtures.mjs";
-import { row } from "./ingestion-test-fixtures.mjs";
-import { applyIngestion } from "./ingestion-repository.mjs";
-import { SOURCE_28HSE } from "./source-contract.mjs";
-import { SOURCE_AUTHORITY_POLICY } from "./source-authority-policy.mjs";
-import { hashPayload } from "./ingestion-contract.mjs";
+import { withOwnedPostgres } from "./owned-postgres-test.mjs";
+import { MIGRATION_VERSIONS } from "../../src/lib/control-plane/migration-versions.js";
+import { incrementalBatch, member } from "../../src/lib/mls/incremental-test-fixtures.mjs";
+import { row } from "../../src/lib/mls/ingestion-test-fixtures.mjs";
+import { applyIngestion } from "../../src/lib/mls/ingestion-repository.mjs";
+import { SOURCE_28HSE } from "../../src/lib/mls/source-contract.mjs";
+import { SOURCE_AUTHORITY_POLICY } from "../../src/lib/mls/source-authority-policy.mjs";
+import { hashPayload } from "../../src/lib/mls/ingestion-contract.mjs";
 
 export const AUTHORITY_MIGRATION = "20261114040000_property_source_authority.sql";
 export const AUTHORITY_HOST = "owned-authority.public.blob.vercel-storage.com";

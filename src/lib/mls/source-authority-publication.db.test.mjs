@@ -12,7 +12,7 @@ import {
   authorityCapture,
   prepareAuthorityMedia,
   withAuthorityDatabase,
-} from "./source-authority-db-fixtures.mjs";
+} from "../../../scripts/acceptance/source-authority-db-fixtures.mjs";
 
 // No disposable URL escape hatch: even a configured Root.env or TEST_DATABASE_URL
 // cannot change this suite's new, verified, loopback-only owned Docker target.
