@@ -205,7 +205,16 @@ test("the feed degrades to its previous order until the migration is applied", a
   const { text } = await captureFeaturedQuery({ limit: 6 }, { tableAvailable: false });
   assert.doesNotMatch(text, /mls_source_promotion_tiers/);
   assert.doesNotMatch(text, /promotion\.rank/);
-  assert.match(text, /ORDER BY p\.created_at DESC/, "it falls back to the existing order");
+  assert.match(
+    text,
+    /eligible_candidates AS \([\s\S]*?PARTITION BY current_offerings\.public_listing_no\s+ORDER BY CASE WHEN p\.source_authority = '28hse' THEN 0 ELSE 1 END, p\.created_at DESC, p\.id ASC\s+\) AS group_rank/,
+    "the canonical representative uses source authority before the existing candidate order",
+  );
+  assert.match(
+    text,
+    /ORDER BY p\.created_at DESC, p\.id ASC\s+LIMIT/,
+    "the final feed retains its existing order",
+  );
 });
 
 test("homepage newest feed ranks new source adverts before old promoted inventory and preserves withdrawal", async () => {
@@ -218,7 +227,7 @@ test("homepage newest feed ranks new source adverts before old promoted inventor
       status text NOT NULL DEFAULT 'active', featured boolean NOT NULL DEFAULT false,
       estate_id text, district_slug text, address text, price numeric, rent numeric,
       saleable_area numeric, bedrooms numeric, bathrooms numeric, features text[],
-      images text[], video_url text, source_site text
+      images text[], video_url text, source_site text, source_authority text
     );
     CREATE TABLE property_public_members(property_id text, public_listing_no text);
     CREATE TABLE estates(id text, name_zh text, slug text, district_slug text);
@@ -381,7 +390,7 @@ test("homepage uses complete sale inventory membership and source order before L
       status text NOT NULL DEFAULT 'active', featured boolean NOT NULL DEFAULT false,
       estate_id text, district_slug text, address text, price numeric, rent numeric,
       saleable_area numeric, bedrooms numeric, bathrooms numeric, features text[],
-      images text[], video_url text, source_site text
+      images text[], video_url text, source_site text, source_authority text
     );
     CREATE TABLE property_public_members(property_id text, public_listing_no text);
     CREATE TABLE estates(id text, name_zh text, slug text, district_slug text);
@@ -755,7 +764,7 @@ test("黃金必走盤 soft-serves the newest healthy snapshot after 36 hours", a
       status text NOT NULL DEFAULT 'active', featured boolean NOT NULL DEFAULT false,
       estate_id text, district_slug text, address text, price numeric, rent numeric,
       saleable_area numeric, bedrooms numeric, bathrooms numeric, features text[],
-      images text[], video_url text, source_site text
+      images text[], video_url text, source_site text, source_authority text
     );
     CREATE TABLE property_public_members(property_id text, public_listing_no text);
     CREATE TABLE estates(id text, name_zh text, slug text, district_slug text);

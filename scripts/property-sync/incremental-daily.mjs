@@ -217,6 +217,49 @@ async function checkPrivateEvidence() {
 async function py(args) {
   return runProcess(python(), args);
 }
+export async function verifySourceAuthorityFacts(root, payload, { run = runProcess } = {}) {
+  const requestPath = join(root, "bundle/request.json");
+  const evidencePath = join(root, "bundle/evidence.json");
+  const proofPath = join(root, "source-authority-facts.json");
+  const requestBytes = await readFile(requestPath),
+    evidenceBytes = await readFile(evidencePath);
+  const payloadHash = hashPayload(payload);
+  if (hashPayload(JSON.parse(requestBytes.toString("utf8"))) !== payloadHash)
+    throw Error("SOURCE_AUTHORITY_REQUEST_CHANGED");
+  const safeEnv = Object.fromEntries(
+    Object.entries(process.env).filter(([key]) =>
+      /^(PATH|SystemRoot|WINDIR|TEMP|TMP|LANG|LC_ALL|VIRTUAL_ENV|PYTHONPATH)$/i.test(key),
+    ),
+  );
+  safeEnv.PYTHONUTF8 = "1";
+  await run(
+    python(),
+    [
+      script("source_authority_verify.py"),
+      "--request",
+      requestPath,
+      "--evidence",
+      evidencePath,
+      "--output",
+      proofPath,
+    ],
+    { env: safeEnv },
+  );
+  const proof = await json(proofPath);
+  if (
+    proof.version !== "28hse-authority-semantic-v1" ||
+    proof.status !== "verified" ||
+    proof.request_sha256 !== sha256(requestBytes) ||
+    proof.evidence_sha256 !== sha256(evidenceBytes) ||
+    proof.parser_version !== payload.meta.parser_version ||
+    proof.record_count !== payload.listings.length ||
+    sha256(await readFile(requestPath)) !== sha256(requestBytes) ||
+    sha256(await readFile(evidencePath)) !== sha256(evidenceBytes) ||
+    hashPayload(payload) !== payloadHash
+  )
+    throw Error("SOURCE_AUTHORITY_FACT_PROOF_MISMATCH");
+  return { payloadHash, parserVersion: payload.meta.parser_version, semanticProof: proof };
+}
 async function unpackBundle(archive, directory) {
   await py([
     script("incremental_evidence.py"),
@@ -517,6 +560,7 @@ export async function ingest(root, apply) {
 }
 
 export async function publish(root) {
+  nativeContext();
   await verifyBundle(join(root, "bundle"));
   const receipt = await json(join(root, "receipt.json"));
   if (receipt.success !== true || receipt.incremental !== true || receipt.full_snapshot !== false)
@@ -532,30 +576,68 @@ export async function publish(root) {
   client.neonConfig.webSocketConstructor = globalThis.WebSocket;
   try {
     await client.connect();
-    const result = await publishDaily({
-      payload,
-      client,
-      apply: true,
-      incremental: true,
-      blobStore: createVercelBlobStore({ token: process.env.BLOB_READ_WRITE_TOKEN }),
-      onReport: async (report) => {
-        await save(join(root, "publication.json"), report);
+    const { reconcileSourceAuthority } =
+      await import("../../src/lib/mls/source-authority-publication.mjs");
+    const onReport = async (report) => {
+      await save(join(root, "publication.json"), report);
+    };
+    const authoritative = await reconcileSourceAuthority(client, payload, {
+      receiptId: receipt.receipt_id,
+      evidence: await json(join(root, "bundle/evidence.json")),
+      blobStore: createVercelBlobStore({
+        token: process.env.SOURCE_AUTHORITY_BLOB_TOKEN || process.env.BLOB_READ_WRITE_TOKEN,
+      }),
+      expectedHost: process.env.SOURCE_AUTHORITY_BLOB_HOST,
+      verifyFacts: () => verifySourceAuthorityFacts(root, payload),
+      onReport,
+    });
+    const result =
+      authoritative ??
+      (await publishDaily({
+        payload,
+        client,
+        apply: true,
+        incremental: true,
+        blobStore: createVercelBlobStore({ token: process.env.BLOB_READ_WRITE_TOKEN }),
+        onReport,
+      }));
+    await save(join(root, "publication.json"), result);
+    if (result.unknown?.length) throw Error("INCREMENTAL_PUBLICATION_OUTCOME_UNKNOWN");
+  } finally {
+    try {
+      if (existsSync(join(root, "publication.json"))) {
         const context = nativeContext();
         const reportPath = join(
           root,
           `incremental-publication-${context.id}-${context.attempt}.json`,
         );
-        await save(reportPath, report);
+        await save(reportPath, await json(join(root, "publication.json")));
         await upload(reportPath);
-      },
-    });
-    await save(join(root, "publication.json"), result);
-    if (result.unknown?.length) throw Error("INCREMENTAL_PUBLICATION_OUTCOME_UNKNOWN");
-  } finally {
-    await client.end();
+      }
+    } finally {
+      await client.end();
+    }
   }
 }
 
+export function canPreserveNewerCache(publication, receipt, authority, prepared) {
+  return (
+    prepared?.replay === true &&
+    publication?.authority === "28hse-authority-v1" &&
+    publication.receiptId === receipt?.receipt_id &&
+    receipt.success === true &&
+    receipt.incremental === true &&
+    receipt.full_snapshot === false &&
+    Array.isArray(publication.held) &&
+    publication.held.length === 0 &&
+    Array.isArray(publication.unknown) &&
+    publication.unknown.length === 0 &&
+    typeof authority?.incremental_receipt_id === "string" &&
+    authority.incremental_receipt_id !== receipt.receipt_id &&
+    Number.isFinite(Date.parse(receipt.scraped_at)) &&
+    Date.parse(authority.last_incremental_scraped_at) >= Date.parse(receipt.scraped_at)
+  );
+}
 export async function accept(root) {
   const context = nativeContext();
   await verifyBundle(join(root, "bundle"));
@@ -573,12 +655,27 @@ export async function accept(root) {
   )
     throw Error("INCREMENTAL_RECEIPT_REQUIRED");
   const authority = await readSyncAuthority();
-  if (authority.incremental_receipt_id !== result.receipt_id)
-    throw Error("INCREMENTAL_CACHE_AUTHORITY_CHANGED");
   const receipt = await readReceipt(result.receipt_id);
   if (receipt.payload_hash !== hashPayload(payload))
     throw Error("INCREMENTAL_RECEIPT_HASH_MISMATCH");
   const prepared = await json(join(root, "prepared.json"));
+  if (authority.incremental_receipt_id !== result.receipt_id) {
+    if (!canPreserveNewerCache(publication, result, authority, prepared))
+      throw Error("INCREMENTAL_CACHE_AUTHORITY_CHANGED");
+    const reconciliation = {
+      kind: "28hse-authority-reconciliation-v1",
+      reconciled_receipt_id: result.receipt_id,
+      preserved_current_receipt_id: authority.incremental_receipt_id,
+      full_receipt_id: authority.receipt_id,
+      bundle_asset: prepared.bundle_asset,
+      checked_at: new Date().toISOString(),
+    };
+    await save(join(root, "cache-reconciliation.json"), reconciliation);
+    const path = join(root, `incremental-reconciliation-${context.id}-${context.attempt}.json`);
+    await save(path, reconciliation);
+    await upload(path);
+    return;
+  }
   const marker = {
     kind: "28hse-incremental-accepted-v1",
     receipt_id: result.receipt_id,

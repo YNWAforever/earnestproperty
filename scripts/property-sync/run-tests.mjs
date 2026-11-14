@@ -8,8 +8,18 @@ if (!existsSync(python)) {
   process.stderr.write("Create scripts/property-sync/.venv and install requirements.txt first.\n");
   process.exitCode = 1;
 } else {
-  const result = spawnSync(python, ["-m", "pytest", "scripts/property-sync/tests", "-q"], {
-    stdio: "inherit",
-  });
+  const result = spawnSync(
+    python,
+    [
+      "-m",
+      "pytest",
+      "scripts/property-sync/tests",
+      "scripts/property-sync/test_source_authority_verify.py",
+      "-q",
+    ],
+    {
+      stdio: "inherit",
+    },
+  );
   process.exitCode = result.status ?? 1;
 }

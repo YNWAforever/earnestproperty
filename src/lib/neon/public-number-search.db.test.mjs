@@ -51,7 +51,7 @@ test("public number and old alias find only the current active offering", async 
         source_updated_at timestamptz, last_seen_at timestamptz, updated_at timestamptz,
         created_at timestamptz, estate_id text, title_zh text, title_en text, address text,
         district_slug text, video_url text, price numeric, rent numeric, saleable_area numeric,
-        bedrooms int, agent_id text
+        bedrooms int, agent_id text, source_authority text
       );
       CREATE TABLE property_public_members (property_id text PRIMARY KEY, public_listing_no text);
       INSERT INTO properties (id, listing_no, deal_type, status, source_updated_at, created_at, title_zh)

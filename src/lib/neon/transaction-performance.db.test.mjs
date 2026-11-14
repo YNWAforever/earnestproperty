@@ -46,7 +46,8 @@ async function fixture() {
     CREATE TABLE crm_leads(id uuid PRIMARY KEY, assigned_agent_id uuid REFERENCES staff_users(id));
     CREATE TABLE property_public_groups(public_listing_no text PRIMARY KEY);
     CREATE TABLE properties(id uuid PRIMARY KEY, deal_type deal_type NOT NULL, status text NOT NULL,
-      source_updated_at timestamptz, last_seen_at timestamptz, updated_at timestamptz, created_at timestamptz);
+      source_updated_at timestamptz, last_seen_at timestamptz, updated_at timestamptz, created_at timestamptz,
+      source_authority text);
     CREATE TABLE property_public_members(property_id uuid PRIMARY KEY REFERENCES properties(id),
       public_listing_no text REFERENCES property_public_groups(public_listing_no));
   `);
@@ -272,6 +273,15 @@ test("newer withdrawn public offer cannot be linked to a verified transaction", 
       [old, withdrawn],
     );
     await assert.rejects(save(db, { ...base, publicListingNo: "A001" }), (e) => e.status === 409);
+    await db.query(
+      "UPDATE properties SET source_authority='28hse',source_updated_at=NULL,last_seen_at=NULL,updated_at=NULL WHERE id=$1",
+      [old],
+    );
+    assert.equal(
+      (await save(db, { ...base, publicListingNo: "A001" })).version,
+      1,
+      "a current active authority with unknown source date takes precedence over a newer withdrawn legacy peer",
+    );
   } finally {
     await db.close();
   }

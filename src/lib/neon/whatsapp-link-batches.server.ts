@@ -2,6 +2,7 @@ import "@tanstack/react-start/server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { queryRows } from "./db.server.ts";
+import { CURRENT_PUBLIC_OFFERING_ORDER } from "./public-listing-query.js";
 import type { StaffAccess } from "./auth.server.ts";
 import { companyChannel } from "./whatsapp-enquiries.server.ts";
 import { mintReference } from "../whatsapp-enquiries/links.ts";
@@ -70,8 +71,8 @@ export async function previewWhatsappLinkBatch(
      FROM wanted w
      LEFT JOIN LATERAL (SELECT p.id,p.status FROM property_public_members pm JOIN properties p ON p.id=pm.property_id
        WHERE pm.public_listing_no=w.d->>'publicListingNo' AND p.deal_type::text=w.d->>'dealType'
-       ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,
-         p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC LIMIT 1) offer ON true
+       ORDER BY ${CURRENT_PUBLIC_OFFERING_ORDER}
+         LIMIT 1) offer ON true
      LEFT JOIN whatsapp_tracking_link_placements reserved ON reserved.placement_key=w.placement_key
      LEFT JOIN LATERAL (
        SELECT count(*)::int n,min(l.id::text)::uuid link_id FROM whatsapp_tracking_links l JOIN whatsapp_tracking_link_versions v

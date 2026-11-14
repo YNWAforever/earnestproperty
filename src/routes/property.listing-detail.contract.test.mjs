@@ -6,6 +6,10 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Maximize, Bed, Bath, Building2, Calendar } from "lucide-react";
 import { readPublicSourceLocation } from "../lib/mls/public-source-location.mjs";
+import {
+  CURRENT_PUBLIC_OFFERING_ORDER,
+  currentPublicOfferingOrder,
+} from "../lib/neon/public-listing-query.js";
 
 // Plain data/logic module, no JSX -- importable directly under Node's native
 // type stripping (same approach src/content/castle-peak-road.test.mjs and
@@ -173,6 +177,8 @@ test("detail reader returns guarded source location for selected active offers w
     "publicAgentJoin",
     "metadataModule",
     "locationModule",
+    "CURRENT_PUBLIC_OFFERING_ORDER",
+    "currentPublicOfferingOrder",
     outputText,
   )(
     exports,
@@ -192,6 +198,8 @@ test("detail reader returns guarded source location for selected active offers w
         return { block: "9", phase: "2A" };
       },
     },
+    CURRENT_PUBLIC_OFFERING_ORDER,
+    currentPublicOfferingOrder,
   );
   const result = await exports.fetchPropertyByListingNo({ listingNo: "ALIAS" });
   assert.deepEqual(calls, [{ propertyId: "representative", ids: ["sale", "rent"] }]);

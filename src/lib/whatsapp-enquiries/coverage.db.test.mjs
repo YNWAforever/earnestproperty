@@ -14,7 +14,7 @@ test("coverage uses current public sale/rent offers and only current verified we
       CREATE TABLE properties(
         id uuid PRIMARY KEY, listing_no text, deal_type text, status text,
         source_updated_at timestamptz,last_seen_at timestamptz,updated_at timestamptz,created_at timestamptz,
-        estate_id uuid,featured boolean DEFAULT false,price integer,rent integer
+        estate_id uuid,featured boolean DEFAULT false,price integer,rent integer,source_authority text
       );
       CREATE TABLE property_public_members(property_id uuid,public_listing_no text);
       CREATE TABLE whatsapp_tracking_links(id uuid PRIMARY KEY,code text,current_version integer);
@@ -123,6 +123,32 @@ test("coverage uses current public sale/rent offers and only current verified we
       assert.equal(resolved.actions[3].mode, "untracked");
       assert.equal(resolved.actions[4].mode, "untracked");
       assert.equal(resolved.links[3].href, null);
+      await db.query(
+        "UPDATE properties SET source_authority='28hse',source_updated_at=null,last_seen_at=null,updated_at=null WHERE id=$1",
+        [id(1)],
+      );
+      await db.query(
+        "INSERT INTO properties(id,listing_no,deal_type,status,source_updated_at,created_at) VALUES($1,'later-legacy','sale','withdrawn',now()+interval '1 day',now())",
+        [id(9)],
+      );
+      await db.query("INSERT INTO property_public_members VALUES($1,'A000001')", [id(9)]);
+      const authoritative = await resolveTrackingLinks(
+        offers,
+        async (sql, params) => (await db.query(sql, params)).rows,
+      );
+      assert.equal(authoritative.actions[0].mode, "tracked");
+      assert.equal(
+        (await db.query(buildWebsiteCoverageQuery(), ["company", null, null, null])).rows.some(
+          (row) => row.property_id === id(1),
+        ),
+        true,
+      );
+      await db.query("UPDATE properties SET source_authority=null WHERE id=$1", [id(1)]);
+      const legacy = await resolveTrackingLinks(
+        offers,
+        async (sql, params) => (await db.query(sql, params)).rows,
+      );
+      assert.equal(legacy.actions[0].mode, "untracked");
     } finally {
       console.warn = warn;
       for (const [key, value] of Object.entries({

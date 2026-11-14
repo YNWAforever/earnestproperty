@@ -21,6 +21,10 @@ import {
 } from "../whatsapp-enquiries/public-context.ts";
 import { websiteCandidateLateral } from "./whatsapp-coverage-query.mjs";
 import {
+  CURRENT_PUBLIC_OFFERING_ORDER,
+  currentPublicOfferingOrder,
+} from "./public-listing-query.js";
+import {
   classifyTrackingGaps,
   trackingGapLogEntries,
   unprovisionedLogDue,
@@ -126,7 +130,7 @@ export async function listTrackingLinks(actor: StaffAccess) {
   ).map(linkDto);
 }
 /** Same current-offer ordering as public detail; never substitutes a different source row. */
-export const currentOfferSql = `SELECT p.id,p.title_zh,p.agent_id FROM properties p JOIN property_public_members m ON m.property_id=p.id WHERE p.id=$1::uuid AND m.public_listing_no=$2 AND p.deal_type::text=$3 AND p.status::text='active' AND p.id=(SELECT x.id FROM property_public_members pm JOIN properties x ON x.id=pm.property_id WHERE pm.public_listing_no=$2 AND x.deal_type::text=$3 ORDER BY x.source_updated_at DESC NULLS LAST,x.last_seen_at DESC NULLS LAST,x.updated_at DESC NULLS LAST,x.created_at DESC,x.id ASC LIMIT 1)`;
+export const currentOfferSql = `SELECT p.id,p.title_zh,p.agent_id FROM properties p JOIN property_public_members m ON m.property_id=p.id WHERE p.id=$1::uuid AND m.public_listing_no=$2 AND p.deal_type::text=$3 AND p.status::text='active' AND p.id=(SELECT x.id FROM property_public_members pm JOIN properties x ON x.id=pm.property_id WHERE pm.public_listing_no=$2 AND x.deal_type::text=$3 ORDER BY ${currentPublicOfferingOrder("x")} LIMIT 1)`;
 async function validateLink(input: TrackingLinkInput, query = queryRows) {
   if (input.referenceMappingId) {
     const [ref] = await query(
@@ -307,8 +311,7 @@ export async function resolveTrackingLinks(
        SELECT p.id,m.public_listing_no,p.deal_type,p.status,
          row_number() OVER(
            PARTITION BY m.public_listing_no,p.deal_type
-           ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,
-             p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC
+           ORDER BY ${CURRENT_PUBLIC_OFFERING_ORDER}
          ) rn
        FROM properties p JOIN property_public_members m ON m.property_id=p.id
        WHERE m.public_listing_no IN(SELECT "publicListingNo" FROM wanted)
@@ -517,7 +520,7 @@ async function trackedRedirectOrThrow(
 export async function searchLinkOffers(q: string) {
   const rows = await queryRows(
     `WITH ranked AS (
- SELECT p.id,p.title_zh,p.deal_type,p.status,p.price,p.rent,p.agent_id,m.public_listing_no,row_number() OVER(PARTITION BY m.public_listing_no,p.deal_type ORDER BY p.source_updated_at DESC NULLS LAST,p.last_seen_at DESC NULLS LAST,p.updated_at DESC NULLS LAST,p.created_at DESC,p.id ASC) rn
+ SELECT p.id,p.title_zh,p.deal_type,p.status,p.price,p.rent,p.agent_id,m.public_listing_no,row_number() OVER(PARTITION BY m.public_listing_no,p.deal_type ORDER BY ${CURRENT_PUBLIC_OFFERING_ORDER}) rn
  FROM properties p JOIN property_public_members m ON m.property_id=p.id
  ) SELECT r.id,r.title_zh,r.deal_type,r.public_listing_no,r.price,r.rent,r.agent_id,COALESCE(s.name_zh,s.name_en) AS agent_name FROM ranked r LEFT JOIN staff_users s ON s.id=r.agent_id WHERE r.rn=1 AND r.status::text='active' AND (r.public_listing_no ILIKE $1 OR r.title_zh ILIKE $1) ORDER BY r.public_listing_no,r.deal_type LIMIT 50`,
     ["%" + q.slice(0, 100) + "%"],

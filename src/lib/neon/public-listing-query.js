@@ -1,7 +1,12 @@
 // Canonical public offering selection shared by listing reads and overview counts.
-// Rank every status first: a newer withdrawal suppresses an older active scrape.
-export const CURRENT_PUBLIC_OFFERING_ORDER =
-  "p.source_updated_at DESC NULLS LAST, p.last_seen_at DESC NULLS LAST, p.updated_at DESC NULLS LAST, p.created_at DESC, p.id ASC";
+// Rank every status first: an authoritative withdrawal also suppresses legacy active rows.
+// A source with an unknown update date must not lose to a lower-priority import.
+const AUTHORITY_ORDER = "CASE WHEN p.source_authority = '28hse' THEN 0 ELSE 1 END";
+export const CURRENT_PUBLIC_OFFERING_ORDER = `${AUTHORITY_ORDER}, p.source_updated_at DESC NULLS LAST, p.last_seen_at DESC NULLS LAST, p.updated_at DESC NULLS LAST, p.created_at DESC, p.id ASC`;
+export function currentPublicOfferingOrder(alias = "p") {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(alias)) throw new Error("INVALID_OFFERING_ALIAS");
+  return CURRENT_PUBLIC_OFFERING_ORDER.replaceAll("p.", `${alias}.`);
+}
 export const LISTING_FRESHNESS_ORDER =
   "p.featured DESC, p.last_seen_at DESC NULLS LAST, p.created_at DESC, p.id ASC";
 
@@ -22,7 +27,7 @@ export function canonicalListingCte(
   ), eligible_candidates AS (
     SELECT p.id, current_offerings.public_listing_no, ROW_NUMBER() OVER (
       PARTITION BY current_offerings.public_listing_no${splitByDeal ? ", p.deal_type" : ""}
-      ORDER BY ${candidateOrder}
+      ORDER BY ${AUTHORITY_ORDER}, ${candidateOrder}
     ) AS group_rank
     FROM current_offerings
     JOIN properties p ON p.id = current_offerings.id

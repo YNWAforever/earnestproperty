@@ -1,3 +1,5 @@
+import { currentPublicOfferingOrder } from "./public-listing-query.js";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MONEY = /^(?:0|[1-9]\d{0,13})(?:\.\d{1,2})?$/;
 const statuses = new Set(["draft", "verified_attributed", "verified_unattributed", "cancelled"]);
@@ -88,8 +90,8 @@ WITH credit_input AS (
      AND p.id=(SELECT latest.id FROM property_public_members member
        JOIN properties latest ON latest.id=member.property_id
        WHERE member.public_listing_no=$4::text AND latest.deal_type=t.deal_type
-       ORDER BY latest.source_updated_at DESC NULLS LAST,latest.last_seen_at DESC NULLS LAST,
-         latest.updated_at DESC NULLS LAST,latest.created_at DESC,latest.id ASC LIMIT 1)))
+       ORDER BY ${currentPublicOfferingOrder("latest")}
+         LIMIT 1)))
  AND ($3::uuid IS NULL OR EXISTS(
    SELECT 1 FROM crm_leads lead LEFT JOIN staff_users lead_owner ON lead_owner.id=lead.assigned_agent_id
    WHERE lead.id=$3::uuid AND ($13::boolean OR lead_owner.branch_id=(SELECT branch_id FROM staff_users WHERE id=$12::uuid))))

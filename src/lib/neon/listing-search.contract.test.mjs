@@ -85,11 +85,14 @@ test("sitemap lists only groups with a current active offering", async () => {
     db.exec(`
       CREATE TABLE properties (
         id TEXT PRIMARY KEY, deal_type TEXT, status TEXT,
-        source_updated_at TEXT, last_seen_at TEXT, updated_at TEXT, created_at TEXT
+        source_updated_at TEXT, last_seen_at TEXT, updated_at TEXT, created_at TEXT,
+        source_authority TEXT
       );
       CREATE TABLE property_public_members (property_id TEXT, public_listing_no TEXT);
     `);
-    const insertProperty = db.prepare("INSERT INTO properties VALUES (?, ?, ?, ?, ?, ?, ?)");
+    const insertProperty = db.prepare(
+      "INSERT INTO properties (id, deal_type, status, source_updated_at, last_seen_at, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    );
     const insertMember = db.prepare("INSERT INTO property_public_members VALUES (?, ?)");
     for (const [id, publicNo, dealType, status, date] of [
       ["old-sale", "P-001", "sale", "active", "2026-01-01"],
@@ -709,7 +712,10 @@ test("newest prioritizes actual listing creation, including group representative
     rows.text.indexOf("eligible_candidates AS"),
     rows.text.indexOf("eligible_groups AS"),
   );
-  assert.match(candidates, /ORDER BY p\.created_at DESC, p\.id ASC/);
+  assert.match(
+    candidates,
+    /ORDER BY CASE WHEN p\.source_authority = '28hse' THEN 0 ELSE 1 END, p\.created_at DESC, p\.id ASC/,
+  );
   assert.doesNotMatch(candidates, /p\.featured DESC|p\.last_seen_at DESC/);
 });
 
