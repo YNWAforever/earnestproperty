@@ -7,6 +7,7 @@ import test from "node:test";
 import pg from "pg";
 import sharp from "sharp";
 import { withOwnedPostgres } from "../acceptance/owned-postgres-test.mjs";
+import { applySourceAuthorityColumn } from "./source-authority-fixture.mjs";
 import {
   buildSavedImportPlan,
   applySavedImport,
@@ -75,6 +76,7 @@ test("local PostgreSQL: 52 creates + 3 in-place updates, sold skipped, owned pho
           throw new Error(`Migration ${migration}: ${error.message}`, { cause: error });
         }
       }
+      await applySourceAuthorityColumn(client);
       // Exercise only the review-only schema guard in an isolated schema, not the owner policy seed.
       const preparedSql = (
         await readFile(
