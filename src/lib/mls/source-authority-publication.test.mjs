@@ -33,6 +33,107 @@ test("observed 28Hse facts replace legacy values without claiming missing fields
   assert.equal(values.source_updated_at, null);
   assert.equal(values.status, "active");
 });
+test("verified orientation removes only conflicting standalone direction features", () => {
+  const target = {
+    district_slug: "tuen-mun",
+    features: ["西南", "海景", "南", "全新裝修", "座向：西南", "SW"],
+  };
+  const before = structuredClone(target);
+  const values = authorityValues(record({ orientation: "南" }), target, {});
+  assert.equal(values.orientation, "南");
+  assert.deepEqual(values.features, ["海景", "南", "全新裝修"]);
+  assert.deepEqual(target, before);
+  assert.equal(
+    Object.hasOwn(
+      authorityValues(record({ orientation: "南" }), { ...target, features: values.features }, {}),
+      "features",
+    ),
+    false,
+  );
+});
+
+for (const [chinese, alias] of [
+  ["北", "N"],
+  ["東北", "NE"],
+  ["東", "E"],
+  ["東南", "SE"],
+  ["南", "S"],
+  ["西南", "SW"],
+  ["西", "W"],
+  ["西北", "NW"],
+]) {
+  test(`exact ${chinese}/${alias} direction aliases agree without rewriting retained tags`, () => {
+    const matching = [chinese, alias, ` 座向： ${alias.toLowerCase()} `, "海景"];
+    const conflicting = chinese === "南" ? "北" : "南";
+    const values = authorityValues(
+      record({ orientation: alias.toLowerCase() }),
+      { district_slug: "tuen-mun", features: [conflicting, ...matching] },
+      {},
+    );
+    assert.deepEqual(values.features, matching);
+    const unchanged = authorityValues(
+      record({ orientation: `座向: ${chinese}` }),
+      { district_slug: "tuen-mun", features: matching },
+      {},
+    );
+    assert.equal(Object.hasOwn(unchanged, "features"), false);
+  });
+}
+
+test("absent or unknown source orientation never claims legacy features", () => {
+  for (const orientation of [undefined, null, "", "  ", "不詳", "西南偏南", "南／西南", "海景"]) {
+    const target = { district_slug: "tuen-mun", features: ["西南", "南", "SW", "海景"] };
+    assert.equal(
+      Object.hasOwn(authorityValues(record({ orientation }), target, {}), "features"),
+      false,
+    );
+    assert.deepEqual(target.features, ["西南", "南", "SW", "海景"]);
+  }
+});
+
+test("narrative and unrecognized direction-like features survive exact-tag cleanup", () => {
+  const retained = [
+    "西南海景",
+    "向西南望開揚",
+    "東南向高層",
+    "座向：西南，開揚",
+    "南偏西",
+    "朝向西南",
+    "西南 / 南",
+    "座向景觀：西南",
+    "SW balcony",
+    "South-facing balcony",
+    "南",
+    "S",
+  ];
+  const values = authorityValues(
+    record({ orientation: "南" }),
+    { district_slug: "tuen-mun", features: ["西南", ...retained] },
+    {},
+  );
+  assert.deepEqual(values.features, retained);
+});
+
+test("all conflicting standalone direction tags may be removed without inventing replacement features", () => {
+  const values = authorityValues(
+    record({ orientation: "南" }),
+    { district_slug: "tuen-mun", features: ["西南", "SW", " 座向：西南 "] },
+    {},
+  );
+  assert.deepEqual(values.features, []);
+});
+
+test("missing, empty or unrecognized feature containers are left unclaimed", () => {
+  for (const features of [undefined, null, [], "西南"]) {
+    const values = authorityValues(
+      record({ orientation: "南" }),
+      { district_slug: "tuen-mun", features },
+      {},
+    );
+    assert.equal(Object.hasOwn(values, "features"), false);
+  }
+});
+
 test("a visible but unmapped estate cannot retain a conflicting legacy estate", () => {
   const values = authorityValues(
     record({ estate: "村屋" }),
