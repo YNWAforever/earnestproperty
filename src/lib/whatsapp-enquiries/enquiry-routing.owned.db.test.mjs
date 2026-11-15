@@ -4,6 +4,8 @@ import test from "node:test";
 import { withOwnedPostgres } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
 import { resolveEnquiryForwarding } from "./enquiry-routing.server.ts";
+import { normalizePhone } from "../phone.js";
+import { notificationPhone } from "./enquiry-routing.mjs";
 const migration = "20261116000000_enquiry_forwarding.sql";
 const versions = MIGRATION_VERSIONS.includes(migration)
   ? MIGRATION_VERSIONS
@@ -13,6 +15,63 @@ const id = (n) => `90000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 test("owned forwarding schema is disabled by default and routes only approved new notification subjects", async (t) => {
   await withOwnedPostgres(
     async ({ query: q }) => {
+      await t.test(
+        "the migrated SQL helper shares canonical HK notification spellings and the explicit mobile-only policy",
+        async () => {
+          const cases = [];
+          for (const prefix of [4, 5, 6, 7, 8, 9]) {
+            const local = `${prefix}1234567`;
+            for (const raw of [
+              local,
+              `852${local}`,
+              `00852${local}`,
+              `${local.slice(0, 4)} ${local.slice(4)}`,
+              `+852 ${local.slice(0, 4)}-${local.slice(4)}`,
+              `00852 ${local.slice(0, 4)} ${local.slice(4)}`,
+              `(852) ${local.slice(0, 4)}.${local.slice(4)}`,
+              `  ${local.slice(0, 4)}\t${local.slice(4)}  `,
+            ])
+              cases.push({ raw, canonical: `852${local}`, destination: `852${local}` });
+          }
+          // Identity accepts landlines and international customers; this notification
+          // destination helper deliberately permits only HK prefixes 4 through 9.
+          cases.push(
+            { raw: "2688 2988", canonical: "85226882988", destination: null },
+            { raw: "+852 3688 2988", canonical: "85236882988", destination: null },
+            { raw: "00852 2688 2988", canonical: "85226882988", destination: null },
+            { raw: "+44 20 7946 0958", canonical: "442079460958", destination: null },
+            { raw: "0044 20 7946 0958", canonical: "442079460958", destination: null },
+            { raw: "8613812345678", canonical: "8613812345678", destination: null },
+          );
+          for (const raw of [
+            null,
+            "",
+            "abc",
+            "00000000",
+            "01234567",
+            "12345678",
+            "9123456",
+            "912345678",
+            "+852 9123 456",
+            "+85212345678",
+            "+1234567890123456",
+            "9123 4567 ext 12",
+            "9123 4567 / 9876 5432",
+          ])
+            cases.push({ raw, canonical: null, destination: null });
+          const rows = await q(
+            "SELECT value AS raw, enquiry_notification_phone(value) AS phone FROM unnest($1::text[]) WITH ORDINALITY AS inputs(value, ordinal) ORDER BY ordinal",
+            [cases.map(({ raw }) => raw)],
+          );
+          assert.equal(rows.length, cases.length);
+          for (const [index, { raw, canonical, destination }] of cases.entries()) {
+            const label = JSON.stringify(raw);
+            assert.equal(normalizePhone(raw), canonical, `shared identity: ${label}`);
+            assert.equal(notificationPhone(raw), destination, `notification policy: ${label}`);
+            assert.deepEqual(rows[index], { raw, phone: destination }, `migrated SQL: ${label}`);
+          }
+        },
+      );
       const roleCount = (await q("SELECT count(*)::int n FROM staff_roles"))[0].n;
       const [customer] = await q(
         "INSERT INTO crm_contacts(name,phone,normalized_phone) VALUES('Owned Customer','9888 1234','85298881234') RETURNING id",

@@ -149,6 +149,9 @@ export const STAFF_RECONCILED_COLUMNS = [
   { table: "inquiries", column: "enquiry_owner_staff_id" },
   { table: "staff_external_references", column: "staff_id" },
   { table: "staff_notification_endpoints", column: "staff_id" },
+  // A verified phone destination identifies its original colleague. Transferring a lead
+  // cannot transfer that identity or permission to send to the registered phone.
+  { table: "enquiry_notification_recipients", column: "staff_id" },
   { table: "whatsapp_conversations", column: "confirmed_staff_id" },
   { table: "whatsapp_staff_channels", column: "staff_id" },
   { table: "whatsapp_human_response_evidence", column: "staff_id" },

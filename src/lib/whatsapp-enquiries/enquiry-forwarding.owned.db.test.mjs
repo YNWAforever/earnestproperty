@@ -57,6 +57,8 @@ test(
           const { resolveEnquiryForwarding } = await import("./enquiry-routing.server.ts");
           const { isolateSignedStaffEvent } = await import("./staff-event-isolation.server.ts");
           const { observeEpisode } = await import("./episodes.server.ts");
+          const { normalizeWoztellEvent } = await import("../woztell/woztell.server.ts");
+          const { ingestWoztellEvent } = await import("../woztell/woztell-ingest.server.ts");
           for (const manager of Object.values(ENQUIRY_MANAGERS))
             await query(
               "INSERT INTO staff_users(id,name_zh,active,show_on_website,phone) VALUES($1,'Owned photographed manager',true,true,$2) ON CONFLICT(id) DO NOTHING",
@@ -310,6 +312,138 @@ test(
                 await resolveEnquiryForwarding(query, { source: "website", subjectId: lead }),
                 null,
               );
+            },
+          );
+          await t.test(
+            "the verified copy contact's first plain message after global pause remains internal before any member binding",
+            async () => {
+              const s = await scenario();
+              const [copy] = await query(
+                "SELECT staff_id,enabled,verified_at,permission_granted FROM enquiry_notification_recipients WHERE recipient_key='copy'",
+              );
+              assert.equal(copy.staff_id, null);
+              assert.equal(copy.enabled, true);
+              assert.ok(copy.verified_at);
+              assert.equal(copy.permission_granted, true);
+              assert.equal(
+                (
+                  await query(
+                    "SELECT count(*)::int n FROM staff_users WHERE enquiry_notification_phone(phone)='85297987774' OR enquiry_notification_phone(whatsapp)='85297987774'",
+                  )
+                )[0].n,
+                0,
+                "copy is a pure contact with no staff-profile fallback",
+              );
+              const member = `owned-first-paused-copy-${randomUUID()}`;
+              const now = new Date();
+              const incoming = normalizeWoztellEvent({
+                type: "TEXT",
+                app: "owned-paused-copy-app",
+                channel: s.channel,
+                member,
+                from: "85297987774",
+                messageId: `owned-first-copy-${randomUUID()}`,
+                timestamp: Math.floor(now.getTime() / 1000),
+                data: { text: "收到，會跟進。" },
+              });
+              assert.equal(incoming.woztellMemberId, member);
+              assert.equal(incoming.fromPhone, "85297987774");
+              assert.equal(incoming.legacyExternalMessageId, null);
+              assert.equal(incoming.payload.context, undefined);
+              assert.deepEqual(
+                (
+                  await query(
+                    "SELECT (SELECT count(*) FROM staff_notification_attempts WHERE channel_id_snapshot=$1)::int attempts,(SELECT count(*) FROM staff_notification_internal_events WHERE channel_id=$1 AND member_id=$2)::int internal,(SELECT count(*) FROM whatsapp_conversations WHERE channel_id=$1 AND woztell_member_id=$2)::int conversations,(SELECT count(*) FROM crm_contacts WHERE whatsapp_member_id=$2)::int contacts",
+                    [s.channel, member],
+                  )
+                )[0],
+                { attempts: 0, internal: 0, conversations: 0, contacts: 0 },
+              );
+              const [customer] = await query(
+                "INSERT INTO crm_contacts(name,phone,normalized_phone,assigned_agent_id,opt_in_whatsapp) VALUES('Owned protected customer',$1,$1,$2,true) RETURNING id",
+                [`8529850${String(s.n).padStart(4, "0")}`, s.staff[0].id],
+              );
+              await query(
+                "INSERT INTO whatsapp_conversations(contact_id,channel_id,woztell_member_id,assigned_agent_id,assignment_lock) VALUES($1,$2,$3,$4,true)",
+                [customer.id, s.channel, `owned-existing-customer-${randomUUID()}`, s.staff[1].id],
+              );
+              await query("UPDATE enquiry_notification_recipients SET enabled=false WHERE enabled");
+              assert.equal(
+                (await query("SELECT enquiry_forwarding_is_enabled($1) AS enabled", [s.channel]))[0]
+                  .enabled,
+                false,
+              );
+              const counts = async () =>
+                (
+                  await query(
+                    "SELECT (SELECT count(*) FROM crm_contacts)::int contacts,(SELECT count(*) FROM crm_leads)::int leads,(SELECT count(*) FROM inquiries)::int inquiries,(SELECT count(*) FROM whatsapp_enquiry_events)::int events,(SELECT count(*) FROM ops_jobs)::int jobs,(SELECT count(*) FROM whatsapp_conversations)::int conversations,(SELECT count(*) FROM whatsapp_messages)::int messages,(SELECT count(*) FROM staff_roles)::int roles",
+                  )
+                )[0];
+              const ownership = async () => ({
+                contacts: await query(
+                  "SELECT id,assigned_agent_id,opt_in_whatsapp,opted_out_whatsapp FROM crm_contacts ORDER BY id",
+                ),
+                conversations: await query(
+                  "SELECT id,contact_id,assigned_agent_id,assignment_lock FROM whatsapp_conversations ORDER BY id",
+                ),
+              });
+              const before = await counts(),
+                ownerBefore = await ownership();
+              let wakes = 0;
+              const outcome = await ingestWoztellEvent(incoming, "live_webhook", transaction, {
+                signedEvent: true,
+                mode: "observe",
+                now,
+                wake: () => {
+                  wakes++;
+                },
+              });
+              const after = await counts();
+              const internal = await query(
+                "SELECT association_state,notification_attempt_id,event_kind FROM staff_notification_internal_events WHERE channel_id=$1 AND member_id=$2",
+                [s.channel, member],
+              );
+              assert.equal(
+                outcome.skipped,
+                "staff-internal",
+                JSON.stringify({ outcome, before, after, internal }),
+              );
+              assert.deepEqual(outcome, {
+                contactId: null,
+                conversationId: null,
+                messageInserted: false,
+                skipped: "staff-internal",
+                identityReview: false,
+              });
+              assert.deepEqual(
+                after,
+                before,
+                "paused internal replies cannot create customer, ledger or workflow rows",
+              );
+              assert.deepEqual(
+                await ownership(),
+                ownerBefore,
+                "customer consent and conversation owners remain intact",
+              );
+              assert.deepEqual(internal, [
+                { association_state: "review", notification_attempt_id: null, event_kind: "TEXT" },
+              ]);
+              assert.equal(
+                (
+                  await query(
+                    "SELECT count(*)::int n FROM enquiry_notification_recipients WHERE enabled",
+                  )
+                )[0].n,
+                0,
+                "internal classification never re-enables sends",
+              );
+              assert.equal(
+                (await query("SELECT enquiry_forwarding_is_enabled($1) AS enabled", [s.channel]))[0]
+                  .enabled,
+                false,
+              );
+              assert.equal(wakes, 0);
+              assert.equal(network.mock.calls.length, 0);
             },
           );
           await t.test(

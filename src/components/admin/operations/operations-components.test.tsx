@@ -624,7 +624,16 @@ test("the status filter starts on 失敗 and the type select lists all types", (
   expect(jobsSource).toMatch(/useState<"all" \| JobStatus>\(DEFAULT_JOB_STATUS\)/);
   const options = jobTypeOptions();
   expect(options[0]).toEqual({ value: "all", label: "所有類型" });
-  expect(options).toHaveLength(16);
+  expect(options).toHaveLength(19);
+  expect(options).toContainEqual({ value: "woztell.enquiry.forward", label: "查詢 WhatsApp 通知" });
+  expect(options).toContainEqual({
+    value: "woztell.enquiry.forward.reconcile",
+    label: "查詢通知結果核對",
+  });
+  expect(options).toContainEqual({
+    value: "woztell.enquiry.forward.readiness",
+    label: "查詢通知連接核對",
+  });
   // A free-text input and a separate apply button are gone: the select applies on change.
   expect(jobsSource).not.toContain("套用篩選");
   expect(jobsSource).not.toContain("輸入工作類型篩選");

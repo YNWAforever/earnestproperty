@@ -40,8 +40,9 @@ export async function inspectForwardingStaffScope(
     ],
   );
   if (correlated) return { matched: true, correlatedId: String(correlated.id) };
+  // Pausing delivery does not turn an already verified colleague into a customer.
   const [registered] = await query(
-    `SELECT id FROM enquiry_notification_recipients r WHERE r.channel_id=$1 AND r.enabled
+    `SELECT id FROM enquiry_notification_recipients r WHERE r.channel_id=$1
        AND r.retired_at IS NULL AND r.permission_granted AND r.verified_at IS NOT NULL
        AND (r.phone=ANY($2::text[]) OR (r.destination_type='member_id' AND r.destination_reference=$3)) LIMIT 1`,
     [event.channelId, phones, event.woztellMemberId],
