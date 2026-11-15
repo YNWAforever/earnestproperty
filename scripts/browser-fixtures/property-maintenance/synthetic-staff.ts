@@ -1,6 +1,7 @@
 // Explicit owned browser model: no Auth, SQL, provider, phone or worker calls.
 export * from "./synthetic-api";
 import { fetchAdminAgents as propertyAgents } from "./synthetic-api";
+import type { EnquiryForwardingSettings } from "../../../src/lib/neon/enquiry-forwarding.types";
 export const staffId = "60000000-0000-4000-8000-000000000001";
 export const otherStaffId = "60000000-0000-4000-8000-000000000002";
 const state = {
@@ -171,6 +172,48 @@ export const fetchStaffEventReview = async () => [];
 export const fetchStaffAttention = async () => [];
 export const fetchStaffNotificationHealth = async () => ({ schemaAvailable: true, counts: {} });
 export const fetchStaffReferences = async () => [];
+const forwardingScope = (isCurrent?: () => boolean) => {
+  if (!isCurrent?.())
+    throw Object.assign(Error("Owned staff workspace is no longer current"), {
+      code: "STAFF_WORKSPACE_CHANGED",
+    });
+};
+export async function fetchEnquiryForwardingSettings(
+  isCurrent?: () => boolean,
+): Promise<EnquiryForwardingSettings> {
+  forwardingScope(isCurrent);
+  call("forwarding-settings-read");
+  await Promise.resolve();
+  forwardingScope(isCurrent);
+  return {
+    available: true,
+    recipients: [
+      {
+        key: "copy",
+        kind: "copy",
+        name: "固定副本",
+        phone: "85297987774",
+        version: 1,
+        enabled: false,
+        verified: false,
+      },
+    ],
+    routes: [],
+    counts: { needs_review: 0 },
+    providerCheck: null,
+  };
+}
+export async function updateEnquiryForwardingEnabled(
+  _input: { enabled: boolean; expectedCopyVersion: number },
+  isCurrent?: () => boolean,
+): Promise<never> {
+  forwardingScope(isCurrent);
+  throw Error("Forwarding configuration writes are outside this owned browser fixture");
+}
+export async function requestEnquiryForwardingCheck(isCurrent?: () => boolean): Promise<never> {
+  forwardingScope(isCurrent);
+  throw Error("Provider checks and queue writes are outside this owned browser fixture");
+}
 export const getWhatsappServicePolicies = async () => [];
 const outsideFixture = async () => {
   throw Error("Configuration writes are outside this fixture");
