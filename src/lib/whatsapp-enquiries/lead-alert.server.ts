@@ -17,6 +17,7 @@ import {
 } from "./staff-notifications.server.ts";
 import { staffDestinationKey, staffDestinationNotACustomer } from "./staff-recipient-guard.ts";
 import { providerChannelId } from "./wa-config.server.ts";
+import { forwardingCoversSubject } from "./enquiry-forwarding-coverage.server.ts";
 
 /**
  * FX-05b: one staff WhatsApp alert per new lead.
@@ -99,6 +100,7 @@ function warnFailure(event: string, leadId: string, jobId: string, error: unknow
 
 /** Expired leases only become unknown; never an automatic resend. */
 export async function reconcileLeadStaffAlert(leadId: string, query = queryRows) {
+  if (await forwardingCoversSubject("website", leadId, query)) return { unknown: 0 };
   return reconcile(leadId, query, null);
 }
 
@@ -141,6 +143,7 @@ export async function handleLeadStaffAlert(
   let queued: Record<string, unknown>[];
   try {
     await context.checkpoint();
+    if (await forwardingCoversSubject("website", leadId, query)) return { summary };
     summary.unknown += (await reconcile(leadId, query, context)).unknown;
     [lead] = await query(
       "SELECT l.id,l.source,l.property_id,p.listing_no,c.name,c.phone AS contact_phone,EXISTS(SELECT 1 FROM crm_activities a WHERE a.lead_id=l.id AND a.activity_type='suspected_bot') AS suspected_bot FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE l.id=$1::uuid",

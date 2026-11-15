@@ -19,8 +19,13 @@ function digitsMatch(dest: string, customer: string) {
 }
 
 /** `alias` is the staff_notification_endpoints alias in the surrounding query. */
-export function staffDestinationNotACustomer(alias = "ep") {
-  const ref = `${alias}.destination_reference`;
+export function staffDestinationNotACustomer(
+  alias = "ep",
+  referenceColumn = "destination_reference",
+) {
+  if (!/^[a-z_][a-z0-9_]*$/i.test(alias) || !/^[a-z_][a-z0-9_]*$/i.test(referenceColumn))
+    throw Error("STAFF_RECIPIENT_IDENTIFIER_INVALID");
+  const ref = `${alias}.${referenceColumn}`;
   const dest = digits(ref);
   const member = digits("guard_w.woztell_member_id");
   const contactMember = digits("guard_c.whatsapp_member_id");

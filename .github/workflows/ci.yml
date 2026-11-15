@@ -126,6 +126,8 @@ jobs:
       - run: npm run test:lead-integrity
       - run: npm run test:phone-identity
       - run: npm run test:staff-notifications
+      - run: npm run test:enquiry-forwarding
+      - run: npm run test:enquiry-forwarding:transport
       - run: npm run test:whatsapp-enquiries
       - run: npm run test:staff-server-fn
       - run: npm run test:no-link
@@ -198,6 +200,7 @@ jobs:
       - run: npm run test:operations:owned:db
       - run: npm run test:whatsapp-access:db
       - run: npm run test:lead-alert:owned:db
+      - run: npm run test:enquiry-forwarding:db
       - run: npm run test:crm:db
       - run: npm run test:woztell:db
       - run: npm run test:property-sync:db

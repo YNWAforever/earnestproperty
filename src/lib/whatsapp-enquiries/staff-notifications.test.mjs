@@ -124,6 +124,7 @@ test("NT-16 dedicated staff transport uses protected STAFF member and proven res
       beforeSend: async () => {},
     });
     assert.deepEqual(sent, {
+      channelId: "fixture",
       memberId: "staff-device",
       response: [{ type: "TEXT", text: "Protected work link" }],
     });

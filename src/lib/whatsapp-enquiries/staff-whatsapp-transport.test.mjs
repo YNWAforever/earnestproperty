@@ -101,7 +101,11 @@ test("sends a TEMPLATE response when a template is given and never a TEXT", () =
     const result = await api.sendStaffWhatsApp({ ...scope, template });
     assert.equal(result.state, "accepted");
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0], { memberId: scope.memberId, response: [template] });
+    assert.deepEqual(calls[0], {
+      channelId: scope.channelId,
+      memberId: scope.memberId,
+      response: [template],
+    });
     assert.ok(calls[0].response.every((item) => item.type !== "TEXT"));
     assert.doesNotMatch(JSON.stringify(calls[0]), /Protected work item/);
   }));

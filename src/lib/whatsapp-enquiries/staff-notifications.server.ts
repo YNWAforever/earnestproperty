@@ -14,6 +14,7 @@ import {
 } from "../woztell/staff-alert-template.ts";
 import { staffDestinationNotACustomer } from "./staff-recipient-guard.ts";
 import { companyChannelId } from "./wa-config.server.ts";
+import { forwardingCoversSubject } from "./enquiry-forwarding-coverage.server.ts";
 type Ports = { query: typeof queryRows; transaction: typeof transactionRows };
 const defaults: Ports = { query: queryRows, transaction: transactionRows };
 export type StaffNotificationRuntime = {
@@ -50,6 +51,14 @@ type Result = {
 };
 export type StaffNotificationTransport = {
   verificationRef: string;
+  /** A phone is a provider recipientId, never a fabricated WOZTELL memberId. */
+  sendStaffWhatsAppByPhone?: (scope: {
+    channelId: string;
+    phone: string;
+    message: string;
+    template: StaffTemplateResponse | null;
+    beforeSend: () => Promise<void>;
+  }) => Promise<Result>;
   postPrivateNote?: (scope: {
     channelId: string;
     memberId: string;
@@ -147,7 +156,13 @@ export async function dispatchStaffNotification(
     "SELECT id FROM staff_notification_endpoints WHERE staff_id=$1::uuid AND channel_id=$2 AND transport='staff_whatsapp' AND enabled AND retired_at IS NULL",
     [n.recipient_staff_id, n.channel_id],
   );
-  const transports = ["inbox_private_note", ...(liveStaffEndpoint ? ["staff_whatsapp"] : [])];
+  const forwardingOwnsPhones = liveStaffEndpoint
+    ? await forwardingCoversSubject("whatsapp", String(n.inquiry_id), query)
+    : false;
+  const transports = [
+    "inbox_private_note",
+    ...(liveStaffEndpoint && !forwardingOwnsPhones ? ["staff_whatsapp"] : []),
+  ];
   let accepted = 0,
     blocked = 0,
     unknown = 0;

@@ -383,6 +383,9 @@ export const woztellEnquiryProcessHandler = registerJobHandler<{ eventId: string
 });
 
 export const SERVICE_CAPABILITIES = [
+  "woztell.enquiry.forward@1",
+  "woztell.enquiry.forward.reconcile@1",
+  "woztell.enquiry.forward.readiness@1",
   "woztell.enquiry.staff.test@1",
   "woztell.enquiry.staff.notify@1",
   "woztell.enquiry.staff.notify.reconcile@1",
@@ -519,6 +522,83 @@ for (const jobType of [LEAD_ALERT_JOB_TYPE, LEAD_ALERT_RECONCILE_JOB_TYPE]) {
     },
   });
 }
+
+for (const jobType of ["woztell.enquiry.forward", "woztell.enquiry.forward.reconcile"]) {
+  registerJobHandler({
+    jobType,
+    payloadVersion: 1,
+    parsePayload(input) {
+      if (
+        !input ||
+        typeof input !== "object" ||
+        Array.isArray(input) ||
+        Object.keys(input).length !== 2 ||
+        !("source" in input) ||
+        !("subjectId" in input) ||
+        (input.source !== "website" && input.source !== "whatsapp")
+      )
+        throw Object.assign(new Error("Invalid enquiry forwarding job"), {
+          code: "VALIDATION_ERROR",
+        });
+      const { subjectId } = idPayload({ subjectId: input.subjectId }, "subjectId");
+      return { source: input.source, subjectId };
+    },
+    async run(payload, context) {
+      await context.checkpoint();
+      if (!context.workerId)
+        throw Object.assign(new Error("Forwarding requires a leased job"), {
+          code: "JOB_LEASE_REQUIRED",
+        });
+      const api = await import("../whatsapp-enquiries/enquiry-forwarding.server.ts");
+      const lease = {
+        jobId: context.jobId,
+        workerId: context.workerId,
+        checkpoint: context.checkpoint,
+      };
+      if (jobType === "woztell.enquiry.forward")
+        return api.dispatchEnquiryForwarding(payload, lease);
+      return { summary: await api.reconcileEnquiryForwarding(payload) };
+    },
+  });
+}
+
+// Safe provider inspection runs inside the deployment; sensitive credentials never leave it.
+registerJobHandler({
+  jobType: "woztell.enquiry.forward.readiness",
+  payloadVersion: 1,
+  parsePayload(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length)
+      throw Object.assign(new Error("Invalid forwarding readiness job"), {
+        code: "VALIDATION_ERROR",
+      });
+    return {};
+  },
+  async run(_payload, context) {
+    await context.checkpoint();
+    const { queryRows } = await import("../neon/db.server.ts");
+    const live = await queryRows(
+      "SELECT id FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.forward.readiness' AND payload='{}'::jsonb AND status='running' AND lease_owner=$2 AND lease_expires_at>now()",
+      [context.jobId, context.workerId ?? null],
+    );
+    if (!live.length)
+      throw Object.assign(new Error("Readiness job ownership lost"), {
+        code: "JOB_OWNERSHIP_LOST",
+      });
+    const { inspectEnquiryForwardingProvider } =
+      await import("../whatsapp-enquiries/enquiry-forwarding-provider.server.ts");
+    const check = await inspectEnquiryForwardingProvider();
+    await context.checkpoint();
+    const proof = await queryRows(
+      "INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) SELECT NULL,'whatsapp.enquiry_forwarding.provider_checked','ops_job',$1,$2::jsonb WHERE EXISTS(SELECT 1 FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.forward.readiness' AND payload='{}'::jsonb AND status='running' AND lease_owner=$3 AND lease_expires_at>now()) RETURNING id",
+      [context.jobId, JSON.stringify(check), context.workerId],
+    );
+    if (!proof.length)
+      throw Object.assign(new Error("Readiness job ownership lost"), {
+        code: "JOB_OWNERSHIP_LOST",
+      });
+    return { summary: { ready: check.ready ? 1 : 0, blockers: check.reasonCodes.length } };
+  },
+});
 
 // Purpose-specific test work has no customer conversation or SLA side effects.
 registerJobHandler({
