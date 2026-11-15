@@ -14,10 +14,16 @@ export type EnquiryEstateRouteSetting = {
   version: number;
   enabled: boolean;
 };
+export type EnquiryRecipientReadiness = {
+  checked: boolean;
+  customerConflictRecipientKeys: string[];
+  distinctBlockedPhoneCount: number;
+};
 export type EnquiryForwardingSettings = {
   available: boolean;
   recipients: EnquiryRecipientSetting[];
   routes: EnquiryEstateRouteSetting[];
   counts: Record<string, number>;
+  recipientReadiness?: EnquiryRecipientReadiness;
   providerCheck: { ready: boolean; checkedAt: string | null; reasonCodes: string[] } | null;
 };

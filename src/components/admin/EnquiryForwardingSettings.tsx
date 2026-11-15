@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { normalizePhone } from "@/lib/phone.js";
 import {
   fetchEnquiryForwardingSettings,
   requestEnquiryForwardingCheck,
@@ -42,6 +43,26 @@ export function EnquiryForwardingSettings({
     };
   }, [refresh]);
   const copy = settings?.recipients.find((row) => row.kind === "copy");
+  const readiness = settings?.recipientReadiness;
+  const conflictKeys = new Set(readiness?.customerConflictRecipientKeys ?? []);
+  const conflictPhones = new Map<string, Set<string>>();
+  for (const row of settings?.recipients ?? []) {
+    if (!conflictKeys.has(row.key)) continue;
+    const phone = normalizePhone(row.phone) ?? row.phone;
+    const names = conflictPhones.get(phone) ?? new Set<string>();
+    names.add(row.name);
+    conflictPhones.set(phone, names);
+  }
+  const blockedPhoneCount = Math.max(
+    readiness?.distinctBlockedPhoneCount ?? 0,
+    conflictPhones.size,
+  );
+  const hasIdentityConflicts = conflictKeys.size > 0 || blockedPhoneCount > 0;
+  const identityReady =
+    readiness?.checked === true &&
+    readiness.distinctBlockedPhoneCount === 0 &&
+    !hasIdentityConflicts;
+  const canEnable = !error && settings?.providerCheck?.ready === true && identityReady;
   const providerReasons = [
     ...new Set(
       (settings?.providerCheck?.reasonCodes ?? []).map((code) =>
@@ -56,7 +77,7 @@ export function EnquiryForwardingSettings({
     ),
   ];
   async function perform(kind: "check" | "toggle") {
-    if (busy || !current()) return;
+    if (busy || !current() || (kind === "toggle" && !copy?.enabled && !canEnable)) return;
     setBusy(true);
     setError("");
     setNotice("");
@@ -73,7 +94,8 @@ export function EnquiryForwardingSettings({
       }
       await refresh();
     } catch {
-      if (current()) setError("未能更新，請核對連接、模板及設定是否已變更。");
+      if (kind === "toggle" && current()) await refresh();
+      if (current()) setError("未能更新，請核對連接、收件身份及設定是否已變更。");
     } finally {
       if (current()) setBusy(false);
     }
@@ -95,11 +117,16 @@ export function EnquiryForwardingSettings({
                 <td className="p-2">{row.name}</td>
                 <td className="p-2 tabular-nums">{row.phone.replace(/^852/, "+852 ")}</td>
                 <td className="p-2">
-                  {row.enabled && row.verified
-                    ? "已啟用"
-                    : row.verified
-                      ? "已核對，未啟用"
-                      : "待核對"}
+                  {conflictKeys.has(row.key) ||
+                  conflictPhones.has(normalizePhone(row.phone) ?? row.phone)
+                    ? "客戶身份重疊"
+                    : readiness?.checked !== true
+                      ? "收件身份待核對"
+                      : row.enabled && row.verified
+                        ? "已啟用"
+                        : row.verified
+                          ? "已核對，未啟用"
+                          : "待核對"}
                 </td>
               </tr>
             ))}
@@ -148,7 +175,7 @@ export function EnquiryForwardingSettings({
               核對 WhatsApp 連接
             </Button>
             <Button
-              disabled={busy || !copy?.version || (!copy.enabled && !settings.providerCheck?.ready)}
+              disabled={busy || !copy?.version || (!copy.enabled && !canEnable)}
               onClick={() => void perform("toggle")}
             >
               {copy?.enabled ? "暫停新查詢通知" : "啟用新查詢通知"}
@@ -161,6 +188,25 @@ export function EnquiryForwardingSettings({
               ))}
             </ul>
           ) : null}
+          <div role="group" aria-label="收件身份核對" className="space-y-2 text-sm">
+            {hasIdentityConflicts ? (
+              <>
+                <p>
+                  {blockedPhoneCount > 0 ? `${blockedPhoneCount} 個收件號碼` : "收件號碼"}
+                  與客戶身份重疊，請先核對。
+                </p>
+                <ul className="list-inside list-disc">
+                  {[...conflictPhones].map(([phone, names]) => (
+                    <li key={phone} className="break-words">
+                      {[...names].join("、")} · {phone.replace(/^852/, "+852 ")}
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : (
+              <p>{identityReady ? "收件身份已核對" : "收件身份待核對，暫不能啟用通知。"}</p>
+            )}
+          </div>
           {recipients(settings.recipients.filter((row) => row.kind !== "sales"))}
           <details className="rounded border p-3">
             <summary className="cursor-pointer">

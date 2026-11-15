@@ -11,9 +11,11 @@ import {
 } from "../whatsapp-enquiries/enquiry-routing.mjs";
 import { forwardingSchemaAvailable } from "../whatsapp-enquiries/enquiry-forwarding-coverage.server.ts";
 import { companyChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
+import { staffDestinationNotACustomer } from "../whatsapp-enquiries/staff-recipient-guard.ts";
 import type {
   EnquiryForwardingSettings,
   EnquiryRecipientSetting,
+  EnquiryRecipientReadiness,
 } from "./enquiry-forwarding.types.ts";
 type Actor = Pick<StaffAccess, "staffId" | "roles">;
 type Ports = { query: typeof queryRows; transaction: typeof transactionRows };
@@ -55,6 +57,41 @@ async function desiredRecipients(query: typeof queryRows) {
       : [];
   });
   return [ENQUIRY_COPY, ...Object.values(ENQUIRY_MANAGERS), ...sales];
+}
+const recipientCustomerGuard = `${staffDestinationNotACustomer("r")} AND ${staffDestinationNotACustomer("r", "phone")}`;
+function customerConflictSql(recipientsParam: string, channelParam: string) {
+  return `SELECT r.key,r.phone FROM (
+    SELECT d.key,d.phone,d.phone AS destination_reference,${channelParam}::text AS channel_id
+    FROM jsonb_to_recordset(${recipientsParam}::jsonb) AS d(key text,phone text)
+  ) r WHERE NOT (${recipientCustomerGuard})`;
+}
+async function recipientReadiness(
+  query: typeof queryRows,
+  desired: Awaited<ReturnType<typeof desiredRecipients>>,
+  channel: string | null,
+): Promise<EnquiryRecipientReadiness> {
+  if (!channel)
+    return { checked: false, customerConflictRecipientKeys: [], distinctBlockedPhoneCount: 0 };
+  const [row] = await query(
+    `WITH customer_conflicts AS (${customerConflictSql("$1", "$2")})
+     SELECT COALESCE(array_agg(key ORDER BY key),ARRAY[]::text[]) AS conflict_recipient_keys,
+       count(DISTINCT phone)::int AS distinct_blocked_phone_count FROM customer_conflicts`,
+    [JSON.stringify(desired.map(({ key, phone }) => ({ key, phone }))), channel],
+  ).catch(() => {
+    console.warn("Enquiry forwarding recipient identity check failed.");
+    return [];
+  });
+  if (
+    !row ||
+    !Array.isArray(row.conflict_recipient_keys) ||
+    !Number.isInteger(Number(row.distinct_blocked_phone_count))
+  )
+    return { checked: false, customerConflictRecipientKeys: [], distinctBlockedPhoneCount: 0 };
+  return {
+    checked: true,
+    customerConflictRecipientKeys: row.conflict_recipient_keys.map(String),
+    distinctBlockedPhoneCount: Number(row.distinct_blocked_phone_count),
+  };
 }
 export async function getEnquiryForwardingSettings(
   actor: Actor,
@@ -101,6 +138,7 @@ export async function getEnquiryForwardingSettings(
       enabled: row.enabled === true,
     })),
     counts: Object.fromEntries(counts.map((row) => [String(row.dispatch_state), Number(row.n)])),
+    recipientReadiness: await recipientReadiness(query, desired, companyChannelId()),
     providerCheck: check
       ? {
           ready: metadata?.ready === true,
@@ -148,7 +186,9 @@ export async function setEnquiryForwardingEnabled(
             "SELECT id FROM enquiry_notification_recipients WHERE recipient_key='copy' FOR UPDATE",
         },
         {
-          statement: `WITH gate AS (
+          statement: `WITH customer_conflicts AS MATERIALIZED (
+          ${customerConflictSql("$8", "$3")} AND $2::boolean
+        ), gate AS (
         UPDATE enquiry_notification_recipients SET enabled=$2,
           channel_id=CASE WHEN $2 THEN $3 ELSE channel_id END,
           destination_type=CASE WHEN $2 THEN 'recipient_id' ELSE destination_type END,
@@ -157,7 +197,7 @@ export async function setEnquiryForwardingEnabled(
           verified_at=CASE WHEN $2 THEN now() ELSE verified_at END,
           permission_granted=CASE WHEN $2 THEN true ELSE permission_granted END,
           permission_ref=CASE WHEN $2 THEN $5 ELSE permission_ref END
-        WHERE recipient_key='copy' AND version=$1 RETURNING id,version
+        WHERE recipient_key='copy' AND version=$1 AND (NOT $2 OR NOT EXISTS(SELECT 1 FROM customer_conflicts)) RETURNING id,version
       ), recipients AS (
         INSERT INTO enquiry_notification_recipients(recipient_key,kind,staff_id,phone,channel_id,destination_type,destination_reference,enabled,verification_ref,verified_at,permission_granted,permission_ref)
         SELECT d.key,d.kind,d.staff_id,d.phone,$3,'recipient_id',d.phone,true,$4,now(),true,$5
@@ -169,7 +209,9 @@ export async function setEnquiryForwardingEnabled(
       ), audit AS (
         INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata)
         SELECT $7::uuid,'whatsapp.enquiry_forwarding.configured','enquiry_notification_recipients',id,jsonb_build_object('enabled',$2,'version',version,'recipientCount',jsonb_array_length($6::jsonb),'verificationRef',$4) FROM gate RETURNING id
-      ) SELECT id,version FROM gate`,
+      ) SELECT (SELECT id FROM gate) AS id,(SELECT version FROM gate) AS version,
+        ARRAY(SELECT key FROM customer_conflicts ORDER BY key) AS conflict_recipient_keys,
+        (SELECT count(DISTINCT phone)::int FROM customer_conflicts) AS distinct_blocked_phone_count`,
           params: [
             data.expectedCopyVersion,
             data.enabled,
@@ -178,6 +220,7 @@ export async function setEnquiryForwardingEnabled(
             ENQUIRY_ROUTING_APPROVAL,
             JSON.stringify(items),
             actor.staffId,
+            JSON.stringify(desired.map(({ key, phone }) => ({ key, phone }))),
           ],
         },
       ],
@@ -190,7 +233,12 @@ export async function setEnquiryForwardingEnabled(
         throw new Response("設定已變更，請重新整理。", { status: 409 });
       throw error;
     });
-  if (!saved.length) throw new Response("設定已變更，請重新整理。", { status: 409 });
+  if (data.enabled && Number(saved[0]?.distinct_blocked_phone_count) > 0)
+    throw new Response("部分通知電話與現有客戶身份重疊，請先核對身份資料後再啟用。", {
+      status: 409,
+      headers: { "X-Error-Code": "RECIPIENT_IDENTITY_REVIEW_REQUIRED" },
+    });
+  if (!saved[0]?.id) throw new Response("設定已變更，請重新整理。", { status: 409 });
   return { version: Number(saved[0].version), enabled: data.enabled };
 }
 export async function queueEnquiryForwardingCheck(actor: Actor, ports: Ports = defaults) {
