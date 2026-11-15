@@ -28,8 +28,10 @@ const jobsServerSource = readFileSync(
 function registeredJobTypes(): string[] {
   const types = new Set<string>();
   for (const match of handlersSource.matchAll(/jobType: "([a-z.]+)"/g)) types.add(match[1]);
-  const loop = handlersSource.match(/for \(const jobType of \[\s*((?:"[a-z.]+",?\s*)+)\]/)?.[1];
-  for (const match of (loop ?? "").matchAll(/"([a-z.]+)"/g)) types.add(match[1]);
+  for (const loop of handlersSource.matchAll(
+    /for \(const jobType of \[\s*((?:"[a-z.]+",?\s*)+)\]/g,
+  ))
+    for (const match of loop[1].matchAll(/"([a-z.]+)"/g)) types.add(match[1]);
   for (const match of leadAlertSource.matchAll(
     /export const LEAD_ALERT(?:_RECONCILE)?_JOB_TYPE = "([a-z.]+)"/g,
   ))
@@ -39,8 +41,8 @@ function registeredJobTypes(): string[] {
 
 test("every registered job type has a label", () => {
   const registered = registeredJobTypes();
-  // 15 types: the reader found the staff loop and the lead-alert pair, not only literals.
-  expect(registered).toHaveLength(15);
+  // 18 types: the staff and forwarding loops and the lead-alert pair are all included.
+  expect(registered).toHaveLength(18);
   expect(Object.keys(JOB_TYPE_LABELS).sort()).toEqual(registered);
   for (const type of registered) expect(jobTypeLabel(type)).not.toBe("其他工作");
 });
@@ -95,6 +97,7 @@ test("every registered job type is classified as sending WhatsApp or not, so the
     "woztell.reply.deliver",
     "lead.staff.alert",
     "woztell.enquiry.staff.notify",
+    "woztell.enquiry.forward",
   ])
     expect(DELIVERY_JOB_TYPES).toContain(type);
 });

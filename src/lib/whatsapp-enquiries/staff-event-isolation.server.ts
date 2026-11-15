@@ -3,7 +3,8 @@ import { extractReferences } from "./links.ts";
 import { classifyWoztellEvent } from "./event-classification.ts";
 import { createHash } from "node:crypto";
 import type { NormalizedWoztellEvent } from "../woztell/woztell.server.ts";
-import { transactionRows } from "../neon/db.server.ts";
+import { transactionRows, type queryRows } from "../neon/db.server.ts";
+import { inspectForwardingStaffScope } from "./enquiry-forwarding-isolation.server.ts";
 function atPath(value: unknown, path: string) {
   let v = value;
   for (const key of path.split(".")) {
@@ -29,10 +30,18 @@ export async function isolateSignedStaffEvent(
       ? atPath(event.payload, path)
       : null;
   const external = event.legacyExternalMessageId === null ? event.externalMessageId : null;
-  const [correlated] = await query(
+  const [legacyCorrelated] = await query(
     `SELECT t.id FROM staff_notification_attempts t JOIN staff_notification_endpoints ep ON ep.id=t.endpoint_id WHERE t.transport='staff_whatsapp' AND t.channel_id_snapshot=$1 AND t.destination_reference_snapshot=$2 AND t.provider_operation_id IS NOT NULL AND t.provider_operation_id IN ($3,$4) LIMIT 1`,
     [event.channelId, event.woztellMemberId, external, replyTo],
   );
+  const forwardingScope = await inspectForwardingStaffScope(
+    event,
+    replyTo,
+    query as typeof queryRows,
+  );
+  const correlated =
+    legacyCorrelated ??
+    (forwardingScope.correlatedId ? { id: forwardingScope.correlatedId } : undefined);
   const classification = classifyWoztellEvent(event.payload);
   const [testSchema] =
     !correlated && (external || replyTo)
@@ -113,7 +122,7 @@ export async function isolateSignedStaffEvent(
       `SELECT t.id FROM staff_notification_attempts t WHERE t.transport='staff_whatsapp' AND t.channel_id_snapshot=$1 AND t.destination_reference_snapshot=$2 AND t.dispatch_state IN ('dispatching','unknown','accepted','delivered') LIMIT 1`,
       [event.channelId, event.woztellMemberId],
     );
-    if (!ambiguous) return false;
+    if (!ambiguous && !forwardingScope.matched) return false;
   }
   const key = createHash("sha256")
     .update(

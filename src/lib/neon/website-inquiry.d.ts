@@ -29,6 +29,8 @@ export type WebsiteInquiryPersistenceInput = {
   message: string | null;
   listingNo: string | null;
   propertyId: string | null;
+  /** Constrains invalid explicit unit references to review; never chooses a recipient. */
+  propertyReferenceRequested?: boolean;
   /** One of the listing's correspondent agents, when the visitor picked one. */
   agentId?: string | null;
   consentWhatsapp: boolean;
@@ -46,4 +48,4 @@ export type WebsiteInquiryQuery = (
 export function persistWebsiteInquiry(
   query: WebsiteInquiryQuery,
   input: WebsiteInquiryPersistenceInput,
-): Promise<{ id: string; leadAlertQueued: boolean }>;
+): Promise<{ id: string; leadAlertQueued: boolean; forwardingQueued?: boolean }>;

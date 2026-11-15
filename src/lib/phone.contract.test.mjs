@@ -8,6 +8,7 @@ import { normalizeAdminPhone } from "./neon/admin-workflow.ts";
 import { normalizePhoneDigits } from "./contact-links.ts";
 import { normalisePhone } from "./staff/licence.ts";
 import { validateHandoffPhone } from "./ai/live-agent.ts";
+import { splitSqlStatements } from "../../scripts/acceptance/migrated-schema.mjs";
 
 // FX-12 (D-12): every parser that turns a typed or received phone into an
 // identity agrees with src/lib/phone.js, and no SQL copy of the phone match
@@ -116,6 +117,66 @@ function sourceFiles(dir) {
   });
 }
 
+function hasInlinePhoneMatch(path, source) {
+  // A stored normalizer and a caller are separate SQL statements. Keep dollar-quoted
+  // function bodies intact so an inline customer match inside either one still fails.
+  // The migration splitter does not lex block comments. Preserve the original
+  // file-wide guard for that syntax, where a comment's semicolon is not a boundary.
+  const scopes =
+    path.endsWith(".sql") && !source.includes("/*") ? splitSqlStatements(source) : [source];
+  return scopes.some((scope) => {
+    const compact = scope.replace(/\s+/g, "");
+    const twoFormat = compact.includes("left($") && compact.includes(",3)='852'");
+    const prefix = compact.includes("'852'||") && compact.includes("normalized_phone");
+    // Minor 9: a copy that only takes the last eight digits of a param.
+    const lastEight =
+      /right\(\$\d+(::text)?,8\)/.test(compact) && compact.includes("normalized_phone");
+    return twoFormat || prefix || lastEight;
+  });
+}
+
+test("SQL block comments cannot split an unsafe phone match out of the audit", () => {
+  for (const unsafe of [
+    "SELECT id FROM crm_contacts WHERE normalized_phone = CASE WHEN left($1::text/* ; */,3)='852' THEN $1 ELSE $2 END;",
+    "SELECT id FROM crm_contacts WHERE normalized_phone = /* ; */ '852' || $1;",
+    "SELECT id FROM crm_contacts WHERE normalized_phone = /* ; */ right($1::text,8);",
+  ])
+    assert.equal(hasInlinePhoneMatch("neon/migrations/phone-control.sql", unsafe), true, unsafe);
+});
+
+test("SQL statement boundaries do not hide inline customer phone matches", () => {
+  const path = "neon/migrations/20261116000000_enquiry_forwarding.sql";
+  const migration = readFileSync(join(ROOT, path), "utf8");
+  const statements = splitSqlStatements(migration);
+  const normalizer = statements.find((statement) =>
+    statement.startsWith("CREATE OR REPLACE FUNCTION enquiry_notification_phone("),
+  );
+  assert.ok(normalizer, "inspect the real canonical SQL function definition");
+  assert.ok(statements.some((statement) => statement.includes("normalized_phone")));
+  assert.ok(normalizer.includes("'852'||"));
+  assert.ok(!normalizer.includes("normalized_phone"));
+  assert.equal(hasInlinePhoneMatch(path, migration), false);
+  // The old cross-statement false positive remains detectable in file-scoped TS/JS.
+  for (const extension of ["ts", "tsx", "js", "mjs"])
+    assert.equal(hasInlinePhoneMatch(`src/lib/phone-scan-control.${extension}`, migration), true);
+
+  const unsafeMatches = [
+    "SELECT id::text FROM crm_contacts WHERE normalized_phone = CASE WHEN left($1::text,3)='852' THEN $1 ELSE $2 END;",
+    "SELECT id::text FROM crm_contacts WHERE normalized_phone = '852' || $1;",
+    "SELECT id::text FROM crm_contacts WHERE normalized_phone = right($1::text,8);",
+  ];
+  for (const unsafe of unsafeMatches) {
+    assert.equal(hasInlinePhoneMatch(path, `${migration}\n${unsafe}`), true, unsafe);
+    assert.equal(hasInlinePhoneMatch(path, `${unsafe}\n${migration}`), true, unsafe);
+    const poisoned = migration.replace(normalizer, () =>
+      normalizer.replace(/\$\$$/, () => `;\n${unsafe}\n$$`),
+    );
+    assert.notEqual(poisoned, migration, "place the unsafe query inside the real function body");
+    assert.equal(splitSqlStatements(poisoned).length, statements.length);
+    assert.equal(hasInlinePhoneMatch(path, poisoned), true, unsafe);
+  }
+});
+
 test("no SQL copy of the phone match outside phone.js", () => {
   const migrations = sourceFiles("neon/migrations").filter((path) => {
     const stamp = /\/(\d{8})/.exec(path)?.[1];
@@ -124,15 +185,9 @@ test("no SQL copy of the phone match outside phone.js", () => {
   const files = [...sourceFiles("src"), ...migrations].filter(
     (path) => !ALLOWLIST.has(relative(ROOT, join(ROOT, path)).replaceAll("\\", "/")),
   );
-  const offenders = files.filter((path) => {
-    const compact = readFileSync(join(ROOT, path), "utf8").replace(/\s+/g, "");
-    const twoFormat = compact.includes("left($") && compact.includes(",3)='852'");
-    const prefix = compact.includes("'852'||") && compact.includes("normalized_phone");
-    // Minor 9: a copy that only takes the last eight digits of a param.
-    const lastEight =
-      /right\(\$\d+(::text)?,8\)/.test(compact) && compact.includes("normalized_phone");
-    return twoFormat || prefix || lastEight;
-  });
+  const offenders = files.filter((path) =>
+    hasInlinePhoneMatch(path, readFileSync(join(ROOT, path), "utf8")),
+  );
   assert.deepEqual(
     offenders,
     [],

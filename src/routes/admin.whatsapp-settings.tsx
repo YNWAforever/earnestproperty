@@ -5,6 +5,7 @@ import { AdminNoPermission } from "@/components/admin/AdminNoPermission";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { useStaffSession } from "@/components/admin/staff-session";
 import { StaffMappingWizard } from "@/components/admin/whatsapp/StaffMappingWizard";
+import { EnquiryForwardingSettings } from "@/components/admin/EnquiryForwardingSettings";
 import { parseWhatsappSettingsSearch } from "@/components/admin/whatsapp/staff-mapping-wizard-state";
 import { WhatsappServicePolicyEditor } from "@/components/admin/WhatsappServicePolicyEditor";
 import { fetchAdminAgents } from "@/lib/neon/admin-data";
@@ -83,6 +84,7 @@ function WhatsappSettingsWorkspace({ identity }: { identity: string }) {
           </a>
         ) : null}
         {error ? <p role="alert">{error}</p> : null}
+        <EnquiryForwardingSettings isWorkspaceCurrent={isWorkspaceCurrent} />
         {agents.length ? (
           <StaffMappingWizard
             isWorkspaceCurrent={isWorkspaceCurrent}

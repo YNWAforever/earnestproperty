@@ -393,11 +393,12 @@ export function woztellConfig() {
   };
 }
 
-export async function sendWoztellResponse(input: {
-  channelId?: string;
-  memberId: string;
-  response: Record<string, unknown>[];
-}) {
+export async function sendWoztellResponse(
+  input: {
+    channelId?: string;
+    response: Record<string, unknown>[];
+  } & ({ memberId: string; recipientId?: never } | { recipientId: string; memberId?: never }),
+) {
   const config = woztellConfig();
   // FX-08: `stage` marks a failure before any provider call, so the send is `failed`, not
   // `unknown`. Campaign delivery ignores it and still keys on the missing `status`.
@@ -416,14 +417,26 @@ export async function sendWoztellResponse(input: {
     return { ok: false, refused: true, error: "WOZTELL_CHANNEL_SCOPE_MISMATCH" };
   }
 
+  const memberId = input.memberId?.trim();
+  const recipientId = input.recipientId?.trim();
+  if ((!memberId && !recipientId) || (memberId && recipientId))
+    return {
+      ok: false,
+      refused: true,
+      error: "WOZTELL_DESTINATION_INVALID",
+      stage: "preflight" as const,
+    };
   const { response: res, text: rawBody } = await boundedProviderFetch(
-    `https://bot.api.woztell.com/sendResponses?accessToken=${encodeURIComponent(config.accessToken)}`,
+    "https://bot.api.woztell.com/sendResponses",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.accessToken}`,
+      },
       body: JSON.stringify({
         channelId: config.channelId,
-        memberId: input.memberId,
+        ...(recipientId ? { recipientId } : { memberId }),
         response: input.response,
       }),
     },

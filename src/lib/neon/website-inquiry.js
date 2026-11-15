@@ -149,6 +149,13 @@ export async function persistWebsiteInquiry(query, input) {
   // listing. When there is no choice the SQL carries a literal NULL, so the statement and its
   // parameter list are byte-identical to the pre-agent build.
   const chosenAgentParam = requestedAgentId ? `$${baseParamCount + 3}::uuid` : "NULL::uuid";
+  // The migration is applied before this reader is deployed. Keep the routing
+  // hint inside the one intake statement, using the existing bound values.
+  const contextKind =
+    input.propertyReferenceRequested === true
+      ? "'property'::text"
+      : "CASE WHEN $7::uuid IS NOT NULL OR $8::text IS NOT NULL THEN 'property' ELSE 'general' END";
+  const routingContext = `jsonb_build_object('kind',${contextKind},'requestedPropertyId',$7::text,'requestedPublicListingNo',$8::text,'selectedAgentId',${chosenAgentParam}::text)`;
   const rows = await query(
     `
     WITH resolved_listing AS (
@@ -189,9 +196,9 @@ export async function persistWebsiteInquiry(query, input) {
     ${submissionCte}
     ${contactCte},
     new_lead AS (
-      INSERT INTO crm_leads (contact_id, property_id, assigned_agent_id, stage, intent, source, note)
+      INSERT INTO crm_leads (contact_id, property_id, assigned_agent_id, stage, intent, source, note, enquiry_routing_context)
       SELECT contact.id, routing.property_id, routing.assigned_agent_id,
-        'new', routing.intent, 'website', $5
+        'new', routing.intent, 'website', $5, ${routingContext}
       FROM contact
       CROSS JOIN routing
       RETURNING id, contact_id
@@ -220,7 +227,8 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
       COALESCE($8::text, (SELECT listing_no FROM requested_listing))
     FROM contact
     CROSS JOIN routing
-    RETURNING id, (SELECT count(*) FROM lead_alert) > 0 AS lead_alert_queued
+    RETURNING id, (SELECT count(*) FROM lead_alert) > 0 AS lead_alert_queued,
+      enquiry_forwarding_is_enabled() AS forwarding_enabled
     `,
     [
       name,
@@ -264,5 +272,8 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
   return {
     id: rows[0]?.id == null ? "" : String(rows[0].id),
     leadAlertQueued: rows[0]?.lead_alert_queued === true,
+    ...(rows[0]?.forwarding_enabled === true && rows[0]?.lead_alert_queued === true
+      ? { forwardingQueued: true }
+      : {}),
   };
 }

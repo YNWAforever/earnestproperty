@@ -20,7 +20,7 @@ await build({
         replacement: resolve(workspace, "scripts/browser-fixtures/leave-guards/synthetic-blog.ts"),
       },
       {
-        find: /^@\/lib\/neon\/(inbox-directory|whatsapp-readiness|staff-endpoints|staff-reference-admin|whatsapp-service-policy|whatsapp-test-notification)$/,
+        find: /^@\/lib\/neon\/(inbox-directory|whatsapp-readiness|staff-endpoints|staff-reference-admin|whatsapp-service-policy|whatsapp-test-notification|enquiry-forwarding)$/,
         replacement: resolve(
           workspace,
           "scripts/browser-fixtures/property-maintenance/synthetic-staff.ts",

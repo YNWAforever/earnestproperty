@@ -19,6 +19,9 @@ export const JOB_TYPE_LABELS: Record<string, string> = {
   "woztell.enquiry.staff.notify.reconcile": "同事通知結果核對",
   "woztell.enquiry.staff.ack.check": "同事接手確認檢查",
   "woztell.enquiry.staff.test": "同事通知測試",
+  "woztell.enquiry.forward": "查詢 WhatsApp 通知",
+  "woztell.enquiry.forward.reconcile": "查詢通知結果核對",
+  "woztell.enquiry.forward.readiness": "查詢通知連接核對",
   "lead.staff.alert": "新客戶查詢通知",
   "lead.staff.alert.reconcile": "新客戶查詢通知核對",
 };
@@ -43,6 +46,7 @@ export const JOB_FAILURE_REASONS: Record<string, string> = {
   WOZTELL_PROVIDER_TIMEOUT: "WhatsApp 服務沒有及時回應。",
   WOZTELL_PROVIDER_UNAVAILABLE: "WhatsApp 服務暫時無法使用。",
   WOZTELL_CONFIGURATION_UNAVAILABLE: "WhatsApp 發送設定未完成。",
+  ENQUIRY_FORWARD_NOT_READY: "查詢通知設定尚未就緒。",
   WOZTELL_DELIVERY_INCOMPLETE: "部分訊息未完成發送。",
   WOZTELL_CAMPAIGN_PAUSED: "推廣活動已暫停，請到推廣活動恢復。",
   WOZTELL_PROVIDER_REJECTED: "WhatsApp 服務拒絕了發送要求。",
@@ -87,6 +91,7 @@ export const DELIVERY_JOB_TYPES: readonly string[] = [
   "lead.staff.alert",
   "woztell.enquiry.staff.notify",
   "woztell.enquiry.staff.test",
+  "woztell.enquiry.forward",
 ];
 
 /** Registered types that never send a message (reconcile and check jobs only read or record). */
@@ -101,6 +106,8 @@ export const NON_DELIVERY_JOB_TYPES: readonly string[] = [
   "woztell.enquiry.staff.notify.reconcile",
   "woztell.enquiry.staff.ack.check",
   "lead.staff.alert.reconcile",
+  "woztell.enquiry.forward.reconcile",
+  "woztell.enquiry.forward.readiness",
 ];
 
 export const JOB_RETRY_RESEND_WARNING =
