@@ -509,6 +509,7 @@ test("HTTP failure observations retain status and safe shape without provider te
       jsonBody: true,
       hasError: true,
       providerOk: false,
+      providerError: { shape: "string", knownName: null, signals: [] },
     });
     const suffix =
       status === 401 || status === 403
@@ -543,6 +544,126 @@ test("HTTP failure observations retain status and safe shape without provider te
     );
     assert.ok(!JSON.stringify(result).includes(cloudSecret));
   }
+});
+
+test("sender errors expose only finite observations and never relax failed readiness", async () => {
+  const cases = [
+    ["Invalid access token", null, ["invalid_token"]],
+    ["jwt must be provided", null, ["missing_token"]],
+    [
+      "TypeError: Cannot read property 'private-field' of undefined",
+      "TypeError",
+      ["null_property_access"],
+    ],
+    [{ name: "TokenExpiredError", message: "jwt expired" }, "TokenExpiredError", ["expired_token"]],
+    [
+      { code: "INVALID_SIGNATURE", message: "jwt malformed" },
+      null,
+      ["malformed_token", "invalid_signature"],
+    ],
+    [
+      { name: "TypeError", message: "Cannot read properties of null (reading 'private-field')" },
+      "TypeError",
+      ["null_property_access"],
+    ],
+    [
+      { type: "OAuthException", message: "permission denied" },
+      "OAuthException",
+      ["permission_denied"],
+    ],
+    [
+      "Channel not found. Integration not found.",
+      null,
+      ["channel_not_found", "integration_not_found"],
+    ],
+    [
+      {
+        name: "PrivateException",
+        message: "private-unknown",
+        code: 123456789,
+        stack: "invalid token",
+      },
+      null,
+      [],
+    ],
+    [[{ message: "invalid token" }], null, []],
+    [{ message: "x".repeat(4097) + "invalid token" }, null, []],
+  ];
+  for (const [error, knownName, signals] of cases) {
+    const { result } = await run(
+      {
+        respond: ({ url }) =>
+          url.pathname.endsWith("/waba-info")
+            ? new Response(JSON.stringify({ ok: 0, error }), { status: 500 })
+            : undefined,
+      },
+      {},
+      { informationalInstallation: informationalInstallation() },
+    );
+    assert.deepEqual(result.requests[1].providerError, {
+      shape: typeof error === "string" ? "string" : Array.isArray(error) ? "array" : "object",
+      knownName,
+      signals,
+    });
+    assert.equal(result.infoForwarding.ready, false);
+    assert.equal(result.channel.senderPhone, null);
+    assert.equal(result.template.validationComplete, false);
+    assert.ok(result.reasonCodes.includes("SENDER_HTTP_FAILED"));
+    const serialized = JSON.stringify(result);
+    for (const forbidden of ["private-field", "PrivateException", "private-unknown", "123456789"])
+      assert.ok(!serialized.includes(forbidden));
+  }
+});
+
+test("sender errors array fallback inspects only its first bounded error", async () => {
+  const { result } = await run({
+    respond: ({ url }) =>
+      url.pathname.endsWith("/waba-info")
+        ? new Response(
+            JSON.stringify({
+              ok: 0,
+              errors: [{ message: "jwt must be provided" }, { message: "invalid signature" }],
+            }),
+            { status: 500 },
+          )
+        : undefined,
+  });
+  assert.deepEqual(result.requests[1].providerError, {
+    shape: "object",
+    knownName: null,
+    signals: ["missing_token"],
+  });
+  assert.equal(result.ready, false);
+});
+
+test("error observations mask raw and encoded known credentials before matching", async () => {
+  const privateCredential = "invalid token / permission denied";
+  const { result } = await run(
+    {
+      expectedCloudToken: privateCredential,
+      respond: ({ url }) =>
+        url.pathname.endsWith("/waba-info")
+          ? new Response(
+              JSON.stringify({
+                ok: 0,
+                error: {
+                  name: "unknown",
+                  message: `${privateCredential} ${encodeURIComponent(privateCredential)}`,
+                },
+              }),
+              { status: 500 },
+            )
+          : undefined,
+    },
+    { WOZTELL_CLOUD_ACCESS_TOKEN: `  ${privateCredential}  ` },
+  );
+  assert.deepEqual(result.requests[1].providerError, {
+    shape: "object",
+    knownName: null,
+    signals: [],
+  });
+  assert.ok(!JSON.stringify(result).includes(privateCredential));
+  assert.ok(!JSON.stringify(result).includes(encodeURIComponent(privateCredential)));
 });
 
 test("sender failure inspects only scoped environment integration identifiers without claiming a selected environment", async () => {
