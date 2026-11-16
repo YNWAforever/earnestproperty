@@ -58,6 +58,19 @@ async function desiredRecipients(query: typeof queryRows) {
   });
   return [ENQUIRY_COPY, ...Object.values(ENQUIRY_MANAGERS), ...sales];
 }
+/** Internal readiness input; callers must establish the job lease before reading the roster. */
+export async function getTrustedEnquiryForwardingRecipientPhones(
+  query = queryRows,
+): Promise<string[]> {
+  const desired = await desiredRecipients(query);
+  return [
+    ...new Set(
+      desired
+        .map(({ phone }) => notificationPhone(phone))
+        .filter((phone): phone is string => phone !== null),
+    ),
+  ];
+}
 const recipientCustomerGuard = `${staffDestinationNotACustomer("r")} AND ${staffDestinationNotACustomer("r", "phone")}`;
 function customerConflictSql(recipientsParam: string, channelParam: string) {
   return `SELECT r.key,r.phone FROM (
