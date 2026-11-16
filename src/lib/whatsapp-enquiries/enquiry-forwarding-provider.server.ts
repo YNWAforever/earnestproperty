@@ -2,6 +2,11 @@ import "@tanstack/react-start/server-only";
 import { createHash } from "node:crypto";
 import { boundedProviderFetch } from "../woztell/provider-fetch.ts";
 import {
+  deriveEnquiryInfoReadiness,
+  type EnquiryInfoInstallationEvidence,
+  type EnquiryInfoReadiness,
+} from "./enquiry-info-readiness.js";
+import {
   parseStaffAlertTemplate,
   type StaffAlertTemplate,
 } from "../woztell/staff-alert-template.ts";
@@ -67,6 +72,8 @@ export type EnquiryForwardingProviderInspection = {
   checkedAt: string;
   /** Configuration readiness only; never delivery or phone ownership verification. */
   ready: boolean;
+  /** Separate informational policy; legacy capability flags and ready remain unchanged. */
+  infoForwarding?: EnquiryInfoReadiness;
   flags: {
     woztellEnabled: boolean;
     staffNotificationsEnabled: boolean;
@@ -87,6 +94,7 @@ export type EnquiryForwardingProviderInspection = {
     replyContext: boolean;
   };
   channel: {
+    appId?: string | null;
     configuredChannelId: string | null;
     connected: boolean | null;
     archived: boolean | null;
@@ -136,6 +144,8 @@ export async function inspectEnquiryForwardingProvider(
     fetch?: typeof globalThis.fetch;
     /** Optional approved registry phones; no customer/member creation or history reads. */
     recipientPhones?: readonly string[];
+    /** Server-validated protected release/schema evidence, never request-body flags. */
+    informationalInstallation?: EnquiryInfoInstallationEvidence | null;
   } = {},
 ): Promise<EnquiryForwardingProviderInspection> {
   const env = options.env ?? process.env;
@@ -181,6 +191,7 @@ export async function inspectEnquiryForwardingProvider(
       replyContext: present(env.EP_WA_STAFF_REPLY_CONTEXT_PATH),
     },
     channel: {
+      appId: null,
       configuredChannelId: channelId,
       connected: null,
       archived: null,
@@ -237,6 +248,7 @@ export async function inspectEnquiryForwardingProvider(
       report.channel.senderDifferentFromFixedCopy === true &&
       report.template.configuredApproved &&
       report.template.validationComplete;
+    report.infoForwarding = deriveEnquiryInfoReadiness(report, options.informationalInstallation);
     report.reasonCodes = [...reasons];
     // Defensive last boundary: provider fields/errors can never echo a known secret.
     let redacted = false;
@@ -255,6 +267,10 @@ export async function inspectEnquiryForwardingProvider(
     ) as EnquiryForwardingProviderInspection;
     if (redacted) {
       clean.ready = false;
+      if (clean.infoForwarding) {
+        clean.infoForwarding.ready = false;
+        clean.infoForwarding.reasonCodes.push("SENSITIVE_PROVIDER_CONTENT_REDACTED");
+      }
       clean.reasonCodes.push("SENSITIVE_PROVIDER_CONTENT_REDACTED");
     }
     return clean;
@@ -346,6 +362,7 @@ export async function inspectEnquiryForwardingProvider(
     reasons.add("PROVIDER_CHANNEL_SCOPE_MISMATCH");
     return finish();
   }
+  report.channel.appId = identifier(channel.appId);
   if (present(channel.appIntegrationAccessToken)) secrets.add(channel.appIntegrationAccessToken);
   const cloudToken =
     configuredCloudToken ??

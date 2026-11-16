@@ -12,15 +12,59 @@ import {
   buildLiveEventStatements,
   enquirySchemaAvailable,
 } from "../whatsapp-enquiries/workflow.server.ts";
+import {
+  prepareEnquiryInfoIntake,
+  classifyEnquiryInfoIntake,
+  buildEnquiryInfoIntakeGate,
+  enquiryInfoPreparationStatements,
+  guardEnquiryInfoWorkflows,
+  enquiryInfoReleaseCompletion,
+  type EnquiryInfoIntakeDisposition,
+} from "../whatsapp-enquiries/enquiry-info-intake.server.ts";
+import type {
+  EnquiryInfoReceiptContext,
+  EnquiryInfoReceiptReview,
+  EnquiryInfoReleaseToken,
+} from "../whatsapp-enquiries/enquiry-info-intake.types.ts";
 
 export type IngestOutcome = {
   contactId: string | null;
   conversationId: string | null;
   messageInserted: boolean;
-  skipped: "no-identity" | "status-event" | "unsupported-event" | "staff-internal" | null;
+  skipped:
+    | "no-identity"
+    | "status-event"
+    | "unsupported-event"
+    | "staff-internal"
+    | "sender-identity-unresolved"
+    | "duplicate"
+    | null;
   /** FX-12 / C-04: stored with no contact in a 「身分待核對」 conversation. */
   identityReview: boolean;
+  receiptReview?: EnquiryInfoReceiptReview;
 };
+function enquiryInfoOutcome(
+  disposition: EnquiryInfoIntakeDisposition,
+  receiptId: string,
+): IngestOutcome | null {
+  if (disposition === "invalid") throw new Error("WA_ENQUIRY_INFO_RECEIPT_MISMATCH");
+  if (!["staff", "review", "done"].includes(disposition)) return null;
+  return {
+    contactId: null,
+    conversationId: null,
+    messageInserted: false,
+    identityReview: false,
+    skipped:
+      disposition === "staff"
+        ? "staff-internal"
+        : disposition === "done"
+          ? "duplicate"
+          : "sender-identity-unresolved",
+    ...(disposition === "review"
+      ? { receiptReview: { receiptId, reason: "sender_identity_unresolved" as const } }
+      : {}),
+  };
+}
 
 // FX-08 opt-out evidence, applied by the normal path and, for a conflicted STOP, by the
 // review path to every matched contact (alias c, opt_out o).
@@ -44,14 +88,52 @@ export async function ingestWoztellEvent(
     schemaAvailable?: () => Promise<boolean>;
     now?: Date;
     wake?: () => void;
+    receiptContext?: EnquiryInfoReceiptContext;
+    enquiryInfoRelease?: EnquiryInfoReleaseToken;
   } = {},
 ): Promise<IngestOutcome> {
   if (origin !== "live_webhook" && origin !== "history_import")
     throw new Error("WA_EVENT_ORIGIN_REQUIRED");
+  if (options.receiptContext && (origin !== "live_webhook" || options.signedEvent !== true))
+    throw new Error("WA_ENQUIRY_INFO_RECEIPT_MISMATCH");
+  const transactionRows =
+    injectedTransaction ?? (await import("../neon/db.server.ts")).transactionRows;
+  const classification = classifyWoztellEvent(event.payload, { now: options.now });
+  const infoPlan =
+    origin === "live_webhook" && options.signedEvent && classification.direction === "inbound"
+      ? await prepareEnquiryInfoIntake(
+          event,
+          options.receiptContext,
+          transactionRows,
+          options.enquiryInfoRelease,
+        )
+      : null;
   if (origin === "live_webhook" && options.signedEvent) {
     const { isolateSignedStaffEvent } =
       await import("../whatsapp-enquiries/staff-event-isolation.server.ts");
-    if (await isolateSignedStaffEvent(event, injectedTransaction))
+    // Exact legacy/test correlation is retained without invoking customer shortcuts or
+    // deriving a sender phone from the company destination or opaque member string.
+    if (
+      infoPlan &&
+      !infoPlan.held &&
+      !infoPlan.release &&
+      (await isolateSignedStaffEvent(event, transactionRows, {
+        exactCorrelationOnly: true,
+        disableForwardingPhoneHeuristic: true,
+      }))
+    )
+      return enquiryInfoOutcome("staff", infoPlan.receiptId)!;
+    if (infoPlan) {
+      const disposition = await classifyEnquiryInfoIntake(event, infoPlan, transactionRows);
+      const isolated = enquiryInfoOutcome(disposition, infoPlan.receiptId);
+      if (isolated) return isolated;
+    }
+    if (
+      !infoPlan?.release &&
+      (await isolateSignedStaffEvent(event, transactionRows, {
+        disableForwardingPhoneHeuristic: !!infoPlan,
+      }))
+    )
       return {
         contactId: null,
         conversationId: null,
@@ -60,12 +142,9 @@ export async function ingestWoztellEvent(
         identityReview: false,
       };
   }
-  const classification = classifyWoztellEvent(event.payload, { now: options.now });
   const observe = origin === "live_webhook" && (options.mode ?? enquiryMode()) !== "off";
   if (observe && !(await (options.schemaAvailable ?? enquirySchemaAvailable)()))
     throw new Error("WA_ENQUIRY_SCHEMA_REQUIRED");
-  const transactionRows =
-    injectedTransaction ?? (await import("../neon/db.server.ts")).transactionRows;
   const wrapped = event.payload.messageEvent;
   const source =
     wrapped && typeof wrapped === "object" && !Array.isArray(wrapped)
@@ -179,23 +258,53 @@ export async function ingestWoztellEvent(
   ]
     .filter((v): v is string => Boolean(v))
     .sort();
-  const workflowStatements =
-    observe && (classification.kind !== "unsupported" || classification.surveyCandidate)
+  const params: unknown[] = [
+    normalizedPhone,
+    memberId,
+    event.memberName,
+    phone,
+    origin === "live_webhook" && event.direction === "inbound" && isOptOutText(event.text),
+    event.direction === "inbound" ? event.timestamp : null,
+    event.channelId,
+    event.timestamp,
+    event.direction,
+    event.messageType,
+    event.text,
+    event.externalMessageId,
+    JSON.stringify(event.payload),
+    event.legacyExternalMessageId,
+    JSON.stringify(outboundWoztellEvidence(event)),
+    origin === "live_webhook",
+  ];
+  const infoGate = infoPlan ? buildEnquiryInfoIntakeGate(event, infoPlan, params) : null;
+  const intakeAllowed = infoGate?.allowed ?? "true";
+  let workflowStatements =
+    !infoPlan?.release &&
+    observe &&
+    (classification.kind !== "unsupported" || classification.surveyCandidate)
       ? buildLiveEventStatements(event, options.now, options.mode ?? enquiryMode())
       : [];
-  const results = await transactionRows([
-    ...keys.map((key) => ({
+  if (infoPlan) workflowStatements = guardEnquiryInfoWorkflows(event, infoPlan, workflowStatements);
+  const locks =
+    infoPlan?.locks ??
+    keys.map((key) => ({
       statement: "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
       params: [key],
-    })),
-    {
-      statement: `WITH matched AS (
-      SELECT * FROM crm_contacts WHERE ${phoneMatchSql("normalized_phone", "$1")}
-        OR whatsapp_member_id=$2
+    }));
+  const preparation = infoPlan ? enquiryInfoPreparationStatements(event, infoPlan) : [];
+  const transcriptIndex = locks.length + preparation.length;
+  const results = await transactionRows(
+    [
+      ...locks,
+      ...preparation,
+      {
+        statement: `WITH ${infoGate?.ctes ?? ""} matched AS (
+      SELECT * FROM crm_contacts WHERE ${intakeAllowed} AND (${phoneMatchSql("normalized_phone", "$1")}
+        OR whatsapp_member_id=$2)
     ), conv AS (
       -- FX-12 / C-04: the member's conversation, the same row updated_conversation picks.
       SELECT id,contact_id FROM whatsapp_conversations
-      WHERE $2::text IS NOT NULL AND woztell_member_id=$2 AND (channel_id=$7 OR channel_id IS NULL)
+      WHERE ${intakeAllowed} AND $2::text IS NOT NULL AND woztell_member_id=$2 AND (channel_id=$7 OR channel_id IS NULL)
       ORDER BY (channel_id=$7) DESC NULLS LAST LIMIT 1
     ), staff_linked AS (
       -- A manager linked this conversation to a contact: that link is authoritative for
@@ -229,7 +338,7 @@ export async function ingestWoztellEvent(
         AND NOT EXISTS(SELECT 1 FROM valid v WHERE v.id=conv.contact_id)
     ), review AS (
       -- 「身分待核對」: store the message with no contact in the member's conversation.
-      SELECT ($2::text IS NOT NULL AND NOT EXISTS(SELECT 1 FROM staff_linked) AND (
+      SELECT (${intakeAllowed} AND $2::text IS NOT NULL AND NOT EXISTS(SELECT 1 FROM staff_linked) AND (
         EXISTS(SELECT 1 FROM crm_contact_identity_reviews r JOIN conv ON r.conversation_id=conv.id
           WHERE r.reason='whatsapp_identity_conflict' AND r.status='open')
         OR (EXISTS(SELECT 1 FROM matched) AND NOT EXISTS(SELECT 1 FROM valid))
@@ -246,6 +355,7 @@ export async function ingestWoztellEvent(
         AND NOT ($14::text IS NOT NULL AND EXISTS(SELECT 1 FROM whatsapp_messages
           WHERE external_message_id=$14 AND text IS NOT DISTINCT FROM $11::text
             AND channel_id=$7 AND woztell_member_id=$2 AND direction::text='inbound'))) AS new_opt_out
+      WHERE ${intakeAllowed}
     ), updated_contact AS (
       UPDATE crm_contacts c SET name=COALESCE(c.name,$3),whatsapp_profile_name=CASE WHEN $16::boolean AND $9::text='inbound' AND $6::timestamptz>=COALESCE(c.last_inbound_at,'-infinity'::timestamptz) THEN COALESCE($3,c.whatsapp_profile_name) ELSE COALESCE(c.whatsapp_profile_name,$3) END,
         -- A staff-linked conversation never fills an identity field from the message.
@@ -365,37 +475,28 @@ export async function ingestWoztellEvent(
       UPDATE whatsapp_messages m SET status='accepted',error=NULL
       FROM accepted_intent i WHERE m.id=i.message_id RETURNING m.id
     ) SELECT (SELECT id FROM contact LIMIT 1) AS contact_id,(SELECT id FROM conversation LIMIT 1) AS conversation_id,
-      EXISTS(SELECT 1 FROM message) AS inserted,(SELECT yes FROM review) AS identity_review`,
-      params: [
-        normalizedPhone,
-        memberId,
-        event.memberName,
-        phone,
-        // FX-08 / D4: only a live inbound message can opt a contact out; history never does.
-        origin === "live_webhook" && event.direction === "inbound" && isOptOutText(event.text),
-        event.direction === "inbound" ? event.timestamp : null,
-        event.channelId,
-        event.timestamp,
-        event.direction,
-        event.messageType,
-        event.text,
-        event.externalMessageId,
-        JSON.stringify(event.payload),
-        event.legacyExternalMessageId,
-        JSON.stringify(outboundWoztellEvidence(event)),
-        origin === "live_webhook",
-      ],
-    },
-    ...workflowStatements,
-  ]);
-  const row = results[keys.length]?.[0] as
+      EXISTS(SELECT 1 FROM message) AS inserted,(SELECT yes FROM review) AS identity_review,
+      ${infoGate ? "(SELECT disposition FROM info_gate)" : "NULL::text"} AS info_disposition`,
+        params,
+      },
+      ...workflowStatements,
+      ...(infoPlan ? enquiryInfoReleaseCompletion(event, infoPlan) : []),
+    ],
+    { isolationLevel: "ReadCommitted" },
+  );
+  const row = results[transcriptIndex]?.[0] as
     | {
         contact_id: string | null;
         conversation_id: string | null;
         inserted: boolean;
         identity_review: boolean | null;
+        info_disposition?: EnquiryInfoIntakeDisposition;
       }
     | undefined;
+  if (infoPlan && row?.info_disposition) {
+    const isolated = enquiryInfoOutcome(row.info_disposition, infoPlan.receiptId);
+    if (isolated) return isolated;
+  }
   // The statement always returns one row, and a conflicted message is stored in review,
   // so this is an impossible state kept as a tripwire (C-04).
   const identityReview = row?.identity_review === true;
@@ -406,7 +507,7 @@ export async function ingestWoztellEvent(
   // An id only: never the phone, member id or text.
   if (identityReview) console.warn("WA_IDENTITY_REVIEW", { conversationId: row.conversation_id });
   const queuedJob = workflowStatements.length
-    ? (results[keys.length + workflowStatements.length]?.[0] as { status?: string } | undefined)
+    ? (results[transcriptIndex + workflowStatements.length]?.[0] as { status?: string } | undefined)
     : undefined;
   if (queuedJob?.status === "queued") (options.wake ?? (() => wakeAfterCommit("service")))();
   return {

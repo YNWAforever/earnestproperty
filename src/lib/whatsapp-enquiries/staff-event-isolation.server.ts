@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import type { NormalizedWoztellEvent } from "../woztell/woztell.server.ts";
 import { transactionRows, type queryRows } from "../neon/db.server.ts";
 import { inspectForwardingStaffScope } from "./enquiry-forwarding-isolation.server.ts";
+import { forwardingPhone } from "./enquiry-forwarding-policy.mjs";
 function atPath(value: unknown, path: string) {
   let v = value;
   for (const key of path.split(".")) {
@@ -17,6 +18,7 @@ function atPath(value: unknown, path: string) {
 export async function isolateSignedStaffEvent(
   event: NormalizedWoztellEvent,
   transaction = transactionRows,
+  options: { disableForwardingPhoneHeuristic?: boolean; exactCorrelationOnly?: boolean } = {},
 ) {
   const query = async (statement: string, params: unknown[] = []) =>
     (await transaction([{ statement, params }]))[0];
@@ -34,11 +36,33 @@ export async function isolateSignedStaffEvent(
     `SELECT t.id FROM staff_notification_attempts t JOIN staff_notification_endpoints ep ON ep.id=t.endpoint_id WHERE t.transport='staff_whatsapp' AND t.channel_id_snapshot=$1 AND t.destination_reference_snapshot=$2 AND t.provider_operation_id IS NOT NULL AND t.provider_operation_id IN ($3,$4) LIMIT 1`,
     [event.channelId, event.woztellMemberId, external, replyTo],
   );
-  const forwardingScope = await inspectForwardingStaffScope(
-    event,
-    replyTo,
-    query as typeof queryRows,
-  );
+  let forwardingScope: { matched: boolean; correlatedId: string | null };
+  if (options.disableForwardingPhoneHeuristic) {
+    // Keep exact provider/opaque-member correlation. Only a genuine fromPhone may
+    // identify a phone destination; toPhone and phone-looking opaque IDs are not senders.
+    const [exact] = await query(
+      `SELECT t.id FROM staff_notification_attempts t
+      WHERE t.transport='staff_whatsapp' AND t.routing_snapshot->>'purpose'='enquiry_forward'
+      AND t.channel_id_snapshot=$1 AND t.provider_operation_id IS NOT NULL AND t.provider_operation_id IN ($3,$4)
+      AND (t.destination_reference_snapshot=$2 OR ($5::text IS NOT NULL AND t.routing_snapshot->>'destinationType'='recipient_id' AND t.routing_snapshot->>'recipientPhone'=$5))
+      AND t.dispatch_state IN ('dispatching','unknown','accepted','delivered') LIMIT 1`,
+      [event.channelId, event.woztellMemberId, external, replyTo, forwardingPhone(event.fromPhone)],
+    );
+    const [member] = exact
+      ? []
+      : await query(
+          `SELECT id FROM enquiry_notification_recipients
+      WHERE channel_id=$1 AND retired_at IS NULL AND permission_granted AND verified_at IS NOT NULL
+      AND destination_type='member_id' AND destination_reference=$2 LIMIT 1`,
+          [event.channelId, event.woztellMemberId],
+        );
+    forwardingScope = {
+      matched: !!exact || !!member,
+      correlatedId: exact ? String(exact.id) : null,
+    };
+  } else {
+    forwardingScope = await inspectForwardingStaffScope(event, replyTo, query as typeof queryRows);
+  }
   const correlated =
     legacyCorrelated ??
     (forwardingScope.correlatedId ? { id: forwardingScope.correlatedId } : undefined);
@@ -96,6 +120,7 @@ export async function isolateSignedStaffEvent(
     ]);
     return true;
   }
+  if (!correlated && options.exactCorrelationOnly) return false;
   if (!correlated) {
     const reference = extractReferences(event.text ?? "");
     if (

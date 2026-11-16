@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import test, { mock } from "node:test";
 import {
   withOwnedPostgres,
@@ -19,6 +19,8 @@ const template = {
   params: ["name", "source", "phone", "link"],
 };
 const baseEnv = {
+  WOZTELL_APP_ID: "owned-admin-app",
+  VERCEL_GIT_COMMIT_SHA: "a".repeat(40),
   WOZTELL_CHANNEL_ID: channel,
   EP_WA_COMPANY_CHANNEL_ID: channel,
   EP_WA_ENQUIRY_MODE: "observe",
@@ -60,7 +62,9 @@ test(
               wakes.push(lane);
               if (wakeError) throw wakeError;
               wakeObservations.push(
-                query("SELECT id FROM ops_jobs WHERE job_type='woztell.enquiry.forward.readiness'"),
+                query(
+                  "SELECT id FROM ops_jobs WHERE job_type='woztell.enquiry.forward.readiness' AND actor_staff_id IS NOT NULL",
+                ),
               );
             },
             laneForJob: () => "service",
@@ -69,11 +73,45 @@ test(
         const {
           getEnquiryForwardingSettings,
           setEnquiryForwardingEnabled,
+          enableEnquiryForwardingFromOwnerInstruction,
           queueEnquiryForwardingCheck,
         } = await import("./enquiry-forwarding.server.ts");
         const { inspectEnquiryForwardingProvider } =
           await import("../whatsapp-enquiries/enquiry-forwarding-provider.server.ts");
         const ports = { query, transaction };
+        const sha = (value) => createHash("sha256").update(value).digest("hex");
+        const scope = { appId: baseEnv.WOZTELL_APP_ID, channelId: channel };
+        const owner = {
+          goalId: "owned-activation-authority",
+          sourceReference: "owned:activation-request",
+          sourceSha256: sha("owned actual instruction"),
+          receivedAt: "2026-01-01T00:00:00Z",
+          recorderReference: "owned:trusted-operator",
+          statement: "Owned Owner authorises informational enquiry phone copies.",
+          photoSha256: sha("owned approved routing photo"),
+        };
+        const decisions = await import("./enquiry-info-decisions.server.ts");
+        const { getCurrentEnquiryInfoInstallationEvidence } =
+          await import("./enquiry-info-installation.server.ts");
+        const [releaseJob] = await query(
+          "INSERT INTO ops_jobs(job_type,payload_version,payload,status,max_attempts,run_after,idempotency_key) VALUES('woztell.enquiry.forward.readiness',1,'{}','queued',2,now(),$1) RETURNING id",
+          [`owned-release:${randomUUID()}`],
+        );
+        const [releaseAudit] = await query(
+          "INSERT INTO audit_logs(action,subject_type,subject_id,metadata) VALUES('whatsapp.enquiry_forwarding.check_requested','ops_job',$1,$2::jsonb) RETURNING id",
+          [
+            releaseJob.id,
+            JSON.stringify({
+              source: "approved_deployment_verification",
+              releaseSha: baseEnv.VERCEL_GIT_COMMIT_SHA,
+            }),
+          ],
+        );
+        const installation = await getCurrentEnquiryInfoInstallationEvidence(scope, {
+          query,
+          env: baseEnv,
+        });
+        assert.equal(installation.releaseAuditId, releaseAudit.id);
         async function staff({
           id = randomUUID(),
           role,
@@ -128,13 +166,19 @@ test(
           (SELECT count(*)::int FROM audit_logs WHERE action LIKE 'whatsapp.enquiry_forwarding.%') AS audits,
           (SELECT count(*)::int FROM ops_jobs) AS jobs,
           (SELECT count(*)::int FROM staff_notification_attempts) AS attempts,
-          (SELECT jsonb_agg(to_jsonb(s) ORDER BY staff_user_id,role) FROM staff_roles s) AS roles`);
+          (SELECT jsonb_agg(to_jsonb(s) ORDER BY staff_user_id,role) FROM staff_roles s) AS roles,
+          (SELECT count(*)::int FROM enquiry_forwarding_decisions) AS decisions`);
           return data;
         };
         async function reset() {
           await query("UPDATE enquiry_notification_recipients SET enabled=false");
-          await query("DELETE FROM audit_logs WHERE action LIKE 'whatsapp.enquiry_forwarding.%'");
-          await query("DELETE FROM ops_jobs WHERE job_type='woztell.enquiry.forward.readiness'");
+          await query(
+            "DELETE FROM audit_logs WHERE action LIKE 'whatsapp.enquiry_forwarding.%' AND metadata->>'source' IS DISTINCT FROM 'approved_deployment_verification'",
+          );
+          await query(
+            "DELETE FROM ops_jobs WHERE job_type='woztell.enquiry.forward.readiness' AND id<>$1",
+            [releaseJob.id],
+          );
           for (const contact of Object.values(ENQUIRY_MANAGERS))
             await query(
               "UPDATE staff_users SET active=true,show_on_website=true,phone=$2 WHERE id=$1",
@@ -145,6 +189,7 @@ test(
           wakeError = null;
         }
         const ready = await inspectEnquiryForwardingProvider({
+          informationalInstallation: installation,
           env: {
             ...baseEnv,
             WOZTELL_ENABLED: "true",
@@ -219,6 +264,11 @@ test(
           true,
           "the real inspector produces the owned local fixture report",
         );
+        assert.equal(
+          ready.infoForwarding.ready,
+          true,
+          "actual owned inspector and installed components/release rows satisfy informational gates",
+        );
         async function proof(metadata = ready, age = "0 seconds") {
           return (
             await query(
@@ -270,7 +320,7 @@ test(
               process.env.EP_WA_COMPANY_CHANNEL_ID = channel;
             }
             const unavailable = async (statement, params = []) => {
-              if (statement.includes("WITH customer_conflicts AS ("))
+              if (statement.includes("AS conflict_recipient_keys"))
                 throw Error("Owned unavailable safety query");
               return query(statement, params);
             };
@@ -466,7 +516,7 @@ test(
             const concurrentPorts = {
               query,
               transaction: async (statements, options) => {
-                assert.equal(options.isolationLevel, "Serializable");
+                assert.equal(options.isolationLevel, "ReadCommitted");
                 [lateCustomer] = await query(
                   "INSERT INTO crm_contacts(name,source,phone,normalized_phone) VALUES('Owned late customer','whatsapp','95551234','85295551234') RETURNING id",
                 );
@@ -588,12 +638,30 @@ test(
           async () => {
             const cases = [
               [],
+              [{ metadata: { ...ready, infoForwarding: undefined } }],
+              [{ metadata: { ...ready, channel: { ...ready.channel, archived: null } } }],
+              [
+                {
+                  metadata: { ...ready, channel: { ...ready.channel, companyPhoneMatches: false } },
+                },
+              ],
               [
                 {
                   metadata: {
                     ...ready,
-                    ready: false,
-                    reasonCodes: ["CAPABILITY_REFERENCES_MISSING"],
+                    template: { ...ready.template, validationComplete: false },
+                  },
+                },
+              ],
+              [
+                {
+                  metadata: {
+                    ...ready,
+                    infoForwarding: {
+                      ...ready.infoForwarding,
+                      ready: false,
+                      reasonCodes: ["INFO_APPROVED_TEMPLATE_UNVERIFIED"],
+                    },
                   },
                 },
               ],
@@ -608,7 +676,16 @@ test(
               [{ metadata: ready, age: "25 hours" }],
               [
                 { metadata: ready, age: "1 minute" },
-                { metadata: { ...ready, ready: false, reasonCodes: ["CHANNEL_AUTH_DENIED"] } },
+                {
+                  metadata: {
+                    ...ready,
+                    infoForwarding: {
+                      ...ready.infoForwarding,
+                      ready: false,
+                      reasonCodes: ["INFO_SENDER_UNVERIFIED"],
+                    },
+                  },
+                },
               ],
             ];
             for (const entries of cases) {
@@ -733,7 +810,7 @@ test(
                 admin,
                 ports,
               ),
-              /ENQUIRY_RECIPIENT_PUBLIC_CONTACT_INVALID/,
+              responseStatus(409),
             );
             assert.deepEqual(await snapshot(), before);
             assert.equal((await copy()).enabled, false);
@@ -810,13 +887,375 @@ test(
         );
 
         await t.test(
+          "exact current purpose review permits a phone-only colleague without changing customer history",
+          async () => {
+            await reset();
+            const colleague = await staff({
+                publicProfile: true,
+                whatsapp: "92786562",
+                phone: "92786562",
+              }),
+              number = "85292786562";
+            const [customer] = await query(
+              "INSERT INTO crm_contacts(name,normalized_phone,whatsapp_member_id,opt_in_whatsapp,opted_out_whatsapp) VALUES('Owned current controller history',$1,'owned_prior_customer_member',false,true) RETURNING *",
+              [number],
+            );
+            const [conversation] = await query(
+              "INSERT INTO whatsapp_conversations(contact_id,channel_id,woztell_member_id,assignment_lock) VALUES($1,$2,'owned_prior_customer_member',true) RETURNING *",
+              [customer.id, channel],
+            );
+            try {
+              const infoOnly = {
+                ...ready,
+                ready: false,
+                reasonCodes: ["CAPABILITY_REFERENCES_MISSING"],
+                capabilities: {
+                  whatsappVerification: false,
+                  correlationVerification: false,
+                  associationReview: false,
+                  replyContext: false,
+                },
+              };
+              const evidence = await proof(infoOnly),
+                before = await snapshot();
+              await assert.rejects(
+                setEnquiryForwardingEnabled(
+                  { enabled: true, expectedCopyVersion: (await copy()).version },
+                  admin,
+                  ports,
+                ),
+                responseStatus(409),
+              );
+              assert.deepEqual(await snapshot(), before);
+              const packet = await decisions.getEnquiryInfoPhoneSnapshot(scope, number, query);
+              const approval = await decisions.importOwnerEnquiryInfoDecision(
+                {
+                  scope,
+                  subject: { kind: "recipient_phone", phone: number },
+                  decision: "approved",
+                  expectedRevision: 0,
+                  staffId: colleague.staffId,
+                  expectedProfileHash: packet.profileHash,
+                  expectedConflictHash: packet.conflictHash,
+                },
+                {
+                  ...owner,
+                  questionId: "owned_current_controller",
+                  response: "Owned owner confirms this is still the colleague phone.",
+                },
+                ports,
+              );
+              const settings = await getEnquiryForwardingSettings(admin, query),
+                recipient = settings.recipients.find(
+                  (row) => row.key === `sales:${colleague.staffId}`,
+                );
+              assert.equal(
+                settings.providerCheck.ready,
+                true,
+                "legacy references remain independently unready",
+              );
+              assert.deepEqual(settings.informationalPolicy.scope, scope);
+              assert.equal(recipient.purposeReviewed, true);
+              assert.equal(recipient.memberAssociated, false);
+              assert.equal(settings.recipientReadiness.distinctBlockedPhoneCount, 0);
+              const version = (await copy()).version;
+              await setEnquiryForwardingEnabled(
+                { enabled: true, expectedCopyVersion: version },
+                admin,
+                ports,
+              );
+              const [saved] = await query(
+                "SELECT permission_ref,verification_ref FROM enquiry_notification_recipients WHERE recipient_key=$1",
+                [recipient.key],
+              );
+              assert.equal(saved.permission_ref, `enq_forward_info:phone-review:${approval.id}`);
+              assert.equal(saved.verification_ref, `provider-check-audit:${evidence.id}`);
+              const armed = await decisions.getEnquiryInfoDecisionHead(
+                scope,
+                { kind: "policy" },
+                query,
+              );
+              assert.equal(armed.decision, "armed");
+              const armId = armed.id;
+              assert.deepEqual(
+                (await query("SELECT * FROM crm_contacts WHERE id=$1", [customer.id]))[0],
+                customer,
+              );
+              assert.deepEqual(
+                (
+                  await query("SELECT * FROM whatsapp_conversations WHERE id=$1", [conversation.id])
+                )[0],
+                conversation,
+              );
+              assert.equal(
+                (
+                  await query(
+                    "SELECT count(*)::int n FROM enquiry_forwarding_decisions WHERE subject_kind='sender_member' AND phone=$1",
+                    [number],
+                  )
+                )[0].n,
+                0,
+              );
+              await proof({
+                ...ready,
+                infoForwarding: {
+                  ...ready.infoForwarding,
+                  ready: false,
+                  reasonCodes: ["INFO_SENDER_UNVERIFIED"],
+                },
+              });
+              const pausePorts = {
+                query: async (statement, params) => {
+                  if (statement.includes("action='whatsapp.enquiry_forwarding.provider_checked'"))
+                    throw Error("Pause must not read provider readiness");
+                  return query(statement, params);
+                },
+                transaction,
+              };
+              await setEnquiryForwardingEnabled(
+                { enabled: false, expectedCopyVersion: (await copy()).version },
+                manager,
+                pausePorts,
+              );
+              assert.equal(await decisions.getEnquiryInfoLatestArmId(scope, query), armId);
+              assert.equal(
+                (await decisions.getEnquiryInfoDecisionHead(scope, { kind: "policy" }, query))
+                  .decision,
+                "paused",
+              );
+              await proof();
+              const [extra] = await query(
+                "INSERT INTO crm_contacts(name,normalized_phone) VALUES('Owned new overlap','92786562') RETURNING id",
+              );
+              try {
+                const beforeConflict = await snapshot();
+                await assert.rejects(
+                  setEnquiryForwardingEnabled(
+                    { enabled: true, expectedCopyVersion: (await copy()).version },
+                    admin,
+                    ports,
+                  ),
+                  responseStatus(409),
+                );
+                assert.deepEqual(await snapshot(), beforeConflict);
+              } finally {
+                await query("DELETE FROM crm_contacts WHERE id=$1", [extra.id]);
+              }
+              const beforeProfile = await snapshot();
+              await assert.rejects(
+                setEnquiryForwardingEnabled(
+                  { enabled: true, expectedCopyVersion: (await copy()).version },
+                  admin,
+                  {
+                    query,
+                    transaction: async (statements, options) => {
+                      await query("UPDATE staff_users SET whatsapp=$2 WHERE id=$1", [
+                        colleague.staffId,
+                        "92786563",
+                      ]);
+                      return transaction(statements, options);
+                    },
+                  },
+                ),
+                responseStatus(409),
+              );
+              assert.deepEqual(await snapshot(), beforeProfile);
+              await query("UPDATE staff_users SET whatsapp=$2 WHERE id=$1", [
+                colleague.staffId,
+                "92786562",
+              ]);
+              const beforeRevoke = await snapshot();
+              await assert.rejects(
+                setEnquiryForwardingEnabled(
+                  { enabled: true, expectedCopyVersion: (await copy()).version },
+                  admin,
+                  {
+                    query,
+                    transaction: async (statements, options) => {
+                      await decisions.appendEnquiryInfoDecision(
+                        {
+                          scope,
+                          subject: { kind: "recipient_phone", phone: number },
+                          decision: "revoked",
+                          expectedRevision: 1,
+                        },
+                        manager,
+                        ports,
+                      );
+                      return transaction(statements, options);
+                    },
+                  },
+                ),
+                responseStatus(409),
+              );
+              const afterRevoke = await snapshot();
+              assert.deepEqual(afterRevoke.recipients, beforeRevoke.recipients);
+              assert.equal(afterRevoke.audits, beforeRevoke.audits);
+              assert.equal(afterRevoke.decisions, beforeRevoke.decisions + 1);
+            } finally {
+              await query("DELETE FROM whatsapp_conversations WHERE id=$1", [conversation.id]);
+              await query("DELETE FROM crm_contacts WHERE id=$1", [customer.id]);
+              await query("UPDATE staff_users SET show_on_website=false WHERE id=$1", [
+                colleague.staffId,
+              ]);
+              await reset();
+            }
+          },
+        );
+        await t.test(
+          "provider and release changes during locking fail closed and an arm failure rolls back configuration",
+          async () => {
+            await reset();
+            await proof();
+            let before = await snapshot();
+            await assert.rejects(
+              setEnquiryForwardingEnabled(
+                { enabled: true, expectedCopyVersion: (await copy()).version },
+                admin,
+                {
+                  query,
+                  transaction: async (statements, options) => {
+                    await proof({
+                      ...ready,
+                      channel: { ...ready.channel, archived: null },
+                      infoForwarding: {
+                        ...ready.infoForwarding,
+                        ready: false,
+                        reasonCodes: ["INFO_CHANNEL_ARCHIVE_UNVERIFIED"],
+                      },
+                    });
+                    return transaction(statements, options);
+                  },
+                },
+              ),
+              responseStatus(409),
+            );
+            let after = await snapshot();
+            assert.deepEqual(after.recipients, before.recipients);
+            assert.equal(after.decisions, before.decisions);
+            assert.equal(after.audits, before.audits + 1);
+            await reset();
+            await proof();
+            before = await snapshot();
+            let extraRelease;
+            try {
+              await assert.rejects(
+                setEnquiryForwardingEnabled(
+                  { enabled: true, expectedCopyVersion: (await copy()).version },
+                  admin,
+                  {
+                    query,
+                    transaction: async (statements, options) => {
+                      [extraRelease] = await query(
+                        "INSERT INTO audit_logs(action,subject_type,subject_id,metadata) VALUES('whatsapp.enquiry_forwarding.check_requested','ops_job',$1,$2::jsonb) RETURNING id",
+                        [
+                          releaseJob.id,
+                          JSON.stringify({
+                            source: "approved_deployment_verification",
+                            releaseSha: baseEnv.VERCEL_GIT_COMMIT_SHA,
+                          }),
+                        ],
+                      );
+                      return transaction(statements, options);
+                    },
+                  },
+                ),
+                responseStatus(409),
+              );
+              after = await snapshot();
+              assert.deepEqual(after.recipients, before.recipients);
+              assert.equal(after.decisions, before.decisions);
+            } finally {
+              if (extraRelease)
+                await query("DELETE FROM audit_logs WHERE id=$1", [extraRelease.id]);
+            }
+            await reset();
+            await proof();
+            before = await snapshot();
+            await query(
+              "CREATE FUNCTION owned_reject_info_arm() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF NEW.subject_kind='policy' AND NEW.decision='armed' THEN RAISE EXCEPTION 'OWNED_ARM_WRITE_FAIL'; END IF; RETURN NEW; END $$",
+            );
+            await query(
+              "CREATE TRIGGER owned_reject_info_arm BEFORE INSERT ON enquiry_forwarding_decisions FOR EACH ROW EXECUTE FUNCTION owned_reject_info_arm()",
+            );
+            try {
+              await assert.rejects(
+                setEnquiryForwardingEnabled(
+                  { enabled: true, expectedCopyVersion: (await copy()).version },
+                  admin,
+                  ports,
+                ),
+                /OWNED_ARM_WRITE_FAIL/,
+              );
+              assert.deepEqual(await snapshot(), before);
+            } finally {
+              await query("DROP TRIGGER owned_reject_info_arm ON enquiry_forwarding_decisions");
+              await query("DROP FUNCTION owned_reject_info_arm()");
+            }
+          },
+        );
+        await t.test(
+          "trusted Owner activation records NULL staff provenance and cannot be selected through the public API",
+          async () => {
+            await reset();
+            await proof();
+            const before = await snapshot(),
+              version = (await copy()).version;
+            const result = await enableEnquiryForwardingFromOwnerInstruction(
+              { expectedCopyVersion: version },
+              owner,
+              ports,
+            );
+            assert.equal(result.enabled, true);
+            assert.equal(result.version, version + 1);
+            const [decision] = await query(
+              "SELECT * FROM enquiry_forwarding_decisions WHERE id=$1",
+              [result.armId],
+            );
+            assert.equal(decision.authority_kind, "owner_instruction");
+            assert.equal(decision.actor_staff_id, null);
+            assert.equal(decision.evidence.ownerInstruction.sourceSha256, owner.sourceSha256);
+            const [audit] = await query(
+              "SELECT actor_id,metadata FROM audit_logs WHERE action='whatsapp.enquiry_forwarding.configured'",
+            );
+            assert.equal(audit.actor_id, null);
+            assert.equal(audit.metadata.authorityKind, "owner_instruction");
+            assert.deepEqual((await snapshot()).roles, before.roles);
+            const stable = await snapshot();
+            await assert.rejects(
+              setEnquiryForwardingEnabled(
+                { enabled: true, expectedCopyVersion: result.version, ownerInstruction: owner },
+                admin,
+                ports,
+              ),
+              (error) => error.name === "ZodError",
+            );
+            await assert.rejects(
+              setEnquiryForwardingEnabled(
+                { enabled: true, expectedCopyVersion: result.version },
+                noRole,
+                ports,
+              ),
+              responseStatus(403),
+            );
+            await assert.rejects(
+              enableEnquiryForwardingFromOwnerInstruction(
+                { expectedCopyVersion: result.version },
+                { ...owner, photoSha256: undefined },
+                ports,
+              ),
+            );
+            assert.deepEqual(await snapshot(), stable);
+          },
+        );
+        await t.test(
           "readiness request queues only its non-message job and wakes after committed audit",
           async () => {
             await reset();
             const before = await snapshot();
             const requested = await queueEnquiryForwardingCheck(admin, ports);
             const jobs = await query(
-              "SELECT * FROM ops_jobs WHERE job_type='woztell.enquiry.forward.readiness'",
+              "SELECT * FROM ops_jobs WHERE job_type='woztell.enquiry.forward.readiness' AND actor_staff_id IS NOT NULL",
             );
             assert.equal((await snapshot()).jobs, before.jobs + 1);
             assert.equal(jobs.length, 1);
@@ -829,7 +1268,7 @@ test(
             assert.equal(jobs[0].actor_staff_id, admin.staffId);
             assert.match(jobs[0].idempotency_key, /^enquiry-forward-readiness:[0-9a-f-]{36}$/);
             const audits = await query(
-              "SELECT * FROM audit_logs WHERE action='whatsapp.enquiry_forwarding.check_requested'",
+              "SELECT * FROM audit_logs WHERE action='whatsapp.enquiry_forwarding.check_requested' AND actor_id IS NOT NULL",
             );
             assert.equal(audits.length, 1);
             assert.equal(audits[0].subject_id, requested.jobId);
@@ -854,14 +1293,14 @@ test(
             try {
               const result = await queueEnquiryForwardingCheck(admin, ports);
               const jobs = await query(
-                "SELECT id FROM ops_jobs WHERE job_type='woztell.enquiry.forward.readiness'",
+                "SELECT id FROM ops_jobs WHERE job_type='woztell.enquiry.forward.readiness' AND actor_staff_id IS NOT NULL",
               );
               assert.deepEqual(
                 jobs.map((row) => row.id),
                 [result.jobId],
               );
               const audits = await query(
-                "SELECT subject_id FROM audit_logs WHERE action='whatsapp.enquiry_forwarding.check_requested'",
+                "SELECT subject_id FROM audit_logs WHERE action='whatsapp.enquiry_forwarding.check_requested' AND actor_id IS NOT NULL",
               );
               assert.deepEqual(
                 audits.map((row) => row.subject_id),
@@ -901,7 +1340,7 @@ test(
         );
 
         await t.test(
-          "concurrent Serializable activation reports one clean conflict without partial writes",
+          "concurrent ReadCommitted activation reports one clean CAS conflict after fresh policy locks",
           async () => {
             await reset();
             await proof();
@@ -914,10 +1353,10 @@ test(
             const synchronized = {
               query,
               transaction: async (statements, options) => {
-                assert.equal(options.isolationLevel, "Serializable");
+                assert.equal(options.isolationLevel, "ReadCommitted");
                 const client = await pool.connect();
                 try {
-                  await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+                  await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
                   await client.query(
                     "SELECT version FROM enquiry_notification_recipients WHERE recipient_key='copy'",
                   );
@@ -1053,11 +1492,34 @@ test(
               assert.deepEqual(result, { summary: { ready: 1, blockers: 0 } });
               assert.equal(inspections, 1);
               assert.equal(trustedRosterReads, rosterReadsBefore + 1);
+              assert.equal(inspectionInputs.length, 1);
+              assert.deepEqual(Object.keys(inspectionInputs[0]).sort(), [
+                "informationalInstallation",
+                "recipientPhones",
+              ]);
               assert.deepEqual(
-                inspectionInputs,
-                [{ recipientPhones: expectedPhones }],
+                inspectionInputs[0].recipientPhones,
+                expectedPhones,
                 "only canonical deduplicated fixed contacts and active public valid Sales reach the inspector",
               );
+              const installation = inspectionInputs[0].informationalInstallation;
+              assert.equal(installation.purpose, "enq_forward_info");
+              assert.equal(installation.version, 1);
+              assert.equal(installation.appId, process.env.WOZTELL_APP_ID);
+              assert.equal(installation.channelId, process.env.WOZTELL_CHANNEL_ID);
+              assert.equal(installation.runtimeBuildSha, process.env.VERCEL_GIT_COMMIT_SHA);
+              assert.equal(installation.verifiedBuildSha, installation.runtimeBuildSha);
+              assert.equal(installation.schemaAvailable, true);
+              assert.equal(installation.receiptAdmissionVersion, 1);
+              assert.equal(installation.neutralHoldVersion, 1);
+              assert.equal(installation.templateTransportVersion, 1);
+              const [release] = await query(
+                "SELECT actor_id,metadata FROM audit_logs WHERE id=$1 AND action='whatsapp.enquiry_forwarding.check_requested'",
+                [installation.releaseAuditId],
+              );
+              assert.equal(release.actor_id, null);
+              assert.equal(release.metadata.source, "approved_deployment_verification");
+              assert.equal(release.metadata.releaseSha, installation.runtimeBuildSha);
               assert.ok(
                 !inspectionInputs[0].recipientPhones.some((phone) =>
                   ["85295551235", "85295551236", "not-a-phone", "85298887777"].includes(phone),
@@ -1139,7 +1601,11 @@ test(
               );
               assert.equal(inspections, 2, "a lost lease after inspection cannot publish evidence");
               assert.equal(trustedRosterReads, rosterReadsBefore + 2);
-              assert.deepEqual(inspectionInputs[1], { recipientPhones: expectedPhones });
+              assert.deepEqual(
+                inspectionInputs[1],
+                inspectionInputs[0],
+                "replacement leases cannot alter the trusted roster or actual installation evidence",
+              );
               await transaction([
                 {
                   statement: "SELECT set_config('app.wa_worker_capabilities',$1,true)",
@@ -1249,6 +1715,84 @@ test(
         );
         assert.equal(network.mock.callCount(), 0, "no external provider or wake request ran");
       });
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      mock.restoreAll();
+    }
+  },
+);
+
+test(
+  "owned compatible pause succeeds before informational migration",
+  { timeout: 120000 },
+  async () => {
+    const previous = Object.fromEntries(Object.keys(baseEnv).map((key) => [key, process.env[key]]));
+    Object.assign(process.env, baseEnv);
+    const network = mock.method(globalThis, "fetch", () => {
+      throw Error("External network forbidden");
+    });
+    try {
+      await withOwnedPostgres(
+        async ({ query, transaction }) => {
+          await mockOwnedServerDb(mock, query, transaction);
+          const { setEnquiryForwardingEnabled, getEnquiryForwardingSettings } =
+            await import("./enquiry-forwarding.server.ts");
+          const id = randomUUID();
+          await query("INSERT INTO staff_users(id,auth_user_id,active) VALUES($1,$2,true)", [
+            id,
+            `owned-legacy-pause-${id}`,
+          ]);
+          await query("INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'admin')", [id]);
+          const actor = { staffId: id, roles: ["admin"] };
+          await query(
+            "UPDATE enquiry_notification_recipients SET enabled=true,channel_id=$1,destination_type='recipient_id',destination_reference=phone,verified_at=now(),verification_ref='owned-before-info-provider-proof',permission_granted=true,permission_ref=$2 WHERE recipient_key='copy'",
+            [channel, ENQUIRY_ROUTING_APPROVAL],
+          );
+          const [before] = await query(
+            "SELECT * FROM enquiry_notification_recipients WHERE recipient_key='copy'",
+          );
+          const settings = await getEnquiryForwardingSettings(actor, query);
+          assert.equal(settings.available, true);
+          assert.equal(settings.informationalPolicy.available, false);
+          assert.equal(settings.recipients.find((row) => row.key === "copy").enabled, true);
+          const guarded = {
+            query: async (statement, params) => {
+              if (statement.includes("action='whatsapp.enquiry_forwarding.provider_checked'"))
+                throw Error("Pause cannot require provider proof");
+              return query(statement, params);
+            },
+            transaction,
+          };
+          const result = await setEnquiryForwardingEnabled(
+            { enabled: false, expectedCopyVersion: before.version },
+            actor,
+            guarded,
+          );
+          assert.deepEqual(result, { enabled: false, version: before.version + 1 });
+          assert.equal(
+            (
+              await query(
+                "SELECT enabled FROM enquiry_notification_recipients WHERE recipient_key='copy'",
+              )
+            )[0].enabled,
+            false,
+          );
+          assert.equal(
+            (await query("SELECT to_regclass('enquiry_forwarding_decisions') IS NULL AS absent"))[0]
+              .absent,
+            true,
+          );
+          assert.equal(network.mock.callCount(), 0);
+        },
+        {
+          migrationVersions: MIGRATION_VERSIONS.filter(
+            (value) => value < "20261116010000_enquiry_information_scope.sql",
+          ),
+        },
+      );
     } finally {
       for (const [key, value] of Object.entries(previous)) {
         if (value === undefined) delete process.env[key];

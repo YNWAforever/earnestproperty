@@ -577,7 +577,7 @@ registerJobHandler({
     await context.checkpoint();
     const { queryRows } = await import("../neon/db.server.ts");
     const live = await queryRows(
-      "SELECT id FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.forward.readiness' AND payload='{}'::jsonb AND status='running' AND lease_owner=$2 AND lease_expires_at>now()",
+      "SELECT id FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.forward.readiness' AND payload_version=1 AND payload='{}'::jsonb AND status='running' AND lease_owner=$2 AND lease_expires_at>now()",
       [context.jobId, context.workerId ?? null],
     );
     if (!live.length)
@@ -589,17 +589,34 @@ registerJobHandler({
     const recipientPhones = await getTrustedEnquiryForwardingRecipientPhones();
     const { inspectEnquiryForwardingProvider } =
       await import("../whatsapp-enquiries/enquiry-forwarding-provider.server.ts");
-    const check = await inspectEnquiryForwardingProvider({ recipientPhones });
+    const { providerChannelId } = await import("../whatsapp-enquiries/wa-config.server.ts");
+    const appId = process.env.WOZTELL_APP_ID;
+    const channelId = providerChannelId();
+    const informationalInstallation =
+      appId && channelId
+        ? await (
+            await import("../neon/enquiry-info-installation.server.ts")
+          ).getCurrentEnquiryInfoInstallationEvidence({ appId, channelId }, { query: queryRows })
+        : null;
+    const check = await inspectEnquiryForwardingProvider({
+      recipientPhones,
+      informationalInstallation,
+    });
     await context.checkpoint();
     const proof = await queryRows(
-      "INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) SELECT NULL,'whatsapp.enquiry_forwarding.provider_checked','ops_job',$1,$2::jsonb WHERE EXISTS(SELECT 1 FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.forward.readiness' AND payload='{}'::jsonb AND status='running' AND lease_owner=$3 AND lease_expires_at>now()) RETURNING id",
+      "INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) SELECT NULL,'whatsapp.enquiry_forwarding.provider_checked','ops_job',$1,$2::jsonb WHERE EXISTS(SELECT 1 FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.forward.readiness' AND payload_version=1 AND payload='{}'::jsonb AND status='running' AND lease_owner=$3 AND lease_expires_at>now()) RETURNING id",
       [context.jobId, JSON.stringify(check), context.workerId],
     );
     if (!proof.length)
       throw Object.assign(new Error("Readiness job ownership lost"), {
         code: "JOB_OWNERSHIP_LOST",
       });
-    return { summary: { ready: check.ready ? 1 : 0, blockers: check.reasonCodes.length } };
+    return {
+      summary: {
+        ready: check.infoForwarding?.ready ? 1 : 0,
+        blockers: check.infoForwarding?.reasonCodes.length ?? check.reasonCodes.length,
+      },
+    };
   },
 });
 

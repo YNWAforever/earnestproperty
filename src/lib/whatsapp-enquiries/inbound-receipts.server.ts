@@ -2,7 +2,14 @@ import "@tanstack/react-start/server-only";
 
 import { randomUUID } from "node:crypto";
 import { deriveInboundIdentity, eventForReceiptProjection } from "./inbound-identity.ts";
-import { queryRows } from "../neon/db.server.ts";
+import { classifyWoztellEvent } from "./event-classification.ts";
+import { queryRows, transactionRows } from "../neon/db.server.ts";
+import { enquiryInfoLockStatements } from "../neon/enquiry-info-decisions.server.ts";
+import { enquiryInfoReceiptSchemaAvailable } from "./enquiry-info-intake.server.ts";
+import {
+  isEnquiryInfoReviewOutcome,
+  type EnquiryInfoReceiptContext,
+} from "./enquiry-info-intake.types.ts";
 import {
   RECEIPT_CLAIM_SET_SQL,
   RECEIPT_DUE_AT_SQL,
@@ -23,11 +30,26 @@ import type {
   VerifiedReceiptInput,
 } from "./no-link.types.ts";
 
+/** Installed causal admission contract; provider proof and business permission remain separate. */
+export const receiptAdmissionVersion = 1;
+
 export type ReceiptQuery = (
   statement: string,
   params?: unknown[],
 ) => Promise<Record<string, unknown>[]>;
-export type ReceiptPorts = { query?: ReceiptQuery; wake?: () => void };
+export type ReceiptPorts = {
+  query?: ReceiptQuery;
+  transaction?: typeof transactionRows;
+  wake?: () => void;
+};
+function receiptQueryForPorts(ports: ReceiptPorts): ReceiptQuery {
+  if (ports.query) return ports.query;
+  const transaction = ports.transaction;
+  if (transaction)
+    return async (statement, params = []) =>
+      (await transaction([{ statement, params }], { isolationLevel: "ReadCommitted" }))[0] ?? [];
+  return queryRows;
+}
 
 function minimalEvent(event: VerifiedReceiptInput["event"]) {
   const outer = event.payload;
@@ -74,7 +96,7 @@ export async function storeInboundReceipt(
   ) {
     throw new Error("WA_RECEIPT_VERIFIED_SCOPE_REQUIRED");
   }
-  const query = ports.query ?? queryRows;
+  const query = receiptQueryForPorts(ports);
   const id = randomUUID();
   const providerMessageId =
     input.event.legacyExternalMessageId === null ? input.event.externalMessageId : null;
@@ -90,38 +112,54 @@ export async function storeInboundReceipt(
     providerOccurredAt: input.providerOccurredAt,
     payloadDigest: input.bodyDigest,
   });
-  const rows = await query(
-    `INSERT INTO whatsapp_inbound_receipts
+  const admission =
+    input.origin === "live_webhook" &&
+    (await enquiryInfoReceiptSchemaAvailable(query as typeof queryRows));
+  if (admission && ports.query && !ports.transaction)
+    throw new Error("WA_RECEIPT_TRANSACTION_REQUIRED");
+  const statement = `INSERT INTO whatsapp_inbound_receipts
       (id,tenant_key,provider,app_id,channel_id,member_id,event_kind,origin,
        provider_message_id,identity_key,similarity_key,normalized_event,body_digest,
        capture_mode,activation_id,effects_eligible,provider_occurred_at,received_at,
-       projection_state,attempt_count)
+       projection_state,attempt_count${admission ? ",enquiry_forwarding_arm_id" : ""})
      VALUES ($1,$2,'woztell',$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,
-             $13,$14::uuid,$15,$16::timestamptz,$17::timestamptz,'pending',1)
+             $13,$14::uuid,$15,$16::timestamptz,$17::timestamptz,'pending',1${admission ? ",enquiry_info_latest_arm($3,$4)" : ""})
      ON CONFLICT (tenant_key,app_id,channel_id,identity_key)
        WHERE identity_key IS NOT NULL
      DO UPDATE SET delivery_count=whatsapp_inbound_receipts.delivery_count+1,updated_at=now()
-     RETURNING id,projection_state,delivery_count`,
-    [
-      id,
-      input.tenantKey,
-      input.appId,
-      input.channelId,
-      input.event.woztellMemberId,
-      input.eventKind,
-      input.origin,
-      providerMessageId,
-      identity.scopedProviderKey,
-      identity.similarityKey,
-      JSON.stringify(minimalEvent(input.event)),
-      input.bodyDigest.toLowerCase(),
-      input.capture.mode,
-      input.capture.activationId,
-      input.capture.effectsEligible,
-      input.providerOccurredAt,
-      input.receivedAt.toISOString(),
-    ],
-  );
+     RETURNING id,projection_state,delivery_count,block_reason${admission ? ",enquiry_forwarding_arm_id" : ""}`;
+  const params: unknown[] = [
+    id,
+    input.tenantKey,
+    input.appId,
+    input.channelId,
+    input.event.woztellMemberId,
+    input.eventKind,
+    input.origin,
+    providerMessageId,
+    identity.scopedProviderKey,
+    identity.similarityKey,
+    JSON.stringify(minimalEvent(input.event)),
+    input.bodyDigest.toLowerCase(),
+    input.capture.mode,
+    input.capture.activationId,
+    input.capture.effectsEligible,
+    input.providerOccurredAt,
+    input.receivedAt.toISOString(),
+  ];
+  // Lock and INSERT are separate statements, giving INSERT a fresh RC snapshot
+  // after a concurrent activation commits. Duplicate delivery never changes its arm.
+  const rows = admission
+    ? ((
+        await (ports.transaction ?? transactionRows)(
+          [
+            ...enquiryInfoLockStatements({ appId: input.appId, channelId: input.channelId }),
+            { statement, params },
+          ],
+          { isolationLevel: "ReadCommitted" },
+        )
+      ).at(-1) ?? [])
+    : await query(statement, params);
   if (!rows[0]?.id) throw new Error("WA_RECEIPT_STORE_NO_READBACK");
   return {
     receiptId: String(rows[0].id),
@@ -133,6 +171,10 @@ export async function storeInboundReceipt(
           ? "duplicate"
           : "new",
     projectionState: rows[0].projection_state as ReceiptProjectionState,
+    blockReason: rows[0].block_reason ? String(rows[0].block_reason) : null,
+    enquiryForwardingArmId: rows[0].enquiry_forwarding_arm_id
+      ? String(rows[0].enquiry_forwarding_arm_id)
+      : null,
   };
 }
 export async function markInboundReceipt(
@@ -143,13 +185,13 @@ export async function markInboundReceipt(
 ): Promise<void> {
   if (!["pending", "projected", "blocked_schema", "failed"].includes(state))
     throw new Error("WA_RECEIPT_STATE_INVALID");
-  const query = ports.query ?? queryRows;
+  const query = receiptQueryForPorts(ports);
   await query(
     `UPDATE whatsapp_inbound_receipts
      SET projection_state=$2, block_reason=$3, lease_until=NULL,
          projected_at=CASE WHEN $2='projected' THEN now() ELSE projected_at END,
          updated_at=now()
-     WHERE id=$1::uuid`,
+     WHERE id=$1::uuid AND projection_state<>'projected' AND block_reason IS DISTINCT FROM 'REVIEW_REQUIRED'`,
     [receiptId, state, reason],
   );
 }
@@ -157,6 +199,7 @@ export async function markInboundReceipt(
 export type ReceiptProject = (
   event: VerifiedReceiptInput["event"],
   mode: "off" | "observe",
+  receiptContext: EnquiryInfoReceiptContext,
 ) => Promise<unknown>;
 
 /** Projects one receipt that the caller has already claimed (leased and counted). */
@@ -165,20 +208,33 @@ export async function projectClaimedReceipt(
   ports: { query: ReceiptQuery; project: ReceiptProject },
 ): Promise<"projected" | "failed" | "blocked_schema" | "review"> {
   const { query, project } = ports;
-  // Historical recovery never restores active effects or a former activation.
-  if (row.origin !== "live_webhook" || row.event_kind !== "customer_message") {
-    await markInboundReceipt(row.id, "failed", "REVIEW_REQUIRED", { query });
-    return "review";
-  }
+  if (row.block_reason === "REVIEW_REQUIRED") return "review";
   const event =
     typeof row.normalized_event === "string"
       ? (JSON.parse(row.normalized_event) as VerifiedReceiptInput["event"])
       : row.normalized_event;
+  const informationalReply =
+    !!row.enquiry_forwarding_arm_id &&
+    row.event_kind === "unsupported" &&
+    classifyWoztellEvent(event.payload).direction === "inbound";
+  // Historical recovery never restores active effects or a former activation.
+  if (
+    row.origin !== "live_webhook" ||
+    (row.event_kind !== "customer_message" && !informationalReply)
+  ) {
+    await markInboundReceipt(row.id, "failed", "REVIEW_REQUIRED", { query });
+    return "review";
+  }
   try {
-    await project(
+    const outcome = await project(
       eventForReceiptProjection(event, row.id, row.event_kind, row.identity_key),
       row.capture_mode === "off" ? "off" : "observe",
+      { receiptId: row.id },
     );
+    if (isEnquiryInfoReviewOutcome(outcome)) {
+      await markInboundReceipt(row.id, "failed", "REVIEW_REQUIRED", { query });
+      return "review";
+    }
     await markInboundReceipt(row.id, "projected", null, { query });
     return "projected";
   } catch (error) {
@@ -193,10 +249,27 @@ export async function projectClaimedReceipt(
   }
 }
 
-const defaultReceiptProject: ReceiptProject = async (event, mode) => {
-  const { ingestWoztellEvent } = await import("../woztell/woztell-ingest.server.ts");
-  await ingestWoztellEvent(event, "live_webhook", undefined, { signedEvent: true, mode });
-};
+function receiptProjectForPorts(
+  ports: ReceiptPorts & { project?: ReceiptProject },
+): ReceiptProject {
+  if (ports.project) return ports.project;
+  const query = receiptQueryForPorts(ports);
+  return async (event, mode, receiptContext) => {
+    if (ports.query && !ports.transaction) throw new Error("WA_RECEIPT_TRANSACTION_REQUIRED");
+    const { ingestWoztellEvent } = await import("../woztell/woztell-ingest.server.ts");
+    return ingestWoztellEvent(event, "live_webhook", ports.transaction, {
+      signedEvent: true,
+      mode,
+      receiptContext,
+      schemaAvailable: async () => {
+        const [row] = await query(
+          "SELECT to_regclass('whatsapp_enquiry_events') IS NOT NULL AS available",
+        );
+        return row?.available === true;
+      },
+    });
+  };
+}
 
 export async function recoverPendingInboundReceipts(
   ports: ReceiptPorts & {
@@ -204,7 +277,7 @@ export async function recoverPendingInboundReceipts(
     limit?: number;
   } = {},
 ) {
-  const query = ports.query ?? queryRows;
+  const query = receiptQueryForPorts(ports);
   const limit = Math.max(1, Math.min(ports.limit ?? 20, 20));
   const rows = (await query(
     `WITH claimed AS (
@@ -215,10 +288,10 @@ export async function recoverPendingInboundReceipts(
      UPDATE whatsapp_inbound_receipts r
      SET ${RECEIPT_CLAIM_SET_SQL}
      FROM claimed WHERE r.id=claimed.id
-     RETURNING r.id,r.identity_key,r.normalized_event,r.event_kind,r.capture_mode,r.origin`,
+     RETURNING r.id,r.identity_key,r.normalized_event,r.event_kind,r.capture_mode,r.origin,r.block_reason,to_jsonb(r)->>'enquiry_forwarding_arm_id' AS enquiry_forwarding_arm_id`,
     [limit],
   )) as ReceiptRow[];
-  const project = ports.project ?? defaultReceiptProject;
+  const project = receiptProjectForPorts(ports);
   const counts = { projected: 0, blocked: 0, review: 0 };
   for (const row of rows) {
     const outcome = await projectClaimedReceipt(row, { query, project });
@@ -336,7 +409,7 @@ export async function retryInboundReceipt(
   if (!actor.roles.some((role) => role === "admin" || role === "manager")) {
     throw new Response("Forbidden", { status: 403 });
   }
-  const query = ports.query ?? queryRows;
+  const query = receiptQueryForPorts(ports);
   const claimed = (await query(
     `WITH target AS (
        SELECT id FROM whatsapp_inbound_receipts
@@ -352,7 +425,7 @@ export async function retryInboundReceipt(
        SET ${RECEIPT_CLAIM_SET_SQL}
        FROM target WHERE r.id=target.id
        RETURNING r.id,r.identity_key,r.normalized_event,r.event_kind,r.capture_mode,r.origin,
-                 r.projection_state AS previous_state,r.attempt_count
+                 r.block_reason,to_jsonb(r)->>'enquiry_forwarding_arm_id' AS enquiry_forwarding_arm_id,r.projection_state AS previous_state,r.attempt_count
      ), audit AS (
        INSERT INTO ops_audit_logs
          (actor_staff_id, permission, action, resource_type, resource_id, outcome, request_id, metadata)
@@ -369,7 +442,7 @@ export async function retryInboundReceipt(
   if (!claimed[0]) return null;
   const outcome = await projectClaimedReceipt(claimed[0], {
     query,
-    project: ports.project ?? defaultReceiptProject,
+    project: receiptProjectForPorts(ports),
   });
   if (outcome === "review") return null;
   return { receiptId, projectionState: outcome };

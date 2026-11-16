@@ -144,6 +144,84 @@ const run = (options = {}, patch = {}, extra = {}) => {
   }).then((result) => ({ result, calls: f.calls }));
 };
 
+const informationalInstallation = () => ({
+  purpose: "enq_forward_info",
+  version: 1,
+  appId: "app-one",
+  channelId,
+  schemaVersion: "20261116010000_enquiry_information_scope",
+  schemaAvailable: true,
+  receiptAdmissionVersion: 1,
+  neutralHoldVersion: 1,
+  templateTransportVersion: 1,
+  runtimeBuildSha: "c".repeat(40),
+  verifiedBuildSha: "c".repeat(40),
+  releaseAuditId: "11111111-2222-4333-8444-555555555555",
+});
+
+test("informational provider readiness is separate from legacy action references and still requires installed isolation", async () => {
+  const withoutInstallation = (await run()).result;
+  assert.equal(withoutInstallation.ready, true);
+  assert.equal(withoutInstallation.infoForwarding.ready, false);
+  const { result } = await run(
+    {},
+    {
+      EP_WA_STAFF_WHATSAPP_VERIFICATION_REF: undefined,
+      EP_WA_STAFF_CORRELATION_VERIFICATION_REF: undefined,
+      EP_WA_STAFF_ASSOCIATION_REVIEW_REF: undefined,
+      EP_WA_STAFF_REPLY_CONTEXT_PATH: undefined,
+    },
+    { informationalInstallation: informationalInstallation() },
+  );
+  assert.equal(result.ready, false);
+  assert.ok(result.reasonCodes.includes("CAPABILITY_REFERENCES_MISSING"));
+  assert.equal(result.channel.appId, "app-one");
+  assert.equal(result.infoForwarding.ready, true);
+  assert.equal(result.infoForwarding.provesWhatsappRegistration, false);
+  assert.equal(result.infoForwarding.provesDelivery, false);
+});
+
+test("informational provider proof preserves explicit archive and scope requirements", async () => {
+  const installation = informationalInstallation();
+  const unknownArchive = (
+    await run(
+      { channel: { archived: null } },
+      {},
+      {
+        informationalInstallation: installation,
+      },
+    )
+  ).result;
+  assert.equal(unknownArchive.infoForwarding.ready, false);
+  assert.ok(unknownArchive.infoForwarding.reasonCodes.includes("INFO_CHANNEL_ARCHIVE_UNVERIFIED"));
+  const wrongScope = (
+    await run(
+      {},
+      {},
+      {
+        informationalInstallation: { ...installation, appId: "other-app" },
+      },
+    )
+  ).result;
+  assert.equal(wrongScope.infoForwarding.ready, false);
+  assert.ok(wrongScope.infoForwarding.reasonCodes.includes("INFO_RELEASE_SCOPE_UNVERIFIED"));
+});
+
+test("the common secret boundary invalidates informational proof after provider fields are redacted", async () => {
+  const privateTemplateId = "owned_private_template_key";
+  const { result } = await run(
+    { templates: [template({ id: privateTemplateId })] },
+    {
+      WOZTELL_BOT_ACCESS_TOKEN: privateTemplateId,
+    },
+    { informationalInstallation: informationalInstallation() },
+  );
+  assert.equal(result.ready, false);
+  assert.equal(result.infoForwarding.ready, false);
+  assert.ok(result.infoForwarding.reasonCodes.includes("SENSITIVE_PROVIDER_CONTENT_REDACTED"));
+  assert.ok(!JSON.stringify(result).includes(privateTemplateId));
+});
+
 test("runtime inspection verifies scoped sender and approved four-body template without sending", async () => {
   const { result, calls } = await run();
   assert.equal(result.ready, true);

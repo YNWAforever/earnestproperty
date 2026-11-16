@@ -27,6 +27,8 @@ export type ReceiptResult = {
   identityKey?: string | null;
   disposition: ReceiptDisposition;
   projectionState: ReceiptProjectionState;
+  blockReason?: string | null;
+  enquiryForwardingArmId?: string | null;
 };
 
 export type ReceiptRow = {
@@ -36,6 +38,8 @@ export type ReceiptRow = {
   capture_mode: EnquiryMode;
   origin: EventOrigin;
   identity_key: string | null;
+  block_reason?: string | null;
+  enquiry_forwarding_arm_id?: string | null;
 };
 export type PortalSource = "28hse" | "propertyhk";
 export type PortalDealType = "sale" | "rent";
