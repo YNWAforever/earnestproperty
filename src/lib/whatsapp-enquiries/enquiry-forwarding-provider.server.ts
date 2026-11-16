@@ -60,12 +60,97 @@ export type ForwardingTemplateCandidate = {
   proofHash: string;
 };
 type InspectionStage = "CHANNEL" | "SENDER" | "TEMPLATES" | "MEMBERS" | "CHANNEL_INTEGRATIONS";
+// These are observations of untrusted error text, never authentication or readiness proof.
+const ERROR_SIGNALS = {
+  invalid_token:
+    /\b(?:invalid (?:access )?token|(?:access )?token (?:is )?(?:not valid|invalid)|invalid oauth access token)\b/i,
+  expired_token:
+    /\b(?:jwt expired|(?:access )?token (?:has )?expired|expired (?:access )?token)\b/i,
+  malformed_token:
+    /\b(?:jwt malformed|invalid token format|malformed (?:access )?token|jwt must be a string)\b/i,
+  invalid_signature: /\b(?:invalid signature|signature (?:verification )?failed)\b/i,
+  missing_token:
+    /\b(?:(?:access )?token (?:is )?(?:required|missing)|missing (?:access )?token|no (?:access )?token provided|jwt must be provided)\b/i,
+  permission_denied:
+    /\b(?:permission denied|access denied|unauthorized|not authorized|insufficient permissions?|forbidden)\b/i,
+  channel_not_found:
+    /\b(?:channel (?:is )?(?:not found|missing|invalid)|invalid channel|no channel found)\b/i,
+  waba_not_found: /\b(?:waba (?:is )?(?:not found|missing|invalid)|invalid waba|no waba found)\b/i,
+  integration_not_found:
+    /\b(?:(?:app )?integration (?:is )?(?:not found|missing|invalid)|invalid integration|no integration found)\b/i,
+  null_property_access:
+    /\b(?:cannot read (?:properties|property(?: ['"][^'"\r\n]{1,64}['"])?) of (?:null|undefined)|cannot destructure property)\b/i,
+  upstream_timeout:
+    /\b(?:etimedout|econnreset|econnrefused|fetch failed|request timed out|gateway timeout)\b/i,
+  internal_error: /\b(?:internal server error|internal error|unexpected error)\b/i,
+  not_supported: /\b(?:not supported|unsupported (?:operation|request|api|version))\b/i,
+} as const;
+const ERROR_NAMES = [
+  "Error",
+  "TypeError",
+  "ReferenceError",
+  "SyntaxError",
+  "JsonWebTokenError",
+  "TokenExpiredError",
+  "NotBeforeError",
+  "OAuthException",
+  "GraphMethodException",
+] as const;
+type ProviderErrorObservation = {
+  shape: "string" | "object" | "array" | "other";
+  knownName: (typeof ERROR_NAMES)[number] | null;
+  signals: (keyof typeof ERROR_SIGNALS)[];
+};
+function observeProviderError(
+  value: unknown,
+  secrets: ReadonlySet<string>,
+): ProviderErrorObservation {
+  const entry = row(value);
+  // Inspect only these bounded error leaves. Never retain text, keys, codes, stack or URLs.
+  const leaves = [
+    typeof value === "string" ? value : null,
+    entry.message,
+    entry.name,
+    entry.type,
+    entry.code,
+  ];
+  const text = leaves
+    .filter((item): item is string => typeof item === "string" && item.length <= 4096)
+    .map((item) => {
+      let safe = item;
+      for (const secret of secrets) {
+        if (secret.length < 4) continue;
+        safe = safe.replaceAll(secret, " ").replaceAll(encodeURIComponent(secret), " ");
+      }
+      return safe;
+    })
+    .join("\n");
+  return {
+    shape:
+      typeof value === "string"
+        ? "string"
+        : Array.isArray(value)
+          ? "array"
+          : value !== null && typeof value === "object"
+            ? "object"
+            : "other",
+    knownName:
+      ERROR_NAMES.find((name) =>
+        text.split("\n").some((line) => line === name || line.startsWith(`${name}:`)),
+      ) ?? null,
+    signals: (Object.keys(ERROR_SIGNALS) as (keyof typeof ERROR_SIGNALS)[]).filter((name) =>
+      ERROR_SIGNALS[name].test(text.replaceAll("_", " ")),
+    ),
+  };
+}
 export type ProviderRequestObservation = {
   stage: InspectionStage;
   httpStatus: number;
   jsonBody: boolean;
   hasError: boolean;
   providerOk: boolean | null;
+  /** Constant-only error observations; never used to relax a failed readiness check. */
+  providerError?: ProviderErrorObservation;
 };
 export type EnquiryForwardingProviderInspection = {
   schemaVersion: 1;
@@ -306,6 +391,9 @@ export async function inspectEnquiryForwardingProvider(
             : body.ok === 0 || body.ok === false
               ? false
               : null,
+        ...(body.error != null || array(body.errors).length > 0
+          ? { providerError: observeProviderError(body.error ?? array(body.errors)[0], secrets) }
+          : {}),
       });
       if (!response.ok) {
         reasons.add(
