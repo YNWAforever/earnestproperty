@@ -386,6 +386,7 @@ export const SERVICE_CAPABILITIES = [
   "woztell.enquiry.forward@1",
   "woztell.enquiry.forward.reconcile@1",
   "woztell.enquiry.forward.readiness@1",
+  "woztell.enquiry.canary.send@1",
   "woztell.enquiry.staff.test@1",
   "woztell.enquiry.staff.notify@1",
   "woztell.enquiry.staff.notify.reconcile@1",
@@ -638,5 +639,101 @@ registerJobHandler({
       workerId: context.workerId,
       checkpoint: context.checkpoint,
     });
+  },
+});
+
+// One-off operator delivery canary. It proves the configured staff template can actually be
+// delivered by the company channel to the owner-nominated number before any staff alert is
+// enabled. The destination comes only from the server-only env value, never from the payload,
+// so a queued job cannot be redirected. It never touches CRM conversations and the queue runs
+// it once (max_attempts=1) so a provider answer is recorded, not retried into a duplicate send.
+registerJobHandler({
+  jobType: "woztell.enquiry.canary.send",
+  payloadVersion: 1,
+  parsePayload(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length)
+      throw Object.assign(new Error("Invalid canary send job"), { code: "VALIDATION_ERROR" });
+    return {};
+  },
+  async run(_payload, context) {
+    await context.checkpoint();
+    if (!context.workerId)
+      throw Object.assign(new Error("Canary send requires a leased job"), {
+        code: "JOB_LEASE_REQUIRED",
+      });
+    const { canarySendPlan, maskCanaryPhone } =
+      await import("../whatsapp-enquiries/enquiry-canary.js");
+    const { queryRows } = await import("../neon/db.server.ts");
+    const live = await queryRows(
+      "SELECT id FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.canary.send' AND payload_version=1 AND payload='{}'::jsonb AND status='running' AND lease_owner=$2 AND lease_expires_at>now()",
+      [context.jobId, context.workerId],
+    );
+    if (!live.length)
+      throw Object.assign(new Error("Canary job ownership lost"), { code: "JOB_OWNERSHIP_LOST" });
+    const plan = canarySendPlan({
+      EP_WA_CANARY_ENABLED: process.env.EP_WA_CANARY_ENABLED,
+      EP_WA_CANARY_PHONE: process.env.EP_WA_CANARY_PHONE,
+    });
+    if (!plan.allowed)
+      throw Object.assign(new Error("Canary send is not enabled."), { code: plan.reason });
+    const { parseStaffAlertTemplate, buildStaffTemplateResponse } =
+      await import("../woztell/staff-alert-template.ts");
+    const template = parseStaffAlertTemplate(process.env.EP_WA_STAFF_ALERT_TEMPLATE);
+    if (!template)
+      throw Object.assign(new Error("Staff alert template is not configured."), {
+        code: "CANARY_TEMPLATE_MISSING",
+      });
+    const { providerChannelId } = await import("../whatsapp-enquiries/wa-config.server.ts");
+    const channelId = providerChannelId();
+    if (!channelId)
+      throw Object.assign(new Error("Company channel is not configured."), {
+        code: "CANARY_CHANNEL_MISSING",
+      });
+    const { sendWoztellResponse } = await import("../woztell/woztell.server.ts");
+    const { parseWoztellProviderResult } = await import("../woztell/provider-result.ts");
+    const templateResponse = buildStaffTemplateResponse(template, {
+      name: "［測試］Willy Lai",
+      source: "系統轉發核對",
+      phone: plan.phone,
+      link: "https://www.earnestproperty.com/admin/leads",
+    });
+    const sent = await sendWoztellResponse({
+      channelId,
+      recipientId: plan.phone,
+      response: [templateResponse],
+    });
+    const parsed = parseWoztellProviderResult("body" in sent ? sent.body : null, {
+      expectedResponseCount: 1,
+    });
+    const accepted =
+      parsed.outcome === "execution_accepted" || parsed.outcome === "identifiable_acceptance";
+    await context.checkpoint();
+    const proof = await queryRows(
+      `INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata)
+       SELECT NULL,'whatsapp.enquiry_forwarding.canary_sent','ops_job',$1,$2::jsonb
+       WHERE EXISTS(SELECT 1 FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.canary.send' AND payload_version=1 AND payload='{}'::jsonb AND status='running' AND lease_owner=$3 AND lease_expires_at>now())
+       RETURNING id`,
+      [
+        context.jobId,
+        JSON.stringify({
+          purpose: "canary",
+          recipient: maskCanaryPhone(plan.phone),
+          template: { name: template.name, language: template.language, params: template.params },
+          outcome: parsed.outcome,
+          accepted,
+          refused: parsed.outcome === "definitive_refusal",
+          hasProviderMessageId: parsed.primaryMessageId !== null,
+          channelId,
+        }),
+        context.workerId,
+      ],
+    );
+    if (!proof.length)
+      throw Object.assign(new Error("Canary job ownership lost"), { code: "JOB_OWNERSHIP_LOST" });
+    if (!accepted)
+      throw Object.assign(new Error("Canary delivery was not accepted."), {
+        code: "CANARY_NOT_ACCEPTED",
+      });
+    return { summary: { accepted: 1 } };
   },
 });
