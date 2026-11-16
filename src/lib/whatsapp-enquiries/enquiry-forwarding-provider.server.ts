@@ -59,7 +59,13 @@ export type ForwardingTemplateCandidate = {
   paramCount: 4;
   proofHash: string;
 };
-type InspectionStage = "CHANNEL" | "SENDER" | "TEMPLATES" | "MEMBERS" | "CHANNEL_INTEGRATIONS";
+type InspectionStage =
+  | "CHANNEL"
+  | "SENDER"
+  | "TEMPLATES"
+  | "MEMBERS"
+  | "CHANNEL_INTEGRATIONS"
+  | "SENDER_CHANNEL_TOKEN";
 // These are observations of untrusted error text, never authentication or readiness proof.
 const ERROR_SIGNALS = {
   invalid_token:
@@ -171,6 +177,17 @@ export type EnquiryForwardingProviderInspection = {
   };
   /** Selected only after channel/app scope checks; presence/source does not verify validity. */
   cloudAccessTokenSource?: "configured" | "channel_integration" | "unavailable";
+  /** Boolean-only credential diagnostics. A comparison probe never establishes readiness. */
+  tokenDiagnostics?: {
+    configuredOuterWhitespace: boolean;
+    configuredQuoted: boolean;
+    configuredBearerPrefix: boolean;
+    configuredInternalWhitespace: boolean;
+    channelTokenPresent: boolean;
+    configuredMatchesChannelToken: boolean | null;
+    comparisonAttempted: boolean;
+    comparisonSenderVerified: boolean;
+  };
   /** Presence of existing references, not newly manufactured verification. */
   capabilities: {
     whatsappVerification: boolean;
@@ -460,6 +477,24 @@ export async function inspectEnquiryForwardingProvider(
     : cloudToken
       ? "channel_integration"
       : "unavailable";
+  const channelToken = present(channel.appIntegrationAccessToken)
+    ? channel.appIntegrationAccessToken.trim()
+    : null;
+  report.tokenDiagnostics = {
+    configuredOuterWhitespace:
+      typeof env.WOZTELL_CLOUD_ACCESS_TOKEN === "string" &&
+      env.WOZTELL_CLOUD_ACCESS_TOKEN !== env.WOZTELL_CLOUD_ACCESS_TOKEN.trim(),
+    configuredQuoted: configuredCloudToken !== null && /^["']|["']$/.test(configuredCloudToken),
+    configuredBearerPrefix:
+      configuredCloudToken !== null && /^Bearer\s/i.test(configuredCloudToken),
+    configuredInternalWhitespace: configuredCloudToken !== null && /\s/.test(configuredCloudToken),
+    channelTokenPresent: channelToken !== null,
+    configuredMatchesChannelToken:
+      configuredCloudToken && channelToken ? configuredCloudToken === channelToken : null,
+    comparisonAttempted: false,
+    comparisonSenderVerified: false,
+  };
+  if (channelToken) secrets.add(channelToken);
   report.channel.connected = typeof channel.connected === "boolean" ? channel.connected : null;
   report.channel.archived = typeof channel.archived === "boolean" ? channel.archived : null;
   if (report.channel.connected === false) reasons.add("PROVIDER_CHANNEL_NOT_CONNECTED");
@@ -589,6 +624,31 @@ export async function inspectEnquiryForwardingProvider(
     "SENDER",
   );
   if (!senderBody) {
+    const senderObservation = report.requests.find((entry) => entry.stage === "SENDER");
+    if (
+      configuredCloudToken &&
+      channelToken &&
+      configuredCloudToken !== channelToken &&
+      senderObservation?.providerError?.signals.includes("permission_denied")
+    ) {
+      // Same verified channel; different provider-issued credential. Never substitute this
+      // diagnostic result for the configured sender proof or relax any readiness gate.
+      report.tokenDiagnostics.comparisonAttempted = true;
+      const comparisonUrl = new URL("waba-info", CLOUD_API);
+      comparisonUrl.searchParams.set("accessToken", channelToken);
+      comparisonUrl.searchParams.set("channelId", channelId);
+      const comparison = await request(
+        comparisonUrl.toString(),
+        { method: "GET" },
+        "SENDER_CHANNEL_TOKEN",
+      );
+      const result = row(comparison?.result);
+      report.tokenDiagnostics.comparisonSenderVerified =
+        comparison?.ok === 1 &&
+        phone(result.phoneNumber) !== null &&
+        identifier(result.wabaId) !== null &&
+        identifier(result.phoneNumberId) !== null;
+    }
     await inspectChannelIntegrations();
     return finish();
   }

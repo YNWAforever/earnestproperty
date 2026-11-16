@@ -144,6 +144,67 @@ const run = (options = {}, patch = {}, extra = {}) => {
   }).then((result) => ({ result, calls: f.calls }));
 };
 
+test("permission denial probes a distinct channel token without granting readiness or exposing credentials", async () => {
+  const { result, calls } = await run(
+    {
+      respond: ({ url }) => {
+        if (!url.pathname.endsWith("/waba-info")) return;
+        if (url.searchParams.get("accessToken") === configuredCloudSecret)
+          return new Response(JSON.stringify({ ok: 0, error: "permission denied" }), {
+            status: 500,
+          });
+        assert.equal(url.searchParams.get("accessToken"), cloudSecret);
+        return new Response(
+          JSON.stringify({
+            ok: 1,
+            result: { phoneNumber: "85224962283", wabaId: "waba-one", phoneNumberId: "phone-one" },
+          }),
+        );
+      },
+    },
+    { WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret },
+  );
+  assert.equal(result.tokenDiagnostics.configuredMatchesChannelToken, false);
+  assert.equal(result.tokenDiagnostics.comparisonAttempted, true);
+  assert.equal(result.tokenDiagnostics.comparisonSenderVerified, true);
+  assert.equal(result.ready, false);
+  assert.equal(result.channel.senderPhone, null);
+  assert.equal(calls.filter((c) => c.url.pathname.endsWith("/waba-info")).length, 2);
+  assert.equal(
+    calls.some((c) => c.url.pathname.endsWith("/whatsapp-message-templates")),
+    false,
+  );
+  for (const value of [cloudSecret, configuredCloudSecret])
+    assert.equal(JSON.stringify(result).includes(value), false);
+});
+
+test("identical tokens are never retried after permission denial", async () => {
+  const { result, calls } = await run(
+    {
+      respond: ({ url }) =>
+        url.pathname.endsWith("/waba-info")
+          ? new Response(JSON.stringify({ ok: 0, error: "permission denied" }), { status: 500 })
+          : undefined,
+    },
+    { WOZTELL_CLOUD_ACCESS_TOKEN: cloudSecret },
+  );
+  assert.equal(result.tokenDiagnostics.configuredMatchesChannelToken, true);
+  assert.equal(result.tokenDiagnostics.comparisonAttempted, false);
+  assert.equal(calls.filter((c) => c.url.pathname.endsWith("/waba-info")).length, 1);
+});
+
+test("credential format diagnostics contain booleans only", async () => {
+  const value = " Bearer invalid token ";
+  const { result } = await run(
+    { expectedCloudToken: value.trim() },
+    { WOZTELL_CLOUD_ACCESS_TOKEN: value },
+  );
+  assert.equal(result.tokenDiagnostics.configuredOuterWhitespace, true);
+  assert.equal(result.tokenDiagnostics.configuredBearerPrefix, true);
+  assert.equal(result.tokenDiagnostics.configuredInternalWhitespace, true);
+  assert.equal(JSON.stringify(result).includes(value.trim()), false);
+});
+
 const informationalInstallation = () => ({
   purpose: "enq_forward_info",
   version: 1,
