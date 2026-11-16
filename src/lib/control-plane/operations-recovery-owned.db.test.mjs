@@ -200,8 +200,11 @@ test("FX-07 receipt retry backoff is shared by recovery and nextDueAt", async (t
   mock.reset();
   await withOwnedPostgres(async ({ query, transaction }) => {
     await mockOwnedServerDb(t.mock, query, transaction);
-    const { storeInboundReceipt, recoverPendingInboundReceipts } =
+    const { storeInboundReceipt: storeInboundReceiptNative, recoverPendingInboundReceipts } =
       await import("../whatsapp-enquiries/inbound-receipts.server.ts");
+    // Every fixture query and admission transaction must use this same owned database.
+    const storeInboundReceipt = (input, ports = {}) =>
+      storeInboundReceiptNative(input, { query, ...ports, transaction });
     const { getNextJobDueAt } = await import("./jobs-next-due.ts");
     const nextDueAt = () => getNextJobDueAt({ lane: "service", capabilities: [], query });
     const dbNow = async () => (await query("SELECT now() AS now"))[0].now.getTime();
@@ -523,11 +526,14 @@ test("FX-07 receipts: observe-only retry, listing and C-09 labelling", async (t)
   await withOwnedPostgres(async ({ query, transaction }) => {
     await mockOwnedServerDb(t.mock, query, transaction);
     const {
-      storeInboundReceipt,
+      storeInboundReceipt: storeInboundReceiptNative,
       recoverPendingInboundReceipts,
       retryInboundReceipt,
       listInboundReceiptProblems,
     } = await import("../whatsapp-enquiries/inbound-receipts.server.ts");
+    // Every fixture query and admission transaction must use this same owned database.
+    const storeInboundReceipt = (input, ports = {}) =>
+      storeInboundReceiptNative(input, { query, ...ports, transaction });
     const staff = async (label, role) => {
       const [row] = await query("INSERT INTO staff_users(auth_user_id) VALUES($1) RETURNING id", [
         `qa-fx07-receipts-${label}`,

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { EnquiryIdentityReview } from "./EnquiryIdentityReview";
 import { normalizePhone } from "@/lib/phone.js";
 import {
   fetchEnquiryForwardingSettings,
@@ -45,14 +46,22 @@ export function EnquiryForwardingSettings({
   const copy = settings?.recipients.find((row) => row.kind === "copy");
   const readiness = settings?.recipientReadiness;
   const conflictKeys = new Set(readiness?.customerConflictRecipientKeys ?? []);
+  const invalidKeys = new Set(readiness?.invalidRecipientKeys ?? []);
+  const revokedKeys = new Set(readiness?.revokedRecipientKeys ?? []);
+  const blockedKeys = new Set([...conflictKeys, ...invalidKeys, ...revokedKeys]);
   const conflictPhones = new Map<string, Set<string>>();
   for (const row of settings?.recipients ?? []) {
-    if (!conflictKeys.has(row.key)) continue;
+    if (!blockedKeys.has(row.key)) continue;
     const phone = normalizePhone(row.phone) ?? row.phone;
     const names = conflictPhones.get(phone) ?? new Set<string>();
     names.add(row.name);
     conflictPhones.set(phone, names);
   }
+  const customerPhones = new Set(
+    (settings?.recipients ?? [])
+      .filter((row) => conflictKeys.has(row.key))
+      .map((row) => normalizePhone(row.phone) ?? row.phone),
+  );
   const blockedPhoneCount = Math.max(
     readiness?.distinctBlockedPhoneCount ?? 0,
     conflictPhones.size,
@@ -62,14 +71,18 @@ export function EnquiryForwardingSettings({
     readiness?.checked === true &&
     readiness.distinctBlockedPhoneCount === 0 &&
     !hasIdentityConflicts;
-  const canEnable = !error && settings?.providerCheck?.ready === true && identityReady;
+  const canEnable =
+    !error &&
+    settings?.informationalPolicy?.available === true &&
+    settings?.providerCheck?.ready === true &&
+    identityReady;
   const providerReasons = [
     ...new Set(
       (settings?.providerCheck?.reasonCodes ?? []).map((code) =>
         code.includes("TEMPLATE")
           ? "未設定可用的已批核通知模板"
-          : code.includes("CAPABILITY")
-            ? "通知及回執核實尚未完成"
+          : /POLICY|INSTALLATION|RELEASE|SCHEMA/.test(code)
+            ? "查詢通知用途設定尚未就緒"
             : code.includes("ARCHIVE")
               ? "渠道封存狀態需要核對"
               : /SENDER|COMPANY_PHONE|COMPANY_CHANNEL|SCOPE_MISMATCH/.test(code)
@@ -120,15 +133,20 @@ export function EnquiryForwardingSettings({
                 <td className="p-2 tabular-nums">{row.phone.replace(/^852/, "+852 ")}</td>
                 <td className="p-2">
                   {conflictKeys.has(row.key) ||
-                  conflictPhones.has(normalizePhone(row.phone) ?? row.phone)
+                  customerPhones.has(normalizePhone(row.phone) ?? row.phone)
                     ? "客戶身份重疊"
-                    : readiness?.checked !== true
-                      ? "收件身份待核對"
-                      : row.enabled && row.verified
-                        ? "已啟用"
-                        : row.verified
-                          ? "已核對，未啟用"
-                          : "待核對"}
+                    : revokedKeys.has(row.key)
+                      ? "已撤回通知用途"
+                      : invalidKeys.has(row.key)
+                        ? "收件資料待核對"
+                        : readiness?.checked !== true
+                          ? "收件用途待核對"
+                          : row.enabled && row.verified
+                            ? "已啟用"
+                            : row.purposeReviewed
+                              ? "通知用途已核對"
+                              : "待核對"}
+                  {row.memberAssociated ? " · 身份關聯已核對" : null}
                 </td>
               </tr>
             ))}
@@ -170,8 +188,8 @@ export function EnquiryForwardingSettings({
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm">
               {settings.providerCheck?.ready
-                ? "WhatsApp 連接及通知模板已核對"
-                : "WhatsApp 連接及通知模板待核對"}
+                ? "WhatsApp 通知用途及模板已核對"
+                : "WhatsApp 通知用途及模板待核對"}
             </span>
             <Button variant="outline" disabled={busy} onClick={() => void perform("check")}>
               核對 WhatsApp 連接
@@ -195,7 +213,9 @@ export function EnquiryForwardingSettings({
               <>
                 <p>
                   {blockedPhoneCount > 0 ? `${blockedPhoneCount} 個收件號碼` : "收件號碼"}
-                  與客戶身份重疊，請先核對。
+                  {invalidKeys.size || revokedKeys.size
+                    ? "的通知用途待核對。"
+                    : "與客戶身份重疊，請先核對。"}
                 </p>
                 <ul className="list-inside list-disc">
                   {[...conflictPhones].map(([phone, names]) => (
@@ -206,7 +226,7 @@ export function EnquiryForwardingSettings({
                 </ul>
               </>
             ) : (
-              <p>{identityReady ? "收件身份已核對" : "收件身份待核對，暫不能啟用通知。"}</p>
+              <p>{identityReady ? "收件用途已核對" : "收件用途待核對，暫不能啟用通知。"}</p>
             )}
           </div>
           {recipients(settings.recipients.filter((row) => row.kind !== "sales"))}
@@ -235,6 +255,7 @@ export function EnquiryForwardingSettings({
                 ))}
             </div>
           </details>
+          <EnquiryIdentityReview isWorkspaceCurrent={current} onChanged={refresh} />
           <div className="flex flex-wrap gap-4 text-sm">
             <span>待發 {settings.counts.queued ?? 0}</span>
             <span>已提交 {settings.counts.accepted ?? 0}</span>

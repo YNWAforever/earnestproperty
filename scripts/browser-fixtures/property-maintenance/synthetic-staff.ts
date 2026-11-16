@@ -206,6 +206,13 @@ export async function fetchEnquiryForwardingSettings(
   forwardingScope(isCurrent);
   return {
     available: true,
+    informationalPolicy: {
+      available: forwardingScenario,
+      armed: forwardingEnabled,
+      scope: forwardingScenario
+        ? { appId: "owned-staff-app", channelId: "owned-staff-channel" }
+        : null,
+    },
     recipients: [
       {
         key: "copy",
@@ -303,6 +310,9 @@ export const getWhatsappServicePolicies = async () => [];
 const outsideFixture = async () => {
   throw Error("Configuration writes are outside this fixture");
 };
+export const fetchEnquiryIdentityReview = outsideFixture,
+  reviewEnquiryPhonePurpose = outsideFixture,
+  resolveEnquiryHeldReply = outsideFixture;
 export const updateStaffEndpoint = outsideFixture,
   turnOffStaffEndpoint = outsideFixture,
   createStaffReference = outsideFixture,

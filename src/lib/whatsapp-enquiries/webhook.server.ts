@@ -11,6 +11,7 @@ import { classifyWoztellEvent } from "./event-classification.ts";
 import { markInboundReceipt, storeInboundReceipt } from "./inbound-receipts.server.ts";
 import { eventForReceiptProjection } from "./inbound-identity.ts";
 import type { ReceiptResult } from "./no-link.types.ts";
+import { isEnquiryInfoReviewOutcome } from "./enquiry-info-intake.types.ts";
 import { wakeAfterCommit } from "../control-plane/job-wake.server.ts";
 const MAX_BODY_BYTES = 1024 * 1024;
 async function readBody(request: Request) {
@@ -162,6 +163,13 @@ export async function handleWoztellWebhook(
       return Response.json({ ok: false, error: "WA_RECEIPT_STORE_UNAVAILABLE" }, { status: 503 });
     }
   }
+  if (receipt?.blockReason === "REVIEW_REQUIRED")
+    return Response.json({
+      ok: true,
+      receiptId,
+      projection: "review_required",
+      skipped: "sender-identity-unresolved",
+    });
   if (receipt?.disposition === "duplicate" && receipt.projectionState === "projected")
     return Response.json({ ok: true, skipped: "duplicate" });
   const projectionEvent = receipt
@@ -190,8 +198,18 @@ export async function handleWoztellWebhook(
       {
         signedEvent: true,
         mode: captureMode,
+        ...(receiptId ? { receiptContext: { receiptId } } : {}),
       },
     );
+    if (isEnquiryInfoReviewOutcome(outcome)) {
+      await finish("failed", "REVIEW_REQUIRED");
+      return Response.json({
+        ok: true,
+        receiptId,
+        projection: "review_required",
+        skipped: outcome.skipped,
+      });
+    }
     await finish("projected", null);
     return Response.json(outcome.skipped ? { ok: true, skipped: outcome.skipped } : { ok: true });
   } catch (error) {

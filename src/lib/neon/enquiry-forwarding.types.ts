@@ -6,6 +6,8 @@ export type EnquiryRecipientSetting = {
   version: number | null;
   enabled: boolean;
   verified: boolean;
+  purposeReviewed?: boolean;
+  memberAssociated?: boolean;
 };
 export type EnquiryEstateRouteSetting = {
   key: string;
@@ -18,6 +20,8 @@ export type EnquiryRecipientReadiness = {
   checked: boolean;
   customerConflictRecipientKeys: string[];
   distinctBlockedPhoneCount: number;
+  invalidRecipientKeys?: string[];
+  revokedRecipientKeys?: string[];
 };
 export type EnquiryForwardingSettings = {
   available: boolean;
@@ -25,5 +29,10 @@ export type EnquiryForwardingSettings = {
   routes: EnquiryEstateRouteSetting[];
   counts: Record<string, number>;
   recipientReadiness?: EnquiryRecipientReadiness;
+  informationalPolicy?: {
+    available: boolean;
+    armed: boolean;
+    scope: { appId: string; channelId: string } | null;
+  };
   providerCheck: { ready: boolean; checkedAt: string | null; reasonCodes: string[] } | null;
 };

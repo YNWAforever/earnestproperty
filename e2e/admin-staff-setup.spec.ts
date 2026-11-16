@@ -133,7 +133,7 @@ for (const width of [1440, 1280, 768, 390]) {
       page,
     }) => {
       const section = await openForwarding(page);
-      await expect(section).toContainText("WhatsApp 連接及通知模板待核對");
+      await expect(section).toContainText("WhatsApp 通知用途及模板待核對");
       await expect(section.getByRole("button", { name: "啟用新查詢通知" })).toBeDisabled();
       await expect(section.getByRole("row").filter({ hasText: "固定副本" })).toContainText(
         "待核對",
@@ -150,7 +150,7 @@ for (const width of [1440, 1280, 768, 390]) {
       page,
     }) => {
       const section = await openForwarding(page, "ready-conflict");
-      await expect(section).toContainText("WhatsApp 連接及通知模板已核對");
+      await expect(section).toContainText("WhatsApp 通知用途及模板已核對");
       await expect(section.getByRole("button", { name: "啟用新查詢通知" })).toBeDisabled();
       const identity = section.getByRole("group", { name: "收件身份核對" });
       await expect(identity).toContainText("2 個收件號碼與客戶身份重疊");
@@ -172,13 +172,13 @@ for (const width of [1440, 1280, 768, 390]) {
         page,
       }) => {
         const section = await openForwarding(page, mode);
-        await expect(section).toContainText("WhatsApp 連接及通知模板已核對");
+        await expect(section).toContainText("WhatsApp 通知用途及模板已核對");
         await expect(section.getByRole("button", { name: "啟用新查詢通知" })).toBeDisabled();
         await expect(section.getByRole("group", { name: "收件身份核對" })).toContainText(
-          "收件身份待核對",
+          "收件用途待核對",
         );
         await expect(section.getByRole("row").filter({ hasText: "固定副本" })).toContainText(
-          "收件身份待核對",
+          "收件用途待核對",
         );
         await noForwardingEffects(page);
       });
@@ -187,9 +187,9 @@ for (const width of [1440, 1280, 768, 390]) {
     }) => {
       const section = await openForwarding(page, "provider-blocked");
       await expect(section.getByRole("group", { name: "收件身份核對" })).toHaveText(
-        "收件身份已核對",
+        "收件用途已核對",
       );
-      await expect(section).toContainText("WhatsApp 連接及通知模板待核對");
+      await expect(section).toContainText("WhatsApp 通知用途及模板待核對");
       await expect(section.getByRole("button", { name: "啟用新查詢通知" })).toBeDisabled();
       await noForwardingEffects(page);
     });
