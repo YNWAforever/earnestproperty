@@ -70,9 +70,11 @@ export function EnquiryForwardingSettings({
           ? "未設定可用的已批核通知模板"
           : code.includes("CAPABILITY")
             ? "通知及回執核實尚未完成"
-            : /SENDER|COMPANY_PHONE|COMPANY_CHANNEL|SCOPE_MISMATCH/.test(code)
-              ? "公司發送號碼或渠道需要核對"
-              : "WhatsApp 供應商連接需要核對",
+            : code.includes("ARCHIVE")
+              ? "渠道封存狀態需要核對"
+              : /SENDER|COMPANY_PHONE|COMPANY_CHANNEL|SCOPE_MISMATCH/.test(code)
+                ? "公司發送號碼或渠道需要核對"
+                : "WhatsApp 供應商連接需要核對",
       ),
     ),
   ];

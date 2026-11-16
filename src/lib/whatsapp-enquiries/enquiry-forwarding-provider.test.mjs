@@ -144,6 +144,90 @@ test("runtime inspection verifies scoped sender and approved four-body template 
   assert.doesNotMatch(JSON.stringify(result), /test-.*(?:credential|secret|proof)/);
 });
 
+test("connected channels with nullable archive status remain unready without a false disconnect reason", async () => {
+  for (const archived of [null, undefined, "false"]) {
+    const { result } = await run({ channel: { archived } });
+    assert.equal(result.ready, false);
+    assert.equal(result.channel.connected, true);
+    assert.equal(result.channel.archived, null);
+    assert.ok(result.reasonCodes.includes("PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN"));
+    assert.ok(!result.reasonCodes.includes("PROVIDER_CHANNEL_NOT_CONNECTED"));
+    assert.equal(result.template.configuredApproved, true);
+  }
+  const archived = (await run({ channel: { archived: true } })).result;
+  assert.ok(archived.reasonCodes.includes("PROVIDER_CHANNEL_ARCHIVED"));
+  assert.ok(!archived.reasonCodes.includes("PROVIDER_CHANNEL_NOT_CONNECTED"));
+  const disconnected = (await run({ channel: { connected: false } })).result;
+  assert.ok(disconnected.reasonCodes.includes("PROVIDER_CHANNEL_NOT_CONNECTED"));
+  const unknown = (await run({ channel: { connected: null } })).result;
+  assert.ok(unknown.reasonCodes.includes("PROVIDER_CHANNEL_CONNECTION_STATUS_UNKNOWN"));
+  assert.ok(!unknown.reasonCodes.includes("PROVIDER_CHANNEL_NOT_CONNECTED"));
+});
+
+test("HTTP failure observations retain status and safe shape without provider text or credentials", async () => {
+  for (const status of [401, 403, 429, 404, 500]) {
+    const { result, calls } = await run({
+      channel: { archived: null },
+      respond: ({ url }) =>
+        url.pathname.endsWith("/waba-info")
+          ? new Response(
+              JSON.stringify({
+                ok: 0,
+                error: `private-response ${secret} ${cloudSecret}`,
+                accessToken: cloudSecret,
+              }),
+              { status },
+            )
+          : undefined,
+    });
+    assert.equal(calls.length, 2, "a failed sender check never reaches templates or sends");
+    assert.equal(result.ready, false);
+    assert.equal(result.channel.connected, true);
+    assert.equal(result.channel.senderPhone, null);
+    assert.ok(result.reasonCodes.includes("PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN"));
+    assert.ok(!result.reasonCodes.includes("PROVIDER_CHANNEL_NOT_CONNECTED"));
+    assert.deepEqual(result.requests[1], {
+      stage: "SENDER",
+      httpStatus: status,
+      jsonBody: true,
+      hasError: true,
+      providerOk: false,
+    });
+    const suffix =
+      status === 401 || status === 403
+        ? "AUTH_DENIED"
+        : status === 429
+          ? "RATE_LIMITED"
+          : "HTTP_FAILED";
+    assert.ok(result.reasonCodes.includes(`SENDER_${suffix}`));
+    const serialized = JSON.stringify(result);
+    for (const forbidden of [secret, cloudSecret, "private-response", "accessToken=", "waba-info?"])
+      assert.ok(!serialized.includes(forbidden));
+  }
+  for (const status of [200, 500]) {
+    const { result } = await run({
+      respond: ({ url }) =>
+        url.pathname.endsWith("/waba-info")
+          ? new Response(`private-response ${cloudSecret}`, { status })
+          : undefined,
+    });
+    assert.equal(result.ready, false);
+    assert.deepEqual(result.requests[1], {
+      stage: "SENDER",
+      httpStatus: status,
+      jsonBody: false,
+      hasError: false,
+      providerOk: null,
+    });
+    assert.ok(
+      result.reasonCodes.includes(
+        status === 200 ? "SENDER_INVALID_RESPONSE" : "SENDER_HTTP_FAILED",
+      ),
+    );
+    assert.ok(!JSON.stringify(result).includes(cloudSecret));
+  }
+});
+
 test("missing capability references do not prevent read-only inspection or fabricate evidence", async () => {
   const { result, calls } = await run(
     {},
