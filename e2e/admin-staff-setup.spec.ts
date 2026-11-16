@@ -114,9 +114,137 @@ async function preview(page: Page) {
   await expect(page.getByRole("dialog", { name: "同事通知試送" })).toContainText("合成接單群組");
   expect(await calls(page, "enqueue")).toHaveLength(0);
 }
+async function openForwarding(page: Page, mode = "default") {
+  await page.addInitScript((value) => sessionStorage.setItem("staff-forwarding-mode", value), mode);
+  await open(page);
+  const section = page.getByRole("region", { name: "查詢 WhatsApp 通知", exact: true });
+  await expect(section.getByRole("group", { name: "收件身份核對" })).toBeVisible();
+  return section;
+}
+async function noForwardingEffects(page: Page) {
+  expect(await calls(page, "forwarding-update")).toHaveLength(0);
+  expect(await calls(page, "forwarding-check")).toHaveLength(0);
+  expect(await calls(page, "enqueue")).toHaveLength(0);
+}
 for (const width of [1440, 1280, 768, 390]) {
   test.describe(`${width}`, () => {
     test.use({ viewport: { width, height: 900 } });
+    test("forwarding defaults stay unverified and rendering or refreshing causes no writes", async ({
+      page,
+    }) => {
+      const section = await openForwarding(page);
+      await expect(section).toContainText("WhatsApp 連接及通知模板待核對");
+      await expect(section.getByRole("button", { name: "啟用新查詢通知" })).toBeDisabled();
+      await expect(section.getByRole("row").filter({ hasText: "固定副本" })).toContainText(
+        "待核對",
+      );
+      await noForwardingEffects(page);
+      const reads = (await calls(page, "forwarding-settings-read")).length;
+      await section.getByRole("button", { name: "更新", exact: true }).click();
+      await expect
+        .poll(async () => (await calls(page, "forwarding-settings-read")).length)
+        .toBe(reads + 1);
+      await noForwardingEffects(page);
+    });
+    test("forwarding identity conflicts block enable and deduplicate the same public phone", async ({
+      page,
+    }) => {
+      const section = await openForwarding(page, "ready-conflict");
+      await expect(section).toContainText("WhatsApp 連接及通知模板已核對");
+      await expect(section.getByRole("button", { name: "啟用新查詢通知" })).toBeDisabled();
+      const identity = section.getByRole("group", { name: "收件身份核對" });
+      await expect(identity).toContainText("2 個收件號碼與客戶身份重疊");
+      await expect(identity.getByRole("listitem")).toHaveCount(2);
+      await expect(identity.getByRole("listitem").filter({ hasText: "合成主管乙" })).toHaveCount(1);
+      await expect(identity).toContainText("合成同事甲 · +852 92222222");
+      await expect(identity).toContainText("合成主管乙 · +852 93333333");
+      await expect(identity).not.toContainText("manager:2");
+      await expect(identity).not.toContainText("sales:");
+      await section.locator("summary").filter({ hasText: "樓盤 Sales 收件設定" }).click();
+      const affected = section.getByRole("row").filter({ hasText: /合成同事甲|合成主管乙/ });
+      await expect(affected).toHaveCount(3);
+      for (const row of await affected.all())
+        await expect(row.getByRole("cell").nth(2)).toHaveText("客戶身份重疊");
+      await noForwardingEffects(page);
+    });
+    for (const mode of ["missing", "unchecked"])
+      test(`forwarding ${mode} identity readiness blocks enable despite a ready provider`, async ({
+        page,
+      }) => {
+        const section = await openForwarding(page, mode);
+        await expect(section).toContainText("WhatsApp 連接及通知模板已核對");
+        await expect(section.getByRole("button", { name: "啟用新查詢通知" })).toBeDisabled();
+        await expect(section.getByRole("group", { name: "收件身份核對" })).toContainText(
+          "收件身份待核對",
+        );
+        await expect(section.getByRole("row").filter({ hasText: "固定副本" })).toContainText(
+          "收件身份待核對",
+        );
+        await noForwardingEffects(page);
+      });
+    test("forwarding enable requires a ready provider even after recipient identity is checked", async ({
+      page,
+    }) => {
+      const section = await openForwarding(page, "provider-blocked");
+      await expect(section.getByRole("group", { name: "收件身份核對" })).toHaveText(
+        "收件身份已核對",
+      );
+      await expect(section).toContainText("WhatsApp 連接及通知模板待核對");
+      await expect(section.getByRole("button", { name: "啟用新查詢通知" })).toBeDisabled();
+      await noForwardingEffects(page);
+    });
+    test("forwarding enables only after both readiness checks pass without a message or check job", async ({
+      page,
+    }) => {
+      const section = await openForwarding(page, "ready");
+      const enable = section.getByRole("button", { name: "啟用新查詢通知" });
+      await expect(enable).toBeEnabled();
+      await noForwardingEffects(page);
+      await enable.click();
+      await expect(section.getByRole("status")).toHaveText("已啟用新查詢通知。");
+      await expect(section.getByRole("button", { name: "暫停新查詢通知" })).toBeEnabled();
+      expect(await calls(page, "forwarding-update")).toEqual([
+        { name: "forwarding-update", input: { enabled: true, expectedCopyVersion: 1 } },
+      ]);
+      expect(await calls(page, "forwarding-check")).toHaveLength(0);
+      expect(await calls(page, "enqueue")).toHaveLength(0);
+    });
+    for (const mode of ["active-conflict", "active-unchecked", "active-missing"])
+      test(`forwarding pause remains usable with ${mode} readiness`, async ({ page }) => {
+        const section = await openForwarding(page, mode);
+        const pause = section.getByRole("button", { name: "暫停新查詢通知" });
+        await expect(pause).toBeEnabled();
+        await noForwardingEffects(page);
+        await pause.click();
+        await expect(section.getByRole("status")).toHaveText("已暫停新查詢通知。");
+        await expect(section.getByRole("button", { name: "啟用新查詢通知" })).toBeDisabled();
+        expect(await calls(page, "forwarding-update")).toEqual([
+          { name: "forwarding-update", input: { enabled: false, expectedCopyVersion: 1 } },
+        ]);
+        expect(await calls(page, "forwarding-check")).toHaveLength(0);
+        expect(await calls(page, "enqueue")).toHaveLength(0);
+      });
+    test("forwarding refreshes a new identity conflict after a rejected enable without retrying", async ({
+      page,
+    }) => {
+      const section = await openForwarding(page, "enable-race");
+      const enable = section.getByRole("button", { name: "啟用新查詢通知" });
+      await expect(enable).toBeEnabled();
+      const reads = (await calls(page, "forwarding-settings-read")).length;
+      await enable.click();
+      await expect(section.getByRole("group", { name: "收件身份核對" })).toContainText(
+        "2 個收件號碼與客戶身份重疊",
+      );
+      await expect(section.getByRole("alert")).toContainText("未能更新");
+      await expect(enable).toBeDisabled();
+      await expect
+        .poll(async () => (await calls(page, "forwarding-settings-read")).length)
+        .toBe(reads + 1);
+      expect(await calls(page, "forwarding-update")).toHaveLength(1);
+      expect(await calls(page, "forwarding-check")).toHaveLength(0);
+      expect(await calls(page, "enqueue")).toHaveLength(0);
+      await expect(section.getByRole("status")).toHaveCount(0);
+    });
     test("an agent opening /admin/whatsapp-settings sees 沒有權限 within 2 s", async ({ page }) => {
       await page.route("**/*", (route) =>
         new URL(route.request().url()).origin === origin &&

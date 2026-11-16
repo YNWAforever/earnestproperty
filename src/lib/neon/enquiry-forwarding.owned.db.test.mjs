@@ -233,9 +233,315 @@ test(
               settings.routes.every((row) => Object.hasOwn(ENQUIRY_MANAGERS, row.managerKey)),
             );
             assert.equal(settings.providerCheck, null);
+            assert.deepEqual(settings.recipientReadiness, {
+              checked: true,
+              customerConflictRecipientKeys: [],
+              distinctBlockedPhoneCount: 0,
+            });
             assert.equal(settings.counts.needs_review, 0);
             assert.deepEqual(await snapshot(), before);
             assert.deepEqual(wakes, []);
+          },
+        );
+
+        await t.test(
+          "recipient readiness stays unchecked without a channel or a successful safety read",
+          async () => {
+            await reset();
+            const before = await snapshot();
+            try {
+              delete process.env.WOZTELL_CHANNEL_ID;
+              delete process.env.EP_WA_COMPANY_CHANNEL_ID;
+              assert.deepEqual(
+                (await getEnquiryForwardingSettings(admin, query)).recipientReadiness,
+                { checked: false, customerConflictRecipientKeys: [], distinctBlockedPhoneCount: 0 },
+              );
+            } finally {
+              process.env.WOZTELL_CHANNEL_ID = channel;
+              process.env.EP_WA_COMPANY_CHANNEL_ID = channel;
+            }
+            const unavailable = async (statement, params = []) => {
+              if (statement.includes("WITH customer_conflicts AS ("))
+                throw Error("Owned unavailable safety query");
+              return query(statement, params);
+            };
+            assert.deepEqual(
+              (await getEnquiryForwardingSettings(admin, unavailable)).recipientReadiness,
+              { checked: false, customerConflictRecipientKeys: [], distinctBlockedPhoneCount: 0 },
+            );
+            assert.deepEqual(await snapshot(), before);
+            assert.deepEqual(wakes, []);
+          },
+        );
+
+        await t.test(
+          "local, 852 and 00852 customer phones expose only trusted conflict keys and block the whole activation",
+          async () => {
+            const duplicateCopy = await staff({
+              publicProfile: true,
+              whatsapp: ENQUIRY_COPY.phone,
+            });
+            const photographed = ENQUIRY_MANAGERS["manager:2"];
+            await query("UPDATE staff_users SET whatsapp=$2 WHERE id=$1", [
+              photographed.staffId,
+              photographed.phone,
+            ]);
+            const expectedConflicts = [
+              "copy",
+              `sales:${duplicateCopy.staffId}`,
+              `sales:${sales.staffId}`,
+              "manager:2",
+              `sales:${photographed.staffId}`,
+            ].sort();
+            const rows = [];
+            try {
+              for (const spelling of ["local", "852", "00852"]) {
+                await reset();
+                await proof();
+                for (const number of [ENQUIRY_COPY.phone, "85295551234", photographed.phone]) {
+                  const value =
+                    spelling === "local"
+                      ? number.slice(3)
+                      : spelling === "00852"
+                        ? `00${number}`
+                        : number;
+                  const [customer] = await query(
+                    "INSERT INTO crm_contacts(name,email,source,phone,normalized_phone,whatsapp_member_id) VALUES('Owned confidential customer',$1,'whatsapp',$2,$2,$3) RETURNING id",
+                    [
+                      `private-${spelling}-${number}@example.invalid`,
+                      value,
+                      `private-member-${spelling}-${number.slice(-3)}`,
+                    ],
+                  );
+                  rows.push(customer.id);
+                }
+                const before = await snapshot();
+                const customerBefore = await query(
+                  "SELECT * FROM crm_contacts WHERE id=ANY($1::uuid[]) ORDER BY id",
+                  [rows],
+                );
+                const settings = await getEnquiryForwardingSettings(admin, query);
+                assert.deepEqual(settings.recipientReadiness, {
+                  checked: true,
+                  customerConflictRecipientKeys: expectedConflicts,
+                  distinctBlockedPhoneCount: 3,
+                });
+                const publicResult = JSON.stringify(settings);
+                assert.equal(publicResult.includes("Owned confidential customer"), false);
+                assert.equal(publicResult.includes("private-member-"), false);
+                assert.equal(publicResult.includes("@example.invalid"), false);
+                for (const customerId of rows)
+                  assert.equal(publicResult.includes(customerId), false);
+                assert.deepEqual(
+                  await snapshot(),
+                  before,
+                  "GET never changes registry, roles, audit or jobs",
+                );
+                let conflict;
+                await assert.rejects(
+                  setEnquiryForwardingEnabled(
+                    { enabled: true, expectedCopyVersion: (await copy()).version },
+                    admin,
+                    ports,
+                  ),
+                  (error) => {
+                    conflict = error;
+                    return (
+                      responseStatus(409)(error) &&
+                      error.headers.get("X-Error-Code") === "RECIPIENT_IDENTITY_REVIEW_REQUIRED"
+                    );
+                  },
+                );
+                assert.match(await conflict.text(), /客戶身份重疊/);
+                assert.deepEqual(
+                  await snapshot(),
+                  before,
+                  "blocked activation never partially verifies, bumps versions or audits",
+                );
+                assert.deepEqual(
+                  await query("SELECT * FROM crm_contacts WHERE id=ANY($1::uuid[]) ORDER BY id", [
+                    rows,
+                  ]),
+                  customerBefore,
+                );
+                assert.deepEqual(wakes, []);
+                // Only owned fixture rows are removed; no application identity correction is inferred.
+                await query("DELETE FROM crm_contacts WHERE id=ANY($1::uuid[])", [rows]);
+                rows.length = 0;
+                assert.deepEqual(
+                  (await getEnquiryForwardingSettings(admin, query)).recipientReadiness,
+                  {
+                    checked: true,
+                    customerConflictRecipientKeys: [],
+                    distinctBlockedPhoneCount: 0,
+                  },
+                );
+                const version = (await copy()).version;
+                assert.deepEqual(
+                  await setEnquiryForwardingEnabled(
+                    { enabled: true, expectedCopyVersion: version },
+                    admin,
+                    ports,
+                  ),
+                  { version: version + 1, enabled: true },
+                );
+              }
+            } finally {
+              if (rows.length)
+                await query("DELETE FROM crm_contacts WHERE id=ANY($1::uuid[])", [rows]);
+              await query("UPDATE staff_users SET whatsapp=NULL WHERE id=$1", [
+                photographed.staffId,
+              ]);
+              await query(
+                "UPDATE staff_users SET show_on_website=false,whatsapp=NULL WHERE id=$1",
+                [duplicateCopy.staffId],
+              );
+              await reset();
+            }
+          },
+        );
+
+        await t.test(
+          "the shared member guard is channel-bound and a late customer overlap blocks inside the transaction",
+          async () => {
+            await reset();
+            await proof();
+            const [customer] = await query(
+              "INSERT INTO crm_contacts(name,source,phone,normalized_phone) VALUES('Owned member guard','whatsapp','98883333','85298883333') RETURNING id",
+            );
+            const [conversation] = await query(
+              "INSERT INTO whatsapp_conversations(contact_id,channel_id,woztell_member_id) VALUES($1,'other-owned-channel','0085295551234') RETURNING id",
+              [customer.id],
+            );
+            try {
+              assert.equal(
+                (await getEnquiryForwardingSettings(admin, query)).recipientReadiness
+                  .distinctBlockedPhoneCount,
+                0,
+              );
+              await query("UPDATE whatsapp_conversations SET channel_id=$2 WHERE id=$1", [
+                conversation.id,
+                channel,
+              ]);
+              const before = await snapshot();
+              assert.deepEqual(
+                (await getEnquiryForwardingSettings(admin, query)).recipientReadiness,
+                {
+                  checked: true,
+                  customerConflictRecipientKeys: [`sales:${sales.staffId}`],
+                  distinctBlockedPhoneCount: 1,
+                },
+              );
+              await assert.rejects(
+                setEnquiryForwardingEnabled(
+                  { enabled: true, expectedCopyVersion: (await copy()).version },
+                  admin,
+                  ports,
+                ),
+                (error) =>
+                  responseStatus(409)(error) &&
+                  error.headers.get("X-Error-Code") === "RECIPIENT_IDENTITY_REVIEW_REQUIRED",
+              );
+              assert.deepEqual(await snapshot(), before);
+            } finally {
+              await query("DELETE FROM whatsapp_conversations WHERE id=$1", [conversation.id]);
+              await query("DELETE FROM crm_contacts WHERE id=$1", [customer.id]);
+            }
+            const before = await snapshot();
+            assert.equal(
+              (await getEnquiryForwardingSettings(admin, query)).recipientReadiness
+                .distinctBlockedPhoneCount,
+              0,
+            );
+            let lateCustomer;
+            const concurrentPorts = {
+              query,
+              transaction: async (statements, options) => {
+                assert.equal(options.isolationLevel, "Serializable");
+                [lateCustomer] = await query(
+                  "INSERT INTO crm_contacts(name,source,phone,normalized_phone) VALUES('Owned late customer','whatsapp','95551234','85295551234') RETURNING id",
+                );
+                return transaction(statements, options);
+              },
+            };
+            try {
+              await assert.rejects(
+                setEnquiryForwardingEnabled(
+                  { enabled: true, expectedCopyVersion: (await copy()).version },
+                  admin,
+                  concurrentPorts,
+                ),
+                (error) =>
+                  responseStatus(409)(error) &&
+                  error.headers.get("X-Error-Code") === "RECIPIENT_IDENTITY_REVIEW_REQUIRED",
+              );
+              assert.ok(lateCustomer);
+              assert.deepEqual(
+                await snapshot(),
+                before,
+                "a conflict appearing after the preflight still prevents every enable mutation",
+              );
+              assert.deepEqual(wakes, []);
+            } finally {
+              if (lateCustomer)
+                await query("DELETE FROM crm_contacts WHERE id=$1", [lateCustomer.id]);
+            }
+          },
+        );
+
+        await t.test(
+          "pause remains available with a customer overlap and no provider proof",
+          async () => {
+            await reset();
+            await proof();
+            await setEnquiryForwardingEnabled(
+              { enabled: true, expectedCopyVersion: (await copy()).version },
+              admin,
+              ports,
+            );
+            const [customer] = await query(
+              "INSERT INTO crm_contacts(name,source,phone,normalized_phone,opt_in_whatsapp) VALUES('Owned pause conflict','whatsapp','95551234','85295551234',true) RETURNING *",
+            );
+            await query(
+              "DELETE FROM audit_logs WHERE action='whatsapp.enquiry_forwarding.provider_checked'",
+            );
+            try {
+              const before = await snapshot(),
+                version = (await copy()).version;
+              assert.deepEqual(
+                await setEnquiryForwardingEnabled(
+                  { enabled: false, expectedCopyVersion: version },
+                  manager,
+                  ports,
+                ),
+                { version: version + 1, enabled: false },
+              );
+              assert.equal(
+                (
+                  await query(
+                    "SELECT count(*)::int n FROM enquiry_notification_recipients WHERE enabled",
+                  )
+                )[0].n,
+                0,
+              );
+              const after = await snapshot();
+              assert.equal(after.audits, before.audits + 1);
+              assert.equal(after.jobs, before.jobs);
+              assert.equal(after.attempts, before.attempts);
+              assert.deepEqual(after.roles, before.roles);
+              assert.deepEqual(
+                (await query("SELECT * FROM crm_contacts WHERE id=$1", [customer.id]))[0],
+                customer,
+              );
+              assert.equal(
+                (await getEnquiryForwardingSettings(admin, query)).recipientReadiness
+                  .distinctBlockedPhoneCount,
+                1,
+              );
+              assert.deepEqual(wakes, []);
+            } finally {
+              await query("DELETE FROM crm_contacts WHERE id=$1", [customer.id]);
+            }
           },
         );
 

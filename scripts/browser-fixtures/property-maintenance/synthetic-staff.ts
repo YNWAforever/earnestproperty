@@ -178,6 +178,25 @@ const forwardingScope = (isCurrent?: () => boolean) => {
       code: "STAFF_WORKSPACE_CHANGED",
     });
 };
+// Explicit in-memory browser scenarios; these flags are never provider verification evidence.
+const forwardingMode = sessionStorage.getItem("staff-forwarding-mode") ?? "default";
+const forwardingScenario = new Set([
+  "ready",
+  "ready-conflict",
+  "unchecked",
+  "missing",
+  "provider-blocked",
+  "active-conflict",
+  "active-unchecked",
+  "active-missing",
+  "enable-race",
+]).has(forwardingMode);
+const forwardingProviderReady =
+  forwardingScenario && !["provider-blocked", "active-unchecked"].includes(forwardingMode);
+let forwardingEnabled = forwardingScenario && forwardingMode.startsWith("active-");
+let forwardingVersion = 1;
+let forwardingRaceConflict = false;
+const forwardingHasConflicts = () => forwardingMode.endsWith("conflict") || forwardingRaceConflict;
 export async function fetchEnquiryForwardingSettings(
   isCurrent?: () => boolean,
 ): Promise<EnquiryForwardingSettings> {
@@ -193,25 +212,91 @@ export async function fetchEnquiryForwardingSettings(
         kind: "copy",
         name: "固定副本",
         phone: "85297987774",
-        version: 1,
-        enabled: false,
-        verified: false,
+        version: forwardingVersion,
+        enabled: forwardingEnabled,
+        verified: forwardingScenario,
       },
+      ...(forwardingScenario
+        ? [
+            {
+              key: "manager:2",
+              kind: "manager" as const,
+              name: "合成主管乙",
+              phone: "85293333333",
+              version: forwardingVersion,
+              enabled: forwardingEnabled,
+              verified: true,
+            },
+            {
+              key: `sales:${staffId}`,
+              kind: "sales" as const,
+              name: "合成同事甲",
+              phone: "85292222222",
+              version: forwardingVersion,
+              enabled: forwardingEnabled,
+              verified: true,
+            },
+            {
+              key: `sales:${otherStaffId}`,
+              kind: "sales" as const,
+              name: "合成主管乙",
+              phone: "+852 9333 3333",
+              version: forwardingVersion,
+              enabled: forwardingEnabled,
+              verified: true,
+            },
+          ]
+        : []),
     ],
     routes: [],
     counts: { needs_review: 0 },
-    providerCheck: null,
+    providerCheck: forwardingScenario
+      ? { ready: forwardingProviderReady, checkedAt: null, reasonCodes: [] }
+      : null,
+    ...(forwardingMode.endsWith("missing")
+      ? {}
+      : {
+          recipientReadiness: {
+            checked: !forwardingMode.endsWith("unchecked"),
+            customerConflictRecipientKeys: forwardingHasConflicts()
+              ? ["manager:2", `sales:${staffId}`, `sales:${otherStaffId}`]
+              : [],
+            distinctBlockedPhoneCount: forwardingHasConflicts() ? 2 : 0,
+          },
+        }),
   };
 }
 export async function updateEnquiryForwardingEnabled(
-  _input: { enabled: boolean; expectedCopyVersion: number },
+  input: { enabled: boolean; expectedCopyVersion: number },
   isCurrent?: () => boolean,
-): Promise<never> {
+): Promise<{ enabled: boolean }> {
   forwardingScope(isCurrent);
-  throw Error("Forwarding configuration writes are outside this owned browser fixture");
+  if (!forwardingScenario)
+    throw Error("Forwarding configuration writes are outside this owned browser fixture");
+  call("forwarding-update", input);
+  await Promise.resolve();
+  forwardingScope(isCurrent);
+  if (input.expectedCopyVersion !== forwardingVersion)
+    throw Error("Owned forwarding version changed");
+  if (
+    input.enabled &&
+    (!forwardingProviderReady ||
+      forwardingHasConflicts() ||
+      forwardingMode.endsWith("unchecked") ||
+      forwardingMode.endsWith("missing"))
+  )
+    throw Error("Owned recipient identity is not ready");
+  if (input.enabled && forwardingMode === "enable-race") {
+    forwardingRaceConflict = true;
+    throw Error("Owned recipient identity changed after the settings read");
+  }
+  forwardingEnabled = input.enabled;
+  forwardingVersion++;
+  return { enabled: forwardingEnabled };
 }
 export async function requestEnquiryForwardingCheck(isCurrent?: () => boolean): Promise<never> {
   forwardingScope(isCurrent);
+  call("forwarding-check");
   throw Error("Provider checks and queue writes are outside this owned browser fixture");
 }
 export const getWhatsappServicePolicies = async () => [];

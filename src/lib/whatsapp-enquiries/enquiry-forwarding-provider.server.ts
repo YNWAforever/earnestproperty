@@ -48,6 +48,14 @@ export type ForwardingTemplateCandidate = {
   paramCount: 4;
   proofHash: string;
 };
+type InspectionStage = "CHANNEL" | "SENDER" | "TEMPLATES" | "MEMBERS";
+export type ProviderRequestObservation = {
+  stage: InspectionStage;
+  httpStatus: number;
+  jsonBody: boolean;
+  hasError: boolean;
+  providerOk: boolean | null;
+};
 export type EnquiryForwardingProviderInspection = {
   schemaVersion: 1;
   checkedAt: string;
@@ -93,6 +101,8 @@ export type EnquiryForwardingProviderInspection = {
     validationComplete: boolean;
     candidates: ForwardingTemplateCandidate[];
   };
+  /** Bounded structural observations only; no URLs, headers, body text or credentials. */
+  requests: ProviderRequestObservation[];
   reasonCodes: string[];
 };
 
@@ -167,6 +177,7 @@ export async function inspectEnquiryForwardingProvider(
       validationComplete: false,
       candidates: [],
     },
+    requests: [],
     reasonCodes: [],
   };
   if (!report.flags.woztellEnabled) reasons.add("WOZTELL_DISABLED");
@@ -212,21 +223,45 @@ export async function inspectEnquiryForwardingProvider(
     }
     return clean;
   };
-  async function request(url: string, init: RequestInit, stage: string): Promise<Row | null> {
+  async function request(
+    url: string,
+    init: RequestInit,
+    stage: InspectionStage,
+  ): Promise<Row | null> {
     try {
       const { response, text } = await boundedProviderFetch(
         url,
         { ...init, redirect: "error" },
         { fetchImpl: options.fetch, timeoutMs: 6_000, maxBytes: 1_048_576 },
       );
+      let decoded: unknown;
+      let jsonBody = false;
+      try {
+        decoded = JSON.parse(text);
+        jsonBody = true;
+      } catch {
+        // The structural observation records invalid JSON without retaining response text.
+      }
+      const body = row(decoded);
+      report.requests.push({
+        stage,
+        httpStatus: response.status,
+        jsonBody,
+        hasError: body.error != null || array(body.errors).length > 0,
+        providerOk:
+          body.ok === 1 || body.ok === true
+            ? true
+            : body.ok === 0 || body.ok === false
+              ? false
+              : null,
+      });
       if (!response.ok) {
         reasons.add(
           `${stage}_${response.status === 401 || response.status === 403 ? "AUTH_DENIED" : response.status === 429 ? "RATE_LIMITED" : "HTTP_FAILED"}`,
         );
         return null;
       }
-      const body = row(JSON.parse(text));
-      if (Object.keys(body).length === 0) reasons.add(`${stage}_INVALID_RESPONSE`);
+      if (!jsonBody || Object.keys(body).length === 0) reasons.add(`${stage}_INVALID_RESPONSE`);
       return Object.keys(body).length ? body : null;
     } catch (error) {
       const message = error instanceof Error ? error.message : "";
@@ -236,7 +271,7 @@ export async function inspectEnquiryForwardingProvider(
       return null;
     }
   }
-  const open = (query: string, variables: Row, stage: string) =>
+  const open = (query: string, variables: Row, stage: InspectionStage) =>
     request(
       OPEN_API,
       {
@@ -277,8 +312,12 @@ export async function inspectEnquiryForwardingProvider(
   }
   report.channel.connected = typeof channel.connected === "boolean" ? channel.connected : null;
   report.channel.archived = typeof channel.archived === "boolean" ? channel.archived : null;
-  if (report.channel.connected !== true || report.channel.archived !== false)
-    reasons.add("PROVIDER_CHANNEL_NOT_CONNECTED");
+  if (report.channel.connected === false) reasons.add("PROVIDER_CHANNEL_NOT_CONNECTED");
+  else if (report.channel.connected !== true)
+    reasons.add("PROVIDER_CHANNEL_CONNECTION_STATUS_UNKNOWN");
+  if (report.channel.archived === true) reasons.add("PROVIDER_CHANNEL_ARCHIVED");
+  else if (report.channel.archived !== false)
+    reasons.add("PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN");
   if (!present(channel.appIntegrationAccessToken)) {
     reasons.add("CLOUD_CHANNEL_READ_TOKEN_UNAVAILABLE");
     return finish();
