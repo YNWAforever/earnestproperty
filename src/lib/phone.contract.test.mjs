@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, relative } from "node:path";
 import test from "node:test";
 
@@ -117,6 +118,14 @@ function sourceFiles(dir) {
   });
 }
 
+const INFO_REFUSAL_MIGRATION = "neon/migrations/20261116010000_enquiry_information_scope.sql";
+// This exact applied statement records D11's refusal set; it never resolves a customer.
+// Pin its body rather than exempting the migration: edits and additional matches still fail.
+const INFO_REFUSAL_STATEMENT_SHA256 =
+  "d6da02e87d33cbd68e4f49017eb7fd893227dcb2ac9f5bd193cdeea915ce3e4d";
+const sourceHash = (source) =>
+  createHash("sha256").update(source.replaceAll("\r\n", "\n")).digest("hex");
+
 function hasInlinePhoneMatch(path, source) {
   // A stored normalizer and a caller are separate SQL statements. Keep dollar-quoted
   // function bodies intact so an inline customer match inside either one still fails.
@@ -125,6 +134,12 @@ function hasInlinePhoneMatch(path, source) {
   const scopes =
     path.endsWith(".sql") && !source.includes("/*") ? splitSqlStatements(source) : [source];
   return scopes.some((scope) => {
+    if (
+      path === INFO_REFUSAL_MIGRATION &&
+      scope.startsWith("CREATE FUNCTION enquiry_info_phone_snapshot(") &&
+      sourceHash(scope) === INFO_REFUSAL_STATEMENT_SHA256
+    )
+      return false;
     const compact = scope.replace(/\s+/g, "");
     const twoFormat = compact.includes("left($") && compact.includes(",3)='852'");
     const prefix = compact.includes("'852'||") && compact.includes("normalized_phone");
@@ -174,6 +189,37 @@ test("SQL statement boundaries do not hide inline customer phone matches", () =>
     assert.notEqual(poisoned, migration, "place the unsafe query inside the real function body");
     assert.equal(splitSqlStatements(poisoned).length, statements.length);
     assert.equal(hasInlinePhoneMatch(path, poisoned), true, unsafe);
+  }
+});
+
+test("only the exact applied D11 refusal statement is separate from customer identity matching", () => {
+  const migration = readFileSync(join(ROOT, INFO_REFUSAL_MIGRATION), "utf8");
+  assert.equal(
+    sourceHash(migration),
+    "11842315c9934a183d098ff160e2ba481d921d9b7381ba034e4af8a7dbd84985",
+    "the already applied migration remains immutable",
+  );
+  const statements = splitSqlStatements(migration);
+  const snapshot = statements.find((statement) =>
+    statement.startsWith("CREATE FUNCTION enquiry_info_phone_snapshot("),
+  );
+  assert.ok(snapshot);
+  assert.equal(sourceHash(snapshot), INFO_REFUSAL_STATEMENT_SHA256);
+  assert.equal(hasInlinePhoneMatch(INFO_REFUSAL_MIGRATION, migration), false);
+  assert.equal(hasInlinePhoneMatch("neon/migrations/phone-control.sql", migration), true);
+  for (const unsafe of [
+    "SELECT id::text FROM crm_contacts WHERE normalized_phone = CASE WHEN left($1::text,3)='852' THEN $1 ELSE $2 END;",
+    "SELECT id::text FROM crm_contacts WHERE normalized_phone = '852' || $1;",
+    "SELECT id::text FROM crm_contacts WHERE normalized_phone = right($1::text,8);",
+  ]) {
+    assert.equal(hasInlinePhoneMatch(INFO_REFUSAL_MIGRATION, `${migration}\n${unsafe}`), true);
+    assert.equal(hasInlinePhoneMatch(INFO_REFUSAL_MIGRATION, `${unsafe}\n${migration}`), true);
+    const poisoned = migration.replace(snapshot, () =>
+      snapshot.replace(/\$\$$/, () => `;\n${unsafe}\n$$`),
+    );
+    assert.notEqual(poisoned, migration);
+    assert.equal(splitSqlStatements(poisoned).length, statements.length);
+    assert.equal(hasInlinePhoneMatch(INFO_REFUSAL_MIGRATION, poisoned), true);
   }
 });
 

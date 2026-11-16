@@ -151,7 +151,7 @@ test("duplicate or missing enquiry jobs do not schedule an empty drain", async (
       async (statements) =>
         statements.map(({ statement }) => {
           if (statement.includes("INSERT INTO ops_jobs")) return jobRows;
-          if (statement.includes("WITH matched AS"))
+          if (statement.includes("INSERT INTO whatsapp_messages"))
             return [{ contact_id: "c", conversation_id: "v", inserted: false }];
           return [];
         }),

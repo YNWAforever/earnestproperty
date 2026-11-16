@@ -50,6 +50,13 @@ test("reassignment touches every ownership column and no historical column", () 
       `${historical} records history and must never be reassigned`,
     );
   }
+  for (const { table, column } of STAFF_HISTORICAL_PAIR_COLUMNS) {
+    assert.doesNotMatch(
+      allSql,
+      new RegExp(`\\bUPDATE\\s+${table}\\s+SET\\s+${column}\\b`, "i"),
+      `${table}.${column} is historical evidence and must never be reassigned`,
+    );
+  }
   for (const { table, column } of STAFF_RECONCILED_COLUMNS) {
     assert.doesNotMatch(
       allSql,

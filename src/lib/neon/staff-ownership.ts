@@ -133,6 +133,8 @@ export function staffReassignStatements(fromStaffId: string, toStaffId: string) 
 export const STAFF_HISTORICAL_PAIR_COLUMNS = [
   { table: "staff_notification_test_previews", column: "staff_id" },
   { table: "staff_notification_test_attempts", column: "staff_id" },
+  // The recipient captured by an append-only purpose review, never a current assignment.
+  { table: "enquiry_forwarding_decisions", column: "staff_id" },
   // Review subject and saved deal-credit identity are historical, not handover targets.
   { table: "whatsapp_staff_mapping_reviews", column: "staff_id" },
   { table: "transaction_agent_credits", column: "staff_id" },
