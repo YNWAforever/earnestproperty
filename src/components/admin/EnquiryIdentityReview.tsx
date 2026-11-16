@@ -8,6 +8,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { nativeFieldClassName } from "@/components/ui/native-field";
 import { Textarea } from "@/components/ui/textarea";
 import {
   fetchEnquiryIdentityReview,
@@ -92,7 +93,7 @@ export function EnquiryIdentityReviewForm({
             <span>收件電話</span>
             <select
               aria-label="收件電話"
-              className="w-full rounded-md border bg-background p-2"
+              className={nativeFieldClassName}
               value={form.key}
               disabled={busy}
               onChange={(e) => select("phone", e.target.value)}
@@ -133,7 +134,7 @@ export function EnquiryIdentityReviewForm({
               <span>待核對回覆</span>
               <select
                 aria-label="待核對回覆"
-                className="w-full rounded-md border bg-background p-2"
+                className={nativeFieldClassName}
                 value={form.key}
                 disabled={busy}
                 onChange={(e) => select("receipt", e.target.value)}

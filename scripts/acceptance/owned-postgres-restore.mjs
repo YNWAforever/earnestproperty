@@ -52,6 +52,22 @@ export async function withRestoredOwnedSnapshot({ containerId, pool }, run) {
     await run({
       pool: restored,
       query: async (sql, params = []) => (await restored.query(sql, params)).rows,
+      transaction: async (statements) => {
+        const client = await restored.connect();
+        try {
+          await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+          const results = [];
+          for (const { statement, params = [] } of statements)
+            results.push((await client.query(statement, params)).rows);
+          await client.query("COMMIT");
+          return results;
+        } catch (error) {
+          await client.query("ROLLBACK");
+          throw error;
+        } finally {
+          client.release();
+        }
+      },
       dumpBytes: dump.stdout.byteLength,
     });
   } finally {

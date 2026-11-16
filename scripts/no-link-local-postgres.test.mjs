@@ -1555,12 +1555,18 @@ test(
             const calls = effectCalls();
             // FX-07: recovery leaves a receipt alone for its 2-minute in-flight grace and
             // backoff, then claims it once it is due.
-            assert.equal((await recoverPendingInboundReceipts({ query })).projected, 0);
+            assert.equal(
+              (await recoverPendingInboundReceipts({ query, transaction })).projected,
+              0,
+            );
             await query(
               "UPDATE whatsapp_inbound_receipts SET updated_at=now()-interval '5 minutes',lease_until=NULL WHERE member_id=$1",
               [body.member],
             );
-            assert.equal((await recoverPendingInboundReceipts({ query })).projected, 1);
+            assert.equal(
+              (await recoverPendingInboundReceipts({ query, transaction })).projected,
+              1,
+            );
             const [recovered] = await query(
               "SELECT id,capture_mode,effects_eligible FROM whatsapp_enquiry_events WHERE member_id=$1",
               [body.member],
@@ -2188,7 +2194,7 @@ test(
                     effectsEligible: receipt.effects_eligible,
                   },
                 },
-                { query: restored.query },
+                { query: restored.query, transaction: restored.transaction },
               );
               assert.equal(replay.receiptId, receipt.id);
               assert.equal(replay.disposition, "duplicate");
