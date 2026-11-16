@@ -140,7 +140,14 @@ test("runtime inspection verifies scoped sender and approved four-body template 
   assert.deepEqual(result.template.configured, contract);
   assert.equal(result.template.candidates[0].bodyText, bodyText);
   assert.equal(result.template.candidates[0].paramCount, 4);
-  assert.equal(result.members.provesWhatsappRegistration, false);
+  assert.deepEqual(result.members, {
+    checked: false,
+    complete: false,
+    requestedPhoneCount: 0,
+    matched: [],
+    provesWhatsappRegistration: false,
+  });
+  assert.ok(calls.every((call) => !call.query?.query.includes("EarnestForwardingMembers")));
   assert.doesNotMatch(JSON.stringify(result), /test-.*(?:credential|secret|proof)/);
 });
 
@@ -335,8 +342,14 @@ test("media headers and dynamic buttons require unavailable parameters", async (
 
 test("channel and app scope mismatches stop before any integration token is used", async () => {
   for (const channel of [{ _id: "other-channel" }, { appId: "other-app" }]) {
-    const { result, calls } = await run({ channel });
+    const { result, calls } = await run({ channel }, {}, { recipientPhones: ["85291005322"] });
     assert.equal(calls.length, 1);
+    assert.equal(result.members.checked, false);
+    assert.deepEqual(result.members.matched, []);
+    assert.deepEqual(
+      result.requests.map(({ stage }) => stage),
+      ["CHANNEL"],
+    );
     assert.equal(result.ready, false);
     assert.ok(result.reasonCodes.includes("PROVIDER_CHANNEL_SCOPE_MISMATCH"));
     assert.equal(result.channel.proofHash, null);
@@ -445,6 +458,201 @@ test("candidate output is capped and existing configured order is preserved", as
       .configured.params,
     configured.params,
   );
+});
+
+test("member association survives Cloud sender failure without weakening readiness or inventing delivery", async () => {
+  const recipient = "85291005322";
+  for (const missingCloudToken of [false, true]) {
+    const { result, calls } = await run(
+      {
+        channel: {
+          archived: null,
+          ...(missingCloudToken ? { appIntegrationAccessToken: undefined } : {}),
+        },
+        members: [{ _id: "opaque-provider-association-A", channelId, externalId: recipient }],
+        respond: ({ url }) =>
+          url.pathname.endsWith("/waba-info")
+            ? new Response(JSON.stringify({ ok: 0, error: "Owned sender failure" }), {
+                status: 500,
+              })
+            : undefined,
+      },
+      {
+        EP_WA_STAFF_WHATSAPP_VERIFICATION_REF: undefined,
+        EP_WA_STAFF_CORRELATION_VERIFICATION_REF: undefined,
+        EP_WA_STAFF_ASSOCIATION_REVIEW_REF: undefined,
+        EP_WA_STAFF_REPLY_CONTEXT_PATH: undefined,
+        EP_WA_STAFF_ALERT_TEMPLATE: undefined,
+      },
+      { recipientPhones: ["+852 9100 5322", "0085291005322", "91005322"] },
+    );
+    assert.equal(result.ready, false);
+    assert.equal(result.members.checked, true);
+    assert.equal(result.members.complete, true);
+    assert.equal(result.members.requestedPhoneCount, 1);
+    assert.equal(result.members.provesWhatsappRegistration, false);
+    assert.deepEqual(
+      result.members.matched.map(({ phone, memberId }) => ({ phone, memberId })),
+      [{ phone: recipient, memberId: "opaque-provider-association-A" }],
+    );
+    assert.match(result.members.matched[0].proofHash, /^[a-f0-9]{64}$/);
+    assert.equal(result.channel.senderPhone, null);
+    assert.equal(result.channel.proofHash, null);
+    assert.equal(result.template.configuredApproved, false);
+    assert.equal(result.template.validationComplete, false);
+    for (const code of [
+      "CAPABILITY_REFERENCES_MISSING",
+      "STAFF_TEMPLATE_SELECTION_REQUIRED",
+      "PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN",
+      missingCloudToken ? "CLOUD_CHANNEL_READ_TOKEN_UNAVAILABLE" : "SENDER_HTTP_FAILED",
+    ])
+      assert.ok(result.reasonCodes.includes(code));
+    assert.deepEqual(
+      result.requests.map(({ stage }) => stage),
+      missingCloudToken ? ["CHANNEL", "MEMBERS"] : ["CHANNEL", "MEMBERS", "SENDER"],
+    );
+    const memberCall = calls.find((call) => call.query?.query.includes("EarnestForwardingMembers"));
+    assert.deepEqual(memberCall.query.variables, {
+      app: "app-one",
+      channel: channelId,
+      phones: [recipient],
+    });
+    assert.ok(
+      calls.every(
+        (call) =>
+          !call.url.pathname.includes("sendResponses") &&
+          (!call.query || !/mutation/i.test(call.query.query)),
+      ),
+    );
+  }
+});
+
+test("a completed empty member query supplies no identity proof or registration gate", async () => {
+  const { result, calls } = await run({}, {}, { recipientPhones: ["85291005322"] });
+  assert.deepEqual(result.members, {
+    checked: true,
+    complete: true,
+    requestedPhoneCount: 1,
+    matched: [],
+    provesWhatsappRegistration: false,
+  });
+  assert.equal(
+    result.ready,
+    true,
+    "configuration readiness does not require an existing provider member for recipientId",
+  );
+  assert.deepEqual(result.reasonCodes, []);
+  assert.deepEqual(
+    result.requests.map(({ stage }) => stage),
+    ["CHANNEL", "MEMBERS", "SENDER", "TEMPLATES"],
+  );
+  assert.equal(calls.length, 4);
+});
+
+test("member authentication, partial GraphQL and malformed responses cannot become association proof", async () => {
+  const recipient = "85291005322";
+  const matching = {
+    data: {
+      apiViewer: {
+        members: {
+          edges: [
+            { node: { _id: "opaque-should-not-be-trusted", channelId, externalId: recipient } },
+          ],
+          pageInfo: { hasNextPage: false },
+        },
+      },
+    },
+  };
+  for (const response of [
+    () => new Response(JSON.stringify({ error: "Owned denied" }), { status: 401 }),
+    () =>
+      new Response(
+        JSON.stringify({ ...matching, errors: [{ message: "Owned partial GraphQL error" }] }),
+      ),
+    () => new Response(JSON.stringify({ data: { apiViewer: { members: null } } })),
+    () =>
+      new Response(JSON.stringify({ data: { apiViewer: { members: { edges: "malformed" } } } })),
+  ]) {
+    const { result } = await run(
+      {
+        respond: ({ query }) =>
+          query?.query.includes("EarnestForwardingMembers") ? response() : undefined,
+      },
+      {},
+      { recipientPhones: [recipient] },
+    );
+    assert.equal(result.members.checked, false);
+    assert.equal(result.members.complete, false);
+    assert.deepEqual(result.members.matched, []);
+    assert.equal(result.members.provesWhatsappRegistration, false);
+    assert.equal(result.ready, false);
+    assert.ok(result.reasonCodes.includes("RECIPIENT_MEMBERSHIP_UNVERIFIED"));
+    if (result.requests.find(({ stage }) => stage === "MEMBERS").httpStatus === 401)
+      assert.ok(result.reasonCodes.includes("MEMBERS_AUTH_DENIED"));
+    assert.equal(
+      result.template.configuredApproved,
+      true,
+      "independent sender/template inspection still completes",
+    );
+  }
+});
+
+test("invalid or oversized member lookup input does not issue a member query", async () => {
+  for (const recipientPhones of [
+    ["not-a-phone"],
+    Array.from({ length: 41 }, (_, index) => `8529${1000000 + index}`),
+  ]) {
+    const { result, calls } = await run({}, {}, { recipientPhones });
+    assert.equal(result.members.checked, false);
+    assert.deepEqual(result.members.matched, []);
+    assert.ok(result.reasonCodes.includes("RECIPIENT_LOOKUP_INPUT_INVALID"));
+    assert.equal(result.ready, false);
+    assert.ok(calls.every((call) => !call.query?.query.includes("EarnestForwardingMembers")));
+  }
+});
+
+test("incomplete member pagination and invalid identities stay unverified", async () => {
+  const recipient = "85291005322";
+  for (const members of [
+    {
+      edges: [{ node: { _id: "opaque-partial-member", channelId, externalId: recipient } }],
+      pageInfo: { hasNextPage: true },
+    },
+    { edges: [], pageInfo: {} },
+    {
+      edges: [{ node: { _id: null, channelId, externalId: recipient } }],
+      pageInfo: { hasNextPage: false },
+    },
+    {
+      edges: [{ node: { _id: "wrong-phone-member", channelId, externalId: "85298887777" } }],
+      pageInfo: { hasNextPage: false },
+    },
+  ]) {
+    const { result } = await run(
+      {
+        respond: ({ query }) =>
+          query?.query.includes("EarnestForwardingMembers")
+            ? new Response(JSON.stringify({ data: { apiViewer: { members } } }))
+            : undefined,
+      },
+      {},
+      { recipientPhones: [recipient] },
+    );
+    assert.equal(result.members.checked, true);
+    assert.equal(result.members.complete, false);
+    assert.equal(result.ready, false);
+    assert.equal(result.members.provesWhatsappRegistration, false);
+    assert.ok(
+      result.reasonCodes.some((code) =>
+        ["RECIPIENT_INSPECTION_INCOMPLETE", "RECIPIENT_MEMBER_SCOPE_MISMATCH"].includes(code),
+      ),
+    );
+    assert.ok(
+      result.members.matched.every(
+        (item) => item.phone === recipient && item.memberId === "opaque-partial-member",
+      ),
+    );
+  }
 });
 
 test("optional member lookups use external phone IDs and require the configured channel", async () => {

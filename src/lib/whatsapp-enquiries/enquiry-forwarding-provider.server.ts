@@ -318,6 +318,64 @@ export async function inspectEnquiryForwardingProvider(
   if (report.channel.archived === true) reasons.add("PROVIDER_CHANNEL_ARCHIVED");
   else if (report.channel.archived !== false)
     reasons.add("PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN");
+  // Open API member association is independent of Cloud sender/template capability.
+  const requested = [
+    ...new Set(
+      (options.recipientPhones ?? []).map(phone).filter((value): value is string => value !== null),
+    ),
+  ];
+  report.members.requestedPhoneCount = requested.length;
+  if (requested.length > 40 || (options.recipientPhones ?? []).some((value) => !phone(value)))
+    reasons.add("RECIPIENT_LOOKUP_INPUT_INVALID");
+  else if (requested.length) {
+    const body = await open(
+      MEMBERS_QUERY,
+      { app: env.WOZTELL_APP_ID, channel: channelId, phones: requested },
+      "MEMBERS",
+    );
+    const members = row(row(row(body?.data).apiViewer).members);
+    if (body && !array(body.errors).length && Array.isArray(members.edges)) {
+      report.members.checked = true;
+      report.members.complete =
+        row(members.pageInfo).hasNextPage === false && members.edges.length <= 100;
+      if (!report.members.complete) reasons.add("RECIPIENT_INSPECTION_INCOMPLETE");
+      const identities = new Map<string, string>();
+      const ambiguousPhones = new Set<string>();
+      for (const edge of members.edges.slice(0, 100)) {
+        const member = row(row(edge).node),
+          memberPhone = phone(member.externalId),
+          memberId = identifier(member._id);
+        if (
+          member.channelId !== channelId ||
+          !memberPhone ||
+          !requested.includes(memberPhone) ||
+          !memberId
+        ) {
+          report.members.complete = false;
+          reasons.add("RECIPIENT_MEMBER_SCOPE_MISMATCH");
+          continue;
+        }
+        if (ambiguousPhones.has(memberPhone)) continue;
+        const existingIdentity = identities.get(memberPhone);
+        if (existingIdentity && existingIdentity !== memberId) {
+          ambiguousPhones.add(memberPhone);
+          report.members.complete = false;
+          report.members.matched = report.members.matched.filter(
+            (entry) => entry.phone !== memberPhone,
+          );
+          reasons.add("RECIPIENT_MEMBER_AMBIGUOUS");
+          continue;
+        }
+        if (existingIdentity) continue;
+        identities.set(memberPhone, memberId);
+        report.members.matched.push({
+          phone: memberPhone,
+          memberId,
+          proofHash: digest({ channelId, phone: memberPhone, memberId }),
+        });
+      }
+    } else reasons.add("RECIPIENT_MEMBERSHIP_UNVERIFIED");
+  }
   if (!present(channel.appIntegrationAccessToken)) {
     reasons.add("CLOUD_CHANNEL_READ_TOKEN_UNAVAILABLE");
     return finish();
@@ -508,62 +566,5 @@ export async function inspectEnquiryForwardingProvider(
   if (!report.template.validationComplete) reasons.add("TEMPLATE_INSPECTION_INCOMPLETE");
   if (configured && !report.template.configuredApproved)
     reasons.add("CONFIGURED_TEMPLATE_NOT_APPROVED_BODY4");
-  const requested = [
-    ...new Set(
-      (options.recipientPhones ?? []).map(phone).filter((value): value is string => value !== null),
-    ),
-  ];
-  report.members.requestedPhoneCount = requested.length;
-  if (requested.length > 40 || (options.recipientPhones ?? []).some((value) => !phone(value)))
-    reasons.add("RECIPIENT_LOOKUP_INPUT_INVALID");
-  else if (requested.length) {
-    const body = await open(
-      MEMBERS_QUERY,
-      { app: env.WOZTELL_APP_ID, channel: channelId, phones: requested },
-      "MEMBERS",
-    );
-    const members = row(row(row(body?.data).apiViewer).members);
-    if (body && !array(body.errors).length && Array.isArray(members.edges)) {
-      report.members.checked = true;
-      report.members.complete =
-        row(members.pageInfo).hasNextPage === false && members.edges.length <= 100;
-      if (!report.members.complete) reasons.add("RECIPIENT_INSPECTION_INCOMPLETE");
-      const identities = new Map<string, string>();
-      const ambiguousPhones = new Set<string>();
-      for (const edge of members.edges.slice(0, 100)) {
-        const member = row(row(edge).node),
-          memberPhone = phone(member.externalId),
-          memberId = identifier(member._id);
-        if (
-          member.channelId !== channelId ||
-          !memberPhone ||
-          !requested.includes(memberPhone) ||
-          !memberId
-        ) {
-          report.members.complete = false;
-          reasons.add("RECIPIENT_MEMBER_SCOPE_MISMATCH");
-          continue;
-        }
-        if (ambiguousPhones.has(memberPhone)) continue;
-        const existingIdentity = identities.get(memberPhone);
-        if (existingIdentity && existingIdentity !== memberId) {
-          ambiguousPhones.add(memberPhone);
-          report.members.complete = false;
-          report.members.matched = report.members.matched.filter(
-            (entry) => entry.phone !== memberPhone,
-          );
-          reasons.add("RECIPIENT_MEMBER_AMBIGUOUS");
-          continue;
-        }
-        if (existingIdentity) continue;
-        identities.set(memberPhone, memberId);
-        report.members.matched.push({
-          phone: memberPhone,
-          memberId,
-          proofHash: digest({ channelId, phone: memberPhone, memberId }),
-        });
-      }
-    } else reasons.add("RECIPIENT_MEMBERSHIP_UNVERIFIED");
-  }
   return finish();
 }

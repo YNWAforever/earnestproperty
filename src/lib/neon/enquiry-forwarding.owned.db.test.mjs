@@ -41,7 +41,16 @@ test(
     });
     try {
       await withOwnedPostgres(async ({ query, transaction, pool }) => {
-        await mockOwnedServerDb(mock, query, transaction);
+        let trustedRosterReads = 0;
+        await mockOwnedServerDb(
+          mock,
+          async (statement, params = []) => {
+            if (statement.includes("FROM staff_users WHERE active AND show_on_website"))
+              trustedRosterReads++;
+            return query(statement, params);
+          },
+          transaction,
+        );
         const wakes = [],
           wakeObservations = [];
         let wakeError = null;
@@ -959,6 +968,23 @@ test(
           "the registered readiness handler stores only protected UUID evidence under its own lease",
           async () => {
             await reset();
+            const duplicateSales = await staff({
+              publicProfile: true,
+              whatsapp: "00852 9555-1234",
+            });
+            const duplicateCopy = await staff({ publicProfile: true, whatsapp: "+852 9798 7774" });
+            const photographed = ENQUIRY_MANAGERS["manager:2"];
+            await query("UPDATE staff_users SET whatsapp=$2 WHERE id=$1", [
+              photographed.staffId,
+              "+852 9100 5322",
+            ]);
+            const expectedPhones = [
+              ENQUIRY_COPY.phone,
+              ...Object.values(ENQUIRY_MANAGERS).map(({ phone }) => phone),
+              "85295551234",
+            ];
+            const rosterReadsBefore = trustedRosterReads;
+            const inspectionInputs = [];
             let inspections = 0;
             let duringInspection = async () => {};
             const providerModule = mock.module(
@@ -968,8 +994,9 @@ test(
               ).href,
               {
                 exports: {
-                  inspectEnquiryForwardingProvider: async () => {
+                  inspectEnquiryForwardingProvider: async (options) => {
                     inspections++;
+                    inspectionInputs.push(structuredClone(options));
                     await duringInspection();
                     return structuredClone(ready);
                   },
@@ -981,9 +1008,20 @@ test(
               const handler = getJobHandler("woztell.enquiry.forward.readiness", 1);
               assert.ok(handler);
               assert.deepEqual(handler.parsePayload({}), {});
-              assert.throws(
-                () => handler.parsePayload({ phone: "85298887777" }),
-                (error) => error.code === "VALIDATION_ERROR",
+              for (const payload of [
+                { phone: "85298887777" },
+                { recipientPhones: ["85298887777"] },
+                [],
+                null,
+              ])
+                assert.throws(
+                  () => handler.parsePayload(payload),
+                  (error) => error.code === "VALIDATION_ERROR",
+                );
+              assert.equal(
+                trustedRosterReads,
+                rosterReadsBefore,
+                "invalid client payloads cannot read the roster",
               );
               const queued = await queueEnquiryForwardingCheck(admin, ports);
               const workerId = "owned-provider-readiness-worker";
@@ -1004,9 +1042,27 @@ test(
                 attempt: 1,
                 checkpoint: async () => {},
               };
+              const beforeInspection = await snapshot();
               const result = await handler.run({}, context);
+              const afterInspection = await snapshot();
+              assert.deepEqual(afterInspection.recipients, beforeInspection.recipients);
+              assert.deepEqual(afterInspection.roles, beforeInspection.roles);
+              assert.equal(afterInspection.attempts, beforeInspection.attempts);
+              assert.equal(afterInspection.jobs, beforeInspection.jobs);
+              assert.equal(afterInspection.audits, beforeInspection.audits + 1);
               assert.deepEqual(result, { summary: { ready: 1, blockers: 0 } });
               assert.equal(inspections, 1);
+              assert.equal(trustedRosterReads, rosterReadsBefore + 1);
+              assert.deepEqual(
+                inspectionInputs,
+                [{ recipientPhones: expectedPhones }],
+                "only canonical deduplicated fixed contacts and active public valid Sales reach the inspector",
+              );
+              assert.ok(
+                !inspectionInputs[0].recipientPhones.some((phone) =>
+                  ["85295551235", "85295551236", "not-a-phone", "85298887777"].includes(phone),
+                ),
+              );
               const audits = await query(
                 "SELECT actor_id,subject_type,subject_id,metadata FROM audit_logs WHERE action='whatsapp.enquiry_forwarding.provider_checked'",
               );
@@ -1029,6 +1085,11 @@ test(
                   1,
                   "an invalid lease never inspects private provider configuration",
                 );
+                assert.equal(
+                  trustedRosterReads,
+                  rosterReadsBefore + 1,
+                  "an invalid lease never reads recipient phones",
+                );
               }
               const [wrongType] = await query(
                 "INSERT INTO ops_jobs(job_type,payload_version,payload,status,max_attempts,attempt_count,run_after,idempotency_key,lease_owner,lease_expires_at) VALUES('ai.knowledge.repair',1,'{}','running',2,1,now(),$1,$2,now()+interval '10 minutes') RETURNING id",
@@ -1036,6 +1097,29 @@ test(
               );
               await assert.rejects(handler.run({}, { ...context, jobId: wrongType.id }));
               assert.equal(inspections, 1);
+              assert.equal(
+                trustedRosterReads,
+                rosterReadsBefore + 1,
+                "a different job type never reads recipient phones",
+              );
+              const [wrongPayload] = await query(
+                "INSERT INTO ops_jobs(job_type,payload_version,payload,status,max_attempts,attempt_count,run_after,idempotency_key,lease_owner,lease_expires_at) VALUES('woztell.enquiry.forward.readiness',1,$1::jsonb,'running',2,1,now(),$2,$3,now()+interval '10 minutes') RETURNING id",
+                [
+                  JSON.stringify({ recipientPhones: ["85298887777"] }),
+                  `owned-wrong-readiness-payload:${randomUUID()}`,
+                  workerId,
+                ],
+              );
+              await assert.rejects(
+                handler.run({}, { ...context, jobId: wrongPayload.id }),
+                (error) => error.code === "JOB_OWNERSHIP_LOST",
+              );
+              assert.equal(inspections, 1);
+              assert.equal(
+                trustedRosterReads,
+                rosterReadsBefore + 1,
+                "a nonempty stored payload never reads recipient phones",
+              );
               duringInspection = async () => {
                 await transaction([
                   {
@@ -1054,6 +1138,8 @@ test(
                 (error) => error.code === "JOB_OWNERSHIP_LOST",
               );
               assert.equal(inspections, 2, "a lost lease after inspection cannot publish evidence");
+              assert.equal(trustedRosterReads, rosterReadsBefore + 2);
+              assert.deepEqual(inspectionInputs[1], { recipientPhones: expectedPhones });
               await transaction([
                 {
                   statement: "SELECT set_config('app.wa_worker_capabilities',$1,true)",
@@ -1071,6 +1157,11 @@ test(
               );
               assert.equal(inspections, 2, "an expired lease never calls the inspector");
               assert.equal(
+                trustedRosterReads,
+                rosterReadsBefore + 2,
+                "an expired lease never reads recipient phones",
+              );
+              assert.equal(
                 (
                   await query(
                     "SELECT count(*)::int n FROM audit_logs WHERE action='whatsapp.enquiry_forwarding.provider_checked'",
@@ -1085,6 +1176,13 @@ test(
               );
             } finally {
               providerModule.restore();
+              await query("UPDATE staff_users SET whatsapp=NULL WHERE id=$1", [
+                photographed.staffId,
+              ]);
+              await query(
+                "UPDATE staff_users SET show_on_website=false,whatsapp=NULL WHERE id=ANY($1::uuid[])",
+                [[duplicateSales.staffId, duplicateCopy.staffId]],
+              );
             }
           },
         );

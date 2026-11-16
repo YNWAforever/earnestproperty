@@ -584,9 +584,12 @@ registerJobHandler({
       throw Object.assign(new Error("Readiness job ownership lost"), {
         code: "JOB_OWNERSHIP_LOST",
       });
+    const { getTrustedEnquiryForwardingRecipientPhones } =
+      await import("../neon/enquiry-forwarding.server.ts");
+    const recipientPhones = await getTrustedEnquiryForwardingRecipientPhones();
     const { inspectEnquiryForwardingProvider } =
       await import("../whatsapp-enquiries/enquiry-forwarding-provider.server.ts");
-    const check = await inspectEnquiryForwardingProvider();
+    const check = await inspectEnquiryForwardingProvider({ recipientPhones });
     await context.checkpoint();
     const proof = await queryRows(
       "INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) SELECT NULL,'whatsapp.enquiry_forwarding.provider_checked','ops_job',$1,$2::jsonb WHERE EXISTS(SELECT 1 FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.forward.readiness' AND payload='{}'::jsonb AND status='running' AND lease_owner=$3 AND lease_expires_at>now()) RETURNING id",
