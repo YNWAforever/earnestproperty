@@ -17,6 +17,12 @@ const CHANNEL_QUERY = `query EarnestForwardingChannel($app:ID,$channel:ID){
     _id appId name type connected archived appIntegrationAccessToken
   }}
 }`;
+// Optional failure diagnostics: metadata fields only, never environment.info or unmaskToken.
+const CHANNEL_INTEGRATIONS_QUERY = `query EarnestForwardingChannelIntegrations($app:ID,$channel:ID){
+  apiViewer(appId:$app){channel(channelId:$channel){
+    _id appId environments{envId integration{integrationId}}
+  }}
+}`;
 const MEMBERS_QUERY = `query EarnestForwardingMembers($app:ID,$channel:String,$phones:[String]){
   apiViewer(appId:$app){members(channelId:$channel,externalIds:$phones,first:100){
     edges{node{_id channelId externalId}} pageInfo{hasNextPage}
@@ -48,7 +54,7 @@ export type ForwardingTemplateCandidate = {
   paramCount: 4;
   proofHash: string;
 };
-type InspectionStage = "CHANNEL" | "SENDER" | "TEMPLATES" | "MEMBERS";
+type InspectionStage = "CHANNEL" | "SENDER" | "TEMPLATES" | "MEMBERS" | "CHANNEL_INTEGRATIONS";
 export type ProviderRequestObservation = {
   stage: InspectionStage;
   httpStatus: number;
@@ -85,6 +91,17 @@ export type EnquiryForwardingProviderInspection = {
     companyPhoneMatches: boolean | null;
     senderDifferentFromFixedCopy: boolean | null;
     proofHash: string | null;
+  };
+  integrationInspection: {
+    attempted: boolean;
+    checked: boolean;
+    complete: boolean;
+    environmentCount: number;
+    cloudIntegrationCount: number;
+    otherIntegrationCount: number;
+    unknownIntegrationCount: number;
+    /** Enumerating environments does not establish the selected live environment. */
+    selectedEnvironmentVerified: false;
   };
   members: {
     checked: boolean;
@@ -162,6 +179,16 @@ export async function inspectEnquiryForwardingProvider(
       companyPhoneMatches: null,
       senderDifferentFromFixedCopy: null,
       proofHash: null,
+    },
+    integrationInspection: {
+      attempted: false,
+      checked: false,
+      complete: false,
+      environmentCount: 0,
+      cloudIntegrationCount: 0,
+      otherIntegrationCount: 0,
+      unknownIntegrationCount: 0,
+      selectedEnvironmentVerified: false,
     },
     members: {
       checked: false,
@@ -318,6 +345,50 @@ export async function inspectEnquiryForwardingProvider(
   if (report.channel.archived === true) reasons.add("PROVIDER_CHANNEL_ARCHIVED");
   else if (report.channel.archived !== false)
     reasons.add("PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN");
+  async function inspectChannelIntegrations() {
+    report.integrationInspection.attempted = true;
+    const body = await open(
+      CHANNEL_INTEGRATIONS_QUERY,
+      { app: env.WOZTELL_APP_ID, channel: channelId },
+      "CHANNEL_INTEGRATIONS",
+    );
+    if (!body || array(body.errors).length) return;
+    const metadata = row(row(row(body.data).apiViewer).channel);
+    if (
+      metadata._id !== channelId ||
+      metadata.appId !== channel.appId ||
+      !Array.isArray(metadata.environments)
+    )
+      return;
+    report.integrationInspection.checked = true;
+    if (metadata.environments.length > 20) return;
+    const seen = new Set<string>();
+    const environments: { envId: string; integrationId: string | null }[] = [];
+    for (const value of metadata.environments) {
+      const entry = row(value),
+        envId = identifier(entry.envId);
+      if (!envId || seen.has(envId)) return;
+      const integration = row(entry.integration);
+      const integrationId =
+        entry.integration === null ? null : identifier(integration.integrationId);
+      if (entry.integration !== null && integration.integrationId !== null && !integrationId)
+        return;
+      seen.add(envId);
+      environments.push({ envId, integrationId });
+    }
+    report.integrationInspection.environmentCount = environments.length;
+    report.integrationInspection.cloudIntegrationCount = environments.filter(
+      ({ integrationId }) => integrationId === "whatsapp-cloud",
+    ).length;
+    report.integrationInspection.unknownIntegrationCount = environments.filter(
+      ({ integrationId }) => integrationId === null,
+    ).length;
+    report.integrationInspection.otherIntegrationCount =
+      environments.length -
+      report.integrationInspection.cloudIntegrationCount -
+      report.integrationInspection.unknownIntegrationCount;
+    report.integrationInspection.complete = true;
+  }
   // Open API member association is independent of Cloud sender/template capability.
   const requested = [
     ...new Set(
@@ -396,12 +467,16 @@ export async function inspectEnquiryForwardingProvider(
     { method: "GET" },
     "SENDER",
   );
-  if (!senderBody) return finish();
+  if (!senderBody) {
+    await inspectChannelIntegrations();
+    return finish();
+  }
   const sender = row(senderBody.result);
   const senderPhone = phone(sender.phoneNumber);
   const wabaId = identifier(sender.wabaId);
   if (senderBody.ok !== 1 || !senderPhone || !wabaId) {
     reasons.add("SENDER_PROOF_UNAVAILABLE");
+    await inspectChannelIntegrations();
     return finish();
   }
   report.channel.senderPhone = senderPhone;

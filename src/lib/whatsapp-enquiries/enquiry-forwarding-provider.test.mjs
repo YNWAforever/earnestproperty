@@ -58,7 +58,25 @@ function fixture(options = {}) {
       assert.equal(init.headers.Authorization, `Bearer ${secret}`);
       assert.match(query.query, /^query /);
       assert.doesNotMatch(query.query, /mutation|sendResponses/i);
-      if (query.query.includes("EarnestForwardingMembers")) {
+      if (query.query.includes("EarnestForwardingChannelIntegrations")) {
+        assert.doesNotMatch(
+          query.query,
+          /\b(info|unmaskToken|signature|appIntegrationAccessToken)\b/,
+        );
+        assert.doesNotMatch(query.query, /\benvironment\s*\(/);
+        data = {
+          data: {
+            apiViewer: {
+              channel: {
+                _id: channelId,
+                appId: "app-one",
+                environments: options.environments ?? [],
+                ...(options.integrationChannel ?? {}),
+              },
+            },
+          },
+        };
+      } else if (query.query.includes("EarnestForwardingMembers")) {
         data = {
           data: {
             apiViewer: {
@@ -76,6 +94,7 @@ function fixture(options = {}) {
               channel: {
                 _id: channelId,
                 appId: "app-one",
+                type: "WHATSAPP",
                 connected: true,
                 archived: false,
                 appIntegrationAccessToken: cloudSecret,
@@ -129,6 +148,8 @@ test("runtime inspection verifies scoped sender and approved four-body template 
   assert.equal(result.ready, true);
   assert.equal(calls.length, 3);
   assert.deepEqual(result.reasonCodes, []);
+  assert.equal(result.integrationInspection.attempted, false);
+  assert.equal(result.integrationInspection.selectedEnvironmentVerified, false);
   assert.equal(result.flags.enquiryMode, "observe");
   assert.equal(result.flags.serviceAutomationEnabled, false);
   assert.equal(result.channel.senderPhone, "85224962283");
@@ -187,7 +208,11 @@ test("HTTP failure observations retain status and safe shape without provider te
             )
           : undefined,
     });
-    assert.equal(calls.length, 2, "a failed sender check never reaches templates or sends");
+    assert.equal(
+      calls.length,
+      3,
+      "sender failures add only the read-only integration metadata query",
+    );
     assert.equal(result.ready, false);
     assert.equal(result.channel.connected, true);
     assert.equal(result.channel.senderPhone, null);
@@ -233,6 +258,140 @@ test("HTTP failure observations retain status and safe shape without provider te
     );
     assert.ok(!JSON.stringify(result).includes(cloudSecret));
   }
+});
+
+test("sender failure inspects only scoped environment integration identifiers without claiming a selected environment", async () => {
+  const targetPhone = "85298887777",
+    memberId = "owned-staff-member";
+  const { result, calls } = await run(
+    {
+      members: [{ _id: memberId, externalId: targetPhone, channelId }],
+      environments: [
+        {
+          envId: "live-one",
+          integration: { integrationId: "whatsapp-cloud", info: { accessToken: cloudSecret } },
+          info: secret,
+        },
+        { envId: "sandbox-two", integration: { integrationId: "other-platform" } },
+      ],
+      respond: ({ url }) =>
+        url.pathname.endsWith("/waba-info")
+          ? new Response(JSON.stringify({ ok: 0, error: `private ${cloudSecret}` }), {
+              status: 500,
+            })
+          : undefined,
+    },
+    {},
+    { recipientPhones: [targetPhone] },
+  );
+  assert.equal(result.ready, false);
+  assert.equal(result.channel.senderPhone, null);
+  assert.equal(result.template.validationComplete, false);
+  assert.equal(result.members.matched[0].memberId, memberId);
+  assert.deepEqual(result.integrationInspection, {
+    attempted: true,
+    checked: true,
+    complete: true,
+    environmentCount: 2,
+    cloudIntegrationCount: 1,
+    otherIntegrationCount: 1,
+    unknownIntegrationCount: 0,
+    selectedEnvironmentVerified: false,
+  });
+  assert.deepEqual(
+    result.requests.map(({ stage }) => stage),
+    ["CHANNEL", "MEMBERS", "SENDER", "CHANNEL_INTEGRATIONS"],
+  );
+  const metadataCall = calls.at(-1);
+  assert.deepEqual(metadataCall.query.variables, { app: "app-one", channel: channelId });
+  assert.match(
+    metadataCall.query.query,
+    /environments\s*\{\s*envId\s+integration\s*\{integrationId\}/,
+  );
+  assert.doesNotMatch(
+    metadataCall.query.query,
+    /\b(info|unmaskToken|signature|appIntegrationAccessToken)\b|\benvironment\s*\(/,
+  );
+  for (const forbidden of [
+    secret,
+    cloudSecret,
+    "private ",
+    "accessToken=",
+    "live-one",
+    "sandbox-two",
+    "other-platform",
+  ])
+    assert.ok(!JSON.stringify(result).includes(forbidden));
+});
+
+test("unavailable or ambiguous environment metadata preserves the original sender failure without exposing provider data", async () => {
+  const variants = [
+    {
+      respondMetadata: () => new Response(JSON.stringify({ error: secret }), { status: 403 }),
+      checked: false,
+    },
+    {
+      respondMetadata: () => new Response(JSON.stringify({ errors: [{ message: cloudSecret }] })),
+      checked: false,
+    },
+    { integrationChannel: { _id: "other-channel" }, checked: false },
+    { integrationChannel: { appId: "other-app" }, checked: false },
+    { integrationChannel: { environments: null }, checked: false },
+    {
+      environments: Array.from({ length: 21 }, (_, i) => ({
+        envId: `env-${i}`,
+        integration: null,
+      })),
+      checked: true,
+    },
+    {
+      environments: [
+        { envId: "same", integration: null },
+        { envId: "same", integration: null },
+      ],
+      checked: true,
+    },
+    { environments: [{ envId: null, integration: null }], checked: true },
+    {
+      environments: [{ envId: "one", integration: { integrationId: `private ${secret}` } }],
+      checked: true,
+    },
+  ];
+  for (const variant of variants) {
+    const { result } = await run({
+      ...variant,
+      respond: ({ url, query }) => {
+        if (url.pathname.endsWith("/waba-info"))
+          return new Response(JSON.stringify({ ok: 0, error: cloudSecret }), { status: 500 });
+        if (query?.query.includes("EarnestForwardingChannelIntegrations"))
+          return variant.respondMetadata?.();
+      },
+    });
+    assert.equal(result.ready, false);
+    assert.equal(result.channel.connected, true);
+    assert.equal(result.channel.senderPhone, null);
+    assert.ok(result.reasonCodes.includes("SENDER_HTTP_FAILED"));
+    assert.equal(result.integrationInspection.attempted, true);
+    assert.equal(result.integrationInspection.checked, variant.checked);
+    assert.equal(result.integrationInspection.complete, false);
+    assert.equal(result.integrationInspection.environmentCount, 0);
+    assert.equal(result.integrationInspection.cloudIntegrationCount, 0);
+    assert.equal(result.integrationInspection.selectedEnvironmentVerified, false);
+    for (const forbidden of [secret, cloudSecret, "private "])
+      assert.ok(!JSON.stringify(result).includes(forbidden));
+  }
+  const { result } = await run({
+    environments: [],
+    respond: ({ url }) =>
+      url.pathname.endsWith("/waba-info")
+        ? new Response(JSON.stringify({ ok: 0 }), { status: 500 })
+        : undefined,
+  });
+  assert.equal(result.integrationInspection.complete, true);
+  assert.equal(result.integrationInspection.environmentCount, 0);
+  assert.equal(result.integrationInspection.cloudIntegrationCount, 0);
+  assert.equal(result.integrationInspection.selectedEnvironmentVerified, false);
+  assert.equal(result.ready, false);
 });
 
 test("missing capability references do not prevent read-only inspection or fabricate evidence", async () => {
@@ -509,7 +668,9 @@ test("member association survives Cloud sender failure without weakening readine
       assert.ok(result.reasonCodes.includes(code));
     assert.deepEqual(
       result.requests.map(({ stage }) => stage),
-      missingCloudToken ? ["CHANNEL", "MEMBERS"] : ["CHANNEL", "MEMBERS", "SENDER"],
+      missingCloudToken
+        ? ["CHANNEL", "MEMBERS"]
+        : ["CHANNEL", "MEMBERS", "SENDER", "CHANNEL_INTEGRATIONS"],
     );
     const memberCall = calls.find((call) => call.query?.query.includes("EarnestForwardingMembers"));
     assert.deepEqual(memberCall.query.variables, {
