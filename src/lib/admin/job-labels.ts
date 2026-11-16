@@ -22,6 +22,7 @@ export const JOB_TYPE_LABELS: Record<string, string> = {
   "woztell.enquiry.forward": "查詢 WhatsApp 通知",
   "woztell.enquiry.forward.reconcile": "查詢通知結果核對",
   "woztell.enquiry.forward.readiness": "查詢通知連接核對",
+  "woztell.enquiry.canary.send": "轉發送達核對（單次）",
   "lead.staff.alert": "新客戶查詢通知",
   "lead.staff.alert.reconcile": "新客戶查詢通知核對",
 };
@@ -47,6 +48,11 @@ export const JOB_FAILURE_REASONS: Record<string, string> = {
   WOZTELL_PROVIDER_UNAVAILABLE: "WhatsApp 服務暫時無法使用。",
   WOZTELL_CONFIGURATION_UNAVAILABLE: "WhatsApp 發送設定未完成。",
   ENQUIRY_FORWARD_NOT_READY: "查詢通知設定尚未就緒。",
+  CANARY_DISABLED: "單次送達核對未啟用。",
+  CANARY_PHONE_INVALID: "送達核對號碼未設定或無效。",
+  CANARY_TEMPLATE_MISSING: "警報範本未設定，無法核對送達。",
+  CANARY_CHANNEL_MISSING: "未設定公司 WhatsApp 渠道。",
+  CANARY_NOT_ACCEPTED: "WhatsApp 服務未接受核對訊息。",
   WOZTELL_DELIVERY_INCOMPLETE: "部分訊息未完成發送。",
   WOZTELL_CAMPAIGN_PAUSED: "推廣活動已暫停，請到推廣活動恢復。",
   WOZTELL_PROVIDER_REJECTED: "WhatsApp 服務拒絕了發送要求。",
@@ -92,6 +98,7 @@ export const DELIVERY_JOB_TYPES: readonly string[] = [
   "woztell.enquiry.staff.notify",
   "woztell.enquiry.staff.test",
   "woztell.enquiry.forward",
+  "woztell.enquiry.canary.send",
 ];
 
 /** Registered types that never send a message (reconcile and check jobs only read or record). */

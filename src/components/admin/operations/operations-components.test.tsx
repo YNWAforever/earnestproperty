@@ -624,8 +624,12 @@ test("the status filter starts on 失敗 and the type select lists all types", (
   expect(jobsSource).toMatch(/useState<"all" \| JobStatus>\(DEFAULT_JOB_STATUS\)/);
   const options = jobTypeOptions();
   expect(options[0]).toEqual({ value: "all", label: "所有類型" });
-  expect(options).toHaveLength(19);
+  expect(options).toHaveLength(20);
   expect(options).toContainEqual({ value: "woztell.enquiry.forward", label: "查詢 WhatsApp 通知" });
+  expect(options).toContainEqual({
+    value: "woztell.enquiry.canary.send",
+    label: "轉發送達核對（單次）",
+  });
   expect(options).toContainEqual({
     value: "woztell.enquiry.forward.reconcile",
     label: "查詢通知結果核對",

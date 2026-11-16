@@ -41,8 +41,8 @@ function registeredJobTypes(): string[] {
 
 test("every registered job type has a label", () => {
   const registered = registeredJobTypes();
-  // 18 types: the staff and forwarding loops and the lead-alert pair are all included.
-  expect(registered).toHaveLength(18);
+  // 19 types: the staff and forwarding loops, the canary and the lead-alert pair are all included.
+  expect(registered).toHaveLength(19);
   expect(Object.keys(JOB_TYPE_LABELS).sort()).toEqual(registered);
   for (const type of registered) expect(jobTypeLabel(type)).not.toBe("其他工作");
 });
