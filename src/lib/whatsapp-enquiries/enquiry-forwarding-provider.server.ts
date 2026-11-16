@@ -75,7 +75,10 @@ export type EnquiryForwardingProviderInspection = {
     botAccessTokenPresent: boolean;
     openApiTokenPresent: boolean;
     channelSecretPresent: boolean;
+    cloudAccessTokenPresent?: boolean;
   };
+  /** Selected only after channel/app scope checks; presence/source does not verify validity. */
+  cloudAccessTokenSource?: "configured" | "channel_integration" | "unavailable";
   /** Presence of existing references, not newly manufactured verification. */
   capabilities: {
     whatsappVerification: boolean;
@@ -136,6 +139,9 @@ export async function inspectEnquiryForwardingProvider(
   } = {},
 ): Promise<EnquiryForwardingProviderInspection> {
   const env = options.env ?? process.env;
+  const configuredCloudToken = present(env.WOZTELL_CLOUD_ACCESS_TOKEN)
+    ? env.WOZTELL_CLOUD_ACCESS_TOKEN.trim()
+    : null;
   const secrets = new Set(
     Object.entries(env)
       .filter(
@@ -144,6 +150,7 @@ export async function inspectEnquiryForwardingProvider(
       )
       .map(([, value]) => value as string),
   );
+  if (configuredCloudToken) secrets.add(configuredCloudToken);
   const sensitiveText = (value: string) =>
     [...secrets].some((secret) => secret.length >= 4 && value.includes(secret));
   const reasons = new Set<string>();
@@ -164,7 +171,9 @@ export async function inspectEnquiryForwardingProvider(
       botAccessTokenPresent: present(env.WOZTELL_BOT_ACCESS_TOKEN),
       openApiTokenPresent: present(env.WOZTELL_OPEN_API_TOKEN),
       channelSecretPresent: present(env.WOZTELL_CHANNEL_SECRET),
+      cloudAccessTokenPresent: configuredCloudToken !== null,
     },
+    cloudAccessTokenSource: "unavailable",
     capabilities: {
       whatsappVerification: present(env.EP_WA_STAFF_WHATSAPP_VERIFICATION_REF),
       correlationVerification: present(env.EP_WA_STAFF_CORRELATION_VERIFICATION_REF),
@@ -337,6 +346,15 @@ export async function inspectEnquiryForwardingProvider(
     reasons.add("PROVIDER_CHANNEL_SCOPE_MISMATCH");
     return finish();
   }
+  if (present(channel.appIntegrationAccessToken)) secrets.add(channel.appIntegrationAccessToken);
+  const cloudToken =
+    configuredCloudToken ??
+    (present(channel.appIntegrationAccessToken) ? channel.appIntegrationAccessToken : null);
+  report.cloudAccessTokenSource = configuredCloudToken
+    ? "configured"
+    : cloudToken
+      ? "channel_integration"
+      : "unavailable";
   report.channel.connected = typeof channel.connected === "boolean" ? channel.connected : null;
   report.channel.archived = typeof channel.archived === "boolean" ? channel.archived : null;
   if (report.channel.connected === false) reasons.add("PROVIDER_CHANNEL_NOT_CONNECTED");
@@ -447,18 +465,16 @@ export async function inspectEnquiryForwardingProvider(
       }
     } else reasons.add("RECIPIENT_MEMBERSHIP_UNVERIFIED");
   }
-  if (!present(channel.appIntegrationAccessToken)) {
+  if (!cloudToken) {
     reasons.add("CLOUD_CHANNEL_READ_TOKEN_UNAVAILABLE");
     return finish();
   }
-  const channelToken = channel.appIntegrationAccessToken;
-  secrets.add(channelToken);
   const cloudUrl = (
     path: "waba-info" | "whatsapp-message-templates",
     params: Record<string, string>,
   ) => {
     const url = new URL(path, CLOUD_API);
-    url.searchParams.set("accessToken", channelToken);
+    url.searchParams.set("accessToken", cloudToken);
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
     return url.toString();
   };

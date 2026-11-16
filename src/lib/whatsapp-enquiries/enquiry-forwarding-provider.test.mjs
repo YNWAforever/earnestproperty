@@ -5,6 +5,7 @@ import { inspectEnquiryForwardingProvider } from "./enquiry-forwarding-provider.
 const channelId = "company-channel";
 const secret = "test-open-credential-never-return";
 const cloudSecret = "test-channel-credential-never-return";
+const configuredCloudSecret = "owned_configured_cloud_access_token_value";
 const bodyText = "新查詢：{{1}}，來源：{{2}}，電話：{{3}}，詳情：{{4}}";
 const contract = {
   name: "staff_enquiry",
@@ -107,7 +108,7 @@ function fixture(options = {}) {
     } else {
       assert.equal(url.origin, "https://api.whatsapp-cloud.woztell.sanuker.com");
       assert.equal(init.method, "GET");
-      assert.equal(url.searchParams.get("accessToken"), cloudSecret);
+      assert.equal(url.searchParams.get("accessToken"), options.expectedCloudToken ?? cloudSecret);
       if (url.pathname.endsWith("/waba-info")) {
         assert.equal(url.searchParams.get("channelId"), channelId);
         data = {
@@ -152,6 +153,8 @@ test("runtime inspection verifies scoped sender and approved four-body template 
   assert.equal(result.integrationInspection.selectedEnvironmentVerified, false);
   assert.equal(result.flags.enquiryMode, "observe");
   assert.equal(result.flags.serviceAutomationEnabled, false);
+  assert.equal(result.flags.cloudAccessTokenPresent, false);
+  assert.equal(result.cloudAccessTokenSource, "channel_integration");
   assert.equal(result.channel.senderPhone, "85224962283");
   assert.equal(result.channel.companyPhoneMatches, true);
   assert.equal(result.channel.senderDifferentFromFixedCopy, true);
@@ -170,6 +173,210 @@ test("runtime inspection verifies scoped sender and approved four-body template 
   });
   assert.ok(calls.every((call) => !call.query?.query.includes("EarnestForwardingMembers")));
   assert.doesNotMatch(JSON.stringify(result), /test-.*(?:credential|secret|proof)/);
+});
+
+test("optional Cloud access token is selected explicitly while Open API authentication stays separate", async () => {
+  for (const channelToken of [cloudSecret, undefined]) {
+    const { result, calls } = await run(
+      {
+        channel: { appIntegrationAccessToken: channelToken },
+        expectedCloudToken: configuredCloudSecret,
+      },
+      { WOZTELL_CLOUD_ACCESS_TOKEN: `  ${configuredCloudSecret}  ` },
+    );
+    assert.equal(result.flags.cloudAccessTokenPresent, true);
+    assert.equal(result.cloudAccessTokenSource, "configured");
+    assert.equal(
+      result.ready,
+      true,
+      "owned provider results still satisfy every existing configuration gate",
+    );
+    assert.equal(result.members.provesWhatsappRegistration, false);
+    const openCalls = calls.filter(({ url }) => url.hostname === "open.api.woztell.com");
+    assert.ok(openCalls.every(({ init }) => init.headers.Authorization === `Bearer ${secret}`));
+    const cloudCalls = calls.filter(
+      ({ url }) => url.hostname === "api.whatsapp-cloud.woztell.sanuker.com",
+    );
+    assert.equal(cloudCalls.length, 2);
+    assert.ok(
+      cloudCalls.every(
+        ({ url, init }) =>
+          url.searchParams.get("accessToken") === configuredCloudSecret && init.method === "GET",
+      ),
+    );
+    assert.ok(!result.reasonCodes.includes("CLOUD_CHANNEL_READ_TOKEN_UNAVAILABLE"));
+    assert.ok(!JSON.stringify(result).includes(configuredCloudSecret));
+  }
+});
+
+test("absent or blank optional Cloud token preserves the original channel fallback", async () => {
+  for (const value of [undefined, "", " \t\n "]) {
+    const { result, calls } = await run({}, { WOZTELL_CLOUD_ACCESS_TOKEN: value });
+    assert.equal(result.flags.cloudAccessTokenPresent, false);
+    assert.equal(result.cloudAccessTokenSource, "channel_integration");
+    assert.equal(result.ready, true);
+    assert.equal(calls.length, 3);
+    assert.ok(
+      calls
+        .filter(({ url }) => url.hostname !== "open.api.woztell.com")
+        .every(({ url }) => url.searchParams.get("accessToken") === cloudSecret),
+    );
+  }
+  const { result, calls } = await run(
+    { channel: { appIntegrationAccessToken: undefined } },
+    { WOZTELL_CLOUD_ACCESS_TOKEN: " " },
+  );
+  assert.equal(result.cloudAccessTokenSource, "unavailable");
+  assert.equal(result.flags.cloudAccessTokenPresent, false);
+  assert.equal(result.ready, false);
+  assert.equal(calls.length, 1);
+  assert.ok(result.reasonCodes.includes("CLOUD_CHANNEL_READ_TOKEN_UNAVAILABLE"));
+});
+
+test("a configured Cloud token cannot bypass Open channel or app scope", async () => {
+  for (const channel of [{ _id: "other-channel" }, { appId: "other-app" }]) {
+    const { result, calls } = await run(
+      { channel, expectedCloudToken: configuredCloudSecret },
+      { WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret },
+      { recipientPhones: ["85291005322"] },
+    );
+    assert.equal(result.flags.cloudAccessTokenPresent, true);
+    assert.equal(result.cloudAccessTokenSource, "unavailable");
+    assert.equal(calls.length, 1);
+    assert.equal(result.ready, false);
+    assert.ok(result.reasonCodes.includes("PROVIDER_CHANNEL_SCOPE_MISMATCH"));
+    assert.equal(result.members.checked, false);
+  }
+});
+
+test("configured Cloud token presence never replaces required credentials or readiness evidence", async () => {
+  const cases = [
+    { options: { channel: { archived: null } }, reason: "PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN" },
+    { options: { channel: { archived: true } }, reason: "PROVIDER_CHANNEL_ARCHIVED" },
+    { options: { channel: { connected: false } }, reason: "PROVIDER_CHANNEL_NOT_CONNECTED" },
+    {
+      patch: {
+        EP_WA_STAFF_WHATSAPP_VERIFICATION_REF: undefined,
+        EP_WA_STAFF_CORRELATION_VERIFICATION_REF: undefined,
+        EP_WA_STAFF_ASSOCIATION_REVIEW_REF: undefined,
+        EP_WA_STAFF_REPLY_CONTEXT_PATH: undefined,
+      },
+      reason: "CAPABILITY_REFERENCES_MISSING",
+    },
+    {
+      patch: { EP_WA_STAFF_ALERT_TEMPLATE: undefined },
+      reason: "STAFF_TEMPLATE_SELECTION_REQUIRED",
+    },
+    { options: { templates: [] }, reason: "CONFIGURED_TEMPLATE_NOT_APPROVED_BODY4" },
+    { patch: { WOZTELL_BOT_ACCESS_TOKEN: undefined }, reason: "BOT_ACCESS_TOKEN_MISSING" },
+    { patch: { WOZTELL_OPEN_API_TOKEN: undefined }, reason: "OPEN_API_TOKEN_MISSING" },
+    { patch: { WOZTELL_CHANNEL_SECRET: undefined }, reason: "CHANNEL_SECRET_MISSING" },
+    { extra: { recipientPhones: ["not-a-phone"] }, reason: "RECIPIENT_LOOKUP_INPUT_INVALID" },
+    {
+      options: {
+        members: [
+          { _id: "owned-member-one", channelId, externalId: "85291005322" },
+          { _id: "owned-member-two", channelId, externalId: "85291005322" },
+        ],
+      },
+      extra: { recipientPhones: ["85291005322"] },
+      reason: "RECIPIENT_MEMBER_AMBIGUOUS",
+    },
+    {
+      options: { sender: { phoneNumber: "85223962283" } },
+      reason: "PROVIDER_SENDER_PHONE_MISMATCH",
+    },
+    {
+      options: { sender: { phoneNumber: "85297987774" } },
+      patch: { VITE_CONTACT_WHATSAPP_PHONE: "85297987774" },
+      reason: "FIXED_COPY_IS_COMPANY_SENDER",
+    },
+  ];
+  for (const item of cases) {
+    const { result } = await run(
+      { ...item.options, expectedCloudToken: configuredCloudSecret },
+      { WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret, ...item.patch },
+      item.extra,
+    );
+    assert.equal(result.flags.cloudAccessTokenPresent, true);
+    assert.equal(result.ready, false, item.reason);
+    assert.ok(result.reasonCodes.includes(item.reason));
+    assert.equal(result.members.provesWhatsappRegistration, false);
+  }
+});
+
+test("selected and unselected Cloud credentials never leak through malicious provider fields or errors", async () => {
+  const unusedChannelToken = "owned_unused_channel_access_token_value";
+  const { result } = await run(
+    {
+      channel: { appIntegrationAccessToken: unusedChannelToken },
+      expectedCloudToken: configuredCloudSecret,
+      members: [{ _id: unusedChannelToken, channelId, externalId: "85291005322" }],
+      templates: [template({ id: configuredCloudSecret })],
+    },
+    { WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret },
+    { recipientPhones: ["85291005322"] },
+  );
+  assert.equal(result.cloudAccessTokenSource, "configured");
+  assert.equal(result.ready, false);
+  assert.ok(result.reasonCodes.includes("SENSITIVE_PROVIDER_CONTENT_REDACTED"));
+  assert.equal(result.members.matched[0].memberId, "[REDACTED]");
+  assert.equal(result.template.candidates[0].providerTemplateId, "[REDACTED]");
+  for (const value of [configuredCloudSecret, unusedChannelToken, cloudSecret, secret])
+    assert.ok(!JSON.stringify(result).includes(value));
+  const failed = await run(
+    {
+      channel: { appIntegrationAccessToken: unusedChannelToken },
+      expectedCloudToken: configuredCloudSecret,
+      respond: ({ url }) =>
+        url.pathname.endsWith("/waba-info")
+          ? new Response(
+              JSON.stringify({
+                ok: 0,
+                error: `private-response ${configuredCloudSecret} ${unusedChannelToken}`,
+              }),
+              { status: 500 },
+            )
+          : undefined,
+    },
+    { WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret },
+  );
+  assert.equal(failed.result.ready, false);
+  assert.ok(failed.result.reasonCodes.includes("SENDER_HTTP_FAILED"));
+  for (const value of [
+    configuredCloudSecret,
+    unusedChannelToken,
+    "private-response",
+    "accessToken=",
+  ])
+    assert.ok(!JSON.stringify(failed.result).includes(value));
+  const thrown = await run(
+    {
+      expectedCloudToken: configuredCloudSecret,
+      respond: ({ url }) => {
+        if (url.pathname.endsWith("/waba-info")) throw Error(`private-url ${url}`);
+      },
+    },
+    { WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret },
+  );
+  assert.equal(thrown.result.ready, false);
+  assert.ok(thrown.result.reasonCodes.includes("SENDER_REQUEST_FAILED"));
+  for (const value of [configuredCloudSecret, "private-url", "accessToken="])
+    assert.ok(!JSON.stringify(thrown.result).includes(value));
+});
+
+test("trimmed configured Cloud credentials are redacted even before a scope failure", async () => {
+  const { result } = await run(
+    { channel: { _id: "other-channel" } },
+    {
+      WOZTELL_CLOUD_ACCESS_TOKEN: `  ${configuredCloudSecret}  `,
+      EP_WA_STAFF_ALERT_TEMPLATE: JSON.stringify({ ...contract, name: configuredCloudSecret }),
+    },
+  );
+  assert.equal(result.cloudAccessTokenSource, "unavailable");
+  assert.equal(result.template.configured, null);
+  assert.equal(result.ready, false);
+  assert.ok(!JSON.stringify(result).includes(configuredCloudSecret));
 });
 
 test("connected channels with nullable archive status remain unready without a false disconnect reason", async () => {
