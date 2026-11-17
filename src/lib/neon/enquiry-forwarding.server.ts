@@ -335,7 +335,8 @@ function enableStatement(): string {
     provider_current AS (SELECT EXISTS(SELECT 1 FROM latest_check a WHERE a.id=$10::uuid
       AND a.metadata->'infoForwarding'->'ready'='true'::jsonb AND a.metadata->'infoForwarding'->>'purpose'='enq_forward_info' AND a.metadata->'infoForwarding'->>'version'='1'
       AND a.metadata->'infoForwarding'->>'appId'=$9 AND a.metadata->'infoForwarding'->>'channelId'=$3 AND a.metadata->'infoForwarding'->>'releaseAuditId'=$11::text
-      AND a.metadata->'channel'->>'appId'=$9 AND a.metadata->'channel'->>'configuredChannelId'=$3 AND a.metadata->'channel'->'connected'='true'::jsonb AND a.metadata->'channel'->'archived'='false'::jsonb
+      AND a.metadata->'channel'->>'appId'=$9 AND a.metadata->'channel'->>'configuredChannelId'=$3 AND a.metadata->'channel'->'connected'='true'::jsonb
+      AND (a.metadata->'channel'->'archived'='false'::jsonb OR (a.metadata->'channel'->'archiveProof'->>'mode'='live_delivery' AND COALESCE((a.metadata->'channel'->>'archived')::boolean,false)=false))
       AND a.metadata->'channel'->'companyPhoneMatches'='true'::jsonb AND a.metadata->'channel'->'senderDifferentFromFixedCopy'='true'::jsonb
       AND a.metadata->'template'->'configuredApproved'='true'::jsonb AND a.metadata->'template'->'validationComplete'='true'::jsonb
       AND a.metadata->'infoForwarding'->>'channelProofHash'=a.metadata->'channel'->>'proofHash'
