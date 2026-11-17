@@ -177,7 +177,9 @@ type InspectionStage =
   | "CHANNEL_IDENTITY"
   | "CHANNEL_SIGNATURE"
   | "BUSINESS_PROFILE"
-  | "DISPLAYNAME_STATUS";
+  | "DISPLAYNAME_STATUS"
+  | "SENDER_DIAGNOSTIC_TOKEN"
+  | "TEMPLATES_DIAGNOSTIC_TOKEN";
 // These are observations of untrusted error text, never authentication or readiness proof.
 const ERROR_SIGNALS = {
   invalid_token:
@@ -321,6 +323,16 @@ export type EnquiryForwardingProviderInspection = {
     proofHash: string | null;
   };
   credentialInspection?: ReturnType<typeof inspectCredential>;
+  tokenProbe?: {
+    attempted: boolean;
+    distinctFromConfigured: boolean | null;
+    senderVerified: boolean;
+    companyPhoneMatches: boolean;
+    expectedWabaMatches: boolean;
+    templatesReadable: boolean | null;
+    templateListed: boolean | null;
+    templateLanguageApproved: boolean | null;
+  };
   phoneProbe?: {
     attempted: boolean;
     profileAttempted: boolean;
@@ -932,6 +944,78 @@ export async function inspectEnquiryForwardingProvider(
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
     return url.toString();
   };
+  if (present(env.WOZTELL_DIAGNOSTIC_CLOUD_TOKEN)) {
+    // Operator-supplied second credential, compared read-only. It is never a fallback for the
+    // production credential, never a sending credential, and never relaxes a readiness gate.
+    reasons.add("TOKEN_DIAGNOSTIC_ONLY");
+    const supplied = env.WOZTELL_DIAGNOSTIC_CLOUD_TOKEN.trim();
+    report.tokenProbe = {
+      attempted: true,
+      distinctFromConfigured:
+        supplied && configuredCloudToken ? supplied !== configuredCloudToken : null,
+      senderVerified: false,
+      companyPhoneMatches: false,
+      expectedWabaMatches: false,
+      templatesReadable: null,
+      templateListed: null,
+      templateLanguageApproved: null,
+    };
+    await inspectChannelIntegrations();
+    if (supplied) {
+      const withToken = (
+        path: "waba-info" | "whatsapp-message-templates",
+        params: Record<string, string>,
+      ) => {
+        const url = new URL(cloudUrl(path, params));
+        url.searchParams.set("accessToken", supplied);
+        return url.toString();
+      };
+      const body = await request(
+        withToken("waba-info", { channelId }),
+        { method: "GET" },
+        "SENDER_DIAGNOSTIC_TOKEN",
+      );
+      const sender = row(body?.result);
+      const senderPhone = phone(sender.phoneNumber);
+      const senderWaba = identifier(sender.wabaId);
+      report.tokenProbe.senderVerified =
+        body?.ok === 1 &&
+        senderPhone !== null &&
+        senderWaba !== null &&
+        identifier(sender.phoneNumberId) !== null;
+      report.tokenProbe.companyPhoneMatches =
+        report.tokenProbe.senderVerified && !!companyPhone && senderPhone === companyPhone;
+      report.tokenProbe.expectedWabaMatches =
+        report.tokenProbe.senderVerified &&
+        present(env.WOZTELL_DIAGNOSTIC_WABA_ID) &&
+        senderWaba === env.WOZTELL_DIAGNOSTIC_WABA_ID;
+      if (report.tokenProbe.senderVerified && senderWaba) {
+        const params: Record<string, string> = { wabaId: senderWaba, first: "10" };
+        if (configured) params.name = configured.name;
+        const templates = await request(
+          withToken("whatsapp-message-templates", params),
+          { method: "GET" },
+          "TEMPLATES_DIAGNOSTIC_TOKEN",
+        );
+        const valid = templates?.ok === 1 && Array.isArray(templates.data);
+        report.tokenProbe.templatesReadable = valid;
+        if (valid && configured) {
+          const matches = array(templates?.data)
+            .map(row)
+            .filter((item) => item.name === configured.name);
+          report.tokenProbe.templateListed = matches.length > 0;
+          report.tokenProbe.templateLanguageApproved = matches.some((item) =>
+            array(item.statuses)
+              .map(row)
+              .some(
+                (status) =>
+                  status.language === configured?.language && status.status === "APPROVED",
+              ),
+          );
+        }
+      }
+    }
+  }
   if (env.WOZTELL_DIAGNOSTIC_PROBE === "phone") {
     // Endpoints keyed by phoneNumberId instead of channelId/wabaId. Read-only; never a
     // fallback, never grants readiness, and no returned text or phone number is retained.

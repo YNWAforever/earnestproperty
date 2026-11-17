@@ -188,8 +188,8 @@ function fixture(options = {}) {
         };
       } else {
         assert.equal(url.pathname, "/v1.2/api/whatsapp-message-templates");
-        assert.equal(url.searchParams.get("wabaId"), "waba-one");
-        assert.equal(url.searchParams.get("first"), "100");
+        assert.equal(url.searchParams.get("wabaId"), options.templateWabaId ?? "waba-one");
+        assert.ok(["100", "10"].includes(url.searchParams.get("first")));
         data = options.pages?.[templatePage++] ?? {
           ok: 1,
           data: options.templates ?? [template()],
@@ -430,6 +430,64 @@ test("identity mode parses bounded JSON-encoded waba info without echoing it", a
   assert.equal(result.identityInspection.companyPhoneMatches, true);
   for (const value of [encoded, "encoded-private-never-output", "1465869128784425", "85224962283"])
     assert.equal(JSON.stringify(result).includes(value), false);
+});
+
+test("a second supplied credential is compared read-only and never grants readiness", async () => {
+  const supplied = "owned_second_supplied_cloud_credential";
+  const { result, calls } = await run(
+    {
+      expectedCloudToken: supplied,
+      sender: { wabaId: "1465869128784425", phoneNumberId: "1418629391333234" },
+      templateWabaId: "1465869128784425",
+    },
+    {
+      WOZTELL_DIAGNOSTIC_CLOUD_TOKEN: supplied,
+      WOZTELL_DIAGNOSTIC_WABA_ID: "1465869128784425",
+    },
+  );
+  assert.deepEqual(
+    result.requests.slice(0, 4).map((r) => r.stage),
+    ["CHANNEL", "CHANNEL_INTEGRATIONS", "SENDER_DIAGNOSTIC_TOKEN", "TEMPLATES_DIAGNOSTIC_TOKEN"],
+  );
+  assert.deepEqual(result.tokenProbe, {
+    attempted: true,
+    distinctFromConfigured: null,
+    senderVerified: true,
+    companyPhoneMatches: true,
+    expectedWabaMatches: true,
+    templatesReadable: true,
+    templateListed: true,
+    templateLanguageApproved: true,
+  });
+  const senderCall = calls.find((c) => c.url.pathname.endsWith("/waba-info"));
+  assert.equal(senderCall.url.searchParams.get("accessToken"), supplied);
+  for (const value of [supplied, "waba-one", "1465869128784425"])
+    assert.equal(JSON.stringify(result).includes(value), false);
+  assert.ok(result.reasonCodes.includes("TOKEN_DIAGNOSTIC_ONLY"));
+  assert.equal(result.ready, false);
+  assert.equal(result.infoForwarding.ready, false);
+});
+
+test("no second credential means no comparison and no diagnostic provider reads", async () => {
+  const { result } = await run({}, { WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret });
+  assert.equal(result.tokenProbe, undefined);
+  assert.equal(
+    result.requests.some((r) => r.stage === "SENDER_DIAGNOSTIC_TOKEN"),
+    false,
+  );
+  assert.equal(result.ready, false);
+});
+
+test("a supplied credential matching the configured one is flagged as reused", async () => {
+  const { result } = await run(
+    { expectedCloudToken: configuredCloudSecret },
+    {
+      WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret,
+      WOZTELL_DIAGNOSTIC_CLOUD_TOKEN: configuredCloudSecret,
+    },
+  );
+  assert.equal(result.tokenProbe.distinctFromConfigured, false);
+  assert.equal(result.ready, false);
 });
 
 test("phone mode verifies identity through phoneNumberId endpoints without leaking values", async () => {
