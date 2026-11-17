@@ -11,6 +11,11 @@ import {
   type StaffAlertTemplate,
 } from "../woztell/staff-alert-template.ts";
 import { staffCorrelationPlan } from "./staff-correlation-mode.js";
+import {
+  channelArchiveProof,
+  channelArchiveVerified,
+  type ChannelArchiveProof,
+} from "./channel-archive-proof.js";
 
 const OPEN_API = "https://open.api.woztell.com/v3";
 const CLOUD_API = "https://api.whatsapp-cloud.woztell.sanuker.com/v1.2/api/";
@@ -318,6 +323,7 @@ export type EnquiryForwardingProviderInspection = {
     configuredChannelId: string | null;
     connected: boolean | null;
     archived: boolean | null;
+    archiveProof: ChannelArchiveProof | null;
     senderPhone: string | null;
     companyPhoneMatches: boolean | null;
     senderDifferentFromFixedCopy: boolean | null;
@@ -481,6 +487,7 @@ export async function inspectEnquiryForwardingProvider(
       configuredChannelId: channelId,
       connected: null,
       archived: null,
+      archiveProof: null,
       senderPhone: null,
       companyPhoneMatches: null,
       senderDifferentFromFixedCopy: null,
@@ -537,7 +544,7 @@ export async function inspectEnquiryForwardingProvider(
       report.capabilities.associationReview &&
       correlation.ready &&
       report.channel.connected === true &&
-      report.channel.archived === false &&
+      channelArchiveVerified(report.channel) &&
       report.channel.companyPhoneMatches === true &&
       report.channel.senderDifferentFromFixedCopy === true &&
       report.template.configuredApproved &&
@@ -689,11 +696,18 @@ export async function inspectEnquiryForwardingProvider(
   if (channelToken) secrets.add(channelToken);
   report.channel.connected = typeof channel.connected === "boolean" ? channel.connected : null;
   report.channel.archived = typeof channel.archived === "boolean" ? channel.archived : null;
+  // A declared live-delivery proof only stands in when the channel is actually connected.
+  report.channel.archiveProof =
+    report.channel.archived === false ||
+    report.channel.archived === true ||
+    report.channel.connected !== true
+      ? null
+      : channelArchiveProof(env);
   if (report.channel.connected === false) reasons.add("PROVIDER_CHANNEL_NOT_CONNECTED");
   else if (report.channel.connected !== true)
     reasons.add("PROVIDER_CHANNEL_CONNECTION_STATUS_UNKNOWN");
   if (report.channel.archived === true) reasons.add("PROVIDER_CHANNEL_ARCHIVED");
-  else if (report.channel.archived !== false)
+  else if (!channelArchiveVerified(report.channel))
     reasons.add("PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN");
   let cloudEnvironmentId: string | null = null;
   async function inspectChannelIntegrations() {
