@@ -205,6 +205,62 @@ test("credential format diagnostics contain booleans only", async () => {
   assert.equal(JSON.stringify(result).includes(value.trim()), false);
 });
 
+test("WABA comparison uses the same token without substituting sender proof", async () => {
+  const waba = "1465869128784425";
+  const { result, calls } = await run(
+    {
+      respond: ({ url }) => {
+        if (!url.pathname.endsWith("/waba-info")) return;
+        assert.equal(url.searchParams.get("accessToken"), configuredCloudSecret);
+        if (url.searchParams.has("channelId"))
+          return new Response(JSON.stringify({ ok: 0, error: "permission denied" }), {
+            status: 500,
+          });
+        assert.equal(url.searchParams.get("wabaId"), waba);
+        return new Response(
+          JSON.stringify({
+            ok: 1,
+            result: { wabaId: waba, phoneNumber: "85224962283", phoneNumberId: "phone-one" },
+          }),
+        );
+      },
+    },
+    { WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret, WOZTELL_DIAGNOSTIC_WABA_ID: waba },
+  );
+  assert.equal(result.tokenDiagnostics.wabaComparisonAttempted, true);
+  assert.equal(result.tokenDiagnostics.wabaComparisonVerified, true);
+  assert.equal(result.tokenDiagnostics.wabaComparisonCompanyPhoneMatches, true);
+  assert.equal(result.tokenDiagnostics.comparisonAttempted, false);
+  assert.equal(result.ready, false);
+  assert.equal(result.channel.senderPhone, null);
+  assert.equal(calls.filter((c) => c.url.pathname.endsWith("/waba-info")).length, 2);
+});
+
+test("WABA comparison rejects mismatched response identity", async () => {
+  const { result } = await run(
+    {
+      respond: ({ url }) => {
+        if (!url.pathname.endsWith("/waba-info")) return;
+        return url.searchParams.has("channelId")
+          ? new Response(JSON.stringify({ ok: 0, error: "permission denied" }), { status: 500 })
+          : new Response(
+              JSON.stringify({
+                ok: 1,
+                result: {
+                  wabaId: "999999999",
+                  phoneNumber: "85224962283",
+                  phoneNumberId: "phone-one",
+                },
+              }),
+            );
+      },
+    },
+    { WOZTELL_DIAGNOSTIC_WABA_ID: "1465869128784425" },
+  );
+  assert.equal(result.tokenDiagnostics.wabaComparisonVerified, false);
+  assert.equal(result.tokenDiagnostics.wabaComparisonCompanyPhoneMatches, false);
+});
+
 const informationalInstallation = () => ({
   purpose: "enq_forward_info",
   version: 1,
