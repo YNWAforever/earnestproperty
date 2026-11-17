@@ -5,6 +5,7 @@ import {
   channelState,
   platformSubscribeEnabled,
   platformSubscribePayload,
+  subscribeInput,
   subscribeOutcome,
 } from "../whatsapp-enquiries/enquiry-platform-subscribe.js";
 
@@ -821,7 +822,9 @@ registerJobHandler({
     const etag = channelEtag(
       await call({ query: stateQuery, variables: { app: appId, channel: channelId } }),
     );
-    if (!before.observed || !etag) mutationFailed = true;
+    // The documented input takes an optional etag; this channel exposes none, so it is omitted
+    // rather than guessed. Still exactly one mutation attempt.
+    if (!before.observed) mutationFailed = true;
     else {
       try {
         mutation = subscribeOutcome(
@@ -832,7 +835,7 @@ registerJobHandler({
                 environments{envId on integrationInstalled info integration{integrationId}}
               }}
             }`,
-            variables: { input: { channelId, etag } },
+            variables: { input: subscribeInput(channelId, etag) },
           }),
         );
       } catch {
@@ -864,6 +867,7 @@ registerJobHandler({
             accepted: mutation.accepted,
             hasErrors: mutation.hasErrors,
             errorCodes: mutation.errorCodes,
+            etagUsed: etag !== null,
             failed: mutationFailed,
           },
           after,

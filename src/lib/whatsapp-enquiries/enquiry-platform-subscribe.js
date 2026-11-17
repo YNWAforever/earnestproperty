@@ -57,6 +57,15 @@ export function channelEtag(body) {
   const etag = body?.data?.apiViewer?.channel?.etag;
   return typeof etag === "string" && IDENTIFIER.test(etag) ? etag : null;
 }
+/**
+ * The documented input accepts an optional `etag`. Channels are not guaranteed to expose one
+ * through the Open API, so it is forwarded only when it is a valid identifier.
+ */
+export function subscribeInput(channelId, etag) {
+  if (typeof channelId !== "string" || !IDENTIFIER.test(channelId))
+    throw Object.assign(new Error("Invalid subscribe channel"), { code: "VALIDATION_ERROR" });
+  return typeof etag === "string" && IDENTIFIER.test(etag) ? { channelId, etag } : { channelId };
+}
 /** Bounded mutation outcome: error codes are validated, never free text. */
 export function subscribeOutcome(body) {
   const payload = body?.data?.subscribeChannel;
