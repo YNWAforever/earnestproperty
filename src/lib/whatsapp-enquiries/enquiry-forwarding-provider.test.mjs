@@ -873,6 +873,21 @@ test("informational provider readiness is separate from legacy action references
   assert.equal(result.infoForwarding.provesDelivery, false);
 });
 
+test("member-id correlation mode accepts a channel whose webhook has no reply context", async () => {
+  const { result } = await run(
+    {},
+    {
+      EP_WA_STAFF_CORRELATION_MODE: "member_id",
+      EP_WA_STAFF_REPLY_CONTEXT_PATH: undefined,
+      EP_WA_STAFF_CORRELATION_VERIFICATION_REF: "receipt:real-staff-reply",
+    },
+  );
+  assert.equal(result.capabilities.replyContext, false);
+  assert.equal(result.capabilities.correlationVerification, true);
+  assert.ok(!result.reasonCodes.includes("CAPABILITY_REFERENCES_MISSING"));
+  assert.equal(result.ready, true);
+});
+
 test("informational provider proof preserves explicit archive and scope requirements", async () => {
   const installation = informationalInstallation();
   const unknownArchive = (
