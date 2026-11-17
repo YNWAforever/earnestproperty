@@ -1184,6 +1184,37 @@ test("connected channels with nullable archive status remain unready without a f
   assert.ok(!unknown.reasonCodes.includes("PROVIDER_CHANNEL_NOT_CONNECTED"));
 });
 
+test("a declared live-delivery proof clears only the missing archive field", async () => {
+  const proofEnv = {
+    EP_WA_CHANNEL_ARCHIVE_PROOF: "live_delivery",
+    EP_WA_CHANNEL_ARCHIVE_PROOF_REF: "audit:real-delivery",
+  };
+  const proven = await run({ channel: { archived: null } }, proofEnv);
+  assert.equal(proven.result.channel.archived, null);
+  assert.deepEqual(proven.result.channel.archiveProof, {
+    mode: "live_delivery",
+    reference: "audit:real-delivery",
+  });
+  assert.ok(!proven.result.reasonCodes.includes("PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN"));
+  assert.equal(proven.result.ready, true);
+
+  const declaredOnly = await run(
+    { channel: { archived: null } },
+    { EP_WA_CHANNEL_ARCHIVE_PROOF: "live_delivery", EP_WA_CHANNEL_ARCHIVE_PROOF_REF: undefined },
+  );
+  assert.equal(declaredOnly.result.channel.archiveProof, null);
+  assert.ok(declaredOnly.result.reasonCodes.includes("PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN"));
+
+  const disconnected = await run({ channel: { archived: null, connected: false } }, proofEnv);
+  assert.equal(disconnected.result.channel.archiveProof, null);
+  assert.ok(disconnected.result.reasonCodes.includes("PROVIDER_CHANNEL_NOT_CONNECTED"));
+
+  const archived = await run({ channel: { archived: true } }, proofEnv);
+  assert.equal(archived.result.channel.archiveProof, null);
+  assert.ok(archived.result.reasonCodes.includes("PROVIDER_CHANNEL_ARCHIVED"));
+  assert.equal(archived.result.ready, false);
+});
+
 test("HTTP failure observations retain status and safe shape without provider text or credentials", async () => {
   for (const status of [401, 403, 429, 404, 500]) {
     const { result, calls } = await run({

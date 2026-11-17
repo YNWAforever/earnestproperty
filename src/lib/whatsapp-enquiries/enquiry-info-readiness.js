@@ -46,7 +46,13 @@ export function deriveEnquiryInfoReadiness(report, installation, sensitiveConten
   const channelId = identifier(channel.configuredChannelId);
   requireFact(!!appId && !!channelId, "INFO_CHANNEL_SCOPE_UNVERIFIED");
   requireFact(channel.connected === true, "INFO_CHANNEL_CONNECTION_UNVERIFIED");
-  requireFact(channel.archived === false, "INFO_CHANNEL_ARCHIVE_UNVERIFIED");
+  // `archived` is normally authoritative; a declared live-delivery proof substitutes only
+  // when the provider omits the field (see channel-archive-proof.js).
+  requireFact(
+    channel.archived === false ||
+      (channel.archived !== true && record(channel.archiveProof).mode === "live_delivery"),
+    "INFO_CHANNEL_ARCHIVE_UNVERIFIED",
+  );
   requireFact(
     channel.companyPhoneMatches === true &&
       channel.senderDifferentFromFixedCopy === true &&

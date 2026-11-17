@@ -144,6 +144,22 @@ test("informational readiness keeps every channel, credential and sender fence i
   }
 });
 
+test("a declared live-delivery proof substitutes only for the provider's missing archive field", () => {
+  const { report, installation } = fixture();
+  report.channel.archived = null;
+  assert.equal(deriveEnquiryInfoReadiness(report, installation).ready, false);
+  report.channel.archiveProof = {
+    mode: "live_delivery",
+    reference: "audit:00000000-0000-4000-8000-000000000002",
+  };
+  assert.equal(deriveEnquiryInfoReadiness(report, installation).ready, true);
+  report.channel.archived = true;
+  assert.equal(deriveEnquiryInfoReadiness(report, installation).ready, false);
+  report.channel.archived = null;
+  report.channel.archiveProof = { mode: "something_else", reference: "audit:unknown" };
+  assert.equal(deriveEnquiryInfoReadiness(report, installation).ready, false);
+});
+
 test("an approved flag alone cannot replace complete unambiguous template and semantic mapping evidence", () => {
   for (const mutate of [
     (t) => {
