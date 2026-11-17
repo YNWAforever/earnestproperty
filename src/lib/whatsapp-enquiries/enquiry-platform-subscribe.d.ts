@@ -20,4 +20,8 @@ export declare function platformSubscribeEnabled(env?: NodeJS.ProcessEnv): boole
 export declare function platformSubscribePayload(input: unknown): Record<string, never>;
 export declare function channelState(body: unknown): PlatformSubscribeChannelState;
 export declare function channelEtag(body: unknown): string | null;
+export declare function subscribeInput(
+  channelId: string,
+  etag: string | null,
+): { channelId: string; etag?: string };
 export declare function subscribeOutcome(body: unknown): PlatformSubscribeOutcome;

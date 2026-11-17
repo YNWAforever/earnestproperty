@@ -6,6 +6,7 @@ import {
   channelState,
   platformSubscribeEnabled,
   platformSubscribePayload,
+  subscribeInput,
   subscribeOutcome,
 } from "./enquiry-platform-subscribe.js";
 
@@ -26,6 +27,19 @@ const channel = (patch = {}) => ({
   ...patch,
 });
 const body = (patch = {}) => ({ data: { apiViewer: { channel: channel(patch) } } });
+
+test("the mutation input forwards a valid etag and omits an absent one", () => {
+  assert.deepEqual(subscribeInput("channel-one", "etag-123"), {
+    channelId: "channel-one",
+    etag: "etag-123",
+  });
+  assert.deepEqual(subscribeInput("channel-one", null), { channelId: "channel-one" });
+  assert.deepEqual(subscribeInput("channel-one", "not valid"), { channelId: "channel-one" });
+  assert.deepEqual(subscribeInput("channel-one", undefined), { channelId: "channel-one" });
+  assert.throws(() => subscribeInput("bad channel", "etag-123"), /Invalid subscribe channel/);
+  for (const bad of [null, undefined, "", "a.b", 42])
+    assert.throws(() => subscribeInput(bad, null), /Invalid subscribe channel/);
+});
 
 test("job type and payload are fixed to an empty server-owned shape", () => {
   assert.equal(PLATFORM_SUBSCRIBE_JOB_TYPE, "woztell.enquiry.platform.subscribe");
