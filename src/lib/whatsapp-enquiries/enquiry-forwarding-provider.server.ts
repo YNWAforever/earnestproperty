@@ -53,6 +53,13 @@ const INFO_KEY_ALLOWLIST = [
   "namespace",
   "accountId",
 ] as const;
+// Payload & SignedContext authentication for endpoints that require it. The signature is a
+// credential: it is registered for masking and never appears in any report.
+const SIGNATURE_QUERY = `query EarnestForwardingEnvironmentSignature($app:ID,$channel:ID,$env:ID!){
+  apiViewer(appId:$app){channel(channelId:$channel){
+    _id appId environment(envId:$env){envId appIntegrationSignature integration{_id integrationId build}}
+  }}
+}`;
 const MEMBERS_QUERY = `query EarnestForwardingMembers($app:ID,$channel:String,$phones:[String]){
   apiViewer(appId:$app){members(channelId:$channel,externalIds:$phones,first:100){
     edges{node{_id channelId externalId}} pageInfo{hasNextPage}
@@ -167,7 +174,10 @@ type InspectionStage =
   | "SENDER_WABA_ID"
   | "TEMPLATES_WABA_ID"
   | "SENDER_V1_1"
-  | "CHANNEL_IDENTITY";
+  | "CHANNEL_IDENTITY"
+  | "CHANNEL_SIGNATURE"
+  | "BUSINESS_PROFILE"
+  | "DISPLAYNAME_STATUS";
 // These are observations of untrusted error text, never authentication or readiness proof.
 const ERROR_SIGNALS = {
   invalid_token:
@@ -311,6 +321,20 @@ export type EnquiryForwardingProviderInspection = {
     proofHash: string | null;
   };
   credentialInspection?: ReturnType<typeof inspectCredential>;
+  phoneProbe?: {
+    attempted: boolean;
+    profileAttempted: boolean;
+    profileValidEnvelope: boolean | null;
+    profileHasVertical: boolean | null;
+    profileHasWebsites: boolean | null;
+    signatureObtained: boolean;
+    displayStatusAttempted: boolean;
+    displayStatusValidEnvelope: boolean | null;
+    displayStatusPhoneMatchesCompany: boolean | null;
+    displayStatusIdMatchesConfigured: boolean | null;
+    displayStatusAccountModeLive: boolean | null;
+    displayStatusVerifiedNamePresent: boolean | null;
+  };
   identityInspection?: {
     queried: boolean;
     refused: boolean;
@@ -649,6 +673,7 @@ export async function inspectEnquiryForwardingProvider(
   if (report.channel.archived === true) reasons.add("PROVIDER_CHANNEL_ARCHIVED");
   else if (report.channel.archived !== false)
     reasons.add("PROVIDER_CHANNEL_ARCHIVE_STATUS_UNKNOWN");
+  let cloudEnvironmentId: string | null = null;
   async function inspectChannelIntegrations() {
     report.integrationInspection.attempted = true;
     const body = await open(
@@ -692,6 +717,10 @@ export async function inspectEnquiryForwardingProvider(
       report.integrationInspection.cloudIntegrationCount -
       report.integrationInspection.unknownIntegrationCount;
     report.integrationInspection.complete = true;
+    const cloudEnvironments = metadata.environments
+      .map(row)
+      .filter((entry) => row(entry.integration).integrationId === "whatsapp-cloud");
+    if (cloudEnvironments.length === 1) cloudEnvironmentId = identifier(cloudEnvironments[0].envId);
     report.environmentConfiguration = metadata.environments
       .map(row)
       .filter((entry) => row(entry.integration).integrationId === "whatsapp-cloud")
@@ -891,7 +920,11 @@ export async function inspectEnquiryForwardingProvider(
     return finish();
   }
   const cloudUrl = (
-    path: "waba-info" | "whatsapp-message-templates",
+    path:
+      | "waba-info"
+      | "whatsapp-message-templates"
+      | "whatsapp-business-profile"
+      | "whatsapp-displayname-status",
     params: Record<string, string>,
   ) => {
     const url = new URL(path, CLOUD_API);
@@ -899,6 +932,96 @@ export async function inspectEnquiryForwardingProvider(
     for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
     return url.toString();
   };
+  if (env.WOZTELL_DIAGNOSTIC_PROBE === "phone") {
+    // Endpoints keyed by phoneNumberId instead of channelId/wabaId. Read-only; never a
+    // fallback, never grants readiness, and no returned text or phone number is retained.
+    reasons.add("PHONE_DIAGNOSTIC_ONLY");
+    const configuredPhoneNumberId = env.WOZTELL_DIAGNOSTIC_PHONE_NUMBER_ID;
+    const phoneNumberId =
+      typeof configuredPhoneNumberId === "string" && /^\d{5,30}$/.test(configuredPhoneNumberId)
+        ? configuredPhoneNumberId
+        : null;
+    report.phoneProbe = {
+      attempted: phoneNumberId !== null,
+      profileAttempted: false,
+      profileValidEnvelope: null,
+      profileHasVertical: null,
+      profileHasWebsites: null,
+      signatureObtained: false,
+      displayStatusAttempted: false,
+      displayStatusValidEnvelope: null,
+      displayStatusPhoneMatchesCompany: null,
+      displayStatusIdMatchesConfigured: null,
+      displayStatusAccountModeLive: null,
+      displayStatusVerifiedNamePresent: null,
+    };
+    await inspectChannelIntegrations();
+    if (phoneNumberId) {
+      report.phoneProbe.profileAttempted = true;
+      const profile = await request(
+        cloudUrl("whatsapp-business-profile", { phoneNumberId }),
+        { method: "GET" },
+        "BUSINESS_PROFILE",
+      );
+      const profileData = row(profile?.data);
+      report.phoneProbe.profileValidEnvelope = profile?.ok === 1;
+      report.phoneProbe.profileHasVertical = typeof profileData.vertical === "string";
+      report.phoneProbe.profileHasWebsites = Array.isArray(profileData.websites);
+      if (cloudEnvironmentId) {
+        const signatureBody = await open(
+          SIGNATURE_QUERY,
+          { app: env.WOZTELL_APP_ID, channel: channelId, env: cloudEnvironmentId },
+          "CHANNEL_SIGNATURE",
+        );
+        const environment = row(row(row(row(signatureBody?.data).apiViewer).channel).environment);
+        const signature = environment.appIntegrationSignature;
+        const appIntegration = identifier(row(environment.integration)._id);
+        if (
+          present(signature) &&
+          signature.length <= 4096 &&
+          appIntegration &&
+          environment.envId === cloudEnvironmentId &&
+          !array(signatureBody?.errors).length
+        ) {
+          secrets.add(signature);
+          report.phoneProbe.signatureObtained = true;
+          report.phoneProbe.displayStatusAttempted = true;
+          const payload = JSON.stringify({
+            app: channel.appId,
+            appIntegration,
+            channel: channelId,
+          });
+          const status = await request(
+            cloudUrl("whatsapp-displayname-status", { phoneNumberId }),
+            {
+              method: "GET",
+              headers: {
+                "X-Woztell-Payload": payload,
+                "X-Woztell-SignedContext": `${signature}.${Buffer.from(payload).toString("base64")}`,
+              },
+            },
+            "DISPLAYNAME_STATUS",
+          );
+          const data = row(status?.data);
+          const displayPhone = phone(data.display_phone_number);
+          report.phoneProbe.displayStatusValidEnvelope = status?.ok === 1;
+          report.phoneProbe.displayStatusPhoneMatchesCompany =
+            status?.ok === 1 && displayPhone !== null && companyPhone !== null
+              ? displayPhone === companyPhone
+              : null;
+          report.phoneProbe.displayStatusIdMatchesConfigured =
+            status?.ok === 1 ? String(data.id ?? "") === phoneNumberId : null;
+          report.phoneProbe.displayStatusAccountModeLive =
+            status?.ok === 1 ? data.account_mode === "LIVE" : null;
+          report.phoneProbe.displayStatusVerifiedNamePresent =
+            status?.ok === 1
+              ? typeof data.verified_name === "string" && data.verified_name.length > 0
+              : null;
+        }
+      }
+    }
+    return finish();
+  }
   const senderBody = await request(
     cloudUrl("waba-info", { channelId }),
     { method: "GET" },
