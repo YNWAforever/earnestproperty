@@ -21,6 +21,10 @@ export type JobHandler<T = unknown> = {
 
 const handlers = new Map<string, JobHandler>();
 
+function invalidCanary() {
+  return Object.assign(new Error("Invalid canary send job"), { code: "VALIDATION_ERROR" });
+}
+
 function handlerKey(jobType: string, payloadVersion: number) {
   return `${jobType}@${payloadVersion}`;
 }
@@ -660,11 +664,16 @@ registerJobHandler({
   jobType: "woztell.enquiry.canary.send",
   payloadVersion: 1,
   parsePayload(input) {
-    if (!input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).length)
-      throw Object.assign(new Error("Invalid canary send job"), { code: "VALIDATION_ERROR" });
-    return {};
+    // The destination must be one of the operator-authorized numbers listed in
+    // EP_WA_CANARY_PHONES; a queued job can never be redirected to anything else.
+    if (!input || typeof input !== "object" || Array.isArray(input)) throw invalidCanary();
+    const keys = Object.keys(input);
+    const phone = (input as { phone?: unknown }).phone;
+    if (keys.length !== 1 || keys[0] !== "phone") throw invalidCanary();
+    if (typeof phone !== "string" || !/^852[456789]\d{7}$/.test(phone)) throw invalidCanary();
+    return { phone };
   },
-  async run(_payload, context) {
+  async run(payload, context) {
     await context.checkpoint();
     if (!context.workerId)
       throw Object.assign(new Error("Canary send requires a leased job"), {
@@ -673,15 +682,25 @@ registerJobHandler({
     const { canarySendPlan, maskCanaryPhone } =
       await import("../whatsapp-enquiries/enquiry-canary.js");
     const { queryRows } = await import("../neon/db.server.ts");
+    const allowed = new Set(
+      (process.env.EP_WA_CANARY_PHONES ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .filter((value) => /^852[456789]\d{7}$/.test(value)),
+    );
+    if (!allowed.has(payload.phone))
+      throw Object.assign(new Error("Canary destination is not authorized."), {
+        code: "CANARY_PHONE_INVALID",
+      });
     const live = await queryRows(
-      "SELECT id FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.canary.send' AND payload_version=1 AND payload='{}'::jsonb AND status='running' AND lease_owner=$2 AND lease_expires_at>now()",
-      [context.jobId, context.workerId],
+      "SELECT id FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.canary.send' AND payload_version=1 AND payload->>'phone'=$3 AND status='running' AND lease_owner=$2 AND lease_expires_at>now()",
+      [context.jobId, context.workerId, payload.phone],
     );
     if (!live.length)
       throw Object.assign(new Error("Canary job ownership lost"), { code: "JOB_OWNERSHIP_LOST" });
     const plan = canarySendPlan({
       EP_WA_CANARY_ENABLED: process.env.EP_WA_CANARY_ENABLED,
-      EP_WA_CANARY_PHONE: process.env.EP_WA_CANARY_PHONE,
+      EP_WA_CANARY_PHONE: payload.phone,
     });
     if (!plan.allowed)
       throw Object.assign(new Error("Canary send is not enabled."), { code: plan.reason });
@@ -701,7 +720,7 @@ registerJobHandler({
     const { sendWoztellResponse } = await import("../woztell/woztell.server.ts");
     const { parseWoztellProviderResult } = await import("../woztell/provider-result.ts");
     const templateResponse = buildStaffTemplateResponse(template, {
-      name: "［測試］Willy Lai",
+      name: "［測試］Earnest 內部",
       source: "系統轉發核對",
       phone: plan.phone,
       link: "https://www.earnestproperty.com/admin/leads",
@@ -720,7 +739,7 @@ registerJobHandler({
     const proof = await queryRows(
       `INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata)
        SELECT NULL,'whatsapp.enquiry_forwarding.canary_sent','ops_job',$1,$2::jsonb
-       WHERE EXISTS(SELECT 1 FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.canary.send' AND payload_version=1 AND payload='{}'::jsonb AND status='running' AND lease_owner=$3 AND lease_expires_at>now())
+       WHERE EXISTS(SELECT 1 FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.canary.send' AND payload_version=1 AND payload->>'phone'=$4 AND status='running' AND lease_owner=$3 AND lease_expires_at>now())
        RETURNING id`,
       [
         context.jobId,
@@ -735,6 +754,7 @@ registerJobHandler({
           channelId,
         }),
         context.workerId,
+        payload.phone,
       ],
     );
     if (!proof.length)
