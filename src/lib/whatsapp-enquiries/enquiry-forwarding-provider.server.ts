@@ -29,6 +29,30 @@ const CHANNEL_INTEGRATIONS_QUERY = `query EarnestForwardingChannelIntegrations($
     _id appId environments{envId on integrationInstalled info integration{_id integrationId build}}
   }}
 }`;
+// Deprecated identity fields, queried only in the explicit identity diagnostic mode.
+// Documentation marks them "No longer supported"; if they still resolve they may provide
+// read-only identity facts while the Cloud Public API refuses every credential.
+const IDENTITY_QUERY = `query EarnestForwardingChannelIdentity($app:ID,$channel:ID){
+  apiViewer(appId:$app){channel(channelId:$channel){
+    _id appId wabaStatus wabaError wabaInfo
+    wabaIntegration{id accountId name namespace type}
+    environments{envId}
+  }}
+}`;
+// Fixed allowlist: only these key names may be echoed, never their values.
+const INFO_KEY_ALLOWLIST = [
+  "integrationId",
+  "build",
+  "alias",
+  "appIntegrationId",
+  "subscribed",
+  "wabaId",
+  "phoneNumberId",
+  "displayPhoneNumber",
+  "phoneNumber",
+  "namespace",
+  "accountId",
+] as const;
 const MEMBERS_QUERY = `query EarnestForwardingMembers($app:ID,$channel:String,$phones:[String]){
   apiViewer(appId:$app){members(channelId:$channel,externalIds:$phones,first:100){
     edges{node{_id channelId externalId}} pageInfo{hasNextPage}
@@ -101,6 +125,30 @@ function inspectCredential(token: string | null, env: NodeJS.ProcessEnv, channel
     wabaClaimMatches: claimMatches(["waba", "wabaId"], env.WOZTELL_DIAGNOSTIC_WABA_ID),
   };
 }
+function emptyIdentityInspection(): NonNullable<
+  EnquiryForwardingProviderInspection["identityInspection"]
+> {
+  return {
+    queried: false,
+    refused: false,
+    infoKeyMembers: [],
+    wabaInfoPresent: null,
+    wabaInfoHasWabaId: null,
+    wabaInfoHasPhoneNumberId: null,
+    wabaInfoHasPhoneNumber: null,
+    wabaInfoHasNamespace: null,
+    wabaInfoHasName: null,
+    configuredWabaMatches: null,
+    companyPhoneMatches: null,
+    wabaStatusPresent: null,
+    wabaStatusConnectedLike: null,
+    wabaErrorPresent: null,
+    wabaIntegrationPresent: null,
+    wabaIntegrationHasId: null,
+    wabaIntegrationHasNamespace: null,
+    wabaIntegrationHasName: null,
+  };
+}
 export type ForwardingTemplateCandidate = {
   providerTemplateId: string;
   name: string;
@@ -118,7 +166,8 @@ type InspectionStage =
   | "SENDER_CHANNEL_TOKEN"
   | "SENDER_WABA_ID"
   | "TEMPLATES_WABA_ID"
-  | "SENDER_V1_1";
+  | "SENDER_V1_1"
+  | "CHANNEL_IDENTITY";
 // These are observations of untrusted error text, never authentication or readiness proof.
 const ERROR_SIGNALS = {
   invalid_token:
@@ -262,6 +311,26 @@ export type EnquiryForwardingProviderInspection = {
     proofHash: string | null;
   };
   credentialInspection?: ReturnType<typeof inspectCredential>;
+  identityInspection?: {
+    queried: boolean;
+    refused: boolean;
+    infoKeyMembers: (typeof INFO_KEY_ALLOWLIST)[number][];
+    wabaInfoPresent: boolean | null;
+    wabaInfoHasWabaId: boolean | null;
+    wabaInfoHasPhoneNumberId: boolean | null;
+    wabaInfoHasPhoneNumber: boolean | null;
+    wabaInfoHasNamespace: boolean | null;
+    wabaInfoHasName: boolean | null;
+    configuredWabaMatches: boolean | null;
+    companyPhoneMatches: boolean | null;
+    wabaStatusPresent: boolean | null;
+    wabaStatusConnectedLike: boolean | null;
+    wabaErrorPresent: boolean | null;
+    wabaIntegrationPresent: boolean | null;
+    wabaIntegrationHasId: boolean | null;
+    wabaIntegrationHasNamespace: boolean | null;
+    wabaIntegrationHasName: boolean | null;
+  };
   versionProbe?: {
     attempted: boolean;
     senderVerified: boolean;
@@ -647,6 +716,17 @@ export async function inspectEnquiryForwardingProvider(
             present(info.wabaId) && present(configuredWaba) ? info.wabaId === configuredWaba : null,
         };
       });
+    // Key names only, from a fixed allowlist; environment.info values are never retained.
+    const observed = new Set<string>();
+    for (const entry of metadata.environments.map(row)) {
+      if (row(entry.integration).integrationId !== "whatsapp-cloud") continue;
+      const info = row(entry.info);
+      for (const key of INFO_KEY_ALLOWLIST) if (Object.hasOwn(info, key)) observed.add(key);
+    }
+    report.identityInspection = {
+      ...(report.identityInspection ?? emptyIdentityInspection()),
+      infoKeyMembers: INFO_KEY_ALLOWLIST.filter((key) => observed.has(key)),
+    };
   }
   if (env.WOZTELL_DIAGNOSTIC_PROBE === "authentication") {
     // Dedicated one-shot comparison; do not repeat v1.2 or member/template reads.
@@ -682,6 +762,70 @@ export async function inspectEnquiryForwardingProvider(
         sender.wabaId === env.WOZTELL_DIAGNOSTIC_WABA_ID;
     }
     await inspectChannelIntegrations();
+    return finish();
+  }
+  if (env.WOZTELL_DIAGNOSTIC_PROBE === "identity") {
+    // Deprecated-field inspection: presence and known-value comparisons only.
+    // No WABA name, phone number, namespace, error text or account id is retained.
+    report.identityInspection = emptyIdentityInspection();
+    report.identityInspection.queried = true;
+    reasons.add("IDENTITY_DIAGNOSTIC_ONLY");
+    const body = await open(
+      IDENTITY_QUERY,
+      { app: env.WOZTELL_APP_ID, channel: channelId },
+      "CHANNEL_IDENTITY",
+    );
+    await inspectChannelIntegrations();
+    const identity = row(row(row(body?.data).apiViewer).channel);
+    if (body && !array(body.errors).length && identity._id === channelId) {
+      const scalar = (value: unknown) =>
+        (typeof value === "string" && value.length > 0) ||
+        (typeof value === "number" && Number.isFinite(value));
+      const rawWabaInfo = identity.wabaInfo;
+      let wabaInfo: Row = {};
+      if (typeof rawWabaInfo === "string" && rawWabaInfo.length <= 8192) {
+        try {
+          wabaInfo = row(JSON.parse(rawWabaInfo));
+        } catch {
+          wabaInfo = {};
+        }
+      } else wabaInfo = row(rawWabaInfo);
+      const status = typeof identity.wabaStatus === "string" ? identity.wabaStatus : null;
+      const integration = row(identity.wabaIntegration);
+      const expectedWaba = env.WOZTELL_DIAGNOSTIC_WABA_ID;
+      const infoPhone = [
+        wabaInfo.phoneNumber,
+        wabaInfo.displayPhoneNumber,
+        wabaInfo.formattedPhoneNumber,
+        wabaInfo.waId,
+      ]
+        .map(phone)
+        .find((value) => value !== null);
+      report.identityInspection = {
+        ...report.identityInspection,
+        wabaInfoPresent: identity.wabaInfo !== null && identity.wabaInfo !== undefined,
+        wabaInfoHasWabaId: scalar(wabaInfo.wabaId),
+        wabaInfoHasPhoneNumberId: scalar(wabaInfo.phoneNumberId),
+        wabaInfoHasPhoneNumber: infoPhone !== undefined,
+        wabaInfoHasNamespace: scalar(wabaInfo.namespace),
+        wabaInfoHasName: typeof wabaInfo.name === "string" && wabaInfo.name.length > 0,
+        configuredWabaMatches:
+          scalar(wabaInfo.wabaId) && present(expectedWaba)
+            ? String(wabaInfo.wabaId) === expectedWaba
+            : null,
+        companyPhoneMatches:
+          infoPhone !== undefined && !!companyPhone ? infoPhone === companyPhone : null,
+        wabaStatusPresent: status !== null,
+        wabaStatusConnectedLike:
+          status === null ? null : /^(?:connected|active|verified|linked)$/i.test(status),
+        wabaErrorPresent: typeof identity.wabaError === "string" && identity.wabaError.length > 0,
+        wabaIntegrationPresent:
+          identity.wabaIntegration !== null && identity.wabaIntegration !== undefined,
+        wabaIntegrationHasId: scalar(integration.id) || scalar(integration._id),
+        wabaIntegrationHasNamespace: scalar(integration.namespace),
+        wabaIntegrationHasName: typeof integration.name === "string" && integration.name.length > 0,
+      };
+    } else report.identityInspection.refused = true;
     return finish();
   }
   // Open API member association is independent of Cloud sender/template capability.
