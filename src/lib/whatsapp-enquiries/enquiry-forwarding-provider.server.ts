@@ -10,6 +10,7 @@ import {
   parseStaffAlertTemplate,
   type StaffAlertTemplate,
 } from "../woztell/staff-alert-template.ts";
+import { staffCorrelationPlan } from "./staff-correlation-mode.js";
 
 const OPEN_API = "https://open.api.woztell.com/v3";
 const CLOUD_API = "https://api.whatsapp-cloud.woztell.sanuker.com/v1.2/api/";
@@ -448,6 +449,7 @@ export async function inspectEnquiryForwardingProvider(
   const sensitiveText = (value: string) =>
     [...secrets].some((secret) => secret.length >= 4 && value.includes(secret));
   const reasons = new Set<string>();
+  const correlation = staffCorrelationPlan(env);
   const channelId = identifier(env.WOZTELL_CHANNEL_ID || env.EP_WA_COMPANY_CHANNEL_ID);
   const companyPhone = phone(env.EP_WA_COMPANY_PHONE || env.VITE_CONTACT_WHATSAPP_PHONE);
   let configured = parseStaffAlertTemplate(env.EP_WA_STAFF_ALERT_TEMPLATE);
@@ -515,7 +517,13 @@ export async function inspectEnquiryForwardingProvider(
   if (!report.flags.staffNotificationsEnabled) reasons.add("STAFF_NOTIFICATIONS_DISABLED");
   if (!report.flags.botAccessTokenPresent) reasons.add("BOT_ACCESS_TOKEN_MISSING");
   if (!report.flags.channelSecretPresent) reasons.add("CHANNEL_SECRET_MISSING");
-  if (!Object.values(report.capabilities).every(Boolean))
+  // Strict mode needs a verified quote path; member-id mode waives only the provider field
+  // that the recorded webhook payloads never contain (see staff-correlation-mode.mjs).
+  if (
+    !report.capabilities.whatsappVerification ||
+    !report.capabilities.associationReview ||
+    !correlation.ready
+  )
     reasons.add("CAPABILITY_REFERENCES_MISSING");
   if (!configured) reasons.add("STAFF_TEMPLATE_SELECTION_REQUIRED");
   const finish = () => {
@@ -525,7 +533,9 @@ export async function inspectEnquiryForwardingProvider(
       report.flags.staffNotificationsEnabled &&
       report.flags.botAccessTokenPresent &&
       report.flags.channelSecretPresent &&
-      Object.values(report.capabilities).every(Boolean) &&
+      report.capabilities.whatsappVerification &&
+      report.capabilities.associationReview &&
+      correlation.ready &&
       report.channel.connected === true &&
       report.channel.archived === false &&
       report.channel.companyPhoneMatches === true &&

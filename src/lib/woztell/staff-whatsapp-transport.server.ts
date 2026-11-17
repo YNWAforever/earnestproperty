@@ -3,6 +3,7 @@ import { sendWoztellResponse } from "./woztell.server.ts";
 import { parseWoztellProviderResult } from "./provider-result.ts";
 import { providerChannelId } from "../whatsapp-enquiries/wa-config.server.ts";
 import { forwardingPhone } from "../whatsapp-enquiries/enquiry-forwarding-policy.mjs";
+import { staffCorrelationPlan } from "../whatsapp-enquiries/staff-correlation-mode.js";
 import type { StaffNotificationTransport } from "../whatsapp-enquiries/staff-notifications.server.ts";
 type StaffScope = Parameters<NonNullable<StaffNotificationTransport["sendStaffWhatsApp"]>>[0];
 type StaffResult = Awaited<
@@ -13,12 +14,8 @@ export function createStaffWhatsAppTransport(
   send = sendWoztellResponse,
 ): StaffNotificationTransport {
   const verificationRef = process.env.EP_WA_STAFF_WHATSAPP_VERIFICATION_REF;
-  if (
-    !verificationRef ||
-    !process.env.EP_WA_STAFF_CORRELATION_VERIFICATION_REF ||
-    !process.env.EP_WA_STAFF_ASSOCIATION_REVIEW_REF ||
-    !process.env.EP_WA_STAFF_REPLY_CONTEXT_PATH
-  )
+  const correlation = staffCorrelationPlan(process.env);
+  if (!verificationRef || !process.env.EP_WA_STAFF_ASSOCIATION_REVIEW_REF || !correlation.ready)
     throw new Error("STAFF_WHATSAPP_CAPABILITY_UNVERIFIED");
   async function sendTo(
     destination:

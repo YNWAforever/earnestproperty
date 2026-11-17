@@ -6,6 +6,7 @@ import type { NormalizedWoztellEvent } from "../woztell/woztell.server.ts";
 import { transactionRows, type queryRows } from "../neon/db.server.ts";
 import { inspectForwardingStaffScope } from "./enquiry-forwarding-isolation.server.ts";
 import { forwardingPhone } from "./enquiry-forwarding-policy.mjs";
+import { staffCorrelationPlan } from "./staff-correlation-mode.js";
 function atPath(value: unknown, path: string) {
   let v = value;
   for (const key of path.split(".")) {
@@ -26,10 +27,11 @@ export async function isolateSignedStaffEvent(
     "SELECT to_regclass('staff_notification_internal_events') IS NOT NULL AS available",
   );
   if (!schema?.available || !event.channelId || !event.woztellMemberId) return false;
-  const path = process.env.EP_WA_STAFF_REPLY_CONTEXT_PATH;
+  const correlation = staffCorrelationPlan(process.env);
+  // The quoted message id is only usable when the provider actually emits reply context.
   const replyTo =
-    process.env.EP_WA_STAFF_CORRELATION_VERIFICATION_REF && path
-      ? atPath(event.payload, path)
+    correlation.replyContextAvailable && correlation.replyContextPath
+      ? atPath(event.payload, correlation.replyContextPath)
       : null;
   const external = event.legacyExternalMessageId === null ? event.externalMessageId : null;
   const [legacyCorrelated] = await query(

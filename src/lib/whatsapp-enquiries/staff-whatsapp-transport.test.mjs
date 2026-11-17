@@ -7,6 +7,7 @@ const keys = [
   "EP_WA_STAFF_CORRELATION_VERIFICATION_REF",
   "EP_WA_STAFF_ASSOCIATION_REVIEW_REF",
   "EP_WA_STAFF_REPLY_CONTEXT_PATH",
+  "EP_WA_STAFF_CORRELATION_MODE",
   "EP_WA_STAFF_NOTIFICATIONS_ENABLED",
   "WOZTELL_CHANNEL_ID",
 ];
@@ -15,6 +16,7 @@ const values = [
   "synthetic-correlation",
   "synthetic-review",
   "context.replyTo",
+  "",
   "true",
   "company",
 ];
@@ -109,6 +111,41 @@ test("sends a TEMPLATE response when a template is given and never a TEXT", () =
     assert.ok(calls[0].response.every((item) => item.type !== "TEXT"));
     assert.doesNotMatch(JSON.stringify(calls[0]), /Protected work item/);
   }));
+
+test("strict correlation refuses without a verified reply-context path", () =>
+  withEnv({ EP_WA_STAFF_REPLY_CONTEXT_PATH: undefined }, async () => {
+    assert.throws(
+      () => createStaffWhatsAppTransport(async () => ({})),
+      /STAFF_WHATSAPP_CAPABILITY_UNVERIFIED/,
+    );
+  }));
+
+test("member-id mode waives only the reply-context path", () =>
+  withEnv(
+    { EP_WA_STAFF_CORRELATION_MODE: "member_id", EP_WA_STAFF_REPLY_CONTEXT_PATH: undefined },
+    async () => {
+      const calls = [];
+      const api = accepting(calls);
+      assert.equal((await api.sendStaffWhatsApp(scope)).state, "accepted");
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].memberId, scope.memberId);
+    },
+  ));
+
+test("member-id mode still refuses without the correlation evidence reference", () =>
+  withEnv(
+    {
+      EP_WA_STAFF_CORRELATION_MODE: "member_id",
+      EP_WA_STAFF_REPLY_CONTEXT_PATH: undefined,
+      EP_WA_STAFF_CORRELATION_VERIFICATION_REF: undefined,
+    },
+    async () => {
+      assert.throws(
+        () => createStaffWhatsAppTransport(async () => ({})),
+        /STAFF_WHATSAPP_CAPABILITY_UNVERIFIED/,
+      );
+    },
+  ));
 
 test("refuses when EP_WA_STAFF_NOTIFICATIONS_ENABLED is not true", async () => {
   for (const value of [undefined, "false", "", "TRUE", "1"])
