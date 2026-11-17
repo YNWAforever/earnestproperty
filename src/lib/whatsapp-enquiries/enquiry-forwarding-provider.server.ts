@@ -67,7 +67,8 @@ type InspectionStage =
   | "MEMBERS"
   | "CHANNEL_INTEGRATIONS"
   | "SENDER_CHANNEL_TOKEN"
-  | "SENDER_WABA_ID";
+  | "SENDER_WABA_ID"
+  | "TEMPLATES_WABA_ID";
 // These are observations of untrusted error text, never authentication or readiness proof.
 const ERROR_SIGNALS = {
   invalid_token:
@@ -209,6 +210,12 @@ export type EnquiryForwardingProviderInspection = {
     companyPhoneMatches: boolean | null;
     senderDifferentFromFixedCopy: boolean | null;
     proofHash: string | null;
+  };
+  templateProbe?: {
+    attempted: boolean;
+    validResponse: boolean;
+    configuredTemplateListed: boolean;
+    configuredLanguageApproved: boolean;
   };
   environmentConfiguration?: {
     enabled: boolean | null;
@@ -668,22 +675,52 @@ export async function inspectEnquiryForwardingProvider(
       /^\d{5,30}$/.test(diagnosticWabaId) &&
       senderObservation?.providerError?.signals.includes("permission_denied")
     ) {
-      report.tokenDiagnostics.wabaComparisonAttempted = true;
-      const comparison = await request(
-        cloudUrl("waba-info", { wabaId: diagnosticWabaId }),
-        { method: "GET" },
-        "SENDER_WABA_ID",
-      );
-      const result = row(comparison?.result);
-      report.tokenDiagnostics.wabaComparisonVerified =
-        comparison?.ok === 1 &&
-        result.wabaId === diagnosticWabaId &&
-        phone(result.phoneNumber) !== null &&
-        identifier(result.phoneNumberId) !== null;
-      report.tokenDiagnostics.wabaComparisonCompanyPhoneMatches =
-        report.tokenDiagnostics.wabaComparisonVerified &&
-        !!companyPhone &&
-        phone(result.phoneNumber) === companyPhone;
+      if (env.WOZTELL_DIAGNOSTIC_PROBE === "templates") {
+        const params: Record<string, string> = { wabaId: diagnosticWabaId, first: "10" };
+        if (configured) params.name = configured.name;
+        const templates = await request(
+          cloudUrl("whatsapp-message-templates", params),
+          { method: "GET" },
+          "TEMPLATES_WABA_ID",
+        );
+        const validResponse = templates?.ok === 1 && Array.isArray(templates.data);
+        const matches =
+          validResponse && configured
+            ? array(templates?.data)
+                .map(row)
+                .filter((item) => item.name === configured.name)
+            : [];
+        report.templateProbe = {
+          attempted: true,
+          validResponse,
+          configuredTemplateListed: matches.length > 0,
+          configuredLanguageApproved: matches.some((item) =>
+            array(item.statuses)
+              .map(row)
+              .some(
+                (status) =>
+                  status.language === configured?.language && status.status === "APPROVED",
+              ),
+          ),
+        };
+      } else {
+        report.tokenDiagnostics.wabaComparisonAttempted = true;
+        const comparison = await request(
+          cloudUrl("waba-info", { wabaId: diagnosticWabaId }),
+          { method: "GET" },
+          "SENDER_WABA_ID",
+        );
+        const result = row(comparison?.result);
+        report.tokenDiagnostics.wabaComparisonVerified =
+          comparison?.ok === 1 &&
+          result.wabaId === diagnosticWabaId &&
+          phone(result.phoneNumber) !== null &&
+          identifier(result.phoneNumberId) !== null;
+        report.tokenDiagnostics.wabaComparisonCompanyPhoneMatches =
+          report.tokenDiagnostics.wabaComparisonVerified &&
+          !!companyPhone &&
+          phone(result.phoneNumber) === companyPhone;
+      }
     } else if (
       configuredCloudToken &&
       channelToken &&
