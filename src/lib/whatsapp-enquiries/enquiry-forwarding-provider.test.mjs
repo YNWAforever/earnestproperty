@@ -77,6 +77,23 @@ function fixture(options = {}) {
             },
           },
         };
+      } else if (query.query.includes("EarnestForwardingChannelIdentity")) {
+        assert.doesNotMatch(query.query, /\bmutation\b/i);
+        data = {
+          data: {
+            apiViewer: {
+              channel: {
+                _id: channelId,
+                appId: "app-one",
+                wabaStatus: options.identity?.wabaStatus ?? null,
+                wabaError: options.identity?.wabaError ?? null,
+                wabaInfo: options.identity?.wabaInfo ?? null,
+                wabaIntegration: options.identity?.wabaIntegration ?? null,
+                environments: options.environments ?? [],
+              },
+            },
+          },
+        };
       } else if (query.query.includes("EarnestForwardingMembers")) {
         data = {
           data: {
@@ -253,6 +270,117 @@ test("malformed and oversized claims remain unknown while opaque credentials sta
     assert.equal(result.credentialInspection.claimsExpired, null);
     assert.equal(JSON.stringify(result).includes(token), false);
   }
+});
+
+test("identity mode reports deprecated field presence without retaining any value", async () => {
+  const privateValue = "identity-private-value-never-output";
+  const { result, calls } = await run(
+    {
+      identity: {
+        wabaStatus: "connected",
+        wabaError: null,
+        wabaInfo: {
+          wabaId: "1465869128784425",
+          phoneNumber: "85224962283",
+          phoneNumberId: privateValue,
+          namespace: privateValue,
+          name: privateValue,
+        },
+        wabaIntegration: { id: privateValue, namespace: privateValue, name: privateValue },
+      },
+      environments: [
+        {
+          envId: privateValue,
+          on: true,
+          integrationInstalled: true,
+          info: {
+            integrationId: "whatsapp-cloud",
+            build: 3,
+            alias: privateValue,
+            appIntegrationId: privateValue,
+            subscribed: true,
+            wabaId: "1465869128784425",
+          },
+          integration: { _id: privateValue, integrationId: "whatsapp-cloud", build: 3 },
+        },
+      ],
+    },
+    { WOZTELL_DIAGNOSTIC_PROBE: "identity", WOZTELL_DIAGNOSTIC_WABA_ID: "1465869128784425" },
+  );
+  assert.equal(result.identityInspection.queried, true);
+  assert.equal(result.identityInspection.refused, false);
+  assert.equal(result.identityInspection.configuredWabaMatches, true);
+  assert.equal(result.identityInspection.companyPhoneMatches, true);
+  assert.equal(result.identityInspection.wabaInfoHasWabaId, true);
+  assert.equal(result.identityInspection.wabaInfoHasPhoneNumberId, true);
+  assert.equal(result.identityInspection.wabaInfoHasNamespace, true);
+  assert.equal(result.identityInspection.wabaInfoHasName, true);
+  assert.equal(result.identityInspection.wabaStatusPresent, true);
+  assert.equal(result.identityInspection.wabaStatusConnectedLike, true);
+  assert.equal(result.identityInspection.wabaErrorPresent, false);
+  assert.equal(result.identityInspection.wabaIntegrationHasId, true);
+  assert.deepEqual(result.identityInspection.infoKeyMembers, [
+    "integrationId",
+    "build",
+    "alias",
+    "appIntegrationId",
+    "subscribed",
+    "wabaId",
+  ]);
+  assert.deepEqual(
+    result.requests.map((r) => r.stage),
+    ["CHANNEL", "CHANNEL_IDENTITY", "CHANNEL_INTEGRATIONS"],
+  );
+  assert.equal(
+    calls.some((c) => c.url.hostname === "api.whatsapp-cloud.woztell.sanuker.com"),
+    false,
+  );
+  for (const value of [privateValue, "1465869128784425", "85224962283", "whatsapp-cloud"])
+    assert.equal(JSON.stringify(result).includes(value), false);
+  assert.equal(result.ready, false);
+  assert.equal(result.infoForwarding.ready, false);
+});
+
+test("identity mode fails closed when the deprecated fields are refused or absent", async () => {
+  const refused = await run(
+    {
+      respond: ({ query }) =>
+        query?.query?.includes("EarnestForwardingChannelIdentity")
+          ? new Response(
+              JSON.stringify({ errors: [{ message: 'Field "wabaInfo" is not defined' }] }),
+            )
+          : undefined,
+    },
+    { WOZTELL_DIAGNOSTIC_PROBE: "identity" },
+  );
+  assert.equal(refused.result.identityInspection.queried, true);
+  assert.equal(refused.result.identityInspection.refused, true);
+  assert.equal(refused.result.identityInspection.wabaInfoPresent, null);
+  assert.equal(refused.result.identityInspection.configuredWabaMatches, null);
+  assert.equal(refused.result.ready, false);
+  const absent = await run({}, { WOZTELL_DIAGNOSTIC_PROBE: "identity" });
+  assert.equal(absent.result.identityInspection.refused, false);
+  assert.equal(absent.result.identityInspection.wabaInfoPresent, false);
+  assert.equal(absent.result.identityInspection.wabaStatusPresent, false);
+  assert.equal(absent.result.identityInspection.wabaIntegrationPresent, false);
+  assert.deepEqual(absent.result.identityInspection.infoKeyMembers, []);
+  assert.equal(absent.result.infoForwarding.ready, false);
+});
+
+test("identity mode parses bounded JSON-encoded waba info without echoing it", async () => {
+  const encoded = JSON.stringify({
+    wabaId: "1465869128784425",
+    displayPhoneNumber: "+852 2496 2283",
+    private: "encoded-private-never-output",
+  });
+  const { result } = await run(
+    { identity: { wabaInfo: encoded } },
+    { WOZTELL_DIAGNOSTIC_PROBE: "identity", WOZTELL_DIAGNOSTIC_WABA_ID: "1465869128784425" },
+  );
+  assert.equal(result.identityInspection.configuredWabaMatches, true);
+  assert.equal(result.identityInspection.companyPhoneMatches, true);
+  for (const value of [encoded, "encoded-private-never-output", "1465869128784425", "85224962283"])
+    assert.equal(JSON.stringify(result).includes(value), false);
 });
 
 test("permission denial probes a distinct channel token without granting readiness or exposing credentials", async () => {
