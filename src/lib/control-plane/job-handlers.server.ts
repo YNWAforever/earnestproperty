@@ -1,5 +1,12 @@
 import "@tanstack/react-start/server-only";
 import { LEAD_ALERT_JOB_TYPE, LEAD_ALERT_RECONCILE_JOB_TYPE } from "../neon/lead-alert-enqueue.js";
+import {
+  channelEtag,
+  channelState,
+  platformSubscribeEnabled,
+  platformSubscribePayload,
+  subscribeOutcome,
+} from "../whatsapp-enquiries/enquiry-platform-subscribe.js";
 
 export type JobHandler<T = unknown> = {
   jobType: string;
@@ -387,6 +394,7 @@ export const SERVICE_CAPABILITIES = [
   "woztell.enquiry.forward.reconcile@1",
   "woztell.enquiry.forward.readiness@1",
   "woztell.enquiry.canary.send@1",
+  "woztell.enquiry.platform.subscribe@1",
   "woztell.enquiry.staff.test@1",
   "woztell.enquiry.staff.notify@1",
   "woztell.enquiry.staff.notify.reconcile@1",
@@ -735,5 +743,150 @@ registerJobHandler({
         code: "CANARY_NOT_ACCEPTED",
       });
     return { summary: { accepted: 1 } };
+  },
+});
+
+// Operator-authorized, one-off platform subscription probe. Every Cloud Public API credential
+// path is refused while the Open API works, so exactly one documented `subscribeChannel` is
+// attempted and the outcome recorded. The queue runs it once (max_attempts=1) and the handler
+// never retries the mutation. It sends no message and cannot enable forwarding.
+registerJobHandler({
+  jobType: "woztell.enquiry.platform.subscribe",
+  payloadVersion: 1,
+  parsePayload(input) {
+    return platformSubscribePayload(input);
+  },
+  async run(_payload, context) {
+    await context.checkpoint();
+    if (!context.workerId)
+      throw Object.assign(new Error("Platform subscribe probe requires a leased job"), {
+        code: "JOB_LEASE_REQUIRED",
+      });
+    if (!platformSubscribeEnabled(process.env))
+      throw Object.assign(new Error("Platform subscribe probe is not enabled."), {
+        code: "PLATFORM_SUBSCRIBE_DISABLED",
+      });
+    const { queryRows } = await import("../neon/db.server.ts");
+    const live = await queryRows(
+      "SELECT id FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.platform.subscribe' AND payload_version=1 AND payload='{}'::jsonb AND status='running' AND lease_owner=$2 AND lease_expires_at>now()",
+      [context.jobId, context.workerId],
+    );
+    if (!live.length)
+      throw Object.assign(new Error("Platform subscribe job ownership lost"), {
+        code: "JOB_OWNERSHIP_LOST",
+      });
+    const { providerChannelId } = await import("../whatsapp-enquiries/wa-config.server.ts");
+    const channelId = providerChannelId();
+    const appId = process.env.WOZTELL_APP_ID;
+    const openToken = process.env.WOZTELL_OPEN_API_TOKEN;
+    if (!channelId || !appId || !openToken)
+      throw Object.assign(new Error("Platform subscribe probe is not configured."), {
+        code: "PLATFORM_SUBSCRIBE_CONFIG_INCOMPLETE",
+      });
+    const { boundedProviderFetch } = await import("../woztell/provider-fetch.ts");
+    const call = async (body: unknown) => {
+      const { text } = await boundedProviderFetch(
+        "https://open.api.woztell.com/v3",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+        { timeoutMs: 20_000, maxBytes: 262_144 },
+      );
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        return null;
+      }
+    };
+    const stateQuery = `query EarnestProbeChannelState($app:ID,$channel:ID){
+      apiViewer(appId:$app){channel(channelId:$channel){
+        _id etag connected archived
+        environments{envId on integrationInstalled info integration{integrationId}}
+      }}
+    }`;
+    const before = channelState(
+      await call({ query: stateQuery, variables: { app: appId, channel: channelId } }),
+    );
+    // Exactly one mutation attempt: a lease or transport failure is recorded, never retried.
+    let mutation = {
+      responded: false,
+      accepted: false,
+      hasErrors: false,
+      errorCodes: [] as string[],
+      channelState: channelState(null),
+    };
+    let mutationFailed = false;
+    const etag = channelEtag(
+      await call({ query: stateQuery, variables: { app: appId, channel: channelId } }),
+    );
+    if (!before.observed || !etag) mutationFailed = true;
+    else {
+      try {
+        mutation = subscribeOutcome(
+          await call({
+            query: `mutation EarnestProbeSubscribeChannel($input:SubscribeChannelInput!){
+              subscribeChannel(input:$input){clientMutationId error{code name} channel{
+                _id etag connected archived
+                environments{envId on integrationInstalled info integration{integrationId}}
+              }}
+            }`,
+            variables: { input: { channelId, etag } },
+          }),
+        );
+      } catch {
+        mutationFailed = true;
+      }
+      if (!mutation.responded) mutationFailed = true;
+    }
+    await context.checkpoint();
+    const after = channelState(
+      await call({ query: stateQuery, variables: { app: appId, channel: channelId } }),
+    );
+    const { inspectEnquiryForwardingProvider } =
+      await import("../whatsapp-enquiries/enquiry-forwarding-provider.server.ts");
+    const check = await inspectEnquiryForwardingProvider();
+    const sender = check.requests.find((entry) => entry.stage === "SENDER");
+    const proof = await queryRows(
+      `INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata)
+       SELECT NULL,'whatsapp.enquiry_forwarding.platform_subscribe_probe','ops_job',$1,$2::jsonb
+       WHERE EXISTS(SELECT 1 FROM ops_jobs WHERE id=$1::uuid AND job_type='woztell.enquiry.platform.subscribe' AND payload_version=1 AND payload='{}'::jsonb AND status='running' AND lease_owner=$3 AND lease_expires_at>now())
+       RETURNING id`,
+      [
+        context.jobId,
+        JSON.stringify({
+          purpose: "platform_subscribe_probe",
+          channelId,
+          before,
+          mutation: {
+            responded: mutation.responded,
+            accepted: mutation.accepted,
+            hasErrors: mutation.hasErrors,
+            errorCodes: mutation.errorCodes,
+            failed: mutationFailed,
+          },
+          after,
+          readiness: {
+            ready: check.ready,
+            infoReady: check.infoForwarding?.ready === true,
+            senderStatus: sender?.httpStatus ?? null,
+            senderOk: sender?.providerOk ?? null,
+            senderSignals: sender?.providerError?.signals ?? [],
+            reasonCodes: check.reasonCodes.slice(0, 12),
+          },
+        }),
+        context.workerId,
+      ],
+    );
+    if (!proof.length)
+      throw Object.assign(new Error("Platform subscribe job ownership lost"), {
+        code: "JOB_OWNERSHIP_LOST",
+      });
+    if (mutationFailed || !mutation.accepted)
+      throw Object.assign(new Error("Platform subscription was not accepted."), {
+        code: "PLATFORM_SUBSCRIBE_REFUSED",
+      });
+    return { summary: { accepted: 1, subscribed: after.subscribed === true ? 1 : 0 } };
   },
 });
