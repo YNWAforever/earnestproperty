@@ -65,7 +65,8 @@ type InspectionStage =
   | "TEMPLATES"
   | "MEMBERS"
   | "CHANNEL_INTEGRATIONS"
-  | "SENDER_CHANNEL_TOKEN";
+  | "SENDER_CHANNEL_TOKEN"
+  | "SENDER_WABA_ID";
 // These are observations of untrusted error text, never authentication or readiness proof.
 const ERROR_SIGNALS = {
   invalid_token:
@@ -187,6 +188,9 @@ export type EnquiryForwardingProviderInspection = {
     configuredMatchesChannelToken: boolean | null;
     comparisonAttempted: boolean;
     comparisonSenderVerified: boolean;
+    wabaComparisonAttempted?: boolean;
+    wabaComparisonVerified?: boolean;
+    wabaComparisonCompanyPhoneMatches?: boolean;
   };
   /** Presence of existing references, not newly manufactured verification. */
   capabilities: {
@@ -625,7 +629,29 @@ export async function inspectEnquiryForwardingProvider(
   );
   if (!senderBody) {
     const senderObservation = report.requests.find((entry) => entry.stage === "SENDER");
+    const diagnosticWabaId = env.WOZTELL_DIAGNOSTIC_WABA_ID;
     if (
+      typeof diagnosticWabaId === "string" &&
+      /^\d{5,30}$/.test(diagnosticWabaId) &&
+      senderObservation?.providerError?.signals.includes("permission_denied")
+    ) {
+      report.tokenDiagnostics.wabaComparisonAttempted = true;
+      const comparison = await request(
+        cloudUrl("waba-info", { wabaId: diagnosticWabaId }),
+        { method: "GET" },
+        "SENDER_WABA_ID",
+      );
+      const result = row(comparison?.result);
+      report.tokenDiagnostics.wabaComparisonVerified =
+        comparison?.ok === 1 &&
+        result.wabaId === diagnosticWabaId &&
+        phone(result.phoneNumber) !== null &&
+        identifier(result.phoneNumberId) !== null;
+      report.tokenDiagnostics.wabaComparisonCompanyPhoneMatches =
+        report.tokenDiagnostics.wabaComparisonVerified &&
+        !!companyPhone &&
+        phone(result.phoneNumber) === companyPhone;
+    } else if (
       configuredCloudToken &&
       channelToken &&
       configuredCloudToken !== channelToken &&
