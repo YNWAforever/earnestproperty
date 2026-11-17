@@ -52,6 +52,55 @@ function phone(value: unknown): string | null {
       ? digits
       : null;
 }
+// Decoding is not signature verification. These bounded observations cannot prove
+// identity, authorization, token validity, or readiness; no claim values leave this helper.
+function inspectCredential(token: string | null, env: NodeJS.ProcessEnv, channelId: string) {
+  const bounded = token !== null && token.length <= 16_384;
+  const jwtLike = bounded && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token);
+  let claims: Row | null = null;
+  if (jwtLike) {
+    try {
+      const parsed: unknown = JSON.parse(
+        Buffer.from(token.split(".")[1], "base64url").toString("utf8"),
+      );
+      if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed))
+        claims = row(parsed);
+    } catch {
+      // Invalid or opaque credentials remain unknown; never repair or re-encode them.
+    }
+  }
+  const matches = (other: string | undefined) =>
+    token && present(other) ? token === other.trim() : null;
+  const claimMatches = (keys: string[], expected: string | undefined) => {
+    if (!claims || !present(expected)) return null;
+    const values = keys.filter((key) => Object.hasOwn(claims, key)).map((key) => claims[key]);
+    if (!values.length || values.some((value) => !present(value))) return null;
+    return values.every((value) => value === expected);
+  };
+  const numericDate = (value: unknown): value is number =>
+    typeof value === "number" && Number.isFinite(value);
+  return {
+    signatureVerified: false as const,
+    configuredPresent: token !== null,
+    exceedsInspectionLimit: token !== null && !bounded,
+    matchesOpenToken: matches(env.WOZTELL_OPEN_API_TOKEN),
+    matchesBotToken: matches(env.WOZTELL_BOT_ACCESS_TOKEN),
+    containsPercentEscape: bounded && /%[0-9a-f]{2}/i.test(token),
+    containsLiteralEscape: bounded && /\\[nrt]/.test(token),
+    placeholderLike:
+      bounded &&
+      /\*{3,}|<redacted>|\{\{SECRET_[^}]+\}\}|your[_ -]?(?:access[_ -]?)?token|change[_ -]?me/i.test(
+        token,
+      ),
+    jwtLike,
+    claimsReadable: claims !== null,
+    claimsExpired: numericDate(claims?.exp) ? claims.exp <= Date.now() / 1000 : null,
+    claimsNotYetValid: numericDate(claims?.nbf) ? claims.nbf > Date.now() / 1000 : null,
+    appClaimMatches: claimMatches(["app", "appId"], env.WOZTELL_APP_ID),
+    channelClaimMatches: claimMatches(["channel", "channelId"], channelId),
+    wabaClaimMatches: claimMatches(["waba", "wabaId"], env.WOZTELL_DIAGNOSTIC_WABA_ID),
+  };
+}
 export type ForwardingTemplateCandidate = {
   providerTemplateId: string;
   name: string;
@@ -68,7 +117,8 @@ type InspectionStage =
   | "CHANNEL_INTEGRATIONS"
   | "SENDER_CHANNEL_TOKEN"
   | "SENDER_WABA_ID"
-  | "TEMPLATES_WABA_ID";
+  | "TEMPLATES_WABA_ID"
+  | "SENDER_V1_1";
 // These are observations of untrusted error text, never authentication or readiness proof.
 const ERROR_SIGNALS = {
   invalid_token:
@@ -210,6 +260,13 @@ export type EnquiryForwardingProviderInspection = {
     companyPhoneMatches: boolean | null;
     senderDifferentFromFixedCopy: boolean | null;
     proofHash: string | null;
+  };
+  credentialInspection?: ReturnType<typeof inspectCredential>;
+  versionProbe?: {
+    attempted: boolean;
+    senderVerified: boolean;
+    companyPhoneMatches: boolean;
+    expectedWabaMatches: boolean;
   };
   templateProbe?: {
     attempted: boolean;
@@ -590,6 +647,42 @@ export async function inspectEnquiryForwardingProvider(
             present(info.wabaId) && present(configuredWaba) ? info.wabaId === configuredWaba : null,
         };
       });
+  }
+  if (env.WOZTELL_DIAGNOSTIC_PROBE === "authentication") {
+    // Dedicated one-shot comparison; do not repeat v1.2 or member/template reads.
+    // The official authentication example uses v1.1 while the main endpoint is v1.2.
+    // This is never an automatic fallback and cannot establish readiness.
+    report.credentialInspection = inspectCredential(configuredCloudToken, env, channelId);
+    report.versionProbe = {
+      attempted: false,
+      senderVerified: false,
+      companyPhoneMatches: false,
+      expectedWabaMatches: false,
+    };
+    reasons.add("AUTHENTICATION_DIAGNOSTIC_ONLY");
+    if (configuredCloudToken) {
+      const url = new URL("https://api.whatsapp-cloud.woztell.sanuker.com/v1.1/api/waba-info");
+      url.searchParams.set("accessToken", configuredCloudToken);
+      url.searchParams.set("channelId", channelId);
+      report.versionProbe.attempted = true;
+      const body = await request(url.toString(), { method: "GET" }, "SENDER_V1_1");
+      const sender = row(body?.result);
+      report.versionProbe.senderVerified =
+        body?.ok === 1 &&
+        phone(sender.phoneNumber) !== null &&
+        identifier(sender.wabaId) !== null &&
+        identifier(sender.phoneNumberId) !== null;
+      report.versionProbe.companyPhoneMatches =
+        report.versionProbe.senderVerified &&
+        !!companyPhone &&
+        phone(sender.phoneNumber) === companyPhone;
+      report.versionProbe.expectedWabaMatches =
+        report.versionProbe.senderVerified &&
+        present(env.WOZTELL_DIAGNOSTIC_WABA_ID) &&
+        sender.wabaId === env.WOZTELL_DIAGNOSTIC_WABA_ID;
+    }
+    await inspectChannelIntegrations();
+    return finish();
   }
   // Open API member association is independent of Cloud sender/template capability.
   const requested = [

@@ -144,6 +144,117 @@ const run = (options = {}, patch = {}, extra = {}) => {
   }).then((result) => ({ result, calls: f.calls }));
 };
 
+test("authentication mode compares only v1.1 and never upgrades successful diagnostics to readiness", async () => {
+  const { result, calls } = await run(
+    { expectedCloudToken: configuredCloudSecret, sender: { wabaId: "1465869128784425" } },
+    {
+      WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret,
+      WOZTELL_DIAGNOSTIC_PROBE: "authentication",
+      WOZTELL_DIAGNOSTIC_WABA_ID: "1465869128784425",
+    },
+    { recipientPhones: ["85298873493"] },
+  );
+  assert.deepEqual(
+    result.requests.map((r) => r.stage),
+    ["CHANNEL", "SENDER_V1_1", "CHANNEL_INTEGRATIONS"],
+  );
+  assert.deepEqual(
+    calls.filter((c) => c.url.hostname !== "open.api.woztell.com").map((c) => c.url.pathname),
+    ["/v1.1/api/waba-info"],
+  );
+  assert.deepEqual(result.versionProbe, {
+    attempted: true,
+    senderVerified: true,
+    companyPhoneMatches: true,
+    expectedWabaMatches: true,
+  });
+  assert.equal(result.channel.senderPhone, null);
+  assert.equal(result.ready, false);
+  assert.equal(result.infoForwarding.ready, false);
+  assert.equal(result.template.configuredApproved, false);
+  assert.equal(result.members.checked, false);
+  assert.equal(result.credentialInspection.claimsReadable, false);
+  assert.equal(result.credentialInspection.claimsExpired, null);
+});
+
+test("credential diagnostics decode bounded untrusted claims without retaining them", async () => {
+  const payload = {
+    app: "wrong-app",
+    channel: channelId,
+    wabaId: "1465869128784425",
+    exp: 0,
+    nbf: 253402300799,
+    private: "private-payload-never-output",
+  };
+  const token =
+    Buffer.from('{"alg":"HS256"}').toString("base64url") +
+    "." +
+    Buffer.from(JSON.stringify(payload)).toString("base64url") +
+    "." +
+    Buffer.from("unit-test-only").toString("base64url");
+  const { result } = await run(
+    { expectedCloudToken: token },
+    {
+      WOZTELL_CLOUD_ACCESS_TOKEN: token,
+      WOZTELL_DIAGNOSTIC_PROBE: "authentication",
+      WOZTELL_DIAGNOSTIC_WABA_ID: "1465869128784425",
+    },
+  );
+  assert.equal(result.credentialInspection.jwtLike, true);
+  assert.equal(result.credentialInspection.claimsReadable, true);
+  assert.equal(result.credentialInspection.signatureVerified, false);
+  assert.equal(result.credentialInspection.claimsExpired, true);
+  assert.equal(result.credentialInspection.claimsNotYetValid, true);
+  assert.equal(result.credentialInspection.appClaimMatches, false);
+  assert.equal(result.credentialInspection.channelClaimMatches, true);
+  assert.equal(result.credentialInspection.wabaClaimMatches, true);
+  for (const value of [token, payload.private, payload.app, String(payload.nbf)])
+    assert.equal(JSON.stringify(result).includes(value), false);
+  assert.equal(result.ready, false);
+});
+
+test("credential diagnostics identify reused tokens but never infer credential validity", async () => {
+  const { result } = await run(
+    { expectedCloudToken: secret },
+    {
+      WOZTELL_CLOUD_ACCESS_TOKEN: secret,
+      WOZTELL_BOT_ACCESS_TOKEN: secret,
+      WOZTELL_DIAGNOSTIC_PROBE: "authentication",
+    },
+  );
+  assert.equal(result.credentialInspection.matchesOpenToken, true);
+  assert.equal(result.credentialInspection.matchesBotToken, true);
+  assert.equal(result.credentialInspection.signatureVerified, false);
+  assert.equal(result.infoForwarding.ready, false);
+});
+
+test("absent configured credential skips the version probe instead of substituting a token", async () => {
+  const { result, calls } = await run({}, { WOZTELL_DIAGNOSTIC_PROBE: "authentication" });
+  assert.equal(result.credentialInspection.configuredPresent, false);
+  assert.equal(result.versionProbe.attempted, false);
+  assert.equal(
+    calls.every((c) => c.url.hostname === "open.api.woztell.com"),
+    true,
+  );
+});
+
+test("malformed and oversized claims remain unknown while opaque credentials stay unchanged", async () => {
+  for (const token of [
+    "e30.bm90LWpzb24.signature",
+    "e30." + "A".repeat(17000) + ".signature",
+    "opaque%2Etoken\\nvalue",
+  ]) {
+    const { result } = await run(
+      { expectedCloudToken: token },
+      { WOZTELL_CLOUD_ACCESS_TOKEN: token, WOZTELL_DIAGNOSTIC_PROBE: "authentication" },
+    );
+    assert.equal(result.credentialInspection.claimsReadable, false);
+    assert.equal(result.credentialInspection.appClaimMatches, null);
+    assert.equal(result.credentialInspection.claimsExpired, null);
+    assert.equal(JSON.stringify(result).includes(token), false);
+  }
+});
+
 test("permission denial probes a distinct channel token without granting readiness or exposing credentials", async () => {
   const { result, calls } = await run(
     {
