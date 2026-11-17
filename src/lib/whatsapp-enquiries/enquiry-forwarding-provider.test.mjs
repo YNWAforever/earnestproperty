@@ -94,6 +94,30 @@ function fixture(options = {}) {
             },
           },
         };
+      } else if (query.query.includes("EarnestForwardingEnvironmentSignature")) {
+        assert.equal(query.variables.env, options.environmentId ?? "env-one");
+        data = {
+          data: {
+            apiViewer: {
+              channel: {
+                _id: channelId,
+                appId: "app-one",
+                environment:
+                  options.signature === null
+                    ? null
+                    : {
+                        envId: options.environmentId ?? "env-one",
+                        appIntegrationSignature: options.signature ?? "signed-context-credential",
+                        integration: {
+                          _id: "integration-one",
+                          integrationId: "whatsapp-cloud",
+                          build: 3,
+                        },
+                      },
+              },
+            },
+          },
+        };
       } else if (query.query.includes("EarnestForwardingMembers")) {
         data = {
           data: {
@@ -126,7 +150,32 @@ function fixture(options = {}) {
       assert.equal(url.origin, "https://api.whatsapp-cloud.woztell.sanuker.com");
       assert.equal(init.method, "GET");
       assert.equal(url.searchParams.get("accessToken"), options.expectedCloudToken ?? cloudSecret);
-      if (url.pathname.endsWith("/waba-info")) {
+      if (url.pathname.endsWith("/whatsapp-business-profile")) {
+        assert.equal(
+          url.searchParams.get("phoneNumberId"),
+          options.phoneNumberId ?? "1418629391333234",
+        );
+        data = options.profile ?? {
+          ok: 1,
+          data: { vertical: "PROF_SERVICES", websites: ["https://example.test"] },
+        };
+      } else if (url.pathname.endsWith("/whatsapp-displayname-status")) {
+        assert.equal(
+          url.searchParams.get("phoneNumberId"),
+          options.phoneNumberId ?? "1418629391333234",
+        );
+        assert.ok(init.headers["X-Woztell-Payload"]);
+        assert.ok(init.headers["X-Woztell-SignedContext"]);
+        data = options.displayStatus ?? {
+          ok: 1,
+          data: {
+            id: options.phoneNumberId ?? "1418629391333234",
+            account_mode: "LIVE",
+            verified_name: "Earnest Property",
+            display_phone_number: "+852 2496 2283",
+          },
+        };
+      } else if (url.pathname.endsWith("/waba-info")) {
         assert.equal(url.searchParams.get("channelId"), channelId);
         data = {
           ok: 1,
@@ -381,6 +430,135 @@ test("identity mode parses bounded JSON-encoded waba info without echoing it", a
   assert.equal(result.identityInspection.companyPhoneMatches, true);
   for (const value of [encoded, "encoded-private-never-output", "1465869128784425", "85224962283"])
     assert.equal(JSON.stringify(result).includes(value), false);
+});
+
+test("phone mode verifies identity through phoneNumberId endpoints without leaking values", async () => {
+  const phoneNumberId = "1418629391333234";
+  const { result, calls } = await run(
+    {
+      environmentId: "env-one",
+      phoneNumberId,
+      environments: [
+        {
+          envId: "env-one",
+          on: true,
+          integrationInstalled: true,
+          info: {
+            integrationId: "whatsapp-cloud",
+            build: 3,
+            alias: "prod",
+            appIntegrationId: "integration-one",
+            subscribed: true,
+          },
+          integration: { _id: "integration-one", integrationId: "whatsapp-cloud", build: 3 },
+        },
+      ],
+    },
+    { WOZTELL_DIAGNOSTIC_PROBE: "phone", WOZTELL_DIAGNOSTIC_PHONE_NUMBER_ID: phoneNumberId },
+  );
+  assert.deepEqual(
+    result.requests.map((r) => r.stage),
+    [
+      "CHANNEL",
+      "CHANNEL_INTEGRATIONS",
+      "BUSINESS_PROFILE",
+      "CHANNEL_SIGNATURE",
+      "DISPLAYNAME_STATUS",
+    ],
+  );
+  assert.deepEqual(result.phoneProbe, {
+    attempted: true,
+    profileAttempted: true,
+    profileValidEnvelope: true,
+    profileHasVertical: true,
+    profileHasWebsites: true,
+    signatureObtained: true,
+    displayStatusAttempted: true,
+    displayStatusValidEnvelope: true,
+    displayStatusPhoneMatchesCompany: true,
+    displayStatusIdMatchesConfigured: true,
+    displayStatusAccountModeLive: true,
+    displayStatusVerifiedNamePresent: true,
+  });
+  const signed = calls.find((c) => c.url.pathname.endsWith("/whatsapp-displayname-status"));
+  assert.equal(
+    Buffer.from(signed.init.headers["X-Woztell-SignedContext"].split(".")[1], "base64").toString(),
+    JSON.stringify({ app: "app-one", appIntegration: "integration-one", channel: channelId }),
+  );
+  for (const value of [
+    phoneNumberId,
+    "signed-context-credential",
+    "Earnest Property",
+    "85224962283",
+    "2496 2283",
+    "PROF_SERVICES",
+    "https://example.test",
+    "integration-one",
+    "env-one",
+  ])
+    assert.equal(JSON.stringify(result).includes(value), false);
+  assert.equal(result.ready, false);
+  assert.equal(result.infoForwarding.ready, false);
+});
+
+test("phone mode reports refusal and withheld signature without granting readiness", async () => {
+  const phoneNumberId = "1418629391333234";
+  const denied = await run(
+    {
+      phoneNumberId,
+      environments: [
+        {
+          envId: "env-one",
+          on: true,
+          info: { integrationId: "whatsapp-cloud", build: 3 },
+          integration: { _id: "integration-one", integrationId: "whatsapp-cloud", build: 3 },
+        },
+      ],
+      respond: ({ url }) =>
+        url.hostname === "api.whatsapp-cloud.woztell.sanuker.com"
+          ? new Response(JSON.stringify({ ok: 0, error: "permission denied" }), { status: 500 })
+          : undefined,
+    },
+    { WOZTELL_DIAGNOSTIC_PROBE: "phone", WOZTELL_DIAGNOSTIC_PHONE_NUMBER_ID: phoneNumberId },
+  );
+  assert.equal(denied.result.phoneProbe.profileValidEnvelope, false);
+  assert.equal(denied.result.phoneProbe.profileHasVertical, false);
+  assert.equal(denied.result.phoneProbe.displayStatusValidEnvelope, false);
+  assert.equal(denied.result.phoneProbe.displayStatusPhoneMatchesCompany, null);
+  assert.equal(denied.result.ready, false);
+  const unsigned = await run(
+    {
+      phoneNumberId,
+      signature: null,
+      environments: [
+        {
+          envId: "env-one",
+          on: true,
+          info: { integrationId: "whatsapp-cloud", build: 3 },
+          integration: { _id: "integration-one", integrationId: "whatsapp-cloud", build: 3 },
+        },
+      ],
+    },
+    { WOZTELL_DIAGNOSTIC_PROBE: "phone", WOZTELL_DIAGNOSTIC_PHONE_NUMBER_ID: phoneNumberId },
+  );
+  assert.equal(unsigned.result.phoneProbe.profileValidEnvelope, true);
+  assert.equal(unsigned.result.phoneProbe.signatureObtained, false);
+  assert.equal(unsigned.result.phoneProbe.displayStatusAttempted, false);
+  assert.equal(unsigned.result.phoneProbe.displayStatusValidEnvelope, null);
+});
+
+test("phone mode stays inert without a valid configured phoneNumberId", async () => {
+  const { result, calls } = await run(
+    {},
+    { WOZTELL_DIAGNOSTIC_PROBE: "phone", WOZTELL_DIAGNOSTIC_PHONE_NUMBER_ID: "not-digits" },
+  );
+  assert.equal(result.phoneProbe.attempted, false);
+  assert.equal(result.phoneProbe.profileAttempted, false);
+  assert.equal(
+    calls.some((c) => c.url.hostname === "api.whatsapp-cloud.woztell.sanuker.com"),
+    false,
+  );
+  assert.equal(result.infoForwarding.ready, false);
 });
 
 test("permission denial probes a distinct channel token without granting readiness or exposing credentials", async () => {
