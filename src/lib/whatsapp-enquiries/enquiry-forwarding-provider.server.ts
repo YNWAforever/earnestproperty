@@ -22,10 +22,11 @@ const CHANNEL_QUERY = `query EarnestForwardingChannel($app:ID,$channel:ID){
     _id appId name type connected archived appIntegrationAccessToken
   }}
 }`;
-// Optional failure diagnostics: metadata fields only, never environment.info or unmaskToken.
+// Optional failure diagnostics: masked environment info is reduced to booleans only.
+// Never request unmaskToken, integration secrets, signatures, or expose raw configuration.
 const CHANNEL_INTEGRATIONS_QUERY = `query EarnestForwardingChannelIntegrations($app:ID,$channel:ID){
   apiViewer(appId:$app){channel(channelId:$channel){
-    _id appId environments{envId integration{integrationId}}
+    _id appId environments{envId on integrationInstalled info integration{_id integrationId build}}
   }}
 }`;
 const MEMBERS_QUERY = `query EarnestForwardingMembers($app:ID,$channel:String,$phones:[String]){
@@ -209,6 +210,14 @@ export type EnquiryForwardingProviderInspection = {
     senderDifferentFromFixedCopy: boolean | null;
     proofHash: string | null;
   };
+  environmentConfiguration?: {
+    enabled: boolean | null;
+    installed: boolean | null;
+    subscribed: boolean | null;
+    bindingMatches: boolean | null;
+    buildMatches: boolean | null;
+    configuredWabaMatches: boolean | null;
+  }[];
   integrationInspection: {
     attempted: boolean;
     checked: boolean;
@@ -550,6 +559,30 @@ export async function inspectEnquiryForwardingProvider(
       report.integrationInspection.cloudIntegrationCount -
       report.integrationInspection.unknownIntegrationCount;
     report.integrationInspection.complete = true;
+    report.environmentConfiguration = metadata.environments
+      .map(row)
+      .filter((entry) => row(entry.integration).integrationId === "whatsapp-cloud")
+      .map((entry) => {
+        const info = row(entry.info),
+          integration = row(entry.integration);
+        const bool = (value: unknown) => (typeof value === "boolean" ? value : null);
+        const configuredWaba = env.WOZTELL_DIAGNOSTIC_WABA_ID;
+        return {
+          enabled: bool(entry.on),
+          installed: bool(entry.integrationInstalled),
+          subscribed: bool(info.subscribed),
+          bindingMatches:
+            present(info.appIntegrationId) && present(integration._id)
+              ? info.appIntegrationId === integration._id
+              : null,
+          buildMatches:
+            Number.isSafeInteger(info.build) && Number.isSafeInteger(integration.build)
+              ? info.build === integration.build
+              : null,
+          configuredWabaMatches:
+            present(info.wabaId) && present(configuredWaba) ? info.wabaId === configuredWaba : null,
+        };
+      });
   }
   // Open API member association is independent of Cloud sender/template capability.
   const requested = [
