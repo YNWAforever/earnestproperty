@@ -303,6 +303,64 @@ test("environment configuration diagnostics expose booleans only and preserve re
   assert.equal(result.integrationInspection.selectedEnvironmentVerified, false);
 });
 
+test("independent template probe distinguishes Sender denial without granting readiness", async () => {
+  const { result, calls } = await run(
+    {
+      respond: ({ url }) => {
+        if (url.pathname.endsWith("/waba-info"))
+          return new Response(JSON.stringify({ ok: 0, error: "permission denied" }), {
+            status: 500,
+          });
+        if (url.pathname.endsWith("/whatsapp-message-templates")) {
+          assert.equal(url.searchParams.get("wabaId"), "1465869128784425");
+          assert.equal(url.searchParams.get("accessToken"), configuredCloudSecret);
+          assert.equal(url.searchParams.get("name"), contract.name);
+          return new Response(JSON.stringify({ ok: 1, data: [template()] }));
+        }
+      },
+    },
+    {
+      WOZTELL_CLOUD_ACCESS_TOKEN: configuredCloudSecret,
+      WOZTELL_DIAGNOSTIC_WABA_ID: "1465869128784425",
+      WOZTELL_DIAGNOSTIC_PROBE: "templates",
+    },
+  );
+  assert.deepEqual(result.templateProbe, {
+    attempted: true,
+    validResponse: true,
+    configuredTemplateListed: true,
+    configuredLanguageApproved: true,
+  });
+  assert.equal(calls.filter((c) => c.url.pathname.endsWith("/waba-info")).length, 1);
+  assert.equal(result.template.configuredApproved, false);
+  assert.equal(result.template.validationComplete, false);
+  assert.equal(result.ready, false);
+});
+
+test("template probe refuses malformed success envelopes and does not expose template data", async () => {
+  const privateValue = "opaque-provider-content-not-for-audit";
+  const { result } = await run(
+    {
+      respond: ({ url }) => {
+        if (url.pathname.endsWith("/waba-info"))
+          return new Response(JSON.stringify({ ok: 0, error: "permission denied" }), {
+            status: 500,
+          });
+        if (url.pathname.endsWith("/whatsapp-message-templates"))
+          return new Response(JSON.stringify({ ok: 1, data: { name: privateValue } }));
+      },
+    },
+    { WOZTELL_DIAGNOSTIC_WABA_ID: "1465869128784425", WOZTELL_DIAGNOSTIC_PROBE: "templates" },
+  );
+  assert.deepEqual(result.templateProbe, {
+    attempted: true,
+    validResponse: false,
+    configuredTemplateListed: false,
+    configuredLanguageApproved: false,
+  });
+  assert.equal(JSON.stringify(result).includes(privateValue), false);
+});
+
 const informationalInstallation = () => ({
   purpose: "enq_forward_info",
   version: 1,
