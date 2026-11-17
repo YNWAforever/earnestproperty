@@ -62,7 +62,7 @@ function fixture(options = {}) {
       if (query.query.includes("EarnestForwardingChannelIntegrations")) {
         assert.doesNotMatch(
           query.query,
-          /\b(info|unmaskToken|signature|appIntegrationAccessToken)\b/,
+          /\b(unmaskToken|signature|secret|appIntegrationSignature|appIntegrationAccessToken)\b/,
         );
         assert.doesNotMatch(query.query, /\benvironment\s*\(/);
         data = {
@@ -259,6 +259,48 @@ test("WABA comparison rejects mismatched response identity", async () => {
   );
   assert.equal(result.tokenDiagnostics.wabaComparisonVerified, false);
   assert.equal(result.tokenDiagnostics.wabaComparisonCompanyPhoneMatches, false);
+});
+
+test("environment configuration diagnostics expose booleans only and preserve readiness failure", async () => {
+  const privateValue = "unknown-environment-credential-never-output";
+  const { result } = await run(
+    {
+      environments: [
+        {
+          envId: "live-env",
+          on: true,
+          integrationInstalled: false,
+          info: {
+            appIntegrationId: "binding-a",
+            build: 3,
+            subscribed: false,
+            wabaId: "1465869128784425",
+            accessToken: privateValue,
+          },
+          integration: { _id: "binding-b", integrationId: "whatsapp-cloud", build: 4 },
+        },
+      ],
+      respond: ({ url }) =>
+        url.pathname.endsWith("/waba-info")
+          ? new Response(JSON.stringify({ ok: 0, error: "permission denied" }), { status: 500 })
+          : undefined,
+    },
+    { WOZTELL_DIAGNOSTIC_WABA_ID: "1465869128784425" },
+  );
+  assert.deepEqual(result.environmentConfiguration, [
+    {
+      enabled: true,
+      installed: false,
+      subscribed: false,
+      bindingMatches: false,
+      buildMatches: false,
+      configuredWabaMatches: true,
+    },
+  ]);
+  for (const forbidden of [privateValue, "binding-a", "binding-b", "live-env"])
+    assert.equal(JSON.stringify(result).includes(forbidden), false);
+  assert.equal(result.ready, false);
+  assert.equal(result.integrationInspection.selectedEnvironmentVerified, false);
 });
 
 const informationalInstallation = () => ({
@@ -829,11 +871,11 @@ test("sender failure inspects only scoped environment integration identifiers wi
   assert.deepEqual(metadataCall.query.variables, { app: "app-one", channel: channelId });
   assert.match(
     metadataCall.query.query,
-    /environments\s*\{\s*envId\s+integration\s*\{integrationId\}/,
+    /environments\s*\{\s*envId\s+on\s+integrationInstalled\s+info\s+integration\s*\{_id\s+integrationId\s+build\}/,
   );
   assert.doesNotMatch(
     metadataCall.query.query,
-    /\b(info|unmaskToken|signature|appIntegrationAccessToken)\b|\benvironment\s*\(/,
+    /\b(unmaskToken|signature|secret|appIntegrationSignature|appIntegrationAccessToken)\b|\benvironment\s*\(/,
   );
   for (const forbidden of [
     secret,
