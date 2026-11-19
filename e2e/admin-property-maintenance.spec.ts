@@ -534,10 +534,12 @@ for (const width of [1440, 1280, 768, 390]) {
       }) => {
         await open(page);
         await page.evaluate(() => (window.propertyFixture.uploadMode = "delayed"));
+        const buffer = await readFile("public/logo-mark.png");
         await page.locator("#property-images").setInputFiles([
-          { name: "one.png", mimeType: "image/png", buffer: Buffer.from("owned one") },
-          { name: "two.png", mimeType: "image/png", buffer: Buffer.from("owned two") },
+          { name: "one.png", mimeType: "image/png", buffer },
+          { name: "two.png", mimeType: "image/png", buffer },
         ]);
+        await page.getByRole("button", { name: "上載 2 張", exact: true }).click();
         await expect
           .poll(() =>
             page.evaluate(
@@ -576,7 +578,7 @@ for (const width of [1440, 1280, 768, 390]) {
             () => JSON.parse(localStorage.getItem("property-fixture-accepted-uploads")!).length,
           ),
         ).toBe(transition === "same-context" ? 2 : 1);
-        await expect(page.getByText(/^已上載 \d 張相片$/, { exact: true })).toHaveCount(
+        await expect(page.getByText("已上載 2／2 張。", { exact: true })).toHaveCount(
           transition === "same-context" ? 1 : 0,
         );
         await expect(page.getByRole("img", { name: "相片 3", exact: true })).toHaveCount(
@@ -707,9 +709,12 @@ for (const width of [1440, 1280, 768, 390]) {
       await page.locator("#property-images").setInputFiles({
         name: "failed.png",
         mimeType: "image/png",
-        buffer: Buffer.from("owned fixture"),
+        buffer: await readFile("public/logo-mark.png"),
       });
-      await expect(page.getByText("failed.png：合成媒體服務失敗", { exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "上載 1 張", exact: true }).click();
+      await expect(
+        page.getByRole("listitem").filter({ hasText: "failed.png" }).getByRole("alert"),
+      ).toHaveText("合成媒體服務失敗");
       await expect(page.getByRole("textbox", { name: /^物業介紹/ })).toHaveValue(
         "上載失敗後保留文字",
       );

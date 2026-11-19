@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { uploadAdminMedia } from "@/lib/admin/media-upload";
+import { ImageUploadQueue } from "./ImageUploadQueue";
 import { fetchAdminDistrictOptions } from "@/lib/neon/admin-data";
 import { nativeFieldClassName } from "@/components/ui/native-field";
 import { cn } from "@/lib/utils";
@@ -85,92 +85,55 @@ export function CmsImageField({
   label,
   value,
   ownerType,
+  inputId,
+  disabled,
+  isWorkspaceCurrent,
   onChange,
   onUploadingChange,
 }: {
   label: string;
   value: string;
   ownerType: "estate" | "article";
+  inputId?: string;
+  disabled?: boolean;
+  isWorkspaceCurrent?: () => boolean;
   onChange: (value: string) => void;
   onUploadingChange?: (uploading: boolean) => void;
 }) {
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  // Use the newest form callback after a slow upload, so concurrent text edits survive.
-  const changeRef = useRef(onChange);
-  changeRef.current = onChange;
-  const uploadingChangeRef = useRef(onUploadingChange);
-  uploadingChangeRef.current = onUploadingChange;
-  const active = useRef(true);
-  useEffect(() => {
-    active.current = true;
-    return () => {
-      active.current = false;
-      uploadingChangeRef.current?.(false);
-    };
-  }, []);
+  const [pending, setPending] = useState(false);
   return (
-    <div className="space-y-3 rounded-md border p-3">
-      {value ? (
+    <div className="min-w-0 space-y-3 rounded-lg border p-3">
+      {value.trim() ? (
         <img
-          src={value}
+          src={value.trim()}
           alt={`${label}預覽`}
-          className="max-h-40 max-w-full rounded object-contain"
+          className="max-h-52 max-w-full rounded bg-muted object-contain"
         />
-      ) : (
-        <p className="text-sm text-muted-foreground">尚未選擇圖片</p>
-      )}
+      ) : null}
+      <ImageUploadQueue
+        ownerType={ownerType}
+        label={label}
+        defaultWide={ownerType === "estate"}
+        disabled={disabled}
+        isWorkspaceCurrent={isWorkspaceCurrent}
+        onPendingChange={(next) => {
+          setPending(next);
+          onUploadingChange?.(next);
+        }}
+        onUploaded={([url]) => onChange(url)}
+      />
       <label className="grid gap-2 text-sm font-medium">
-        上載{label}
+        {label}網址
         <Input
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/avif"
-          disabled={uploading}
-          onChange={async (event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (!file) return;
-            setUploading(true);
-            uploadingChangeRef.current?.(true);
-            setError(null);
-            try {
-              const result = await uploadAdminMedia(file, ownerType);
-              if (active.current) changeRef.current(result.url);
-            } catch (err) {
-              if (active.current)
-                setError(err instanceof Error ? err.message : "上載失敗，請重新選擇檔案重試。");
-            } finally {
-              if (active.current) {
-                setUploading(false);
-                uploadingChangeRef.current?.(false);
-              }
-            }
-          }}
-        />
-      </label>
-      <p className="text-xs text-muted-foreground">
-        JPG、PNG、WEBP 或 AVIF，每張不超過 5MB。上載後請儲存草稿。
-      </p>
-      <label className="grid gap-2 text-sm font-medium">
-        {label}網址（亦可直接貼上）
-        <Input
+          id={inputId}
           type="text"
           inputMode="url"
+          placeholder="https://…"
           value={value}
-          disabled={uploading}
+          disabled={disabled || pending}
           onChange={(event) => onChange(event.target.value)}
         />
       </label>
-      {uploading ? (
-        <p role="status" className="text-sm">
-          圖片上載中…
-        </p>
-      ) : null}
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error} 其他修改已保留。
-        </p>
-      ) : null}
     </div>
   );
 }

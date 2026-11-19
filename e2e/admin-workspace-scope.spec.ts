@@ -185,10 +185,12 @@ for (const width of [1440, 1280, 768, 390])
     }) => {
       await openScope(page, "/admin/listings/new");
       await page.evaluate(() => (window.propertyFixture.uploadMode = "delayed"));
+      const buffer = await readFile("public/logo-mark.png");
       await page.locator("#property_images").setInputFiles([
-        { name: "first.png", mimeType: "image/png", buffer: Buffer.from("owned first image") },
-        { name: "second.png", mimeType: "image/png", buffer: Buffer.from("owned second image") },
+        { name: "first.png", mimeType: "image/png", buffer },
+        { name: "second.png", mimeType: "image/png", buffer },
       ]);
+      await page.getByRole("button", { name: "上載 2 張", exact: true }).click();
       await expect
         .poll(() =>
           page.evaluate(() => window.propertyFixture.pending.some((p) => p.kind === "upload")),

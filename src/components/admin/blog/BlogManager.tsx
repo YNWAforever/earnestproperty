@@ -17,7 +17,13 @@ import { BlogSettingsEditor } from "./BlogSettingsEditor";
 import { BlogCategoryManager } from "./BlogCategoryManager";
 import { articleError, changeQuery, linkImportError } from "./blog-editor-state";
 type View = "articles" | "settings" | "categories";
-export function BlogManager({ canPublish }: { canPublish: boolean }) {
+export function BlogManager({
+  canPublish,
+  isWorkspaceCurrent,
+}: {
+  canPublish: boolean;
+  isWorkspaceCurrent?: () => boolean;
+}) {
   const [view, setView] = useState<View>("articles");
   const [query, setQuery] = useState<ArticleQuery>({
     search: "",
@@ -395,6 +401,7 @@ export function BlogManager({ canPublish }: { canPublish: boolean }) {
           article={editor.article}
           categories={options}
           canPublish={canPublish}
+          isWorkspaceCurrent={isWorkspaceCurrent}
           onSave={(command) => api.saveBlogArticle({ data: command })}
           onRefresh={refresh}
           onClose={() => setEditor(null)}

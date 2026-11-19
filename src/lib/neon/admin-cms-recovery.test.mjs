@@ -315,6 +315,9 @@ test("dedicated publish sends only the saved reviewed revision with its base, ne
   };
   const { handlePublish } = extractedFunctions(estateFormPath, ["handlePublish"], {
     isCurrent: () => true,
+    pendingImage: { current: false },
+    saving: false,
+    publishing: false,
     validate: () => null,
     setPublishing: () => {},
     reviewed,
@@ -357,6 +360,9 @@ test("dedicated publish retains unsaved local edits and refuses a stale reviewed
   const errors = [];
   const { handlePublish } = extractedFunctions(estateFormPath, ["handlePublish"], {
     isCurrent: () => true,
+    pendingImage: { current: false },
+    saving: false,
+    publishing: false,
     validate: () => null,
     setPublishing: () => {},
     reviewed: { draftRevisionId: "old" },

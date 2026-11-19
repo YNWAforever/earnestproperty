@@ -88,72 +88,9 @@ test("estate and article close guards and submit paths include pending upload", 
   for (const kind of ["Estate"]) {
     const body = source.slice(source.indexOf(`function ${kind}Dialog(`)).split("\nfunction ")[0];
     assert.match(body, /isDirty: isDirty \|\| imageUploading/);
-    assert.match(body, /onUploadingChange=\{setImageUploading\}/);
+    assert.match(body, /onUploadingChange=\{handleImagePending\}/);
     assert.match(body, /uploading=\{imageUploading\}/);
     assert.match(body, /if \(imageUploading\)/);
-  }
-});
-
-test("image upload reports pending until success or failure and applies only successful URL", async () => {
-  const imageSource = readFileSync(
-    new URL("../components/admin/CmsEditorFields.tsx", import.meta.url),
-    "utf8",
-  );
-  const snippet = imageSource
-    .slice(imageSource.indexOf("export function CmsImageField"))
-    .replace("export function", "function");
-  const js = ts.transpileModule(snippet, {
-    compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
-  }).outputText;
-  for (const fails of [false, true]) {
-    let settle;
-    const pending = new Promise((resolve, reject) => {
-      settle = () =>
-        fails ? reject(new Error("fixture upload failed")) : resolve({ url: "/images/new.jpg" });
-    });
-    const states = [],
-      values = [];
-    const Component = new Function(
-      "React",
-      "useState",
-      "useRef",
-      "useEffect",
-      "Input",
-      "uploadAdminMedia",
-      js + ";return CmsImageField;",
-    )(
-      React,
-      (initial) => [initial, () => {}],
-      (initial) => ({ current: initial }),
-      (effect) => effect(),
-      "input",
-      () => pending,
-    );
-    const tree = Component({
-      label: "封面圖片",
-      value: "/images/old.jpg",
-      ownerType: "article",
-      onChange: (value) => values.push(value),
-      onUploadingChange: (value) => states.push(value),
-    });
-    function findFile(node) {
-      if (!node || typeof node !== "object") return null;
-      if (node.type === "input" && node.props.type === "file") return node;
-      for (const child of React.Children.toArray(node.props?.children)) {
-        const found = findFile(child);
-        if (found) return found;
-      }
-      return null;
-    }
-    const upload = findFile(tree).props.onChange({
-      target: { files: [{ name: "fixture.png" }], value: "fixture.png" },
-    });
-    assert.deepEqual(states, [true]);
-    assert.deepEqual(values, []);
-    settle();
-    await upload;
-    assert.deepEqual(states, [true, false]);
-    assert.deepEqual(values, fails ? [] : ["/images/new.jpg"]);
   }
 });
 
@@ -317,8 +254,8 @@ test("blog editor retains saved baseline, guarded uploads, compare and confirmed
     "CmsPublicationCompare",
     "CmsRestoreConfirm",
     "encodeArticle(baseline)",
-    "onUploadingChange={setInlineUploading}",
-    "onUploadingChange={setCoverUploading}",
+    'handleImagePending("inline", pending)',
+    'handleImagePending("cover", pending)',
     "const uploading = inlineUploading || coverUploading",
     "busy || uploading",
   ]) {

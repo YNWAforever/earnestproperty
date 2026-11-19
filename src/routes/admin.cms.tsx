@@ -7,7 +7,8 @@ import { useStaffWorkspaceCurrent } from "@/hooks/use-staff-workspace";
 import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
 import { cmsEditorHasChanges } from "@/components/admin/cms-editor-state";
 import { CmsDistrictField, CmsImageField } from "@/components/admin/CmsEditorFields";
-import { uploadAdminMedia } from "@/lib/admin/media-upload";
+import { ImageUploadQueue } from "@/components/admin/ImageUploadQueue";
+import { MediaAssetGallery } from "@/components/admin/MediaAssetGallery";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent, ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -269,8 +270,9 @@ function AdminCms({ identity }: { identity: string }) {
   });
   const [faqScopeFilter, setFaqScopeFilter] = useState("all");
   const faqFileInputRef = useRef<HTMLInputElement>(null);
-  const mediaFileInputRef = useRef<HTMLInputElement>(null);
-  const [mediaUploading, setMediaUploading] = useState(false);
+  const [mediaPending, setMediaPending] = useState(false);
+  const [mediaRefreshError, setMediaRefreshError] = useState(false);
+  const { dialog: mediaLeaveGuard } = useRouteLeaveGuard(mediaPending);
 
   const [cmsCursor, setCmsCursor] = useState<string | null>(null);
   const [cmsNextCursor, setCmsNextCursor] = useState<string | null>(null);
@@ -947,48 +949,13 @@ function AdminCms({ identity }: { identity: string }) {
     }
   }
 
-  /** Uploads into the media library.
-   *
-   * /api/admin/media/upload has existed all along but was reachable only from
-   * the property form, so the CMS's own 媒體庫 tab was read-only: staff could
-   * edit alt text on assets that some other screen had happened to create, and
-   * the empty state told them to "upload photos" with nowhere to do it.
-   */
-  async function handleMediaUpload(files: FileList | null) {
-    if (!files?.length) return;
-    const list = Array.from(files);
-    setMediaUploading(true);
-    const failed: string[] = [];
-    let uploaded = 0;
+  async function refreshMediaAfterUpload() {
+    if (!isWorkspaceCurrent() || activeTab !== "media") return;
+    setMediaRefreshError(false);
     try {
-      for (const file of list) {
-        try {
-          if (!isWorkspaceCurrent()) return;
-          await uploadAdminMedia(file, "cms", isWorkspaceCurrent);
-          if (!isWorkspaceCurrent()) return;
-
-          uploaded += 1;
-        } catch (error) {
-          if (!isWorkspaceCurrent()) return;
-
-          failed.push(`${file.name}：${error instanceof Error ? error.message : "上載未完成"}`);
-        }
-      }
-
-      if (!isWorkspaceCurrent()) return;
       await refreshCmsData();
-      if (!isWorkspaceCurrent()) return;
-
-      if (failed.length) {
-        toast.error(`已上載 ${uploaded}／${list.length}，失敗：${failed.join("、")}`);
-      } else {
-        toast.success(`已上載 ${uploaded} 個檔案`);
-      }
-    } finally {
-      if (isWorkspaceCurrent()) {
-        setMediaUploading(false);
-        if (mediaFileInputRef.current) mediaFileInputRef.current.value = "";
-      }
+    } catch {
+      if (isWorkspaceCurrent()) setMediaRefreshError(true);
     }
   }
 
@@ -1056,15 +1023,6 @@ function AdminCms({ identity }: { identity: string }) {
               <Plus className="h-4 w-4" />
               新增 FAQ
             </Button>
-          ) : activeTab === "media" ? (
-            <Button
-              type="button"
-              disabled={mediaUploading}
-              onClick={() => mediaFileInputRef.current?.click()}
-            >
-              <Upload className="h-4 w-4" />
-              {mediaUploading ? "上載中…" : "上載媒體"}
-            </Button>
           ) : null
         ) : null
       }
@@ -1100,7 +1058,8 @@ function AdminCms({ identity }: { identity: string }) {
           {activeTab !== "articles" ? (
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span>
-                {activeSearch.trim() ? "符合搜尋" : "目前分類"}共 {cmsTotal} 項（包括草稿）
+                {activeSearch.trim() ? "符合搜尋" : "目前分類"}共 {cmsTotal} 項
+                {activeTab === "media" ? "" : "（包括草稿）"}
               </span>
               <Button
                 variant="outline"
@@ -1238,7 +1197,10 @@ function AdminCms({ identity }: { identity: string }) {
             </TabsContent>
 
             <TabsContent value="articles">
-              <BlogManager canPublish={canReadYouTubeStatus} />
+              <BlogManager
+                canPublish={canReadYouTubeStatus}
+                isWorkspaceCurrent={isWorkspaceCurrent}
+              />
             </TabsContent>
 
             <TabsContent value="videos">
@@ -1499,107 +1461,64 @@ function AdminCms({ identity }: { identity: string }) {
               </Card>
             </TabsContent>
 
-            <TabsContent value="media">
+            <TabsContent value="media" forceMount hidden={activeTab !== "media"}>
               <Card>
                 <CardHeader className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                  <div>
-                    <CardTitle as="h2" className="text-base">
-                      媒體庫
-                    </CardTitle>
-                    <CardDescription>更新圖片替代文字，改善搜尋及無障礙內容。</CardDescription>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {mediaAssets ? (
-                      <TableSearch
-                        label="搜尋檔案路徑或替代文字"
-                        value={searchByTab.media}
-                        onChange={(value) =>
-                          setSearchByTab((current) => ({ ...current, media: value }))
-                        }
-                      />
-                    ) : null}
-
-                    <input
-                      ref={mediaFileInputRef}
-                      className="hidden"
-                      type="file"
-                      multiple
-                      tabIndex={-1}
-                      aria-hidden="true"
-                      accept="image/jpeg,image/png,image/webp,image/avif"
-                      onChange={(event) => void handleMediaUpload(event.target.files)}
-                    />
-                  </div>
+                  <CardTitle as="h2" className="text-base">
+                    媒體庫
+                  </CardTitle>
+                  <TableSearch
+                    label="搜尋檔案路徑或替代文字"
+                    value={searchByTab.media}
+                    onChange={(value) =>
+                      setSearchByTab((current) => ({ ...current, media: value }))
+                    }
+                  />
                 </CardHeader>
-                <CardContent className="p-0">
-                  {!mediaAssets ? <Skeleton className="m-6 h-48 w-auto" /> : null}
-                  {filteredMediaAssets.length ? (
-                    <Table containerLabel="媒體內容">
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>檔案</TableHead>
-                          <TableHead>類型</TableHead>
-                          <TableHead>用途</TableHead>
-                          <TableHead>替代文字</TableHead>
-                          <TableHead className="w-28 text-right">操作</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filteredMediaAssets.map((asset) => (
-                          <TableRow key={asset.id}>
-                            <TableCell>
-                              <a
-                                href={asset.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="font-medium hover:underline"
-                              >
-                                {asset.pathname}
-                              </a>
-                              <p className="text-xs text-muted-foreground">
-                                {formatBytes(asset.size_bytes)}
-                              </p>
-                            </TableCell>
-                            <TableCell>{asset.content_type ?? "—"}</TableCell>
-                            <TableCell>
-                              {asset.owner_type}
-                              {asset.owner_id ? (
-                                <p className="text-xs text-muted-foreground">{asset.owner_id}</p>
-                              ) : null}
-                            </TableCell>
-                            <TableCell className="max-w-xs truncate">
-                              {asset.alt_text ?? "—"}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => setEditingMedia(mediaToInput(asset))}
-                              >
-                                <Pencil className="h-4 w-4" />
-                                編輯
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  ) : null}
-                  {mediaAssets && !filteredMediaAssets.length ? (
-                    <div className="p-6">
-                      {searchByTab.media.trim() ? (
-                        <NoSearchMatch
-                          label="媒體"
-                          query={searchByTab.media}
-                          onClear={() => setSearchByTab((current) => ({ ...current, media: "" }))}
+                <CardContent className="space-y-5">
+                  <ImageUploadQueue
+                    multiple
+                    ownerType="cms"
+                    label="媒體"
+                    isWorkspaceCurrent={isWorkspaceCurrent}
+                    onPendingChange={setMediaPending}
+                    onUploaded={() => void refreshMediaAfterUpload()}
+                  />
+                  {activeTab === "media" ? (
+                    <>
+                      {mediaRefreshError ? (
+                        <div role="alert" className="flex flex-wrap items-center gap-2 text-sm">
+                          圖片已上載，媒體庫未能更新。
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void refreshMediaAfterUpload()}
+                          >
+                            重試載入媒體
+                          </Button>
+                        </div>
+                      ) : null}
+                      {!mediaAssets ? <Skeleton className="h-48" /> : null}
+                      {filteredMediaAssets.length ? (
+                        <MediaAssetGallery
+                          assets={filteredMediaAssets}
+                          canEdit={canReadYouTubeStatus}
+                          onEdit={(asset) => setEditingMedia(mediaToInput(asset))}
                         />
-                      ) : (
-                        <AdminEmptyState
-                          title="未有媒體"
-                          description="上載相片後即可在媒體庫管理替代文字。"
-                        />
-                      )}
-                    </div>
+                      ) : null}
+                      {mediaAssets && !filteredMediaAssets.length ? (
+                        searchByTab.media.trim() ? (
+                          <NoSearchMatch
+                            label="媒體"
+                            query={searchByTab.media}
+                            onClear={() => setSearchByTab((current) => ({ ...current, media: "" }))}
+                          />
+                        ) : (
+                          <AdminEmptyState title="未有媒體" />
+                        )
+                      ) : null}
+                    </>
                   ) : null}
                 </CardContent>
               </Card>
@@ -1728,6 +1647,7 @@ function AdminCms({ identity }: { identity: string }) {
             saving={saving}
             publishing={publishing}
             revisions={estateRevisions}
+            isWorkspaceCurrent={isWorkspaceCurrent}
             onChange={setEditingEstate}
             onClose={() => {
               ++estateLoadSequence.current;
@@ -1893,6 +1813,7 @@ function AdminCms({ identity }: { identity: string }) {
               </div>
             ) : null}
           </AdminConfirmDialog>
+          {mediaLeaveGuard}
           <MediaDialog
             media={editingMedia}
             saving={saving}
@@ -2020,6 +1941,7 @@ function EstateDialog({
   publishing,
   revisions,
   fingerprintValues,
+  isWorkspaceCurrent,
   onChange,
   onClose,
   onSubmit,
@@ -2032,7 +1954,8 @@ function EstateDialog({
   publishing: boolean;
   revisions: CmsRevisionSummary[] | null;
   fingerprintValues: Record<string, unknown>;
-  onChange: (estate: AdminEstateInput | null) => void;
+  isWorkspaceCurrent: () => boolean;
+  onChange: React.Dispatch<React.SetStateAction<AdminEstateInput | null>>;
   onClose: () => void;
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onPublish: () => void;
@@ -2045,6 +1968,11 @@ function EstateDialog({
       : openingDirty
     : false;
   const [imageUploading, setImageUploading] = useState(false);
+  const pendingImage = useRef(false);
+  function handleImagePending(pending: boolean) {
+    pendingImage.current = pending;
+    setImageUploading(pending);
+  }
   const [confirmingPublish, setConfirmingPublish] = useState(false);
   const canRestore = useCmsCanRestore();
   const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
@@ -2076,7 +2004,7 @@ function EstateDialog({
                 id="cms-estate-form"
                 className="grid gap-4"
                 onSubmit={(event) => {
-                  if (imageUploading) {
+                  if (pendingImage.current || saving || publishing) {
                     event.preventDefault();
                     return;
                   }
@@ -2165,11 +2093,17 @@ function EstateDialog({
                 <fieldset className="grid gap-4 rounded-md border p-4">
                   <legend className="px-1 font-semibold">圖片</legend>
                   <CmsImageField
-                    onUploadingChange={setImageUploading}
+                    onUploadingChange={handleImagePending}
+                    isWorkspaceCurrent={isWorkspaceCurrent}
+                    disabled={saving || publishing}
                     label="屋苑主圖"
                     ownerType="estate"
                     value={estate.hero_image ?? ""}
-                    onChange={(value) => onChange({ ...estate, hero_image: nullIfBlank(value) })}
+                    onChange={(value) =>
+                      onChange(
+                        (current) => current && { ...current, hero_image: nullIfBlank(value) },
+                      )
+                    }
                   />
                 </fieldset>
                 <fieldset className="grid gap-4 rounded-md border p-4">
@@ -2913,13 +2847,6 @@ function parseNullableNumber(value: string) {
 function formatDateTime(value: string | null | undefined) {
   if (!value) return "—";
   return formatHkDateTime(value) ?? value;
-}
-
-function formatBytes(value: number | null) {
-  if (!value) return "—";
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function assertNoServerError(result: unknown) {

@@ -1,6 +1,15 @@
 import { assertWorkspaceCurrent } from "./workspace-request";
 import { withStaffUploadIdentity } from "@/auth";
 
+export class AdminMediaUploadError extends Error {
+  constructor(
+    message: string,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+  }
+}
+
 // File content binds retries across re-selection and reload in this tab. A failed
 // storage write stops before dispatch, so reload cannot accidentally create a new blob.
 export async function uploadAdminMedia(
@@ -49,13 +58,25 @@ export async function uploadAdminMedia(
     sessionStorage.setItem(key, JSON.stringify(intent));
   }
   if (!response.ok || !data?.ok || typeof data.url !== "string") {
-    const text =
+    if (data?.error === "UPLOAD_OUTCOME_UNKNOWN") {
+      throw new AdminMediaUploadError(
+        `上載結果未確認；請聯絡管理員查核，勿建立新上載。編號：${intent.id}`,
+        false,
+      );
+    }
+    if (response.status === 413 || response.status === 415) {
+      throw new AdminMediaUploadError(
+        response.status === 413
+          ? "檔案太大，請縮小後重新選擇。"
+          : "檔案格式無法讀取，請重新匯出後再上載。",
+        false,
+      );
+    }
+    const message =
       data?.error === "UPLOAD_METADATA_PENDING"
-        ? "檔案已上載，資料待補存；請重新選擇相同檔案重試。"
-        : data?.error === "UPLOAD_OUTCOME_UNKNOWN"
-          ? "上載結果未確認；請聯絡管理員查核，勿建立新上載。"
-          : "上載未完成，請重試。";
-    throw new Error(`${text} 編號：${intent.id}`);
+        ? "檔案已上載，資料待補存；請以相同檔案重試。"
+        : "上載未完成，請重試。";
+    throw new AdminMediaUploadError(`${message} 編號：${intent.id}`, true);
   }
   return { url: data.url as string, pathname: data.pathname as string };
 }

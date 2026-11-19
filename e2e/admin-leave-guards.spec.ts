@@ -1,15 +1,22 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { resolve, sep, extname } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test, expect, type Page, type Route } from "@playwright/test";
 
 type DraftSave = { resourceType: string; resourceId?: string; payload: Record<string, unknown> };
-type Fixture = { saves: unknown[]; editorReads: number; draftSaves: DraftSave[] };
+type Fixture = {
+  saves: unknown[];
+  editorReads: number;
+  draftSaves: DraftSave[];
+  publications: unknown[];
+};
 declare global {
   interface Window {
     leaveGuardFixture: Fixture;
+    mediaFixture: { changeActor: (id: string) => void };
     copilotFixture: typeof import("../scripts/browser-fixtures/leave-guards/synthetic-copilot").copilotFixture;
     blogFixture: typeof import("../scripts/browser-fixtures/leave-guards/synthetic-blog").fixture;
   }
@@ -28,21 +35,40 @@ test.beforeAll(async () => {
     0,
   );
   const root = resolve(".audit/leave-guards-browser");
+  const production = resolve(".vercel/output/static");
+  const productionWorker =
+    process.env.EP_PRODUCTION_CUTOUT === "1"
+      ? (await readdir(resolve(production, "assets"))).find((name) =>
+          /^image-cutout\.worker-.*\.js$/.test(name),
+        )
+      : undefined;
+  if (process.env.EP_PRODUCTION_CUTOUT === "1") assert.ok(productionWorker);
   server = createServer(async (request, response) => {
     try {
       assert.ok(["GET", "HEAD"].includes(request.method!));
       const path = new URL(request.url!, "http://127.0.0.1").pathname;
-      const target = path.startsWith("/assets/")
+      const fixtureTarget = path.startsWith("/assets/")
         ? resolve(root, `.${decodeURIComponent(path)}`)
         : resolve(root, "index.html");
-      assert.ok(target.startsWith(root + sep));
+      assert.ok(fixtureTarget.startsWith(root + sep));
+      let target = fixtureTarget;
+      if (path === "/media-editor/fixture.png") target = resolve("public/logo-mark.png");
+      if (path === "/media-editor/u2netp.onnx")
+        target = resolve(productionWorker ? production : "public", "." + path);
+      if (productionWorker && /^\/assets\/image-cutout\.worker-.*\.js$/.test(path))
+        target = resolve(production, "assets", productionWorker);
+      if (productionWorker && /^\/assets\/ort-wasm-[\w.-]+\.wasm$/.test(path))
+        target = resolve(production, "." + path);
       response.setHeader(
         "Content-Type",
         (
-          { ".js": "text/javascript", ".css": "text/css", ".html": "text/html" } as Record<
-            string,
-            string
-          >
+          {
+            ".js": "text/javascript",
+            ".css": "text/css",
+            ".html": "text/html",
+            ".png": "image/png",
+            ".wasm": "application/wasm",
+          } as Record<string, string>
         )[extname(target)] ?? "application/octet-stream",
       );
       response.end(await readFile(target));
@@ -481,8 +507,9 @@ test.describe("Task6 delayed operations", () => {
     await d.getByLabel("上載封面圖片").setInputFiles({
       name: "fixture.png",
       mimeType: "image/png",
-      buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      buffer: readFileSync("public/logo-mark.png"),
     });
+    await d.getByRole("button", { name: "上載封面圖片", exact: true }).click();
     await expect(d.getByRole("alert")).toContainText("其他修改已保留");
     await expect(d.getByLabel("標題", { exact: true })).toHaveValue("上載失敗仍保留");
     await expect(body).toHaveText("保留的格式內容");
@@ -870,11 +897,13 @@ test.describe("Task6 round1", () => {
       const file = (name: string) => ({
         name,
         mimeType: "image/png",
-        buffer: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+        buffer: readFileSync("public/logo-mark.png"),
       });
       await d.getByLabel("上載封面圖片").setInputFiles(file("cover.png"));
+      await d.getByRole("button", { name: "上載封面圖片", exact: true }).click();
       await expect.poll(() => pending.length).toBe(1);
       await d.getByLabel("上載內文圖片").setInputFiles(file("inline.png"));
+      await d.getByRole("button", { name: "上載內文圖片", exact: true }).click();
       await expect.poll(() => pending.length).toBe(2);
       await d.getByLabel("標題", { exact: true }).fill("並行上載保留文字");
       const index = first === "cover" ? 0 : 1;
@@ -1102,5 +1131,284 @@ test.describe("Final fix", () => {
     await page.getByRole("button", { name: "儲存分類" }).click();
     await expect(page.getByRole("alert")).toBeVisible();
     await expect(page.getByLabel("分類名稱")).toHaveValue("不能使用");
+  });
+});
+
+const MEDIA_ESTATE = "/admin/estates/70000000-0000-4000-8000-000000000001";
+const mediaPng = (name: string) => ({
+  name,
+  mimeType: "image/png",
+  buffer: readFileSync("public/logo-mark.png"),
+});
+
+async function testImage(page: Page) {
+  return page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 320;
+    canvas.height = 240;
+    const ctx = canvas.getContext("2d")!;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, 320, 240);
+    ctx.beginPath();
+    ctx.arc(160, 120, 65, 0, Math.PI * 2);
+    ctx.fillStyle = "#c51329";
+    ctx.fill();
+    return canvas.toDataURL("image/png");
+  });
+}
+
+async function dropHero(page: Page, dataUrl: string, name = "estate.png") {
+  await page.getByText("拖放圖片到這裡", { exact: true }).evaluate(
+    async (target, { dataUrl, name }) => {
+      const blob = await fetch(dataUrl).then((response) => response.blob());
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(new File([blob], name, { type: blob.type }));
+      target.dispatchEvent(
+        new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer }),
+      );
+    },
+    { dataUrl, name },
+  );
+}
+
+test.describe("admin image workflows", () => {
+  test("estate hero drop, preview, crop, cutout and draft/publish boundary", async ({ page }) => {
+    await page.addInitScript(() => sessionStorage.setItem("blog-fixture-role", "manager"));
+    await open(page, MEDIA_ESTATE);
+    const hero = page.getByRole("region", { name: "屋苑主圖", exact: true });
+    const current = hero.getByLabel("屋苑主圖網址");
+    await expect(current).toHaveValue("/media-editor/fixture.png?hero");
+    let uploads = 0;
+    await page.route("**/api/admin/media/upload", async (route) => {
+      uploads++;
+      const body = route.request().postData() ?? "";
+      expect(body).toContain('name="ownerType"\r\n\r\nestate');
+      expect(body).toMatch(/filename="estate-cutout\.(webp|png)"/);
+      await route.fulfill({
+        json: { ok: true, url: "/media-editor/fixture.png?replacement", pathname: "estate/owned" },
+      });
+    });
+    await dropHero(page, await testImage(page));
+    await expect(hero.getByRole("img", { name: "屋苑主圖預覽" })).toHaveAttribute("src", /hero$/);
+    await expect(page.getByRole("button", { name: "儲存草稿", exact: true })).toBeDisabled();
+    expect(uploads).toBe(0);
+    await hero.getByRole("button", { name: "編輯 estate.png" }).click();
+    const editor = page.getByRole("dialog", { name: "編輯圖片" });
+    await expect(editor.getByLabel("裁剪比例")).toHaveValue("16:9");
+    await editor.getByLabel("裁剪比例").selectOption("1:1");
+    await editor.getByRole("button", { name: "預覽裁剪" }).click();
+    const cropped = editor.getByRole("img", { name: "裁剪結果" });
+    await expect
+      .poll(() =>
+        cropped.evaluate((node: HTMLImageElement) => [node.naturalWidth, node.naturalHeight]),
+      )
+      .toEqual([240, 240]);
+    await editor.getByRole("button", { name: "移除背景" }).click();
+    const cutout = editor.getByRole("img", { name: "去背結果" });
+    await expect(cutout).toBeVisible({ timeout: 15000 });
+    await expect
+      .poll(() =>
+        cutout.evaluate((node: HTMLImageElement) => {
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = 240;
+          const ctx = canvas.getContext("2d")!;
+          ctx.drawImage(node, 0, 0);
+          return [
+            ctx.getImageData(0, 0, 1, 1).data[3] < 32,
+            ctx.getImageData(120, 120, 1, 1).data[3] > 223,
+          ];
+        }),
+      )
+      .toEqual([true, true]);
+    await editor.getByRole("button", { name: "比較原圖" }).click();
+    await expect(editor.getByRole("img", { name: "原圖", exact: true })).toBeVisible();
+    await editor.getByRole("button", { name: "套用編輯" }).click();
+    await expect(hero.getByText("已去背", { exact: true })).toBeVisible();
+    await hero.getByRole("button", { name: "上載屋苑主圖", exact: true }).click();
+    await expect(current).toHaveValue("/media-editor/fixture.png?replacement");
+    expect(uploads).toBe(1);
+    expect(await draftSaves(page)).toEqual([]);
+    await page.getByRole("button", { name: "儲存草稿", exact: true }).click();
+    await expect
+      .poll(async () => (await draftSaves(page))[0]?.payload.hero_image)
+      .toBe("/media-editor/fixture.png?replacement");
+    expect(await page.evaluate(() => window.leaveGuardFixture.publications)).toEqual([]);
+    await page.getByRole("button", { name: "發布", exact: true }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "發布", exact: true }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.leaveGuardFixture.publications.length))
+      .toBe(1);
+  });
+
+  test("mobile cutout on a new estate saves and opens the new draft", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, "/admin/estates/new");
+    await page.getByLabel("Slug", { exact: true }).fill("owned-new-estate");
+    await page.getByLabel("中文名", { exact: true }).fill("合成新屋苑");
+    await page.getByLabel("地區 slug（舊）", { exact: true }).fill("kowloon");
+    const hero = page.getByRole("region", { name: "屋苑主圖", exact: true });
+    await hero.getByLabel("上載屋苑主圖").setInputFiles({
+      name: "mobile.png",
+      mimeType: "image/png",
+      buffer: Buffer.from((await testImage(page)).split(",")[1], "base64"),
+    });
+    await hero.getByRole("button", { name: "編輯 mobile.png" }).click();
+    const editor = page.getByRole("dialog", { name: "編輯圖片" });
+    await editor.getByLabel("裁剪比例").selectOption("自由裁剪");
+    await editor.getByRole("button", { name: "移除背景" }).click();
+    await expect(editor.getByRole("img", { name: "去背結果" })).toBeVisible({ timeout: 15000 });
+    await editor.getByRole("button", { name: "套用編輯" }).click();
+    await page.route("**/api/admin/media/upload", (route) =>
+      route.fulfill({
+        json: { ok: true, url: "/media-editor/fixture.png?new", pathname: "estate/owned-new" },
+      }),
+    );
+    await hero.getByRole("button", { name: "上載屋苑主圖", exact: true }).click();
+    await expect(hero.getByLabel("屋苑主圖網址")).toHaveValue("/media-editor/fixture.png?new");
+    await page.getByRole("button", { name: "儲存草稿", exact: true }).click();
+    await expect(page).toHaveURL(/\/admin\/estates\/[\da-f-]{36}$/);
+    await expect(prompt(page)).toHaveCount(0);
+    await expect(hero.getByLabel("屋苑主圖網址")).toHaveValue("/media-editor/fixture.png?new");
+  });
+
+  test("mobile estate editor retains the original after cutout error and cancellation", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, MEDIA_ESTATE);
+    const hero = page.getByRole("region", { name: "屋苑主圖", exact: true });
+    await hero.getByLabel("上載屋苑主圖").setInputFiles(mediaPng("keep.png"));
+    await hero.getByRole("button", { name: "編輯 keep.png" }).click();
+    const editor = page.getByRole("dialog", { name: "編輯圖片" });
+    await page.route("**/media-editor/u2netp.onnx", (route) => route.fulfill({ status: 503 }));
+    await editor.getByRole("button", { name: "移除背景" }).click();
+    await expect(editor.getByRole("alert")).toContainText("未能移除背景");
+    await expect(editor.getByRole("img", { name: "原圖裁剪區域" })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
+      true,
+    );
+    await editor.getByRole("button", { name: "取消", exact: true }).click();
+    await expect(hero.getByRole("button", { name: "編輯 keep.png" })).toBeFocused();
+    await hero.getByRole("button", { name: "移除待上載圖片 keep.png" }).click();
+    await expect(hero.getByLabel("屋苑主圖網址")).toHaveValue("/media-editor/fixture.png?hero");
+    await expect(page.getByRole("button", { name: "儲存草稿", exact: true })).toBeEnabled();
+  });
+
+  test("CMS thumbnail grid is searchable and paginated and batch retry keeps its receipt", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => sessionStorage.setItem("blog-fixture-role", "manager"));
+    await open(page, "/admin/cms?tab=media");
+    const gallery = page.getByRole("list", { name: "媒體內容" });
+    await expect(gallery.getByRole("listitem")).toHaveCount(2);
+    await expect(gallery.locator('img[loading="lazy"]')).toHaveCount(2);
+    await gallery.getByRole("button", { name: "預覽 屋苑正面" }).click();
+    const preview = page.getByRole("dialog", { name: "屋苑正面" });
+    await expect(preview.getByRole("img", { name: "屋苑正面" })).toBeVisible();
+    await preview.getByRole("button", { name: "關閉" }).click();
+    await page.getByRole("button", { name: "下一頁", exact: true }).click();
+    await expect(gallery.getByRole("listitem")).toHaveCount(1);
+    await expect(gallery).toContainText("屋苑會所");
+    const search = page.getByRole("searchbox", { name: "搜尋檔案路徑或替代文字" });
+    await search.fill("花園");
+    await expect(gallery.getByRole("listitem")).toHaveCount(1);
+    await expect(gallery).toContainText("屋苑花園");
+    const requests: string[] = [];
+    await page.route("**/api/admin/media/upload", async (route) => {
+      const body = route.request().postDataBuffer();
+      expect(body?.byteLength).toBeLessThan(4_500_000);
+      requests.push(body?.toString() ?? "");
+      if (requests.length === 2) {
+        await route.fulfill({
+          status: 503,
+          json: { ok: false, error: "UPLOAD_METADATA_PENDING", receipt: "owned-receipt" },
+        });
+      } else {
+        await route.fulfill({
+          json: {
+            ok: true,
+            url: `/media-editor/fixture.png?upload=${requests.length}`,
+            pathname: `cms/owned-${requests.length}`,
+          },
+        });
+      }
+    });
+    const first = mediaPng("success.png");
+    // A decodable PNG slightly above the hosting limit, with padding after its end marker.
+    first.buffer = Buffer.concat([first.buffer, Buffer.alloc(4_600_000 - first.buffer.length)]);
+    const second = {
+      name: "retry.png",
+      mimeType: "image/png",
+      buffer: Buffer.from((await testImage(page)).split(",")[1], "base64"),
+    };
+    await page
+      .getByLabel("上載媒體", { exact: true })
+      .setInputFiles([
+        first,
+        second,
+        { name: "invalid.txt", mimeType: "text/plain", buffer: Buffer.from("x") },
+      ]);
+    await expect(page.getByRole("list", { name: "待上載圖片" }).getByRole("listitem")).toHaveCount(
+      2,
+    );
+    await expect(page.getByRole("alert").filter({ hasText: "invalid.txt" })).toBeVisible();
+    await expect(page.getByText("已縮小檔案", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "上載 2 張" }).click();
+    await expect(page.getByText("已上載 1／2 張，1 張未完成。", { exact: true })).toBeVisible();
+    await page.getByText("查看已上載檔案", { exact: true }).click();
+    await expect(page.getByText("success.png", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "重試 retry.png" }).click();
+    await expect(page.getByText("已上載 1／1 張。", { exact: true })).toBeVisible();
+    expect(requests).toHaveLength(3);
+    const id = (body: string) => body.match(/name="uploadId"\r\n\r\n([\w-]+)/)?.[1];
+    expect(id(requests[2])).toBeTruthy();
+    expect(id(requests[2])).toBe(id(requests[1]));
+    expect(id(requests[2])).not.toBe(id(requests[0]));
+    expect(requests[2]).toContain("owned-receipt");
+    await expect(search).toHaveValue("花園");
+  });
+
+  test("listing upload keeps cover order and accepts several photos", async ({ page }) => {
+    await open(page, "/__listing-image-test");
+    await page.getByRole("button", { name: "將相片 2 上移" }).click();
+    await expect(page.getByRole("img", { name: "相片 1", exact: true })).toHaveAttribute(
+      "src",
+      /second$/,
+    );
+    await page.getByLabel("上載相片", { exact: true }).setInputFiles(mediaPng("listing.png"));
+    await expect(page.getByRole("button", { name: "更新放盤", exact: true })).toBeDisabled();
+    await page.route("**/api/admin/media/upload", (route) =>
+      route.fulfill({
+        json: { ok: true, url: "/media-editor/fixture.png?listing", pathname: "property/owned" },
+      }),
+    );
+    await page.getByRole("button", { name: "上載 1 張" }).click();
+    await expect(page.getByRole("img", { name: "相片 3", exact: true })).toHaveAttribute(
+      "src",
+      /listing$/,
+    );
+    await expect(page.getByRole("img", { name: "相片 1", exact: true })).toHaveAttribute(
+      "src",
+      /second$/,
+    );
+  });
+
+  test("a retired staff workspace drops a late estate upload outcome", async ({ page }) => {
+    await open(page, MEDIA_ESTATE);
+    const hero = page.getByRole("region", { name: "屋苑主圖", exact: true });
+    let pending: Route | undefined;
+    await page.route("**/api/admin/media/upload", (route) => {
+      pending = route;
+    });
+    await hero.getByLabel("上載屋苑主圖").setInputFiles(mediaPng("old-staff.png"));
+    await hero.getByRole("button", { name: "上載屋苑主圖", exact: true }).click();
+    await expect.poll(() => !!pending).toBe(true);
+    await page.evaluate(() => window.mediaFixture.changeActor("actor-b"));
+    await expect(hero.getByText("old-staff.png", { exact: true })).toHaveCount(0);
+    await pending!.fulfill({
+      json: { ok: true, url: "/media-editor/fixture.png?retired", pathname: "estate/owned" },
+    });
+    await expect(hero.getByLabel("屋苑主圖網址")).toHaveValue("/media-editor/fixture.png?hero");
+    expect(await draftSaves(page)).toEqual([]);
   });
 });

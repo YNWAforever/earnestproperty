@@ -1,0 +1,17 @@
+U²-Net compact model (U2NETP)
+Xuebin Qin, Zichen Zhang, Chenyang Huang, Masood Dehghan, Osmar R. Zaiane, and Martin Jagersand
+https://github.com/xuebinqin/U-2-Net
+Apache License 2.0. See U2Net-LICENSE.txt.
+
+ONNX conversion distributed by rembg
+https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx
+Upstream MD5: 8e83ca70e441ab06c318d82300c84806
+SHA-256: 309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8
+
+ONNX Runtime Web 1.31.1
+Copyright (c) Microsoft Corporation. MIT License.
+https://registry.npmjs.org/onnxruntime-web/1.31.1
+See ONNXRuntime-LICENSE.txt and ONNXRuntime-ThirdPartyNotices.txt.
+
+React Image Crop 11.1.2
+Copyright (c) Dominic Tobias. ISC License. See ReactImageCrop-LICENSE.txt.

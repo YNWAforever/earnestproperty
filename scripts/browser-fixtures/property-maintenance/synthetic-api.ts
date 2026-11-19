@@ -241,9 +241,12 @@ export async function saveAdminPropertyManagement({ data }: { data: PropertyMana
   call("save-return", data, captured);
   return { ok: true };
 }
+export class AdminMediaUploadError extends Error {
+  readonly retryable = true;
+}
 export async function uploadAdminMedia(file: File) {
   call("upload", file.name);
-  if (state.uploadMode === "fail") throw Error("合成媒體服務失敗");
+  if (state.uploadMode === "fail") throw new AdminMediaUploadError("合成媒體服務失敗");
   const accepted = {
     actor: state.actor,
     binding: state.binding,
