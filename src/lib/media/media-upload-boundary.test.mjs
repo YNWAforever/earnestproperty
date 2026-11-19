@@ -212,12 +212,21 @@ test("client preserves retry identity and signed receipt across calls and passes
   assert.equal(requests[0].body.get("uploadId"), requests[1].body.get("uploadId"));
   assert.equal(requests[1].body.get("receipt"), "signed");
 });
-test("both upload callers use the authenticated recovery helper", () => {
-  for (const path of ["src/routes/admin.cms.tsx", "src/components/dashboard/ImageUploader.tsx"]) {
+test("CMS, estate and listing uploaders share the authenticated recovery queue", () => {
+  for (const path of [
+    "src/routes/admin.cms.tsx",
+    "src/components/admin/CmsEditorFields.tsx",
+    "src/components/dashboard/ImageUploader.tsx",
+  ]) {
     const source = readFileSync(path, "utf8");
-    assert.match(source, /uploadAdminMedia\(file,/);
+    assert.match(source, /<ImageUploadQueue\b/);
     assert.doesNotMatch(source, /fetch\("\/api\/admin\/media\/upload"/);
   }
+  const queue = readFileSync("src/components/admin/ImageUploadQueue.tsx", "utf8");
+  assert.match(
+    queue,
+    /uploadAdminMedia\(\s*entry\.edit\?\.file \?\? entry\.prepared,\s*ownerType,\s*isCurrent/,
+  );
 });
 
 test("actual multipart bytes are capped even without Content-Length", async () => {

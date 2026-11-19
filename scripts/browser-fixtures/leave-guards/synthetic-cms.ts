@@ -1,6 +1,6 @@
 import { getArticlePreview, restoreFixtureArticle } from "./synthetic-blog";
 import { encodeArticle } from "../../../src/lib/blog/article-codec";
-import { article, draftSaves, estate } from "./synthetic-api";
+import { article, draftSaves, estate, publications } from "./synthetic-api";
 // FX-19d-1 H-08: the real page's payload must pass the server function's own schema.
 import {
   cmsArchiveSchema,
@@ -69,7 +69,7 @@ export async function fetchAdminCmsEditor({
     publishedPayload: null,
     editState: {
       resourceId: data.resourceId,
-      draftRevisionId: `rev-${saved?.version ?? 1}`,
+      draftRevisionId: `70000000-0000-4000-8000-${String(saved?.version ?? 1).padStart(12, "0")}`,
       draftVersion: saved?.version ?? 1,
       draftEditVersion: saved?.editVersion ?? 1,
       currentPublishedVersion: null,
@@ -85,7 +85,7 @@ export const archiveAdminCmsResource = async ({ data }: { data: unknown }) => {
   return {};
 };
 export const publishAdminCmsRevision = async ({ data }: { data: unknown }) => {
-  cmsPublishSchema.parse(data);
+  publications.push(cmsPublishSchema.parse(data));
   return {};
 };
 export const restoreAdminCmsRevision = async ({ data }: { data: unknown }) => {
@@ -105,12 +105,12 @@ export const saveAdminCmsDraft = async ({ data }: { data: unknown }) => {
   draftSaves.push({ resourceType: input.resourceType, resourceId, payload });
   return {
     resourceId,
-    revisionId: `rev-${version}`,
+    revisionId: `70000000-0000-4000-8000-${String(version).padStart(12, "0")}`,
     versionNumber: version,
     savedAt: new Date().toISOString(),
     editState: {
       resourceId,
-      draftRevisionId: `rev-${version}`,
+      draftRevisionId: `70000000-0000-4000-8000-${String(version).padStart(12, "0")}`,
       draftVersion: version,
       draftEditVersion: editVersion,
       currentPublishedVersion: null,

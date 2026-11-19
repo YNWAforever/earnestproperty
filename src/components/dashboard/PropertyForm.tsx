@@ -149,6 +149,8 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
   const [form, setForm] = useState(() => createInitialForm(property));
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [images, setImages] = useState<string[]>(property?.images ?? []);
+  const [imagePending, setImagePending] = useState(false);
+  const pendingImage = useRef(false);
   const [saved, setSaved] = useState(false);
 
   // The 20-field listing form had no guard at all: a sidebar click, the browser
@@ -168,7 +170,7 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
     return formChanged || imagesChanged;
   }, [form, images, property, saved]);
 
-  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty);
+  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty || imagePending);
 
   function focusField(field: string) {
     if (!field) return;
@@ -231,7 +233,7 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!isCurrent() || submitting) return;
+    if (!isCurrent() || submitting || pendingImage.current) return;
     const parsed = schema.safeParse(form);
     if (!parsed.success) {
       const nextErrors: Partial<Record<keyof FormState, string>> = {};
@@ -578,7 +580,12 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
             inputId="property_images"
             ownerType="property"
             value={images}
+            disabled={submitting}
             onChange={setImages}
+            onUploadingChange={(pending) => {
+              pendingImage.current = pending;
+              setImagePending(pending);
+            }}
           />
         </Field>
         <Field label="精選" htmlFor="featured" error={fieldErrors.featured}>
@@ -614,7 +621,7 @@ export function PropertyForm({ property, onSaved, isWorkspaceCurrent }: Props) {
         }}
       />
       <div className="flex justify-end gap-2 border-t pt-4">
-        <Button type="submit" disabled={submitting}>
+        <Button type="submit" disabled={submitting || imagePending}>
           {submitting ? "儲存中…" : property ? "更新放盤" : "建立放盤"}
         </Button>
       </div>

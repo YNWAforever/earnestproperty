@@ -48,12 +48,14 @@ function RichBody({
   body,
   onChange,
   onUploadingChange,
+  isWorkspaceCurrent,
   disabled,
   onInvalidChange,
 }: {
   body: Extract<ValidatedArticleBody, { format: "editor-json-v1" }>;
   onChange: (b: ValidatedArticleBody) => void;
   onUploadingChange: (b: boolean) => void;
+  isWorkspaceCurrent?: () => boolean;
   disabled: boolean;
   onInvalidChange: (invalid: boolean) => void;
 }) {
@@ -207,6 +209,8 @@ function RichBody({
           <CmsImageField
             label="內文圖片"
             ownerType="article"
+            disabled={disabled}
+            isWorkspaceCurrent={isWorkspaceCurrent}
             value={imageUrl}
             onChange={setImageUrl}
             onUploadingChange={onUploadingChange}
@@ -289,6 +293,7 @@ export function ArticleEditor({
   article,
   categories,
   canPublish,
+  isWorkspaceCurrent,
   onSave,
   onRefresh,
   onClose,
@@ -296,6 +301,7 @@ export function ArticleEditor({
   article: ArticleRecord | null;
   categories: BlogCategoryOption[];
   canPublish: boolean;
+  isWorkspaceCurrent?: () => boolean;
   onSave: (command: SaveArticleCommand) => Promise<ArticleRecord>;
   onRefresh: () => Promise<void>;
   onClose: () => void;
@@ -311,6 +317,12 @@ export function ArticleEditor({
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const uploading = inlineUploading || coverUploading;
+  const pendingImages = useRef({ inline: false, cover: false });
+  function handleImagePending(kind: "inline" | "cover", pending: boolean) {
+    pendingImages.current[kind] = pending;
+    if (kind === "inline") setInlineUploading(pending);
+    else setCoverUploading(pending);
+  }
   const [restoreSyncPending, setRestoreSyncPending] = useState(false);
   const locked = busy || restoreSyncPending;
   const [invalidBody, setInvalidBody] = useState(false);
@@ -406,7 +418,8 @@ export function ArticleEditor({
     }
   }
   async function requestSave(action: SaveArticleCommand["action"]) {
-    if (locked || uploading || invalidBody) return;
+    if (locked || pendingImages.current.inline || pendingImages.current.cover || invalidBody)
+      return;
     if (!canPublish || (!record?.published && action === "save")) {
       await save(action);
       return;
@@ -581,7 +594,8 @@ export function ArticleEditor({
                     disabled={locked}
                     onInvalidChange={setInvalidBody}
                     onChange={(body) => patch({ body })}
-                    onUploadingChange={setInlineUploading}
+                    onUploadingChange={(pending) => handleImagePending("inline", pending)}
+                    isWorkspaceCurrent={isWorkspaceCurrent}
                   />
                 )}
                 <fieldset className="grid gap-3 rounded border p-3">
@@ -673,7 +687,9 @@ export function ArticleEditor({
                   ownerType="article"
                   value={value.coverImage ?? ""}
                   onChange={(coverImage) => patch({ coverImage: coverImage || null })}
-                  onUploadingChange={setCoverUploading}
+                  onUploadingChange={(pending) => handleImagePending("cover", pending)}
+                  isWorkspaceCurrent={isWorkspaceCurrent}
+                  disabled={locked}
                 />
                 <Field
                   label="封面替代文字"

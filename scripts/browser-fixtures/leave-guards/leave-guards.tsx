@@ -3,6 +3,10 @@ import { createRoot } from "react-dom/client";
 import { createRootRoute, createRouter, Outlet, RouterProvider } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
+import { Route as EstateEdit } from "../../../src/routes/admin.estates_.$id";
+import { Route as EstateNew } from "../../../src/routes/admin.estates_.new";
+import { PropertyForm } from "../../../src/components/dashboard/PropertyForm";
+import { changeActor } from "./auth";
 import { Route as Cms } from "../../../src/routes/admin.cms";
 import { Route as TransactionNew } from "../../../src/routes/admin.transactions_.new";
 import { Route as TransactionEdit } from "../../../src/routes/admin.transactions_.$id";
@@ -23,9 +27,23 @@ const destination = createRoute({
 });
 const mount = (route: { update: (o: never) => unknown }, path: string) =>
   route.update({ id: path, path, getParentRoute: () => root } as never) as never;
+Object.assign(window, { mediaFixture: { changeActor } });
+const listing = createRoute({
+  getParentRoute: () => root,
+  path: "/__listing-image-test",
+  component: () => (
+    <PropertyForm
+      property={{ images: ["/media-editor/fixture.png", "/media-editor/fixture.png?second"] }}
+      onSaved={() => {}}
+    />
+  ),
+});
 const router = createRouter({
   routeTree: root.addChildren([
     mount(Cms, "/admin/cms"),
+    mount(EstateEdit, "/admin/estates/$id"),
+    mount(EstateNew, "/admin/estates/new"),
+    listing,
     mount(TransactionNew, "/admin/transactions/new"),
     mount(TransactionEdit, "/admin/transactions/$id"),
     destination,

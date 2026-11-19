@@ -25,4 +25,7 @@ export const useNeonAuth = () =>
     () => auth,
   );
 export const withStaffAuthHeaders = async <T>(value: T) => value;
-export const withStaffUploadIdentity = async () => ({ actorId: "actor-a", headers: new Headers() });
+export const withStaffUploadIdentity = async () => ({
+  actorId: auth.user.id,
+  headers: new Headers(),
+});

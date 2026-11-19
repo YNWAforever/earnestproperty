@@ -33,7 +33,7 @@ export const estate = {
   area_min: null,
   area_max: null,
   description: null,
-  hero_image: null,
+  hero_image: "/media-editor/fixture.png?hero",
   facilities: [],
   seo_title: "合成標題",
   seo_description: null,
@@ -83,10 +83,12 @@ transactions.set("70000000-0000-4000-8000-0000000000aa", {
 export const saves: Row[] = [];
 // Every CMS draft save, as parsed by the server's own schema (synthetic-cms.ts).
 export const draftSaves: Row[] = [];
+export const publications: unknown[] = [];
 (window as unknown as { leaveGuardFixture: unknown }).leaveGuardFixture = {
   saves,
   editorReads: 0,
   draftSaves,
+  publications,
 };
 
 export async function fetchAdminEstateOptions() {
@@ -111,13 +113,39 @@ export async function saveAdminTransaction({ data }: { data: Row }) {
 }
 
 const faqs: Row[] = [];
-export async function fetchAdminPage(options: { data: { resource: string } }) {
+const media = ["屋苑正面", "屋苑花園", "屋苑會所"].map((alt_text, index) => ({
+  id: "70000000-0000-4000-8000-00000000001" + index,
+  url: "/media-editor/fixture.png?asset=" + index,
+  pathname: "estate/front-" + index + ".png",
+  size_bytes: 36334,
+  content_type: "image/png",
+  owner_type: "estate",
+  owner_id: estateId,
+  alt_text,
+}));
+export async function fetchAdminCms() {
+  return { estates: [estate], articles: [article], faqs, faqGroups: [] };
+}
+export const saveAdminProperty = async () => ({ id: estateId });
+export async function fetchAdminPage(options: {
+  data: { resource: string; q?: string; cursor?: string };
+}) {
   const { resource } = options.data;
   if (resource === "estates") return { rows: [estate], total: 1, nextCursor: null };
   if (resource === "articles") return { rows: [article], total: 1, nextCursor: null };
   if (resource === "faqs") return { rows: faqs, total: faqs.length, nextCursor: null };
-  if (resource === "videos" || resource === "media")
-    return { rows: [], total: 0, nextCursor: null };
+  if (resource === "media") {
+    const matches = media.filter((asset) =>
+      (asset.alt_text + asset.pathname).includes(options.data.q ?? ""),
+    );
+    const offset = options.data.cursor ? 2 : 0;
+    return {
+      rows: matches.slice(offset, offset + 2),
+      total: matches.length,
+      nextCursor: !offset && matches.length > 2 ? "fixture-next" : null,
+    };
+  }
+  if (resource === "videos") return { rows: [], total: 0, nextCursor: null };
   return shellPage(options as never);
 }
 export async function fetchAdminAiKnowledgeStatus() {

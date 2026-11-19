@@ -110,6 +110,7 @@ export function AdminPropertyWorkspace({
   );
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const pendingImages = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const [invalidFields, setInvalidFields] = useState<string[]>([]);
@@ -188,7 +189,7 @@ export function AdminPropertyWorkspace({
     expectedVersion = detail.version,
   ) {
     const epoch = lifetime.current;
-    if (!isCurrent(epoch)) return;
+    if (!isCurrent(epoch) || pendingImages.current) return;
     if (!Object.keys(payload).length) {
       toast.info("沒有需要儲存的修改");
       return;
@@ -535,7 +536,10 @@ export function AdminPropertyWorkspace({
                   isWorkspaceCurrent={() => isCurrent()}
                   disabled={!editable || busy}
                   value={shared.images}
-                  onUploadingChange={setUploading}
+                  onUploadingChange={(pending) => {
+                    pendingImages.current = pending;
+                    setUploading(pending);
+                  }}
                   onChange={(value) =>
                     setShared((s) => ({
                       ...s,

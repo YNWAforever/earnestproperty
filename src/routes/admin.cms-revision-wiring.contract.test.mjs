@@ -32,7 +32,7 @@ const manager = readFileSync(
   "utf8",
 );
 test("Articles entry delegates to the role-aware blog manager", () => {
-  assert.match(source, /<BlogManager canPublish=/);
+  assert.match(source, /<BlogManager\s+canPublish=/);
   assert.match(manager, /saveBlogArticle/);
   assert.match(manager, /getBlogCategoryOptions/);
   assert.match(editor, /儲存草稿/);

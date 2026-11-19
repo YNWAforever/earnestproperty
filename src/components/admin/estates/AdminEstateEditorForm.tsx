@@ -1,7 +1,9 @@
 import { useWorkspaceCurrent } from "@/hooks/use-workspace-current";
 import { ADMIN_ERROR_CODES, adminErrorMessage } from "@/components/admin/admin-error-text";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { CmsImageField } from "@/components/admin/CmsEditorFields";
 import type { FormEvent } from "react";
+import { flushSync } from "react-dom";
 import { History, Save, Upload } from "lucide-react";
 import { toast } from "sonner";
 
@@ -197,6 +199,8 @@ export function AdminEstateEditorForm({
   const [reviewed, setReviewed] = useState(editState ?? null);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [imagePending, setImagePending] = useState(false);
+  const pendingImage = useRef(false);
   const [archiving, setArchiving] = useState(false);
   const [confirmingPublish, setConfirmingPublish] = useState(false);
   const [pendingRestore, setPendingRestore] = useState<CmsRevisionSummary | null>(null);
@@ -295,6 +299,7 @@ export function AdminEstateEditorForm({
 
   async function handleSaveDraft(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pendingImage.current || saving || publishing || !isCurrent()) return;
     const error = validate();
     if (error) {
       toast.error(error);
@@ -317,9 +322,12 @@ export function AdminEstateEditorForm({
       );
       if (!isCurrent()) return;
 
-      setReviewed(result.editState);
-      set("id", result.resourceId);
-      setPristine({ ...form, id: result.resourceId });
+      // A new estate navigates immediately after saving. Update the leave guard first.
+      flushSync(() => {
+        setReviewed(result.editState);
+        set("id", result.resourceId);
+        setPristine({ ...form, id: result.resourceId });
+      });
       onSaved(result.resourceId);
 
       if (!isCurrent()) return;
@@ -343,6 +351,7 @@ export function AdminEstateEditorForm({
   }
 
   async function handlePublish() {
+    if (pendingImage.current || saving || publishing || !isCurrent()) return;
     const error = validate();
     if (error) {
       toast.error(error);
@@ -522,11 +531,11 @@ export function AdminEstateEditorForm({
   const publishedFaqs = faqs?.filter((faq) => faq.published) ?? [];
   const archivedFaqCount = (faqs?.length ?? 0) - publishedFaqs.length;
 
-  const disabled = saving || publishing;
+  const disabled = saving || publishing || imagePending;
   const isDirty = (Object.keys(form) as Array<keyof FormState>).some(
     (key) => form[key] !== pristine[key],
   );
-  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty);
+  const { dialog: leaveGuardDialog } = useRouteLeaveGuard(isDirty || imagePending);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start">
@@ -591,13 +600,6 @@ export function AdminEstateEditorForm({
                 onChange={(e) => set("developer", e.target.value)}
               />
             </Field>
-            <Field label="Hero 圖片" htmlFor="hero_image">
-              <Input
-                id="hero_image"
-                value={form.hero_image}
-                onChange={(e) => set("hero_image", e.target.value)}
-              />
-            </Field>
             <Field label="落成年份" htmlFor="year_completed">
               <Input
                 id="year_completed"
@@ -659,6 +661,25 @@ export function AdminEstateEditorForm({
               />
             </Field>
           </div>
+        </section>
+
+        <section aria-labelledby="estate-hero-heading">
+          <h2 id="estate-hero-heading" className="mb-3 text-sm font-semibold">
+            屋苑主圖
+          </h2>
+          <CmsImageField
+            label="屋苑主圖"
+            ownerType="estate"
+            inputId="hero_image"
+            value={form.hero_image}
+            disabled={saving || publishing}
+            isWorkspaceCurrent={isCurrent}
+            onChange={(value) => set("hero_image", value)}
+            onUploadingChange={(pending) => {
+              pendingImage.current = pending;
+              setImagePending(pending);
+            }}
+          />
         </section>
 
         <section>
@@ -916,6 +937,7 @@ export function AdminEstateEditorForm({
                         type="button"
                         variant="ghost"
                         size="sm"
+                        disabled={disabled}
                         onClick={() => setPendingRestore(revision)}
                       >
                         <History className="h-4 w-4" />
