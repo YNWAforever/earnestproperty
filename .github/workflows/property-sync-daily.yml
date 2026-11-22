@@ -17,6 +17,7 @@ name: Daily property sync
           - owner-publication-dry-run
           - incremental-shadow
           - incremental-apply
+          - incremental-recover
         default: shadow
       scope:
         default: agent:540
@@ -101,6 +102,12 @@ jobs:
           case "$MODE" in
            shadow|replay-shadow|incremental-shadow) ;;
            incremental-apply)
+            test "$GITHUB_EVENT_NAME" = workflow_dispatch
+            test "$INCREMENTAL_MANUAL_ENABLED" = true
+            test "$POLICY_APPROVED" = python-v2.2
+            [[ "$REPLAY_ASSET" =~ ^incremental-bundle-[0-9]+-[0-9]+\.tar\.gz$ ]]
+            ;;
+           incremental-recover)
             test "$GITHUB_EVENT_NAME" = workflow_dispatch
             test "$INCREMENTAL_MANUAL_ENABLED" = true
             test "$POLICY_APPROVED" = python-v2.2
@@ -774,7 +781,8 @@ jobs:
     if: >-
       needs.preflight.result == 'success' &&
       ((github.event_name == 'schedule' && vars.PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED == 'true') ||
-      inputs.mode == 'incremental-shadow' || inputs.mode == 'incremental-apply')
+      inputs.mode == 'incremental-shadow' || inputs.mode == 'incremental-apply' ||
+      inputs.mode == 'incremental-recover')
     needs: [preflight]
     environment: Production
     runs-on: ubuntu-latest
@@ -782,7 +790,8 @@ jobs:
     permissions:
       contents: read
     env:
-      INCREMENTAL_APPLY: ${{ github.event_name == 'schedule' || inputs.mode == 'incremental-apply' }}
+      INCREMENTAL_APPLY: ${{ github.event_name == 'schedule' || inputs.mode == 'incremental-apply' || inputs.mode == 'incremental-recover' }}
+      PROPERTY_SYNC_28HSE_INCREMENTAL_AUTO_RECOVERY_ENABLED: ${{ vars.PROPERTY_SYNC_28HSE_INCREMENTAL_AUTO_RECOVERY_ENABLED }}
       PROPERTY_SYNC_EXPECTED_BRANCH: ${{ vars.PROPERTY_SYNC_EXPECTED_BRANCH }}
       PROPERTY_SYNC_INCREMENTAL_MAX_DETAIL: ${{ vars.PROPERTY_SYNC_INCREMENTAL_MAX_DETAIL || '100' }}
       PROPERTY_SYNC_INCREMENTAL_MAX_REQUESTS: ${{ vars.PROPERTY_SYNC_INCREMENTAL_MAX_REQUESTS || '250' }}
@@ -803,6 +812,7 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
       - name: Restore cache against actual database authority
         id: incremental-prepare
+        if: inputs.mode != 'incremental-recover'
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
@@ -810,8 +820,16 @@ jobs:
           args=(prepare)
           if [ -n "$REPLAY_ASSET" ]; then args+=(--replay "$REPLAY_ASSET"); fi
           node scripts/property-sync/incremental-daily.mjs "${args[@]}"
+      - name: Recover accepted cache for the current receipt without replaying stale captures
+        id: incremental-recover
+        if: inputs.mode == 'incremental-recover'
+        env:
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+          PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
+        run: node scripts/property-sync/incremental-daily.mjs recover --replay "$REPLAY_ASSET"
       - name: Fetch changed details and pin private immutable evidence
         id: incremental-collect
+        if: inputs.mode != 'incremental-recover'
         env:
           PROPERTY_SYNC_28HSE_TRANSPORT: ${{ vars.PROPERTY_SYNC_28HSE_TRANSPORT || 'firecrawl-basic' }}
           FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
@@ -819,13 +837,14 @@ jobs:
         run: node scripts/property-sync/incremental-daily.mjs collect
       - name: Validate or apply exact incremental request
         id: incremental-ingest
+        if: inputs.mode != 'incremental-recover'
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
         run: node scripts/property-sync/incremental-daily.mjs ingest --apply "$INCREMENTAL_APPLY"
       - name: Publish eligible new drafts with existing staff protections
         id: incremental-publish
-        if: env.INCREMENTAL_APPLY == 'true'
+        if: env.INCREMENTAL_APPLY == 'true' && inputs.mode != 'incremental-recover'
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
           PROPERTY_SYNC_EXPECTED_DATABASE_HOST: ${{ vars.PROPERTY_SYNC_EXPECTED_DATABASE_HOST }}
@@ -834,7 +853,7 @@ jobs:
           SOURCE_AUTHORITY_BLOB_HOST: ${{ vars.IMPORT_BLOB_HOST }}
         run: node scripts/property-sync/incremental-daily.mjs publish
       - name: Map agents from already captured details
-        if: env.INCREMENTAL_APPLY == 'true'
+        if: env.INCREMENTAL_APPLY == 'true' && inputs.mode != 'incremental-recover'
         continue-on-error: true
         env:
           DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}

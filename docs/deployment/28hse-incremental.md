@@ -6,15 +6,16 @@
 
 沿用 [Daily property sync workflow](../../.github/workflows/property-sync-daily.yml) 的香港 09:00 排程（UTC `0 1 * * *`，Actions 可以延遲）。增量與舊有 owner publication 使用獨立 gates；舊的手動 full collector 仍保留。
 
-| Repository variable                                    | 初始／預設    | 用途                                                       |
-| ------------------------------------------------------ | ------------- | ---------------------------------------------------------- |
-| `PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED`              | false／未設定 | 每日 live 增量 apply，亦供 watchdog 選擇增量健康基準       |
-| `PROPERTY_SYNC_28HSE_INCREMENTAL_MANUAL_APPLY_ENABLED` | false／未設定 | 手動 incremental apply；不會開啟舊 full apply              |
-| `PROPERTY_SYNC_INCREMENTAL_MAX_DETAIL`                 | 100           | 單次詳情請求 URL 上限                                      |
-| `PROPERTY_SYNC_INCREMENTAL_MAX_REQUESTS`               | 250           | 實際 provider HTTP attempts 上限，包含 retry／key failover |
-| `PROPERTY_SYNC_INCREMENTAL_CACHE_TTL_DAYS`             | 7             | 定期校驗年齡；不是把快取重新標成新資料                     |
-| `PROPERTY_SYNC_INCREMENTAL_MAX_REFRESH`                | 40            | 每日最多校驗的 index 未變舊詳情；新／變動／重試項目優先    |
-| `PROPERTY_SYNC_28HSE_INCREMENTAL_STALE_HOURS`          | 30            | 每日增量的新鮮度閾值                                       |
+| Repository variable                                     | 初始／預設    | 用途                                                       |
+| ------------------------------------------------------- | ------------- | ---------------------------------------------------------- |
+| `PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED`               | false／未設定 | 每日 live 增量 apply，亦供 watchdog 選擇增量健康基準       |
+| `PROPERTY_SYNC_28HSE_INCREMENTAL_MANUAL_APPLY_ENABLED`  | false／未設定 | 手動 incremental apply／recover；不會開啟舊 full apply     |
+| `PROPERTY_SYNC_28HSE_INCREMENTAL_AUTO_RECOVERY_ENABLED` | false／未設定 | 每日 prepare 自動修復「已 ingest 但發佈失敗」的收據        |
+| `PROPERTY_SYNC_INCREMENTAL_MAX_DETAIL`                  | 100           | 單次詳情請求 URL 上限                                      |
+| `PROPERTY_SYNC_INCREMENTAL_MAX_REQUESTS`                | 250           | 實際 provider HTTP attempts 上限，包含 retry／key failover |
+| `PROPERTY_SYNC_INCREMENTAL_CACHE_TTL_DAYS`              | 7             | 定期校驗年齡；不是把快取重新標成新資料                     |
+| `PROPERTY_SYNC_INCREMENTAL_MAX_REFRESH`                 | 40            | 每日最多校驗的 index 未變舊詳情；新／變動／重試項目優先    |
+| `PROPERTY_SYNC_28HSE_INCREMENTAL_STALE_HOURS`           | 30            | 每日增量的新鮮度閾值                                       |
 
 沿用已配置的 approved branch、DB host、python-v2.2 policy、private evidence repository/token、Production 的 Firecrawl primary/backup key、DB 及 Blob secrets。不在 repository variables 或日誌保存 secret 值。
 
@@ -55,6 +56,24 @@ gh variable set PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED --repo YNWAforever/earne
 - 發佈仍有每輪 20 個媒體嘗試上限。因 daily_publication_limit 未嘗試的項目會帶進下輪 retry；需要人工／媒體 review 的 holds 保留人工處理。
 - input/raw/cache-next 先封存私有 bundle 並 hash readback，才讓 DB stage 接觸。成功 receipt、publication 和 public verification 後，再寫 immutable acceptance marker。只允許 DB 最新 accepted receipt 對應的快取成為下輪基準。
 - COMMIT 回覆遺失或 apply bridge 結果不明，先按相同 scraped_at＋payload hash 只讀查 receipt。查到完全匹配的 successful incremental receipt 才恢復；不能確定則維持 unknown，不自動第二次 apply。之後 operator 可指定原 bundle 做受控對帳／重播。
+
+## 寫入後發佈失敗的復原
+
+若一輪已完成 ingest（DB authority 已推進）但 publication 失敗，acceptance marker 不會寫入，之後每輪 prepare 都會以 `INCREMENTAL_CACHE_RECOVERY_REQUIRED` 停止。舊的 `incremental-apply` 重播無法處理，因為 ingest 會以 36 小時新鮮度拒絕過期 bundle。
+
+復原只做三件事，不會用過期資料覆寫正式資料：
+
+1. 以 DB 最新 incremental receipt（`payload_hash`、`scraped_at`、`full_snapshot=false`）綁定該輪凍結 bundle，並驗證私有 evidence 及 request hash。
+2. 讀回該輪的 publication report，重新做公開頁驗證。
+3. 寫入 acceptance marker；`source_authority_write_failed` 及 `daily_publication_limit` 的項目會帶入 `publication_retry_pairs`，下一輪以最新詳情重試，人工／媒體 review holds 仍留待人工處理。
+
+手動復原（需要 `PROPERTY_SYNC_28HSE_INCREMENTAL_MANUAL_APPLY_ENABLED=true`，執行後可設回 false）：
+
+```powershell
+gh workflow run property-sync-daily.yml --repo YNWAforever/earnestproperty --ref main -f mode=incremental-recover -f scope=agent:540 -f replay_asset=incremental-bundle-<FAILED_RUN_ID>-<ATTEMPT>.tar.gz
+```
+
+`PROPERTY_SYNC_28HSE_INCREMENTAL_AUTO_RECOVERY_ENABLED=true`（預設 false）會在每日 prepare 遇到同一情況時自動執行上述步驟，避免排程連續多日停擺；journal 會以 `incremental-recovery-<run>-<attempt>.json` 存入私有 evidence。
 
 ## 日誌及健康
 

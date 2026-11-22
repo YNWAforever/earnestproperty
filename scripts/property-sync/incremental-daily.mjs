@@ -62,9 +62,16 @@ export function normalizeIncrementalPayload(original) {
   return payload;
 }
 
+// A budget hold and a rolled-back write both leave a known ad that was never
+// published. Carrying them into the next collection is what stops an item from
+// being silently treated as unchanged forever. Review holds stay manual.
+const RETRYABLE_PUBLICATION_HOLDS = new Set([
+  "daily_publication_limit",
+  "source_authority_write_failed",
+]);
 export function publicationRetryPairs(report) {
   return (report?.held ?? [])
-    .filter((row) => row.reason === "daily_publication_limit")
+    .filter((row) => RETRYABLE_PUBLICATION_HOLDS.has(row.reason))
     .map((row) => ({ property_id: row.sourceId, deal_type: row.dealType }));
 }
 export function cacheWithPublicationRetries(cache, pairs) {
@@ -342,14 +349,29 @@ export async function prepare(root, replayAsset) {
     authority.incremental_receipt_id &&
     authority.last_incremental_scraped_at >= (authority.scraped_at ?? "");
   if (incrementalIsCurrent) {
-    let accepted;
-    for (const asset of acceptedMarkers(assets).slice(0, 60)) {
-      const path = await download(asset.name, join(root, "markers"));
-      const marker = await json(path);
-      if (marker.receipt_id === authority.incremental_receipt_id) {
-        accepted = marker;
-        break;
+    let accepted = await acceptedMarkerFor(assets, root, authority.incremental_receipt_id);
+    if (!accepted && process.env.PROPERTY_SYNC_28HSE_INCREMENTAL_AUTO_RECOVERY_ENABLED === "true") {
+      // Ingestion committed, publication failed, and the acceptance marker was
+      // never written. Rebind that receipt's frozen bundle instead of stalling
+      // every later daily run until an operator notices.
+      const bundleAsset = await recoveryBundleForReceipt(
+        root,
+        assets,
+        authority.incremental_receipt_id,
+      );
+      const bound = await rebindAuthorityCache(root, bundleAsset);
+      await writeRecoveryJournal(root, nativeContext(), bound, bundleAsset);
+      const pairs = publicationRetryPairs(bound.publication);
+      let recoveredCache = join(root, "bundle/cache-next.json");
+      if (pairs.length) {
+        recoveredCache = join(root, "cache-with-retries.json");
+        await save(
+          recoveredCache,
+          cacheWithPublicationRetries(await json(join(root, "bundle/cache-next.json")), pairs),
+        );
       }
+      await save(join(root, "prepared.json"), { replay: false, cache: recoveredCache });
+      return;
     }
     if (!accepted) throw Error("INCREMENTAL_CACHE_RECOVERY_REQUIRED");
     validateAcceptance(accepted, authority);
@@ -638,6 +660,173 @@ export function canPreserveNewerCache(publication, receipt, authority, prepared)
     Date.parse(authority.last_incremental_scraped_at) >= Date.parse(receipt.scraped_at)
   );
 }
+export function recoveryPublicationAsset(bundleAsset) {
+  const match = BUNDLE.exec(bundleAsset ?? "");
+  if (!match) throw Error("INVALID_INCREMENTAL_RECOVERY_BUNDLE");
+  return `incremental-publication-${match[1]}-${match[2]}.json`;
+}
+
+const canonicalTimestamp = (value) =>
+  String(value ?? "").replace(
+    /(\.\d{1,6})?Z$/,
+    (_, fraction) => "." + (fraction?.slice(1) ?? "").padEnd(6, "0") + "Z",
+  );
+
+/**
+ * A run that ingests and then fails publication advances the database authority
+ * without writing an acceptance marker, so every later collector refuses to
+ * start. Recovery is only allowed for the exact frozen bundle whose request the
+ * database receipt already accepted; the cache is never rebuilt from a guess.
+ */
+export function verifyRecoveryBinding(authority, receipt, payload) {
+  if (!authority?.incremental_receipt_id) throw Error("INCREMENTAL_RECOVERY_NOT_REQUIRED");
+  if (receipt?.id !== authority.incremental_receipt_id)
+    throw Error("INCREMENTAL_RECOVERY_RECEIPT_MISMATCH");
+  if (receipt.payload_hash !== hashPayload(payload))
+    throw Error("INCREMENTAL_RECOVERY_BUNDLE_MISMATCH");
+  const response = receipt.response ?? {};
+  if (
+    receipt.full_snapshot !== false ||
+    response.success !== true ||
+    response.incremental !== true ||
+    response.incremental_mode !== "index-delta-v1" ||
+    response.full_snapshot !== false ||
+    response.receipt_id !== receipt.id ||
+    canonicalTimestamp(response.scraped_at) !==
+      canonicalTimestamp(authority.last_incremental_scraped_at)
+  )
+    throw Error("INCREMENTAL_RECOVERY_AUTHORITY_MISMATCH");
+}
+
+async function acceptedMarkerFor(assets, root, receiptId) {
+  for (const asset of acceptedMarkers(assets).slice(0, 60)) {
+    const marker = await json(await download(asset.name, join(root, "markers")));
+    if (marker.receipt_id === receiptId) return marker;
+  }
+  return undefined;
+}
+
+export async function recoveryBundleForReceipt(root, assets, receiptId) {
+  const receipts = assets
+    .filter((asset) => /^incremental-receipt-[0-9]+-[0-9]+\.json$/.test(asset.name))
+    .sort(
+      (a, b) =>
+        String(b.createdAt ?? b.created_at ?? "").localeCompare(
+          String(a.createdAt ?? a.created_at ?? ""),
+        ) || b.name.localeCompare(a.name, "en", { numeric: true }),
+    );
+  for (const asset of receipts.slice(0, 60)) {
+    const receipt = await json(await download(asset.name, join(root, "recovery-receipts")));
+    if (receipt.receipt_id !== receiptId) continue;
+    const bundleAsset = asset.name
+      .replace(/^incremental-receipt-/, "incremental-bundle-")
+      .replace(/\.json$/, ".tar.gz");
+    if (!assets.some((entry) => entry.name === bundleAsset))
+      throw Error("INCREMENTAL_RECOVERY_BUNDLE_REQUIRED");
+    return bundleAsset;
+  }
+  throw Error("INCREMENTAL_RECOVERY_BUNDLE_REQUIRED");
+}
+
+async function writeAcceptance(root, { authority, receiptId, publication, prepared, context }) {
+  const marker = {
+    kind: "28hse-incremental-accepted-v1",
+    receipt_id: receiptId,
+    full_receipt_id: authority.receipt_id,
+    scraped_at: authority.last_incremental_scraped_at,
+    bundle_asset: prepared.bundle_asset,
+    bundle_sha256: sha256(await readFile(prepared.archive)),
+    accepted_at: authority.last_incremental_accepted_at,
+    publication_retry_pairs: publicationRetryPairs(publication),
+  };
+  validateAcceptance(marker, authority);
+  const path = join(root, `incremental-accepted-${context.id}-${context.attempt}.json`);
+  await save(path, marker);
+  await upload(path);
+  const readback = await download(path.split(/[\\/]/).at(-1), join(root, "accepted-readback"));
+  if (sha256(await readFile(path)) !== sha256(await readFile(readback)))
+    throw Error("INCREMENTAL_ACCEPTANCE_READBACK_FAILED");
+  return marker;
+}
+
+/**
+ * Rebind the frozen bundle of the current authority receipt. Publication is
+ * deliberately not replayed: a bundle older than the 36-hour capture window
+ * must never overwrite newer production data. Held ads become
+ * `publication_retry_pairs` so the next live collection refreshes and
+ * republishes them with fresh captures.
+ */
+export async function rebindAuthorityCache(root, bundleAsset) {
+  if (!BUNDLE.test(bundleAsset ?? "")) throw Error("INVALID_INCREMENTAL_RECOVERY_BUNDLE");
+  const assets = await checkPrivateEvidence();
+  const authority = await readSyncAuthority();
+  await save(join(root, "authority.json"), authority);
+  if (!authority.incremental_receipt_id) throw Error("INCREMENTAL_RECOVERY_NOT_REQUIRED");
+  const archive = await download(bundleAsset, join(root, "recovery-download"));
+  const bundleSha = sha256(await readFile(archive));
+  await unpackBundle(archive, join(root, "bundle"));
+  await verifyBundle(join(root, "bundle"));
+  const payload = await json(join(root, "bundle/request.json"));
+  decodeSnapshot(payload, { incremental: true });
+  const receipt = await readReceipt(authority.incremental_receipt_id);
+  verifyRecoveryBinding(authority, receipt, payload);
+  await save(join(root, "receipt.json"), receipt.response);
+
+  const publicationAsset = recoveryPublicationAsset(bundleAsset);
+  if (!assets.some((asset) => asset.name === publicationAsset))
+    throw Error("INCREMENTAL_RECOVERY_PUBLICATION_REQUIRED");
+  const publication = await json(
+    await download(publicationAsset, join(root, "recovery-publication")),
+  );
+  if (
+    publication.receiptId !== receipt.id ||
+    publication.unknown?.length ||
+    !Array.isArray(publication.published) ||
+    !Array.isArray(publication.held)
+  )
+    throw Error("INCREMENTAL_RECOVERY_PUBLICATION_INVALID");
+  await save(join(root, "publication.json"), publication);
+
+  const { verifyPublicReport } = await import("../mls/verify-sync-publication.mjs");
+  await save(join(root, "verification.json"), await verifyPublicReport(publication));
+  return { authority, receipt, payload, publication, publicationAsset, bundleSha, archive };
+}
+
+async function writeRecoveryJournal(root, context, bound, bundleAsset) {
+  const journal = {
+    kind: "28hse-incremental-recovery-v1",
+    receipt_id: bound.authority.incremental_receipt_id,
+    full_receipt_id: bound.authority.receipt_id,
+    bundle_asset: bundleAsset,
+    bundle_sha256: bound.bundleSha,
+    payload_sha256: hashPayload(bound.payload),
+    publication_asset: bound.publicationAsset,
+    publication_retry_pairs: publicationRetryPairs(bound.publication),
+    recovered_at: new Date().toISOString(),
+    workflowRunId: context.id,
+    workflowAttempt: context.attempt,
+  };
+  const path = join(root, `incremental-recovery-${context.id}-${context.attempt}.json`);
+  await save(path, journal);
+  await upload(path);
+  return journal;
+}
+
+/**
+ * Manual phase: rebind the receipt's frozen bundle, then let the normal verify
+ * and accept steps write the single acceptance marker.
+ */
+export async function recover(root, bundleAsset) {
+  const context = nativeContext();
+  const bound = await rebindAuthorityCache(root, bundleAsset);
+  await save(join(root, "prepared.json"), {
+    replay: true,
+    bundle_asset: bundleAsset,
+    archive: bound.archive,
+  });
+  return writeRecoveryJournal(root, context, bound, bundleAsset);
+}
+
 export async function accept(root) {
   const context = nativeContext();
   await verifyBundle(join(root, "bundle"));
@@ -676,23 +865,13 @@ export async function accept(root) {
     await upload(path);
     return;
   }
-  const marker = {
-    kind: "28hse-incremental-accepted-v1",
-    receipt_id: result.receipt_id,
-    full_receipt_id: authority.receipt_id,
-    scraped_at: authority.last_incremental_scraped_at,
-    bundle_asset: prepared.bundle_asset,
-    bundle_sha256: sha256(await readFile(prepared.archive)),
-    accepted_at: authority.last_incremental_accepted_at,
-    publication_retry_pairs: publicationRetryPairs(publication),
-  };
-  validateAcceptance(marker, authority);
-  const path = join(root, `incremental-accepted-${context.id}-${context.attempt}.json`);
-  await save(path, marker);
-  await upload(path);
-  const readback = await download(path.split(/[\\/]/).at(-1), join(root, "accepted-readback"));
-  if (sha256(await readFile(path)) !== sha256(await readFile(readback)))
-    throw Error("INCREMENTAL_ACCEPTANCE_READBACK_FAILED");
+  await writeAcceptance(root, {
+    authority,
+    receiptId: result.receipt_id,
+    publication,
+    prepared,
+    context,
+  });
 }
 
 export async function safeSummary(root) {
@@ -842,6 +1021,7 @@ export async function main(args = process.argv.slice(2)) {
   const [phase, ...rest] = args;
   const allowed = [
     "prepare",
+    "recover",
     "collect",
     "ingest",
     "publish",
@@ -863,6 +1043,7 @@ export async function main(args = process.argv.slice(2)) {
   const clock = { status: "succeeded", startedAt: new Date().toISOString() };
   try {
     if (phase === "prepare") await prepare(root, options["--replay"]);
+    if (phase === "recover") await recover(root, options["--replay"]);
     if (phase === "collect") await collect(root);
     if (phase === "ingest") await ingest(root, options["--apply"] === "true");
     if (phase === "publish") await publish(root);
