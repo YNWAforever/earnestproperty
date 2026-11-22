@@ -213,6 +213,42 @@ export function authorityDomConflictApproved(record, rule, { now = Date.now } = 
   });
 }
 
+/**
+ * Split evidence records into publishable winners and review holds.
+ *
+ * A record that fails the policy used to abort the entire publication, which
+ * left the daily run without an acceptance marker and stalled every later day.
+ * One reviewed conflict or one stale capture only withholds its own company
+ * group; every other group still publishes.
+ */
+export function partitionAuthorityRecords(records, rule, { now = Date.now } = {}) {
+  const groups = new Map();
+  for (const record of records) {
+    const key = JSON.stringify([record.agencyPropertyNo, record.dealType]);
+    const approved = authorityDomConflictApproved(record, rule, { now });
+    const existing = groups.get(key);
+    if (existing) {
+      if (!approved) existing.approved = false;
+    } else {
+      groups.set(key, { approved, record });
+    }
+  }
+  const plan = (record) => groups.get(JSON.stringify([record.agencyPropertyNo, record.dealType]));
+  const approved = records.filter((record) => plan(record).approved);
+  return {
+    approved,
+    winners: preferredAuthorityRecords(approved, rule, { now }),
+    held: [...groups.values()]
+      .filter((group) => !group.approved)
+      .map((group) => ({
+        propertyNo: group.record.agencyPropertyNo,
+        sourceId: group.record.externalId,
+        dealType: group.record.dealType,
+        reason: "source_authority_record_rejected",
+      })),
+  };
+}
+
 export function preferredAuthorityRecords(records, rule, { now = Date.now } = {}) {
   if (rule === null || rule === undefined) return [];
   if (!approvedRule(rule)) throw new SnapshotError("invalid_source_authority_policy", 503);

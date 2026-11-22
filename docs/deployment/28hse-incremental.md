@@ -54,6 +54,7 @@ gh variable set PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED --repo YNWAforever/earne
 - 新／變動／重試先處理；到期校驗按最舊優先並分批。已知必要詳情超出 hard cap、index 不完整或 detail 失敗會停止該輪 apply；不能硬改成 full／成功。定期校驗的 deferredRefresh 另列，保留舊詳情驗證時間。
 - 既有公司物業編號＋租售身份、ownership fence、manual/admin override、inactive/draft 保護沿用。新 canonical 保持 draft，只有符合既有媒體／屋苑／人工保護規則的項目才能上架。
 - 發佈仍有每輪 20 個媒體嘗試上限。因 daily_publication_limit 未嘗試的項目會帶進下輪 retry；需要人工／媒體 review 的 holds 保留人工處理。
+- 若個別証據未符合 authority policy（例如需要 review 的 conflict 或超過 36 小時的舊 capture），只會 hold 該公司物業編號的一組，reason 為 `source_authority_record_rejected`，其他組別照常發佈。不會再因為單一記錄而中止整輪發佈及 acceptance。
 - input/raw/cache-next 先封存私有 bundle 並 hash readback，才讓 DB stage 接觸。成功 receipt、publication 和 public verification 後，再寫 immutable acceptance marker。只允許 DB 最新 accepted receipt 對應的快取成為下輪基準。
 - COMMIT 回覆遺失或 apply bridge 結果不明，先按相同 scraped_at＋payload hash 只讀查 receipt。查到完全匹配的 successful incremental receipt 才恢復；不能確定則維持 unknown，不自動第二次 apply。之後 operator 可指定原 bundle 做受控對帳／重播。
 
