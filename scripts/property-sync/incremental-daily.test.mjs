@@ -18,6 +18,7 @@ import {
   candidateRetryPairs,
   publicationFromCandidates,
   failureClass,
+  failureFrames,
 } from "./incremental-daily.mjs";
 import { hashPayload } from "../../src/lib/mls/ingestion-contract.mjs";
 import { incrementalBatch } from "../../src/lib/mls/incremental-test-fixtures.mjs";
@@ -241,6 +242,25 @@ test("operator failure classification never leaks the error message", () => {
     failureClass(Object.assign(new Error("OUTCOME_UNKNOWN"), { code: "X" })),
     "CLASS:CODED",
   );
+  const traced = new Error("secret scraped price");
+  traced.stack = [
+    "TypeError: secret scraped price",
+    "    at authorityRecordsFromEvidence (file:///repo/src/lib/mls/source-authority-publication.mjs:466:20)",
+    "    at reconcileSourceAuthority (file:///repo/src/lib/mls/source-authority-publication.mjs:450:30)",
+    "    at async main (file:///repo/scripts/property-sync/incremental-daily.mjs:1100:5)",
+    "    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)",
+  ].join("\n");
+  const frames = failureFrames(traced);
+  assert.deepEqual(frames, [
+    "src/lib/mls/source-authority-publication.mjs:466",
+    "src/lib/mls/source-authority-publication.mjs:450",
+    "scripts/property-sync/incremental-daily.mjs:1100",
+  ]);
+  assert.doesNotMatch(frames.join(","), /secret/);
+  const foreign = Object.assign(new Error("x"), {
+    stack: "Error: x\n    at foo (node:internal/process/task_queues:105:5)",
+  });
+  assert.deepEqual(failureFrames(foreign), []);
 });
 
 test("recovery derives publication evidence from the frozen bundle name only", () => {

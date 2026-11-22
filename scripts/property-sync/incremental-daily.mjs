@@ -107,6 +107,21 @@ export function publicationFromCandidates(receiptId, payload) {
   };
 }
 
+/**
+ * Repo-relative frames of a failure. File and line are code metadata; messages,
+ * SQL text and scraped values never appear here.
+ */
+export function failureFrames(error, limit = 3) {
+  const frames = [];
+  for (const line of String(error?.stack ?? "").split("\n")) {
+    const match = /\(?((?:src|scripts)\/[A-Za-z0-9_./-]+):(\d+):(\d+)\)?\s*$/.exec(line.trim());
+    if (!match) continue;
+    frames.push(`${match[1]}:${match[2]}`);
+    if (frames.length >= limit) break;
+  }
+  return frames;
+}
+
 /** Safe, value-free classification for operator logs. */
 export function failureClass(error) {
   const parts = [];
@@ -1145,6 +1160,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     // Values, SQL text and scraped content stay private; SQLSTATE, error name and
     // constraint name are schema metadata an operator needs to fix a stuck run.
     console.error("INCREMENTAL_FAILURE_CLASS=" + failureClass(error));
+    console.error("INCREMENTAL_FAILURE_AT=" + (failureFrames(error).join(",") || "UNKNOWN"));
     process.exitCode = 1;
   });
 }
