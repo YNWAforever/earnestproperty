@@ -8,6 +8,7 @@ import {
   authorityRecordAllowed,
   authorityDomConflictApproved,
   preferredAuthorityRecords,
+  partitionAuthorityRecords,
 } from "./source-authority-policy.mjs";
 
 const CAPTURE = "2026-11-14T02:34:35.753890Z";
@@ -105,6 +106,40 @@ for (const [name, change] of [
     change(row);
     assert.equal(sourceAuthorityPolicy(row), null);
   });
+
+test("a rejected record withholds only its own company group", () => {
+  const clean = record({ id: "1", agency: "A100001" });
+  const stale = record({ id: "2", agency: "A200002", stamp: "2026-11-01T00:00:00.000000Z" });
+  const split = partitionAuthorityRecords([clean, stale], rule(), options);
+  assert.deepEqual(
+    split.approved.map((value) => value.externalId),
+    ["1"],
+  );
+  assert.deepEqual(
+    split.winners.map((value) => value.externalId),
+    ["1"],
+  );
+  assert.deepEqual(split.held, [
+    {
+      propertyNo: "A200002",
+      sourceId: "2",
+      dealType: "sale",
+      reason: "source_authority_record_rejected",
+    },
+  ]);
+  // One rejected alias withholds its whole company group rather than publishing
+  // a sibling whose group still carries a reviewed conflict.
+  const mixed = [
+    record({ id: "3", agency: "A300003" }),
+    record({ id: "4", agency: "A300003", stamp: "2026-11-01T00:00:00.000000Z" }),
+  ];
+  const held = partitionAuthorityRecords(mixed, rule(), options);
+  assert.deepEqual(held.winners, []);
+  assert.deepEqual(
+    held.held.map((value) => value.propertyNo),
+    ["A300003"],
+  );
+});
 
 test("missing policy is disabled", () => {
   assert.equal(sourceAuthorityPolicy(null), null);

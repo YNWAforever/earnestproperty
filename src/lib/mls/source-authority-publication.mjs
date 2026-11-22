@@ -10,7 +10,7 @@ import {
   SOURCE_AUTHORITY_POLICY,
   sourceAuthorityPolicy,
   preferredAuthorityRecords,
-  authorityDomConflictApproved,
+  partitionAuthorityRecords,
 } from "./source-authority-policy.mjs";
 import { authorityRecordsFromEvidence } from "./source-authority-evidence.mjs";
 import { applyAuthorityOverrides, planAuthorityOverrides } from "./source-authority-overrides.mjs";
@@ -464,9 +464,9 @@ export async function reconcileSourceAuthority(
   if (facts?.payloadHash !== batch.hash || facts?.parserVersion !== batch.parserVersion)
     fail("SOURCE_AUTHORITY_NATIVE_FACT_PROOF_MISMATCH");
   const records = authorityRecordsFromEvidence(batch, evidence);
-  const winners = preferredAuthorityRecords(records, rule, { now });
-  if (records.some((r) => !authorityDomConflictApproved(r, rule, { now })))
-    fail("SOURCE_AUTHORITY_UNSUPPORTED_SOURCE_CONFLICT");
+  // A reviewed conflict withholds only its own company group; it must not block
+  // every other listing from publishing and accepting the cache.
+  const { approved, winners, held } = partitionAuthorityRecords(records, rule, { now });
   const report = {
     receiptId,
     authority: SOURCE_AUTHORITY_POLICY,
@@ -475,11 +475,12 @@ export async function reconcileSourceAuthority(
     held: [],
     unknown: [],
     alreadyPublic: 0,
-    duplicateCanonical: records.length - winners.length,
+    duplicateCanonical: approved.length - winners.length,
     attempted: 0,
     eligibleBacklog: 0,
     oldestWaitingAt: null,
   };
+  report.held.push(...held);
   try {
     for (const record of winners) {
       const itemInfo = {
