@@ -68,7 +68,74 @@ export function normalizeIncrementalPayload(original) {
 const RETRYABLE_PUBLICATION_HOLDS = new Set([
   "daily_publication_limit",
   "source_authority_write_failed",
+  // A run that died before writing any report published nothing, so every
+  // candidate of its accepted request still needs a publication attempt.
+  "publication_not_attempted",
 ]);
+
+/**
+ * Publication can die before it writes any report, in which case no per-item
+ * hold names the ads that still need publishing. Every candidate in the
+ * accepted request is then a retry candidate: publishing them again with fresh
+ * details is harmless, skipping them would leave them unpublished forever.
+ */
+export function candidateRetryPairs(payload) {
+  const candidates = payload?.meta?.incremental?.candidates;
+  if (!Array.isArray(candidates)) return [];
+  return candidates
+    .filter(
+      (row) =>
+        /^[0-9]+$/.test(String(row?.property_id ?? "")) &&
+        ["sale", "rent"].includes(row?.deal_type),
+    )
+    .map((row) => ({ property_id: String(row.property_id), deal_type: row.deal_type }));
+}
+
+export function publicationFromCandidates(receiptId, payload) {
+  return {
+    receiptId,
+    authority: null,
+    published: [],
+    ready: [],
+    held: candidateRetryPairs(payload).map((pair) => ({
+      sourceId: pair.property_id,
+      dealType: pair.deal_type,
+      reason: "publication_not_attempted",
+    })),
+    unknown: [],
+    publicationNotAttempted: true,
+  };
+}
+
+/**
+ * Repo-relative frames of a failure. File and line are code metadata; messages,
+ * SQL text and scraped values never appear here.
+ */
+export function failureFrames(error, limit = 3) {
+  const frames = [];
+  for (const line of String(error?.stack ?? "").split("\n")) {
+    const match = /\(?((?:src|scripts)\/[A-Za-z0-9_./-]+):(\d+):(\d+)\)?\s*$/.exec(line.trim());
+    if (!match) continue;
+    frames.push(`${match[1]}:${match[2]}`);
+    if (frames.length >= limit) break;
+  }
+  return frames;
+}
+
+/** Safe, value-free classification for operator logs. */
+export function failureClass(error) {
+  const parts = [];
+  const code = String(error?.code ?? "");
+  if (/^[0-9A-Z]{5}$/.test(code)) parts.push(`SQLSTATE:${code}`);
+  const name = String(error?.name ?? "");
+  // "Error" is the base class and says nothing an operator can act on.
+  if (name !== "Error" && /^[A-Za-z][A-Za-z.]{1,40}$/.test(name)) parts.push(`NAME:${name}`);
+  const constraint = String(error?.constraint ?? "");
+  if (/^[A-Za-z][A-Za-z0-9_]{1,63}$/.test(constraint)) parts.push(`CONSTRAINT:${constraint}`);
+  return parts.length
+    ? parts.join(",")
+    : "CLASS:" + (/^[A-Z_]+$/.test(error?.message ?? "") ? "CODED" : "UNCLASSIFIED");
+}
 export function publicationRetryPairs(report) {
   return (report?.held ?? [])
     .filter((row) => RETRYABLE_PUBLICATION_HOLDS.has(row.reason))
@@ -773,23 +840,36 @@ export async function rebindAuthorityCache(root, bundleAsset) {
   await save(join(root, "receipt.json"), receipt.response);
 
   const publicationAsset = recoveryPublicationAsset(bundleAsset);
-  if (!assets.some((asset) => asset.name === publicationAsset))
-    throw Error("INCREMENTAL_RECOVERY_PUBLICATION_REQUIRED");
-  const publication = await json(
-    await download(publicationAsset, join(root, "recovery-publication")),
-  );
-  if (
-    publication.receiptId !== receipt.id ||
-    publication.unknown?.length ||
-    !Array.isArray(publication.published) ||
-    !Array.isArray(publication.held)
-  )
-    throw Error("INCREMENTAL_RECOVERY_PUBLICATION_INVALID");
-  await save(join(root, "publication.json"), publication);
-
   const { verifyPublicReport } = await import("../mls/verify-sync-publication.mjs");
+  let publication;
+  let basis = "publication-report";
+  if (assets.some((asset) => asset.name === publicationAsset)) {
+    publication = await json(await download(publicationAsset, join(root, "recovery-publication")));
+    if (
+      publication.receiptId !== receipt.id ||
+      publication.unknown?.length ||
+      !Array.isArray(publication.published) ||
+      !Array.isArray(publication.held)
+    )
+      throw Error("INCREMENTAL_RECOVERY_PUBLICATION_INVALID");
+  } else {
+    // Publication died before writing a report, so nothing from this receipt was
+    // published. Retry every candidate with fresh details next run.
+    basis = "receipt-candidates";
+    publication = publicationFromCandidates(receipt.id, payload);
+  }
+  await save(join(root, "publication.json"), publication);
   await save(join(root, "verification.json"), await verifyPublicReport(publication));
-  return { authority, receipt, payload, publication, publicationAsset, bundleSha, archive };
+  return {
+    authority,
+    receipt,
+    payload,
+    publication,
+    publicationAsset: basis === "publication-report" ? publicationAsset : null,
+    basis,
+    bundleSha,
+    archive,
+  };
 }
 
 async function writeRecoveryJournal(root, context, bound, bundleAsset) {
@@ -801,6 +881,7 @@ async function writeRecoveryJournal(root, context, bound, bundleAsset) {
     bundle_sha256: bound.bundleSha,
     payload_sha256: hashPayload(bound.payload),
     publication_asset: bound.publicationAsset,
+    retry_basis: bound.basis,
     publication_retry_pairs: publicationRetryPairs(bound.publication),
     recovered_at: new Date().toISOString(),
     workflowRunId: context.id,
@@ -1076,6 +1157,10 @@ export async function main(args = process.argv.slice(2)) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((error) => {
     console.error(/^[A-Z_]+$/.test(error.message) ? error.message : "INCREMENTAL_DAILY_FAILED");
+    // Values, SQL text and scraped content stay private; SQLSTATE, error name and
+    // constraint name are schema metadata an operator needs to fix a stuck run.
+    console.error("INCREMENTAL_FAILURE_CLASS=" + failureClass(error));
+    console.error("INCREMENTAL_FAILURE_AT=" + (failureFrames(error).join(",") || "UNKNOWN"));
     process.exitCode = 1;
   });
 }

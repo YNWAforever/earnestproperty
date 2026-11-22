@@ -15,6 +15,10 @@ import {
   requestAssetForBundle,
   recoveryPublicationAsset,
   verifyRecoveryBinding,
+  candidateRetryPairs,
+  publicationFromCandidates,
+  failureClass,
+  failureFrames,
 } from "./incremental-daily.mjs";
 import { hashPayload } from "../../src/lib/mls/ingestion-contract.mjs";
 import { incrementalBatch } from "../../src/lib/mls/incremental-test-fixtures.mjs";
@@ -125,11 +129,13 @@ test("publication budget carries retry IDs forward without changing verified cac
       { sourceId: "123", dealType: "sale", reason: "daily_publication_limit" },
       { sourceId: "456", dealType: "sale", reason: "staff_or_source_review" },
       { sourceId: "789", dealType: "rent", reason: "source_authority_write_failed" },
+      { sourceId: "790", dealType: "sale", reason: "publication_not_attempted" },
     ],
   });
   assert.deepEqual(pairs, [
     { property_id: "123", deal_type: "sale" },
     { property_id: "789", deal_type: "rent" },
+    { property_id: "790", deal_type: "sale" },
   ]);
   const next = cacheWithPublicationRetries(cache, pairs);
   assert.equal(next.entries["28hse:agent:540:sale:123"].pending_retry, true);
@@ -185,6 +191,76 @@ test("stuck receipts recover only from the exact frozen bundle the database acce
     () => verifyRecoveryBinding({ ...authority, incremental_receipt_id: null }, receipt, payload),
     /INCREMENTAL_RECOVERY_NOT_REQUIRED/,
   );
+});
+
+test("a publication that never wrote a report still retries every accepted candidate", () => {
+  const payload = {
+    meta: {
+      incremental: {
+        candidates: [
+          { property_id: "123", deal_type: "sale" },
+          { property_id: "456", deal_type: "rent" },
+          { property_id: "not-numeric", deal_type: "sale" },
+          { property_id: "789", deal_type: "other" },
+        ],
+      },
+    },
+  };
+  const candidates = candidateRetryPairs(payload);
+  assert.deepEqual(candidates, [
+    { property_id: "123", deal_type: "sale" },
+    { property_id: "456", deal_type: "rent" },
+  ]);
+  const publication = publicationFromCandidates("receipt-1", payload);
+  assert.equal(publication.receiptId, "receipt-1");
+  assert.deepEqual(publication.published, []);
+  assert.deepEqual(publication.unknown, []);
+  assert.equal(publication.publicationNotAttempted, true);
+  assert.deepEqual(
+    publicationRetryPairs(publication),
+    candidates.map((pair) => ({ property_id: pair.property_id, deal_type: pair.deal_type })),
+  );
+  assert.deepEqual(
+    candidateRetryPairs({
+      meta: { incremental: { candidates: [{ property_id: "x", deal_type: "sale" }] } },
+    }),
+    [],
+  );
+});
+
+test("operator failure classification never leaks the error message", () => {
+  const coded = Object.assign(new Error("secret price 5,000,000"), {
+    code: "23505",
+    constraint: "properties_listing_no_key",
+  });
+  const classified = failureClass(coded);
+  assert.match(classified, /SQLSTATE:23505/);
+  assert.match(classified, /CONSTRAINT:properties_listing_no_key/);
+  assert.doesNotMatch(classified, /secret|5,000,000/);
+  assert.equal(failureClass(new Error("raw provider text")), "CLASS:UNCLASSIFIED");
+  assert.equal(
+    failureClass(Object.assign(new Error("OUTCOME_UNKNOWN"), { code: "X" })),
+    "CLASS:CODED",
+  );
+  const traced = new Error("secret scraped price");
+  traced.stack = [
+    "TypeError: secret scraped price",
+    "    at authorityRecordsFromEvidence (file:///repo/src/lib/mls/source-authority-publication.mjs:466:20)",
+    "    at reconcileSourceAuthority (file:///repo/src/lib/mls/source-authority-publication.mjs:450:30)",
+    "    at async main (file:///repo/scripts/property-sync/incremental-daily.mjs:1100:5)",
+    "    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)",
+  ].join("\n");
+  const frames = failureFrames(traced);
+  assert.deepEqual(frames, [
+    "src/lib/mls/source-authority-publication.mjs:466",
+    "src/lib/mls/source-authority-publication.mjs:450",
+    "scripts/property-sync/incremental-daily.mjs:1100",
+  ]);
+  assert.doesNotMatch(frames.join(","), /secret/);
+  const foreign = Object.assign(new Error("x"), {
+    stack: "Error: x\n    at foo (node:internal/process/task_queues:105:5)",
+  });
+  assert.deepEqual(failureFrames(foreign), []);
 });
 
 test("recovery derives publication evidence from the frozen bundle name only", () => {
