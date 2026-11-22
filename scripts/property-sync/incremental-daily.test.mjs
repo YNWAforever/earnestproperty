@@ -13,6 +13,8 @@ import {
   publicationRetryPairs,
   cacheWithPublicationRetries,
   requestAssetForBundle,
+  recoveryPublicationAsset,
+  verifyRecoveryBinding,
 } from "./incremental-daily.mjs";
 import { hashPayload } from "../../src/lib/mls/ingestion-contract.mjs";
 import { incrementalBatch } from "../../src/lib/mls/incremental-test-fixtures.mjs";
@@ -122,9 +124,13 @@ test("publication budget carries retry IDs forward without changing verified cac
     held: [
       { sourceId: "123", dealType: "sale", reason: "daily_publication_limit" },
       { sourceId: "456", dealType: "sale", reason: "staff_or_source_review" },
+      { sourceId: "789", dealType: "rent", reason: "source_authority_write_failed" },
     ],
   });
-  assert.equal(pairs.length, 1);
+  assert.deepEqual(pairs, [
+    { property_id: "123", deal_type: "sale" },
+    { property_id: "789", deal_type: "rent" },
+  ]);
   const next = cacheWithPublicationRetries(cache, pairs);
   assert.equal(next.entries["28hse:agent:540:sale:123"].pending_retry, true);
   assert.equal(cache.entries["28hse:agent:540:sale:123"].pending_retry, false);
@@ -133,6 +139,61 @@ test("publication budget carries retry IDs forward without changing verified cac
     cache.entries["28hse:agent:540:sale:123"].detail_fetched_at,
   );
   assert.deepEqual(next.entries["28hse:agent:540:sale:123"].detail_record, { price: 5000000 });
+});
+
+test("stuck receipts recover only from the exact frozen bundle the database accepted", () => {
+  const payload = collectorPayload();
+  const padded = payload.scraped_at.replace(
+    /(\.\d{1,6})?Z$/,
+    (_, fraction) => "." + (fraction?.slice(1) ?? "").padEnd(6, "0") + "Z",
+  );
+  const authority = {
+    incremental_receipt_id: "ea9efde8-1bb2-4d8e-9242-4ac9a3faca99",
+    receipt_id: "551a967a-c93c-4f32-9b30-9b7b9ea49e72",
+    last_incremental_scraped_at: padded,
+  };
+  const receipt = {
+    id: authority.incremental_receipt_id,
+    payload_hash: hashPayload(payload),
+    full_snapshot: false,
+    response: {
+      success: true,
+      incremental: true,
+      incremental_mode: "index-delta-v1",
+      full_snapshot: false,
+      receipt_id: authority.incremental_receipt_id,
+      scraped_at: payload.scraped_at,
+    },
+  };
+  assert.doesNotThrow(() => verifyRecoveryBinding(authority, receipt, payload));
+  for (const [edit, code] of [
+    [(row) => (row.id = "other"), /INCREMENTAL_RECOVERY_RECEIPT_MISMATCH/],
+    [(row) => (row.payload_hash = "0".repeat(64)), /INCREMENTAL_RECOVERY_BUNDLE_MISMATCH/],
+    [(row) => (row.full_snapshot = true), /INCREMENTAL_RECOVERY_AUTHORITY_MISMATCH/],
+    [(row) => (row.response.incremental = false), /INCREMENTAL_RECOVERY_AUTHORITY_MISMATCH/],
+    [(row) => (row.response.receipt_id = "other"), /INCREMENTAL_RECOVERY_AUTHORITY_MISMATCH/],
+    [
+      (row) => (row.response.scraped_at = "2026-11-15T00:00:00Z"),
+      /INCREMENTAL_RECOVERY_AUTHORITY_MISMATCH/,
+    ],
+  ]) {
+    const candidate = structuredClone(receipt);
+    edit(candidate);
+    assert.throws(() => verifyRecoveryBinding(authority, candidate, payload), code);
+  }
+  assert.throws(
+    () => verifyRecoveryBinding({ ...authority, incremental_receipt_id: null }, receipt, payload),
+    /INCREMENTAL_RECOVERY_NOT_REQUIRED/,
+  );
+});
+
+test("recovery derives publication evidence from the frozen bundle name only", () => {
+  assert.equal(
+    recoveryPublicationAsset("incremental-bundle-43825983129-1.tar.gz"),
+    "incremental-publication-43825983129-1.json",
+  );
+  for (const invalid of ["incremental-bundle-1.tar.gz", "../incremental-bundle-1-1.tar.gz", ""])
+    assert.throws(() => recoveryPublicationAsset(invalid), /INVALID_INCREMENTAL_RECOVERY_BUNDLE/);
 });
 
 test("Python evidence normalizes to a guarded partial request without modifying original data", async () => {
@@ -312,6 +373,7 @@ test("incremental scheduling isolates paid collection from DB credentials and le
   );
   assert.match(workflow.jobs.incremental.if, /PROPERTY_SYNC_28HSE_INCREMENTAL_ENABLED/);
   assert.match(workflow.jobs.incremental.if, /incremental-shadow/);
+  assert.match(workflow.jobs.incremental.if, /incremental-recover/);
   assert.match(workflow.jobs.collect.if, /!startsWith\(inputs.mode, 'incremental-'\)/);
   assert.match(workflow.jobs.ingest.if, /!startsWith\(inputs.mode, 'incremental-'\)/);
   const job = workflow.jobs.incremental;
@@ -323,6 +385,32 @@ test("incremental scheduling isolates paid collection from DB credentials and le
   for (const step of job.steps.filter((step) => step.env?.DATABASE_URL_UNPOOLED))
     assert.equal(step.env.FIRECRAWL_API_KEY, undefined);
   const publication = job.steps.find((step) => step.id === "incremental-publish");
-  assert.equal(publication.if, "env.INCREMENTAL_APPLY == 'true'");
+  assert.equal(
+    publication.if,
+    "env.INCREMENTAL_APPLY == 'true' && inputs.mode != 'incremental-recover'",
+  );
   assert.ok(publication.env.BLOB_READ_WRITE_TOKEN);
+  // Recovery reuses the accepted receipt, so it must skip replaying stale captures
+  // while still running public verification and acceptance.
+  const prepare = job.steps.find((step) => step.id === "incremental-prepare");
+  assert.equal(prepare.if, "inputs.mode != 'incremental-recover'");
+  const recovery = job.steps.find((step) => step.id === "incremental-recover");
+  assert.equal(recovery.if, "inputs.mode == 'incremental-recover'");
+  assert.match(String(recovery.run), /incremental-daily\.mjs recover --replay/);
+  assert.ok(recovery.env.DATABASE_URL_UNPOOLED);
+  assert.equal(recovery.env.FIRECRAWL_API_KEY, undefined);
+  for (const id of ["incremental-collect", "incremental-ingest"])
+    assert.equal(
+      job.steps.find((step) => step.id === id).if,
+      "inputs.mode != 'incremental-recover'",
+    );
+  const accept = job.steps.find((step) => step.id === "incremental-accept");
+  assert.equal(accept.if, "env.INCREMENTAL_APPLY == 'true'");
+  assert.ok(job.env.PROPERTY_SYNC_28HSE_INCREMENTAL_AUTO_RECOVERY_ENABLED);
+  const source = await readFile(
+    new URL("../../.github/workflows/property-sync-daily.yml", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /- incremental-recover/);
+  assert.match(source, /incremental-recover\)/);
 });
