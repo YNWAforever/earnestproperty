@@ -19,6 +19,7 @@ import {
   type EstateComparisonRow,
 } from "@/components/site/EstateComparisonTable";
 import { EstateMarketSnapshot } from "@/components/site/EstateMarketSnapshot";
+import { EstateMarketRegistrations } from "@/components/site/EstateMarketRegistrations";
 import { EstateRegisteredTransactions } from "@/components/site/EstateRegisteredTransactions";
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
@@ -29,8 +30,14 @@ import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
 import { estateRegistry, findComparableEstates } from "@/content/estate-registry";
 import { getEstateHeroPhoto } from "@/content/estate-photos";
+import type { MarketChartMonth, MarketEstateTransactions } from "@/content/market-transactions";
 import type { EprcEstateTransactions } from "@/content/eprc-transactions";
+import { EPRC_SNAPSHOT_DATE } from "@/content/eprc-transactions";
 import { getEstateRegisteredTransactions } from "@/content/eprc-transactions-snapshot";
+import { estateMarketSearchSchema } from "@/lib/estate-market-search";
+import type { EstateMarketSearch } from "@/lib/estate-market-search";
+import { fetchEstateMarketBlock } from "@/lib/market/estate-market";
+import { zodValidator } from "@tanstack/zod-adapter";
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
 import { getSchoolNet, schoolNetCodeForDistrict } from "@/content/school-nets";
 import { SITE_URL, SITE_OG_IMAGE, authored, canonicalLink, estateSeo } from "@/content/seo";
@@ -55,8 +62,33 @@ import { buildContext, useTrackPageView } from "@/lib/analytics/events";
 
 type EstateDetail = NonNullable<Awaited<ReturnType<typeof fetchEstateBySlug>>>;
 
+/**
+ * 市場註冊成交 for one estate, read from the versioned static snapshot rather
+ * than the database. It goes through `fetchEstateMarketBlock` (a server
+ * function) so the ~5.7 MB source rows never reach the public client bundle:
+ * the browser receives only the current page of rows. The agency (本行成交)
+ * `transactions` fetch in the loader is a completely separate path -- no shared
+ * rows, no blended counts.
+ */
+async function loadEstateMarketBlock(slug: string, search: EstateMarketSearch) {
+  return fetchEstateMarketBlock({
+    data: {
+      slug,
+      year: search.mtYear ?? null,
+      nature: search.mtNature ?? null,
+      phase: search.mtPhase ?? null,
+      page: search.mtPage,
+    },
+  });
+}
+
 export const Route = createFileRoute("/estate/$slug")({
-  loader: async ({ params }) => {
+  // 市場註冊成交 filters/pagination live in the URL so the table is
+  // server-rendered, crawlable and shareable. They never touch the agency
+  // (本行成交) queries below.
+  validateSearch: zodValidator(estateMarketSearchSchema),
+  loaderDeps: ({ search }) => search,
+  loader: async ({ params, deps }) => {
     const estate = await fetchEstateBySlug(params.slug);
     if (!estate) throw notFound();
     // Task 5 (P4 plan): up to 2 registry entries sharing this estate's real
@@ -103,6 +135,16 @@ export const Route = createFileRoute("/estate/$slug")({
       );
       return [];
     });
+    // 市場註冊成交 (public registered transactions) is read from a versioned
+    // static snapshot, not the database, and lazily imported so the raw source
+    // rows never reach the public client bundle. Deliberately computed BEFORE
+    // the comparable projection below: that projection is sliced out of this
+    // file verbatim by src/routes/estate.district-driven.contract.test.mjs, so
+    // it must stay a self-contained, await-free expression.
+    const { market: marketRegistrations, chart: marketChart } = await loadEstateMarketBlock(
+      estate.slug,
+      deps,
+    );
     // A comparable's real facts (avg PSF / units / year / developer) live in
     // the DB, not the registry -- combine each entry with its fetched record
     // here so the route/component only ever deal with one flat shape. A
@@ -132,6 +174,8 @@ export const Route = createFileRoute("/estate/$slug")({
       latestListings,
       transactions,
       marketTransactions: getEstateRegisteredTransactions(estate.slug),
+      marketRegistrations,
+      marketChart,
       comparableEstates,
       relatedAgents,
       relatedVideos,
@@ -236,6 +280,8 @@ function EstatePage() {
     latestListings,
     transactions,
     marketTransactions,
+    marketRegistrations,
+    marketChart,
     comparableEstates,
     relatedAgents,
     relatedVideos,
@@ -246,6 +292,8 @@ function EstatePage() {
     latestListings: ListingRow[];
     transactions: EstateTransaction[];
     marketTransactions: EprcEstateTransactions | null;
+    marketRegistrations: MarketEstateTransactions | null;
+    marketChart: MarketChartMonth[];
     comparableEstates: EstateComparisonRow[];
     relatedAgents: NeonPublicAgentProfile[];
     relatedVideos: CmsVideo[];
@@ -483,7 +531,23 @@ function EstatePage() {
         transactions={transactions}
       />
 
-      <EstateRegisteredTransactions market={marketTransactions} />
+      {/* 市場註冊成交 (public registered transactions) and the EPRC export are
+          two separate sources with their own counts, kept apart from 本行成交
+          (`transactions`, rendered by EstateMarketSnapshot above). */}
+      {marketRegistrations && (
+        <Container className="py-8">
+          <EstateMarketRegistrations market={marketRegistrations} chart={marketChart} />
+          {marketTransactions && marketTransactions.rows.length > 0 && (
+            <details className="mt-4 rounded-lg border bg-card p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-primary">
+                其他來源：EPRC 匯出（{marketTransactions.total} 筆，{EPRC_SNAPSHOT_DATE}）
+              </summary>
+              <EstateRegisteredTransactions market={marketTransactions} />
+            </details>
+          )}
+        </Container>
+      )}
+      {!marketRegistrations && <EstateRegisteredTransactions market={marketTransactions} />}
 
       <Container className="py-8">
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
