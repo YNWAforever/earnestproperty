@@ -116,24 +116,45 @@ Fixtures in the repo are synthetic; the only real data committed is the public
 registered-transaction snapshot itself (no contacts, no vendor/purchaser, no
 raw HTML), matching the existing EPRC fixture precedent.
 
-## 6. Preview screenshots
+## 6. PR, preview and screenshots
 
-Captured from the local production build (`.output/server` + Playwright
-Chromium, 1440×1000 desktop / 390×844 mobile, `locale=zh-HK`, zero page errors).
+- **PR:** https://github.com/YNWAforever/earnestproperty/pull/361 (opened as a
+  **draft**; it must not be merged without Willy's named approval).
+- **Vercel preview:** https://earnestproperty-git-feat-market-re-429665-ynwaforevers-projects.vercel.app
+  — deployment succeeded, but this project's previews sit behind **Vercel
+  Authentication**, so an unauthenticated request gets the Vercel login page
+  (`<title>Login – Vercel</title>`). Sign in as the project owner to view it;
+  it cannot be captured anonymously.
+- **GitHub Actions:** every job on this PR failed in 3–4 s with **zero executed
+  steps** (`ci`, `no-link-local-postgres`, `browser-handoff`,
+  `browser-no-link`, `migration-drift`). The same zero-step failure is present on
+  `main`'s scheduled runs since run `45033305369`
+  (`Daily property sync`, `Property sync read-only watchdog`,
+  `Old-site inventory sync`, `Correspondent agents refresh`), while the last PR
+  runs before that point succeeded in ~31 min. This is an account/runner
+  condition, not this branch: nothing in the diff can prevent a workflow from
+  starting, and `migration-drift` has nothing to check here (no migration).
+  Local verification stands in for it (typecheck, lint, build, 171 tests,
+  `--check` determinism, bundle-size check).
+
+Screenshots below are from the **local production build** (the brief allows
+preview _or_ local; the preview is auth-gated). `.output/server` + Playwright
+Chromium, 1440×1000 desktop / 390×844 mobile, `locale=zh-HK`, zero page errors,
+no page-level horizontal overflow.
 `docs/market-transactions/screenshots/`:
 
-| File | Shows |
-|---|---|
-| `estate-mun-ming-shan-desktop.png` | estate page module: 323 source rows, both date columns, all-`—` 面積／呎價, facet counts 2021 92 … 2026 55, 性質 261/62, pagination 1/17, chart transcription collapsed, provenance footnote |
-| `estate-mun-ming-shan-filtered-2021.png` | URL-driven filter (`?mtYear=2021`): `符合篩選 92 筆（此屋苑共 323 筆來源紀錄）` |
-| `estate-mun-ming-shan-temporary-contracts.png` | 性質 filter (`?mtNature=臨時合約`): 62 |
-| `estate-hoi-wan-toi-filtered-empty.png` | filtered-empty estate: honest copy, no rows, no zero chart |
-| `listing-a059644-estate-summary.png` | listing page estate summary + `查看 滿名山 全部市場註冊成交 →` |
-| `estate-mun-ming-shan-mobile.png`, `listing-a059644-estate-summary-mobile.png` | mobile 390 px: wrapped facets, contained horizontal scroll, no page-level overflow |
+| File                                                                           | Shows                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `estate-mun-ming-shan-desktop.png`                                             | estate page module: 323 source rows, both date columns, all-`—` 面積／呎價, facet counts 2021 92 … 2026 55, 性質 261/62, pagination 1/17, chart transcription collapsed, provenance footnote |
+| `estate-mun-ming-shan-filtered-2021.png`                                       | URL-driven filter (`?mtYear=2021`): `符合篩選 92 筆（此屋苑共 323 筆來源紀錄）`                                                                                                              |
+| `estate-mun-ming-shan-temporary-contracts.png`                                 | 性質 filter (`?mtNature=臨時合約`): 62                                                                                                                                                       |
+| `estate-hoi-wan-toi-filtered-empty.png`                                        | filtered-empty estate: honest copy, no rows, no zero chart                                                                                                                                   |
+| `listing-a059644-estate-summary.png`                                           | listing page estate summary + `查看 滿名山 全部市場註冊成交 →`                                                                                                                               |
+| `estate-mun-ming-shan-mobile.png`, `listing-a059644-estate-summary-mobile.png` | mobile 390 px: wrapped facets, contained horizontal scroll, no page-level overflow                                                                                                           |
 
 Note on the brief's worked example: old-site listing `#B051070`
 (`property-detail/6887554`) has no live new-site listing, and its neighbour
-`A056650` resolves to a property row whose *selected offering* has no
+`A056650` resolves to a property row whose _selected offering_ has no
 `estate_id`, so the summary correctly renders nothing there rather than
 guessing. `A059644` (same estate group) is used as the equivalent live example.
 
