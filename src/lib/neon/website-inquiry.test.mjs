@@ -717,46 +717,46 @@ test("a listing enquiry resolves the correspondent agent before the single write
   assert.equal(writeWithoutTable.params.includes(CORRESPONDENT), false);
 });
 
-// The copy destination (Willy, 2026-11-24: 張秋 on 85297987774) lives in the
-// environment, not in the repository, and must never be guessed from a typo.
-test("the copy destination is parsed strictly and stays unset by default", async () => {
-  const { parseLeadCopyPhone, readLeadCopyPhone } = await import(
+// Willy, 2026-11-24 (option B): the copy goes to 張秋 on his own staff line, so
+// the repository holds a staff id and no second phone number. A lead he owns must
+// therefore produce one send, not two - the alert plan collapses identical
+// destinations, which only works while both sides resolve to the same staff row.
+const QIU_ZHANG_STAFF_ID = "64d5a2d6-e602-4760-9709-63b0414f6a83";
+
+test("every lead alert copies 張秋 on his own staff line", async () => {
+  const { LEAD_COPY_STAFF_ID, leadCopyStaffIds } = await import(
     new URL("./lead-default-assignee.js", import.meta.url)
   );
 
-  assert.equal(parseLeadCopyPhone("85297987774"), "85297987774");
-  assert.equal(parseLeadCopyPhone("97987774"), "85297987774", "local form is normalised");
-  assert.equal(parseLeadCopyPhone("+852 9798 7774"), "85297987774");
-  assert.equal(parseLeadCopyPhone(" 85297987774 "), "85297987774");
-  for (const invalid of [
-    "",
-    "   ",
-    "12345",
-    "07987774",
-    "8529798777",
-    "852979877744",
-    null,
-    undefined,
-    97987774,
-    {},
-  ]) {
-    assert.equal(parseLeadCopyPhone(invalid), null, String(invalid));
+  assert.equal(LEAD_COPY_STAFF_ID, QIU_ZHANG_STAFF_ID);
+  assert.deepEqual(leadCopyStaffIds(), [QIU_ZHANG_STAFF_ID]);
+  assert.equal(new Set(leadCopyStaffIds()).size, leadCopyStaffIds().length, "no duplicate copies");
+  for (const id of leadCopyStaffIds()) {
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   }
-
-  assert.equal(readLeadCopyPhone({}), null, "unset means no copy is sent");
-  assert.equal(readLeadCopyPhone(null), null);
-  assert.equal(readLeadCopyPhone({ EP_LEAD_COPY_PHONE: "85297987774" }), "85297987774");
-  assert.equal(readLeadCopyPhone({ EP_LEAD_COPY_PHONE: "not-a-number" }), null);
 });
 
-test("the copy destination is never confused with the assignee", async () => {
-  const { readLeadCopyPhone, readDefaultLeadAssignee } = await import(
+test("the copy carries no second phone number in code", async () => {
+  const source = readFileSync(new URL("./lead-default-assignee.js", import.meta.url), "utf8");
+  // Option B: no copy phone env var, and the office line is deliberately absent.
+  assert.doesNotMatch(source, /EP_LEAD_COPY_PHONE/);
+  assert.doesNotMatch(source, /97987774/);
+  assert.doesNotMatch(source, /92786562/);
+});
+
+test("a lead 張秋 owns resolves to the same staff member as the copy", async () => {
+  const { LEAD_COPY_STAFF_ID, resolveAssignedAgentId } = await import(
     new URL("./lead-default-assignee.js", import.meta.url)
   );
-  // 張秋 is the default assignee; the copy is a separate office line. Setting one
-  // must not imply the other.
-  const env = { EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID: DEDICATED_AGENT };
-  assert.equal(readDefaultLeadAssignee(env), DEDICATED_AGENT);
-  assert.equal(readLeadCopyPhone(env), null);
-  assert.equal(readLeadCopyPhone({ ...env, EP_LEAD_COPY_PHONE: "85297987774" }), "85297987774");
+  // When the configured default assignee is 張秋, assignee and copy are one staff
+  // row, so the plan's destination de-duplication yields a single send.
+  assert.equal(
+    resolveAssignedAgentId({ defaultAssigneeId: QIU_ZHANG_STAFF_ID }),
+    LEAD_COPY_STAFF_ID,
+  );
+  // A lead owned by a listing's 負責經紀 is a different person: two sends.
+  assert.notEqual(
+    resolveAssignedAgentId({ correspondentAgentId: "9b1f7c3e-2a4d-4b6e-8c05-7d3e1f9a2b44" }),
+    LEAD_COPY_STAFF_ID,
+  );
 });

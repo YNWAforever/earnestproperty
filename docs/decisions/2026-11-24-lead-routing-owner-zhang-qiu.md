@@ -133,30 +133,35 @@ The once-only guarantee needs no work: the lead alert is one `ops_jobs` row keye
 `attempt_key` plus a per-lead "no attempts yet" guard, so a retry, a second job or a duplicate
 delivery cannot send twice.
 
-## The copy destination is 張秋 (2026-11-24)
+## The copy destination is 張秋 on his own line (2026-11-24, option B)
 
-Willy: "copy 85297987774 張秋". So every lead alert also copies 張秋 (Kenneth Chang,
-`64d5a2d6-e602-4760-9709-63b0414f6a83`), and 85297987774 is the line that copy goes to.
+Willy first said "copy 85297987774 張秋", then chose **option B** when the two numbers were pointed
+out: 85297987774 is not a second person and does not need a second message. So every lead alert
+copies 張秋 (Kenneth Chang, `64d5a2d6-e602-4760-9709-63b0414f6a83`) **on his own staff line**
+(`staff_users.phone` / `whatsapp` = 92786562), and the old 85297987774 line is not used at all.
 
-Two details recorded so nobody assumes them later:
+How that is implemented, and why it cannot double-send:
 
-- 張秋's own `staff_users.phone` / `whatsapp` is **92786562**, not 85297987774. The copy line is a
-  second (office) line, and the repository hardcodes neither number: the copy destination is the
-  server-only variable `EP_LEAD_COPY_PHONE`, normalised to the `852...` form, unset by default.
-- Because the default assignee (張秋) and the copy (張秋 on the office line) are different
-  destinations, a lead that 張秋 owns produces two planned sends - one to his own line, one copy to
-  the office line - and the plan already collapses identical destinations
-  (`DISTINCT ON staffDestinationKey(destination_reference)`), so nothing is duplicated by accident.
-  If Willy would rather the copy go to his own line, say so and leave `EP_LEAD_COPY_PHONE` unset.
+- The copy is a **staff id**, not a phone number: `LEAD_COPY_STAFF_ID` in
+  `src/lib/neon/lead-default-assignee.js` (`leadCopyStaffIds()` returns the list). The repository
+  stores no phone number for this, and the env knob `EP_LEAD_COPY_PHONE` was removed rather than left
+  around as a way to re-introduce a second destination by accident.
+- The notification plan collapses identical destinations
+  (`DISTINCT ON staffDestinationKey(destination_reference)`), so a lead 張秋 owns - assignee and copy
+  are the same staff row - produces **one** send. A lead owned by a listing's 負責經紀 produces two,
+  to two different people, which is the intent.
 
-Combined with the rotation sheet, the full rule is now:
+The full rule with option B:
 
-| Enquiry scope     | Assigned owner                                                                   | Copy                        |
-| ----------------- | -------------------------------------------------------------------------------- | --------------------------- |
-| 定單位            | the 負責經紀 from `property_agents` (falls back to 張秋 if the listing has none) | 張秋 / `EP_LEAD_COPY_PHONE` |
-| 只講屋苑          | the estate's manager from the rotation sheet                                     | 張秋 / `EP_LEAD_COPY_PHONE` |
-| 無範圍 / 無法判定 | nobody (no `assigned_agent_id`)                                                  | 張秋 / `EP_LEAD_COPY_PHONE` |
+| Enquiry scope     | Assigned owner                                                                     | Copy           |
+| ----------------- | ---------------------------------------------------------------------------------- | -------------- |
+| 定單位            | the 負責經紀 from `property_agents` (falls back to 張秋 when the listing has none) | 張秋, own line |
+| 只講屋苑          | that estate's manager from the rotation sheet                                      | 張秋, own line |
+| 無範圍 / 無法判定 | nobody (no `assigned_agent_id`)                                                    | 張秋, own line |
 
-Every one of them still sends at most once per enquiry: one `ops_jobs` row keyed
-`lead-alert:<lead id>`, unique `staff_notification_attempts.attempt_key`, and a per-lead
-"no attempts yet" guard.
+Every one of them sends at most once per enquiry: one `ops_jobs` row keyed `lead-alert:<lead id>`,
+unique `staff_notification_attempts.attempt_key`, and a per-lead "no attempts yet" guard.
+
+Still outstanding (unchanged by option B): nobody has a `staff_whatsapp` endpoint or consent evidence
+yet, and `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED=false`, so today an alert can only become an Inbox
+private note.

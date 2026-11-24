@@ -96,9 +96,9 @@ which is inert on its own):
   (`permission_granted`, `verified_at`, `enabled=true`). The existing `manager:1..3` rows belong to
   three other colleagues and stay as they are unless Willy says otherwise. This is a consent record,
   not a preference toggle.
-- 5.1a The copy destination is 張秋's office line 85297987774 (`EP_LEAD_COPY_PHONE`, server-only;
-  his `staff_users.phone` is 92786562, a different line). It still needs consent and a
-  `staff_whatsapp` endpoint of its own before any copy can leave the system.
+- 5.1a The copy recipient is 張秋 on his own staff line (92786562), by staff id
+  (`LEAD_COPY_STAFF_ID`) - not a second phone number. Willy chose this on 2026-11-24 so one enquiry
+  never messages him twice; the plan de-duplicates identical destinations.
 - 5.2 Register a verified WhatsApp endpoint for 張秋 (today both endpoints are `inbox_private_note`
   and owned by the "test" account) and confirm `EP_WA_STAFF_ALERT_TEMPLATE` is approved for that
   number.

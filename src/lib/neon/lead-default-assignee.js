@@ -56,37 +56,26 @@ export function readDefaultLeadAssignee(env = globalThis.process?.env) {
 }
 
 /**
- * The "copy" destination every lead alert should also reach.
+ * Who every lead alert is also copied to.
  *
- * Willy, 2026-11-24: the copy goes to 張秋 on 85297987774. It lives in the
- * environment, not in the repository, so a personal number stays a deployment
- * setting instead of a published constant.
+ * Willy, 2026-11-24, option B: the copy goes to 張秋 on his **own staff line**
+ * (`staff_users.phone` / `whatsapp`), not to a second number. So this is a staff
+ * id, not a phone: the notification plan resolves the destination from that
+ * staff member's endpoint, and because the plan collapses identical destinations
+ * (`DISTINCT ON staffDestinationKey(destination_reference)`), a lead 張秋 already
+ * owns produces exactly one send rather than a duplicate.
  *
- * Note for whoever wires the send: 張秋's own `staff_users.phone`/`whatsapp` is
- * 92786562, so 85297987774 is a second (office) line rather than his personal
- * number. The two are deliberately not assumed to be the same.
+ * A code constant, like the estate rotation: this is a business rule, and the
+ * repository stores neither his phone nor anyone else's.
  */
-export const LEAD_COPY_PHONE_ENV = "EP_LEAD_COPY_PHONE";
-
-/** Hong Kong mobile: 8 local digits, or 852 + 8 digits, digits only. */
-const COPY_PHONE_PATTERN = /^(?:852)?([2-9]\d{7})$/;
+export const LEAD_COPY_STAFF_ID = "64d5a2d6-e602-4760-9709-63b0414f6a83";
 
 /**
- * Normalise the copy destination to the company-prefixed digits the notification
- * plan stores. Returns null when unset or not a Hong Kong number, so a typo can
- * never route an alert to a stranger.
+ * Staff ids that receive a copy of every lead alert. One entry today; a list so
+ * the plan and its tests stay honest if Willy ever adds a second pair of eyes.
  */
-export function parseLeadCopyPhone(value) {
-  if (typeof value !== "string") return null;
-  const digits = value.replace(/\D/g, "");
-  const match = COPY_PHONE_PATTERN.exec(digits);
-  return match ? `852${match[1]}` : null;
-}
-
-/** Read the copy destination from the environment (server only). */
-export function readLeadCopyPhone(env = globalThis.process?.env) {
-  if (!env || typeof env !== "object") return null;
-  return parseLeadCopyPhone(env.EP_LEAD_COPY_PHONE ?? env[LEAD_COPY_PHONE_ENV]);
+export function leadCopyStaffIds() {
+  return [LEAD_COPY_STAFF_ID];
 }
 
 /**

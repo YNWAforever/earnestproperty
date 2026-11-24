@@ -1,10 +1,8 @@
 export const LEAD_DEFAULT_ASSIGNEE_ENV: string;
 
-export const LEAD_COPY_PHONE_ENV: string;
+export const LEAD_COPY_STAFF_ID: string;
 
-export function parseLeadCopyPhone(value: unknown): string | null;
-
-export function readLeadCopyPhone(env?: Record<string, string | undefined>): string | null;
+export function leadCopyStaffIds(): string[];
 
 export function parseDefaultLeadAssignee(value: unknown): string | null;
 
