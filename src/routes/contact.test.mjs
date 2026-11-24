@@ -15,7 +15,14 @@ test("/contact route renders ContactInquiryForm, which wires the enquiry-type/pr
 
   const route = read(routePath);
   assert.match(route, /createFileRoute\("\/contact"\)/);
-  assert.match(route, /<ContactInquiryForm \/>/);
+  // 只講屋苑 entry point A: the route reads ?estate=<slug>, resolves it against the
+  // registry and hands it to the form, so an estate-scoped enquiry can reach that
+  // estate's manager instead of landing unowned.
+  assert.match(route, /<ContactInquiryForm estateSlug=\{estateEntry\?\.slug \?\? null\} \/>/);
+  assert.match(route, /validateSearch: zodValidator\(contactSearchSchema\)/);
+  assert.match(route, /estate: z\.string\(\)\.max\(80\)\.optional\(\)\.catch\(undefined\)/);
+  assert.match(route, /estateRegistry/);
+  assert.match(route, /Route\.useSearch\(\)/);
 
   // The form itself (state, handler and fields) lives in ContactInquiryForm.tsx so it can be
   // exercised in a browser fixture; the route only renders it.
@@ -70,7 +77,7 @@ test("PICS copy renders near the form and links to a real /privacy route", () =>
   // The PICS paragraph must sit before the <form> opens, not folded into the
   // marketing-consent checkbox or the operational-reply disclaimer.
   const picsIndex = route.indexOf("私隱政策");
-  const formOpenIndex = route.indexOf("<ContactInquiryForm />");
+  const formOpenIndex = route.indexOf("<ContactInquiryForm");
   assert.ok(picsIndex > -1 && formOpenIndex > -1 && picsIndex < formOpenIndex);
 });
 

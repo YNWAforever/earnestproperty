@@ -97,6 +97,7 @@ export function buildWebsiteInquiryPayload(
   data: ContactInquiryFormValues,
   consentWhatsapp: boolean,
   website?: unknown,
+  estateSlug?: string | null,
 ): WebsiteInquiryInput {
   return {
     name: data.name,
@@ -106,6 +107,9 @@ export function buildWebsiteInquiryPayload(
     consentWhatsapp,
     // The honeypot travels as-is and only flags server-side; it is never validated here.
     ...(website === undefined ? {} : { website }),
+    // 只講屋苑: an estate-scoped enquiry routes to that estate's manager instead of
+    // an unowned lead. The server validates the slug against estate-registry.
+    ...(estateSlug ? { estateSlug } : {}),
   };
 }
 
@@ -164,11 +168,14 @@ export async function submitContactInquiry({
   consentWhatsapp,
   submitFn,
   website,
+  estateSlug,
 }: {
   raw: RawContactInquiryInput;
   consentWhatsapp: boolean;
   submitFn: ContactSubmitFn;
   website?: unknown;
+  /** Estate this enquiry is about (只講屋苑), when the page knows one. */
+  estateSlug?: string | null;
 }): Promise<ContactSubmitOutcome> {
   const parsed = contactInquirySchema.safeParse(raw);
   if (!parsed.success) {
@@ -177,7 +184,7 @@ export async function submitContactInquiry({
       message: parsed.error.issues[0]?.message ?? "請檢查輸入",
     };
   }
-  const payload = buildWebsiteInquiryPayload(parsed.data, consentWhatsapp, website);
+  const payload = buildWebsiteInquiryPayload(parsed.data, consentWhatsapp, website, estateSlug);
   const result = await submitPublicForm(() => submitFn(payload));
   if (result.status === "error") {
     return { status: "server-error", code: result.code, message: result.message };
