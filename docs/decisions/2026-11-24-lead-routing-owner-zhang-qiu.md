@@ -65,3 +65,27 @@ licence the buyer sees; 張秋 receives the ones with no listing-level agent at 
 estate and district pages, and the roughly 7% of listings without a correspondent agent. If Willy
 instead wants **every** enquiry to land with 張秋, that is a one-line ordering change in
 `src/lib/neon/website-inquiry.js` and it will be done on request.
+
+## The rule, verbatim (2026-11-24)
+
+| Enquiry scope                    | Who is notified                               |
+| -------------------------------- | --------------------------------------------- |
+| 定單位 (a specific listing/unit) | that unit's 負責 Sales **+ copy 85297987774** |
+| 只講屋苑 (estate named, no unit) | that estate's 經理 **+ copy 85297987774**     |
+| 無範圍 / 無法判定                | copy 85297987774 only                         |
+
+Every enquiry notifies **once**. The send must be locked and de-duplicated.
+
+### What each part needs, and where it stands
+
+| Part                 | Mechanism                                                                                                                                                                                                                         | State                                                                                                                                              |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 定單位 -> 負責 Sales | listing enquiry assigns the 負責經紀 from `property_agents`; the lead alert plans the assigned agent's endpoint                                                                                                                   | code in PR #362 (unit routing); alert recipient plan already targets the assigned agent                                                            |
+| 只講屋苑 -> 屋苑經理 | **no estate-to-manager mapping exists** in the schema (no `estate_manager*` column/table, no per-estate manager row)                                                                                                              | **blocked: needs the manager named per estate**, or an approved rule such as "estate manager = manager of that estate's branch" (3 branches exist) |
+| copy 85297987774     | the `enquiry_notification_recipients` row `copy` already carries this number, but it is `enabled=false`, `permission_granted=false`, `verified_at=null`; the lead-alert plan reads `staff_notification_endpoints`, not that table | **blocked: needs the number's owner + consent, and a `staff_whatsapp` endpoint**                                                                   |
+| 只發一次 + 鎖 + 去重 | `ops_jobs` enqueue uses `idempotency_key='lead-alert:'                                                                                                                                                                            |                                                                                                                                                    | lead_id`with`ON CONFLICT DO NOTHING`; `staff_notification_attempts`has a unique`attempt_key` plus a "no attempts exist for this lead" guard, so a retry or a second job cannot send twice | **already implemented** (code path unchanged by this rule) |
+| Actual send          | the plan only reads endpoints with `transport='staff_whatsapp'`, verified mapping, granted permission and an approved quiet-hours policy                                                                                          | **blocked: production has only two `inbox_private_note` endpoints** and `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED=false`                                |
+
+Two facts about the current staff table that matter for the estate-manager case: the only `manager`
+role account is a placeholder ("Earnest Admin"), and no staff row carries `is_duty_manager = true`,
+so the existing duty-manager fallback would notify nobody even if the transport were on.
