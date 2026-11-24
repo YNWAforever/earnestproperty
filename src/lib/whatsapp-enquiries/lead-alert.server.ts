@@ -16,6 +16,7 @@ import {
   type StaffNotificationTransport,
 } from "./staff-notifications.server.ts";
 import { staffDestinationKey, staffDestinationNotACustomer } from "./staff-recipient-guard.ts";
+import { leadCopyStaffIds } from "../neon/lead-default-assignee.js";
 import { providerChannelId } from "./wa-config.server.ts";
 import { forwardingCoversSubject } from "./enquiry-forwarding-coverage.server.ts";
 
@@ -61,7 +62,10 @@ export function leadAlertRuntime(): StaffNotificationRuntime {
 }
 
 /** An endpoint a lead alert may use (aliases: ep endpoint, m mapping, s staff). */
-const ENDPOINT_ELIGIBLE = `ep.transport='staff_whatsapp' AND ep.enabled AND ep.verified_at IS NOT NULL AND ep.permission_granted AND ep.retired_at IS NULL AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb AND m.eligible AND m.verified_at IS NOT NULL AND m.retired_at IS NULL AND (ep.mapping_version IS NULL OR ep.mapping_version=m.version) AND s.active AND EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))`;
+const ENDPOINT_ELIGIBLE_BASE = `ep.transport='staff_whatsapp' AND ep.enabled AND ep.verified_at IS NOT NULL AND ep.permission_granted AND ep.retired_at IS NULL AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb AND m.eligible AND m.verified_at IS NOT NULL AND m.retired_at IS NULL AND (ep.mapping_version IS NULL OR ep.mapping_version=m.version) AND s.active`;
+/** Role-derived recipients need a staff role; the owner-designated copy does not. */
+const ROLE_ELIGIBLE = `EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))`;
+const ENDPOINT_ELIGIBLE = `${ENDPOINT_ELIGIBLE_BASE} AND ${ROLE_ELIGIBLE}`;
 const ENDPOINT_JOINS = `JOIN staff_users s ON s.id=ep.staff_id JOIN whatsapp_staff_channels m ON m.staff_id=ep.staff_id AND m.channel_id=ep.channel_id`;
 /** D-11: the one customer-recipient guard shared by every staff send path, used
  * here for plan, claim and beforeSend (see staff-recipient-guard.ts). */
@@ -347,10 +351,20 @@ async function plan(
           JOIN crm_leads l ON l.id=$1::uuid AND l.assigned_agent_id=ep.staff_id
           WHERE ep.channel_id=$2 AND ep.transport='staff_whatsapp' AND ep.retired_at IS NULL
             AND NOT EXISTS(SELECT 1 FROM assigned)
+        ), copy_recipients AS (
+          -- The owner-designated copy (張秋) is addressed by staff id, not by role:
+          -- he holds no staff_roles row, and copying him is an explicit instruction
+          -- rather than a role-derived default. Every other eligibility predicate
+          -- (verified endpoint, permission, channel mapping, not-a-customer) applies.
+          SELECT ep.id,ep.version,ep.staff_id,ep.destination_reference,s.is_duty_manager,(${NOT_A_CUSTOMER}) AS not_customer
+          FROM staff_notification_endpoints ep ${ENDPOINT_JOINS}
+          WHERE ep.channel_id=$2 AND ${ENDPOINT_ELIGIBLE_BASE} AND ep.staff_id = ANY($4::uuid[])
         ), chosen AS (
           SELECT * FROM assigned
           UNION ALL
           SELECT * FROM eligible WHERE is_duty_manager AND NOT EXISTS(SELECT 1 FROM assigned WHERE not_customer)
+          UNION ALL
+          SELECT * FROM copy_recipients
         ), destinations AS (
           SELECT DISTINCT ON (${staffDestinationKey("destination_reference")}) * FROM chosen ORDER BY ${staffDestinationKey("destination_reference")},id
         ), planned AS (
@@ -368,7 +382,7 @@ async function plan(
           ON CONFLICT(attempt_key) DO NOTHING RETURNING dispatch_state
         )
         SELECT dispatch_state FROM planned UNION ALL SELECT dispatch_state FROM refused`,
-      params: [leadId, channelId, attemptKey([leadId, "assigned_unavailable"])],
+      params: [leadId, channelId, attemptKey([leadId, "assigned_unavailable"]), leadCopyStaffIds()],
     },
     {
       statement: `INSERT INTO staff_notification_attempts(lead_id,transport,attempt_key,dispatch_state,safe_error,finished_at) SELECT $1::uuid,'staff_whatsapp',$2,'suppressed','no_destination',now() WHERE ${noRows} ON CONFLICT(attempt_key) DO NOTHING RETURNING id`,

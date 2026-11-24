@@ -119,14 +119,17 @@ Counts from the sheet:
 
 What is still missing before 「只講屋苑 → 屋苑經理」 actually notifies anyone:
 
-1. the enquiry has to carry estate scope (the public form sends a property id / listing number today,
-   not an estate slug), so `enquiry_routing_context` needs a `kind = 'estate'` case wired through
-   `website-inquiry.js`;
+1. a **source** of estate scope. The intake, the classification and the manager lookup are
+   wired (see the section below), but no form or link sends an estate slug yet: it needs an
+   estate selector on `/contact`, or an enquiry form on estate pages;
+   1a. an inbound WhatsApp message that names an estate is a second source, and belongs to the
+   enquiry pipeline rather than to this intake;
 2. the estate manager needs a usable notification path - at present there is **no** `staff_whatsapp`
    endpoint for any of the three, the recipient rows are `enabled=false` with no consent evidence, and
    `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED=false`;
-3. the copy number 85297987774 still needs its owner and consent, and an endpoint, exactly like the
-   managers.
+3. the copy recipient's endpoint and consent. Option B settled that the copy goes to 張秋 on his
+   own staff line, so no second number is involved, but he still has no `staff_whatsapp`
+   endpoint and no consent record;
 
 The once-only guarantee needs no work: the lead alert is one `ops_jobs` row keyed
 `lead-alert:<lead id>` with `ON CONFLICT DO NOTHING`, and `staff_notification_attempts` has a unique
@@ -165,3 +168,21 @@ unique `staff_notification_attempts.attempt_key`, and a per-lead "no attempts ye
 Still outstanding (unchanged by option B): nobody has a `staff_whatsapp` endpoint or consent evidence
 yet, and `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED=false`, so today an alert can only become an Inbox
 private note.
+
+## Estate scope and the copy, wired (2026-11-25)
+
+Server side of the three-case rule is now in code (PR #362), still without any production write:
+
+| Piece                | Where                        | Behaviour                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------- | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scope classification | `src/lib/neon/lead-scope.js` | a listing reference is `unit` (and wins over an estate reference), an estate slug alone is `estate`, otherwise `unknown`                                                                                                                                                                                                                                              |
+| Owner decision       | same module                  | unit: visitor's pick > 負責經紀 > active `properties.agent_id` > default assignee. estate: that estate's manager > default assignee (an estate off the sheet still needs an owner). unknown: **nobody**                                                                                                                                                               |
+| Intake               | `website-inquiry.js`         | one statement records `scope` and `requestedEstateSlug` in `enquiry_routing_context`; the fallback term is the scope fallback, so an unscoped enquiry binds no assignee at all                                                                                                                                                                                        |
+| Slug resolution      | `admin-data.server.ts`       | the optional `estateSlug` input is checked against `estate-registry`, then the rotation sheet gives the manager's staff id; an unknown slug is dropped (logged by field name only) and never fails the enquiry                                                                                                                                                        |
+| Copy                 | `lead-alert.server.ts`       | the copy recipient (張秋, `leadCopyStaffIds()`) is added to the same plan by staff id. It deliberately skips the `staff_roles` requirement - he holds no role row - while keeping every other predicate: verified endpoint, permission, channel mapping, and the not-a-customer guard. Identical destinations still collapse, so one enquiry never messages him twice |
+
+Still missing before any of it sends: a **source** that actually carries an estate slug (the contact
+form and estate pages do not send one yet), consent + `staff_whatsapp` endpoints, and the
+`EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED` switch. The 只講屋苑 case also has a WhatsApp-side source -
+an inbound message that names an estate - which is a parser question in the enquiry pipeline, not
+this intake.

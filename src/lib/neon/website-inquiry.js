@@ -1,5 +1,6 @@
 import { leadAlertEnqueueCte } from "./lead-alert-enqueue.js";
 import { readDefaultLeadAssignee, resolveAssignedAgentId } from "./lead-default-assignee.js";
+import { classifyEnquiryScope, scopeFallbackAssigneeId } from "./lead-scope.js";
 import { phoneMatchSql, phoneSpellingTiebreakSql } from "../phone.js";
 
 /**
@@ -165,8 +166,9 @@ export async function persistWebsiteInquiry(query, input) {
   // listing. When there is no choice the SQL carries a literal NULL, so the statement and its
   // parameter list are byte-identical to the pre-agent build.
   //
-  // Phase 2.5 fallback: an optional dedicated sales agent, configured with
-  // EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID. Unset (or malformed) leaves the statement
+  // Scope fallback: the estate manager for an estate enquiry, or the dedicated
+  // sales agent configured with EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID for a unit one.
+  // Unset (or malformed) leaves the statement
   // exactly as before -- a literal NULL and no extra parameter -- so merging this
   // code cannot change routing until the variable is set. The SQL's
   // `AND d.active = true` is what refuses to assign a lead to a colleague who has
@@ -195,11 +197,32 @@ export async function persistWebsiteInquiry(query, input) {
       correspondentAgentId = rows[0]?.staff_id ?? null;
     }
   }
+  // Willy's three-case rule: a listing reference is a unit enquiry, an estate slug
+  // alone is an estate enquiry, and anything else is unscoped - which gets the copy
+  // recipient only, never the default assignee.
+  const estateSlug =
+    typeof input.estateSlug === "string" && input.estateSlug.trim() !== ""
+      ? input.estateSlug.trim()
+      : null;
+  const estateManagerStaffId =
+    typeof input.estateManagerStaffId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      input.estateManagerStaffId,
+    )
+      ? input.estateManagerStaffId
+      : null;
+  const scope = classifyEnquiryScope({ propertyId, listingNo, estateSlug });
   const defaultAssigneeId = readDefaultLeadAssignee();
+  const fallbackAssigneeId = scopeFallbackAssigneeId({
+    scope,
+    estateManagerStaffId,
+    defaultAssigneeId,
+  });
   let nextParam = baseParamCount + 3;
   const chosenAgentParam = requestedAgentId ? `$${nextParam++}::uuid` : "NULL::uuid";
   const correspondentAgentParam = correspondentAgentId ? `$${nextParam++}::uuid` : "NULL::uuid";
-  const defaultAssigneeParam = defaultAssigneeId ? `$${nextParam++}::uuid` : "NULL::uuid";
+  const defaultAssigneeParam = fallbackAssigneeId ? `$${nextParam++}::uuid` : "NULL::uuid";
+  const estateSlugParam = estateSlug ? `$${nextParam++}::text` : "NULL::text";
   // A scalar subquery rather than a leading CTE: the statement must still open
   // with `WITH resolved_listing`, which its contract test pins.
   const defaultAssigneeSql = `(SELECT d.id FROM staff_users d WHERE d.id = ${defaultAssigneeParam} AND d.active = true)`;
@@ -209,15 +232,16 @@ export async function persistWebsiteInquiry(query, input) {
     input.propertyReferenceRequested === true
       ? "'property'::text"
       : "CASE WHEN $7::uuid IS NOT NULL OR $8::text IS NOT NULL THEN 'property' ELSE 'general' END";
-  const routingContext = `jsonb_build_object('kind',${contextKind},'requestedPropertyId',$7::text,'requestedPublicListingNo',$8::text,'selectedAgentId',${chosenAgentParam}::text)`;
+  const routingContext = `jsonb_build_object('kind',${contextKind},'scope','${scope}'::text,'requestedPropertyId',$7::text,'requestedPublicListingNo',$8::text,'requestedEstateSlug',${estateSlugParam},'selectedAgentId',${chosenAgentParam}::text)`;
   const rows = await query(
     `
     WITH resolved_listing AS (
       SELECT
         p.id AS property_id,
         -- The visitor's chosen correspondent agent wins; then the 負責經紀 shown on
-        -- the listing page; then the listing's own agent; then the configured
-        -- default assignee (Phase 2.5, inert when unset).
+        -- the listing page; then the listing's own agent; then the scope fallback:
+        -- the estate's manager for an estate enquiry, the configured default
+        -- assignee for a unit enquiry, NULL for an unscoped one (copy only).
         COALESCE(${chosenAgentParam}, ${correspondentAgentParam}, s.id, ${defaultAssigneeSql}) AS assigned_agent_id,
         CASE WHEN p.deal_type = 'rent' THEN 'renter' ELSE 'buyer' END AS intent
       FROM properties p
@@ -300,7 +324,8 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
       input.suspectedBot === true,
       ...(requestedAgentId ? [requestedAgentId] : []),
       ...(correspondentAgentId ? [correspondentAgentId] : []),
-      ...(defaultAssigneeId ? [defaultAssigneeId] : []),
+      ...(fallbackAssigneeId ? [fallbackAssigneeId] : []),
+      ...(estateSlug ? [estateSlug] : []),
     ],
   );
 

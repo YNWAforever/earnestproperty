@@ -576,7 +576,10 @@ test("only a canonical staff uuid counts as configuration", async () => {
   assert.equal(readDefaultLeadAssignee(null), null);
 });
 
-test("configuring the fallback binds one active-staff-guarded uuid and keeps the statement shape", async () => {
+test("an unscoped enquiry gets no assignee even when a fallback is configured", async () => {
+  // Willy's rule: 無範圍/無法判定 -> copy only. So the default assignee must not
+  // reach a general contact-page enquiry; it only covers scoped ones without an
+  // owner of their own (unit with no correspondent agent, estate off the sheet).
   const { persistWebsiteInquiry } = await import(moduleUrl);
   const input = {
     name: "測試",
@@ -596,7 +599,6 @@ test("configuring the fallback binds one active-staff-guarded uuid and keeps the
       return [];
     }, input);
   });
-  assert.equal(unset.length, 1);
   const configured = [];
   await withDefaultAssignee(DEDICATED_AGENT, async () => {
     await persistWebsiteInquiry(async (sql, params) => {
@@ -604,26 +606,92 @@ test("configuring the fallback binds one active-staff-guarded uuid and keeps the
       return [];
     }, input);
   });
-  assert.equal(configured.length, 1);
 
+  assert.equal(unset.length, 1);
+  assert.equal(configured.length, 1);
   const [off] = unset;
   const [on] = configured;
-  // The contract test above pins `WITH resolved_listing` first; keep it.
   assert.match(on.sql, /^\s*WITH resolved_listing/i);
-  assert.equal(on.params.length, off.params.length + 1);
-  assert.equal(on.params.at(-1), DEDICATED_AGENT);
-  // Unset: no new parameter, and the statement still says "no owner".
+  // Unscoped: the configured fallback binds nothing and cannot be assigned.
+  assert.equal(on.params.length, off.params.length);
+  assert.equal(on.params.includes(DEDICATED_AGENT), false);
   assert.equal(off.params.includes(DEDICATED_AGENT), false);
-  assert.match(off.sql, /'buyer'::text\s+WHERE NOT EXISTS \(SELECT 1 FROM resolved_listing\)/);
-  assert.match(off.sql, /NULL::uuid/);
-  // Configured: only an ACTIVE colleague can be assigned, and the fallback is
-  // the last term of the COALESCE, never ahead of the listing's own agent.
+  assert.match(on.sql, /NULL::uuid/);
+  // The statement records which of the three cases it was.
+  assert.match(on.sql, /'scope','unknown'::text/);
+});
+
+test("a unit enquiry still binds the configured fallback behind the active-staff guard", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const input = {
+    name: "測試",
+    phone: "9123 4567",
+    normalizedPhone: "85291234567",
+    email: null,
+    message: null,
+    listingNo: null,
+    propertyId: "11111111-1111-4111-8111-111111111111",
+    consentWhatsapp: false,
+  };
+  const calls = [];
+  await withDefaultAssignee(DEDICATED_AGENT, async () => {
+    await persistWebsiteInquiry(async (sql, params) => {
+      calls.push({ sql, params });
+      if (/to_regclass\('property_agents'\)/.test(sql)) return [{ available: true }];
+      if (/FROM property_agents a/.test(sql)) return [{ staff_id: CORRESPONDENT }];
+      return [];
+    }, input);
+  });
+  const write = calls.find((call) => /INSERT INTO inquiries/.test(call.sql));
+  assert.ok(write);
+  assert.equal(write.params.includes(DEDICATED_AGENT), true);
+  // Order: visitor's pick, 負責經紀, properties.agent_id, scope fallback.
   assert.match(
-    on.sql,
+    write.sql,
     /COALESCE\((?:NULL|\$\d+)::uuid, (?:NULL|\$\d+)::uuid, s\.id, \(SELECT d\.id FROM staff_users d WHERE d\.id = \$\d+::uuid AND d\.active = true\)\)/,
   );
-  assert.equal((on.sql.match(/AND d\.active = true/g) ?? []).length, 2);
-  assert.doesNotMatch(on.sql, /BYPASSRLS|GRANT|ALTER /i);
+  assert.equal((write.sql.match(/AND d\.active = true/g) ?? []).length, 2);
+  assert.match(write.sql, /'scope','unit'::text/);
+  assert.doesNotMatch(write.sql, /BYPASSRLS|GRANT|ALTER /i);
+});
+
+test("an estate enquiry assigns that estate's manager and records the slug", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const MANAGER_STAFF_ID = "fb4dfa8f-a892-458b-a4f9-7caf48a4a0a2"; // Terence, rotation ②
+  const calls = [];
+  await withDefaultAssignee(DEDICATED_AGENT, async () => {
+    await persistWebsiteInquiry(
+      async (sql, params) => {
+        calls.push({ sql, params });
+        return [];
+      },
+      {
+        name: "測試",
+        phone: "9123 4567",
+        normalizedPhone: "85291234567",
+        email: null,
+        message: null,
+        listingNo: null,
+        propertyId: null,
+        estateSlug: "napa",
+        estateManagerStaffId: MANAGER_STAFF_ID,
+        consentWhatsapp: false,
+      },
+    );
+  });
+
+  assert.equal(calls.length, 1, "an estate enquiry needs no property_agents read");
+  const [write] = calls;
+  assert.equal(write.params.includes(MANAGER_STAFF_ID), true);
+  assert.equal(write.params.includes(DEDICATED_AGENT), false, "the manager outranks the fallback");
+  assert.equal(write.params.includes("napa"), true);
+  assert.match(write.sql, /'scope','estate'::text/);
+  assert.match(write.sql, /'requestedEstateSlug'/);
+  // The estate manager is bound through the same active-staff-guarded subquery.
+  assert.match(
+    write.sql,
+    /SELECT d\.id FROM staff_users d WHERE d\.id = \$\d+::uuid AND d\.active = true/,
+  );
 });
 
 // The colleague a buyer sees on a listing page ("負責經紀") is a property_agents

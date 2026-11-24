@@ -39,6 +39,10 @@ export type WebsiteInquiryPersistenceInput = {
   propertyReferenceRequested?: boolean;
   /** One of the listing's correspondent agents, when the visitor picked one. */
   agentId?: string | null;
+  /** Estate named by the enquiry (只講屋苑 case), validated against the registry. */
+  estateSlug?: string | null;
+  /** The staff id of that estate's manager from the rotation sheet, resolved by the caller. */
+  estateManagerStaffId?: string | null;
   consentWhatsapp: boolean;
   /** Honeypot flag: adds a timeline note and an audit row; never drops the enquiry. */
   suspectedBot?: boolean;
