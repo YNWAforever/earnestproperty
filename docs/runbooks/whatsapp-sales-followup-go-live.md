@@ -129,3 +129,37 @@ source must pass before any canary is widened.
   their own named approval from Willy.
 - Never print secrets, tokens or customer content; mask destinations in evidence.
 - Never infer "live" from a merged PR: the layers above are independently gated.
+
+## Production state after Willy's approval (2026-11-25)
+
+Approved by Willy in session ("批准 Production"). Written to production Neon:
+
+| Staff                          | Endpoint destination             | Consent                                                                               | Enabled   |
+| ------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------- | --------- |
+| 張秋 (copy + default assignee) | 85292786562 (his own staff line) | `permission_granted=true`, `verified_at=now()`, ref `owner-approval:Willy:2026-11-25` | **false** |
+| 姚頌溏 (rotation ①)            | 85266442444                      | same                                                                                  | **false** |
+| 鄧錦雄 (rotation ②)            | 85291005322                      | same                                                                                  | **false** |
+| 李德鴻 (rotation ③)            | 85266266608                      | same                                                                                  | **false** |
+
+All four are `transport=staff_whatsapp` on channel `6ad6c56645bc37e79936664a`, with
+`quiet_hours_policy={"approved":true,"allowAllHours":true}` and template
+`staff_enquiry_followup` / `zh_HK` (the template production already carries in
+`EP_WA_STAFF_ALERT_TEMPLATE`).
+
+They are deliberately **disabled**, because two things still do not exist and inventing them would be
+fabricated evidence:
+
+1. `whatsapp_staff_channels` rows per person. The table requires `inbox_user_id`, `folder_id` and
+   `routing_node_id`, which are Woztell-side identifiers. A read-only call to
+   `EP_WA_INBOX_LIST_USERS_URL` with our signed context returned `Unauthorized`, so they have to come
+   from the Woztell console (or a working credential).
+2. The switch, `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED` (still `false`).
+
+Go-live therefore reduces to: create the four channel mappings, enable the four endpoints
+(`UPDATE ... SET enabled=true, mapping_version=<mapping version>`), then flip the switch. Nothing
+else is missing on the code side.
+
+One more thing worth deciding: 張秋 holds no `staff_roles` row. The **copy** path addresses him by
+staff id and skips the role predicate, but the **assigned-agent** path still requires a role, so a
+lead whose owner is 張秋 would not reach him through that path - only through the copy. Add a
+`staff_roles` row for him if he should also be alerted as an owner.
