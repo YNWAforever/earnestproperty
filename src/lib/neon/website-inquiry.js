@@ -181,7 +181,7 @@ export async function persistWebsiteInquiry(query, input) {
   // configured default assignee. property_agents is additive, so probe before
   // reading; a pre-migration database simply skips this term.
   let correspondentAgentId = null;
-  if (propertyId) {
+  if (propertyId || listingNo) {
     const [agentTable] = await query(
       `SELECT to_regclass('property_agents') IS NOT NULL AS available`,
     );
@@ -189,10 +189,11 @@ export async function persistWebsiteInquiry(query, input) {
       const rows = await query(
         `SELECT a.staff_id FROM property_agents a
          JOIN staff_users s ON s.id = a.staff_id AND s.active = true
-         WHERE a.property_id = $1::uuid
+           AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true
+         WHERE a.property_id = COALESCE($1::uuid, (SELECT id FROM properties WHERE listing_no=$2::text AND status='active' ORDER BY id LIMIT 1))
          ORDER BY a.position, a.staff_id
          LIMIT 1`,
-        [propertyId],
+        [propertyId || null, listingNo || null],
       );
       correspondentAgentId = rows[0]?.staff_id ?? null;
     }
@@ -232,7 +233,9 @@ export async function persistWebsiteInquiry(query, input) {
     input.propertyReferenceRequested === true
       ? "'property'::text"
       : "CASE WHEN $7::uuid IS NOT NULL OR $8::text IS NOT NULL THEN 'property' ELSE 'general' END";
-  const routingContext = `jsonb_build_object('kind',${contextKind},'scope','${scope}'::text,'requestedPropertyId',$7::text,'requestedPublicListingNo',$8::text,'requestedEstateSlug',${estateSlugParam},'selectedAgentId',${chosenAgentParam}::text)`;
+  const notificationRoute =
+    process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true" ? "staff_phone" : "staff_phone_paused";
+  const routingContext = `jsonb_build_object('kind',${contextKind},'scope','${scope}'::text,'requestedPropertyId',$7::text,'requestedPublicListingNo',$8::text,'requestedEstateSlug',${estateSlugParam},'selectedAgentId',${chosenAgentParam}::text,'notificationRoute','${notificationRoute}'::text)`;
   const rows = await query(
     `
     WITH resolved_listing AS (
@@ -254,7 +257,7 @@ export async function persistWebsiteInquiry(query, input) {
           -- of an active row that shares its public number).
           OR ($7::uuid IS NULL AND $8::text IS NOT NULL AND p.listing_no = $8::text)
         )
-      ORDER BY CASE WHEN p.id = $7::uuid THEN 0 ELSE 1 END
+      ORDER BY CASE WHEN p.id = $7::uuid THEN 0 ELSE 1 END, p.id
       LIMIT 1
     ),
     -- C-15: the listing the enquiry was about, in any status. It only links the
@@ -307,8 +310,7 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
       COALESCE($8::text, (SELECT listing_no FROM requested_listing))
     FROM contact
     CROSS JOIN routing
-    RETURNING id, (SELECT count(*) FROM lead_alert) > 0 AS lead_alert_queued,
-      enquiry_forwarding_is_enabled() AS forwarding_enabled
+    RETURNING id, (SELECT count(*) FROM lead_alert) > 0 AS lead_alert_queued
     `,
     [
       name,
@@ -355,8 +357,5 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
   return {
     id: rows[0]?.id == null ? "" : String(rows[0].id),
     leadAlertQueued: rows[0]?.lead_alert_queued === true,
-    ...(rows[0]?.forwarding_enabled === true && rows[0]?.lead_alert_queued === true
-      ? { forwardingQueued: true }
-      : {}),
   };
 }

@@ -9,6 +9,7 @@ import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transpor
 import {
   buildStaffTemplateResponse,
   formatCustomerPhone,
+  type StaffAlertTemplate,
 } from "../woztell/staff-alert-template.ts";
 import {
   staffWhatsappAlertRuntime,
@@ -67,8 +68,18 @@ const ENDPOINT_ELIGIBLE_BASE = `ep.transport='staff_whatsapp' AND ep.enabled AND
 const ROLE_ELIGIBLE = `EXISTS(SELECT 1 FROM staff_roles r WHERE r.staff_user_id=s.id AND r.role IN ('admin','manager','agent'))`;
 const ENDPOINT_ELIGIBLE = `${ENDPOINT_ELIGIBLE_BASE} AND ${ROLE_ELIGIBLE}`;
 const ENDPOINT_JOINS = `JOIN staff_users s ON s.id=ep.staff_id JOIN whatsapp_staff_channels m ON m.staff_id=ep.staff_id AND m.channel_id=ep.channel_id`;
-/** D-11: the one customer-recipient guard shared by every staff send path, used
- * here for plan, claim and beforeSend (see staff-recipient-guard.ts). */
+const PHONE_STAFF_JOIN = `JOIN staff_users s ON s.id=ep.staff_id`;
+const PHONE_ELIGIBLE = `ep.transport='website_lead_phone' AND s.active AND ep.enabled AND ep.retired_at IS NULL
+  AND ep.verified_at<=now() AND ep.permission_granted AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb`;
+
+function websitePhoneTemplate(template: StaffAlertTemplate | null) {
+  return (
+    template?.name === "staff_enquiry_followup" &&
+    template.language === "zh_HK" &&
+    template.params.join(",") === "name,source,phone,link"
+  );
+}
+
 const NOT_A_CUSTOMER = staffDestinationNotACustomer("ep");
 /** The attempt `t` still targets exactly the endpoint it froze. */
 const SAME_ENDPOINT = `ep.id=t.endpoint_id AND ep.version=t.endpoint_version AND ep.destination_reference=t.destination_reference_snapshot AND ep.channel_id=t.channel_id_snapshot`;
@@ -143,6 +154,7 @@ export async function handleLeadStaffAlert(
   let runtime: StaffNotificationRuntime;
   let transport: StaffNotificationTransport | null = null;
   let lead: Record<string, unknown> | undefined;
+  let phoneRoute = false;
   let origin: string | null;
   let queued: Record<string, unknown>[];
   try {
@@ -150,7 +162,7 @@ export async function handleLeadStaffAlert(
     if (await forwardingCoversSubject("website", leadId, query)) return { summary };
     summary.unknown += (await reconcile(leadId, query, context)).unknown;
     [lead] = await query(
-      "SELECT l.id,l.source,l.property_id,p.listing_no,c.name,c.phone AS contact_phone,EXISTS(SELECT 1 FROM crm_activities a WHERE a.lead_id=l.id AND a.activity_type='suspected_bot') AS suspected_bot FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE l.id=$1::uuid",
+      "SELECT l.id,l.source,l.property_id,l.enquiry_routing_context->>'notificationRoute' AS notification_route,p.listing_no,c.name,c.phone AS contact_phone,EXISTS(SELECT 1 FROM crm_activities a WHERE a.lead_id=l.id AND a.activity_type='suspected_bot') AS suspected_bot FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE l.id=$1::uuid",
       [leadId],
     );
     // lead_missing: attempt.lead_id references crm_leads, so no row can be kept;
@@ -159,6 +171,7 @@ export async function handleLeadStaffAlert(
       console.warn("[lead-alert] lead_missing", { leadId, jobId: context.jobId });
       return { summary: { ...summary, blocked: summary.blocked + 1 } };
     }
+    phoneRoute = lead.notification_route === "staff_phone";
     runtime = runtimeOf();
     try {
       transport = (deps.transport ?? createStaffWhatsAppTransport)();
@@ -166,17 +179,19 @@ export async function handleLeadStaffAlert(
       transport = null;
     }
     origin = resolveSiteOrigin();
-    const blocked: LeadAlertBlockReason | null = !runtime.enabled
-      ? "notifications_disabled"
-      : !runtime.template
-        ? "template_not_configured"
-        : !runtime.channelId || runtime.channelId !== providerChannelId()
-          ? "channel_unverified"
-          : !transport?.verificationRef || !transport.sendStaffWhatsApp
-            ? "transport_capability_unverified"
-            : !origin?.startsWith("https://")
-              ? "work_origin_unconfigured"
-              : null;
+    const blocked: LeadAlertBlockReason | null =
+      !runtime.enabled || lead.notification_route === "staff_phone_paused"
+        ? "notifications_disabled"
+        : !runtime.template || (phoneRoute && !websitePhoneTemplate(runtime.template))
+          ? "template_not_configured"
+          : !runtime.channelId || runtime.channelId !== providerChannelId()
+            ? "channel_unverified"
+            : !transport?.verificationRef ||
+                !(phoneRoute ? transport.sendStaffWhatsAppByPhone : transport.sendStaffWhatsApp)
+              ? "transport_capability_unverified"
+              : !origin?.startsWith("https://")
+                ? "work_origin_unconfigured"
+                : null;
     if (blocked) {
       const [, inserted, suppressed] = await transaction([
         { statement: "SELECT id FROM crm_leads WHERE id=$1::uuid FOR UPDATE", params: [leadId] },
@@ -195,7 +210,8 @@ export async function handleLeadStaffAlert(
       summary.blocked += inserted.length + suppressed.length;
       return { summary };
     }
-    await plan(leadId, runtime.channelId!, transaction, summary);
+    if (phoneRoute) await planPhoneRecipients(leadId, runtime.channelId!, transaction, summary);
+    else await plan(leadId, runtime.channelId!, transaction, summary);
     // Still before any claim: a failed read leaves the planned rows queued.
     queued = await query(
       "SELECT id FROM staff_notification_attempts WHERE lead_id=$1::uuid AND dispatch_state='queued' ORDER BY created_at,id",
@@ -223,6 +239,8 @@ export async function handleLeadStaffAlert(
     link: `${origin}/admin/leads?lead=${leadId}`,
   });
   const message = `新查詢：${sourceLabel(lead)}`; // evidence only; the template is always sent
+  const endpointJoins = phoneRoute ? PHONE_STAFF_JOIN : ENDPOINT_JOINS;
+  const endpointEligible = phoneRoute ? PHONE_ELIGIBLE : ENDPOINT_ELIGIBLE;
   for (const attempt of queued) {
     await context.checkpoint();
     const claim = randomUUID();
@@ -235,7 +253,7 @@ export async function handleLeadStaffAlert(
           params: [attempt.id],
         },
         {
-          statement: `UPDATE staff_notification_attempts t SET dispatch_state='dispatching',claim_id=$2::uuid,job_id=$3::uuid,dispatch_started_at=now(),updated_at=now() FROM staff_notification_endpoints ep ${ENDPOINT_JOINS}, ops_jobs j WHERE t.id=$1::uuid AND t.lead_id=$4::uuid AND t.dispatch_state='queued' AND ${SAME_ENDPOINT} AND ep.channel_id=$6 AND ${ENDPOINT_ELIGIBLE} AND ${NOT_A_CUSTOMER} AND j.id=$3::uuid AND ${leaseIsMine("$5")} RETURNING t.id,t.destination_reference_snapshot`,
+          statement: `UPDATE staff_notification_attempts t SET dispatch_state='dispatching',claim_id=$2::uuid,job_id=$3::uuid,dispatch_started_at=now(),updated_at=now() FROM staff_notification_endpoints ep ${endpointJoins}, ops_jobs j WHERE t.id=$1::uuid AND t.lead_id=$4::uuid AND t.dispatch_state='queued' AND ${SAME_ENDPOINT} AND ep.channel_id=$6 AND ${endpointEligible} AND ${NOT_A_CUSTOMER} AND j.id=$3::uuid AND ${leaseIsMine("$5")} RETURNING t.id,t.destination_reference_snapshot`,
           params: [attempt.id, claim, context.jobId, leadId, context.workerId, runtime.channelId],
         },
         {
@@ -271,10 +289,15 @@ export async function handleLeadStaffAlert(
       try {
         await context.checkpoint();
         const live = runtimeOf();
-        if (!live.enabled || !live.template || live.channelId !== runtime.channelId)
+        if (
+          !live.enabled ||
+          !live.template ||
+          live.channelId !== runtime.channelId ||
+          (phoneRoute && !websitePhoneTemplate(live.template))
+        )
           throw new Error("dispatch_disabled");
         const [valid] = await query(
-          `SELECT t.id FROM staff_notification_attempts t JOIN staff_notification_endpoints ep ON ${SAME_ENDPOINT} ${ENDPOINT_JOINS} JOIN ops_jobs j ON j.id=t.job_id WHERE t.id=$1::uuid AND t.claim_id=$2::uuid AND t.dispatch_state='dispatching' AND t.job_id=$3::uuid AND ep.channel_id=$5 AND ${ENDPOINT_ELIGIBLE} AND ${NOT_A_CUSTOMER} AND ${leaseIsMine("$4")}`,
+          `SELECT t.id FROM staff_notification_attempts t JOIN staff_notification_endpoints ep ON ${SAME_ENDPOINT} ${endpointJoins} JOIN ops_jobs j ON j.id=t.job_id WHERE t.id=$1::uuid AND t.claim_id=$2::uuid AND t.dispatch_state='dispatching' AND t.job_id=$3::uuid AND ep.channel_id=$5 AND ${endpointEligible} AND ${NOT_A_CUSTOMER} AND ${leaseIsMine("$4")}`,
           [attempt.id, claim, context.jobId, context.workerId, runtime.channelId],
         );
         if (!valid) throw new Error("dispatch_eligibility_changed");
@@ -288,13 +311,11 @@ export async function handleLeadStaffAlert(
     let result: SendResult = { state: "unknown" };
     let safeError: string | null = null;
     try {
-      result = await transport!.sendStaffWhatsApp!({
-        channelId: runtime.channelId!,
-        memberId: String(reserved.destination_reference_snapshot),
-        message,
-        template,
-        beforeSend,
-      });
+      const scope = { channelId: runtime.channelId!, message, template, beforeSend };
+      const destination = String(reserved.destination_reference_snapshot);
+      result = phoneRoute
+        ? await transport!.sendStaffWhatsAppByPhone!({ ...scope, phone: destination })
+        : await transport!.sendStaffWhatsApp!({ ...scope, memberId: destination });
     } catch (error) {
       // Only a started provider request has a possibly accepted, unknown outcome.
       const preflight =
@@ -391,4 +412,41 @@ async function plan(
   ]);
   summary.blocked +=
     planned.filter((row) => row.dispatch_state === "suppressed").length + none.length;
+}
+
+/** New website intake selects one owner (unit or estate) and the designated copy.
+ * Missing or disabled endpoints remain visible even when the other recipient succeeds. */
+async function planPhoneRecipients(
+  leadId: string,
+  channelId: string,
+  transaction: typeof transactionRows,
+  summary: Summary,
+) {
+  const [, rows] = await transaction([
+    { statement: "SELECT id FROM crm_leads WHERE id=$1::uuid FOR UPDATE", params: [leadId] },
+    {
+      statement: `WITH recipients AS (
+        SELECT unnest($3::uuid[]) AS staff_id
+        UNION SELECT assigned_agent_id FROM crm_leads WHERE id=$1::uuid AND assigned_agent_id IS NOT NULL
+          AND enquiry_routing_context->>'scope' IN ('unit','estate')
+      ), candidates AS (
+        SELECT r.staff_id,ep.id,ep.version,ep.destination_reference,
+          CASE WHEN (${PHONE_ELIGIBLE}) IS NOT TRUE OR ep.verified_at > (SELECT created_at FROM crm_leads WHERE id=$1::uuid) THEN 'assigned_destination_unavailable'
+               WHEN NOT ${NOT_A_CUSTOMER} THEN 'destination_is_customer' END AS reason
+        FROM recipients r LEFT JOIN staff_users s ON s.id=r.staff_id
+        LEFT JOIN staff_notification_endpoints ep ON ep.staff_id=r.staff_id AND ep.channel_id=$2 AND ep.transport='website_lead_phone'
+      ), destinations AS (
+        SELECT DISTINCT ON (COALESCE(destination_reference,staff_id::text)) * FROM candidates
+        ORDER BY COALESCE(destination_reference,staff_id::text), reason NULLS FIRST, staff_id
+      )
+      INSERT INTO staff_notification_attempts(lead_id,transport,endpoint_id,endpoint_version,attempt_key,dispatch_state,safe_error,finished_at)
+      SELECT $1::uuid,'staff_whatsapp',d.id,d.version,'website-phone:'||$1::text||':'||d.staff_id::text,
+        CASE WHEN reason IS NULL THEN 'queued' ELSE 'suppressed' END,reason,
+        CASE WHEN reason IS NOT NULL THEN now() END
+      FROM destinations d WHERE NOT EXISTS (SELECT 1 FROM staff_notification_attempts WHERE lead_id=$1::uuid)
+      ON CONFLICT(attempt_key) DO NOTHING RETURNING dispatch_state`,
+      params: [leadId, channelId, leadCopyStaffIds()],
+    },
+  ]);
+  summary.blocked += rows.filter((row) => row.dispatch_state === "suppressed").length;
 }

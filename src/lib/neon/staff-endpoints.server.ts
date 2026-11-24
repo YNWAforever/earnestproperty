@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { forwardingPhone } from "../whatsapp-enquiries/enquiry-forwarding-policy.mjs";
 import { z } from "zod";
 import { maskStaffDestination } from "./whatsapp-readiness-policy.ts";
 import { staffNotificationRuntime } from "../whatsapp-enquiries/staff-notifications.server.ts";
@@ -10,7 +11,7 @@ export const endpointInput = z
     id: z.string().uuid().optional(),
     expectedVersion: z.number().int().positive().optional(),
     staffId: z.string().uuid(),
-    transport: z.enum(["inbox_private_note", "staff_whatsapp"]),
+    transport: z.enum(["inbox_private_note", "staff_whatsapp", "website_lead_phone"]),
     destinationReference: z.string().max(256).optional(),
     verificationRef: z.string().trim().max(160).optional(),
     permissionRef: z.string().trim().min(1).max(160),
@@ -64,14 +65,20 @@ export async function saveStaffEndpoint(
   if (d.id && !d.expectedVersion) throw new Response("VERSION_REQUIRED", { status: 400 });
   const channelId = staffNotificationRuntime().channelId;
   if (!channelId) throw new Response("COMPANY_CHANNEL_UNAVAILABLE", { status: 409 });
-  const [mapping] = await ports.query(
-    `SELECT m.channel_id,m.inbox_user_id,m.version,m.eligible,m.retired_at,m.verified_at,
+  const phoneEndpoint = d.transport === "website_lead_phone";
+  const [mapping] = phoneEndpoint
+    ? []
+    : await ports.query(
+        `SELECT m.channel_id,m.inbox_user_id,m.version,m.eligible,m.retired_at,m.verified_at,
        m.review_enforced,m.review_basis,m.review_evidence_id
      FROM whatsapp_staff_channels m JOIN staff_users s ON s.id=m.staff_id
      WHERE m.staff_id=$1::uuid AND m.channel_id=$2 AND s.active LIMIT 1`,
-    [d.staffId, channelId],
-  );
-  if (!mapping || mapping.eligible !== true || mapping.retired_at || !mapping.verified_at)
+        [d.staffId, channelId],
+      );
+  if (
+    !phoneEndpoint &&
+    (!mapping || mapping.eligible !== true || mapping.retired_at || !mapping.verified_at)
+  )
     throw new Response("STAFF_MAPPING_UNAVAILABLE", { status: 409 });
   const privateNote = d.transport === "inbox_private_note";
   if (
@@ -84,13 +91,15 @@ export async function saveStaffEndpoint(
     throw new Response("INBOX_MAPPING_REVIEW_REQUIRED", { status: 409 });
   const destinationReference = privateNote
     ? String(mapping.inbox_user_id)
-    : (d.destinationReference?.trim() ?? "");
+    : phoneEndpoint
+      ? forwardingPhone(d.destinationReference)
+      : (d.destinationReference?.trim() ?? "");
   const verificationRef = privateNote
     ? String(mapping.review_evidence_id)
     : (d.verificationRef?.trim() ?? "");
   if (!destinationReference || !verificationRef)
     throw new Response("ENDPOINT_VERIFICATION_REQUIRED", { status: 400 });
-  const mappingVersion = Number(mapping.version);
+  const mappingVersion = phoneEndpoint ? null : Number(mapping.version);
   const params = [
     d.staffId,
     d.transport,
@@ -105,8 +114,11 @@ export async function saveStaffEndpoint(
     d.expectedVersion ?? null,
     mappingVersion,
   ];
-  const guard =
-    "EXISTS(SELECT 1 FROM staff_users a JOIN staff_roles r ON r.staff_user_id=a.id WHERE a.id=$9::uuid AND a.active AND r.role IN ('admin','manager')) AND EXISTS(SELECT 1 FROM staff_users s JOIN whatsapp_staff_channels m ON m.staff_id=s.id WHERE s.id=$1::uuid AND s.active AND m.channel_id=$3 AND m.version=$12 AND m.eligible AND m.retired_at IS NULL AND m.verified_at IS NOT NULL AND ($2<>'inbox_private_note' OR (m.inbox_user_id=$4 AND m.review_enforced AND m.review_basis='provider_verified' AND m.review_evidence_id::text=$5)))";
+  const activeStaff = "EXISTS(SELECT 1 FROM staff_users s WHERE s.id=$1::uuid AND s.active)";
+  const endpointGuard = phoneEndpoint
+    ? activeStaff
+    : "EXISTS(SELECT 1 FROM staff_users s JOIN whatsapp_staff_channels m ON m.staff_id=s.id WHERE s.id=$1::uuid AND s.active AND m.channel_id=$3 AND m.version=$12 AND m.eligible AND m.retired_at IS NULL AND m.verified_at IS NOT NULL AND ($2<>'inbox_private_note' OR (m.inbox_user_id=$4 AND m.review_enforced AND m.review_basis='provider_verified' AND m.review_evidence_id::text=$5)))";
+  const guard = `EXISTS(SELECT 1 FROM staff_users a JOIN staff_roles r ON r.staff_user_id=a.id WHERE a.id=$9::uuid AND a.active AND r.role IN ('admin','manager')) AND ${endpointGuard}`;
   const statement = d.id
     ? `UPDATE staff_notification_endpoints SET transport=$2,channel_id=$3,destination_reference=$4,verification_ref=$5,verified_at=now(),permission_ref=$6,permission_granted=true,quiet_hours_policy=$7::jsonb,enabled=$8,mapping_version=$12,updated_at=now(),last_inbound_at=CASE WHEN destination_reference=$4 AND channel_id=$3 AND transport=$2 THEN last_inbound_at ELSE NULL END,template_name=NULL,template_language=NULL,template_verified_at=NULL WHERE id=$10::uuid AND staff_id=$1::uuid AND version=$11 AND retired_at IS NULL AND ${guard} RETURNING id,version`
     : `INSERT INTO staff_notification_endpoints(staff_id,transport,channel_id,destination_reference,verification_ref,verified_at,permission_ref,permission_granted,quiet_hours_policy,enabled,mapping_version) SELECT $1::uuid,$2,$3,$4,$5,now(),$6,true,$7::jsonb,$8,$12 WHERE $10::uuid IS NULL AND $11::integer IS NULL AND ${guard} RETURNING id,version`;

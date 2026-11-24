@@ -1,12 +1,6 @@
 # WhatsApp sales follow-up go-live checklist
 
-Status on 2026-11-24 (verified read-only against production Neon + Vercel env names/flags): **the
-flow is not live**. What _is_ live is the plumbing — the number, the tracked links and inbound
-capture. What is missing is ownership: nothing is attributed, assigned, or followed up.
-
-Every step below names its type, the evidence that proves it is done, and the rollback. **None of
-the production steps may be executed without Willy naming that step.** Code steps go through a PR
-and are inert until the matching setting exists.
+Website lead forwarding uses the approved `staff_enquiry_followup` Utility template. The draft adds a dedicated phone destination for each colleague. Four production destination drafts await verification and delivery hours. The migration, release and automatic phone delivery are pending.
 
 ## Where the flow actually stands
 
@@ -25,13 +19,7 @@ and are inert until the matching setting exists.
 
 ## Step 1 - Who owns a sales enquiry (DECIDED 2026-11-24)
 
-Willy's standing rule, restated 2026-11-24: **sales -> 秋, manager -> 秋.**
-
-- **Sales assignee:** 張秋 (Kenneth Chang), job title 董事,
-  `staff_users.id = 64d5a2d6-e602-4760-9709-63b0414f6a83`, `active = true`, `branch_id = null`.
-- **Manager follow-up recipient:** the same person, 張秋.
-
-Nothing in production points at 張秋 yet, so the rule is currently unenforced on every layer:
+A unit enquiry alerts its responsible Sales colleague and copies 張秋 (Kenneth Chang). An estate enquiry alerts the manager assigned to that estate and copies 張秋. An enquiry with unknown scope goes only to 張秋. Option B identifies him by staff ID `64d5a2d6-e602-4760-9709-63b0414f6a83` and uses his own verified staff line ending 6562. Each distinct phone receives one template per enquiry.
 
 | Check (2026-11-24)                               | Result                                                                                                                                                                                                                                           |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -42,17 +30,7 @@ Nothing in production points at 張秋 yet, so the rule is currently unenforced 
 | `whatsapp_staff_channels` owner (both channels)  | the staff account literally named **"test"** (`72285986-c82c-46bd-98d9-c6b021d91b0d`), admin                                                                                                                                                     |
 | `staff_notification_endpoints` owner (both rows) | also the **"test"** account, transport `inbox_private_note` only                                                                                                                                                                                 |
 
-Implementing the rule needs three separately approved production changes (Step 2 covers the code,
-which is inert on its own):
-
-1. `EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID=64d5a2d6-e602-4760-9709-63b0414f6a83` in Vercel Production -
-   this is the whole of "sales + 秋" for website enquiries.
-2. A **new versioned** `enquiry_notification_recipients` row for 張秋 with consent evidence
-   (`permission_granted`, `verified_at`, `enabled=true`) - this is "manager + 秋". Do not silently
-   repoint the existing `manager:1..3` rows: they are three other people, and a recipient row is a
-   consent record, not a routing preference.
-3. A verified WhatsApp endpoint for 張秋 (and a `whatsapp_staff_channels` row if the Inbox mapping
-   should move off the "test" account). Until then his alerts can only be an Inbox private note.
+The 2026-11-24 observations above predate the four destination drafts. The website lead worker uses `staff_notification_endpoints`. Inbound WhatsApp conversation assignment uses the channel mapping described in Step 3.
 
 ## Step 2 — Website enquiries fall back to that person (code, this PR)
 
@@ -90,23 +68,14 @@ which is inert on its own):
 - Acceptance: one test enquiry has a `whatsapp_enquiry_reference_links` row and its conversation
   shows the source link and staff.
 
-## Step 5 — Manager follow-up alerts (owner consent + config)
+## Step 5 — Website lead phone delivery
 
-- 5.1 Create and verify the recipient row for 張秋 (per the Step 1 decision), with consent evidence
-  (`permission_granted`, `verified_at`, `enabled=true`). The existing `manager:1..3` rows belong to
-  three other colleagues and stay as they are unless Willy says otherwise. This is a consent record,
-  not a preference toggle.
-- 5.1a The copy recipient is 張秋 on his own staff line (92786562), by staff id
-  (`LEAD_COPY_STAFF_ID`) - not a second phone number. Willy chose this on 2026-11-24 so one enquiry
-  never messages him twice; the plan de-duplicates identical destinations.
-- 5.2 Register a verified WhatsApp endpoint for 張秋 (today both endpoints are `inbox_private_note`
-  and owned by the "test" account) and confirm `EP_WA_STAFF_ALERT_TEMPLATE` is approved for that
-  number.
-- 5.3 Only then set `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED=true`.
-- Acceptance: one test enquiry produces exactly one `staff_notification_intents` row that renders
-  (the pending row from 2026-09-28 is a good first sample), delivered to the approved recipient,
-  acknowledged by them, and recorded with a masked destination.
-- Rollback: set the flag back to `false` and retire the endpoint. Do not delete intents or receipts.
+1. Apply `20261125000000_website_lead_phone.sql` during the authorised release. It adds the `website_lead_phone` endpoint type and reserves new website submissions for their own worker. Existing jobs retain the route chosen at intake.
+2. Under 同事通知設定, use 重新核實 on each existing draft, select 網站查詢 WhatsApp 電話通知, and enter the independently confirmed staff number, verification reference, recipient permission reference and approved hours. Use the same procedure for listing Sales who should receive unit enquiries. Enable each eligible destination. The current delivery worker supports approved all-hours endpoints. Inbox emails and memberships are only needed for colleagues managing conversations in Inbox.
+3. Use the company channel and the verified staff transport settings. Set `EP_WA_STAFF_ALERT_TEMPLATE` to `{"name":"staff_enquiry_followup","language":"zh_HK","params":["name","source","phone","link"]}`. The shared `EP_WA_STAFF_NOTIFICATIONS_ENABLED` switch must be `true`. The older `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED` environment entry has no runtime effect.
+4. For an authorised delivery test, compare the intended recipients with the frozen attempts by `lead_id`. A provider acceptance has an operation ID when supplied. Use delivery receipts or recipient confirmation to establish delivery. A missing or unverified destination leaves a suppressed attempt. A lost provider outcome stays unknown and is never automatically resent.
+
+To pause one phone, disable its website endpoint. The shared `EP_WA_STAFF_NOTIFICATIONS_ENABLED` switch pauses all staff notifications. Submissions created during a global pause keep their paused state when delivery resumes.
 
 ## Step 6 — Portal sources (28hse, Property.hk)
 
@@ -138,23 +107,8 @@ Willy's setup approval under `permission_ref=owner-approval:Willy:2026-11-25`. T
 `verified_at=NULL`, `verification_ref=NULL` and an empty quiet-hours policy. The original setup
 mistakenly used the owner's approval as evidence of destination verification and all-hours delivery.
 
-### Woztell account matching
+### Woztell Inbox access
 
-The signed-in app showed 19 team membership records. The team list and the Earnest Property Inbox
-overview had no identifiable match for the four colleagues using their recorded names or telephone
-numbers. All four CRM email fields and linked login IDs were empty. An account may use another
-name. Obtain each colleague's Woztell login email or the confirmed work email for a new invitation.
-The app's Team Members screen sends invitations by email.
+Colleagues who handle or assign conversations in Inbox need a matching Inbox account and channel access. The two historical mappings belong to the test account. Receiving the website template directly by phone requires the verified destination described in Step 5.
 
-Match existing team members first. After an invited colleague joins, grant access to the Earnest
-Property channel through Inbox user management. Confirm each person's channel user and folder in
-Woztell before saving their CRM mapping. The two historical mappings for the test account only
-establish that account's folder and routing node. The configured provider directory previously
-returned `Unauthorized`, so verify directory access before relying on a provider lookup.
-[Woztell roles and permissions](https://doc.woztell.com/docs/integrations/inbox/inbox-settings/)
-
-Record destination verification and approved notification hours for each endpoint. Verify template
-eligibility in the sending path and follow Steps 5 and 7 before reporting delivery. The last
-production flag read showed `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED=false`. The draft PR carries the
-scoped owner and copy logic. 張秋's copy uses his staff ID and shares destination de-duplication with
-the owner's alert.
+The November 18 delivery to the test line ending 3493 established template delivery on the company channel. The four staff drafts each need their own destination evidence. [Delivery record](../decisions/2026-11-18-channel-archive-live-delivery.md)

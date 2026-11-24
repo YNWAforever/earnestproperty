@@ -139,6 +139,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20261114040000_property_source_authority.sql",
   "20261116000000_enquiry_forwarding.sql",
   "20261116010000_enquiry_information_scope.sql",
+  "20261125000000_website_lead_phone.sql",
 ]);
 
 /**

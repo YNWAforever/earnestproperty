@@ -2,6 +2,8 @@
 
 Date: 2026-11-24 · Decided by: Willy · Status: decision recorded, **not yet applied in production**
 
+The November 25 implementation uses verified website phone endpoints and the shared staff notification switch. The launch instructions and current three-case routing are in the [website forwarding runbook](../runbooks/whatsapp-sales-followup-go-live.md). Earlier configuration notes below record the investigation at the time.
+
 ## Decision
 
 Every lead that has no other owner is followed up by **張秋 (Kenneth Chang, 董事)**:

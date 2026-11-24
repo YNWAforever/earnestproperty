@@ -1359,6 +1359,165 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         );
       };
 
+      await t.test(
+        "scoped phone templates use the registered owner and copy without Inbox accounts",
+        async () => {
+          const channel = scenario();
+          const switches = ["EP_WA_STAFF_NOTIFICATIONS_ENABLED", "EP_WA_STAFF_ALERT_TEMPLATE"];
+          const saved = Object.fromEntries(switches.map((key) => [key, process.env[key]]));
+          const { LEAD_COPY_STAFF_ID: copyId } = await import("../neon/lead-default-assignee.js");
+          const { saveStaffEndpoint } = await import("../neon/staff-endpoints.server.ts");
+          const sales = await seedStaff(query);
+          const manager = await seedStaff(query, { roles: ["manager"] });
+          const duty = await seedStaff(query, { roles: ["manager"], duty: true });
+          await query("INSERT INTO staff_users(id,active) VALUES($1,true) ON CONFLICT DO NOTHING", [
+            copyId,
+          ]);
+          const register = (staffId, destinationReference) =>
+            saveStaffEndpoint(
+              {
+                staffId,
+                transport: "website_lead_phone",
+                destinationReference,
+                verificationRef: "owned-phone",
+                permissionRef: "owned-permission",
+                allowAllHours: true,
+                enabled: true,
+              },
+              { staffId: manager, roles: ["manager"] },
+              { query, transaction },
+            );
+          const endpoint = await register(copyId, "+852 6900 0001");
+          assert.equal(endpoint.mappingVersion, null);
+          await register(sales, "69000002");
+          await register(manager, "69000003");
+          await register(duty, "69000004");
+          await assert.rejects(register(duty, "not-a-phone"), (e) => e.status === 400);
+          const listingNo = `WA-${randomUUID().slice(0, 8)}`;
+          const [property] = await query(
+            "INSERT INTO properties(listing_no,canonical_property_no,title_zh,deal_type,district_slug,status,price,agent_id) VALUES($1,$1,'測試','sale','sham-tseng','active',10000000,$2) RETURNING id",
+            [listingNo, duty],
+          );
+          await query("UPDATE staff_users SET show_on_website=true WHERE id=$1", [sales]);
+          await query(
+            "INSERT INTO property_agents(property_id,position,staff_id,source) VALUES($1,1,$2,'owned')",
+            [property.id, sales],
+          );
+          async function prepare(input) {
+            const submission = intake({ submissionId: randomUUID(), ...input });
+            const first = await persistWebsiteInquiry(query, submission);
+            assert.equal(first.forwardingQueued, undefined);
+            assert.equal((await persistWebsiteInquiry(query, submission)).id, first.id);
+            const { id } = await leadFor(first.id);
+            assert.equal(
+              (await query("SELECT enquiry_enqueue_forward('website',$1) AS job", [id]))[0].job,
+              null,
+            );
+            assert.equal(
+              (
+                await query("SELECT id FROM ops_jobs WHERE idempotency_key=$1", [
+                  `enquiry-forward:website:${id}`,
+                ])
+              ).length,
+              0,
+            );
+            const [job] = await query(
+              "UPDATE ops_jobs SET status='running',lease_owner='worker-1',lease_expires_at=now()+interval '5 minutes' WHERE idempotency_key=$1 RETURNING id",
+              [`lead-alert:${id}`],
+            );
+            return [id, job.id];
+          }
+          try {
+            process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED = "true";
+            process.env.EP_WA_STAFF_ALERT_TEMPLATE = JSON.stringify({
+              name: "staff_enquiry_followup",
+              language: "zh_HK",
+              params: ["name", "source", "phone", "link"],
+            });
+            await query(
+              "UPDATE enquiry_notification_recipients SET enabled=true,channel_id=$1,destination_reference=phone,verified_at=now(),verification_ref='owned',permission_granted=true,permission_ref='owned' WHERE recipient_key='copy'",
+              [channel],
+            );
+            assert.equal(
+              (await query("SELECT enquiry_forwarding_is_enabled() AS enabled"))[0].enabled,
+              true,
+            );
+            for (const [input, phones] of [
+              [{ listingNo, propertyId: property.id }, ["85269000001", "85269000002"]],
+              [{ listingNo }, ["85269000001", "85269000002"]],
+              [
+                { estateSlug: "hong-kong-garden", estateManagerStaffId: manager },
+                ["85269000001", "85269000003"],
+              ],
+              [{}, ["85269000001"]],
+              [{ estateSlug: "hong-kong-garden", estateManagerStaffId: copyId }, ["85269000001"]],
+            ]) {
+              const [id, job] = await prepare(input);
+              const provider = fakeProvider();
+              await run(id, job, provider);
+              await run(id, job, provider);
+              assert.deepEqual(provider.calls.map((c) => c.recipientId).sort(), phones);
+              for (const call of provider.calls) {
+                assert.equal(call.memberId, undefined);
+                assert.equal(call.response[0].elementName, "staff_enquiry_followup");
+                assert.equal(call.response[0].languageCode, "zh_HK");
+              }
+            }
+            await query(
+              "UPDATE staff_notification_endpoints SET destination_reference='85269000001' WHERE staff_id=$1 AND channel_id=$2",
+              [sales, channel],
+            );
+            const [sameId, sameJob] = await prepare({ listingNo, propertyId: property.id });
+            const same = fakeProvider();
+            await run(sameId, sameJob, same);
+            assert.deepEqual(
+              same.calls.map((c) => c.recipientId),
+              ["85269000001"],
+            );
+            const [uncertainId, uncertainJob] = await prepare({});
+            let calls = 0;
+            const timeout = {
+              send: async () => {
+                calls++;
+                throw new Error("owned timeout after submission");
+              },
+            };
+            await run(uncertainId, uncertainJob, timeout);
+            await run(uncertainId, uncertainJob, timeout);
+            assert.equal(calls, 1);
+            assert.equal((await attempts(uncertainId))[0].dispatch_state, "unknown");
+            process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED = "false";
+            const [pausedId, pausedJob] = await prepare({});
+            process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED = "true";
+            const paused = fakeProvider();
+            await run(pausedId, pausedJob, paused);
+            assert.equal(paused.calls.length, 0);
+            assert.equal((await attempts(pausedId))[0].safe_error, "notifications_disabled");
+            const [id, job] = await prepare({});
+            const revoked = fakeProvider();
+            const real = createStaffWhatsAppTransport(revoked.send);
+            await run(id, job, revoked, {
+              transport: () => ({
+                ...real,
+                async sendStaffWhatsAppByPhone(scope) {
+                  await query("UPDATE staff_notification_endpoints SET enabled=false WHERE id=$1", [
+                    endpoint.id,
+                  ]);
+                  return real.sendStaffWhatsAppByPhone(scope);
+                },
+              }),
+            });
+            assert.equal(revoked.calls.length, 0);
+            assert.equal((await attempts(id))[0].safe_error, "dispatch_eligibility_changed");
+          } finally {
+            await query(
+              "UPDATE enquiry_notification_recipients SET enabled=false WHERE recipient_key='copy'",
+            );
+            applyEnv(saved);
+          }
+        },
+      );
+
       await t.test("each source path enqueues exactly one alert job", async () => {
         const jobsBefore = await alertJobCount();
         // Contact form: no listing.

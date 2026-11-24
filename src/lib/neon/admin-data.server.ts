@@ -4950,7 +4950,6 @@ export async function createWebsiteInquiry(input: {
   if (result.leadAlertQueued) {
     try {
       wakeAfterCommit("general");
-      if (result.forwardingQueued) wakeAfterCommit("service");
     } catch {
       // The enquiry and its alert job are committed; the cron lane will pick the job up.
       console.warn("[website-inquiry] lead_alert_wake_failed");

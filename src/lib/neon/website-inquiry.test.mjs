@@ -191,6 +191,7 @@ test("website inquiry persistence awaits and propagates an injected query failur
   await assert.rejects(
     persistWebsiteInquiry(
       async (sql, params) => {
+        if (sql.includes("to_regclass('property_agents')")) return [{ available: false }];
         calls += 1;
         assert.match(sql, /^\s*WITH resolved_listing/i);
         assert.deepEqual(params, [
@@ -262,7 +263,7 @@ test("public inquiry upsert can never raise consent or overwrite an existing con
     consentWhatsapp: true,
   });
 
-  const { sql } = calls[0];
+  const { sql, params } = calls.find((call) => call.sql.includes("INSERT INTO inquiries"));
   const conflictClause = sql.slice(sql.indexOf("ON CONFLICT (normalized_phone)"));
 
   // Consent is carried over untouched -- never OR'd, never taken from EXCLUDED.
@@ -277,7 +278,7 @@ test("public inquiry upsert can never raise consent or overwrite an existing con
 
   // The submitted consent flag still reaches the INSERT, so a brand-new contact
   // who ticks the box is opted in on first write.
-  assert.equal(calls[0].params[5], true);
+  assert.equal(params[5], true);
 });
 
 // Each CTE clause of live-agent.server.ts that starts with `<name> AS (` (the name must not be a
