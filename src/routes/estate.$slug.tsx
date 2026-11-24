@@ -6,7 +6,7 @@ import {
   propertyDealLabel,
   publicPropertyTitle,
 } from "@/lib/property-public";
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, stripSearchParams } from "@tanstack/react-router";
 import { FaqList } from "@/components/site/FaqList";
 import { AlertCircle, ArrowRight, CheckCircle2 } from "lucide-react";
 import { AppImage } from "@/components/media/AppImage";
@@ -34,7 +34,11 @@ import type { MarketChartMonth, MarketEstateTransactions } from "@/content/marke
 import type { EprcEstateTransactions } from "@/content/eprc-transactions";
 import { EPRC_SNAPSHOT_DATE } from "@/content/eprc-transactions";
 import { getEstateRegisteredTransactions } from "@/content/eprc-transactions-snapshot";
-import { estateMarketSearchSchema } from "@/lib/estate-market-search";
+import {
+  ESTATE_MARKET_SEARCH_DEFAULTS,
+  estateMarketSearchSchema,
+  hasEstateMarketFilters,
+} from "@/lib/estate-market-search";
 import type { EstateMarketSearch } from "@/lib/estate-market-search";
 import { fetchEstateMarketBlock } from "@/lib/market/estate-market";
 import { zodValidator } from "@tanstack/zod-adapter";
@@ -87,6 +91,7 @@ export const Route = createFileRoute("/estate/$slug")({
   // server-rendered, crawlable and shareable. They never touch the agency
   // (本行成交) queries below.
   validateSearch: zodValidator(estateMarketSearchSchema),
+  search: { middlewares: [stripSearchParams(ESTATE_MARKET_SEARCH_DEFAULTS)] },
   loaderDeps: ({ search }) => search,
   loader: async ({ params, deps }) => {
     const estate = await fetchEstateBySlug(params.slug);
@@ -176,6 +181,7 @@ export const Route = createFileRoute("/estate/$slug")({
       marketTransactions: getEstateRegisteredTransactions(estate.slug),
       marketRegistrations,
       marketChart,
+      isMarketSearchView: hasEstateMarketFilters(deps) || deps.mtPage > 1,
       comparableEstates,
       relatedAgents,
       relatedVideos,
@@ -227,6 +233,7 @@ export const Route = createFileRoute("/estate/$slug")({
         { property: "og:description", content: description },
         { name: "twitter:title", content: title },
         { name: "twitter:description", content: description },
+        ...(loaderData.isMarketSearchView ? [{ name: "robots", content: "noindex,follow" }] : []),
         ...(image
           ? [
               {

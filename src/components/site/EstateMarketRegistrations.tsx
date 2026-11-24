@@ -12,6 +12,7 @@ type EstateMarketLink = {
   to: "/estate/$slug";
   params: { slug: string };
   search: EstateMarketSearch;
+  hash: string;
 };
 
 /**
@@ -42,10 +43,19 @@ export function EstateMarketRegistrations({
   const filteredEmpty = estate.status === "filtered-empty";
   const firstRow = total === 0 ? 0 : (page - 1) * market.pageSize + 1;
   const lastRow = Math.min(page * market.pageSize, total);
-  const estateLink = { to: "/estate/$slug", params: { slug: estate.slug } } as const;
+  const estateLink = {
+    to: "/estate/$slug",
+    params: { slug: estate.slug },
+    hash: "market-registrations-heading",
+  } as const;
+  const filters = {
+    mtYear: activeFilters.year ?? undefined,
+    mtNature: activeFilters.nature ?? undefined,
+    mtPhase: activeFilters.phase ?? undefined,
+  };
   const facetLink = (patch: Partial<EstateMarketSearch>): EstateMarketLink => ({
     ...estateLink,
-    search: { ...patch, mtPage: 1 },
+    search: { ...filters, ...patch, mtPage: 1 },
   });
 
   return (
@@ -84,7 +94,7 @@ export function EstateMarketRegistrations({
           <FacetRow
             label="年份"
             allActive={!activeFilters.year}
-            allLink={facetLink({})}
+            allLink={facetLink({ mtYear: undefined })}
             values={facets.years.map((facet) => ({
               key: String(facet.value),
               label: String(facet.value),
@@ -96,7 +106,7 @@ export function EstateMarketRegistrations({
           <FacetRow
             label="性質"
             allActive={!activeFilters.nature}
-            allLink={facetLink({})}
+            allLink={facetLink({ mtNature: undefined })}
             values={facets.natures.map((facet) => ({
               key: String(facet.value),
               label: String(facet.value),
@@ -109,7 +119,7 @@ export function EstateMarketRegistrations({
             <FacetRow
               label="期數／座數"
               allActive={!activeFilters.phase}
-              allLink={facetLink({})}
+              allLink={facetLink({ mtPhase: undefined })}
               values={facets.phases.map((facet) => ({
                 key: String(facet.value),
                 label: String(facet.value),
@@ -169,9 +179,7 @@ export function EstateMarketRegistrations({
                   <Link
                     {...estateLink}
                     search={{
-                      mtYear: activeFilters.year ?? undefined,
-                      mtNature: activeFilters.nature ?? undefined,
-                      mtPhase: activeFilters.phase ?? undefined,
+                      ...filters,
                       mtPage: page - 1,
                     }}
                     className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground"
@@ -190,9 +198,7 @@ export function EstateMarketRegistrations({
                   <Link
                     {...estateLink}
                     search={{
-                      mtYear: activeFilters.year ?? undefined,
-                      mtNature: activeFilters.nature ?? undefined,
-                      mtPhase: activeFilters.phase ?? undefined,
+                      ...filters,
                       mtPage: page + 1,
                     }}
                     className="rounded-md border px-3 py-1.5 text-xs font-medium text-foreground"

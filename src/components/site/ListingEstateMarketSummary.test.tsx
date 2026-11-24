@@ -9,12 +9,14 @@ mock.module("@tanstack/react-router", () => ({
     to,
     params,
     search,
+    hash,
     className,
   }: {
     children?: ReactNode;
     to?: string;
     params?: { slug?: string };
     search?: Record<string, unknown>;
+    hash?: string;
     className?: string;
   }) => {
     const path = (to ?? "").replace("$slug", String(params?.slug ?? ""));
@@ -22,7 +24,11 @@ mock.module("@tanstack/react-router", () => ({
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => `${key}=${String(value)}`)
       .join("&");
-    return createElement("a", { href: query ? `${path}?${query}` : path, className }, children);
+    return createElement(
+      "a",
+      { href: `${path}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`, className },
+      children,
+    );
   },
 }));
 
@@ -106,7 +112,9 @@ describe("ListingEstateMarketSummary", () => {
     expect(section.find("tbody tr")).toHaveLength(3);
     expect(section.text()).toContain("5 筆來源紀錄");
     expect(section.text()).toContain("更新於 2026-11-23");
-    expect(section.find("a").attr("href")).toBe("/estate/demo-estate?mtPage=1");
+    expect(section.find("a").attr("href")).toBe(
+      "/estate/demo-estate?mtPage=1#market-registrations-heading",
+    );
     expect(section.text()).toContain("查看 示範屋苑 全部市場註冊成交");
   });
 
@@ -146,6 +154,7 @@ describe("ListingEstateMarketSummary", () => {
     expect(text).toContain("此公開來源的 2021–2026 列表未有此屋苑紀錄");
     expect(text).toContain("不代表此屋苑沒有成交");
     expect($("tbody tr")).toHaveLength(0);
+    expect($("section a").attr("href")).toEndWith("#market-registrations-heading");
     expect($("section").text()).not.toContain("本行成交");
   });
 });

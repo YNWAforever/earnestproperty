@@ -36,80 +36,67 @@ export function ListingEstateMarketSummary({
         </p>
       </div>
       {latest.length > 0 ? (
-        <>
-          <div className="mt-3 max-w-full overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[480px] text-left text-sm">
-              <caption className="sr-only">
-                {estateNameZh} 市場註冊成交最新紀錄。售價以百萬港元顯示，面積從缺時顯示破折號。
-              </caption>
-              <thead className="bg-muted text-xs text-muted-foreground">
-                <tr>
-                  {["登記日期", "樓層／單位", "售價（$M）", "面積／呎價"].map((label) => (
-                    <th key={label} scope="col" className="px-3 py-2">
-                      {label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {latest.map((row) => (
-                  <tr key={`${row.yearFilter}-${row.ref}`} className="border-t">
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {row.registrationDate ? (
-                        <time dateTime={row.registrationDate}>
-                          {formatHkDate(row.registrationDate) ?? row.registrationDate}
-                        </time>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {[
-                        row.floor === null ? null : `${row.floor} 樓`,
-                        row.unit === null ? null : `${row.unit} 室`,
-                      ]
-                        .filter(Boolean)
-                        .join("／") || "—"}
-                    </td>
-                    <td className="px-3 py-2 tabular-nums">
-                      {row.considerationMillion === null
-                        ? "—"
-                        : row.considerationMillion.toFixed(3)}
-                    </td>
-                    <td className="whitespace-nowrap px-3 py-2">
-                      {row.grossAreaSqft === null && row.pricePerSqft === null ? (
-                        "—"
-                      ) : (
-                        <>
-                          <span className="block">
-                            {row.grossAreaSqft === null
-                              ? "—"
-                              : `${row.grossAreaSqft.toLocaleString("zh-HK")} 呎`}
-                          </span>
-                          {row.pricePerSqft !== null && (
-                            <span className="block text-xs text-muted-foreground">
-                              ${row.pricePerSqft.toLocaleString("zh-HK")}／呎
-                              {row.psfBasis ? `（${row.psfBasis}）` : ""}
-                            </span>
-                          )}
-                        </>
-                      )}
-                    </td>
-                  </tr>
+        <div className="mt-3 max-w-full overflow-x-auto rounded-lg border">
+          <table className="w-full min-w-[480px] text-left text-sm">
+            <caption className="sr-only">
+              {estateNameZh} 市場註冊成交最新紀錄。售價以百萬港元顯示，面積從缺時顯示破折號。
+            </caption>
+            <thead className="bg-muted text-xs text-muted-foreground">
+              <tr>
+                {["登記日期", "樓層／單位", "售價（$M）", "面積／呎價"].map((label) => (
+                  <th key={label} scope="col" className="px-3 py-2">
+                    {label}
+                  </th>
                 ))}
-              </tbody>
-            </table>
-          </div>
-          <Link
-            to="/estate/$slug"
-            params={{ slug: estate.slug }}
-            search={{ mtPage: 1 }}
-            className="mt-3 inline-block text-sm font-semibold text-primary underline"
-          >
-            查看 {estateNameZh} 全部市場註冊成交（
-            {pageCount > 1 ? `${total.toLocaleString("zh-HK")} 筆` : "詳情"}）→
-          </Link>
-        </>
+              </tr>
+            </thead>
+            <tbody>
+              {latest.map((row) => (
+                <tr key={`${row.yearFilter}-${row.ref}`} className="border-t">
+                  <td className="whitespace-nowrap px-3 py-2">
+                    {row.registrationDate ? (
+                      <time dateTime={row.registrationDate}>
+                        {formatHkDate(row.registrationDate) ?? row.registrationDate}
+                      </time>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    {[
+                      row.floor === null ? null : `${row.floor} 樓`,
+                      row.unit === null ? null : `${row.unit} 室`,
+                    ]
+                      .filter(Boolean)
+                      .join("／") || "—"}
+                  </td>
+                  <td className="px-3 py-2 tabular-nums">
+                    {row.considerationMillion === null ? "—" : row.considerationMillion.toFixed(3)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    {row.grossAreaSqft === null && row.pricePerSqft === null ? (
+                      "—"
+                    ) : (
+                      <>
+                        <span className="block">
+                          {row.grossAreaSqft === null
+                            ? "—"
+                            : `${row.grossAreaSqft.toLocaleString("zh-HK")} 呎`}
+                        </span>
+                        {row.pricePerSqft !== null && (
+                          <span className="block text-xs text-muted-foreground">
+                            ${row.pricePerSqft.toLocaleString("zh-HK")}／呎
+                            {row.psfBasis ? `（${row.psfBasis}）` : ""}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       ) : (
         <p className="mt-3 rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
           {estate.status === "filtered-empty"
@@ -117,6 +104,16 @@ export function ListingEstateMarketSummary({
             : `此屋苑暫無可顯示的市場註冊成交，可到屋苑頁查看其他來源。`}
         </p>
       )}
+      <Link
+        to="/estate/$slug"
+        params={{ slug: estate.slug }}
+        search={{ mtPage: 1 }}
+        hash="market-registrations-heading"
+        className="mt-3 inline-block text-sm font-semibold text-primary underline"
+      >
+        查看 {estateNameZh} 全部市場註冊成交（
+        {pageCount > 1 ? `${total.toLocaleString("zh-HK")} 筆` : "詳情"}）→
+      </Link>
     </section>
   );
 }

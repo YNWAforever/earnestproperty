@@ -11,6 +11,7 @@ mock.module("@tanstack/react-router", () => ({
     to,
     params,
     search,
+    hash,
     className,
     ...rest
   }: {
@@ -18,6 +19,7 @@ mock.module("@tanstack/react-router", () => ({
     to?: string;
     params?: { slug?: string };
     search?: Record<string, unknown>;
+    hash?: string;
     className?: string;
     [key: string]: unknown;
   }) => {
@@ -29,7 +31,7 @@ mock.module("@tanstack/react-router", () => ({
     return createElement(
       "a",
       {
-        href: query ? `${path}?${query}` : path,
+        href: `${path}${query ? `?${query}` : ""}${hash ? `#${hash}` : ""}`,
         className,
         "aria-current": rest["aria-current"],
       },
@@ -216,6 +218,38 @@ describe("EstateMarketRegistrations", () => {
     expect(values.every((value) => value.href?.startsWith("/estate/demo-estate"))).toBe(true);
   });
 
+  test("changing or clearing one facet preserves the others and resets the page", () => {
+    const $ = render({
+      market: market({
+        activeFilters: { year: 2026, nature: "sale", phase: "A" },
+        page: 2,
+        pageCount: 3,
+        facets: {
+          years: [{ value: 2025, count: 4 }],
+          natures: [{ value: "other", count: 3 }],
+          phases: [
+            { value: "A", count: 2 },
+            { value: "B", count: 4 },
+          ],
+        },
+      }),
+    });
+    const facets = $("section a[aria-current], section a")
+      .toArray()
+      .slice(0, 7)
+      .map((el) => new URL($(el).attr("href")!, "https://example.test"));
+    expect(facets.map((url) => Object.fromEntries(url.searchParams))).toEqual([
+      { mtNature: "sale", mtPhase: "A", mtPage: "1" },
+      { mtYear: "2025", mtNature: "sale", mtPhase: "A", mtPage: "1" },
+      { mtYear: "2026", mtPhase: "A", mtPage: "1" },
+      { mtYear: "2026", mtNature: "other", mtPhase: "A", mtPage: "1" },
+      { mtYear: "2026", mtNature: "sale", mtPage: "1" },
+      { mtYear: "2026", mtNature: "sale", mtPhase: "A", mtPage: "1" },
+      { mtYear: "2026", mtNature: "sale", mtPhase: "B", mtPage: "1" },
+    ]);
+    expect(facets.every((url) => url.hash === "#market-registrations-heading")).toBe(true);
+  });
+
   test("pagination exposes prev/next only when there is more than one page", () => {
     const single = render({ market: market() });
     expect(single.text()).not.toContain("下一頁");
@@ -226,7 +260,7 @@ describe("EstateMarketRegistrations", () => {
     const next = many("a")
       .filter((_, anchor) => many(anchor).text() === "下一頁")
       .attr("href");
-    expect(next).toBe("/estate/demo-estate?mtPage=3");
+    expect(next).toBe("/estate/demo-estate?mtPage=3#market-registrations-heading");
   });
 
   test("a filtered-empty source shows an honest empty state, not a demand or a zero row", () => {

@@ -77,7 +77,7 @@ count.
 
 ## 4. SEO / performance
 
-- Canonical URL is unchanged (`/estate/{slug}`); filter variations share it.
+- The first page uses `/estate/{slug}`. Filters and later pages carry `noindex,follow` and point to the base estate URL as their canonical. Changing or clearing one filter retains the other selections and returns to the first page. Listing, filter and pagination links target the market registration heading.
 - The ~5.7 MB snapshot is read through **one server function**
   (`src/lib/market/estate-market.ts`, the repo's `createServerFn` +
   `await import(...)` boundary) and `src/content/market-transactions-snapshot.ts`
@@ -125,17 +125,7 @@ raw HTML), matching the existing EPRC fixture precedent.
   Authentication**, so an unauthenticated request gets the Vercel login page
   (`<title>Login – Vercel</title>`). Sign in as the project owner to view it;
   it cannot be captured anonymously.
-- **GitHub Actions:** every job on this PR failed in 3–4 s with **zero executed
-  steps** (`ci`, `no-link-local-postgres`, `browser-handoff`,
-  `browser-no-link`, `migration-drift`). The same zero-step failure is present on
-  `main`'s scheduled runs since run `45033305369`
-  (`Daily property sync`, `Property sync read-only watchdog`,
-  `Old-site inventory sync`, `Correspondent agents refresh`), while the last PR
-  runs before that point succeeded in ~31 min. This is an account/runner
-  condition, not this branch: nothing in the diff can prevent a workflow from
-  starting, and `migration-drift` has nothing to check here (no migration).
-  Local verification stands in for it (typecheck, lint, build, 171 tests,
-  `--check` determinism, bundle-size check).
+- GitHub reports an account billing or spending-limit issue for all five checks. The jobs started zero steps. The account owner can check the payment status and Actions budget under Billing and plans before rerunning the checks. [GitHub Actions run](https://github.com/YNWAforever/earnestproperty/actions/runs/45257834385).
 
 Screenshots below are from the **local production build** (the brief allows
 preview _or_ local; the preview is auth-gated). `.output/server` + Playwright
