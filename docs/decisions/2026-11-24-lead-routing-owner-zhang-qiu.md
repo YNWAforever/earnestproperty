@@ -33,11 +33,12 @@ Two consequences worth stating plainly:
 
 ## How it is implemented
 
-| Layer                                                                | Mechanism                                                                                                                         | State                      |
-| -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| Website enquiries with no visitor choice and no active listing agent | `EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID` (code: PR #362, inert until the variable is set)                                              | code ready, variable unset |
-| WhatsApp conversations                                               | Woztell inbox assignment rule to 張秋's folder                                                                                    | not configured             |
-| Manager follow-up alerts                                             | new versioned `enquiry_notification_recipients` row for 張秋 + verified WhatsApp endpoint + `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED` | not configured             |
+| Layer                                                               | Mechanism                                                                                                                         | State                       |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
+| A listing enquiry with no visitor choice and no correspondent agent | `EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID` (code: PR #362, inert until set)                                                              | code ready, variable unset  |
+| A listing enquiry that shows a correspondent agent                  | `property_agents` position 1, active staff (the 負責經紀 on the page)                                                             | code in PR #362, not merged |
+| WhatsApp conversations                                              | Woztell inbox assignment rule to 張秋's folder                                                                                    | not configured              |
+| Manager follow-up alerts                                            | new versioned `enquiry_notification_recipients` row for 張秋 + verified WhatsApp endpoint + `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED` | not configured              |
 
 The ordered checklist, the current production evidence and the rollback for each step live in
 `docs/runbooks/whatsapp-sales-followup-go-live.md` (Step 1 is this decision).
@@ -47,3 +48,20 @@ The ordered checklist, the current production evidence and the rollback for each
 Not an approval to write to production. Each production change above needs Willy to name it. The
 existing `manager:1..3` recipients belong to three other colleagues and are left untouched until he
 says otherwise.
+
+## Correction: where the 負責經紀 actually lives (2026-11-24)
+
+Willy's point on the A034926 listing is right and worth recording: every listing page does show a
+負責經紀 (there, 李偉增 S-098767). That agent is a `property_agents` row, **not**
+`properties.agent_id`. Measured on 2026-11-24:
+
+| Field                                                                          | Coverage on active listings                        |
+| ------------------------------------------------------------------------------ | -------------------------------------------------- |
+| `properties.agent_id` (the routing column the old code used)                   | **0 of 836**                                       |
+| `property_agents` with an active staff member (the 負責經紀 shown on the page) | **781 of 836** (417 of 454 active public listings) |
+
+So routing must read `property_agents`. A buyer's enquiry goes to the colleague whose name and
+licence the buyer sees; 張秋 receives the ones with no listing-level agent at all - the contact page,
+estate and district pages, and the roughly 7% of listings without a correspondent agent. If Willy
+instead wants **every** enquiry to land with 張秋, that is a one-line ordering change in
+`src/lib/neon/website-inquiry.js` and it will be done on request.

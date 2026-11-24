@@ -58,17 +58,24 @@ export function readDefaultLeadAssignee(env = globalThis.process?.env) {
 /**
  * The assignment decision for one enquiry.
  *
- * Priority: visitor's chosen correspondent agent > the listing's own agent when
+ * Priority: visitor's chosen correspondent agent > the 負責經紀 shown on the
+ * listing page (`property_agents`) > the listing's own `properties.agent_id` when
  * that staff row is active > the configured default assignee. Returns null when
  * none applies, which is what the intake SQL inserts in that case.
+ *
+ * `properties.agent_id` is the weakest listing-level source: production on
+ * 2026-11-24 had it set on 0 of 836 active property rows, while 781 of them had
+ * an active correspondent agent.
  */
 export function resolveAssignedAgentId({
   chosenAgentId = null,
+  correspondentAgentId = null,
   listingAgentId = null,
   listingAgentActive = false,
   defaultAssigneeId = null,
 } = {}) {
   if (chosenAgentId) return chosenAgentId;
+  if (correspondentAgentId) return correspondentAgentId;
   if (listingAgentActive && listingAgentId) return listingAgentId;
   return defaultAssigneeId ?? null;
 }

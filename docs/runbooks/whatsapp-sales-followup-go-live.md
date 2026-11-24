@@ -33,14 +33,14 @@ Willy's standing rule, restated 2026-11-24: **sales -> 秋, manager -> 秋.**
 
 Nothing in production points at 張秋 yet, so the rule is currently unenforced on every layer:
 
-| Check (2026-11-24)                                    | Result                                                                                                                                                                                 |
-| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `crm_leads` / `inquiries` ever assigned to 張秋       | 0 / 0                                                                                                                                                                                  |
-| `staff_roles` row for 張秋                            | none - he holds no admin/manager/agent role                                                                                                                                            |
-| Active listings with an agent (`properties.agent_id`) | **0** - not one active listing has an agent, so the "listing's own agent" term never fires either                                                                                      |
-| `enquiry_notification_recipients` rows                | `manager:1` 姚頌溏 (Tommy Yiu), `manager:2` 鄧錦雄 (Terence Tang), `manager:3` 李德鴻 (Sam Lee) - all `enabled=false`, `permission_granted=false`, `verified_at=null`; no row for 張秋 |
-| `whatsapp_staff_channels` owner (both channels)       | the staff account literally named **"test"** (`72285986-c82c-46bd-98d9-c6b021d91b0d`), admin                                                                                           |
-| `staff_notification_endpoints` owner (both rows)      | also the **"test"** account, transport `inbox_private_note` only                                                                                                                       |
+| Check (2026-11-24)                               | Result                                                                                                                                                                                                                                           |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `crm_leads` / `inquiries` ever assigned to 張秋  | 0 / 0                                                                                                                                                                                                                                            |
+| `staff_roles` row for 張秋                       | none - he holds no admin/manager/agent role                                                                                                                                                                                                      |
+| Where the 負責經紀 lives                         | `property_agents` (1,394 rows). `properties.agent_id` is set on **0 of 836** active property rows, while **781 of 836** have an active correspondent agent (417 of 454 active public listings) - routing reads `property_agents`, not `agent_id` |
+| `enquiry_notification_recipients` rows           | `manager:1` 姚頌溏 (Tommy Yiu), `manager:2` 鄧錦雄 (Terence Tang), `manager:3` 李德鴻 (Sam Lee) - all `enabled=false`, `permission_granted=false`, `verified_at=null`; no row for 張秋                                                           |
+| `whatsapp_staff_channels` owner (both channels)  | the staff account literally named **"test"** (`72285986-c82c-46bd-98d9-c6b021d91b0d`), admin                                                                                                                                                     |
+| `staff_notification_endpoints` owner (both rows) | also the **"test"** account, transport `inbox_private_note` only                                                                                                                                                                                 |
 
 Implementing the rule needs three separately approved production changes (Step 2 covers the code,
 which is inert on its own):
@@ -56,10 +56,13 @@ which is inert on its own):
 
 ## Step 2 — Website enquiries fall back to that person (code, this PR)
 
-- **Change:** `EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID` (optional, server-only). When set, enquiries with
-  no visitor choice and no active listing agent are assigned to that staff member; the SQL refuses
-  the assignment if the colleague is inactive. Unset or malformed = byte-identical behaviour to
-  today, so merging is safe and changes nothing until the variable exists.
+- **Assignment order (one statement):** visitor's chosen correspondent agent -> the 負責經紀 on the
+  listing page (`property_agents`, position 1, active staff only) -> `properties.agent_id` when that
+  staff row is active -> `EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID` (optional, server-only, last resort).
+  The SQL refuses the default when the colleague is inactive.
+- **Inert by default:** unset or malformed means the same statement shape as today (a literal NULL and
+  no extra parameter). Routing to the 負責經紀 needs no setting at all: it fixes the case where a listing
+  enquiry currently falls through to NULL because `properties.agent_id` is empty.
 - **Evidence:** `npm run test:property-experience` new cases — fallback only when nobody else owns,
   never displacing a visitor's choice or the listing's agent; the statement still opens with
   `WITH resolved_listing`; unset binds no extra parameter and still inserts `NULL`.

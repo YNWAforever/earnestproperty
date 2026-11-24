@@ -14,8 +14,12 @@ export type WebsiteInquiryRouting = {
 export function deriveWebsiteInquiryRouting(
   listing: WebsiteInquiryListing | null,
   chosenAgentId?: string | null,
-  /** EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID, when configured; last resort only. */
-  defaultAssigneeId?: string | null,
+  options?: {
+    /** The 負責經紀 shown on the listing page, from property_agents. */
+    correspondentAgentId?: string | null;
+    /** EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID, when configured; last resort only. */
+    defaultAssigneeId?: string | null;
+  },
 ): WebsiteInquiryRouting;
 
 export const WEBSITE_LISTING_NO_PATTERN: RegExp;

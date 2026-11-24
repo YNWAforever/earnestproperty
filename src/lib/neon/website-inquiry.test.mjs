@@ -140,15 +140,18 @@ test("website inquiry persistence resolves assignment and writes through one ato
   });
 
   assert.deepEqual(result, { id: "inquiry-1", leadAlertQueued: false });
-  assert.equal(calls.length, 1, "resolution and all writes must share one query call");
-  assert.match(calls[0].sql, /WITH[\s\S]*resolved_listing/i);
-  assert.match(calls[0].sql, /p\.status = 'active'/);
-  assert.match(calls[0].sql, /s\.active = true/);
-  assert.match(calls[0].sql, /INSERT INTO crm_contacts/);
-  assertInsertUsesRoutingIntent(calls[0].sql, "crm_leads");
-  assertInsertUsesRoutingIntent(calls[0].sql, "inquiries");
-  assert.equal(calls[0].params.includes("caller-agent"), false);
-  assert.equal(calls[0].params.includes("caller-assigned-agent"), false);
+  // A listing enquiry also reads the 負責經紀 (property_agents) before writing, so
+  // the guarantee is one atomic WRITE statement, not one total call.
+  const writes = calls.filter((call) => /INSERT INTO inquiries/.test(call.sql));
+  assert.equal(writes.length, 1, "resolution and all writes must share one write statement");
+  assert.match(writes[0].sql, /WITH[\s\S]*resolved_listing/i);
+  assert.match(writes[0].sql, /p\.status = 'active'/);
+  assert.match(writes[0].sql, /s\.active = true/);
+  assert.match(writes[0].sql, /INSERT INTO crm_contacts/);
+  assertInsertUsesRoutingIntent(writes[0].sql, "crm_leads");
+  assertInsertUsesRoutingIntent(writes[0].sql, "inquiries");
+  assert.equal(writes[0].params.includes("caller-agent"), false);
+  assert.equal(writes[0].params.includes("caller-assigned-agent"), false);
 });
 
 test("website inquiry enqueues its lead alert in the same statement", async () => {
@@ -522,23 +525,27 @@ test("the configured fallback only decides an enquiry nobody else owns", async (
 
   // Nobody to own a general enquiry: the fallback takes it.
   assert.equal(
-    deriveWebsiteInquiryRouting(null, null, DEDICATED_AGENT).assignedAgentId,
+    deriveWebsiteInquiryRouting(null, null, { defaultAssigneeId: DEDICATED_AGENT }).assignedAgentId,
     DEDICATED_AGENT,
   );
   // A listing whose agent is missing or inactive also falls through to it.
   assert.equal(
-    deriveWebsiteInquiryRouting({ ...listing, agentActive: false }, null, DEDICATED_AGENT)
-      .assignedAgentId,
+    deriveWebsiteInquiryRouting({ ...listing, agentActive: false }, null, {
+      defaultAssigneeId: DEDICATED_AGENT,
+    }).assignedAgentId,
     DEDICATED_AGENT,
   );
   // The listing's own active agent is never displaced.
   assert.equal(
-    deriveWebsiteInquiryRouting(listing, null, DEDICATED_AGENT).assignedAgentId,
+    deriveWebsiteInquiryRouting(listing, null, { defaultAssigneeId: DEDICATED_AGENT })
+      .assignedAgentId,
     "agent-active",
   );
   // Nor is the colleague the visitor explicitly picked.
   assert.equal(
-    deriveWebsiteInquiryRouting(listing, "chosen-agent", DEDICATED_AGENT).assignedAgentId,
+    deriveWebsiteInquiryRouting(listing, "chosen-agent", {
+      defaultAssigneeId: DEDICATED_AGENT,
+    }).assignedAgentId,
     "chosen-agent",
   );
   // No configuration: unchanged pre-fallback behaviour.
@@ -613,8 +620,99 @@ test("configuring the fallback binds one active-staff-guarded uuid and keeps the
   // the last term of the COALESCE, never ahead of the listing's own agent.
   assert.match(
     on.sql,
-    /COALESCE\((?:NULL|\$\d+)::uuid, s\.id, \(SELECT d\.id FROM staff_users d WHERE d\.id = \$\d+::uuid AND d\.active = true\)\)/,
+    /COALESCE\((?:NULL|\$\d+)::uuid, (?:NULL|\$\d+)::uuid, s\.id, \(SELECT d\.id FROM staff_users d WHERE d\.id = \$\d+::uuid AND d\.active = true\)\)/,
   );
   assert.equal((on.sql.match(/AND d\.active = true/g) ?? []).length, 2);
   assert.doesNotMatch(on.sql, /BYPASSRLS|GRANT|ALTER /i);
+});
+
+// The colleague a buyer sees on a listing page ("負責經紀") is a property_agents
+// row, not properties.agent_id. Production on 2026-11-24: agent_id was null on
+// all 836 active property rows while 781 had an active correspondent agent, so
+// routing has to read property_agents or almost every lead stays unowned.
+const CORRESPONDENT = "9b1f7c3e-2a4d-4b6e-8c05-7d3e1f9a2b44";
+
+test("the listing's displayed 負責經紀 is assigned before the default fallback", async () => {
+  const { deriveWebsiteInquiryRouting } = await import(moduleUrl);
+  const listing = { id: "property-1", dealType: "sale", agentId: null, agentActive: false };
+
+  // Nobody picked, no legacy agent_id, but the page shows a correspondent agent.
+  assert.equal(
+    deriveWebsiteInquiryRouting(listing, null, {
+      correspondentAgentId: CORRESPONDENT,
+      defaultAssigneeId: DEDICATED_AGENT,
+    }).assignedAgentId,
+    CORRESPONDENT,
+  );
+  // The correspondent agent also outranks a legacy properties.agent_id.
+  assert.equal(
+    deriveWebsiteInquiryRouting({ ...listing, agentId: "legacy-agent", agentActive: true }, null, {
+      correspondentAgentId: CORRESPONDENT,
+      defaultAssigneeId: DEDICATED_AGENT,
+    }).assignedAgentId,
+    CORRESPONDENT,
+  );
+  // A visitor's explicit choice still wins over both.
+  assert.equal(
+    deriveWebsiteInquiryRouting(listing, "chosen-agent", {
+      correspondentAgentId: CORRESPONDENT,
+      defaultAssigneeId: DEDICATED_AGENT,
+    }).assignedAgentId,
+    "chosen-agent",
+  );
+  // No correspondent agent: the configured default still owns it.
+  assert.equal(
+    deriveWebsiteInquiryRouting(listing, null, { defaultAssigneeId: DEDICATED_AGENT })
+      .assignedAgentId,
+    DEDICATED_AGENT,
+  );
+});
+
+test("a listing enquiry resolves the correspondent agent before the single write", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const input = {
+    name: "測試",
+    phone: "9123 4567",
+    normalizedPhone: "85291234567",
+    email: null,
+    message: null,
+    listingNo: null,
+    propertyId: "11111111-1111-4111-8111-111111111111",
+    consentWhatsapp: false,
+  };
+
+  const run = async (available) => {
+    const calls = [];
+    await persistWebsiteInquiry(async (sql, params) => {
+      calls.push({ sql, params });
+      if (/to_regclass\('property_agents'\)/.test(sql)) return [{ available }];
+      if (/FROM property_agents a/.test(sql)) return [{ staff_id: CORRESPONDENT }];
+      return [{ id: "inquiry-1" }];
+    }, input);
+    return calls;
+  };
+
+  const found = await run(true);
+  // probe + correspondent read + one write
+  assert.equal(found.length, 3);
+  const write = found.find((call) => /INSERT INTO inquiries/.test(call.sql));
+  assert.ok(write, "the write still happens");
+  assert.equal(write.params.includes(CORRESPONDENT), true, "the correspondent agent is bound");
+  // Order matters: chosen, correspondent, legacy agent_id, configured default.
+  assert.match(
+    write.sql,
+    /COALESCE\((?:NULL|\$\d+)::uuid, (?:NULL|\$\d+)::uuid, s\.id, \(SELECT d\.id/,
+  );
+  // The read only ever picks an ACTIVE colleague and follows the page's order.
+  const read = found.find((call) => /FROM property_agents a/.test(call.sql));
+  assert.match(read.sql, /s\.active = true/);
+  assert.match(read.sql, /ORDER BY a\.position, a\.staff_id/);
+
+  // Pre-migration database (no property_agents): the term is skipped, the write
+  // still runs, and it does not invent an assignee.
+  const missing = await run(false);
+  assert.equal(missing.length, 2);
+  const writeWithoutTable = missing.find((call) => /INSERT INTO inquiries/.test(call.sql));
+  assert.ok(writeWithoutTable);
+  assert.equal(writeWithoutTable.params.includes(CORRESPONDENT), false);
 });

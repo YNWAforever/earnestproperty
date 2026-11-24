@@ -4,16 +4,14 @@ import { phoneMatchSql, phoneSpellingTiebreakSql } from "../phone.js";
 
 /**
  * Routing projection for one enquiry, mirroring the intake statement's
- * `COALESCE`: the visitor's choice wins, then the listing's own active agent,
- * then the configured default assignee (`EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID`,
- * see lead-default-assignee.js). Null means "nobody owns this lead yet", which
- * is what the statement inserts in that case.
+ * `COALESCE`: the visitor's choice wins, then the 負責經紀 shown on the listing
+ * page (a property_agents row), then the listing's own active `agent_id`, then
+ * the configured default assignee (`EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID`, see
+ * lead-default-assignee.js). Null means "nobody owns this lead yet", which is
+ * what the statement inserts in that case.
  */
-export function deriveWebsiteInquiryRouting(
-  listing,
-  chosenAgentId = null,
-  defaultAssigneeId = null,
-) {
+export function deriveWebsiteInquiryRouting(listing, chosenAgentId = null, options = {}) {
+  const { correspondentAgentId = null, defaultAssigneeId = null } = options ?? {};
   if (!listing) {
     return {
       propertyId: null,
@@ -24,10 +22,12 @@ export function deriveWebsiteInquiryRouting(
 
   return {
     propertyId: listing.id,
-    // The visitor's choice (already validated against property_agents) wins over the
-    // listing's own agent, so the new-lead alert reaches the colleague they picked.
+    // The visitor's choice (already validated against property_agents) wins over
+    // anything the listing itself carries, so the new-lead alert reaches the
+    // colleague they picked.
     assignedAgentId: resolveAssignedAgentId({
       chosenAgentId,
+      correspondentAgentId,
       listingAgentId: listing.agentId,
       listingAgentActive: listing.agentActive,
       defaultAssigneeId,
@@ -171,9 +171,34 @@ export async function persistWebsiteInquiry(query, input) {
   // code cannot change routing until the variable is set. The SQL's
   // `AND d.active = true` is what refuses to assign a lead to a colleague who has
   // been deactivated.
+  // The colleague the buyer actually sees on a listing page ("負責經紀") is a
+  // property_agents row, not properties.agent_id. Production on 2026-11-24: 0 of
+  // 836 active property rows had agent_id set, while 781 had an active
+  // correspondent agent (417 of 454 active public listings). Routing therefore
+  // prefers the correspondent agent, then properties.agent_id, then the
+  // configured default assignee. property_agents is additive, so probe before
+  // reading; a pre-migration database simply skips this term.
+  let correspondentAgentId = null;
+  if (propertyId) {
+    const [agentTable] = await query(
+      `SELECT to_regclass('property_agents') IS NOT NULL AS available`,
+    );
+    if (agentTable?.available === true) {
+      const rows = await query(
+        `SELECT a.staff_id FROM property_agents a
+         JOIN staff_users s ON s.id = a.staff_id AND s.active = true
+         WHERE a.property_id = $1::uuid
+         ORDER BY a.position, a.staff_id
+         LIMIT 1`,
+        [propertyId],
+      );
+      correspondentAgentId = rows[0]?.staff_id ?? null;
+    }
+  }
   const defaultAssigneeId = readDefaultLeadAssignee();
   let nextParam = baseParamCount + 3;
   const chosenAgentParam = requestedAgentId ? `$${nextParam++}::uuid` : "NULL::uuid";
+  const correspondentAgentParam = correspondentAgentId ? `$${nextParam++}::uuid` : "NULL::uuid";
   const defaultAssigneeParam = defaultAssigneeId ? `$${nextParam++}::uuid` : "NULL::uuid";
   // A scalar subquery rather than a leading CTE: the statement must still open
   // with `WITH resolved_listing`, which its contract test pins.
@@ -190,9 +215,10 @@ export async function persistWebsiteInquiry(query, input) {
     WITH resolved_listing AS (
       SELECT
         p.id AS property_id,
-        -- The visitor's chosen correspondent agent wins; otherwise the listing's own
-        -- agent; otherwise the configured default assignee (Phase 2.5, inert when unset).
-        COALESCE(${chosenAgentParam}, s.id, ${defaultAssigneeSql}) AS assigned_agent_id,
+        -- The visitor's chosen correspondent agent wins; then the 負責經紀 shown on
+        -- the listing page; then the listing's own agent; then the configured
+        -- default assignee (Phase 2.5, inert when unset).
+        COALESCE(${chosenAgentParam}, ${correspondentAgentParam}, s.id, ${defaultAssigneeSql}) AS assigned_agent_id,
         CASE WHEN p.deal_type = 'rent' THEN 'renter' ELSE 'buyer' END AS intent
       FROM properties p
       LEFT JOIN staff_users s ON s.id = p.agent_id AND s.active = true
@@ -273,6 +299,7 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
       SUSPECTED_BOT_NOTE,
       input.suspectedBot === true,
       ...(requestedAgentId ? [requestedAgentId] : []),
+      ...(correspondentAgentId ? [correspondentAgentId] : []),
       ...(defaultAssigneeId ? [defaultAssigneeId] : []),
     ],
   );
