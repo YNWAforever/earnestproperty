@@ -1,0 +1,74 @@
+/**
+ * Default lead assignee for public website enquiries (Phase 2.5 of
+ * `docs/runbooks/whatsapp-sales-followup-go-live.md`).
+ *
+ * Today a website enquiry is assigned only when the visitor picked a
+ * correspondent agent or the active listing's own agent is an active staff
+ * member. Every other case — the contact page, an estate/district page, and any
+ * listing whose agent row is missing or inactive — inserts `crm_leads` and
+ * `inquiries` with `assigned_agent_id = NULL`, so nobody owns the follow-up.
+ * Production on 2026-11-24: 7 of 7 website leads in the last 30 days were
+ * unassigned.
+ *
+ * This module is the pure half: it reads one optional staff UUID from the
+ * server environment and decides the assignment in the same priority order the
+ * intake SQL uses, so the tested projection and the statement cannot drift.
+ *
+ * Design rules (deliberate, keep them):
+ * - Unset or malformed configuration is inert. No env var, no error, no
+ *   behaviour change: the intake statement keeps the exact parameter list it
+ *   had before this module existed, so a merge cannot change routing by itself.
+ * - A configured staff member who is inactive (or no longer exists) is ignored.
+ *   Only the intake SQL's `AND d.active = true` guard decides that; this module
+ *   never claims a staff row is active.
+ * - The visitor's explicit choice still wins. This is a fallback, not a
+ *   re-routing: a lead must never be moved away from the colleague a buyer
+ *   picked, or from the listing's own agent.
+ */
+
+/** Server-only. Never exposed to the browser bundle. */
+export const LEAD_DEFAULT_ASSIGNEE_ENV = "EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID";
+
+// Same shape the intake statement accepts for a visitor-chosen agent: any
+// canonical Postgres uuid, not only the v1-v5 forms.
+const STAFF_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Trim and validate a configured staff id. Anything that is not a canonical
+ * UUID is treated as "not configured" rather than as an error: a typo in an env
+ * var must not take the public enquiry form down.
+ */
+export function parseDefaultLeadAssignee(value) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return STAFF_ID_PATTERN.test(trimmed) ? trimmed : null;
+}
+
+/** Read the fallback staff id from the environment (server only). */
+export function readDefaultLeadAssignee(env = globalThis.process?.env) {
+  if (!env || typeof env !== "object") return null;
+  // Read through the literal name as well: scripts/check-required-env.test.mjs
+  // scans for env reads and fails when a documented variable is not read anywhere
+  // by that shape.
+  return parseDefaultLeadAssignee(
+    env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID ?? env[LEAD_DEFAULT_ASSIGNEE_ENV],
+  );
+}
+
+/**
+ * The assignment decision for one enquiry.
+ *
+ * Priority: visitor's chosen correspondent agent > the listing's own agent when
+ * that staff row is active > the configured default assignee. Returns null when
+ * none applies, which is what the intake SQL inserts in that case.
+ */
+export function resolveAssignedAgentId({
+  chosenAgentId = null,
+  listingAgentId = null,
+  listingAgentActive = false,
+  defaultAssigneeId = null,
+} = {}) {
+  if (chosenAgentId) return chosenAgentId;
+  if (listingAgentActive && listingAgentId) return listingAgentId;
+  return defaultAssigneeId ?? null;
+}

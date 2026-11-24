@@ -1,11 +1,23 @@
 import { leadAlertEnqueueCte } from "./lead-alert-enqueue.js";
+import { readDefaultLeadAssignee, resolveAssignedAgentId } from "./lead-default-assignee.js";
 import { phoneMatchSql, phoneSpellingTiebreakSql } from "../phone.js";
 
-export function deriveWebsiteInquiryRouting(listing, chosenAgentId = null) {
+/**
+ * Routing projection for one enquiry, mirroring the intake statement's
+ * `COALESCE`: the visitor's choice wins, then the listing's own active agent,
+ * then the configured default assignee (`EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID`,
+ * see lead-default-assignee.js). Null means "nobody owns this lead yet", which
+ * is what the statement inserts in that case.
+ */
+export function deriveWebsiteInquiryRouting(
+  listing,
+  chosenAgentId = null,
+  defaultAssigneeId = null,
+) {
   if (!listing) {
     return {
       propertyId: null,
-      assignedAgentId: null,
+      assignedAgentId: resolveAssignedAgentId({ defaultAssigneeId }),
       intent: "buyer",
     };
   }
@@ -14,8 +26,12 @@ export function deriveWebsiteInquiryRouting(listing, chosenAgentId = null) {
     propertyId: listing.id,
     // The visitor's choice (already validated against property_agents) wins over the
     // listing's own agent, so the new-lead alert reaches the colleague they picked.
-    assignedAgentId:
-      chosenAgentId ?? (listing.agentActive && listing.agentId ? listing.agentId : null),
+    assignedAgentId: resolveAssignedAgentId({
+      chosenAgentId,
+      listingAgentId: listing.agentId,
+      listingAgentActive: listing.agentActive,
+      defaultAssigneeId,
+    }),
     intent: listing.dealType === "rent" ? "renter" : "buyer",
   };
 }
@@ -148,7 +164,20 @@ export async function persistWebsiteInquiry(query, input) {
   // Validated above: null unless the visitor's choice is a correspondent agent of this
   // listing. When there is no choice the SQL carries a literal NULL, so the statement and its
   // parameter list are byte-identical to the pre-agent build.
-  const chosenAgentParam = requestedAgentId ? `$${baseParamCount + 3}::uuid` : "NULL::uuid";
+  //
+  // Phase 2.5 fallback: an optional dedicated sales agent, configured with
+  // EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID. Unset (or malformed) leaves the statement
+  // exactly as before -- a literal NULL and no extra parameter -- so merging this
+  // code cannot change routing until the variable is set. The SQL's
+  // `AND d.active = true` is what refuses to assign a lead to a colleague who has
+  // been deactivated.
+  const defaultAssigneeId = readDefaultLeadAssignee();
+  let nextParam = baseParamCount + 3;
+  const chosenAgentParam = requestedAgentId ? `$${nextParam++}::uuid` : "NULL::uuid";
+  const defaultAssigneeParam = defaultAssigneeId ? `$${nextParam++}::uuid` : "NULL::uuid";
+  // A scalar subquery rather than a leading CTE: the statement must still open
+  // with `WITH resolved_listing`, which its contract test pins.
+  const defaultAssigneeSql = `(SELECT d.id FROM staff_users d WHERE d.id = ${defaultAssigneeParam} AND d.active = true)`;
   // The migration is applied before this reader is deployed. Keep the routing
   // hint inside the one intake statement, using the existing bound values.
   const contextKind =
@@ -161,8 +190,9 @@ export async function persistWebsiteInquiry(query, input) {
     WITH resolved_listing AS (
       SELECT
         p.id AS property_id,
-        -- The visitor's chosen correspondent agent wins; otherwise the listing's own agent.
-        COALESCE(${chosenAgentParam}, s.id) AS assigned_agent_id,
+        -- The visitor's chosen correspondent agent wins; otherwise the listing's own
+        -- agent; otherwise the configured default assignee (Phase 2.5, inert when unset).
+        COALESCE(${chosenAgentParam}, s.id, ${defaultAssigneeSql}) AS assigned_agent_id,
         CASE WHEN p.deal_type = 'rent' THEN 'renter' ELSE 'buyer' END AS intent
       FROM properties p
       LEFT JOIN staff_users s ON s.id = p.agent_id AND s.active = true
@@ -190,7 +220,7 @@ export async function persistWebsiteInquiry(query, input) {
     routing AS (
       SELECT property_id, assigned_agent_id, intent FROM resolved_listing
       UNION ALL
-      SELECT (SELECT id FROM requested_listing), NULL::uuid, 'buyer'::text
+      SELECT (SELECT id FROM requested_listing), ${defaultAssigneeSql}, 'buyer'::text
       WHERE NOT EXISTS (SELECT 1 FROM resolved_listing)
     ),
     ${submissionCte}
@@ -243,6 +273,7 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
       SUSPECTED_BOT_NOTE,
       input.suspectedBot === true,
       ...(requestedAgentId ? [requestedAgentId] : []),
+      ...(defaultAssigneeId ? [defaultAssigneeId] : []),
     ],
   );
 

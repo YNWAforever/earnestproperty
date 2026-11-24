@@ -493,3 +493,128 @@ test("each handler derives suspectedBot after the rate limits and never returns 
     assert.doesNotMatch(between, /\breturn\b|\bthrow\b/, `${server}: no early exit`);
   }
 });
+
+// Phase 2.5: a website enquiry that has no other owner can fall back to one
+// configured staff member. Everything here is the *inert by default* half: with
+// no configuration the intake statement and its parameter list are byte-identical
+// to the pre-fallback build, which is what the strict parameter assertion above
+// already proves for the unset case.
+const DEDICATED_AGENT = "3f9c1b0a-6d2e-4c8f-9a51-2b7d4e6f8a01";
+
+function withDefaultAssignee(value, run) {
+  const previous = process.env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID;
+  if (value === undefined) delete process.env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID;
+  else process.env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID = value;
+  return Promise.resolve(run()).finally(() => {
+    if (previous === undefined) delete process.env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID;
+    else process.env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID = previous;
+  });
+}
+
+test("the configured fallback only decides an enquiry nobody else owns", async () => {
+  const { deriveWebsiteInquiryRouting } = await import(moduleUrl);
+  const listing = {
+    id: "property-1",
+    dealType: "sale",
+    agentId: "agent-active",
+    agentActive: true,
+  };
+
+  // Nobody to own a general enquiry: the fallback takes it.
+  assert.equal(
+    deriveWebsiteInquiryRouting(null, null, DEDICATED_AGENT).assignedAgentId,
+    DEDICATED_AGENT,
+  );
+  // A listing whose agent is missing or inactive also falls through to it.
+  assert.equal(
+    deriveWebsiteInquiryRouting({ ...listing, agentActive: false }, null, DEDICATED_AGENT)
+      .assignedAgentId,
+    DEDICATED_AGENT,
+  );
+  // The listing's own active agent is never displaced.
+  assert.equal(
+    deriveWebsiteInquiryRouting(listing, null, DEDICATED_AGENT).assignedAgentId,
+    "agent-active",
+  );
+  // Nor is the colleague the visitor explicitly picked.
+  assert.equal(
+    deriveWebsiteInquiryRouting(listing, "chosen-agent", DEDICATED_AGENT).assignedAgentId,
+    "chosen-agent",
+  );
+  // No configuration: unchanged pre-fallback behaviour.
+  assert.equal(deriveWebsiteInquiryRouting(null).assignedAgentId, null);
+  assert.equal(
+    deriveWebsiteInquiryRouting({ ...listing, agentActive: false }).assignedAgentId,
+    null,
+  );
+});
+
+test("only a canonical staff uuid counts as configuration", async () => {
+  const { parseDefaultLeadAssignee, readDefaultLeadAssignee } = await import(
+    new URL("./lead-default-assignee.js", import.meta.url)
+  );
+
+  assert.equal(parseDefaultLeadAssignee(DEDICATED_AGENT), DEDICATED_AGENT);
+  assert.equal(parseDefaultLeadAssignee(`  ${DEDICATED_AGENT}  `), DEDICATED_AGENT);
+  for (const invalid of ["", "   ", "not-a-uuid", "3f9c1b0a", null, undefined, 42, true]) {
+    assert.equal(parseDefaultLeadAssignee(invalid), null, String(invalid));
+  }
+  assert.equal(readDefaultLeadAssignee({}), null);
+  assert.equal(
+    readDefaultLeadAssignee({ EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID: DEDICATED_AGENT }),
+    DEDICATED_AGENT,
+  );
+  // A typo must degrade to "not configured", never to a crash on the public form.
+  assert.equal(readDefaultLeadAssignee({ EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID: "typo" }), null);
+  assert.equal(readDefaultLeadAssignee(null), null);
+});
+
+test("configuring the fallback binds one active-staff-guarded uuid and keeps the statement shape", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const input = {
+    name: "測試",
+    phone: "9123 4567",
+    normalizedPhone: "85291234567",
+    email: null,
+    message: null,
+    listingNo: null,
+    propertyId: null,
+    consentWhatsapp: false,
+  };
+
+  const unset = [];
+  await withDefaultAssignee(undefined, async () => {
+    await persistWebsiteInquiry(async (sql, params) => {
+      unset.push({ sql, params });
+      return [];
+    }, input);
+  });
+  assert.equal(unset.length, 1);
+  const configured = [];
+  await withDefaultAssignee(DEDICATED_AGENT, async () => {
+    await persistWebsiteInquiry(async (sql, params) => {
+      configured.push({ sql, params });
+      return [];
+    }, input);
+  });
+  assert.equal(configured.length, 1);
+
+  const [off] = unset;
+  const [on] = configured;
+  // The contract test above pins `WITH resolved_listing` first; keep it.
+  assert.match(on.sql, /^\s*WITH resolved_listing/i);
+  assert.equal(on.params.length, off.params.length + 1);
+  assert.equal(on.params.at(-1), DEDICATED_AGENT);
+  // Unset: no new parameter, and the statement still says "no owner".
+  assert.equal(off.params.includes(DEDICATED_AGENT), false);
+  assert.match(off.sql, /'buyer'::text\s+WHERE NOT EXISTS \(SELECT 1 FROM resolved_listing\)/);
+  assert.match(off.sql, /NULL::uuid/);
+  // Configured: only an ACTIVE colleague can be assigned, and the fallback is
+  // the last term of the COALESCE, never ahead of the listing's own agent.
+  assert.match(
+    on.sql,
+    /COALESCE\((?:NULL|\$\d+)::uuid, s\.id, \(SELECT d\.id FROM staff_users d WHERE d\.id = \$\d+::uuid AND d\.active = true\)\)/,
+  );
+  assert.equal((on.sql.match(/AND d\.active = true/g) ?? []).length, 2);
+  assert.doesNotMatch(on.sql, /BYPASSRLS|GRANT|ALTER /i);
+});
