@@ -89,3 +89,46 @@ Every enquiry notifies **once**. The send must be locked and de-duplicated.
 Two facts about the current staff table that matter for the estate-manager case: the only `manager`
 role account is a placeholder ("Earnest Admin"), and no staff row carries `is_duty_manager = true`,
 so the existing duty-manager fallback would notify nobody even if the transport were on.
+
+## 屋苑 → 經理 rotation (transcribed from the printed sheet, 2026-11-24)
+
+Willy supplied the agency's printed 推介 sheet (photo dated 2026-11-11). Each estate carries a circled
+①/②/③, and the top of the sheet writes the legend by hand:
+
+| Mark | Contact                       | Phone on sheet | Existing recipient row | Staff id                               |
+| ---- | ----------------------------- | -------------- | ---------------------- | -------------------------------------- |
+| ①    | Tommy 姚頌溏 (Tommy Yiu)      | 6644 2444      | `manager:1`            | `81206a23-777c-45c0-a2c5-7b53757206ca` |
+| ②    | Terence 鄧錦雄 (Terence Tang) | 9100 5322      | `manager:2`            | `fb4dfa8f-a892-458b-a4f9-7caf48a4a0a2` |
+| ③    | Sam 李德鴻 (Sam Lee)          | 6626 6608      | `manager:3`            | `48e258b4-6b1f-4f65-b5e8-2f10a34806ba` |
+
+The three numbers match the three `enquiry_notification_recipients` manager rows that already exist
+(disabled, unconsented), so the rotation maps straight onto recipients the notification plan can use.
+
+Transcription lives in code, not in this document, so it is testable:
+`src/content/estate-manager-rotation.ts` (`ESTATE_MANAGERS`, `ESTATE_MANAGER_BY_SLUG`,
+`ESTATE_MANAGER_BY_NAME`, `managerRotationForEstate`), pinned by
+`src/content/estate-manager-rotation.test.mjs` (6 cases, in `npm run test:estate-conversion`).
+
+Counts from the sheet:
+
+| Item                                                                                     | Count                                    |
+| ---------------------------------------------------------------------------------------- | ---------------------------------------- |
+| Estates on the sheet with a live page here (slug-keyed)                                  | 48                                       |
+| Estates on the sheet with no live page (kept by name, listed in `UNMAPPED_ESTATE_NAMES`) | 5 - 皇壁, 新麗苑, 金麗苑, 凱和山, 龍珠島 |
+| Not estates (村屋 ① in the 深井 block only; 村屋 and 其他 unmarked in the 青山 block)    | never routed                             |
+
+What is still missing before 「只講屋苑 → 屋苑經理」 actually notifies anyone:
+
+1. the enquiry has to carry estate scope (the public form sends a property id / listing number today,
+   not an estate slug), so `enquiry_routing_context` needs a `kind = 'estate'` case wired through
+   `website-inquiry.js`;
+2. the estate manager needs a usable notification path - at present there is **no** `staff_whatsapp`
+   endpoint for any of the three, the recipient rows are `enabled=false` with no consent evidence, and
+   `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED=false`;
+3. the copy number 85297987774 still needs its owner and consent, and an endpoint, exactly like the
+   managers.
+
+The once-only guarantee needs no work: the lead alert is one `ops_jobs` row keyed
+`lead-alert:<lead id>` with `ON CONFLICT DO NOTHING`, and `staff_notification_attempts` has a unique
+`attempt_key` plus a per-lead "no attempts yet" guard, so a retry, a second job or a duplicate
+delivery cannot send twice.
