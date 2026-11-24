@@ -163,3 +163,32 @@ One more thing worth deciding: 張秋 holds no `staff_roles` row. The **copy** p
 staff id and skips the role predicate, but the **assigned-agent** path still requires a role, so a
 lead whose owner is 張秋 would not reach him through that path - only through the copy. Add a
 `staff_roles` row for him if he should also be alerted as an owner.
+
+### What the last mile actually needs (verified 2026-11-25)
+
+The mapping table's other two columns are tenant constants, not per-person values: every existing row
+uses `folder_id='main'` and `routing_node_id=''`, and only `inbox_user_id` differs per staff member
+(a 24-hex Woztell id). Production holds exactly two mapping rows, both for the staff account named
+"test" (`inbox_user_id 69280afe1bbc4961899a4ce8`); 姚頌溏, 鄧錦雄, 李德鴻 and 張秋 have **never been
+Woztell inbox users**, so there is nothing to copy from.
+
+The app maps staff to inbox users that already exist (`inbox-directory.server.ts` lists candidates and
+`staff-mapping-review.server.ts` saves the choice) - it does not create them. A read-only call to
+`EP_WA_INBOX_LIST_USERS_URL` with the production signed context returned
+`{"ok":0,"error":{"name":"Error","message":"Unauthorized"}}`, so the ids have to come from the Woztell
+console.
+
+So the remaining step is four inbox users in Woztell, one per colleague, same company channel
+`6ad6c56645bc37e79936664a`, in folder `main`:
+
+| Colleague           | Phone to attach |
+| ------------------- | --------------- |
+| 張秋 Kenneth Chang  | +852 9278 6562  |
+| 姚頌溏 Tommy Yiu    | +852 6644 2444  |
+| 鄧錦雄 Terence Tang | +852 9100 5322  |
+| 李德鴻 Sam Lee      | +852 6626 6608  |
+
+Their `inbox_user_id` then goes into `whatsapp_staff_channels` (with `folder_id='main'`,
+`routing_node_id=''`, `eligible=true`, `verified_at=now()`, `review_basis='owner_approved_setup'`),
+each endpoint is enabled with the mapping version, and `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED` goes true.
+No email fallback exists: production has no email provider and all four staff rows have `email = null`.
