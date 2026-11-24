@@ -716,3 +716,47 @@ test("a listing enquiry resolves the correspondent agent before the single write
   assert.ok(writeWithoutTable);
   assert.equal(writeWithoutTable.params.includes(CORRESPONDENT), false);
 });
+
+// The copy destination (Willy, 2026-11-24: 張秋 on 85297987774) lives in the
+// environment, not in the repository, and must never be guessed from a typo.
+test("the copy destination is parsed strictly and stays unset by default", async () => {
+  const { parseLeadCopyPhone, readLeadCopyPhone } = await import(
+    new URL("./lead-default-assignee.js", import.meta.url)
+  );
+
+  assert.equal(parseLeadCopyPhone("85297987774"), "85297987774");
+  assert.equal(parseLeadCopyPhone("97987774"), "85297987774", "local form is normalised");
+  assert.equal(parseLeadCopyPhone("+852 9798 7774"), "85297987774");
+  assert.equal(parseLeadCopyPhone(" 85297987774 "), "85297987774");
+  for (const invalid of [
+    "",
+    "   ",
+    "12345",
+    "07987774",
+    "8529798777",
+    "852979877744",
+    null,
+    undefined,
+    97987774,
+    {},
+  ]) {
+    assert.equal(parseLeadCopyPhone(invalid), null, String(invalid));
+  }
+
+  assert.equal(readLeadCopyPhone({}), null, "unset means no copy is sent");
+  assert.equal(readLeadCopyPhone(null), null);
+  assert.equal(readLeadCopyPhone({ EP_LEAD_COPY_PHONE: "85297987774" }), "85297987774");
+  assert.equal(readLeadCopyPhone({ EP_LEAD_COPY_PHONE: "not-a-number" }), null);
+});
+
+test("the copy destination is never confused with the assignee", async () => {
+  const { readLeadCopyPhone, readDefaultLeadAssignee } = await import(
+    new URL("./lead-default-assignee.js", import.meta.url)
+  );
+  // 張秋 is the default assignee; the copy is a separate office line. Setting one
+  // must not imply the other.
+  const env = { EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID: DEDICATED_AGENT };
+  assert.equal(readDefaultLeadAssignee(env), DEDICATED_AGENT);
+  assert.equal(readLeadCopyPhone(env), null);
+  assert.equal(readLeadCopyPhone({ ...env, EP_LEAD_COPY_PHONE: "85297987774" }), "85297987774");
+});

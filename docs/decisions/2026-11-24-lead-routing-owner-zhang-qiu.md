@@ -78,13 +78,13 @@ Every enquiry notifies **once**. The send must be locked and de-duplicated.
 
 ### What each part needs, and where it stands
 
-| Part                 | Mechanism                                                                                                                                                                                                                         | State                                                                                                                                              |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| 定單位 -> 負責 Sales | listing enquiry assigns the 負責經紀 from `property_agents`; the lead alert plans the assigned agent's endpoint                                                                                                                   | code in PR #362 (unit routing); alert recipient plan already targets the assigned agent                                                            |
-| 只講屋苑 -> 屋苑經理 | **no estate-to-manager mapping exists** in the schema (no `estate_manager*` column/table, no per-estate manager row)                                                                                                              | **blocked: needs the manager named per estate**, or an approved rule such as "estate manager = manager of that estate's branch" (3 branches exist) |
-| copy 85297987774     | the `enquiry_notification_recipients` row `copy` already carries this number, but it is `enabled=false`, `permission_granted=false`, `verified_at=null`; the lead-alert plan reads `staff_notification_endpoints`, not that table | **blocked: needs the number's owner + consent, and a `staff_whatsapp` endpoint**                                                                   |
-| 只發一次 + 鎖 + 去重 | `ops_jobs` enqueue uses `idempotency_key='lead-alert:'                                                                                                                                                                            |                                                                                                                                                    | lead_id`with`ON CONFLICT DO NOTHING`; `staff_notification_attempts`has a unique`attempt_key` plus a "no attempts exist for this lead" guard, so a retry or a second job cannot send twice | **already implemented** (code path unchanged by this rule) |
-| Actual send          | the plan only reads endpoints with `transport='staff_whatsapp'`, verified mapping, granted permission and an approved quiet-hours policy                                                                                          | **blocked: production has only two `inbox_private_note` endpoints** and `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED=false`                                |
+| Part                 | Mechanism                                                                                                                                | State                                                                                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| 定單位 -> 負責 Sales | listing enquiry assigns the 負責經紀 from `property_agents`; the lead alert plans the assigned agent's endpoint                          | code in PR #362 (unit routing); alert recipient plan already targets the assigned agent                                                            |
+| 只講屋苑 -> 屋苑經理 | **no estate-to-manager mapping exists** in the schema (no `estate_manager*` column/table, no per-estate manager row)                     | **blocked: needs the manager named per estate**, or an approved rule such as "estate manager = manager of that estate's branch" (3 branches exist) |
+| copy 85297987774     | **owner identified 2026-11-24: 張秋**; `EP_LEAD_COPY_PHONE` (server-only, digits normalised to `85297987774`)                            | code in PR #362; still needs consent + a `staff_whatsapp` endpoint before anything can send                                                        |
+| 只發一次 + 鎖 + 去重 | `ops_jobs` enqueue uses `idempotency_key='lead-alert:'                                                                                   |                                                                                                                                                    | lead_id`with`ON CONFLICT DO NOTHING`; `staff_notification_attempts`has a unique`attempt_key` plus a "no attempts exist for this lead" guard, so a retry or a second job cannot send twice | **already implemented** (code path unchanged by this rule) |
+| Actual send          | the plan only reads endpoints with `transport='staff_whatsapp'`, verified mapping, granted permission and an approved quiet-hours policy | **blocked: production has only two `inbox_private_note` endpoints** and `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED=false`                                |
 
 Two facts about the current staff table that matter for the estate-manager case: the only `manager`
 role account is a placeholder ("Earnest Admin"), and no staff row carries `is_duty_manager = true`,
@@ -132,3 +132,31 @@ The once-only guarantee needs no work: the lead alert is one `ops_jobs` row keye
 `lead-alert:<lead id>` with `ON CONFLICT DO NOTHING`, and `staff_notification_attempts` has a unique
 `attempt_key` plus a per-lead "no attempts yet" guard, so a retry, a second job or a duplicate
 delivery cannot send twice.
+
+## The copy destination is 張秋 (2026-11-24)
+
+Willy: "copy 85297987774 張秋". So every lead alert also copies 張秋 (Kenneth Chang,
+`64d5a2d6-e602-4760-9709-63b0414f6a83`), and 85297987774 is the line that copy goes to.
+
+Two details recorded so nobody assumes them later:
+
+- 張秋's own `staff_users.phone` / `whatsapp` is **92786562**, not 85297987774. The copy line is a
+  second (office) line, and the repository hardcodes neither number: the copy destination is the
+  server-only variable `EP_LEAD_COPY_PHONE`, normalised to the `852...` form, unset by default.
+- Because the default assignee (張秋) and the copy (張秋 on the office line) are different
+  destinations, a lead that 張秋 owns produces two planned sends - one to his own line, one copy to
+  the office line - and the plan already collapses identical destinations
+  (`DISTINCT ON staffDestinationKey(destination_reference)`), so nothing is duplicated by accident.
+  If Willy would rather the copy go to his own line, say so and leave `EP_LEAD_COPY_PHONE` unset.
+
+Combined with the rotation sheet, the full rule is now:
+
+| Enquiry scope     | Assigned owner                                                                   | Copy                        |
+| ----------------- | -------------------------------------------------------------------------------- | --------------------------- |
+| 定單位            | the 負責經紀 from `property_agents` (falls back to 張秋 if the listing has none) | 張秋 / `EP_LEAD_COPY_PHONE` |
+| 只講屋苑          | the estate's manager from the rotation sheet                                     | 張秋 / `EP_LEAD_COPY_PHONE` |
+| 無範圍 / 無法判定 | nobody (no `assigned_agent_id`)                                                  | 張秋 / `EP_LEAD_COPY_PHONE` |
+
+Every one of them still sends at most once per enquiry: one `ops_jobs` row keyed
+`lead-alert:<lead id>`, unique `staff_notification_attempts.attempt_key`, and a per-lead
+"no attempts yet" guard.
