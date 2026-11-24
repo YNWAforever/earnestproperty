@@ -132,63 +132,29 @@ source must pass before any canary is widened.
 
 ## Production state after Willy's approval (2026-11-25)
 
-Approved by Willy in session ("批准 Production"). Written to production Neon:
+Four disabled staff WhatsApp endpoints on company channel `6ad6c56645bc37e79936664a` record
+Willy's setup approval under `permission_ref=owner-approval:Willy:2026-11-25`. The targets are
+張秋 (line ending 6562), 姚頌溏 (2444), 鄧錦雄 (5322) and 李德鴻 (6608). Each record now has
+`verified_at=NULL`, `verification_ref=NULL` and an empty quiet-hours policy. The original setup
+mistakenly used the owner's approval as evidence of destination verification and all-hours delivery.
 
-| Staff                          | Endpoint destination             | Consent                                                                               | Enabled   |
-| ------------------------------ | -------------------------------- | ------------------------------------------------------------------------------------- | --------- |
-| 張秋 (copy + default assignee) | 85292786562 (his own staff line) | `permission_granted=true`, `verified_at=now()`, ref `owner-approval:Willy:2026-11-25` | **false** |
-| 姚頌溏 (rotation ①)            | 85266442444                      | same                                                                                  | **false** |
-| 鄧錦雄 (rotation ②)            | 85291005322                      | same                                                                                  | **false** |
-| 李德鴻 (rotation ③)            | 85266266608                      | same                                                                                  | **false** |
+### Woztell account matching
 
-All four are `transport=staff_whatsapp` on channel `6ad6c56645bc37e79936664a`, with
-`quiet_hours_policy={"approved":true,"allowAllHours":true}` and template
-`staff_enquiry_followup` / `zh_HK` (the template production already carries in
-`EP_WA_STAFF_ALERT_TEMPLATE`).
+The signed-in app showed 19 team membership records. The team list and the Earnest Property Inbox
+overview had no identifiable match for the four colleagues using their recorded names or telephone
+numbers. All four CRM email fields and linked login IDs were empty. An account may use another
+name. Obtain each colleague's Woztell login email or the confirmed work email for a new invitation.
+The app's Team Members screen sends invitations by email.
 
-They are deliberately **disabled**, because two things still do not exist and inventing them would be
-fabricated evidence:
+Match existing team members first. After an invited colleague joins, grant access to the Earnest
+Property channel through Inbox user management. Confirm each person's channel user and folder in
+Woztell before saving their CRM mapping. The two historical mappings for the test account only
+establish that account's folder and routing node. The configured provider directory previously
+returned `Unauthorized`, so verify directory access before relying on a provider lookup.
+[Woztell roles and permissions](https://doc.woztell.com/docs/integrations/inbox/inbox-settings/)
 
-1. `whatsapp_staff_channels` rows per person. The table requires `inbox_user_id`, `folder_id` and
-   `routing_node_id`, which are Woztell-side identifiers. A read-only call to
-   `EP_WA_INBOX_LIST_USERS_URL` with our signed context returned `Unauthorized`, so they have to come
-   from the Woztell console (or a working credential).
-2. The switch, `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED` (still `false`).
-
-Go-live therefore reduces to: create the four channel mappings, enable the four endpoints
-(`UPDATE ... SET enabled=true, mapping_version=<mapping version>`), then flip the switch. Nothing
-else is missing on the code side.
-
-One more thing worth deciding: 張秋 holds no `staff_roles` row. The **copy** path addresses him by
-staff id and skips the role predicate, but the **assigned-agent** path still requires a role, so a
-lead whose owner is 張秋 would not reach him through that path - only through the copy. Add a
-`staff_roles` row for him if he should also be alerted as an owner.
-
-### What the last mile actually needs (verified 2026-11-25)
-
-The mapping table's other two columns are tenant constants, not per-person values: every existing row
-uses `folder_id='main'` and `routing_node_id=''`, and only `inbox_user_id` differs per staff member
-(a 24-hex Woztell id). Production holds exactly two mapping rows, both for the staff account named
-"test" (`inbox_user_id 69280afe1bbc4961899a4ce8`); 姚頌溏, 鄧錦雄, 李德鴻 and 張秋 have **never been
-Woztell inbox users**, so there is nothing to copy from.
-
-The app maps staff to inbox users that already exist (`inbox-directory.server.ts` lists candidates and
-`staff-mapping-review.server.ts` saves the choice) - it does not create them. A read-only call to
-`EP_WA_INBOX_LIST_USERS_URL` with the production signed context returned
-`{"ok":0,"error":{"name":"Error","message":"Unauthorized"}}`, so the ids have to come from the Woztell
-console.
-
-So the remaining step is four inbox users in Woztell, one per colleague, same company channel
-`6ad6c56645bc37e79936664a`, in folder `main`:
-
-| Colleague           | Phone to attach |
-| ------------------- | --------------- |
-| 張秋 Kenneth Chang  | +852 9278 6562  |
-| 姚頌溏 Tommy Yiu    | +852 6644 2444  |
-| 鄧錦雄 Terence Tang | +852 9100 5322  |
-| 李德鴻 Sam Lee      | +852 6626 6608  |
-
-Their `inbox_user_id` then goes into `whatsapp_staff_channels` (with `folder_id='main'`,
-`routing_node_id=''`, `eligible=true`, `verified_at=now()`, `review_basis='owner_approved_setup'`),
-each endpoint is enabled with the mapping version, and `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED` goes true.
-No email fallback exists: production has no email provider and all four staff rows have `email = null`.
+Record destination verification and approved notification hours for each endpoint. Verify template
+eligibility in the sending path and follow Steps 5 and 7 before reporting delivery. The last
+production flag read showed `EP_WA_STAFF_WHATSAPP_ALERTS_ENABLED=false`. The draft PR carries the
+scoped owner and copy logic. 張秋's copy uses his staff ID and shares destination de-duplication with
+the owner's alert.
