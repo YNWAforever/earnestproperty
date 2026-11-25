@@ -166,7 +166,12 @@ export function HistoricalStaffResend({
           result.state === "duplicate" && result.dispatchState
             ? result.dispatchState
             : result.state;
-        setNotice(outcomes[state] ?? "請重新核對發送紀錄。");
+        const summary = outcomes[state] ?? "請重新核對發送紀錄。";
+        setNotice(
+          result.state === "blocked" && result.reason
+            ? `${summary}${reasonText(result.reason)}`
+            : summary,
+        );
       }
     });
   };

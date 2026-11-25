@@ -12,6 +12,7 @@ import {
   type StaffTemplateResponse,
 } from "../../woztell/staff-alert-template.ts";
 import { staffWhatsappAlertRuntime } from "../../whatsapp-enquiries/staff-notifications.server.ts";
+import { notificationPhone } from "../../whatsapp-enquiries/enquiry-routing.mjs";
 import { companyChannelId, providerChannelId } from "../../whatsapp-enquiries/wa-config.server.ts";
 import { resolveSiteOrigin } from "../../../../scripts/site-origin.mjs";
 import {
@@ -80,10 +81,13 @@ async function authorize(actor: HistoricalResendActor, ports: HistoricalResendPo
   if (!row) throw new Response("Forbidden", { status: 403 });
 }
 
-/** Digits-only comparison: one phone typed two ways is one destination. */
+/**
+ * Canonical HK notification phone: 8-digit local and 11-digit 852 aliases are one
+ * destination (`notificationPhone` from the enquiry routing policy), so a frozen
+ * 8-digit snapshot still matches the canonical proof phone and vice versa.
+ */
 function destinationDigits(value: unknown) {
-  const digits = String(value ?? "").replace(/\D/g, "");
-  return digits.length >= 8 ? digits : null;
+  return notificationPhone(typeof value === "string" ? value : null);
 }
 
 /**
@@ -172,13 +176,15 @@ async function scanDuplicateAliases(
   const attempts = await ports.query(
     `SELECT t.id,t.dispatch_state,t.endpoint_id,t.forwarding_recipient_id,t.notification_id,
         e.staff_id,e.transport AS endpoint_transport,
-        COALESCE(t.destination_reference_snapshot,e.destination_reference) AS destination_reference,
+        t.destination_reference_snapshot AS destination_reference,
         r.staff_id AS forwarding_staff_id,r.phone AS forwarding_phone,
-        si.recipient_staff_id AS intent_recipient_staff_id
+        si.recipient_staff_id AS intent_recipient_staff_id,
+        hd.id AS historical_decision_id,hd.staff_id AS historical_decision_staff_id
        FROM staff_notification_attempts t
        LEFT JOIN staff_notification_endpoints e ON e.id=t.endpoint_id
        LEFT JOIN enquiry_notification_recipients r ON r.id=t.forwarding_recipient_id
        LEFT JOIN staff_notification_intents si ON si.id=t.notification_id
+       LEFT JOIN historical_resend_decisions hd ON hd.attempt_id=t.id
       WHERE (t.lead_id=ANY($1::uuid[]) OR t.forwarding_inquiry_id=ANY($2::uuid[])
         OR t.notification_id IN (SELECT id FROM staff_notification_intents WHERE inquiry_id=ANY($2::uuid[]))
         OR t.routing_snapshot->>'subjectId'=ANY($1::text[])
@@ -202,8 +208,20 @@ async function scanDuplicateAliases(
     illegible: false,
   };
   for (const row of attempts) {
+    const frozen = destinationDigits(row.destination_reference);
     if (row.dispatch_state === "queued" || row.dispatch_state === "dispatching") {
-      scan.inFlight = true;
+      // Two managers may approve the same lead for two distinct staff in parallel.
+      // A queued/dispatching historical attempt is a *sibling*, not a concurrent
+      // cross-route send, only when its durable decision names a distinct staff and
+      // its frozen phone is present and distinct. Anything else stays fail-closed.
+      const provenSibling =
+        row.historical_decision_id != null &&
+        row.historical_decision_staff_id != null &&
+        String(row.historical_decision_staff_id) !== input.staffId &&
+        frozen != null &&
+        ours != null &&
+        frozen !== ours;
+      if (!provenSibling) scan.inFlight = true;
       continue;
     }
     // Member/inbox-targeted notification: the immutable recipient_staff_id on the
@@ -245,10 +263,13 @@ async function scanDuplicateAliases(
     }
     const sameStaff =
       (row.staff_id != null && String(row.staff_id) === input.staffId) ||
+      (row.historical_decision_staff_id != null &&
+        String(row.historical_decision_staff_id) === input.staffId) ||
       (row.forwarding_staff_id != null && String(row.forwarding_staff_id) === input.staffId);
-    const destination =
-      destinationDigits(row.destination_reference) ?? destinationDigits(row.forwarding_phone);
+    const destination = frozen ?? destinationDigits(row.forwarding_phone);
     if (sameStaff || (ours != null && destination === ours)) scan.priorRecipient = true;
+    else if (row.endpoint_transport === "website_lead_phone" && frozen == null)
+      scan.illegible = true;
   }
   return scan;
 }
@@ -263,6 +284,14 @@ function scanReasons(scan: HistoricalResendScan | null): string[] {
   return reasons;
 }
 
+/** One side of the release-before-migration state: the historical decision table is absent. */
+function missingHistoricalRelation(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) return false;
+  if (error.code !== "42P01") return false;
+  const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  return message.includes("historical_resend_decisions");
+}
+
 type Evaluation = {
   reasons: string[];
   channelId: string;
@@ -273,6 +302,7 @@ type Evaluation = {
   fingerprint: string | null;
   ledger: HistoricalResendLedger;
   scan: HistoricalResendScan | null;
+  migrationPending: boolean;
   checkedAt: string;
 };
 
@@ -310,6 +340,7 @@ async function evaluate(
     fingerprint: null,
     ledger: { state: "idle", dispatchState: null, attemptId: null },
     scan: null,
+    migrationPending: false,
     checkedAt: ports.now().toISOString(),
   };
   if (!channelId) return base;
@@ -367,15 +398,25 @@ async function evaluate(
     destinationReference: proof.destinationReference,
     message,
   });
-  const scan = await scanDuplicateAliases(ports, {
-    leadId: value.leadId,
-    inquiryId: lead.inquiryId,
-    staffId: value.staffId,
-    destinationReference: proof.destinationReference,
-    excludeAttemptId: options.excludeAttemptId,
-  });
-  reasons.push(...scanReasons(scan));
-  return { ...base, template, message, fingerprint, scan };
+  let scan: HistoricalResendScan | null = null;
+  let migrationPending = false;
+  try {
+    scan = await scanDuplicateAliases(ports, {
+      leadId: value.leadId,
+      inquiryId: lead.inquiryId,
+      staffId: value.staffId,
+      destinationReference: proof.destinationReference,
+      excludeAttemptId: options.excludeAttemptId,
+    });
+  } catch (error) {
+    // Release-before-migration: the read-only preview still renders the masked
+    // proof, but claims no fingerprint and refuses dispatch until the table exists.
+    if (!missingHistoricalRelation(error)) throw error;
+    migrationPending = true;
+    reasons.push(HISTORICAL_RESEND_REASONS.historicalMigrationPending);
+  }
+  if (scan) reasons.push(...scanReasons(scan));
+  return { ...base, template, message, fingerprint, scan, migrationPending };
 }
 
 /** Read-only preview. Never writes, never sends, never throws for business reasons. */
@@ -402,7 +443,7 @@ export async function previewHistoricalStaffResend(
     maskedDestination: proof?.maskedDestination ?? null,
     endpointVersion: proof?.endpointVersion ?? null,
     message: result.message,
-    fingerprint: result.fingerprint,
+    fingerprint: result.migrationPending ? null : result.fingerprint,
     checkedAt: result.checkedAt,
     review: proof?.review ?? null,
     ledger: {
@@ -545,13 +586,15 @@ export async function dispatchHistoricalStaffResend(
       suppressedReason = preflight ? "transport_preflight_blocked" : "dispatch_eligibility_changed";
     } else outcome = historicalResendOutcome({ state: "unknown" });
   }
-  await ports.query(
+  const finalized = await ports.query(
     `UPDATE staff_notification_attempts SET dispatch_state=$3,evidence_kind=$4,provider_operation_id=$5,
        provider_accepted_at=CASE WHEN $3 IN ('accepted','delivered') THEN COALESCE(provider_accepted_at,now()) ELSE provider_accepted_at END,
        provider_acceptance_source=CASE WHEN $3 IN ('accepted','delivered') THEN COALESCE(provider_acceptance_source,'woztell_send_responses') ELSE provider_acceptance_source END,
        safe_error=CASE WHEN $3='unknown' THEN 'provider_outcome_unknown' WHEN $3='failed' THEN 'provider_refused' WHEN $3='suppressed' THEN COALESCE($6,'transport_preflight_blocked') ELSE NULL END,
        finished_at=now(),updated_at=now()
-     WHERE id=$1::uuid AND claim_id=$2::uuid AND dispatch_state IN ('dispatching','unknown')`,
+     WHERE id=$1::uuid AND claim_id=$2::uuid
+       AND (dispatch_state='dispatching' OR (dispatch_state='unknown' AND $3='accepted'))
+     RETURNING dispatch_state`,
     [
       attemptId,
       claimId,
@@ -561,6 +604,24 @@ export async function dispatchHistoricalStaffResend(
       suppressedReason,
     ],
   );
+  // A concurrent reconcile may already have made this row permanently unknown;
+  // a late failure must never overwrite that, and the caller must see unknown.
+  const stored = finalized.length > 0 ? String(finalized[0].dispatch_state) : "unknown";
+  if (stored !== outcome.dispatchState) {
+    const reconciled = await readLedger(ports, input.leadId, input.staffId);
+    return {
+      ok: false,
+      state: reconciled.state === "unknown" ? "unknown" : "blocked",
+      reason:
+        reconciled.state === "unknown"
+          ? HISTORICAL_RESEND_REASONS.ledgerUnknownPermanent
+          : HISTORICAL_RESEND_REASONS.ledgerTerminal,
+      attemptId,
+      decisionId,
+      providerOperationId: reconciled.providerOperationId ?? outcome.providerOperationId ?? null,
+      dispatchState: reconciled.dispatchState,
+    };
+  }
   return {
     ok: outcome.dispatchState === "accepted",
     state: outcome.dispatchState,

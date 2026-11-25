@@ -114,8 +114,11 @@ function harness(overrides = {}) {
     claimId: null,
     claimAttempt: "55555555-5555-4555-8555-555555555555",
     decisionId: "66666666-6666-4666-8666-666666666666",
+    scanError: overrides.scanError ?? null,
+    reconciledUnknown: overrides.reconciledUnknown ?? false,
   };
   const query = async (sql, params = []) => {
+    if (state.scanError && sql.includes("historical_resend_decisions")) throw state.scanError;
     if (sql.includes("JOIN staff_roles")) return [{ id: ACTOR.staffId }];
     if (sql.includes("safe_error='lease_expired_after_dispatch'")) return [];
     if (sql.includes("FROM staff_notification_attempts WHERE attempt_key=$1"))
@@ -129,14 +132,17 @@ function harness(overrides = {}) {
           ]
         : [];
     if (sql.includes("ARRAY(SELECT l.id")) return [{ lead_ids: [LEAD], inquiry_ids: [INQ] }];
-    if (sql.includes("COALESCE(t.destination_reference_snapshot")) return state.attempts;
+    if (sql.includes("t.destination_reference_snapshot AS destination_reference"))
+      return state.attempts;
     if (sql.includes("FROM ops_jobs")) return state.jobs;
     if (sql.includes("WHERE id=$1::uuid AND claim_id=$2::uuid AND dispatch_state='dispatching'"))
       return [{ id: state.claimAttempt }];
     if (sql.startsWith("UPDATE staff_notification_attempts SET dispatch_state=$3")) {
       state.finalized = params;
-      if (state.ledger) state.ledger.dispatchState = params[2];
-      return [];
+      // A concurrent reconcile may have made the row permanently unknown first.
+      const stored = state.reconciledUnknown ? "unknown" : params[2];
+      if (state.ledger) state.ledger.dispatchState = stored;
+      return [{ dispatch_state: stored }];
     }
     throw new Error(`unexpected query: ${sql.slice(0, 90)}`);
   };
@@ -453,6 +459,158 @@ test("member-targeted rows use the intent recipient, never a mutable inbox id", 
       )
     ).reasons.includes("duplicate_review_required"),
   );
+});
+
+const OTHER_STAFF = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const otherRecipient = (overrides = {}) => ({
+  id: "other-historical-attempt",
+  dispatch_state: "dispatching",
+  endpoint_id: ENDPOINT,
+  endpoint_transport: "website_lead_phone",
+  staff_id: null,
+  destination_reference: "85298765432",
+  forwarding_recipient_id: null,
+  notification_id: null,
+  historical_decision_id: "other-decision",
+  historical_decision_staff_id: OTHER_STAFF,
+  ...overrides,
+});
+
+test("two managers approving distinct staff may send in parallel", async () => {
+  for (const alias of ["85298765432", "98765432"]) {
+    const { state, ports } = harness();
+    state.attempts = [
+      otherRecipient({
+        destination_reference: alias,
+        historical_decision_staff_id: OTHER_STAFF,
+      }),
+    ];
+    const preview = await previewHistoricalStaffResend(
+      { leadId: LEAD, staffId: STAFF },
+      ACTOR,
+      ports,
+    );
+    assert.equal(preview.ready, true, `${alias}: a proven sibling must not block`);
+    const result = await dispatchHistoricalStaffResend(
+      { leadId: LEAD, staffId: STAFF, fingerprint: preview.fingerprint, confirm: true },
+      ACTOR,
+      ports,
+    );
+    assert.equal(
+      result.state,
+      "accepted",
+      `${alias}: the sibling's dispatch is not a cross-route send`,
+    );
+    assert.equal(state.sent.length, 1);
+  }
+});
+
+test("a sibling is proven only by durable decision + distinct staff + distinct frozen phone", async () => {
+  const cases = [
+    [{ historical_decision_id: null }, "ordinary queued/dispatching attempt"],
+    [{ historical_decision_staff_id: STAFF }, "same staff"],
+    [{ historical_decision_staff_id: null }, "unknown decision staff"],
+    [{ destination_reference: "91234567" }, "same phone through an 8-digit alias"],
+    [{ destination_reference: null }, "missing frozen phone"],
+    [{ destination_reference: "member-1234" }, "unparseable frozen target"],
+  ];
+  for (const [overrides, label] of cases) {
+    const { state, ports } = harness();
+    state.attempts = [otherRecipient(overrides)];
+    const preview = await previewHistoricalStaffResend(
+      { leadId: LEAD, staffId: STAFF },
+      ACTOR,
+      ports,
+    );
+    assert.equal(preview.ready, false, `${label}: must stay fail-closed`);
+    assert.ok(preview.reasons.length > 0, label);
+    const blocked = await dispatchHistoricalStaffResend(
+      {
+        leadId: LEAD,
+        staffId: STAFF,
+        fingerprint: preview.fingerprint ?? "0".repeat(64),
+        confirm: true,
+      },
+      ACTOR,
+      ports,
+    );
+    assert.equal(blocked.state, "blocked", label);
+    assert.equal(state.sent.length, 0, label);
+  }
+});
+
+test("a terminal recipient matches through the canonical HK phone alias", async () => {
+  const { state, ports } = harness();
+  state.attempts = [
+    otherRecipient({
+      dispatch_state: "accepted",
+      destination_reference: "91234567",
+      historical_decision_id: null,
+      historical_decision_staff_id: null,
+    }),
+  ];
+  const preview = await previewHistoricalStaffResend(
+    { leadId: LEAD, staffId: STAFF },
+    ACTOR,
+    ports,
+  );
+  assert.equal(preview.ready, false);
+  assert.ok(preview.reasons.includes("recipient_already_sent"));
+});
+
+test("release before the historical migration masks the proof and refuses dispatch", async () => {
+  const { state, ports } = harness({
+    scanError: Object.assign(new Error('relation "historical_resend_decisions" does not exist'), {
+      code: "42P01",
+    }),
+  });
+  const preview = await previewHistoricalStaffResend(
+    { leadId: LEAD, staffId: STAFF },
+    ACTOR,
+    ports,
+  );
+  assert.equal(preview.ready, false);
+  assert.ok(preview.reasons.includes("historical_migration_pending"));
+  assert.equal(preview.fingerprint, null, "no approval token may exist before the migration");
+  assert.ok(preview.review, "the masked proof still renders for the reviewer");
+  assert.equal(preview.staffName, "測試同事");
+  const blocked = await dispatchHistoricalStaffResend(
+    { leadId: LEAD, staffId: STAFF, fingerprint: "0".repeat(64), confirm: true },
+    ACTOR,
+    ports,
+  );
+  assert.equal(blocked.state, "blocked");
+  assert.equal(blocked.reason, "historical_migration_pending");
+  assert.equal(state.sent.length, 0, "no provider call");
+  assert.equal(state.ledger, null, "no attempt/decision claim is written");
+});
+
+test("a non-migration read failure propagates instead of being masked", async () => {
+  const { ports } = harness({
+    scanError: Object.assign(new Error("permission denied for table"), { code: "42501" }),
+  });
+  await assert.rejects(() =>
+    previewHistoricalStaffResend({ leadId: LEAD, staffId: STAFF }, ACTOR, ports),
+  );
+});
+
+test("a late failure never overwrites an already-reconciled unknown", async () => {
+  const { state, ports } = harness({ reconciledUnknown: true });
+  state.providerResult = { state: "failed" };
+  const preview = await previewHistoricalStaffResend(
+    { leadId: LEAD, staffId: STAFF },
+    ACTOR,
+    ports,
+  );
+  const result = await dispatchHistoricalStaffResend(
+    { leadId: LEAD, staffId: STAFF, fingerprint: preview.fingerprint, confirm: true },
+    ACTOR,
+    ports,
+  );
+  assert.equal(result.state, "unknown", "the reconciled unknown wins over the late failure");
+  assert.equal(result.reason, "ledger_unknown_permanent");
+  assert.equal(state.finalized[2], "failed", "the failure was attempted but not stored");
+  assert.equal(state.ledger.dispatchState, "unknown");
 });
 
 test("only admin and manager may review or dispatch", async () => {

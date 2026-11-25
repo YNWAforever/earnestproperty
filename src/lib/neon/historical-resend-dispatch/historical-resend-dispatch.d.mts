@@ -27,6 +27,7 @@ export declare const HISTORICAL_RESEND_REASONS: Readonly<{
   duplicateReviewRequired: "duplicate_review_required";
   ledgerTerminal: "ledger_terminal";
   ledgerUnknownPermanent: "ledger_unknown_permanent";
+  historicalMigrationPending: "historical_migration_pending";
 }>;
 export declare function historicalResendAttemptKey(leadId: string, staffId: string): string;
 export declare function isHistoricalResendAttemptKey(value: unknown): boolean;

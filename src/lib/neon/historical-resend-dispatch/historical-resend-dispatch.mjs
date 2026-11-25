@@ -47,6 +47,7 @@ export const HISTORICAL_RESEND_REASONS = Object.freeze({
   duplicateReviewRequired: "duplicate_review_required",
   ledgerTerminal: "ledger_terminal",
   ledgerUnknownPermanent: "ledger_unknown_permanent",
+  historicalMigrationPending: "historical_migration_pending",
 });
 
 /** One attempt per lead+staff, forever: an endpoint-version change must not resend. */
