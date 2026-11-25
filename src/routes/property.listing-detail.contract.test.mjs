@@ -243,15 +243,15 @@ function buildLoader() {
   const startNeedle = "loader: async ({ params }) => {";
   const bodyStart = routeSource.indexOf(startNeedle) + startNeedle.length;
   assert.ok(bodyStart > startNeedle.length - 1, "expected the route loader");
-  const returnMarker = "return { property, similar, txns, branches, enquiryLinks };";
-  const returnIdx = routeSource.indexOf(returnMarker, bodyStart);
-  assert.ok(returnIdx !== -1, "expected the loader's final return statement");
-  const body = routeSource.slice(bodyStart, returnIdx + returnMarker.length);
+  const loaderSource = routeSource.slice(bodyStart);
+  const bodyEnd = loaderSource.search(/^  },\s*head:/m);
+  assert.ok(bodyEnd !== -1, "expected the end of the route loader");
+  const body = loaderSource.slice(0, bodyEnd);
 
   const snippet = `
 ${unavailableMatch[0]}
 async function loader(params, deps) {
-  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchNeonBranches, resolveWhatsappLinks = async()=>({enabled:false,links:[],fallbackHref:null,actions:[]}), activePropertyOfferings = p=>p.offerings??[p], publicPropertyNo=p=>p.public_listing_no??p.listing_no, publicPropertyTitle=p=>p.title_zh??"", sanitizeListingText=s=>s, resolvePublicWaAction=offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}), resolveWebsiteActions=offers=>({actions:offers.map(offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}))}), resolveOldSearchCode = () => null } = deps;
+  const { fetchPropertyByListingNo, notFound, redirect, fetchSimilarListings, fetchEstateTransactions, fetchEstateMarketBlock, fetchNeonBranches, resolveWhatsappLinks = async()=>({enabled:false,links:[],fallbackHref:null,actions:[]}), activePropertyOfferings = p=>p.offerings??[p], publicPropertyNo=p=>p.public_listing_no??p.listing_no, publicPropertyTitle=p=>p.title_zh??"", sanitizeListingText=s=>s, resolvePublicWaAction=offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}), resolveWebsiteActions=offers=>({actions:offers.map(offer=>({href:"/contact",mode:"contact",publicListingNo:offer.publicListingNo,dealType:offer.dealType}))}), resolveOldSearchCode = () => null } = deps;
   const SITE_CONTACT = { whatsappPhone: "" };
   ${body}
 }
@@ -266,7 +266,14 @@ test("loader: active/sold/rented resolve normally and still fetch similar listin
     const similarCalls = [];
     const txnsCalls = [];
     const branchesCalls = [];
-    const property = { status, estate_id: "estate-1", deal_type: "sale", id: "prop-1" };
+    const market = { rowCount: 3 };
+    const property = {
+      status,
+      estate_id: "estate-1",
+      estates: { slug: "lido-garden" },
+      deal_type: "sale",
+      id: "prop-1",
+    };
     const deps = {
       fetchPropertyByListingNo: async () => property,
       notFound: () => new Error("unexpected notFound()"),
@@ -277,6 +284,10 @@ test("loader: active/sold/rented resolve normally and still fetch similar listin
       fetchEstateTransactions: async (...args) => {
         txnsCalls.push(args);
         return [];
+      },
+      fetchEstateMarketBlock: async (input) => {
+        assert.deepEqual(input, { data: { slug: "lido-garden", page: 1 } });
+        return { market };
       },
       fetchNeonBranches: async () => {
         branchesCalls.push([]);
@@ -295,6 +306,7 @@ test("loader: active/sold/rented resolve normally and still fetch similar listin
     };
     const result = await loader({ listingNo: "X1" }, deps);
     assert.equal(result.property, property, `expected status="${status}" to resolve, not 404`);
+    assert.equal(result.estateMarket, market);
     assert.equal(
       similarCalls.length,
       1,

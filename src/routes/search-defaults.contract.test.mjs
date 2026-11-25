@@ -91,6 +91,23 @@ test("bare /listings renders without redirect", () => {
   assert.equal(canonicalHref("/listings", listingsSchema, LISTINGS_SEARCH_DEFAULTS), "/listings");
 });
 
+test("estate URLs omit the default first page and retain market filters and pagination", async () => {
+  const { estateMarketSearchSchema, ESTATE_MARKET_SEARCH_DEFAULTS } =
+    await import("../lib/estate-market-search.ts");
+  const base = "/estate/mun-ming-shan";
+  for (const [request, expected] of [
+    [base, base],
+    [`${base}?mtPage=1`, base],
+    [`${base}?mtYear=2021&mtPage=1`, `${base}?mtYear=2021`],
+    [`${base}?mtYear=2021&mtPage=2`, `${base}?mtYear=2021&mtPage=2`],
+  ]) {
+    assert.equal(
+      canonicalHref(request, estateMarketSearchSchema, ESTATE_MARKET_SEARCH_DEFAULTS),
+      expected,
+    );
+  }
+});
+
 test("bare /videos renders without redirect", () => {
   assert.equal(canonicalHref("/videos", videosSchema, VIDEOS_SEARCH_DEFAULTS), "/videos");
 });
