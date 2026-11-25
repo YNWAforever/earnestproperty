@@ -4,6 +4,12 @@ import test from "node:test";
 import { withOwnedPostgres } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
 import { resolveEnquiryForwarding } from "./enquiry-routing.server.ts";
+import {
+  readHistoricalIntakeRoute,
+  resolveHistoricalLead,
+} from "../neon/historical-lead-route.server.ts";
+import { leadCopyStaffIds } from "../neon/lead-default-assignee.js";
+import { ENQUIRY_MANAGERS } from "./enquiry-routing.mjs";
 import { normalizePhone } from "../phone.js";
 import { notificationPhone } from "./enquiry-routing.mjs";
 const migration = "20261116000000_enquiry_forwarding.sql";
@@ -14,7 +20,7 @@ const id = (n) => `90000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 test("owned forwarding schema is disabled by default and routes only approved new notification subjects", async (t) => {
   await withOwnedPostgres(
-    async ({ query: q }) => {
+    async ({ query: q, transaction }) => {
       await t.test(
         "the migrated SQL helper shares canonical HK notification spellings and the explicit mobile-only policy",
         async () => {
@@ -340,6 +346,184 @@ test("owned forwarding schema is disabled by default and routes only approved ne
         await q("UPDATE whatsapp_enquiry_events SET inquiry_id=$2 WHERE id=$1", [event, inquiry]);
         return { inquiry, conversation, event, message };
       };
+      await t.test(
+        "reviewed historical routing binds the exact intake, coalesces one manager and rejects changed identities",
+        async () => {
+          const channel = "historical-company";
+          const { inquiry, message, event } = await whatsapp({
+            channel,
+            member: "historical-customer",
+          });
+          const stamp = "2026-11-22T12:00:00+08:00";
+          await q("UPDATE inquiries SET created_at=$2 WHERE id=$1", [inquiry, stamp]);
+          const [m] = await q(
+            "UPDATE whatsapp_messages SET created_at=$2,text='想問碧堤半島同縉皇居' WHERE id=$1 RETURNING contact_id",
+            [message, stamp],
+          );
+          await q("UPDATE whatsapp_enquiry_events SET processing_state='processed' WHERE id=$1", [
+            event,
+          ]);
+          const [l] = await q(
+            "INSERT INTO crm_leads(contact_id,source,created_at) VALUES($1,'whatsapp',$2) RETURNING id",
+            [m.contact_id, stamp],
+          );
+          assert.equal(await resolveHistoricalLead(l.id, channel, q), null);
+          const route = () => readHistoricalIntakeRoute(l.id, channel, q);
+          const first = await route();
+          assert.equal(first.inquiryId, inquiry);
+          assert.deepEqual(
+            first.staffIds,
+            [...leadCopyStaffIds(), ENQUIRY_MANAGERS["manager:3"].staffId].sort(),
+          );
+          assert.equal(await readHistoricalIntakeRoute(l.id, "other-channel", q), null);
+          await q("UPDATE whatsapp_messages SET text='想問碧堤半島同麗都花園' WHERE id=$1", [
+            message,
+          ]);
+          const ambiguous = await route();
+          assert.deepEqual(ambiguous.staffIds, leadCopyStaffIds());
+          assert.notEqual(ambiguous.fingerprint, first.fingerprint);
+          await q("INSERT INTO crm_leads(contact_id,source,created_at) VALUES($1,'whatsapp',$2)", [
+            m.contact_id,
+            stamp,
+          ]);
+          assert.equal(await route(), null);
+        },
+      );
+      await t.test(
+        "a historical website listing with no original salesperson keeps only its designated copy",
+        async () => {
+          const stamp = "2026-11-21T09:30:04+08:00";
+          const [l] = await q(
+            "INSERT INTO crm_leads(contact_id,source,created_at,assigned_agent_id) VALUES($1,'website',$2,$3) RETURNING id",
+            [customer.id, stamp, id(1)],
+          );
+          await q(
+            "INSERT INTO inquiries(source,crm_contact_id,crm_lead_id,created_at,public_listing_no,name) VALUES('website',$1,$2,$3,'X000001','測試客戶')",
+            [customer.id, l.id, stamp],
+          );
+          const route = await readHistoricalIntakeRoute(l.id, "historical-company", q);
+          assert.deepEqual(route.staffIds, leadCopyStaffIds());
+          assert.equal(route.sourceLabel, "網站查詢 · X000001");
+          await q("UPDATE crm_leads SET created_at='2026-11-25T09:30:04+08:00' WHERE id=$1", [
+            l.id,
+          ]);
+          assert.equal(await readHistoricalIntakeRoute(l.id, "historical-company", q), null);
+        },
+      );
+      await t.test(
+        "concurrent approved resends claim one immutable decision and retain a lost provider response",
+        async () => {
+          const {
+            previewHistoricalStaffResend,
+            dispatchHistoricalStaffResend,
+            historicalResendPorts,
+          } =
+            await import("../neon/historical-resend-dispatch/historical-resend-dispatch.server.ts");
+          const channel = "historical-owned";
+          const actor = { staffId: id(1), roles: ["manager"] };
+          await q(
+            "INSERT INTO staff_roles(staff_user_id,role) VALUES($1,'manager') ON CONFLICT DO NOTHING",
+            [actor.staffId],
+          );
+          const [staffId] = leadCopyStaffIds();
+          await q(
+            "INSERT INTO staff_users(id,name_zh,active) VALUES($1,'測試同事',true) ON CONFLICT DO NOTHING",
+            [staffId],
+          );
+          const [endpoint] = await q(
+            "INSERT INTO staff_notification_endpoints(staff_id,channel_id,transport,destination_reference,version,enabled) VALUES($1,$2,'website_lead_phone','85291234444',1,false) RETURNING id,version",
+            [staffId, channel],
+          );
+          const [contact] = await q(
+            "INSERT INTO crm_contacts(name,phone) VALUES('測試客戶','98887777') RETURNING id",
+          );
+          const stamp = "2026-11-23T12:34:56+08:00";
+          const [l] = await q(
+            "INSERT INTO crm_leads(contact_id,source,created_at) VALUES($1,'website',$2) RETURNING id",
+            [contact.id, stamp],
+          );
+          await q(
+            "INSERT INTO inquiries(crm_lead_id,crm_contact_id,created_at,source,name) VALUES($1,$2,$3,'website','測試客戶')",
+            [l.id, contact.id, stamp],
+          );
+          await q(
+            "UPDATE ops_jobs SET status='succeeded' WHERE payload->>'leadId'=$1 OR payload->>'subjectId'=$1",
+            [l.id],
+          );
+          const pair = { leadId: l.id, staffId };
+          const proof = {
+            staffId,
+            staffName: "測試同事",
+            transport: "website_lead_phone",
+            channelId: channel,
+            endpointId: endpoint.id,
+            endpointVersion: 1,
+            destinationReference: "85291234444",
+            maskedDestination: "••••4444",
+            memberId: "owned-staff",
+            fingerprint: "a".repeat(64),
+            ready: true,
+            eligible: true,
+            reasons: [],
+            review: {
+              status: "eligible",
+              receipts: [],
+              conflictCounts: { crmContacts: 0, sameMemberContacts: 0 },
+              mismatch: { kind: "none" },
+            },
+          };
+          let sent = 0;
+          const ports = historicalResendPorts({
+            query: q,
+            transaction,
+            resolveLead: (leadId, companyChannel) =>
+              readHistoricalIntakeRoute(leadId, companyChannel, q),
+            recipientProof: async () => proof,
+            channelId: () => channel,
+            origin: () => "https://owned.example.invalid",
+            runtime: () => ({
+              enabled: true,
+              channelId: channel,
+              template: {
+                name: "staff_enquiry_followup",
+                language: "zh_HK",
+                params: ["name", "source", "phone", "link"],
+              },
+            }),
+            transport: () => ({
+              verificationRef: "owned",
+              sendStaffWhatsAppByPhone: async ({ beforeSend, phone }) => {
+                await beforeSend();
+                assert.equal(phone, proof.destinationReference);
+                sent++;
+                throw new Error("lost provider response");
+              },
+            }),
+          });
+          const preview = await previewHistoricalStaffResend(pair, actor, ports);
+          assert.deepEqual(preview.reasons, []);
+          const approval = { ...pair, fingerprint: preview.fingerprint, confirm: true };
+          await Promise.all([
+            dispatchHistoricalStaffResend(approval, actor, ports),
+            dispatchHistoricalStaffResend(approval, actor, ports),
+          ]);
+          const again = await dispatchHistoricalStaffResend(approval, actor, ports);
+          assert.ok(["blocked", "duplicate"].includes(again.state));
+          assert.equal(sent, 1);
+          const ledger = await q(
+            "SELECT a.dispatch_state,d.actor_staff_id FROM staff_notification_attempts a JOIN historical_resend_decisions d ON d.attempt_id=a.id WHERE a.lead_id=$1",
+            [l.id],
+          );
+          assert.deepEqual(ledger, [{ dispatch_state: "unknown", actor_staff_id: actor.staffId }]);
+          await assert.rejects(
+            q(
+              "UPDATE historical_resend_decisions SET actor_staff_id=actor_staff_id WHERE lead_id=$1",
+              [l.id],
+            ),
+            /IMMUTABLE/,
+          );
+        },
+      );
       await t.test(
         "fresh observe-mode estate-only inbound queues once without changing locked assignment or customer effects",
         async () => {

@@ -27,7 +27,9 @@ const object = (value: unknown): Row =>
 const stamp = (value: unknown) => (value instanceof Date ? value.toISOString() : String(value));
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 
-async function routes(query: EnquiryRoutingQuery): Promise<EnquiryEstateRoute[]> {
+export async function enquiryEstateRoutes(
+  query: EnquiryRoutingQuery,
+): Promise<EnquiryEstateRoute[]> {
   const rows = await query(
     `SELECT r.scope_key,r.label,r.estate_id,r.aliases,r.district_scope,r.manager_recipient_key,r.version,
     e.name_zh AS estate_name_zh,e.name_en AS estate_name_en
@@ -249,7 +251,7 @@ export async function resolveEnquiryForwarding(
     estateLabel,
     estateId,
     text: message,
-    routes: await routes(query),
+    routes: await enquiryEstateRoutes(query),
   });
   return {
     ...plan,

@@ -107,12 +107,12 @@ export function notificationPhone(value) {
   const canonical = normalizePhone(value);
   return canonical && /^852[456789]\d{7}$/.test(canonical) ? canonical : null;
 }
-export function matchEnquiryEstate({
+function matchingEstateRoutes({
   estateId,
   estateLabel,
   text = "",
   routes = ENQUIRY_ESTATE_ROUTES,
-} = {}) {
+}) {
   const matches = new Map();
   const exact = normalizeEstateLabel(estateLabel);
   const content =
@@ -131,8 +131,7 @@ export function matchEnquiryEstate({
         spans.push({ start: found.index, end: found.index + found[0].length, route });
     }
   }
-  if ((estateId || exact) && matches.size === 0)
-    return { kind: "general", reason: "estate_unmapped", route: null };
+  if ((estateId || exact) && matches.size === 0) return [];
   // Only suppress a shorter alias when a longer label occupies the same text.
   // Separate mentions remain ambiguous, including two estates for one manager.
   for (const span of spans) {
@@ -146,8 +145,19 @@ export function matchEnquiryEstate({
     )
       matches.set(span.route.scopeKey, span.route);
   }
-  if (matches.size > 1) return { kind: "review", reason: "multiple_estates", route: null };
-  if (matches.size === 1) return { kind: "estate", route: [...matches.values()][0] };
+  return [...matches.values()];
+}
+
+/** Several named estates can establish a single original manager for a reviewed resend. */
+export function historicalEstateManager(input) {
+  const keys = new Set(matchingEstateRoutes(input).map((route) => route.managerKey));
+  return keys.size === 1 ? (ENQUIRY_MANAGERS[[...keys][0]]?.staffId ?? null) : null;
+}
+
+export function matchEnquiryEstate(input = {}) {
+  const matches = matchingEstateRoutes(input);
+  if (matches.length > 1) return { kind: "review", reason: "multiple_estates", route: null };
+  if (matches.length === 1) return { kind: "estate", route: matches[0] };
   return { kind: "general", reason: "estate_unmapped", route: null };
 }
 export function mentionsSpecificProperty(value) {
