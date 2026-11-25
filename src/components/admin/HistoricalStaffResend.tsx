@@ -53,6 +53,7 @@ const reasons: Record<string, string> = {
   template_unconfigured: "通知範本未就緒。",
   channel_mismatch: "公司渠道有變。",
   transport_capability_unverified: "公司發送服務尚未核實。",
+  historical_migration_pending: "補發紀錄表尚待安裝，暫時只可核對收件資料。",
   original_jobs_pending: "原有通知仍在處理。",
   cross_route_in_flight: "另一條通知途徑正在處理此查詢。",
   recipient_already_sent: "這位收件人已有發送紀錄。",
@@ -217,7 +218,16 @@ export function HistoricalStaffResend({
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
               <dt>本人號碼</dt>
               <dd>
-                {checkedReceipt("destination_proof") ? "已核對公司 WhatsApp 入站回條" : "未核實"}
+                {checkedReceipt("destination_proof")
+                  ? "已核對公司 WhatsApp 入站回條"
+                  : review.review.receipts.some(
+                        (receipt) =>
+                          receipt.kind === "destination_proof" &&
+                          receipt.verified &&
+                          receipt.matchedPhone,
+                      )
+                    ? "號碼有簽署入站回條，補發身分仍待覆核"
+                    : "未核實"}
               </dd>
               <dt>收件用途</dt>
               <dd>{checkedReceipt("consent") ? "同事已確認接收查詢通知" : "未核實"}</dd>

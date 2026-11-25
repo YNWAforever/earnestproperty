@@ -943,8 +943,11 @@ test(
               const read = () =>
                 getHistoricalRecipientProof(staffId, scope.channelId, query, reviewed);
               const original = await read();
+              assert.equal(original.review.receipts.length, 3);
               assert.ok(
-                original.review.receipts.every((r) => r.verified && r.attested && r.matchedMember),
+                original.review.receipts.every(
+                  (r) => r.verified && r.attested && r.matchedMember && r.matchedPhone,
+                ),
               );
               assert.equal(original.review.hoursApproved, true);
               assert.ok(!original.reasons.includes("shared_phone"));
