@@ -10,7 +10,8 @@ import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transpor
 import {
   buildStaffTemplateResponse,
   formatCustomerPhone,
-  type StaffAlertTemplate,
+  isStaffPhoneFollowup,
+  sameStaffAlertTemplate,
 } from "../woztell/staff-alert-template.ts";
 import {
   staffWhatsappAlertRuntime,
@@ -73,14 +74,6 @@ const ENDPOINT_JOINS = `JOIN staff_users s ON s.id=ep.staff_id JOIN whatsapp_sta
 const PHONE_STAFF_JOIN = `JOIN staff_users s ON s.id=ep.staff_id`;
 const PHONE_ELIGIBLE = `ep.transport='website_lead_phone' AND s.active AND ep.enabled AND ep.retired_at IS NULL
   AND ep.verified_at<=now() AND ep.permission_granted AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb`;
-
-function websitePhoneTemplate(template: StaffAlertTemplate | null) {
-  return (
-    template?.name === "staff_enquiry_followup" &&
-    template.language === "zh_HK" &&
-    template.params.join(",") === "name,source,phone,link"
-  );
-}
 
 const NOT_A_CUSTOMER = staffDestinationNotACustomer("ep");
 /** The attempt `t` still targets exactly the endpoint it froze. */
@@ -183,7 +176,7 @@ export async function handleLeadStaffAlert(
     if (await forwardingCoversSubject("website", leadId, query)) return { summary };
     summary.unknown += (await reconcile(leadId, query, context)).unknown;
     [lead] = await query(
-      "SELECT l.id,l.source,l.property_id,l.enquiry_routing_context->>'notificationRoute' AS notification_route,p.listing_no,c.name,c.phone AS contact_phone,EXISTS(SELECT 1 FROM crm_activities a WHERE a.lead_id=l.id AND a.activity_type='suspected_bot') AS suspected_bot FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE l.id=$1::uuid",
+      "SELECT l.id,l.source,l.property_id,l.enquiry_routing_context->>'notificationRoute' AS notification_route,p.listing_no,c.name,c.phone AS contact_phone,(SELECT i.message FROM inquiries i WHERE i.crm_lead_id=l.id AND i.source='website' AND l.source='website' ORDER BY i.created_at,i.id LIMIT 1) AS inquiry_message,EXISTS(SELECT 1 FROM crm_activities a WHERE a.lead_id=l.id AND a.activity_type='suspected_bot') AS suspected_bot FROM crm_leads l LEFT JOIN crm_contacts c ON c.id=l.contact_id LEFT JOIN properties p ON p.id=l.property_id WHERE l.id=$1::uuid",
       [leadId],
     );
     // lead_missing: attempt.lead_id references crm_leads, so no row can be kept;
@@ -203,7 +196,7 @@ export async function handleLeadStaffAlert(
     const blocked: LeadAlertBlockReason | null =
       !runtime.enabled || lead.notification_route === "staff_phone_paused"
         ? "notifications_disabled"
-        : !runtime.template || (phoneRoute && !websitePhoneTemplate(runtime.template))
+        : !runtime.template || (phoneRoute && !isStaffPhoneFollowup(runtime.template))
           ? "template_not_configured"
           : !runtime.channelId || runtime.channelId !== providerChannelId()
             ? "channel_unverified"
@@ -256,6 +249,7 @@ export async function handleLeadStaffAlert(
   const template = buildStaffTemplateResponse(runtime.template!, {
     name: String(lead.name ?? ""),
     source: sourceLabel(lead),
+    context: String(lead.inquiry_message ?? ""),
     phone: formatCustomerPhone(lead.contact_phone as string | null | undefined),
     link: `${origin}/admin/leads?lead=${leadId}`,
   });
@@ -314,7 +308,7 @@ export async function handleLeadStaffAlert(
           !live.enabled ||
           !live.template ||
           live.channelId !== runtime.channelId ||
-          (phoneRoute && !websitePhoneTemplate(live.template))
+          !sameStaffAlertTemplate(live.template, runtime.template)
         )
           throw new Error("dispatch_disabled");
         const [valid] = await query(

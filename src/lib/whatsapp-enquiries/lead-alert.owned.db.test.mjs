@@ -1334,7 +1334,7 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
       const leadFor = async (inquiryId) =>
         (
           await query(
-            "SELECT l.id, l.assigned_agent_id FROM inquiries i JOIN crm_leads l ON l.id=i.crm_lead_id OR (i.crm_lead_id IS NULL AND l.contact_id=i.crm_contact_id) WHERE i.id=$1",
+            "SELECT l.id, l.assigned_agent_id FROM inquiries i JOIN crm_leads l ON l.id=i.crm_lead_id WHERE i.id=$1",
             [inquiryId],
           )
         )[0];
@@ -1430,9 +1430,9 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
           try {
             process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED = "true";
             process.env.EP_WA_STAFF_ALERT_TEMPLATE = JSON.stringify({
-              name: "staff_enquiry_followup",
+              name: "staff_enquiry_followup_context",
               language: "zh_HK",
-              params: ["name", "source", "phone", "link"],
+              params: ["name", "source", "phone", "context", "link"],
             });
             await query(
               "UPDATE enquiry_notification_recipients SET enabled=true,channel_id=$1,destination_reference=phone,verified_at=now(),verification_ref='owned',permission_granted=true,permission_ref='owned' WHERE recipient_key='copy'",
@@ -1453,13 +1453,15 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
               [{ estateSlug: "hong-kong-garden", estateManagerStaffId: copyId }, ["85269000001"]],
             ]) {
               const [id, job] = await prepare(input);
+              await query("UPDATE crm_leads SET note='internal sales note' WHERE id=$1", [id]);
               const provider = fakeProvider();
               await run(id, job, provider);
               await run(id, job, provider);
               assert.deepEqual(provider.calls.map((c) => c.recipientId).sort(), phones);
               for (const call of provider.calls) {
                 assert.equal(call.memberId, undefined);
-                assert.equal(call.response[0].elementName, "staff_enquiry_followup");
+                assert.equal(call.response[0].elementName, "staff_enquiry_followup_context");
+                assert.equal(call.response[0].components[0].parameters[3].text, "想睇樓");
                 assert.equal(call.response[0].languageCode, "zh_HK");
               }
             }

@@ -242,6 +242,11 @@ test("owned forwarding schema is disabled by default and routes only approved ne
             subjectId: unknown,
           });
           assert.equal(route.routingKind, "review");
+          assert.equal(
+            route.customerMessage,
+            "",
+            "unlinked CRM notes are never forwarded as customer text",
+          );
           assert.deepEqual(
             route.recipients.map((r) => r.key),
             ["copy"],
@@ -370,6 +375,7 @@ test("owned forwarding schema is disabled by default and routes only approved ne
           assert.equal(await resolveHistoricalLead(l.id, channel, q), null);
           const route = () => readHistoricalIntakeRoute(l.id, channel, q);
           const first = await route();
+          assert.equal(first.customerMessage, "想問碧堤半島同縉皇居");
           assert.equal(first.inquiryId, inquiry);
           assert.deepEqual(
             first.staffIds,
@@ -443,7 +449,7 @@ test("owned forwarding schema is disabled by default and routes only approved ne
             [contact.id, stamp],
           );
           await q(
-            "INSERT INTO inquiries(crm_lead_id,crm_contact_id,created_at,source,name) VALUES($1,$2,$3,'website','測試客戶')",
+            "INSERT INTO inquiries(crm_lead_id,crm_contact_id,created_at,source,name,message) VALUES($1,$2,$3,'website','測試客戶','星期六可否睇樓？')",
             [l.id, contact.id, stamp],
           );
           await q(
@@ -485,16 +491,17 @@ test("owned forwarding schema is disabled by default and routes only approved ne
               enabled: true,
               channelId: channel,
               template: {
-                name: "staff_enquiry_followup",
+                name: "staff_enquiry_followup_context",
                 language: "zh_HK",
-                params: ["name", "source", "phone", "link"],
+                params: ["name", "source", "phone", "context", "link"],
               },
             }),
             transport: () => ({
               verificationRef: "owned",
-              sendStaffWhatsAppByPhone: async ({ beforeSend, phone }) => {
+              sendStaffWhatsAppByPhone: async ({ beforeSend, phone, template }) => {
                 await beforeSend();
                 assert.equal(phone, proof.destinationReference);
+                assert.equal(template.components[0].parameters[3].text, "星期六可否睇樓？");
                 sent++;
                 throw new Error("lost provider response");
               },

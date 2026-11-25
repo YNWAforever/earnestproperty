@@ -8,6 +8,8 @@ import {
 } from "./enquiry-info-readiness.js";
 import {
   parseStaffAlertTemplate,
+  isForwardingTemplate,
+  CONTEXT_TEMPLATE,
   type StaffAlertTemplate,
 } from "../woztell/staff-alert-template.ts";
 import { staffCorrelationPlan } from "./staff-correlation-mode.js";
@@ -22,7 +24,6 @@ const CLOUD_API = "https://api.whatsapp-cloud.woztell.sanuker.com/v1.2/api/";
 const COPY_PHONE = "85297987774";
 const MAX_PAGES = 3;
 const MAX_CANDIDATES = 20;
-const PARAMS = ["name", "source", "phone", "link"];
 const CHANNEL_QUERY = `query EarnestForwardingChannel($app:ID,$channel:ID){
   apiViewer(appId:$app){channel(channelId:$channel){
     _id appId name type connected archived appIntegrationAccessToken
@@ -167,7 +168,7 @@ export type ForwardingTemplateCandidate = {
   name: string;
   language: string;
   bodyText: string;
-  paramCount: 4;
+  paramCount: number;
   proofHash: string;
 };
 type InspectionStage =
@@ -1292,9 +1293,11 @@ export async function inspectEnquiryForwardingProvider(
         )
           continue;
         const placeholders = [...bodyText.matchAll(/\{\{([^{}]*)\}\}/g)].map((match) => match[1]);
+        const expected = name === CONTEXT_TEMPLATE ? "1,2,3,4,5" : "1,2,3,4";
         if (
-          placeholders.join(",") !== "1,2,3,4" ||
-          /[{}]/.test(bodyText.replace(/\{\{[1-4]\}\}/g, ""))
+          placeholders.join(",") !== expected ||
+          (name === CONTEXT_TEMPLATE && language !== "zh_HK") ||
+          /[{}]/.test(bodyText.replace(/\{\{[1-5]\}\}/g, ""))
         )
           continue;
         const extraParams = components.some((component) => {
@@ -1323,7 +1326,7 @@ export async function inspectEnquiryForwardingProvider(
           name,
           language,
           bodyText,
-          paramCount: 4,
+          paramCount: placeholders.length,
           proofHash: digest({
             channelId,
             wabaId,
@@ -1358,10 +1361,8 @@ export async function inspectEnquiryForwardingProvider(
         if (
           configured?.name === name &&
           configured.language === language &&
-          configured.params.length === 4 &&
-          PARAMS.every((param) =>
-            configured.params.includes(param as "name" | "source" | "phone" | "link"),
-          )
+          configured.params.length === candidate.paramCount &&
+          isForwardingTemplate(configured)
         )
           report.template.configuredApproved = true;
       }

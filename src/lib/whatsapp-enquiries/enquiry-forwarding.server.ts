@@ -69,6 +69,7 @@ export type ForwardRoute = {
   customerName: string | null;
   customerPhone: string | null;
   summary: string | null;
+  customerMessage: string;
   propertyId?: string | null;
   propertyNo?: string | null;
   dealType?: string | null;
@@ -456,6 +457,7 @@ export async function dispatchEnquiryForwarding(input: unknown, context: Context
       const template = buildStaffTemplateResponse(runtime.template!, {
         name: String(route.customerName ?? ""),
         source: forwardingSourceLabel(route),
+        context: route.customerMessage,
         phone: formatCustomerPhone(route.customerPhone),
         link: workLink(route, origin!),
       });

@@ -1589,7 +1589,32 @@ test("approval is per language and contradictory language status is rejected", a
   );
 });
 
-test("only the exact four positional placeholders are accepted", async () => {
+test("the context template needs approval for its exact five-variable Cantonese body", async () => {
+  const name = "staff_enquiry_followup_context";
+  const env = {
+    EP_WA_STAFF_ALERT_TEMPLATE: JSON.stringify({
+      name,
+      language: "zh_HK",
+      params: ["name", "source", "phone", "context", "link"],
+    }),
+  };
+  for (const [status, text, expected] of [
+    ["APPROVED", "{{1}} {{2}} {{3}} {{4}} {{5}}", true],
+    ["PENDING", "{{1}} {{2}} {{3}} {{4}} {{5}}", false],
+    ["APPROVED", bodyText, false],
+    ["APPROVED", "{{1}} {{2}} {{3}} {{5}} {{4}}", false],
+  ]) {
+    const item = template({
+      name,
+      templates: [{ language: "zh_HK", status, components: [{ type: "BODY", text }] }],
+    });
+    const { result } = await run({ templates: [item] }, env);
+    assert.equal(result.template.configuredApproved, expected);
+    if (expected) assert.equal(result.template.candidates[0].paramCount, 5);
+  }
+});
+
+test("legacy templates require exactly four positional placeholders", async () => {
   for (const text of [
     "{{1}} {{2}} {{3}}",
     "{{1}} {{2}} {{3}} {{4}} {{5}}",

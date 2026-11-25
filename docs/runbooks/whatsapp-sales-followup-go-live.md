@@ -77,6 +77,32 @@ The 2026-11-24 observations above predate the four destination drafts. The websi
 
 To pause one phone, disable its website endpoint. The shared `EP_WA_STAFF_NOTIFICATIONS_ENABLED` switch pauses all staff notifications. Submissions created during a global pause keep their paused state when delivery resumes.
 
+### Follow-up template with enquiry text
+
+The proposed zh_HK Utility template `staff_enquiry_followup_context` shows the original website enquiry or the inbound WhatsApp message that opened the enquiry. Sales can read up to 500 characters. `…` marks a longer message and `未有查詢文字` marks missing text. The last field opens the full record.
+
+```text
+你有一宗新查詢需要跟進。
+客戶姓名：{{1}}
+查詢來源：{{2}}
+聯絡電話：{{3}}
+查詢內容：{{4}}
+後台連結：{{5}}
+請按客戶要求跟進。
+```
+
+Use synthetic examples when submitting the Utility template, such as `陳小姐`, `網站查詢`, `測試電話`, `想問兩房租盤，星期六下午可以睇樓嗎？` and `https://example.invalid/admin/leads`. After the company channel shows this exact five-field body as `APPROVED`, the rollout setting is:
+
+```json
+{
+  "name": "staff_enquiry_followup_context",
+  "language": "zh_HK",
+  "params": ["name", "source", "phone", "context", "link"]
+}
+```
+
+Set `EP_WA_STAFF_ALERT_TEMPLATE` during the authorised rollout. For an active informational forwarding policy, refresh its provider proof and bind the new template through the existing review flow. The four-field setting in step 5 remains available for rollback. Switching templates applies to future dispatches and does not replay accepted notices.
+
 ## Step 6 — Portal sources (28hse, Property.hk)
 
 - 6.1 Add `staff_external_references` for the 28hse staff names so "XXX 你好" maps to the agent.

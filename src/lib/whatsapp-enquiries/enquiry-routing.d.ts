@@ -42,6 +42,7 @@ export type EnquiryForwardingPlan = EnquiryRoutingPlan & {
   customerName: string | null;
   customerPhone: string | null;
   summary: string;
+  customerMessage: string;
   channelId?: string;
   conversationId?: string;
   sourceMessageId?: string;

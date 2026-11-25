@@ -118,6 +118,33 @@ test("one frozen four-parameter TEMPLATE uses recipientId only after both guarde
   assert.deepEqual(Object.keys(fixture.transport), ["sendTemplateByPhone"]);
 });
 
+test("the context template sends the reviewed excerpt and rejects a changed body", async () => {
+  const request = input();
+  request.templateContract = {
+    name: "staff_enquiry_followup_context",
+    language: "zh_HK",
+    params: ["name", "source", "phone", "context", "link"],
+  };
+  request.template = buildStaffTemplateResponse(request.templateContract, {
+    name: "測試",
+    source: "網站查詢",
+    phone: "測試電話",
+    context: "星期六\n可以睇樓嗎？",
+    link: "https://owned.invalid/admin/leads",
+  });
+  request.binding.templateDigest = enquiryInfoTemplateDigest(
+    request.templateContract,
+    request.template,
+  );
+  const valid = owned();
+  assert.equal((await valid.transport.sendTemplateByPhone(request)).state, "accepted");
+  assert.equal(valid.calls[0].response[0].components[0].parameters[3].text, "星期六 可以睇樓嗎？");
+  request.template.components[0].parameters[3].text = "另一宗查詢";
+  const changed = owned();
+  await assert.rejects(() => changed.transport.sendTemplateByPhone(request), isBlocked);
+  assert.equal(changed.calls.length, 0);
+});
+
 test("a claimed ready flag or reference strings cannot replace the mandatory permit port", async () => {
   for (const options of [undefined, {}, { ready: true }, { resolvePermit: true }])
     assert.throws(() => createEnquiryInfoTemplateTransport(options), isBlocked);

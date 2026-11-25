@@ -300,12 +300,12 @@ export async function persistWebsiteInquiry(query, input) {
     ),
     ${leadAlertEnqueueCte("new_lead")}
     INSERT INTO inquiries (
-${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_version," : ""}
-      source, property_id, intent, name, phone, email, message, assigned_agent_id, crm_contact_id,
+${submissionId ? "id, marketing_consent_requested, consent_copy_version," : ""}
+      crm_lead_id, source, property_id, intent, name, phone, email, message, assigned_agent_id, crm_contact_id,
       public_listing_no
     )
-    SELECT ${submissionId ? "(SELECT inquiry_id FROM submission), (SELECT id FROM new_lead), $6, 'website-whatsapp-v1'," : ""}
-      'website', routing.property_id, routing.intent, $1, $2, $4, $5,
+    SELECT ${submissionId ? "(SELECT inquiry_id FROM submission), $6, 'website-whatsapp-v1'," : ""}
+      (SELECT id FROM new_lead), 'website', routing.property_id, routing.intent, $1, $2, $4, $5,
       routing.assigned_agent_id, contact.id,
       COALESCE($8::text, (SELECT listing_no FROM requested_listing))
     FROM contact

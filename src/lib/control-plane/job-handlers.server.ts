@@ -722,6 +722,7 @@ registerJobHandler({
     const templateResponse = buildStaffTemplateResponse(template, {
       name: "［測試］Earnest 內部",
       source: "系統轉發核對",
+      context: "測試查詢：星期六下午可以睇樓嗎？",
       phone: plan.phone,
       link: "https://www.earnestproperty.com/admin/leads",
     });

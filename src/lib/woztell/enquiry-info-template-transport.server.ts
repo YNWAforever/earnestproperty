@@ -8,6 +8,8 @@ import { boundedProviderFetch } from "./provider-fetch.ts";
 import { parseWoztellProviderResult } from "./provider-result.ts";
 import {
   parseStaffAlertTemplate,
+  isForwardingTemplate,
+  STAFF_PARAM_LIMITS,
   sanitizeTemplateParam,
   type StaffAlertTemplate,
   type StaffTemplateResponse,
@@ -20,8 +22,6 @@ const COPY_PHONE = "85297987774";
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const ID = /^[a-zA-Z0-9_-]{1,160}$/;
-const PARAMS = ["name", "source", "phone", "link"] as const;
-const MAX = { name: 60, source: 60, phone: 40, link: 1000 } as const;
 
 /** All fields describe one frozen dispatch claim, not provider delivery evidence. */
 export type EnquiryInfoSendBinding = {
@@ -156,7 +156,8 @@ function bindingOf(value: unknown): Readonly<EnquiryInfoSendBinding> {
 }
 function templateOf(contractValue: unknown, templateValue: unknown) {
   const rawContract = object(contractValue, ["name", "language", "params"]);
-  const semantics = list(rawContract.params, 4);
+  const paramCount = Array.isArray(rawContract.params) && rawContract.params.length === 5 ? 5 : 4;
+  const semantics = list(rawContract.params, paramCount);
   if (
     typeof rawContract.name !== "string" ||
     typeof rawContract.language !== "string" ||
@@ -166,12 +167,7 @@ function templateOf(contractValue: unknown, templateValue: unknown) {
   const contract = parseStaffAlertTemplate(
     JSON.stringify({ name: rawContract.name, language: rawContract.language, params: semantics }),
   );
-  if (
-    !contract ||
-    contract.params.length !== 4 ||
-    !PARAMS.every((param) => contract.params.includes(param))
-  )
-    throw blocked();
+  if (!contract || !isForwardingTemplate(contract)) throw blocked();
   const wire = object(templateValue, ["type", "elementName", "languageCode", "components"]);
   if (
     wire.type !== "TEMPLATE" ||
@@ -181,14 +177,14 @@ function templateOf(contractValue: unknown, templateValue: unknown) {
     throw blocked();
   const body = object(list(wire.components, 1)[0], ["type", "parameters"]);
   if (body.type !== "body") throw blocked();
-  const parameters = list(body.parameters, 4).map((value, index) => {
+  const parameters = list(body.parameters, paramCount).map((value, index) => {
     const parameter = object(value, ["type", "text"]);
     const semantic = contract.params[index];
     if (
       parameter.type !== "text" ||
       typeof parameter.text !== "string" ||
       !parameter.text ||
-      sanitizeTemplateParam(parameter.text, "-", MAX[semantic]) !== parameter.text
+      sanitizeTemplateParam(parameter.text, "-", STAFF_PARAM_LIMITS[semantic]) !== parameter.text
     )
       throw blocked();
     return Object.freeze({ type: "text" as const, text: parameter.text });

@@ -7,8 +7,10 @@ import { createStaffWhatsAppTransport } from "../woztell/staff-whatsapp-transpor
 import { createInboxApi } from "../woztell/inbox-api.server.ts";
 import {
   buildStaffTemplateResponse,
+  formatEnquiryContext,
   formatCustomerPhone,
   parseStaffAlertTemplate,
+  sameStaffAlertTemplate,
   type StaffAlertTemplate,
   type StaffTemplateResponse,
 } from "../woztell/staff-alert-template.ts";
@@ -122,7 +124,7 @@ export async function dispatchStaffNotification(
   }
   await options.checkpoint();
   const [n] = await query(
-    `SELECT n.*,w.channel_id,w.woztell_member_id,m.inbox_user_id,m.folder_id,c.phone AS contact_phone ${joins} WHERE n.id=$1::uuid AND ${eligibility}`,
+    `SELECT n.*,w.channel_id,w.woztell_member_id,m.inbox_user_id,m.folder_id,c.phone AS contact_phone,(SELECT msg.text FROM whatsapp_messages msg WHERE msg.id=i.intake_message_id AND msg.direction='inbound' AND msg.conversation_id=i.conversation_id AND msg.conversation_id=w.id AND msg.channel_id=w.channel_id AND msg.woztell_member_id=w.woztell_member_id) AS intake_text ${joins} WHERE n.id=$1::uuid AND ${eligibility}`,
     [notificationId, runtime.generationId, runtime.channelId],
   );
   if (!n) {
@@ -251,7 +253,11 @@ export async function dispatchStaffNotification(
     const boundary = async () => {
       await options.checkpoint();
       const live = ports === defaults ? staffNotificationRuntime() : runtime;
-      if (!live.enabled || live.generationId !== runtime.generationId)
+      if (
+        !live.enabled ||
+        live.generationId !== runtime.generationId ||
+        (transport === "staff_whatsapp" && !sameStaffAlertTemplate(live.template, runtime.template))
+      )
         throw new Error("dispatch_disabled");
       const [valid] = await query(
         `SELECT n.id ${joins} JOIN staff_notification_attempts t ON t.notification_id=n.id JOIN staff_notification_endpoints ep ON ep.id=t.endpoint_id JOIN ops_jobs j ON j.id=t.job_id WHERE n.id=$1::uuid AND ${eligibility} AND m.inbox_user_id=$7 AND m.folder_id=$8 AND t.id=$4::uuid AND t.claim_id=$5::uuid AND t.dispatch_state='dispatching' AND ep.staff_id=n.recipient_staff_id AND ep.channel_id=w.channel_id AND ep.transport=t.transport AND ep.version=t.endpoint_version AND ep.enabled AND ep.permission_granted AND ep.retired_at IS NULL AND ep.verified_at IS NOT NULL AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb AND (t.transport<>'staff_whatsapp' OR (ep.destination_reference<>w.woztell_member_id AND ${staffDestinationNotACustomer("ep")} AND (ep.last_inbound_at BETWEEN now()-interval '24 hours' AND now() OR $9::boolean))) AND j.status='running' AND j.lease_owner=$6 AND j.lease_expires_at>now()`,
@@ -317,12 +323,15 @@ export async function dispatchStaffNotification(
           : await adapter!.sendStaffWhatsApp!({
               channelId: String(n.channel_id),
               memberId: String(ep!.destination_reference),
-              message,
+              message: runtime.template
+                ? message
+                : `查詢內容：${formatEnquiryContext(n.intake_text as string | null)}\n${message}`,
               template: !runtime.template
                 ? null
                 : buildStaffTemplateResponse(runtime.template, {
                     name: "WhatsApp 客戶",
                     source: "WhatsApp 查詢",
+                    context: String(n.intake_text ?? ""),
                     phone: formatCustomerPhone(n.contact_phone as string | null | undefined),
                     link: workLink!,
                   }),
