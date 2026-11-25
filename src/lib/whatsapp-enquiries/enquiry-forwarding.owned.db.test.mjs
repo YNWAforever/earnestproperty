@@ -57,6 +57,17 @@ test(
       await withOwnedPostgres(
         async ({ query, transaction, pool }) => {
           await mockOwnedServerDb(mock, query, transaction);
+          // This worker still drains website jobs created by the previous release. Its
+          // intake rows had no notificationRoute. Reproduce that row shape before the
+          // real AFTER INSERT enqueue trigger runs, solely in this disposable schema.
+          // Current-release intake and its exclusive phone route run in lead-alert.owned.
+          await query(`CREATE FUNCTION owned_pre_phone_intake() RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+              NEW.enquiry_routing_context := NEW.enquiry_routing_context - 'notificationRoute';
+              RETURN NEW;
+            END $$`);
+          await query(`CREATE TRIGGER owned_pre_phone_intake BEFORE INSERT ON crm_leads
+            FOR EACH ROW WHEN (NEW.source='website') EXECUTE FUNCTION owned_pre_phone_intake()`);
           mock.module(new URL("../control-plane/job-wake.server.ts", import.meta.url).href, {
             exports: { wakeAfterCommit: () => {}, laneForJob: () => "general" },
           });
