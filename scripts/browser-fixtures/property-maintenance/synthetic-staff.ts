@@ -317,6 +317,7 @@ export const fetchEnquiryIdentityReview = outsideFixture,
   reviewEnquiryPhonePurpose = outsideFixture,
   resolveEnquiryHeldReply = outsideFixture;
 export const updateStaffEndpoint = outsideFixture,
+  authorizeCompanyPhone = outsideFixture,
   turnOffStaffEndpoint = outsideFixture,
   createStaffReference = outsideFixture,
   disableStaffReference = outsideFixture,

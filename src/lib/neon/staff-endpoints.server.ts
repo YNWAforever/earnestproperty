@@ -1,6 +1,12 @@
 import "@tanstack/react-start/server-only";
 import { forwardingPhone } from "../whatsapp-enquiries/enquiry-forwarding-policy.mjs";
 import { z } from "zod";
+import { randomUUID } from "node:crypto";
+import { companyPhoneEnrollment } from "./company-phone-enrollment.ts";
+import {
+  COMPANY_PHONE_ASSIGNED,
+  staffDestinationNotACustomer,
+} from "../whatsapp-enquiries/staff-recipient-guard.ts";
 import { maskStaffDestination } from "./whatsapp-readiness-policy.ts";
 import { staffNotificationRuntime } from "../whatsapp-enquiries/staff-notifications.server.ts";
 import { queryRows, transactionRows } from "./db.server.ts";
@@ -34,7 +40,7 @@ async function authorize(actor: Actor, query = queryRows) {
 export async function listStaffEndpoints(actor: Actor, query = queryRows) {
   await authorize(actor, query);
   const rows = await query(
-    "SELECT id,staff_id,transport,channel_id,version,mapping_version,enabled,retired_at,verification_ref,destination_reference,verified_at,permission_granted,last_inbound_at,template_verified_at FROM staff_notification_endpoints ORDER BY updated_at DESC LIMIT 200",
+    "SELECT id,staff_id,transport,channel_id,version,mapping_version,enabled,retired_at,verification_ref,destination_reference,verified_at,permission_granted,quiet_hours_policy->>'authority' AS authority,last_inbound_at,template_verified_at FROM staff_notification_endpoints ORDER BY updated_at DESC LIMIT 200",
   );
   return rows.map((r) => ({
     id: String(r.id),
@@ -49,6 +55,7 @@ export async function listStaffEndpoints(actor: Actor, query = queryRows) {
     maskedDestination: maskStaffDestination(String(r.destination_reference ?? "")),
     verifiedAt: r.verified_at ? new Date(String(r.verified_at)).toISOString() : null,
     permissionGranted: r.permission_granted === true,
+    managerAuthorized: r.authority === "company_manager",
     lastInboundAt: r.last_inbound_at ? new Date(String(r.last_inbound_at)).toISOString() : null,
     templateVerifiedAt: r.template_verified_at
       ? new Date(String(r.template_verified_at)).toISOString()
@@ -136,6 +143,48 @@ export async function saveStaffEndpoint(
   if (!rows[1]?.length)
     throw new Response("ENDPOINT_PERMISSION_OR_VERSION_CONFLICT", { status: 409 });
   return { id: String(rows[1][0].id), version: Number(rows[1][0].version), mappingVersion };
+}
+
+export async function enrollCompanyPhone(value: unknown, actor: Actor, query = queryRows) {
+  await authorize(actor, query);
+  const input = companyPhoneEnrollment.parse(value);
+  const phone = forwardingPhone(input.phone);
+  if (!phone) throw new Response("INVALID_STAFF_PHONE", { status: 400 });
+  const channelId = staffNotificationRuntime().channelId;
+  if (!channelId) throw new Response("COMPANY_CHANNEL_UNAVAILABLE", { status: 409 });
+
+  const [saved] = await query(
+    `WITH reviewer AS (
+       SELECT a.id, COALESCE(NULLIF(a.name_zh,''),a.name_en) AS name FROM staff_users a
+       JOIN staff_roles r ON r.staff_user_id=a.id
+       WHERE a.id=$5::uuid AND a.active AND r.role IN ('admin','manager') LIMIT 1 FOR SHARE OF a,r
+     ), changed AS (
+       UPDATE staff_notification_endpoints ep SET verification_ref=$4, verified_at=statement_timestamp(),
+         permission_granted=true, permission_ref='manager-authorization:'||$7::text,
+         quiet_hours_policy='{"authority":"company_manager","approved":true,"allowAllHours":true}'::jsonb,
+         enabled=true, updated_at=statement_timestamp()
+       FROM staff_users s, reviewer
+       WHERE ep.id=$1::uuid AND ep.version=$2 AND ep.staff_id=s.id AND s.active
+         AND ep.channel_id=$6 AND ep.transport='website_lead_phone' AND ep.retired_at IS NULL AND NOT ep.enabled
+         AND ep.destination_reference=$3 AND ${COMPANY_PHONE_ASSIGNED} AND ${staffDestinationNotACustomer("ep")}
+       RETURNING ep.id,ep.staff_id,ep.version
+     ) INSERT INTO audit_logs(id,actor_id,action,subject_type,subject_id,metadata)
+       SELECT $7::uuid,reviewer.id,'staff.endpoint.manager_authorize','staff_endpoint',changed.id,
+         jsonb_build_object('authority','company_manager','managerName',reviewer.name,'staffId',changed.staff_id,
+           'version',changed.version,'purpose','website_lead_phone','allowAllHours',true,'companyRecordRef',$4::text)
+       FROM changed,reviewer RETURNING subject_id`,
+    [
+      input.id,
+      input.expectedVersion,
+      phone,
+      input.companyRecordRef,
+      actor.staffId,
+      channelId,
+      randomUUID(),
+    ],
+  );
+  if (!saved) throw new Response("COMPANY_PHONE_ENROLLMENT_CONFLICT", { status: 409 });
+  return { id: String(saved.subject_id) };
 }
 
 export async function listStaffAttention(actor: Actor, query = queryRows) {
