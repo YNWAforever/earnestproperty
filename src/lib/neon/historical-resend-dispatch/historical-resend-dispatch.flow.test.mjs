@@ -477,7 +477,7 @@ const otherRecipient = (overrides = {}) => ({
 });
 
 test("two managers approving distinct staff may send in parallel", async () => {
-  for (const alias of ["85298765432", "98765432"]) {
+  for (const alias of ["85298765432", "98765432", "0085298765432"]) {
     const { state, ports } = harness();
     state.attempts = [
       otherRecipient({

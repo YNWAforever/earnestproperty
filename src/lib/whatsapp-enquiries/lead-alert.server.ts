@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
+import { phoneEquivalentsSql } from "../phone.js";
 import { resolveSiteOrigin } from "../../../scripts/site-origin.mjs";
 import { queryRows, transactionRows } from "../neon/db.server.ts";
 import { LEAD_ALERT_JOB_TYPE, LEAD_ALERT_RECONCILE_JOB_TYPE } from "../neon/lead-alert-enqueue.js";
@@ -99,17 +100,6 @@ function attemptKey(parts: string[]) {
 const HISTORICAL_ATTEMPT_LIKE = `${HISTORICAL_RESEND_ATTEMPT_PREFIX}%`;
 
 /**
- * Canonical HK notification phone in SQL: an 8-digit local number and its
- * 11-digit 852 form are one destination, so a frozen snapshot alias still
- * compares equal to the endpoint's canonical phone.
- */
-function notificationPhoneSql(expr: string) {
-  const digits = `regexp_replace(COALESCE(${expr},''),'\\D','','g')`;
-  return `(CASE WHEN length(${digits})=11 AND left(${digits},3)='852' AND substr(${digits},4,1) BETWEEN '4' AND '9' THEN ${digits}
-    WHEN length(${digits})=8 AND left(${digits},1) BETWEEN '4' AND '9' THEN '852'||${digits} ELSE NULL END)`;
-}
-
-/**
  * A recipient already reached by a reviewed historical resend (accepted,
  * delivered or permanently unknown) must not receive the ordinary alert again:
  * the immutable historical decision is the duplicate marker. Historical rows
@@ -118,7 +108,7 @@ function notificationPhoneSql(expr: string) {
  * destination can never slip past the block.
  */
 function priorHistoricalSend(leadIdExpr: string, endpointAlias: string) {
-  return `NOT EXISTS(SELECT 1 FROM staff_notification_attempts h JOIN historical_resend_decisions d ON d.attempt_id=h.id WHERE h.lead_id=${leadIdExpr}::uuid AND h.dispatch_state IN ('accepted','delivered','unknown') AND (h.endpoint_id=${endpointAlias}.id OR d.staff_id=${endpointAlias}.staff_id OR ${notificationPhoneSql("h.destination_reference_snapshot")}=${notificationPhoneSql(`${endpointAlias}.destination_reference`)}))`;
+  return `NOT EXISTS(SELECT 1 FROM staff_notification_attempts h JOIN historical_resend_decisions d ON d.attempt_id=h.id WHERE h.lead_id=${leadIdExpr}::uuid AND h.dispatch_state IN ('accepted','delivered','unknown') AND (h.endpoint_id=${endpointAlias}.id OR d.staff_id=${endpointAlias}.staff_id OR ${endpointAlias}.destination_reference=ANY(${phoneEquivalentsSql("h.destination_reference_snapshot")}) OR enquiry_notification_phone(h.destination_reference_snapshot)=enquiry_notification_phone(${endpointAlias}.destination_reference)))`;
 }
 
 /** Plan copy table: 網站查詢 · 樓盤查詢 {listing_no} (樓盤查詢 when the number is unknown).

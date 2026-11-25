@@ -12,6 +12,7 @@ import {
   type StaffTemplateResponse,
 } from "../../woztell/staff-alert-template.ts";
 import { staffWhatsappAlertRuntime } from "../../whatsapp-enquiries/staff-notifications.server.ts";
+import { normalizePhone } from "../../phone.js";
 import { notificationPhone } from "../../whatsapp-enquiries/enquiry-routing.mjs";
 import { companyChannelId, providerChannelId } from "../../whatsapp-enquiries/wa-config.server.ts";
 import { resolveSiteOrigin } from "../../../../scripts/site-origin.mjs";
@@ -87,7 +88,7 @@ async function authorize(actor: HistoricalResendActor, ports: HistoricalResendPo
  * 8-digit snapshot still matches the canonical proof phone and vice versa.
  */
 function destinationDigits(value: unknown) {
-  return notificationPhone(typeof value === "string" ? value : null);
+  return notificationPhone(typeof value === "string" ? normalizePhone(value) : null);
 }
 
 /**
