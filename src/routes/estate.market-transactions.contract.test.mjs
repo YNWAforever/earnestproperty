@@ -33,9 +33,9 @@ test("agency 本行成交 and market registered transactions never share a table
     route,
     /transactions:\s*marketRegistrations|transactions\.concat|transactions\.push|marketRegistrations\.rows\.push/,
   );
-  // The EPRC export stays a separately counted source inside the same page.
-  assert.match(route, /<EstateRegisteredTransactions market=\{marketTransactions\}/);
-  assert.match(route, /其他來源：EPRC 匯出/);
+  // The registry table is now the only market block on the page: the separate
+  // EPRC export and its own source count were removed.
+  assert.doesNotMatch(route, /EstateRegisteredTransactions|其他來源：EPRC/);
 });
 
 test("listing detail page adds the estate market summary and keeps 本行成交 labelled", () => {
@@ -86,8 +86,12 @@ test("market snapshot modules and components stay off database/agency dependency
   );
 });
 
-test("the shipped EPRC snapshot is unchanged by the new public-list source", () => {
-  const snapshot = read("src/content/eprc-transactions-snapshot.ts");
-  assert.match(snapshot, /eprc-transactions-22-estates-20261027\.csv\?raw/);
-  assert.match(snapshot, /buildEprcSnapshot\(csv\)/);
+test("the estate page carries no provenance or verification caveat copy for these tables", () => {
+  assert.doesNotMatch(route, /尚待人手覆核並標註核實日期|本行屋苑資料庫/);
+  const market = read("src/components/site/EstateMarketRegistrations.tsx");
+  assert.doesNotMatch(
+    market,
+    /資料來源|筆來源紀錄|臨時＋正式合約配對|去重後|更新於/,
+    "the registry table shows rows, not repeated claims about them",
+  );
 });

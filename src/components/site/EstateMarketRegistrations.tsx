@@ -26,8 +26,7 @@ type EstateMarketLink = {
  *
  * This is deliberately NOT the 本行成交 table (agency deals from the
  * `transactions` table, rendered by EstateMarketSnapshot on the estate page and
- * by the listing route) and not blended with the EPRC export, which the estate
- * route renders as its own separately-counted source block.
+ * by the listing route).
  */
 export function EstateMarketRegistrations({
   market,
@@ -37,9 +36,6 @@ export function EstateMarketRegistrations({
   chart: readonly MarketChartMonth[];
 }) {
   const { estate, rows, total, page, pageCount, facets, activeFilters } = market;
-  const filtering =
-    activeFilters.year !== null || activeFilters.nature !== null || activeFilters.phase !== null;
-  const pairedPairs = Math.floor(estate.pairedRowCount / 2);
   const filteredEmpty = estate.status === "filtered-empty";
   const firstRow = total === 0 ? 0 : (page - 1) * market.pageSize + 1;
   const lastRow = Math.min(page * market.pageSize, total);
@@ -63,31 +59,14 @@ export function EstateMarketRegistrations({
       aria-labelledby="market-registrations-heading"
       className="min-w-0 rounded-lg border bg-card p-5"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 id="market-registrations-heading" className="text-xl font-bold text-primary">
-            市場註冊成交
-          </h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {filteredEmpty
-              ? "此公開來源的 2021–2026 列表未有此屋苑紀錄。"
-              : filtering
-                ? `符合篩選 ${total.toLocaleString("zh-HK")} 筆（此屋苑共 ${estate.rowCount.toLocaleString("zh-HK")} 筆來源紀錄）`
-                : `共 ${estate.rowCount.toLocaleString("zh-HK")} 筆來源紀錄${
-                    estate.registrationThrough
-                      ? ` · 登記日期 2021-01 至 ${estate.registrationThrough}`
-                      : ""
-                  }`}
-          </p>
-          {!filteredEmpty && pairedPairs > 0 && (
-            <p className="mt-1 text-xs text-muted-foreground">
-              其中 {pairedPairs} 組為臨時＋正式合約配對（同一單位、同一登記日、同一成交價），去重後{" "}
-              {estate.dedupedDealCount.toLocaleString("zh-HK")} 宗。
-            </p>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">更新於 {estate.asOf.slice(0, 10)}</p>
-      </div>
+      <h2 id="market-registrations-heading" className="text-xl font-bold text-primary">
+        市場註冊成交
+      </h2>
+      {filteredEmpty && (
+        <p className="mt-1 text-sm text-muted-foreground">
+          此公開來源的 2021–2026 列表未有此屋苑紀錄。
+        </p>
+      )}
 
       {!filteredEmpty && (
         <div className="mt-5 space-y-2">
@@ -171,7 +150,7 @@ export function EstateMarketRegistrations({
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
             <p>
               顯示第 {firstRow.toLocaleString("zh-HK")}–{lastRow.toLocaleString("zh-HK")} 筆，共{" "}
-              {total.toLocaleString("zh-HK")} 筆來源紀錄
+              {total.toLocaleString("zh-HK")} 筆
             </p>
             {pageCount > 1 && (
               <div className="flex items-center gap-2">
@@ -237,13 +216,6 @@ export function EstateMarketRegistrations({
       )}
 
       {chart.length > 0 && <ChartTranscription chart={chart} />}
-
-      <p className="mt-4 border-t pt-3 text-xs leading-6 text-muted-foreground">
-        資料來源：晉誠地產舊站公開註冊成交列表（earnestproperty.com.hk 公開頁面），期間 2021 年至{" "}
-        {estate.registrationThrough ?? "2026"} 年登記日期，2026 年為年初至今；此為該來源的歷史快照，
-        並非即時、亦非全部歷史成交。面積及呎價沿用來源刊登（多為建築面積），大部分紀錄從缺，並非零；
-        本表列出的是來源列數，經配對後方為成交宗數。
-      </p>
     </section>
   );
 }

@@ -20,7 +20,6 @@ import {
 } from "@/components/site/EstateComparisonTable";
 import { EstateMarketSnapshot } from "@/components/site/EstateMarketSnapshot";
 import { EstateMarketRegistrations } from "@/components/site/EstateMarketRegistrations";
-import { EstateRegisteredTransactions } from "@/components/site/EstateRegisteredTransactions";
 import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import { PageHero } from "@/components/site/PageHero";
@@ -32,9 +31,6 @@ import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-r
 import { estateRegistry, findComparableEstates } from "@/content/estate-registry";
 import { getEstateHeroPhoto } from "@/content/estate-photos";
 import type { MarketChartMonth, MarketEstateTransactions } from "@/content/market-transactions";
-import type { EprcEstateTransactions } from "@/content/eprc-transactions";
-import { EPRC_SNAPSHOT_DATE } from "@/content/eprc-transactions";
-import { getEstateRegisteredTransactions } from "@/content/eprc-transactions-snapshot";
 import {
   ESTATE_MARKET_SEARCH_DEFAULTS,
   estateMarketSearchSchema,
@@ -46,7 +42,6 @@ import { zodValidator } from "@tanstack/zod-adapter";
 import { buildEstateAnswerSummary, getEstatePageContent } from "@/content/estate-pages";
 import { getSchoolNet, schoolNetCodeForDistrict } from "@/content/school-nets";
 import { SITE_URL, SITE_OG_IMAGE, authored, canonicalLink, estateSeo } from "@/content/seo";
-import { formatHkDate } from "@/lib/format";
 import {
   fetchCmsVideos,
   fetchEstateBySlug,
@@ -179,7 +174,6 @@ export const Route = createFileRoute("/estate/$slug")({
       faqs,
       latestListings,
       transactions,
-      marketTransactions: getEstateRegisteredTransactions(estate.slug),
       marketRegistrations,
       marketChart,
       isMarketSearchView: hasEstateMarketFilters(deps) || deps.mtPage > 1,
@@ -287,7 +281,6 @@ function EstatePage() {
     faqs,
     latestListings,
     transactions,
-    marketTransactions,
     marketRegistrations,
     marketChart,
     comparableEstates,
@@ -299,7 +292,6 @@ function EstatePage() {
     faqs: FaqItem[];
     latestListings: ListingRow[];
     transactions: EstateTransaction[];
-    marketTransactions: EprcEstateTransactions | null;
     marketRegistrations: MarketEstateTransactions | null;
     marketChart: MarketChartMonth[];
     comparableEstates: EstateComparisonRow[];
@@ -508,25 +500,9 @@ function EstatePage() {
         </Container>
       ) : null}
 
-      {/* Verified-facts block: the plain "· "-joined summary this used to be
-          carried no source or as-of date. estate.verified_at (P4 Task 2's
-          column) is null for every estate today, including the 5 with real
-          detail pages -- the DataNote shows an honest caveat rather than a
-          fabricated verification date in that case. The facts themselves are
-          still real DB data and still render either way. */}
       {estateFacts.length > 0 && (
         <Container className="pt-6">
-          <DataNote
-            source="本行屋苑資料庫"
-            asOf={estate.verified_at ? (formatHkDate(estate.verified_at) ?? undefined) : undefined}
-            caveat={
-              estate.verified_at
-                ? undefined
-                : "以上資料尚待人手覆核並標註核實日期，如有出入以最新單位資料為準。"
-            }
-          >
-            {estateFacts.join(" · ")}
-          </DataNote>
+          <p className="text-sm leading-6 text-muted-foreground">{estateFacts.join(" · ")}</p>
         </Container>
       )}
 
@@ -539,23 +515,13 @@ function EstatePage() {
         transactions={transactions}
       />
 
-      {/* 市場註冊成交 (public registered transactions) and the EPRC export are
-          two separate sources with their own counts, kept apart from 本行成交
+      {/* 市場註冊成交 (public registered transactions), kept apart from 本行成交
           (`transactions`, rendered by EstateMarketSnapshot above). */}
       {marketRegistrations && (
         <Container className="py-8">
           <EstateMarketRegistrations market={marketRegistrations} chart={marketChart} />
-          {marketTransactions && marketTransactions.rows.length > 0 && (
-            <details className="mt-4 rounded-lg border bg-card p-4">
-              <summary className="cursor-pointer text-sm font-semibold text-primary">
-                其他來源：EPRC 匯出（{marketTransactions.total} 筆，{EPRC_SNAPSHOT_DATE}）
-              </summary>
-              <EstateRegisteredTransactions market={marketTransactions} />
-            </details>
-          )}
         </Container>
       )}
-      {!marketRegistrations && <EstateRegisteredTransactions market={marketTransactions} />}
 
       <Container className="py-8">
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">

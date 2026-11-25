@@ -537,13 +537,12 @@ test("estate route wires the verified-facts DataNote, transport, and school-net 
   );
   assert.match(route, /getSchoolNet\(schoolNetCodeForDistrict\(/);
 
-  // Verified-facts block: sourced from estate.verified_at (Task 2's column,
-  // null for every estate today), with an honest caveat rather than a
-  // fabricated date when it's null -- and the DataNote component is actually
-  // used, not just a plain paragraph.
+  // Verified-facts block: sourced from estate.verified_at (Task 2's column),
+  // rendered as a plain line. The per-page "awaiting manual verification"
+  // caveat was removed from the page copy on purpose.
   assert.match(route, /estate\.verified_at/);
   assert.match(route, /<DataNote/);
-  assert.match(route, /尚待人手覆核並標註核實日期/);
+  assert.doesNotMatch(route, /尚待人手覆核並標註核實日期/);
 
   // Transport + school-net are each gated on the real derived value (not a
   // hardcoded true), so both the "renders" and "omitted" branches are
