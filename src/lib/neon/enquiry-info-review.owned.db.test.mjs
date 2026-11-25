@@ -216,7 +216,12 @@ test(
           }
           async function receive(
             member,
-            { from, app = scope.appId, channel = scope.channelId } = {},
+            {
+              from,
+              app = scope.appId,
+              channel = scope.channelId,
+              message = "請提供這個單位的資料。",
+            } = {},
           ) {
             const body = {
               type: "TEXT",
@@ -228,7 +233,7 @@ test(
               timestamp: Math.floor(Date.now() / 1000),
               ...(from ? { from } : {}),
               to: "85224962283",
-              data: { text: "請提供這個單位的資料。" },
+              data: { text: message },
             };
             const raw = JSON.stringify(body),
               secret = "owned_review_signature";
@@ -881,6 +886,76 @@ test(
             },
           );
           await t.test(
+            "a signed staff receipt verifies the historical phone and another active directory holder blocks it",
+            async () => {
+              const number = "85298764444";
+              const receipt = await receive("owned_historical_colleague", {
+                from: number,
+                message: "我是測試同事，確認使用此號碼全日接收公司的查詢通知。",
+              });
+              const { staffId } = await staff("agent", number);
+              const [ep] = await query(
+                "INSERT INTO staff_notification_endpoints(staff_id,transport,channel_id,destination_reference,verification_ref,verified_at,permission_granted,permission_ref,quiet_hours_policy) VALUES($1,'website_lead_phone',$2,$3,$4,now(),true,$5,$6::jsonb) RETURNING id",
+                [
+                  staffId,
+                  scope.channelId,
+                  number,
+                  `accepted-ingress:${receipt.id}`,
+                  `recipient-consent:${receipt.id}`,
+                  JSON.stringify({
+                    approved: true,
+                    allowAllHours: true,
+                    timezone: "Asia/Hong_Kong",
+                  }),
+                ],
+              );
+              const approval = {
+                version: 1,
+                authority: "authenticated_recipient_confirmation",
+                allowAllHours: true,
+                timezone: "Asia/Hong_Kong",
+                transport: "website_lead_phone",
+                enabled: false,
+                companyApprovalRef: "owned company approval",
+                consentReceiptId: receipt.id,
+                allHoursReceiptId: receipt.id,
+                destinationProofReceiptId: receipt.id,
+              };
+              await query(
+                "INSERT INTO audit_logs(action,subject_type,subject_id,metadata) VALUES('staff.endpoint.configure','staff_endpoint',$1,$2::jsonb)",
+                [ep.id, JSON.stringify(approval)],
+              );
+              const reviewed = new Set(
+                ["consent", "identity", "hours", "first_confirmation"].map((role) =>
+                  sha(
+                    [
+                      "historical-recipient-evidence:v1",
+                      role,
+                      staffId,
+                      receipt.id,
+                      receipt.body_digest,
+                    ].join("\n"),
+                  ),
+                ),
+              );
+              const { getHistoricalRecipientProof } =
+                await import("./historical-recipient-proof.server.ts");
+              const read = () =>
+                getHistoricalRecipientProof(staffId, scope.channelId, query, reviewed);
+              const original = await read();
+              assert.ok(
+                original.review.receipts.every((r) => r.verified && r.attested && r.matchedMember),
+              );
+              assert.equal(original.review.hoursApproved, true);
+              assert.ok(!original.reasons.includes("shared_phone"));
+              await staff(null, number);
+              const shared = await read();
+              assert.equal(shared.ready, false);
+              assert.ok(shared.reasons.includes("shared_phone"));
+              assert.notEqual(shared.fingerprint, original.fingerprint);
+            },
+          );
+          await t.test(
             "every public review handler delegates each request to opaque staff auth without an Owner authority switch",
             async () => {
               let request = new Request("https://owned.invalid/admin"),
@@ -989,6 +1064,42 @@ test(
                 (error) => error.name === "ZodError",
               );
               assert.equal(serviceCalls, 3);
+
+              const historical = await import("./historical-resend.ts");
+              const pair = { leadId: randomUUID(), staffId: colleague.staffId };
+              const confirmation = {
+                ...pair,
+                fingerprint: sha("owned historical review"),
+                identityReviewed: true,
+              };
+              const current = () => true;
+              const calls = [
+                () => historical.fetchHistoricalRecipients(current),
+                () => historical.reviewHistoricalRecipient(pair, current),
+                () => historical.sendHistoricalNotification(confirmation, current),
+              ];
+              for (const [authorization, code] of [
+                [null, 401],
+                ["Bearer owned_opaque_agent_session", 403],
+              ]) {
+                request = new Request("https://owned.invalid/admin", {
+                  headers: authorization ? { authorization } : {},
+                });
+                for (const call of calls) await assert.rejects(call(), status(code));
+              }
+              request = new Request("https://owned.invalid/admin", {
+                headers: { authorization: "Bearer owned_opaque_manager_session" },
+              });
+              const deployment = process.env.VERCEL_ENV;
+              try {
+                process.env.VERCEL_ENV = "preview";
+                await assert.rejects(calls[2](), status(403));
+                delete process.env.VERCEL_ENV;
+                await assert.rejects(calls[2](), status(403));
+              } finally {
+                if (deployment === undefined) delete process.env.VERCEL_ENV;
+                else process.env.VERCEL_ENV = deployment;
+              }
             },
           );
           assert.equal(network.mock.callCount(), 0);

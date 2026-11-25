@@ -390,6 +390,71 @@ test("a preflight block before the provider boundary stays suppressed", async ()
   assert.equal(state.finalized[5], "transport_preflight_blocked");
 });
 
+test("member-targeted rows use the intent recipient, never a mutable inbox id", async () => {
+  const ours = harness();
+  ours.state.attempts = [
+    {
+      id: "attempt-member",
+      dispatch_state: "accepted",
+      notification_id: "77777777-7777-4777-8777-777777777777",
+      intent_recipient_staff_id: STAFF,
+      endpoint_id: null,
+      forwarding_recipient_id: null,
+      staff_id: null,
+      destination_reference: null,
+    },
+  ];
+  assert.ok(
+    (
+      await previewHistoricalStaffResend({ leadId: LEAD, staffId: STAFF }, ACTOR, ours.ports)
+    ).reasons.includes("recipient_already_sent"),
+  );
+  const unknownRecipient = harness();
+  unknownRecipient.state.attempts = [
+    {
+      id: "attempt-member-unknown",
+      dispatch_state: "accepted",
+      notification_id: "77777777-7777-4777-8777-777777777777",
+      intent_recipient_staff_id: null,
+      endpoint_id: null,
+      forwarding_recipient_id: null,
+      staff_id: null,
+      destination_reference: null,
+    },
+  ];
+  assert.ok(
+    (
+      await previewHistoricalStaffResend(
+        { leadId: LEAD, staffId: STAFF },
+        ACTOR,
+        unknownRecipient.ports,
+      )
+    ).reasons.includes("duplicate_review_required"),
+  );
+  const mutableInbox = harness();
+  mutableInbox.state.attempts = [
+    {
+      id: "attempt-inbox",
+      dispatch_state: "accepted",
+      notification_id: null,
+      endpoint_id: ENDPOINT,
+      endpoint_transport: "inbox_private_note",
+      forwarding_recipient_id: null,
+      staff_id: null,
+      destination_reference: "member-1234",
+    },
+  ];
+  assert.ok(
+    (
+      await previewHistoricalStaffResend(
+        { leadId: LEAD, staffId: STAFF },
+        ACTOR,
+        mutableInbox.ports,
+      )
+    ).reasons.includes("duplicate_review_required"),
+  );
+});
+
 test("only admin and manager may review or dispatch", async () => {
   const { ports } = harness();
   await assert.rejects(

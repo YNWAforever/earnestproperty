@@ -170,14 +170,18 @@ async function scanDuplicateAliases(
 ): Promise<HistoricalResendScan> {
   const { leadIds, inquiryIds } = await readLinkedSubjects(ports, input.leadId, input.inquiryId);
   const attempts = await ports.query(
-    `SELECT t.id,t.dispatch_state,t.endpoint_id,t.forwarding_recipient_id,
-        e.staff_id,COALESCE(t.destination_reference_snapshot,e.destination_reference) AS destination_reference,
-        r.staff_id AS forwarding_staff_id,r.phone AS forwarding_phone
+    `SELECT t.id,t.dispatch_state,t.endpoint_id,t.forwarding_recipient_id,t.notification_id,
+        e.staff_id,e.transport AS endpoint_transport,
+        COALESCE(t.destination_reference_snapshot,e.destination_reference) AS destination_reference,
+        r.staff_id AS forwarding_staff_id,r.phone AS forwarding_phone,
+        si.recipient_staff_id AS intent_recipient_staff_id
        FROM staff_notification_attempts t
        LEFT JOIN staff_notification_endpoints e ON e.id=t.endpoint_id
        LEFT JOIN enquiry_notification_recipients r ON r.id=t.forwarding_recipient_id
+       LEFT JOIN staff_notification_intents si ON si.id=t.notification_id
       WHERE (t.lead_id=ANY($1::uuid[]) OR t.forwarding_inquiry_id=ANY($2::uuid[])
         OR t.notification_id IN (SELECT id FROM staff_notification_intents WHERE inquiry_id=ANY($2::uuid[]))
+        OR t.routing_snapshot->>'subjectId'=ANY($1::text[])
         OR t.routing_snapshot->>'subjectId'=ANY($2::text[])
         OR t.routing_snapshot->>'leadId'=ANY($1::text[]))
         AND t.dispatch_state IN ('queued','dispatching','accepted','delivered','unknown')
@@ -202,9 +206,30 @@ async function scanDuplicateAliases(
       scan.inFlight = true;
       continue;
     }
+    // Member/inbox-targeted notification: the immutable recipient_staff_id on the
+    // intent is the only trustworthy attribution. A member id in the inbox is a
+    // mutable mapping, so an unknown recipient is illegible and blocks.
+    if (row.notification_id != null) {
+      if (row.intent_recipient_staff_id == null) {
+        scan.illegible = true;
+        continue;
+      }
+      if (String(row.intent_recipient_staff_id) === input.staffId) scan.priorRecipient = true;
+      continue;
+    }
     const hasEndpoint = row.endpoint_id != null;
     const hasForwarding = row.forwarding_recipient_id != null;
     if (!hasEndpoint && !hasForwarding) {
+      scan.illegible = true;
+      continue;
+    }
+    // Only phone/member staff transports can attribute a recipient; anything else
+    // (an inbox private note, an unknown transport) is a mutable or unparseable id.
+    if (
+      hasEndpoint &&
+      row.endpoint_transport != null &&
+      !["staff_whatsapp", "website_lead_phone"].includes(String(row.endpoint_transport))
+    ) {
       scan.illegible = true;
       continue;
     }

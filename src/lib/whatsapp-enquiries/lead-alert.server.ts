@@ -232,7 +232,7 @@ export async function handleLeadStaffAlert(
     else await plan(leadId, runtime.channelId!, transaction, summary);
     // Still before any claim: a failed read leaves the planned rows queued.
     queued = await query(
-      `SELECT id FROM staff_notification_attempts WHERE lead_id=$1::uuid AND dispatch_state='queued' AND attempt_key NOT LIKE '${HISTORICAL_ATTEMPT_LIKE}' ORDER BY created_at,id`,
+      `SELECT id FROM staff_notification_attempts WHERE lead_id=$1::uuid AND attempt_key NOT LIKE '${HISTORICAL_ATTEMPT_LIKE}' AND dispatch_state='queued' ORDER BY created_at,id`,
       [leadId],
     );
   } catch (error) {
@@ -271,7 +271,7 @@ export async function handleLeadStaffAlert(
           params: [attempt.id],
         },
         {
-          statement: `UPDATE staff_notification_attempts t SET dispatch_state='dispatching',claim_id=$2::uuid,job_id=$3::uuid,dispatch_started_at=now(),updated_at=now() FROM staff_notification_endpoints ep ${endpointJoins}, ops_jobs j WHERE t.id=$1::uuid AND t.lead_id=$4::uuid AND t.dispatch_state='queued' AND ${SAME_ENDPOINT} AND ep.channel_id=$6 AND ${endpointEligible} AND ${NOT_A_CUSTOMER} AND j.id=$3::uuid AND ${leaseIsMine("$5")} RETURNING t.id,t.destination_reference_snapshot`,
+          statement: `UPDATE staff_notification_attempts t SET dispatch_state='dispatching',claim_id=$2::uuid,job_id=$3::uuid,dispatch_started_at=now(),updated_at=now() FROM staff_notification_endpoints ep ${endpointJoins}, ops_jobs j WHERE t.id=$1::uuid AND t.lead_id=$4::uuid AND t.dispatch_state='queued' AND ${SAME_ENDPOINT} AND ep.channel_id=$6 AND ${endpointEligible} AND ${NOT_A_CUSTOMER} AND ${priorHistoricalSend("t.lead_id", "ep")} AND j.id=$3::uuid AND ${leaseIsMine("$5")} RETURNING t.id,t.destination_reference_snapshot`,
           params: [attempt.id, claim, context.jobId, leadId, context.workerId, runtime.channelId],
         },
         {
@@ -382,7 +382,7 @@ async function plan(
       statement: `WITH eligible AS (
           SELECT ep.id,ep.version,ep.staff_id,ep.destination_reference,s.is_duty_manager,(${NOT_A_CUSTOMER}) AS not_customer
           FROM staff_notification_endpoints ep ${ENDPOINT_JOINS}
-          WHERE ep.channel_id=$2 AND ${ENDPOINT_ELIGIBLE}
+          WHERE ep.channel_id=$2 AND ${ENDPOINT_ELIGIBLE} AND ${priorHistoricalSend("$1", "ep")}
         ), assigned AS (
           SELECT e.* FROM eligible e JOIN crm_leads l ON l.id=$1::uuid AND l.assigned_agent_id=e.staff_id
         ), unavailable AS (
@@ -452,7 +452,7 @@ async function planPhoneRecipients(
           CASE WHEN (${PHONE_ELIGIBLE}) IS NOT TRUE OR ep.verified_at > (SELECT created_at FROM crm_leads WHERE id=$1::uuid) THEN 'assigned_destination_unavailable'
                WHEN NOT ${NOT_A_CUSTOMER} THEN 'destination_is_customer' END AS reason
         FROM recipients r LEFT JOIN staff_users s ON s.id=r.staff_id
-        LEFT JOIN staff_notification_endpoints ep ON ep.staff_id=r.staff_id AND ep.channel_id=$2 AND ep.transport='website_lead_phone'
+        LEFT JOIN staff_notification_endpoints ep ON ep.staff_id=r.staff_id AND ep.channel_id=$2 AND ep.transport='website_lead_phone' AND ${priorHistoricalSend("$1", "ep")}
       ), destinations AS (
         SELECT DISTINCT ON (COALESCE(destination_reference,staff_id::text)) * FROM candidates
         ORDER BY COALESCE(destination_reference,staff_id::text), reason NULLS FIRST, staff_id

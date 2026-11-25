@@ -28,6 +28,10 @@ const outcomes: Record<string, string> = {
 const reasons: Record<string, string> = {
   no_recipient_proof: "未有足夠的同事身分及收件證據。",
   hours_receipt_missing: "欠缺本人確認可全日接收通知的有效回條。",
+  hours_not_approved: "同事的全日收件時段尚未核准。",
+  company_approval_missing: "欠缺公司核准此收件號碼的紀錄。",
+  permission_missing: "欠缺同事的有效收件許可。",
+  first_confirmation_missing: "未能核實首個同號紀錄的來源。",
   directory_mismatch: "已核實的號碼與同事名冊不符。",
   identity_receipt_missing: "未能核實這個號碼屬於該同事。",
   purpose_receipt_missing: "欠缺本人同意接收客戶查詢的有效回條。",
@@ -55,10 +59,50 @@ const reasons: Record<string, string> = {
   ledger_unknown_permanent: "之前的發送結果未明，已鎖定補發。",
   recipient_not_in_historical_scope: "收件人與原有查詢分派不符。",
 };
+const resolutionText = {
+  clear: "同號紀錄沒有衝突。",
+  staff_confirmation_projection: "首個同號 CRM 紀錄來自同事的身分確認訊息。",
+  current_phone_approval: "現有的同號覆核紀錄仍然有效，已核對目前的 CRM 衝突。",
+  unresolved: "同號紀錄的收件資格未核實。",
+};
 function reasonText(code: string) {
   return (
     reasons[code.replace(/^proof_not_ready:/, "")] ??
     (code.startsWith("proof_not_ready:") ? "同事收件證據仍待覆核。" : "請核對原有查詢及收件資格。")
+  );
+}
+
+export function HistoricalApproval({
+  previewOnly,
+  ready,
+  checked,
+  busy,
+  onCheck,
+  onSend,
+}: {
+  previewOnly: boolean;
+  ready: boolean;
+  checked: boolean;
+  busy: boolean;
+  onCheck: (value: boolean) => void;
+  onSend: () => void;
+}) {
+  if (previewOnly) return <p>此環境只供預覽及核對。</p>;
+  if (!ready) return null;
+  return (
+    <>
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(event) => onCheck(event.target.checked)}
+        />
+        我已核對身分證據及 CRM 紀錄，確認這位同事可收取這宗查詢。
+      </label>
+      <Button type="button" disabled={!checked || busy} onClick={onSend}>
+        批准並發送這份通知
+      </Button>
+    </>
   );
 }
 
@@ -190,6 +234,8 @@ export function HistoricalStaffResend({
                 {review.review.conflictCounts.crmContacts} 條，當中{" "}
                 {review.review.conflictCounts.sameMemberContacts} 條屬同一 WhatsApp 帳戶
               </dd>
+              <dt>同號核對結果</dt>
+              <dd>{resolutionText[review.review.conflictResolution]}</dd>
             </dl>
           )}
           {review.ledger.dispatchState && (
@@ -202,22 +248,14 @@ export function HistoricalStaffResend({
               ))}
             </ul>
           )}
-          {review.previewOnly && <p>此環境只供預覽及核對。</p>}
-          {review.ready && !review.previewOnly && (
-            <>
-              <label className="flex items-start gap-2">
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={(e) => setChecked(e.target.checked)}
-                />
-                我已核對身分證據及 CRM 紀錄，確認這位同事可收取這宗查詢。
-              </label>
-              <Button disabled={!checked || busy} onClick={send}>
-                批准並發送這份通知
-              </Button>
-            </>
-          )}
+          <HistoricalApproval
+            previewOnly={review.previewOnly}
+            ready={review.ready && !!review.fingerprint}
+            checked={checked}
+            busy={busy}
+            onCheck={setChecked}
+            onSend={send}
+          />
         </div>
       )}
       {notice && <p role="status">{notice}</p>}
