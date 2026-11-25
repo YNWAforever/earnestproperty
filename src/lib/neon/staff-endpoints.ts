@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { callStaffServerFn } from "./staff-server-fn";
 import { z } from "zod";
+import { companyPhoneEnrollment } from "./company-phone-enrollment";
 const list = createServerFn({ method: "GET" }).handler(async () => {
   const { requireStaffAccess } = await import("./auth.server");
   return (await import("./staff-endpoints.server")).listStaffEndpoints(
@@ -58,6 +59,20 @@ const attention = createServerFn({ method: "GET" }).handler(async () => {
 });
 export const fetchStaffAttention = async (isWorkspaceCurrent?: () => boolean) =>
   callStaffServerFn(attention, {}, isWorkspaceCurrent);
+
+const enroll = createServerFn({ method: "POST" })
+  .inputValidator(companyPhoneEnrollment)
+  .handler(async ({ data }) => {
+    const { requireStaffAccess } = await import("./auth.server");
+    return (await import("./staff-endpoints.server")).enrollCompanyPhone(
+      data,
+      await requireStaffAccess(getRequest(), ["admin", "manager"]),
+    );
+  });
+export const authorizeCompanyPhone = async (
+  data: Parameters<typeof enroll>[0]["data"],
+  isWorkspaceCurrent?: () => boolean,
+) => callStaffServerFn(enroll, { data }, isWorkspaceCurrent);
 
 const disable = createServerFn({ method: "POST" })
   .inputValidator(

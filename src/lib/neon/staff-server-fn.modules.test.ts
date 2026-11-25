@@ -124,6 +124,19 @@ const staffCalls: [keyof typeof staffModules, string, unknown[]][] = [
   ["staff-endpoints", "fetchStaffNotificationHealth", []],
   ["staff-endpoints", "fetchStaffAttention", []],
   ["staff-endpoints", "turnOffStaffEndpoint", [{ id: uuid, expectedVersion: 1 }]],
+  [
+    "staff-endpoints",
+    "authorizeCompanyPhone",
+    [
+      {
+        id: uuid,
+        expectedVersion: 1,
+        phone: "69000002",
+        companyRecordRef: "asset-42",
+        authorizeAllHours: true,
+      },
+    ],
+  ],
   ["staff-endpoints", "fetchStaffEventReview", []],
   ["staff-notifications", "fetchMyStaffNotifications", [{}]],
   ["staff-notifications", "confirmStaffNotification", [{ notificationId: uuid }]],
@@ -247,7 +260,7 @@ test("a denied chunk commit is not recorded as completed and the batch does not 
 });
 
 test("every staff, notification and enquiry wrapper rejects a resolved 401, 403 and 409 Response", async () => {
-  expect(staffTable).toHaveLength(40);
+  expect(staffTable).toHaveLength(41);
   for (const [name, call, args] of staffTable) {
     expect({ name, type: typeof call }).toEqual({ name, type: "function" });
     for (const status of [401, 403, 409]) {

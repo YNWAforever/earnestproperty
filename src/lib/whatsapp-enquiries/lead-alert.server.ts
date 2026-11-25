@@ -17,7 +17,11 @@ import {
   type StaffNotificationRuntime,
   type StaffNotificationTransport,
 } from "./staff-notifications.server.ts";
-import { staffDestinationKey, staffDestinationNotACustomer } from "./staff-recipient-guard.ts";
+import {
+  COMPANY_PHONE_ASSIGNED,
+  staffDestinationKey,
+  staffDestinationNotACustomer,
+} from "./staff-recipient-guard.ts";
 import { leadCopyStaffIds } from "../neon/lead-default-assignee.js";
 import { HISTORICAL_RESEND_ATTEMPT_PREFIX } from "../neon/historical-resend-dispatch/historical-resend-dispatch.mjs";
 import { providerChannelId } from "./wa-config.server.ts";
@@ -72,7 +76,8 @@ const ENDPOINT_ELIGIBLE = `${ENDPOINT_ELIGIBLE_BASE} AND ${ROLE_ELIGIBLE}`;
 const ENDPOINT_JOINS = `JOIN staff_users s ON s.id=ep.staff_id JOIN whatsapp_staff_channels m ON m.staff_id=ep.staff_id AND m.channel_id=ep.channel_id`;
 const PHONE_STAFF_JOIN = `JOIN staff_users s ON s.id=ep.staff_id`;
 const PHONE_ELIGIBLE = `ep.transport='website_lead_phone' AND s.active AND ep.enabled AND ep.retired_at IS NULL
-  AND ep.verified_at<=now() AND ep.permission_granted AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb`;
+  AND ep.verified_at<=now() AND ep.permission_granted AND ep.quiet_hours_policy @> '{"approved":true,"allowAllHours":true}'::jsonb
+  AND (ep.quiet_hours_policy->>'authority' IS DISTINCT FROM 'company_manager' OR (${COMPANY_PHONE_ASSIGNED}))`;
 
 function websitePhoneTemplate(template: StaffAlertTemplate | null) {
   return (

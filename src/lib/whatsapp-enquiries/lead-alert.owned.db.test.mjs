@@ -1518,6 +1518,125 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
         },
       );
 
+      await t.test(
+        "manager authorization binds a verified company line to future assigned leads",
+        async () => {
+          const { enrollCompanyPhone } = await import("../neon/staff-endpoints.server.ts");
+          const channel = scenario();
+          const sales = await seedStaff(query);
+          const manager = await seedStaff(query, { roles: ["manager"] });
+          const reviewer = { staffId: manager, roles: ["manager"] };
+          const phone = "85269008002";
+          await query("UPDATE staff_users SET whatsapp=$2 WHERE id=$1", [sales, phone]);
+          const [draft] = await query(
+            "INSERT INTO staff_notification_endpoints(staff_id,transport,channel_id,destination_reference,enabled) VALUES($1,'website_lead_phone',$2,$3,false) RETURNING id,version",
+            [sales, channel, phone],
+          );
+          const input = {
+            id: draft.id,
+            expectedVersion: draft.version,
+            phone: "+852 6900 8002",
+            companyRecordRef: "synthetic-asset-42",
+            authorizeAllHours: true,
+          };
+          const enroll = (changes = {}) =>
+            enrollCompanyPhone({ ...input, ...changes }, reviewer, query);
+          const conflict = (e) => e.status === 409;
+          await assert.rejects(
+            enrollCompanyPhone(input, { staffId: sales, roles: ["agent"] }, query),
+            (e) => e.status === 403,
+          );
+          await assert.rejects(
+            enrollCompanyPhone(input, { staffId: sales, roles: ["manager"] }, query),
+            (e) => e.status === 403,
+          );
+          await assert.rejects(enroll({ authorizeAllHours: false }));
+          await assert.rejects(enroll({ companyRecordRef: " " }));
+          await assert.rejects(enroll({ actorId: sales }));
+          await assert.rejects(enroll({ phone: "69008003" }), conflict);
+          await query("UPDATE staff_users SET phone=$2 WHERE id=$1", [manager, phone]);
+          await assert.rejects(enroll(), conflict);
+          await query("UPDATE staff_users SET phone=NULL WHERE id=$1", [manager]);
+          const [contact] = await query(
+            "INSERT INTO crm_contacts(name,normalized_phone) VALUES('owned customer','69008002') RETURNING id",
+          );
+          await assert.rejects(enroll(), conflict);
+          await query("UPDATE crm_contacts SET normalized_phone=NULL WHERE id=$1", [contact.id]);
+          const queuedLead = async () => {
+            const leadId = await seedLead(query, { assigned: sales });
+            await query(
+              `UPDATE crm_leads SET enquiry_routing_context='{"scope":"unit","notificationRoute":"staff_phone"}' WHERE id=$1`,
+              [leadId],
+            );
+            return [leadId, await leasedJob(query, leadId)];
+          };
+          const beforeEnrollment = await queuedLead();
+          const auditRows = () =>
+            query(
+              "SELECT id,actor_id,metadata FROM audit_logs WHERE subject_id=$1 AND action='staff.endpoint.manager_authorize'",
+              [draft.id],
+            );
+          assert.equal((await auditRows()).length, 0);
+          const concurrent = await Promise.allSettled([enroll(), enroll()]);
+          assert.equal(concurrent.filter((x) => x.status === "fulfilled").length, 1);
+          assert.equal(concurrent.find((x) => x.status === "rejected").reason.status, 409);
+          const audits = await auditRows();
+          assert.equal(audits.length, 1);
+          const [audit] = audits;
+          assert.equal(audit.actor_id, manager);
+          assert.equal(audit.metadata.managerName, "合成同事");
+          assert.equal(audit.metadata.authority, "company_manager");
+          assert.equal(audit.metadata.staffId, sales);
+          assert.equal(audit.metadata.allowAllHours, true);
+          assert.equal(audit.metadata.companyRecordRef, input.companyRecordRef);
+          const [saved] = await query(
+            "SELECT enabled,permission_ref,verification_ref,version FROM staff_notification_endpoints WHERE id=$1",
+            [draft.id],
+          );
+          assert.equal(saved.enabled, true);
+          assert.equal(saved.permission_ref, `manager-authorization:${audit.id}`);
+          assert.equal(saved.verification_ref, input.companyRecordRef);
+          assert.equal(saved.version, audit.metadata.version);
+          const savedTemplate = process.env.EP_WA_STAFF_ALERT_TEMPLATE;
+          try {
+            process.env.EP_WA_STAFF_ALERT_TEMPLATE = JSON.stringify({
+              name: "staff_enquiry_followup",
+              language: "zh_HK",
+              params: ["name", "source", "phone", "link"],
+            });
+            const provider = fakeProvider();
+            await run(...beforeEnrollment, provider);
+            assert.equal(provider.calls.length, 0);
+            const next = await queuedLead();
+            await run(...next, provider);
+            await run(...next, provider);
+            assert.deepEqual(
+              provider.calls.map((c) => c.recipientId),
+              [phone],
+            );
+            const later = await queuedLead();
+            const real = createStaffWhatsAppTransport(provider.send);
+            await run(...later, provider, {
+              transport: () => ({
+                ...real,
+                async sendStaffWhatsAppByPhone(scope) {
+                  await query("UPDATE staff_users SET whatsapp=NULL WHERE id=$1", [sales]);
+                  return real.sendStaffWhatsAppByPhone(scope);
+                },
+              }),
+            });
+            assert.equal(provider.calls.length, 1);
+            assert.ok(
+              (await attempts(later[0])).some(
+                (a) => a.safe_error === "dispatch_eligibility_changed",
+              ),
+            );
+          } finally {
+            applyEnv({ EP_WA_STAFF_ALERT_TEMPLATE: savedTemplate });
+          }
+        },
+      );
+
       await t.test("each source path enqueues exactly one alert job", async () => {
         const jobsBefore = await alertJobCount();
         // Contact form: no listing.

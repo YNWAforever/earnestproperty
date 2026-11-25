@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  authorizeCompanyPhone,
   turnOffStaffEndpoint,
   fetchStaffEventReview,
   fetchStaffAttention,
@@ -81,7 +82,7 @@ export function StaffEndpointEditor({
     <section id="staff-notifications" aria-label="同事通知設定" className="space-y-3 border-t pt-4">
       <h2 className="font-semibold">同事通知及待處理工作</h2>
       <p className="text-sm">
-        同事手機通知是獨立可選功能，預設關閉。未設定不影響接收客戶查詢；只有核實目的地、同事授權及時段後才可啟用。
+        同事手機通知預設關閉。公司管理的電話可由經理核實及授權接收網站查詢。
       </p>
       <dl className="flex flex-wrap gap-4">
         {Object.entries(health).map(([key, n]) => (
@@ -265,13 +266,65 @@ export function StaffEndpointEditor({
       {rows
         .filter((r) => !selectedStaffId || r.staffId === selectedStaffId)
         .map((r) => (
-          <article key={r.id} className="rounded border p-2">
+          <article key={`${r.id}:${r.version}`} className="rounded border p-2">
             <p>
               {agents.find((a) => a.id === r.staffId)?.name ?? r.staffId} · {r.transport} · v
               {r.version} · {r.enabled ? "啟用" : "關閉"} · 目的地 {r.maskedDestination ?? "未設定"}
               {" · "}核實 {r.verifiedAt ?? "未核實"} · 權限{" "}
-              {r.permissionGranted ? "已核實" : "未核實"}
+              {r.managerAuthorized ? "經理已授權" : r.permissionGranted ? "已核實" : "未核實"}
             </p>
+            {r.transport === "website_lead_phone" && !r.enabled && !r.retired && (
+              <details className="my-2">
+                <summary className="cursor-pointer font-medium">經理授權公司電話</summary>
+                <form
+                  className="mt-2 grid max-w-xl gap-2"
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    if (busy || !isCurrent()) return;
+                    const data = new FormData(event.currentTarget);
+                    if (data.get("allHours") !== "on") return;
+                    setBusy(true);
+                    setError("");
+                    try {
+                      await authorizeCompanyPhone(
+                        {
+                          id: r.id,
+                          expectedVersion: r.version,
+                          phone: String(data.get("phone") ?? ""),
+                          companyRecordRef: String(data.get("recordRef") ?? ""),
+                          authorizeAllHours: true,
+                        },
+                        isCurrent,
+                      );
+                      if (!isCurrent()) return;
+                      const updated = await fetchStaffEndpoints(isCurrent);
+                      if (isCurrent()) setRows(updated);
+                    } catch {
+                      if (isCurrent())
+                        setError(
+                          "未能確認啟用狀態。請重新整理，核對公司電話紀錄、所屬同事及客戶號碼衝突。",
+                        );
+                    } finally {
+                      if (isCurrent()) setBusy(false);
+                    }
+                  }}
+                >
+                  <label>
+                    公司紀錄上的 WhatsApp 號碼
+                    <Input name="phone" type="tel" autoComplete="off" maxLength={32} required />
+                  </label>
+                  <label>
+                    可核對號碼及使用人的公司紀錄編號
+                    <Input name="recordRef" maxLength={160} required />
+                  </label>
+                  <label>
+                    <input name="allHours" type="checkbox" required />{" "}
+                    我已核對公司管理此號碼並分配予這位同事，並授權全天候接收新網站查詢通知。
+                  </label>
+                  <Button disabled={busy}>授權並啟用</Button>
+                </form>
+              </details>
+            )}
             <Button
               variant="outline"
               disabled={busy || r.retired}

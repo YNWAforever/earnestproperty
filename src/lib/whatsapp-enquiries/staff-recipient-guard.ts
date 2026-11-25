@@ -33,6 +33,14 @@ export function staffDestinationNotACustomer(
   return `(NOT EXISTS(SELECT 1 FROM whatsapp_conversations guard_w WHERE guard_w.channel_id=${alias}.channel_id AND (guard_w.woztell_member_id=${ref} OR ${digitsMatch(dest, member)})) AND NOT EXISTS(SELECT 1 FROM crm_contacts guard_c WHERE guard_c.whatsapp_member_id=${ref} OR guard_c.normalized_phone=${ref} OR ${digitsMatch(dest, contactMember)} OR ${digitsMatch(dest, contactPhone)}))`;
 }
 
+/** Aliases ep and s identify the endpoint and its current assignee in both enrollment and dispatch. */
+export const COMPANY_PHONE_ASSIGNED = `ep.destination_reference=COALESCE(enquiry_notification_phone(s.whatsapp),enquiry_notification_phone(s.phone))
+  AND NOT EXISTS (SELECT 1 FROM staff_users other WHERE other.active AND other.id<>s.id
+    AND ep.destination_reference IN (enquiry_notification_phone(other.whatsapp),enquiry_notification_phone(other.phone)))
+  AND NOT EXISTS (SELECT 1 FROM staff_notification_endpoints other WHERE other.channel_id=ep.channel_id
+    AND other.staff_id<>s.id AND other.transport='website_lead_phone' AND other.retired_at IS NULL
+    AND other.destination_reference=ep.destination_reference)`;
+
 /** One phone typed two ways is one destination: the digits when there are at least
  * 8, else the reference as typed (a non-phone member id is never merged). */
 export function staffDestinationKey(expr = "destination_reference") {
