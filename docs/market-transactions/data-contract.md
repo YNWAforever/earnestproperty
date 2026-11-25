@@ -5,6 +5,13 @@ single source of truth for the snapshot format shared by the generator script,
 the pure module, the estate-page UI and the listing-page summary. Change it in
 the same commit as the code if the shape moves.
 
+> **2026-11-26:** the separate `EPRC 匯出` block and its modules
+> (`eprc-transactions*.ts`, `EstateRegisteredTransactions.tsx`, its CSV fixture
+> and tests) were deleted from the estate page at the owner's request. The
+> estate page now renders only the registry table described here, without the
+> source-row counts, pairing note, `更新於` stamp or source paragraph. References
+> to the EPRC files below describe the shipped state before that date.
+
 ## Scope decisions (settled, do not re-litigate)
 
 1. **Static versioned snapshot, no database.** `origin/main` already ships

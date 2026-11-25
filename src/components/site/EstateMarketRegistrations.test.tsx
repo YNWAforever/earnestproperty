@@ -189,17 +189,18 @@ describe("EstateMarketRegistrations", () => {
     expect($("section").text()).not.toContain("0 呎");
   });
 
-  test("counts are labelled as source rows, and pairing is reported separately", () => {
+  test("renders the table without source-row counts or a pairing note", () => {
     const $ = render({
       market: market({
         estate: estate({ rowCount: 4, pairedRowCount: 2, dedupedDealCount: 3 }),
         total: 4,
       }),
     });
-    const text = $("section").text();
-    expect(text).toContain("共 4 筆來源紀錄");
-    expect(text).toContain("其中 1 組為臨時＋正式合約配對");
-    expect(text).toContain("去重後 3 宗");
+    const section = $("section[aria-labelledby='market-registrations-heading']");
+    expect(section.find("tbody tr")).toHaveLength(2);
+    for (const copy of ["筆來源紀錄", "臨時＋正式合約配對", "去重後"]) {
+      expect(section.text()).not.toContain(copy);
+    }
   });
 
   test("facet chips link to filtered views and keep their own counts", () => {
@@ -327,10 +328,16 @@ describe("EstateMarketRegistrations", () => {
     expect($("section > div > table tbody tr")).toHaveLength(2);
   });
 
-  test("carries provenance, source period and 2026 year-to-date caveat", () => {
+  test("carries no provenance paragraph, source period or verification caveat", () => {
     const text = render({ market: market() })("section").text();
-    for (const copy of ["資料來源", "2026 年為年初至今", "大部分紀錄從缺，並非零"]) {
-      expect(text).toContain(copy);
+    for (const copy of [
+      "資料來源",
+      "2026 年為年初至今",
+      "大部分紀錄從缺，並非零",
+      "更新於",
+      "登記日期 2021-01",
+    ]) {
+      expect(text).not.toContain(copy);
     }
   });
 });
