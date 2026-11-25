@@ -140,15 +140,18 @@ test("website inquiry persistence resolves assignment and writes through one ato
   });
 
   assert.deepEqual(result, { id: "inquiry-1", leadAlertQueued: false });
-  assert.equal(calls.length, 1, "resolution and all writes must share one query call");
-  assert.match(calls[0].sql, /WITH[\s\S]*resolved_listing/i);
-  assert.match(calls[0].sql, /p\.status = 'active'/);
-  assert.match(calls[0].sql, /s\.active = true/);
-  assert.match(calls[0].sql, /INSERT INTO crm_contacts/);
-  assertInsertUsesRoutingIntent(calls[0].sql, "crm_leads");
-  assertInsertUsesRoutingIntent(calls[0].sql, "inquiries");
-  assert.equal(calls[0].params.includes("caller-agent"), false);
-  assert.equal(calls[0].params.includes("caller-assigned-agent"), false);
+  // A listing enquiry also reads the 負責經紀 (property_agents) before writing, so
+  // the guarantee is one atomic WRITE statement, not one total call.
+  const writes = calls.filter((call) => /INSERT INTO inquiries/.test(call.sql));
+  assert.equal(writes.length, 1, "resolution and all writes must share one write statement");
+  assert.match(writes[0].sql, /WITH[\s\S]*resolved_listing/i);
+  assert.match(writes[0].sql, /p\.status = 'active'/);
+  assert.match(writes[0].sql, /s\.active = true/);
+  assert.match(writes[0].sql, /INSERT INTO crm_contacts/);
+  assertInsertUsesRoutingIntent(writes[0].sql, "crm_leads");
+  assertInsertUsesRoutingIntent(writes[0].sql, "inquiries");
+  assert.equal(writes[0].params.includes("caller-agent"), false);
+  assert.equal(writes[0].params.includes("caller-assigned-agent"), false);
 });
 
 test("website inquiry enqueues its lead alert in the same statement", async () => {
@@ -188,6 +191,7 @@ test("website inquiry persistence awaits and propagates an injected query failur
   await assert.rejects(
     persistWebsiteInquiry(
       async (sql, params) => {
+        if (sql.includes("to_regclass('property_agents')")) return [{ available: false }];
         calls += 1;
         assert.match(sql, /^\s*WITH resolved_listing/i);
         assert.deepEqual(params, [
@@ -259,7 +263,7 @@ test("public inquiry upsert can never raise consent or overwrite an existing con
     consentWhatsapp: true,
   });
 
-  const { sql } = calls[0];
+  const { sql, params } = calls.find((call) => call.sql.includes("INSERT INTO inquiries"));
   const conflictClause = sql.slice(sql.indexOf("ON CONFLICT (normalized_phone)"));
 
   // Consent is carried over untouched -- never OR'd, never taken from EXCLUDED.
@@ -274,7 +278,7 @@ test("public inquiry upsert can never raise consent or overwrite an existing con
 
   // The submitted consent flag still reaches the INSERT, so a brand-new contact
   // who ticks the box is opted in on first write.
-  assert.equal(calls[0].params[5], true);
+  assert.equal(params[5], true);
 });
 
 // Each CTE clause of live-agent.server.ts that starts with `<name> AS (` (the name must not be a
@@ -492,4 +496,336 @@ test("each handler derives suspectedBot after the rate limits and never returns 
     const between = handler.slice(detect, call);
     assert.doesNotMatch(between, /\breturn\b|\bthrow\b/, `${server}: no early exit`);
   }
+});
+
+// Phase 2.5: a website enquiry that has no other owner can fall back to one
+// configured staff member. Everything here is the *inert by default* half: with
+// no configuration the intake statement and its parameter list are byte-identical
+// to the pre-fallback build, which is what the strict parameter assertion above
+// already proves for the unset case.
+const DEDICATED_AGENT = "3f9c1b0a-6d2e-4c8f-9a51-2b7d4e6f8a01";
+
+function withDefaultAssignee(value, run) {
+  const previous = process.env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID;
+  if (value === undefined) delete process.env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID;
+  else process.env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID = value;
+  return Promise.resolve(run()).finally(() => {
+    if (previous === undefined) delete process.env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID;
+    else process.env.EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID = previous;
+  });
+}
+
+test("the configured fallback only decides an enquiry nobody else owns", async () => {
+  const { deriveWebsiteInquiryRouting } = await import(moduleUrl);
+  const listing = {
+    id: "property-1",
+    dealType: "sale",
+    agentId: "agent-active",
+    agentActive: true,
+  };
+
+  // Nobody to own a general enquiry: the fallback takes it.
+  assert.equal(
+    deriveWebsiteInquiryRouting(null, null, { defaultAssigneeId: DEDICATED_AGENT }).assignedAgentId,
+    DEDICATED_AGENT,
+  );
+  // A listing whose agent is missing or inactive also falls through to it.
+  assert.equal(
+    deriveWebsiteInquiryRouting({ ...listing, agentActive: false }, null, {
+      defaultAssigneeId: DEDICATED_AGENT,
+    }).assignedAgentId,
+    DEDICATED_AGENT,
+  );
+  // The listing's own active agent is never displaced.
+  assert.equal(
+    deriveWebsiteInquiryRouting(listing, null, { defaultAssigneeId: DEDICATED_AGENT })
+      .assignedAgentId,
+    "agent-active",
+  );
+  // Nor is the colleague the visitor explicitly picked.
+  assert.equal(
+    deriveWebsiteInquiryRouting(listing, "chosen-agent", {
+      defaultAssigneeId: DEDICATED_AGENT,
+    }).assignedAgentId,
+    "chosen-agent",
+  );
+  // No configuration: unchanged pre-fallback behaviour.
+  assert.equal(deriveWebsiteInquiryRouting(null).assignedAgentId, null);
+  assert.equal(
+    deriveWebsiteInquiryRouting({ ...listing, agentActive: false }).assignedAgentId,
+    null,
+  );
+});
+
+test("only a canonical staff uuid counts as configuration", async () => {
+  const { parseDefaultLeadAssignee, readDefaultLeadAssignee } = await import(
+    new URL("./lead-default-assignee.js", import.meta.url)
+  );
+
+  assert.equal(parseDefaultLeadAssignee(DEDICATED_AGENT), DEDICATED_AGENT);
+  assert.equal(parseDefaultLeadAssignee(`  ${DEDICATED_AGENT}  `), DEDICATED_AGENT);
+  for (const invalid of ["", "   ", "not-a-uuid", "3f9c1b0a", null, undefined, 42, true]) {
+    assert.equal(parseDefaultLeadAssignee(invalid), null, String(invalid));
+  }
+  assert.equal(readDefaultLeadAssignee({}), null);
+  assert.equal(
+    readDefaultLeadAssignee({ EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID: DEDICATED_AGENT }),
+    DEDICATED_AGENT,
+  );
+  // A typo must degrade to "not configured", never to a crash on the public form.
+  assert.equal(readDefaultLeadAssignee({ EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID: "typo" }), null);
+  assert.equal(readDefaultLeadAssignee(null), null);
+});
+
+test("an unscoped enquiry gets no assignee even when a fallback is configured", async () => {
+  // Willy's rule: 無範圍/無法判定 -> copy only. So the default assignee must not
+  // reach a general contact-page enquiry; it only covers scoped ones without an
+  // owner of their own (unit with no correspondent agent, estate off the sheet).
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const input = {
+    name: "測試",
+    phone: "9123 4567",
+    normalizedPhone: "85291234567",
+    email: null,
+    message: null,
+    listingNo: null,
+    propertyId: null,
+    consentWhatsapp: false,
+  };
+
+  const unset = [];
+  await withDefaultAssignee(undefined, async () => {
+    await persistWebsiteInquiry(async (sql, params) => {
+      unset.push({ sql, params });
+      return [];
+    }, input);
+  });
+  const configured = [];
+  await withDefaultAssignee(DEDICATED_AGENT, async () => {
+    await persistWebsiteInquiry(async (sql, params) => {
+      configured.push({ sql, params });
+      return [];
+    }, input);
+  });
+
+  assert.equal(unset.length, 1);
+  assert.equal(configured.length, 1);
+  const [off] = unset;
+  const [on] = configured;
+  assert.match(on.sql, /^\s*WITH resolved_listing/i);
+  // Unscoped: the configured fallback binds nothing and cannot be assigned.
+  assert.equal(on.params.length, off.params.length);
+  assert.equal(on.params.includes(DEDICATED_AGENT), false);
+  assert.equal(off.params.includes(DEDICATED_AGENT), false);
+  assert.match(on.sql, /NULL::uuid/);
+  // The statement records which of the three cases it was.
+  assert.match(on.sql, /'scope','unknown'::text/);
+});
+
+test("a unit enquiry still binds the configured fallback behind the active-staff guard", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const input = {
+    name: "測試",
+    phone: "9123 4567",
+    normalizedPhone: "85291234567",
+    email: null,
+    message: null,
+    listingNo: null,
+    propertyId: "11111111-1111-4111-8111-111111111111",
+    consentWhatsapp: false,
+  };
+  const calls = [];
+  await withDefaultAssignee(DEDICATED_AGENT, async () => {
+    await persistWebsiteInquiry(async (sql, params) => {
+      calls.push({ sql, params });
+      if (/to_regclass\('property_agents'\)/.test(sql)) return [{ available: true }];
+      if (/FROM property_agents a/.test(sql)) return [{ staff_id: CORRESPONDENT }];
+      return [];
+    }, input);
+  });
+  const write = calls.find((call) => /INSERT INTO inquiries/.test(call.sql));
+  assert.ok(write);
+  assert.equal(write.params.includes(DEDICATED_AGENT), true);
+  // Order: visitor's pick, 負責經紀, properties.agent_id, scope fallback.
+  assert.match(
+    write.sql,
+    /COALESCE\((?:NULL|\$\d+)::uuid, (?:NULL|\$\d+)::uuid, s\.id, \(SELECT d\.id FROM staff_users d WHERE d\.id = \$\d+::uuid AND d\.active = true\)\)/,
+  );
+  assert.equal((write.sql.match(/AND d\.active = true/g) ?? []).length, 2);
+  assert.match(write.sql, /'scope','unit'::text/);
+  assert.doesNotMatch(write.sql, /BYPASSRLS|GRANT|ALTER /i);
+});
+
+test("an estate enquiry assigns that estate's manager and records the slug", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const MANAGER_STAFF_ID = "fb4dfa8f-a892-458b-a4f9-7caf48a4a0a2"; // Terence, rotation ②
+  const calls = [];
+  await withDefaultAssignee(DEDICATED_AGENT, async () => {
+    await persistWebsiteInquiry(
+      async (sql, params) => {
+        calls.push({ sql, params });
+        return [];
+      },
+      {
+        name: "測試",
+        phone: "9123 4567",
+        normalizedPhone: "85291234567",
+        email: null,
+        message: null,
+        listingNo: null,
+        propertyId: null,
+        estateSlug: "napa",
+        estateManagerStaffId: MANAGER_STAFF_ID,
+        consentWhatsapp: false,
+      },
+    );
+  });
+
+  assert.equal(calls.length, 1, "an estate enquiry needs no property_agents read");
+  const [write] = calls;
+  assert.equal(write.params.includes(MANAGER_STAFF_ID), true);
+  assert.equal(write.params.includes(DEDICATED_AGENT), false, "the manager outranks the fallback");
+  assert.equal(write.params.includes("napa"), true);
+  assert.match(write.sql, /'scope','estate'::text/);
+  assert.match(write.sql, /'requestedEstateSlug'/);
+  // The estate manager is bound through the same active-staff-guarded subquery.
+  assert.match(
+    write.sql,
+    /SELECT d\.id FROM staff_users d WHERE d\.id = \$\d+::uuid AND d\.active = true/,
+  );
+});
+
+// The colleague a buyer sees on a listing page ("負責經紀") is a property_agents
+// row, not properties.agent_id. Production on 2026-11-24: agent_id was null on
+// all 836 active property rows while 781 had an active correspondent agent, so
+// routing has to read property_agents or almost every lead stays unowned.
+const CORRESPONDENT = "9b1f7c3e-2a4d-4b6e-8c05-7d3e1f9a2b44";
+
+test("the listing's displayed 負責經紀 is assigned before the default fallback", async () => {
+  const { deriveWebsiteInquiryRouting } = await import(moduleUrl);
+  const listing = { id: "property-1", dealType: "sale", agentId: null, agentActive: false };
+
+  // Nobody picked, no legacy agent_id, but the page shows a correspondent agent.
+  assert.equal(
+    deriveWebsiteInquiryRouting(listing, null, {
+      correspondentAgentId: CORRESPONDENT,
+      defaultAssigneeId: DEDICATED_AGENT,
+    }).assignedAgentId,
+    CORRESPONDENT,
+  );
+  // The correspondent agent also outranks a legacy properties.agent_id.
+  assert.equal(
+    deriveWebsiteInquiryRouting({ ...listing, agentId: "legacy-agent", agentActive: true }, null, {
+      correspondentAgentId: CORRESPONDENT,
+      defaultAssigneeId: DEDICATED_AGENT,
+    }).assignedAgentId,
+    CORRESPONDENT,
+  );
+  // A visitor's explicit choice still wins over both.
+  assert.equal(
+    deriveWebsiteInquiryRouting(listing, "chosen-agent", {
+      correspondentAgentId: CORRESPONDENT,
+      defaultAssigneeId: DEDICATED_AGENT,
+    }).assignedAgentId,
+    "chosen-agent",
+  );
+  // No correspondent agent: the configured default still owns it.
+  assert.equal(
+    deriveWebsiteInquiryRouting(listing, null, { defaultAssigneeId: DEDICATED_AGENT })
+      .assignedAgentId,
+    DEDICATED_AGENT,
+  );
+});
+
+test("a listing enquiry resolves the correspondent agent before the single write", async () => {
+  const { persistWebsiteInquiry } = await import(moduleUrl);
+  const input = {
+    name: "測試",
+    phone: "9123 4567",
+    normalizedPhone: "85291234567",
+    email: null,
+    message: null,
+    listingNo: null,
+    propertyId: "11111111-1111-4111-8111-111111111111",
+    consentWhatsapp: false,
+  };
+
+  const run = async (available) => {
+    const calls = [];
+    await persistWebsiteInquiry(async (sql, params) => {
+      calls.push({ sql, params });
+      if (/to_regclass\('property_agents'\)/.test(sql)) return [{ available }];
+      if (/FROM property_agents a/.test(sql)) return [{ staff_id: CORRESPONDENT }];
+      return [{ id: "inquiry-1" }];
+    }, input);
+    return calls;
+  };
+
+  const found = await run(true);
+  // probe + correspondent read + one write
+  assert.equal(found.length, 3);
+  const write = found.find((call) => /INSERT INTO inquiries/.test(call.sql));
+  assert.ok(write, "the write still happens");
+  assert.equal(write.params.includes(CORRESPONDENT), true, "the correspondent agent is bound");
+  // Order matters: chosen, correspondent, legacy agent_id, configured default.
+  assert.match(
+    write.sql,
+    /COALESCE\((?:NULL|\$\d+)::uuid, (?:NULL|\$\d+)::uuid, s\.id, \(SELECT d\.id/,
+  );
+  // The read only ever picks an ACTIVE colleague and follows the page's order.
+  const read = found.find((call) => /FROM property_agents a/.test(call.sql));
+  assert.match(read.sql, /s\.active = true/);
+  assert.match(read.sql, /ORDER BY a\.position, a\.staff_id/);
+
+  // Pre-migration database (no property_agents): the term is skipped, the write
+  // still runs, and it does not invent an assignee.
+  const missing = await run(false);
+  assert.equal(missing.length, 2);
+  const writeWithoutTable = missing.find((call) => /INSERT INTO inquiries/.test(call.sql));
+  assert.ok(writeWithoutTable);
+  assert.equal(writeWithoutTable.params.includes(CORRESPONDENT), false);
+});
+
+// Willy, 2026-11-24 (option B): the copy goes to 張秋 on his own staff line, so
+// the repository holds a staff id and no second phone number. A lead he owns must
+// therefore produce one send, not two - the alert plan collapses identical
+// destinations, which only works while both sides resolve to the same staff row.
+const QIU_ZHANG_STAFF_ID = "64d5a2d6-e602-4760-9709-63b0414f6a83";
+
+test("every lead alert copies 張秋 on his own staff line", async () => {
+  const { LEAD_COPY_STAFF_ID, leadCopyStaffIds } = await import(
+    new URL("./lead-default-assignee.js", import.meta.url)
+  );
+
+  assert.equal(LEAD_COPY_STAFF_ID, QIU_ZHANG_STAFF_ID);
+  assert.deepEqual(leadCopyStaffIds(), [QIU_ZHANG_STAFF_ID]);
+  assert.equal(new Set(leadCopyStaffIds()).size, leadCopyStaffIds().length, "no duplicate copies");
+  for (const id of leadCopyStaffIds()) {
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  }
+});
+
+test("the copy carries no second phone number in code", async () => {
+  const source = readFileSync(new URL("./lead-default-assignee.js", import.meta.url), "utf8");
+  // Option B: no copy phone env var, and the office line is deliberately absent.
+  assert.doesNotMatch(source, /EP_LEAD_COPY_PHONE/);
+  assert.doesNotMatch(source, /97987774/);
+  assert.doesNotMatch(source, /92786562/);
+});
+
+test("a lead 張秋 owns resolves to the same staff member as the copy", async () => {
+  const { LEAD_COPY_STAFF_ID, resolveAssignedAgentId } = await import(
+    new URL("./lead-default-assignee.js", import.meta.url)
+  );
+  // When the configured default assignee is 張秋, assignee and copy are one staff
+  // row, so the plan's destination de-duplication yields a single send.
+  assert.equal(
+    resolveAssignedAgentId({ defaultAssigneeId: QIU_ZHANG_STAFF_ID }),
+    LEAD_COPY_STAFF_ID,
+  );
+  // A lead owned by a listing's 負責經紀 is a different person: two sends.
+  assert.notEqual(
+    resolveAssignedAgentId({ correspondentAgentId: "9b1f7c3e-2a4d-4b6e-8c05-7d3e1f9a2b44" }),
+    LEAD_COPY_STAFF_ID,
+  );
 });

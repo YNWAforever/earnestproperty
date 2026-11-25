@@ -30,7 +30,10 @@ export function StaffEndpointEditor({
     [busy, setBusy] = useState(false);
   const [form, setForm] = useState({
     staffId: "",
-    transport: "inbox_private_note" as "inbox_private_note" | "staff_whatsapp",
+    transport: "inbox_private_note" as
+      | "inbox_private_note"
+      | "staff_whatsapp"
+      | "website_lead_phone",
     destinationReference: "",
     verificationRef: "",
     permissionRef: "",
@@ -197,7 +200,8 @@ export function StaffEndpointEditor({
               }
             >
               <option value="inbox_private_note">私有 Inbox 備註</option>
-              <option value="staff_whatsapp">同事 WhatsApp</option>
+              <option value="website_lead_phone">網站查詢 WhatsApp 電話通知</option>
+              <option value="staff_whatsapp">同事 WhatsApp（會員 ID）</option>
             </select>
           </label>
           {form.transport === "inbox_private_note" ? (
@@ -207,7 +211,9 @@ export function StaffEndpointEditor({
           ) : (
             <>
               <label>
-                已核實同事 WhatsApp 收件 ID
+                {form.transport === "website_lead_phone"
+                  ? "已核實同事 WhatsApp 電話號碼"
+                  : "已核實同事 WhatsApp 收件 ID"}
                 <Input
                   required
                   maxLength={256}
@@ -216,7 +222,7 @@ export function StaffEndpointEditor({
                 />
               </label>
               <label>
-                收件 ID 核實紀錄編號
+                目的地核實紀錄編號
                 <Input
                   required
                   maxLength={160}

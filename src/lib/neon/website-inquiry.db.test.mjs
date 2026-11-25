@@ -76,8 +76,9 @@ test("a listing enquiry routes to the correspondent agent the visitor picked", a
     const propertyId = randomUUID();
     const listingAgent = randomUUID();
     const correspondent = randomUUID();
+    const firstCorrespondent = randomUUID();
     const outsider = randomUUID();
-    for (const id of [listingAgent, correspondent, outsider]) {
+    for (const id of [listingAgent, firstCorrespondent, correspondent, outsider]) {
       await query(
         "INSERT INTO staff_users (id, name_zh, active, show_on_website) VALUES ($1,'Synthetic agent',true,true)",
         [id],
@@ -88,8 +89,9 @@ test("a listing enquiry routes to the correspondent agent the visitor picked", a
       [propertyId, listingAgent],
     );
     await query(
-      "INSERT INTO property_agents (property_id, position, staff_id, source) VALUES ($1,1,$2,'owned-website-fixture')",
-      [propertyId, correspondent],
+      `INSERT INTO property_agents (property_id, position, staff_id, source) VALUES
+       ($1,1,$2,'owned-website-fixture'), ($1,2,$3,'owned-website-fixture')`,
+      [propertyId, firstCorrespondent, correspondent],
     );
     const base = {
       name: "Synthetic",
@@ -115,18 +117,19 @@ test("a listing enquiry routes to the correspondent agent the visitor picked", a
     assert.equal(chosen.enquiry_routing_context.kind, "property");
     assert.equal(chosen.enquiry_routing_context.selectedAgentId, correspondent);
 
-    // A staff member who is not a correspondent agent of this listing is ignored.
-    await persistWebsiteInquiry(query, {
+    // An outsider selection falls back to the first public correspondent on this listing.
+    const ignoredSelection = await persistWebsiteInquiry(query, {
       ...base,
       submissionId: randomUUID(),
       phone: "85262220000",
       normalizedPhone: "85262220000",
       agentId: outsider,
     });
-    const leads = await query("SELECT assigned_agent_id FROM crm_leads ORDER BY assigned_agent_id");
-    assert.deepEqual(
-      leads.map((row) => row.assigned_agent_id).sort(),
-      [listingAgent, correspondent].sort(),
+    const [fallback] = await query(
+      "SELECT l.assigned_agent_id,l.enquiry_routing_context FROM crm_leads l JOIN inquiries i ON i.crm_lead_id=l.id WHERE i.id=$1",
+      [ignoredSelection.id],
     );
+    assert.equal(fallback.assigned_agent_id, firstCorrespondent);
+    assert.equal(fallback.enquiry_routing_context.selectedAgentId, null);
   });
 });

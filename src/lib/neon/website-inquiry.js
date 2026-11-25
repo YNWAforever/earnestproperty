@@ -1,21 +1,38 @@
 import { leadAlertEnqueueCte } from "./lead-alert-enqueue.js";
+import { readDefaultLeadAssignee, resolveAssignedAgentId } from "./lead-default-assignee.js";
+import { classifyEnquiryScope, scopeFallbackAssigneeId } from "./lead-scope.js";
 import { phoneMatchSql, phoneSpellingTiebreakSql } from "../phone.js";
 
-export function deriveWebsiteInquiryRouting(listing, chosenAgentId = null) {
+/**
+ * Routing projection for one enquiry, mirroring the intake statement's
+ * `COALESCE`: the visitor's choice wins, then the 負責經紀 shown on the listing
+ * page (a property_agents row), then the listing's own active `agent_id`, then
+ * the configured default assignee (`EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID`, see
+ * lead-default-assignee.js). Null means "nobody owns this lead yet", which is
+ * what the statement inserts in that case.
+ */
+export function deriveWebsiteInquiryRouting(listing, chosenAgentId = null, options = {}) {
+  const { correspondentAgentId = null, defaultAssigneeId = null } = options ?? {};
   if (!listing) {
     return {
       propertyId: null,
-      assignedAgentId: null,
+      assignedAgentId: resolveAssignedAgentId({ defaultAssigneeId }),
       intent: "buyer",
     };
   }
 
   return {
     propertyId: listing.id,
-    // The visitor's choice (already validated against property_agents) wins over the
-    // listing's own agent, so the new-lead alert reaches the colleague they picked.
-    assignedAgentId:
-      chosenAgentId ?? (listing.agentActive && listing.agentId ? listing.agentId : null),
+    // The visitor's choice (already validated against property_agents) wins over
+    // anything the listing itself carries, so the new-lead alert reaches the
+    // colleague they picked.
+    assignedAgentId: resolveAssignedAgentId({
+      chosenAgentId,
+      correspondentAgentId,
+      listingAgentId: listing.agentId,
+      listingAgentActive: listing.agentActive,
+      defaultAssigneeId,
+    }),
     intent: listing.dealType === "rent" ? "renter" : "buyer",
   };
 }
@@ -148,21 +165,87 @@ export async function persistWebsiteInquiry(query, input) {
   // Validated above: null unless the visitor's choice is a correspondent agent of this
   // listing. When there is no choice the SQL carries a literal NULL, so the statement and its
   // parameter list are byte-identical to the pre-agent build.
-  const chosenAgentParam = requestedAgentId ? `$${baseParamCount + 3}::uuid` : "NULL::uuid";
+  //
+  // Scope fallback: the estate manager for an estate enquiry, or the dedicated
+  // sales agent configured with EP_LEAD_DEFAULT_ASSIGNEE_STAFF_ID for a unit one.
+  // Unset (or malformed) leaves the statement
+  // exactly as before -- a literal NULL and no extra parameter -- so merging this
+  // code cannot change routing until the variable is set. The SQL's
+  // `AND d.active = true` is what refuses to assign a lead to a colleague who has
+  // been deactivated.
+  // The colleague the buyer actually sees on a listing page ("負責經紀") is a
+  // property_agents row, not properties.agent_id. Production on 2026-11-24: 0 of
+  // 836 active property rows had agent_id set, while 781 had an active
+  // correspondent agent (417 of 454 active public listings). Routing therefore
+  // prefers the correspondent agent, then properties.agent_id, then the
+  // configured default assignee. property_agents is additive, so probe before
+  // reading; a pre-migration database simply skips this term.
+  let correspondentAgentId = null;
+  if (propertyId || listingNo) {
+    const [agentTable] = await query(
+      `SELECT to_regclass('property_agents') IS NOT NULL AS available`,
+    );
+    if (agentTable?.available === true) {
+      const rows = await query(
+        `SELECT a.staff_id FROM property_agents a
+         JOIN staff_users s ON s.id = a.staff_id AND s.active = true
+           AND COALESCE((to_jsonb(s)->>'show_on_website')::boolean, false) = true
+         WHERE a.property_id = COALESCE($1::uuid, (SELECT id FROM properties WHERE listing_no=$2::text AND status='active' ORDER BY id LIMIT 1))
+         ORDER BY a.position, a.staff_id
+         LIMIT 1`,
+        [propertyId || null, listingNo || null],
+      );
+      correspondentAgentId = rows[0]?.staff_id ?? null;
+    }
+  }
+  // Willy's three-case rule: a listing reference is a unit enquiry, an estate slug
+  // alone is an estate enquiry, and anything else is unscoped - which gets the copy
+  // recipient only, never the default assignee.
+  const estateSlug =
+    typeof input.estateSlug === "string" && input.estateSlug.trim() !== ""
+      ? input.estateSlug.trim()
+      : null;
+  const estateManagerStaffId =
+    typeof input.estateManagerStaffId === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      input.estateManagerStaffId,
+    )
+      ? input.estateManagerStaffId
+      : null;
+  const scope = classifyEnquiryScope({ propertyId, listingNo, estateSlug });
+  const defaultAssigneeId = readDefaultLeadAssignee();
+  const fallbackAssigneeId = scopeFallbackAssigneeId({
+    scope,
+    estateManagerStaffId,
+    defaultAssigneeId,
+  });
+  let nextParam = baseParamCount + 3;
+  const chosenAgentParam = requestedAgentId ? `$${nextParam++}::uuid` : "NULL::uuid";
+  const correspondentAgentParam = correspondentAgentId ? `$${nextParam++}::uuid` : "NULL::uuid";
+  const defaultAssigneeParam = fallbackAssigneeId ? `$${nextParam++}::uuid` : "NULL::uuid";
+  const estateSlugParam = estateSlug ? `$${nextParam++}::text` : "NULL::text";
+  // A scalar subquery rather than a leading CTE: the statement must still open
+  // with `WITH resolved_listing`, which its contract test pins.
+  const defaultAssigneeSql = `(SELECT d.id FROM staff_users d WHERE d.id = ${defaultAssigneeParam} AND d.active = true)`;
   // The migration is applied before this reader is deployed. Keep the routing
   // hint inside the one intake statement, using the existing bound values.
   const contextKind =
     input.propertyReferenceRequested === true
       ? "'property'::text"
       : "CASE WHEN $7::uuid IS NOT NULL OR $8::text IS NOT NULL THEN 'property' ELSE 'general' END";
-  const routingContext = `jsonb_build_object('kind',${contextKind},'requestedPropertyId',$7::text,'requestedPublicListingNo',$8::text,'selectedAgentId',${chosenAgentParam}::text)`;
+  const notificationRoute =
+    process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true" ? "staff_phone" : "staff_phone_paused";
+  const routingContext = `jsonb_build_object('kind',${contextKind},'scope','${scope}'::text,'requestedPropertyId',$7::text,'requestedPublicListingNo',$8::text,'requestedEstateSlug',${estateSlugParam},'selectedAgentId',${chosenAgentParam}::text,'notificationRoute','${notificationRoute}'::text)`;
   const rows = await query(
     `
     WITH resolved_listing AS (
       SELECT
         p.id AS property_id,
-        -- The visitor's chosen correspondent agent wins; otherwise the listing's own agent.
-        COALESCE(${chosenAgentParam}, s.id) AS assigned_agent_id,
+        -- The visitor's chosen correspondent agent wins; then the 負責經紀 shown on
+        -- the listing page; then the listing's own agent; then the scope fallback:
+        -- the estate's manager for an estate enquiry, the configured default
+        -- assignee for a unit enquiry, NULL for an unscoped one (copy only).
+        COALESCE(${chosenAgentParam}, ${correspondentAgentParam}, s.id, ${defaultAssigneeSql}) AS assigned_agent_id,
         CASE WHEN p.deal_type = 'rent' THEN 'renter' ELSE 'buyer' END AS intent
       FROM properties p
       LEFT JOIN staff_users s ON s.id = p.agent_id AND s.active = true
@@ -174,7 +257,7 @@ export async function persistWebsiteInquiry(query, input) {
           -- of an active row that shares its public number).
           OR ($7::uuid IS NULL AND $8::text IS NOT NULL AND p.listing_no = $8::text)
         )
-      ORDER BY CASE WHEN p.id = $7::uuid THEN 0 ELSE 1 END
+      ORDER BY CASE WHEN p.id = $7::uuid THEN 0 ELSE 1 END, p.id
       LIMIT 1
     ),
     -- C-15: the listing the enquiry was about, in any status. It only links the
@@ -190,7 +273,7 @@ export async function persistWebsiteInquiry(query, input) {
     routing AS (
       SELECT property_id, assigned_agent_id, intent FROM resolved_listing
       UNION ALL
-      SELECT (SELECT id FROM requested_listing), NULL::uuid, 'buyer'::text
+      SELECT (SELECT id FROM requested_listing), ${defaultAssigneeSql}, 'buyer'::text
       WHERE NOT EXISTS (SELECT 1 FROM resolved_listing)
     ),
     ${submissionCte}
@@ -227,8 +310,7 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
       COALESCE($8::text, (SELECT listing_no FROM requested_listing))
     FROM contact
     CROSS JOIN routing
-    RETURNING id, (SELECT count(*) FROM lead_alert) > 0 AS lead_alert_queued,
-      enquiry_forwarding_is_enabled() AS forwarding_enabled
+    RETURNING id, (SELECT count(*) FROM lead_alert) > 0 AS lead_alert_queued
     `,
     [
       name,
@@ -243,6 +325,9 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
       SUSPECTED_BOT_NOTE,
       input.suspectedBot === true,
       ...(requestedAgentId ? [requestedAgentId] : []),
+      ...(correspondentAgentId ? [correspondentAgentId] : []),
+      ...(fallbackAssigneeId ? [fallbackAssigneeId] : []),
+      ...(estateSlug ? [estateSlug] : []),
     ],
   );
 
@@ -272,8 +357,5 @@ ${submissionId ? "id, crm_lead_id, marketing_consent_requested, consent_copy_ver
   return {
     id: rows[0]?.id == null ? "" : String(rows[0].id),
     leadAlertQueued: rows[0]?.lead_alert_queued === true,
-    ...(rows[0]?.forwarding_enabled === true && rows[0]?.lead_alert_queued === true
-      ? { forwardingQueued: true }
-      : {}),
   };
 }

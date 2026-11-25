@@ -15,7 +15,7 @@ const save = createServerFn({ method: "POST" })
         id: z.string().uuid().optional(),
         expectedVersion: z.number().int().positive().optional(),
         staffId: z.string().uuid(),
-        transport: z.enum(["inbox_private_note", "staff_whatsapp"]),
+        transport: z.enum(["inbox_private_note", "staff_whatsapp", "website_lead_phone"]),
         destinationReference: z.string().max(256).optional(),
         verificationRef: z.string().max(160).optional(),
         permissionRef: z.string().min(1).max(160),

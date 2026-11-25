@@ -113,6 +113,8 @@ import {
   campaignRetryStatusSql,
   retryableFailedRecipientSql,
 } from "./campaign-retry.ts";
+import { estateRegistry } from "@/content/estate-registry";
+import { estateManagerContact, managerRotationForEstate } from "@/content/estate-manager-rotation";
 import { isValidWebsiteListingNo, persistWebsiteInquiry } from "./website-inquiry.js";
 import {
   persistListingAlert,
@@ -4884,6 +4886,9 @@ export async function createWebsiteInquiry(input: {
   /** The correspondent agent the visitor picked on the listing page. Only honoured when
    * the staff member really is a correspondent agent of that property (checked in SQL). */
   agentId?: string | null;
+  /** Estate the visitor asked about, when the form/link carried one. Resolved against
+   * estate-registry and the manager rotation; an unknown slug is dropped. */
+  estateSlug?: string | null;
   consentWhatsapp?: boolean;
   suspectedBot?: boolean;
 }) {
@@ -4908,6 +4913,23 @@ export async function createWebsiteInquiry(input: {
   const requestedAgentId = WEBSITE_INQUIRY_UUID.test(rawAgentId) ? rawAgentId : null;
   if (rawAgentId && !requestedAgentId)
     console.warn("INQUIRY_LISTING_REF_DROPPED", { field: "agentId" });
+  // Willy's 只講屋苑 case: an estate slug with no listing reference routes to that
+  // estate's manager from the rotation sheet, and the manager's staff id travels
+  // into the one intake statement. An unknown slug is dropped (logged by field
+  // name only) so a bad parameter can never fail the enquiry.
+  const rawEstateSlug = typeof input.estateSlug === "string" ? input.estateSlug.trim() : "";
+  const estateEntry =
+    rawEstateSlug === ""
+      ? null
+      : (estateRegistry.find((entry) => entry.slug === rawEstateSlug) ?? null);
+  const requestedEstateSlug = estateEntry?.slug ?? null;
+  if (rawEstateSlug && !requestedEstateSlug)
+    console.warn("INQUIRY_LISTING_REF_DROPPED", { field: "estateSlug" });
+  const estateManagerStaffId =
+    requestedEstateSlug === null
+      ? null
+      : (estateManagerContact(managerRotationForEstate({ slug: requestedEstateSlug }))?.staffId ??
+        null);
   const result = await persistWebsiteInquiry(queryRows, {
     submissionId: input.submissionId,
     name: input.name,
@@ -4917,8 +4939,10 @@ export async function createWebsiteInquiry(input: {
     message,
     listingNo: requestedListingNo,
     propertyId: requestedPropertyId,
+    estateSlug: requestedEstateSlug,
     propertyReferenceRequested: !!rawPropertyId || !!rawListingNo,
     agentId: requestedAgentId,
+    estateManagerStaffId,
     consentWhatsapp: optInWhatsapp,
     suspectedBot: input.suspectedBot === true,
   });
@@ -4926,7 +4950,6 @@ export async function createWebsiteInquiry(input: {
   if (result.leadAlertQueued) {
     try {
       wakeAfterCommit("general");
-      if (result.forwardingQueued) wakeAfterCommit("service");
     } catch {
       // The enquiry and its alert job are committed; the cron lane will pick the job up.
       console.warn("[website-inquiry] lead_alert_wake_failed");

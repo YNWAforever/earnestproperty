@@ -611,6 +611,10 @@ const websiteInquirySchema = z
     // The correspondent agent the visitor picked. Shape-checked here and validated against
     // property_agents in SQL; a bad value can never fail the enquiry.
     agentId: z.string().max(80).optional().catch(undefined),
+    // Optional estate context: a form or link that names an estate but no unit is an
+    // estate enquiry (Willy's 只講屋苑 case). Checked against estate-registry in the
+    // handler; an unknown slug is dropped, so it can never fail the enquiry.
+    estateSlug: z.string().max(80).optional().catch(undefined),
     consentWhatsapp: z.boolean().default(false),
     // Invisible honeypot: any type or length is accepted, so it can never fail a submission.
     website: z.unknown().optional(),

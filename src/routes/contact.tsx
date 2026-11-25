@@ -1,4 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { zodValidator } from "@tanstack/zod-adapter";
+import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { MapPin, Phone, MessageCircle, Mail, Clock } from "lucide-react";
 import { SITE_BRANCHES, SITE_CONTACT, whatsappUrl, type SiteBranch } from "@/config/site";
@@ -9,6 +11,7 @@ import { branchLocalBusinessSchema, jsonLdScript } from "@/lib/schema";
 import { AppImage } from "@/components/media/AppImage";
 import { Container } from "@/components/layout/Container";
 import { ContactInquiryForm } from "@/components/site/ContactInquiryForm";
+import { estateRegistry } from "@/content/estate-registry";
 import { PageHero } from "@/components/site/PageHero";
 import { PhoneLink } from "@/components/site/PhoneLink";
 
@@ -40,7 +43,17 @@ function branchMapEmbedUrl(branch: SiteBranch) {
 
 const CONTACT_TITLE = pageSeo.contact.title;
 
+// 只講屋苑 entry point A: a link can carry ?estate=<slug> (an estate page, a
+// campaign URL, a staff message) and the enquiry is then routed to that estate's
+// manager instead of landing unowned. The slug is checked against the registry
+// here and again server-side; an unknown one simply falls back to a general
+// enquiry.
+const contactSearchSchema = z.object({
+  estate: z.string().max(80).optional().catch(undefined),
+});
+
 export const Route = createFileRoute("/contact")({
+  validateSearch: zodValidator(contactSearchSchema),
   head: () => ({
     meta: [
       { title: CONTACT_TITLE },
@@ -56,6 +69,12 @@ export const Route = createFileRoute("/contact")({
 });
 
 function ContactPage() {
+  const search = Route.useSearch();
+  const estateEntry =
+    search.estate === undefined
+      ? null
+      : (estateRegistry.find((entry) => entry.slug === search.estate) ?? null);
+
   return (
     <div className="bg-background">
       <script
@@ -187,7 +206,10 @@ function ContactPage() {
             </a>
             。
           </p>
-          <ContactInquiryForm />
+          {estateEntry && (
+            <p className="mt-3 text-sm text-muted-foreground">查詢屋苑：{estateEntry.nameZh}</p>
+          )}
+          <ContactInquiryForm estateSlug={estateEntry?.slug ?? null} />
         </div>
       </Container>
     </div>

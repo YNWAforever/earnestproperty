@@ -25,6 +25,7 @@ import { IntentWhatsAppCTA } from "@/components/site/IntentWhatsAppCTA";
 import { OwnerValuationPanel } from "@/components/site/OwnerValuationPanel";
 import { PageHero } from "@/components/site/PageHero";
 import { SearchFallbackCTA } from "@/components/site/SearchFallbackCTA";
+import { ContactInquiryForm } from "@/components/site/ContactInquiryForm";
 import { TrustProofPanel } from "@/components/site/TrustProofPanel";
 import { whatsappIntentUrl } from "@/config/site";
 import { findCastlePeakRoadSegmentByDistrictSlug } from "@/content/castle-peak-road";
@@ -851,6 +852,18 @@ function EstatePage() {
           </div>
         </Container>
       )}
+
+      {/* 只講屋苑 entry point B: an enquiry written on the estate page carries this
+          estate's slug, so it is routed to the estate's manager (rotation sheet)
+          instead of landing unowned. */}
+      <Container className="py-8" id="estate-enquiry">
+        <div className="max-w-3xl">
+          <h2 className="text-2xl font-bold text-primary">{estateName} 屋苑查詢</h2>
+          <div className="mt-6">
+            <ContactInquiryForm estateSlug={estate.slug} />
+          </div>
+        </div>
+      </Container>
 
       <OwnerValuationPanel key={estate.id} context={ctaContext} estateId={estate.id} />
       <TrustProofPanel />

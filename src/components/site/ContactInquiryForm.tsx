@@ -24,7 +24,7 @@ import { HoneypotField } from "@/components/site/HoneypotField";
 
 const CONTACT_FORM_STATUS_ID = "contact-form-status";
 
-export function ContactInquiryForm() {
+export function ContactInquiryForm({ estateSlug }: { estateSlug?: string | null } = {}) {
   const [submitting, setSubmitting] = useState(false);
   const [consentWhatsapp, setConsentWhatsapp] = useState(false);
   const [enquiryType, setEnquiryType] = useState("");
@@ -77,6 +77,7 @@ export function ContactInquiryForm() {
         consentWhatsapp,
         submitFn: (payload) => createWebsiteInquiry({ data: payload }),
         website: fd.get("website") ?? undefined,
+        estateSlug: estateSlug ?? null,
       });
 
       switch (outcome.status) {
