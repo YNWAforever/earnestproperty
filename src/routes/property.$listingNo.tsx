@@ -46,6 +46,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { SITE_URL, canonicalLink } from "@/content/seo";
+import type { MarketEstateTransactions } from "@/content/market-transactions";
+import { ListingEstateMarketSummary } from "@/components/site/ListingEstateMarketSummary";
+import { fetchEstateMarketBlock } from "@/lib/market/estate-market";
 import { listingOffersSchema, organizationRef, residenceSchema } from "@/lib/schema";
 import {
   fetchPropertyByListingNo,
@@ -199,7 +202,26 @@ export const Route = createFileRoute("/property/$listingNo")({
         };
       }),
     ]);
-    return { property, similar, txns, branches, enquiryLinks };
+    // 市場註冊成交 summary for the listing's estate. Static, database-free
+    // snapshot read through a server function ({ data } is the page's slug, so
+    // the 5.7 MB source file never reaches the client bundle), and deliberately
+    // fail-soft: this block is supporting evidence on a money page, so a
+    // snapshot problem must render the page without it instead of taking the
+    // listing down (the 2026-11-06 code-before-schema incident is the reference
+    // case).
+    const estateMarketSlug = property.estates?.slug ?? null;
+    const estateMarket = estateMarketSlug
+      ? await fetchEstateMarketBlock({ data: { slug: estateMarketSlug, page: 1 } })
+          .then((block) => block.market)
+          .catch((error: unknown) => {
+            console.error(
+              "[property] market registrations snapshot failed; rendering without the estate market block",
+              error,
+            );
+            return null;
+          })
+      : null;
+    return { property, similar, txns, branches, enquiryLinks, estateMarket };
   },
   head: ({ loaderData }) => {
     const p = (loaderData as PropertyHeadData | undefined)?.property;
@@ -301,12 +323,14 @@ function PropertyPage() {
     txns,
     branches,
     enquiryLinks,
+    estateMarket,
   } = Route.useLoaderData() as {
     property: PropertyDetail;
     similar: SimilarListing[];
     txns: EstateTransaction[];
     branches: NeonBranchRecord[];
     enquiryLinks: Awaited<ReturnType<typeof resolveWhatsappLinks>>;
+    estateMarket: MarketEstateTransactions | null;
   };
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
@@ -868,10 +892,13 @@ function PropertyPage() {
               </Card>
             )}
 
-            {/* Recent transactions */}
+            {/* Recent transactions. This is 本行成交 (the agency's own deals
+                from the `transactions` table), NOT market registrations: the
+                市場註冊成交 block below is a separate source with its own
+                count, and the two are never added together. */}
             {txns.length > 0 && (
               <section className="mt-6">
-                <h2 className="text-xl font-semibold">屋苑近期成交</h2>
+                <h2 className="text-xl font-semibold">本行成交紀錄</h2>
                 {/* overflow-x-auto (not overflow-hidden): five columns do not fit a
                     phone, and clipping hid the price/實呎 columns entirely. */}
                 <div className="mt-3 overflow-x-auto rounded-lg border">
@@ -905,6 +932,13 @@ function PropertyPage() {
                   </Table>
                 </div>
               </section>
+            )}
+
+            {estateMarket && (
+              <ListingEstateMarketSummary
+                market={estateMarket}
+                estateNameZh={estate?.name_zh ?? estateMarket.estate.nameZh}
+              />
             )}
 
             {/* Similar listings */}

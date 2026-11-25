@@ -678,6 +678,19 @@ test("estate-comparison.ts is a plain .ts module with no JSX, importable directl
   assert.match(source, /export function estateTextFigure/);
 });
 
+test("filtered and paginated market views point crawlers to the base estate page", () => {
+  const head = buildEstateHead(read("src/routes/estate.$slug.tsx"));
+  const estate = { slug: "no-seo", name_zh: "Demo" };
+  for (const isMarketSearchView of [true, false]) {
+    const { meta, links } = head({ loaderData: { estate, isMarketSearchView } });
+    assert.equal(
+      meta.find((tag) => tag.name === "robots")?.content,
+      isMarketSearchView ? "noindex,follow" : undefined,
+    );
+    assert.equal(links[0].href, "https://example.test/estate/no-seo");
+  }
+});
+
 test("estate social cards use the reviewed exterior or brand artwork, never the DB unit photo", () => {
   const head = buildEstateHead(read("src/routes/estate.$slug.tsx"));
   const estate = { slug: "no-seo", name_zh: "屋苑", hero_image: "https://example.test/unit.jpg" };

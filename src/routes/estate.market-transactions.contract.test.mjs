@@ -4,19 +4,49 @@ import { test } from "node:test";
 
 const read = (path) => readFileSync(new URL(`../../${path}`, import.meta.url), "utf8");
 const route = read("src/routes/estate.$slug.tsx");
+const propertyRoute = read("src/routes/property.$listingNo.tsx");
 
-test("estate route passes the static market snapshot to its own section, separate from agency data", () => {
-  assert.match(route, /marketTransactions: getEstateRegisteredTransactions\(estate\.slug\)/);
-  assert.match(route, /<EstateRegisteredTransactions market=\{marketTransactions\}/);
+test("estate route renders 市場註冊成交 from the static snapshot, on its own search schema", () => {
+  // The snapshot is ~5.7 MB and database-free: it is read through a server
+  // function so the client bundle only ever receives the current page of rows.
+  assert.match(route, /import \{ fetchEstateMarketBlock \} from "@\/lib\/market\/estate-market"/);
+  assert.match(
+    route,
+    /const \{ market: marketRegistrations, chart: marketChart \} = await loadEstateMarketBlock\(/,
+  );
+  assert.match(route, /<EstateMarketRegistrations market=\{marketRegistrations\}/);
+  // Filters/pagination are validated URL state, not client-only state.
+  assert.match(route, /validateSearch: zodValidator\(estateMarketSearchSchema\)/);
+  assert.match(route, /loaderDeps: \(\{ search \}\) => search/);
+  // Neither route may import the snapshot module directly: doing that from a
+  // loader put a 5.6 MB chunk into .output/public once already.
+  assert.doesNotMatch(route, /market-transactions-snapshot/);
+  assert.doesNotMatch(propertyRoute, /market-transactions-snapshot/);
+  assert.match(propertyRoute, /fetchEstateMarketBlock\(\{/);
+  assert.match(propertyRoute, /estateMarketSlug/);
+});
+
+test("agency 本行成交 and market registered transactions never share a table or a count", () => {
   assert.match(route, /fetchEstateTransactions\(estate\.id, 8\)/);
   assert.match(route, /<EstateMarketSnapshot[\s\S]*?transactions=\{transactions\}/);
   assert.doesNotMatch(
     route,
-    /transactions:\s*marketTransactions|transactions\.concat|transactions\.push/,
+    /transactions:\s*marketRegistrations|transactions\.concat|transactions\.push|marketRegistrations\.rows\.push/,
   );
+  // The EPRC export stays a separately counted source inside the same page.
+  assert.match(route, /<EstateRegisteredTransactions market=\{marketTransactions\}/);
+  assert.match(route, /其他來源：EPRC 匯出/);
 });
 
-test("EPRC fixture/module and agency queries/admin stay on independent dependency paths", () => {
+test("listing detail page adds the estate market summary and keeps 本行成交 labelled", () => {
+  assert.match(propertyRoute, /<ListingEstateMarketSummary/);
+  assert.match(propertyRoute, /本行成交紀錄/);
+  // Fail-soft: a snapshot problem must not take the listing page down.
+  assert.match(propertyRoute, /\[property\] market registrations snapshot failed/);
+  assert.doesNotMatch(propertyRoute, /txns\.(?:concat|push)\(estateMarket/);
+});
+
+test("market snapshot modules and components stay off database/agency dependency paths", () => {
   for (const path of [
     "src/lib/queries.ts",
     "src/lib/neon/public-data.ts",
@@ -25,12 +55,17 @@ test("EPRC fixture/module and agency queries/admin stay on independent dependenc
     "src/lib/neon/admin-data.server.ts",
     "src/components/site/EstateMarketSnapshot.tsx",
   ]) {
-    assert.doesNotMatch(read(path), /eprc|RegisteredTransactions|marketTransactions/i, path);
+    assert.doesNotMatch(
+      read(path),
+      /eprc|RegisteredTransactions|marketTransactions|marketRegistrations/i,
+      path,
+    );
   }
   for (const path of [
-    "src/content/eprc-transactions.ts",
-    "src/content/eprc-transactions-snapshot.ts",
-    "src/components/site/EstateRegisteredTransactions.tsx",
+    "src/content/market-transactions.ts",
+    "src/content/market-transactions-snapshot.ts",
+    "src/components/site/EstateMarketRegistrations.tsx",
+    "src/components/site/ListingEstateMarketSummary.tsx",
   ]) {
     assert.doesNotMatch(
       read(path),
@@ -38,6 +73,20 @@ test("EPRC fixture/module and agency queries/admin stay on independent dependenc
       path,
     );
   }
+  // The only server boundary for these rows: it may use createServerFn, but it
+  // must not touch the database/agency readers, and the snapshot it wraps must
+  // stay server-only so a client import fails the build instead of shipping 5 MB.
+  const boundary = read("src/lib/market/estate-market.ts");
+  assert.match(boundary, /createServerFn/);
+  assert.match(boundary, /market-transactions-snapshot/);
+  assert.doesNotMatch(boundary, /from "@\/(?:lib\/neon|lib\/queries)/);
+  assert.match(
+    read("src/content/market-transactions-snapshot.ts"),
+    /import "@tanstack\/react-start\/server-only"/,
+  );
+});
+
+test("the shipped EPRC snapshot is unchanged by the new public-list source", () => {
   const snapshot = read("src/content/eprc-transactions-snapshot.ts");
   assert.match(snapshot, /eprc-transactions-22-estates-20261027\.csv\?raw/);
   assert.match(snapshot, /buildEprcSnapshot\(csv\)/);
