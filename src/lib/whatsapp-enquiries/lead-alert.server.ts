@@ -1,6 +1,7 @@
 import "@tanstack/react-start/server-only";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
+import { phoneEquivalentsSql } from "../phone.js";
 import { resolveSiteOrigin } from "../../../scripts/site-origin.mjs";
 import { queryRows, transactionRows } from "../neon/db.server.ts";
 import { LEAD_ALERT_JOB_TYPE, LEAD_ALERT_RECONCILE_JOB_TYPE } from "../neon/lead-alert-enqueue.js";
@@ -18,6 +19,7 @@ import {
 } from "./staff-notifications.server.ts";
 import { staffDestinationKey, staffDestinationNotACustomer } from "./staff-recipient-guard.ts";
 import { leadCopyStaffIds } from "../neon/lead-default-assignee.js";
+import { HISTORICAL_RESEND_ATTEMPT_PREFIX } from "../neon/historical-resend-dispatch/historical-resend-dispatch.mjs";
 import { providerChannelId } from "./wa-config.server.ts";
 import { forwardingCoversSubject } from "./enquiry-forwarding-coverage.server.ts";
 
@@ -90,6 +92,25 @@ function attemptKey(parts: string[]) {
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 }
 
+/**
+ * Reviewed historical resends are their own lane: the ordinary worker never
+ * claims, reconciles, suppresses or lets them block planning. Their outcome is
+ * owned by the authenticated synchronous decision that created them.
+ */
+const HISTORICAL_ATTEMPT_LIKE = `${HISTORICAL_RESEND_ATTEMPT_PREFIX}%`;
+
+/**
+ * A recipient already reached by a reviewed historical resend (accepted,
+ * delivered or permanently unknown) must not receive the ordinary alert again:
+ * the immutable historical decision is the duplicate marker. Historical rows
+ * themselves are still excluded from claiming and reconciliation above. The
+ * durable decision's staff id is compared too, so a missing or changed ordinary
+ * destination can never slip past the block.
+ */
+function priorHistoricalSend(leadIdExpr: string, endpointAlias: string) {
+  return `NOT EXISTS(SELECT 1 FROM staff_notification_attempts h JOIN historical_resend_decisions d ON d.attempt_id=h.id WHERE h.lead_id=${leadIdExpr}::uuid AND h.dispatch_state IN ('accepted','delivered','unknown') AND (h.endpoint_id=${endpointAlias}.id OR d.staff_id=${endpointAlias}.staff_id OR ${endpointAlias}.destination_reference=ANY(${phoneEquivalentsSql("h.destination_reference_snapshot")}) OR enquiry_notification_phone(h.destination_reference_snapshot)=enquiry_notification_phone(${endpointAlias}.destination_reference)))`;
+}
+
 /** Plan copy table: 網站查詢 · 樓盤查詢 {listing_no} (樓盤查詢 when the number is unknown).
  * A honeypot-flagged lead is still alerted, tagged 「（疑似機械人）」 (FX-14 B-05). */
 function sourceLabel(lead: Record<string, unknown>) {
@@ -132,8 +153,8 @@ async function reconcile(
 ) {
   z.string().uuid().parse(leadId);
   const rows = await query(
-    "UPDATE staff_notification_attempts t SET dispatch_state='unknown',safe_error='lease_expired_after_dispatch',updated_at=now() WHERE t.lead_id=$1::uuid AND t.dispatch_state='dispatching' AND (t.job_id IS NULL OR (t.job_id=$2::uuid AND EXISTS(SELECT 1 FROM ops_jobs o WHERE o.id=$2::uuid AND o.status='running' AND o.lease_owner=$3 AND o.lease_expires_at>now())) OR NOT EXISTS(SELECT 1 FROM ops_jobs j WHERE j.id=t.job_id AND j.status='running' AND j.lease_expires_at>now())) RETURNING id",
-    [leadId, current?.jobId ?? null, current?.workerId ?? null],
+    "UPDATE staff_notification_attempts t SET dispatch_state='unknown',safe_error='lease_expired_after_dispatch',updated_at=now() WHERE t.lead_id=$1::uuid AND t.dispatch_state='dispatching' AND t.attempt_key NOT LIKE $4 AND (t.job_id IS NULL OR (t.job_id=$2::uuid AND EXISTS(SELECT 1 FROM ops_jobs o WHERE o.id=$2::uuid AND o.status='running' AND o.lease_owner=$3 AND o.lease_expires_at>now())) OR NOT EXISTS(SELECT 1 FROM ops_jobs j WHERE j.id=t.job_id AND j.status='running' AND j.lease_expires_at>now())) RETURNING id",
+    [leadId, current?.jobId ?? null, current?.workerId ?? null, HISTORICAL_ATTEMPT_LIKE],
   );
   return { unknown: rows.length };
 }
@@ -197,14 +218,14 @@ export async function handleLeadStaffAlert(
         { statement: "SELECT id FROM crm_leads WHERE id=$1::uuid FOR UPDATE", params: [leadId] },
         {
           statement:
-            "INSERT INTO staff_notification_attempts(lead_id,transport,attempt_key,dispatch_state,safe_error,finished_at) SELECT $1::uuid,'staff_whatsapp',$2,'suppressed',$3,now() WHERE NOT EXISTS(SELECT 1 FROM staff_notification_attempts WHERE lead_id=$1::uuid) ON CONFLICT(attempt_key) DO NOTHING RETURNING id",
-          params: [leadId, attemptKey([leadId, "blocked"]), blocked],
+            "INSERT INTO staff_notification_attempts(lead_id,transport,attempt_key,dispatch_state,safe_error,finished_at) SELECT $1::uuid,'staff_whatsapp',$2,'suppressed',$3,now() WHERE NOT EXISTS(SELECT 1 FROM staff_notification_attempts WHERE lead_id=$1::uuid AND attempt_key NOT LIKE $4) ON CONFLICT(attempt_key) DO NOTHING RETURNING id",
+          params: [leadId, attemptKey([leadId, "blocked"]), blocked, HISTORICAL_ATTEMPT_LIKE],
         },
         {
           // Frozen rows from an earlier run that can no longer be sent.
           statement:
-            "UPDATE staff_notification_attempts SET dispatch_state='suppressed',safe_error=$2,finished_at=now(),updated_at=now() WHERE lead_id=$1::uuid AND dispatch_state='queued' RETURNING id",
-          params: [leadId, blocked],
+            "UPDATE staff_notification_attempts SET dispatch_state='suppressed',safe_error=$2,finished_at=now(),updated_at=now() WHERE lead_id=$1::uuid AND dispatch_state='queued' AND attempt_key NOT LIKE $3 RETURNING id",
+          params: [leadId, blocked, HISTORICAL_ATTEMPT_LIKE],
         },
       ]);
       summary.blocked += inserted.length + suppressed.length;
@@ -214,7 +235,7 @@ export async function handleLeadStaffAlert(
     else await plan(leadId, runtime.channelId!, transaction, summary);
     // Still before any claim: a failed read leaves the planned rows queued.
     queued = await query(
-      "SELECT id FROM staff_notification_attempts WHERE lead_id=$1::uuid AND dispatch_state='queued' ORDER BY created_at,id",
+      `SELECT id FROM staff_notification_attempts WHERE lead_id=$1::uuid AND attempt_key NOT LIKE '${HISTORICAL_ATTEMPT_LIKE}' AND dispatch_state='queued' ORDER BY created_at,id`,
       [leadId],
     );
   } catch (error) {
@@ -253,7 +274,7 @@ export async function handleLeadStaffAlert(
           params: [attempt.id],
         },
         {
-          statement: `UPDATE staff_notification_attempts t SET dispatch_state='dispatching',claim_id=$2::uuid,job_id=$3::uuid,dispatch_started_at=now(),updated_at=now() FROM staff_notification_endpoints ep ${endpointJoins}, ops_jobs j WHERE t.id=$1::uuid AND t.lead_id=$4::uuid AND t.dispatch_state='queued' AND ${SAME_ENDPOINT} AND ep.channel_id=$6 AND ${endpointEligible} AND ${NOT_A_CUSTOMER} AND j.id=$3::uuid AND ${leaseIsMine("$5")} RETURNING t.id,t.destination_reference_snapshot`,
+          statement: `UPDATE staff_notification_attempts t SET dispatch_state='dispatching',claim_id=$2::uuid,job_id=$3::uuid,dispatch_started_at=now(),updated_at=now() FROM staff_notification_endpoints ep ${endpointJoins}, ops_jobs j WHERE t.id=$1::uuid AND t.lead_id=$4::uuid AND t.dispatch_state='queued' AND ${SAME_ENDPOINT} AND ep.channel_id=$6 AND ${endpointEligible} AND ${NOT_A_CUSTOMER} AND ${priorHistoricalSend("t.lead_id", "ep")} AND j.id=$3::uuid AND ${leaseIsMine("$5")} RETURNING t.id,t.destination_reference_snapshot`,
           params: [attempt.id, claim, context.jobId, leadId, context.workerId, runtime.channelId],
         },
         {
@@ -353,7 +374,7 @@ async function plan(
   transaction: typeof transactionRows,
   summary: Summary,
 ) {
-  const noRows = "NOT EXISTS(SELECT 1 FROM staff_notification_attempts x WHERE x.lead_id=$1::uuid)";
+  const noRows = `NOT EXISTS(SELECT 1 FROM staff_notification_attempts x WHERE x.lead_id=$1::uuid AND x.attempt_key NOT LIKE '${HISTORICAL_ATTEMPT_LIKE}')`;
   const [, planned, none] = await transaction([
     { statement: "SELECT id FROM crm_leads WHERE id=$1::uuid FOR UPDATE", params: [leadId] },
     {
@@ -364,7 +385,7 @@ async function plan(
       statement: `WITH eligible AS (
           SELECT ep.id,ep.version,ep.staff_id,ep.destination_reference,s.is_duty_manager,(${NOT_A_CUSTOMER}) AS not_customer
           FROM staff_notification_endpoints ep ${ENDPOINT_JOINS}
-          WHERE ep.channel_id=$2 AND ${ENDPOINT_ELIGIBLE}
+          WHERE ep.channel_id=$2 AND ${ENDPOINT_ELIGIBLE} AND ${priorHistoricalSend("$1", "ep")}
         ), assigned AS (
           SELECT e.* FROM eligible e JOIN crm_leads l ON l.id=$1::uuid AND l.assigned_agent_id=e.staff_id
         ), unavailable AS (
@@ -434,7 +455,7 @@ async function planPhoneRecipients(
           CASE WHEN (${PHONE_ELIGIBLE}) IS NOT TRUE OR ep.verified_at > (SELECT created_at FROM crm_leads WHERE id=$1::uuid) THEN 'assigned_destination_unavailable'
                WHEN NOT ${NOT_A_CUSTOMER} THEN 'destination_is_customer' END AS reason
         FROM recipients r LEFT JOIN staff_users s ON s.id=r.staff_id
-        LEFT JOIN staff_notification_endpoints ep ON ep.staff_id=r.staff_id AND ep.channel_id=$2 AND ep.transport='website_lead_phone'
+        LEFT JOIN staff_notification_endpoints ep ON ep.staff_id=r.staff_id AND ep.channel_id=$2 AND ep.transport='website_lead_phone' AND ${priorHistoricalSend("$1", "ep")}
       ), destinations AS (
         SELECT DISTINCT ON (COALESCE(destination_reference,staff_id::text)) * FROM candidates
         ORDER BY COALESCE(destination_reference,staff_id::text), reason NULLS FIRST, staff_id
@@ -443,7 +464,7 @@ async function planPhoneRecipients(
       SELECT $1::uuid,'staff_whatsapp',d.id,d.version,'website-phone:'||$1::text||':'||d.staff_id::text,
         CASE WHEN reason IS NULL THEN 'queued' ELSE 'suppressed' END,reason,
         CASE WHEN reason IS NOT NULL THEN now() END
-      FROM destinations d WHERE NOT EXISTS (SELECT 1 FROM staff_notification_attempts WHERE lead_id=$1::uuid)
+      FROM destinations d WHERE NOT EXISTS (SELECT 1 FROM staff_notification_attempts WHERE lead_id=$1::uuid AND attempt_key NOT LIKE '${HISTORICAL_ATTEMPT_LIKE}')
       ON CONFLICT(attempt_key) DO NOTHING RETURNING dispatch_state`,
       params: [leadId, channelId, leadCopyStaffIds()],
     },

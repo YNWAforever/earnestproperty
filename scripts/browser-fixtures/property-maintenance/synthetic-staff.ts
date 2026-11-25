@@ -310,6 +310,9 @@ export const getWhatsappServicePolicies = async () => [];
 const outsideFixture = async () => {
   throw Error("Configuration writes are outside this fixture");
 };
+export const fetchHistoricalRecipients = async () => [],
+  reviewHistoricalRecipient = outsideFixture,
+  sendHistoricalNotification = outsideFixture;
 export const fetchEnquiryIdentityReview = outsideFixture,
   reviewEnquiryPhonePurpose = outsideFixture,
   resolveEnquiryHeldReply = outsideFixture;

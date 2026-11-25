@@ -55,6 +55,11 @@ export const ENQUIRY_ESTATE_ROUTES: readonly EnquiryEstateRoute[];
 export function normalizeEstateLabel(value: unknown): string;
 export function notificationPhone(value: unknown): string | null;
 export function mentionsSpecificProperty(value: unknown): boolean;
+export function historicalEstateManager(input: {
+  estateLabel?: string | null;
+  text: string;
+  routes: readonly EnquiryEstateRoute[];
+}): string | null;
 export function matchEnquiryEstate(input?: {
   estateId?: string | null;
   estateLabel?: string | null;
