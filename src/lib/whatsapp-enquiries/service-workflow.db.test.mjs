@@ -17,6 +17,9 @@ import {
 } from "./service-workflow.server.ts";
 import { buildLiveEventStatements } from "./workflow.server.ts";
 import { normalizeWoztellEvent } from "../woztell/woztell.server.ts";
+import { customerGreetingScope, queueCustomerGreeting } from "./customer-greeting.server.ts";
+import { storeInboundReceipt } from "./inbound-receipts.server.ts";
+import { eventForReceiptProjection } from "./inbound-identity.ts";
 import { getServiceHealth } from "./service-health.server.ts";
 import {
   saveServicePolicyDraft,
@@ -563,6 +566,165 @@ test(
           t.diagnostic(
             "Synthetic service claim under 1000 history rows: " + (Date.now() - started) + " ms",
           );
+        },
+      );
+      await t.test(
+        "company greeting acknowledges new daytime and overnight enquiries once",
+        async (ctx) => {
+          const body =
+            "你好，我哋係晉誠地產，收到你嘅 WhatsApp 查詢。請問有咩想我哋幫你跟進？另外，我哋負責同事會盡快搵你";
+          const app = "fixture-app",
+            channel = "fixture";
+          const start = new Date(Date.now() - 48 * 3600000);
+          const [routing] = await query(
+            `INSERT INTO whatsapp_service_policies(version,rules,status,copy_version,approved_by,effective_at)
+            VALUES(999,$3::jsonb,'approved','fixture-routing',$1,$2) RETURNING id`,
+            [
+              admin,
+              start,
+              JSON.stringify({ ...rules, purpose: "routing_notifications", freshnessSeconds: 300 }),
+            ],
+          );
+          const live = await activateServiceGeneration(routing.id, admin, ports, start);
+          const env = {
+            ...process.env,
+            VERCEL_ENV: "production",
+            WOZTELL_ENABLED: "true",
+            WOZTELL_APP_ID: app,
+            WOZTELL_CHANNEL_ID: channel,
+            EP_WA_ACTIVATION_ID: live,
+            EP_WA_ENQUIRY_MODE: "active",
+            EP_WA_SERVICE_AUTOMATION_ENABLED: "false",
+            OPS_WAKE_URL: "",
+          };
+          const previousEnv = process.env;
+          process.env = env;
+          ctx.after(() => {
+            process.env = previousEnv;
+          });
+          assert.equal(customerGreetingScope({ ...env, VERCEL_ENV: "preview" }), null);
+          await query("INSERT INTO whatsapp_customer_greetings VALUES($1,$2,'85224962283',$3,$4)", [
+            app,
+            channel,
+            body,
+            start,
+          ]);
+          for (const [hour, scenario] of [
+            [1, "unknown"],
+            [13, "accepted"],
+            [2, "optout"],
+            [3, "history"],
+            [4, "staff"],
+          ]) {
+            const at = new Date();
+            at.setUTCHours((hour + 16) % 24, 0, 0, 0);
+            if (at.getTime() > Date.now()) at.setUTCDate(at.getUTCDate() - 1);
+            const member = "synthetic-greeting-" + scenario,
+              phone = "8529000000" + String(hour % 10);
+            const [customer] = await query(
+              "INSERT INTO crm_contacts(name,phone,whatsapp_member_id) VALUES('Synthetic',$1,$2) RETURNING id",
+              [phone, member],
+            );
+            const [thread] = await query(
+              "INSERT INTO whatsapp_conversations(contact_id,channel_id,woztell_member_id,last_inbound_at) VALUES($1,$2,$3,$4) RETURNING id",
+              [customer.id, channel, member, at],
+            );
+            if (scenario === "staff")
+              await query("UPDATE staff_users SET whatsapp=$2 WHERE id=$1", [admin, phone]);
+            async function incoming() {
+              const raw = {
+                type: "TEXT",
+                eventType: "INBOUND",
+                messageId: randomUUID(),
+                member,
+                channel,
+                app,
+                from: phone,
+                timestamp: at.getTime() / 1000,
+                data: { text: "synthetic enquiry" },
+              };
+              const normalized = normalizeWoztellEvent(raw);
+              const receipt = await storeInboundReceipt(
+                {
+                  tenantKey: "woztell:" + app,
+                  appId: app,
+                  channelId: channel,
+                  event: normalized,
+                  eventKind: "customer_message",
+                  origin: "live_webhook",
+                  bodyDigest: createHash("sha256").update(JSON.stringify(raw)).digest("hex"),
+                  providerOccurredAt: at.toISOString(),
+                  receivedAt: at,
+                  capture: { mode: "active", activationId: live, effectsEligible: true },
+                },
+                ports,
+              );
+              const event = eventForReceiptProjection(
+                normalized,
+                receipt.receiptId,
+                "customer_message",
+                receipt.identityKey,
+              );
+              await query(
+                "INSERT INTO whatsapp_messages(conversation_id,contact_id,direction,message_type,text,channel_id,woztell_member_id,external_message_id) VALUES($1,$2,'inbound','TEXT',$3,$4,$5,$6)",
+                [thread.id, customer.id, event.text, channel, member, event.externalMessageId],
+              );
+              const statements = buildLiveEventStatements(event, at, "active");
+              await tx(statements);
+              const id = statements[0].params[0];
+              assert.ok(await observeEpisode(id, query));
+              return id;
+            }
+            const intake = await incoming(),
+              followup = await incoming();
+            if (scenario === "history")
+              await query("UPDATE whatsapp_customer_greetings SET enabled_since=now()");
+            await Promise.all([
+              queueCustomerGreeting(intake, query),
+              queueCustomerGreeting(intake, query),
+              queueCustomerGreeting(followup, query),
+            ]);
+            const actions = await query(
+              "SELECT a.* FROM whatsapp_service_actions a JOIN inquiries i ON i.id=a.inquiry_id WHERE i.conversation_id=$1 AND a.purpose='customer_greeting'",
+              [thread.id],
+            );
+            if (scenario === "history")
+              await query("UPDATE whatsapp_customer_greetings SET enabled_since=$1", [start]);
+            if (scenario === "history" || scenario === "staff") {
+              assert.equal(actions.length, 0, scenario);
+              continue;
+            }
+            assert.equal(actions.length, 1, scenario);
+            const [action] = actions;
+            const job = await running(action.id);
+            let calls = 0,
+              delivered;
+            const send = async (payload) => {
+              calls++;
+              delivered = payload;
+              if (scenario === "unknown") throw Error("simulated provider timeout");
+              return { ok: true, body: { messageId: "synthetic-greeting-sent" } };
+            };
+            if (scenario === "optout")
+              await query("UPDATE crm_contacts SET opted_out_whatsapp=true WHERE id=$1", [
+                customer.id,
+              ]);
+            await deliverServiceAction(action.id, job, ports, undefined, new Date(), { send });
+            await deliverServiceAction(action.id, job, ports, undefined, new Date(), { send });
+            assert.equal(calls, scenario === "optout" ? 0 : 1, scenario);
+            if (calls)
+              assert.deepEqual(delivered, {
+                channelId: channel,
+                memberId: member,
+                response: [{ type: "TEXT", text: body }],
+              });
+            const [out] = await query(
+              "SELECT state,actor_type FROM whatsapp_outbound_intents WHERE id=$1",
+              [action.outbound_intent_id],
+            );
+            assert.equal(out.actor_type, "service");
+            assert.equal(out.state, scenario === "optout" ? "cancelled" : scenario);
+          }
         },
       );
     } finally {

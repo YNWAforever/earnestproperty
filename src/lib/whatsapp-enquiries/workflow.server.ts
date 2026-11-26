@@ -151,6 +151,10 @@ export async function observeEnquiryEvent(
       [eventId],
     );
   }
+  if (mode === "active" && process.env.VERCEL_ENV === "production") {
+    const { queueCustomerGreeting } = await import("./customer-greeting.server.ts");
+    await queueCustomerGreeting(eventId, query);
+  }
   const rows = await query(
     `UPDATE whatsapp_enquiry_events SET processing_state=$2,processed_at=COALESCE(processed_at,now())
  WHERE id=$1::uuid AND origin='live_webhook' AND capture_mode='observe' AND effects_eligible=false

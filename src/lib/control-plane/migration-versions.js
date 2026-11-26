@@ -142,6 +142,7 @@ export const MIGRATION_VERSIONS = Object.freeze([
   "20261125000000_website_lead_phone.sql",
   "20261125120000_historical_resend_decisions.sql",
   "20261126000000_staff_enquiry_copy.sql",
+  "20261127000000_whatsapp_customer_greeting.sql",
 ]);
 
 /**

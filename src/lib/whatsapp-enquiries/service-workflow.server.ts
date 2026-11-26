@@ -180,7 +180,7 @@ async function actionContext(id: string, p: ServicePorts) {
  e.occurred_at,e.received_at,e.timing,e.identity_quality,
  r.state AS assignment_state,r.desired_staff_id,w.confirmed_staff_id,
  EXISTS(SELECT 1 FROM staff_users u JOIN staff_roles role ON role.staff_user_id=u.id WHERE u.id=r.desired_staff_id AND u.active AND role.role IN ('admin','manager')) AS manager_active
- FROM whatsapp_service_actions a JOIN whatsapp_service_surveys s ON s.id=a.survey_id JOIN inquiries i ON i.id=a.inquiry_id
+ FROM whatsapp_service_actions a LEFT JOIN whatsapp_service_surveys s ON s.id=a.survey_id JOIN inquiries i ON i.id=a.inquiry_id
  JOIN whatsapp_conversations w ON w.id=i.conversation_id JOIN crm_contacts c ON c.id=w.contact_id
  JOIN whatsapp_service_policies p ON p.id=a.policy_id JOIN whatsapp_enquiry_activations g ON g.id=a.activation_id
  JOIN whatsapp_enquiry_events e ON e.message_id=i.intake_message_id AND e.inquiry_id=i.id
@@ -324,6 +324,18 @@ export async function deliverServiceAction(
   );
   const r = await actionContext(id, p);
   if (!r?.outbound_intent_id) return { dispatched: 0 };
+  if (r.purpose === "customer_greeting") {
+    const { reserveCustomerGreeting } = await import("./customer-greeting.server.ts");
+    return deliverOutboundIntent(String(r.outbound_intent_id), {
+      checkpoint: context.checkpoint,
+      begin: (intent) => reserveCustomerGreeting(intent, id, context.job, p.transaction),
+      send: transport?.send,
+      finish: async (intent, outcome) => {
+        await finishOutboundIntent(intent, outcome, p.transaction);
+        await syncServiceActionAfterFinish(intent, now, p);
+      },
+    });
+  }
   let reason = blockedReason(r, runtime, now);
   if (!transport && !reason) reason = "service_transport_unverified";
   const intent = String(r.outbound_intent_id);
