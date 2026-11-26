@@ -16,7 +16,6 @@ import {
 export const ENQUIRY_INFO_TRANSPORT_PURPOSE = "enq_forward_info";
 export const ENQUIRY_INFO_TRANSPORT_VERSION = 1;
 const BOT_ENDPOINT = "https://bot.api.woztell.com/sendResponses";
-const COPY_PHONE = "85297987774";
 const UUID = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const HASH = /^[0-9a-f]{64}$/;
 const ID = /^[a-zA-Z0-9_-]{1,160}$/;
@@ -135,7 +134,6 @@ function bindingOf(value: unknown): Readonly<EnquiryInfoSendBinding> {
     !ID.test(row.channelId) ||
     typeof row.companySenderPhone !== "string" ||
     normalizePhone(row.companySenderPhone) !== row.companySenderPhone ||
-    row.companySenderPhone === COPY_PHONE ||
     typeof row.recipientPhone !== "string" ||
     forwardingPhone(row.recipientPhone) !== row.recipientPhone ||
     row.companySenderPhone === row.recipientPhone ||

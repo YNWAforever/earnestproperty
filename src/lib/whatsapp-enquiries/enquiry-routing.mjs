@@ -1,15 +1,16 @@
+import { LEAD_COPY_STAFF_ID } from "../neon/lead-default-assignee.js";
 import { normalizePhone } from "../phone.js";
 
 export const ENQUIRY_ROUTING_VERSION = "photo-20261116-v1";
 export const ENQUIRY_ROUTING_APPROVAL = "user-20261116-enquiry-forwarding-goal5c39c5b8";
 export const ENQUIRY_ROUTING_PHOTO_SHA256 =
   "53c362f1ae9ec48e8cdd753bde4bf96a3354a0d432a58964e75c7b3f4a4a1c12";
-export const ENQUIRY_COPY = Object.freeze({
-  key: "copy",
-  kind: "copy",
-  staffId: null,
-  phone: "85297987774",
-});
+export function enquiryCopyRecipient(value) {
+  const phone = notificationPhone(value);
+  return phone
+    ? { key: "copy", kind: "copy", staffId: LEAD_COPY_STAFF_ID, phone, displayName: "張秋" }
+    : null;
+}
 export const ENQUIRY_MANAGERS = Object.freeze({
   "manager:1": Object.freeze({
     key: "manager:1",
@@ -189,6 +190,7 @@ function usableSales(staff) {
     : null;
 }
 export function planEnquiryRouting({
+  copyPhone,
   specific = false,
   property = null,
   selectedStaffId = null,
@@ -200,7 +202,15 @@ export function planEnquiryRouting({
   text,
   routes,
 } = {}) {
-  const base = { routingVersion: ENQUIRY_ROUTING_VERSION, recipients: [ENQUIRY_COPY] };
+  const copy = enquiryCopyRecipient(copyPhone);
+  if (!copy)
+    return {
+      routingVersion: ENQUIRY_ROUTING_VERSION,
+      routingKind: "review",
+      recipients: [],
+      reason: "copy_staff_unavailable",
+    };
+  const base = { routingVersion: ENQUIRY_ROUTING_VERSION, recipients: [copy] };
   if (specific) {
     if (review || !property || property.current !== true || property.status !== "active")
       return { ...base, routingKind: "review", reason: "specific_property_unavailable" };
@@ -217,7 +227,7 @@ export function planEnquiryRouting({
       dealType: property.dealType,
       ...(sales
         ? {
-            recipients: sales.phone === ENQUIRY_COPY.phone ? [ENQUIRY_COPY] : [sales, ENQUIRY_COPY],
+            recipients: sales.phone === copy.phone ? [copy] : [sales, copy],
           }
         : { reason: "property_sales_unavailable" }),
     };
@@ -236,6 +246,6 @@ export function planEnquiryRouting({
     routingKind: "estate",
     routeKey: match.route.scopeKey,
     routeRevision: match.route.version ?? 1,
-    recipients: [manager, ENQUIRY_COPY],
+    recipients: manager.phone === copy.phone ? [copy] : [manager, copy],
   };
 }

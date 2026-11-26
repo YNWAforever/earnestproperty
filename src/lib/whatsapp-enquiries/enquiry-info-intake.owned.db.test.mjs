@@ -1,3 +1,4 @@
+import { seedOwnedEnquiryCopy } from "../../../scripts/acceptance/owned-enquiry-copy.mjs";
 import assert from "node:assert/strict";
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import test, { mock } from "node:test";
@@ -7,6 +8,7 @@ import {
 } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import { migrationStatements } from "../../../scripts/acceptance/migrated-schema.mjs";
 import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
+const copyVersion = "20261126000000_staff_enquiry_copy.sql";
 const VERSION = "20261116010000_enquiry_information_scope.sql";
 const scope = { appId: "owned_intake_app", channelId: "owned_intake_channel" };
 const SECRET = "owned-intake-hmac-fixture";
@@ -161,6 +163,11 @@ test(
               );
               await transaction(migrationStatements(VERSION).map((statement) => ({ statement })));
               await query("INSERT INTO app_migrations(version) VALUES($1)", [VERSION]);
+              await transaction(
+                migrationStatements(copyVersion).map((statement) => ({ statement })),
+              );
+              await query("INSERT INTO app_migrations(version) VALUES($1)", [copyVersion]);
+              await seedOwnedEnquiryCopy(query);
               const second = await receive(payload({ member: "owned_unarmed_customer" }));
               assert.equal(second.status, 200);
               beforeArm = await receipts.storeInboundReceipt(
@@ -1412,7 +1419,11 @@ test(
           );
           assert.equal(network.mock.callCount(), 0);
         },
-        { migrationVersions: MIGRATION_VERSIONS.filter((version) => version !== VERSION) },
+        {
+          migrationVersions: MIGRATION_VERSIONS.filter(
+            (version) => version !== VERSION && version !== copyVersion,
+          ),
+        },
       );
     } finally {
       mock.restoreAll();

@@ -68,7 +68,6 @@ export function parseEnquiryInfoDispatchEvidence(
     !/^[A-Za-z0-9_-]{1,128}$/.test(v.channelId) ||
     typeof v.companySenderPhone !== "string" ||
     !/^852[2-9]\d{7}$/.test(v.companySenderPhone) ||
-    v.companySenderPhone === "85297987774" ||
     typeof v.armId !== "string" ||
     !uuid.test(v.armId) ||
     !Number.isInteger(v.policyRevision) ||
@@ -115,7 +114,8 @@ export async function loadEnquiryInfoDispatchContext(
     JOIN ops_jobs checked_job ON checked_job.id=a.subject_id
     WHERE p.app_id=$1 AND p.channel_id=$2 AND p.subject_kind='policy' AND p.decision='armed'
       AND p.id=(enquiry_info_head($1,$2,'policy','policy')).id
-      AND copy.verification_ref='provider-check-audit:'||a.id::text
+      AND copy.phone<>(a.metadata#>>'{channel,senderPhone}')
+       AND copy.verification_ref='provider-check-audit:'||a.id::text
       AND a.action='whatsapp.enquiry_forwarding.provider_checked' AND a.actor_id IS NULL AND a.subject_type='ops_job'
       AND checked_job.job_type='woztell.enquiry.forward.readiness' AND checked_job.payload_version=1 AND checked_job.payload='{}'::jsonb
       AND a.metadata#>'{infoForwarding,ready}'='true'::jsonb

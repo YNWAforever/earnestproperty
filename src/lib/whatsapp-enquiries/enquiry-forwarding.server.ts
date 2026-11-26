@@ -18,6 +18,7 @@ import {
   buildStaffTemplateResponse,
   formatCustomerPhone,
 } from "../woztell/staff-alert-template.ts";
+import { LEAD_COPY_STAFF_ID } from "../neon/lead-default-assignee.js";
 import { normalizePhone } from "../phone.js";
 import {
   staffWhatsappAlertRuntime,
@@ -103,7 +104,7 @@ const lease = (job = "j") =>
 const purpose = "t.routing_snapshot->>'purpose'='enquiry_forward'";
 const samePayload =
   "j.job_type='woztell.enquiry.forward' AND j.payload_version=1 AND j.payload=jsonb_build_object('source',$6::text,'subjectId',$7::text)";
-const recipientReady = `r.enabled AND r.retired_at IS NULL AND r.permission_granted AND r.permission_ref IS NOT NULL AND r.verified_at IS NOT NULL AND r.verification_ref IS NOT NULL AND r.channel_id=$4 AND r.destination_type='recipient_id' AND r.destination_reference=r.phone AND (r.staff_id IS NULL OR EXISTS(SELECT 1 FROM staff_users current_staff WHERE current_staff.id=r.staff_id AND current_staff.active AND COALESCE((to_jsonb(current_staff)->>'show_on_website')::boolean,false) AND (enquiry_notification_phone(current_staff.whatsapp)=r.phone OR (r.kind='manager' AND enquiry_notification_phone(current_staff.phone)=r.phone))))`;
+const recipientReady = `r.enabled AND r.retired_at IS NULL AND r.permission_granted AND r.permission_ref IS NOT NULL AND r.verified_at IS NOT NULL AND r.verification_ref IS NOT NULL AND r.channel_id=$4 AND r.destination_type='recipient_id' AND r.destination_reference=r.phone AND ((r.kind='copy' AND EXISTS(SELECT 1 FROM enquiry_forwarding_copy_contact() c WHERE c.staff_id=r.staff_id AND c.phone=r.phone)) OR (r.kind<>'copy' AND EXISTS(SELECT 1 FROM staff_users current_staff WHERE current_staff.id=r.staff_id AND current_staff.active AND COALESCE((to_jsonb(current_staff)->>'show_on_website')::boolean,false) AND (enquiry_notification_phone(current_staff.whatsapp)=r.phone OR (r.kind='manager' AND enquiry_notification_phone(current_staff.phone)=r.phone)))))`;
 export {
   forwardingCoversSubject,
   forwardingSchemaAvailable,
@@ -272,7 +273,7 @@ export async function dispatchEnquiryForwarding(input: unknown, context: Context
   const key = forwardingSubjectKey(payload.source, payload.subjectId),
     column = subjectColumn(payload.source);
   const [copy] = await query(
-    "SELECT enabled,enabled_since,channel_id FROM enquiry_notification_recipients WHERE recipient_key='copy'",
+    "SELECT enabled,enabled_since,channel_id,staff_id,phone FROM enquiry_notification_recipients WHERE recipient_key='copy'",
   );
   if (
     !copy?.enabled ||
@@ -282,7 +283,15 @@ export async function dispatchEnquiryForwarding(input: unknown, context: Context
   )
     return { summary: { ...summary, blocked: 1 } };
   const recipients = uniqueForwardingRecipients(route.recipients);
-  if (!recipients.some((r) => r.kind === "copy" && r.phone === "85297987774"))
+  if (
+    !recipients.some(
+      (r) =>
+        r.kind === "copy" &&
+        r.staffId === LEAD_COPY_STAFF_ID &&
+        r.staffId === copy.staff_id &&
+        r.phone === copy.phone,
+    )
+  )
     throw Error("ENQUIRY_FORWARD_COPY_REQUIRED");
   const existing = await query(
     `SELECT id FROM staff_notification_attempts t WHERE t.${column}=$1::uuid AND ${purpose} LIMIT 1`,

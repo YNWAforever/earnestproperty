@@ -204,6 +204,7 @@ function fixture(options = {}) {
 const run = (options = {}, patch = {}, extra = {}) => {
   const f = fixture(options);
   return inspectEnquiryForwardingProvider({
+    copyPhone: "85297987775",
     env: { ...env(), ...patch },
     fetch: f.fetch,
     ...extra,
@@ -1072,8 +1073,8 @@ test("configured Cloud token presence never replaces required credentials or rea
       reason: "PROVIDER_SENDER_PHONE_MISMATCH",
     },
     {
-      options: { sender: { phoneNumber: "85297987774" } },
-      patch: { VITE_CONTACT_WHATSAPP_PHONE: "85297987774" },
+      options: { sender: { phoneNumber: "85297987775" } },
+      patch: { VITE_CONTACT_WHATSAPP_PHONE: "85297987775" },
       reason: "FIXED_COPY_IS_COMPANY_SENDER",
     },
   ];
@@ -1674,8 +1675,8 @@ test("actual sender mismatch and the fixed-copy self-send collision block readin
   assert.ok(mismatch.reasonCodes.includes("PROVIDER_SENDER_PHONE_MISMATCH"));
   const collision = (
     await run(
-      { sender: { phoneNumber: "85297987774" } },
-      { VITE_CONTACT_WHATSAPP_PHONE: "85297987774" },
+      { sender: { phoneNumber: "85297987775" } },
+      { VITE_CONTACT_WHATSAPP_PHONE: "85297987775" },
     )
   ).result;
   assert.equal(collision.channel.companyPhoneMatches, true);

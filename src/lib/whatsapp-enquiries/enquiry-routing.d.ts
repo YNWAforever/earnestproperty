@@ -49,7 +49,7 @@ export type EnquiryForwardingPlan = EnquiryRoutingPlan & {
 export const ENQUIRY_ROUTING_VERSION: string;
 export const ENQUIRY_ROUTING_APPROVAL: string;
 export const ENQUIRY_ROUTING_PHOTO_SHA256: string;
-export const ENQUIRY_COPY: Readonly<EnquiryRecipient>;
+export function enquiryCopyRecipient(value: unknown): EnquiryRecipient | null;
 export const ENQUIRY_MANAGERS: Readonly<Record<string, Readonly<EnquiryRecipient>>>;
 export const ENQUIRY_ESTATE_ROUTES: readonly EnquiryEstateRoute[];
 export function normalizeEstateLabel(value: unknown): string;
@@ -67,6 +67,7 @@ export function matchEnquiryEstate(input?: {
   routes?: readonly EnquiryEstateRoute[];
 }): { kind: "estate" | "general" | "review"; reason?: string; route: EnquiryEstateRoute | null };
 export function planEnquiryRouting(input?: {
+  copyPhone?: string | null;
   specific?: boolean;
   property?: {
     id: string;

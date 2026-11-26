@@ -1,5 +1,6 @@
 import "@tanstack/react-start/server-only";
 import { queryRows } from "../neon/db.server.ts";
+import { enquiryTextOfferingSql } from "./enquiry-routing.server.ts";
 import { SOURCE_28HSE } from "../mls/source-contract.mjs";
 import { ENQUIRY_ROUTING_APPROVAL, ENQUIRY_ROUTING_PHOTO_SHA256 } from "./enquiry-routing.mjs";
 
@@ -86,6 +87,8 @@ function sourceHashSql(
   ), witness_target_ids AS (
     SELECT property_id::text AS id FROM witness_website UNION SELECT property_id::text FROM witness_whatsapp
     UNION SELECT lower(context_snapshot->>'propertyId') FROM witness_whatsapp
+    UNION SELECT offering.id::text FROM witness_whatsapp w CROSS JOIN LATERAL (${enquiryTextOfferingSql("w.text")}) offering
+      WHERE w.property_id IS NULL AND w.link_open_id IS NULL AND NOT EXISTS(SELECT 1 FROM witness_references)
     UNION SELECT property_id::text FROM witness_references
     UNION SELECT property_id::text FROM witness_mls
   ), witness_targets AS (

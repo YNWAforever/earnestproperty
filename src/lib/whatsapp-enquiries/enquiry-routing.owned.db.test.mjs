@@ -1,3 +1,4 @@
+import { seedOwnedEnquiryCopy } from "../../../scripts/acceptance/owned-enquiry-copy.mjs";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -21,6 +22,7 @@ const id = (n) => `90000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 test("owned forwarding schema is disabled by default and routes only approved new notification subjects", async (t) => {
   await withOwnedPostgres(
     async ({ query: q, transaction }) => {
+      await seedOwnedEnquiryCopy(q);
       await t.test(
         "the migrated SQL helper shares canonical HK notification spellings and the explicit mobile-only policy",
         async () => {
@@ -141,6 +143,12 @@ test("owned forwarding schema is disabled by default and routes only approved ne
       await t.test(
         "only verified phone addressing can activate the copy and no history is enqueued",
         async () => {
+          await assert.rejects(
+            q(
+              "UPDATE enquiry_notification_recipients SET phone='85297987774' WHERE recipient_key='copy'",
+            ),
+            (error) => error.code === "23514",
+          );
           await assert.rejects(
             q("UPDATE enquiry_notification_recipients SET enabled=true WHERE recipient_key='copy'"),
             /NOT_VERIFIED/,
@@ -564,13 +572,34 @@ test("owned forwarding schema is disabled by default and routes only approved ne
         },
       );
       await t.test(
+        "typed public listing numbers reach position one and the staff copy",
+        async () => {
+          const subject = await whatsapp({ member: "owned_listing_text" });
+          for (const [body, expected] of [
+            ["您好，我想查詢樓盤 A900001（出售）", [`sales:${id(1)}`, "copy"]],
+            ["A900001 b999999", ["copy"]],
+            ["A900001（出租）", ["copy"]],
+          ]) {
+            await q("UPDATE whatsapp_messages SET text=$2 WHERE id=$1", [subject.message, body]);
+            const route = await resolveEnquiryForwarding(q, {
+              source: "whatsapp",
+              subjectId: subject.inquiry,
+            });
+            assert.deepEqual(
+              route.recipients.map((r) => r.key),
+              expected,
+            );
+          }
+        },
+      );
+      await t.test(
         "stale, outbound, wrong channel and internal contact identities never enqueue",
         async () => {
           for (const input of [
             { timing: "stale" },
             { kind: "staff_outbound" },
             { channel: "other-channel" },
-            { member: "85297987774" },
+            { member: "85297987775" },
             { phone: "85266442444" },
           ]) {
             const subject = await whatsapp({ ...input, member: input.member ?? randomUUID() });
@@ -599,7 +628,7 @@ test("owned forwarding schema is disabled by default and routes only approved ne
             'INSERT INTO staff_notification_attempts(lead_id,transport,forwarding_recipient_id,recipient_version,routing_snapshot,attempt_key) VALUES($1,\'staff_whatsapp\',$2,$3,\'{"purpose":"enquiry_forward","destinationType":"recipient_id"}\',\'owned-forward-freeze\') RETURNING *',
             [propertyLead, copy.id, copy.version],
           );
-          assert.equal(attempt.destination_reference_snapshot, "85297987774");
+          assert.equal(attempt.destination_reference_snapshot, "85297987775");
           assert.equal(attempt.channel_id_snapshot, "owned-company");
           await assert.rejects(
             q("UPDATE staff_notification_attempts SET routing_snapshot='{}' WHERE id=$1", [

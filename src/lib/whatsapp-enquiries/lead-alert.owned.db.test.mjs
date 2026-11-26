@@ -1,3 +1,4 @@
+import { seedOwnedEnquiryCopy } from "../../../scripts/acceptance/owned-enquiry-copy.mjs";
 import assert from "node:assert/strict";
 import test, { mock } from "node:test";
 import { readFileSync } from "node:fs";
@@ -1365,6 +1366,7 @@ test("lead alert on owned Postgres", { timeout: 600000 }, async (t) => {
           const channel = scenario();
           const switches = ["EP_WA_STAFF_NOTIFICATIONS_ENABLED", "EP_WA_STAFF_ALERT_TEMPLATE"];
           const saved = Object.fromEntries(switches.map((key) => [key, process.env[key]]));
+          await seedOwnedEnquiryCopy(query);
           const { LEAD_COPY_STAFF_ID: copyId } = await import("../neon/lead-default-assignee.js");
           const { saveStaffEndpoint } = await import("../neon/staff-endpoints.server.ts");
           const sales = await seedStaff(query);

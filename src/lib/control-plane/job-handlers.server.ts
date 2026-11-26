@@ -600,7 +600,7 @@ registerJobHandler({
       });
     const { getTrustedEnquiryForwardingRecipientPhones } =
       await import("../neon/enquiry-forwarding.server.ts");
-    const recipientPhones = await getTrustedEnquiryForwardingRecipientPhones();
+    const roster = await getTrustedEnquiryForwardingRecipientPhones();
     const { inspectEnquiryForwardingProvider } =
       await import("../whatsapp-enquiries/enquiry-forwarding-provider.server.ts");
     const { providerChannelId } = await import("../whatsapp-enquiries/wa-config.server.ts");
@@ -613,7 +613,7 @@ registerJobHandler({
           ).getCurrentEnquiryInfoInstallationEvidence({ appId, channelId }, { query: queryRows })
         : null;
     const check = await inspectEnquiryForwardingProvider({
-      recipientPhones,
+      ...roster,
       informationalInstallation,
     });
     await context.checkpoint();

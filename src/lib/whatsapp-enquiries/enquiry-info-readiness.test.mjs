@@ -126,7 +126,7 @@ test("informational readiness keeps every channel, credential and sender fence i
       r.channel.senderPhone = null;
     },
     (r) => {
-      r.channel.senderPhone = "85297987774";
+      r.channel.senderPhone = "invalid";
     },
     (r) => {
       r.channel.companyPhoneMatches = null;
