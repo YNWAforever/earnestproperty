@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { StaffAccess } from "./auth.server.ts";
 import { queryRows, transactionRows, type TransactionStatement, type DbRow } from "./db.server.ts";
 import {
-  ENQUIRY_COPY,
+  enquiryCopyRecipient,
   ENQUIRY_MANAGERS,
   ENQUIRY_ROUTING_APPROVAL,
   notificationPhone,
@@ -129,7 +129,7 @@ async function informationalProof(
         ],
   };
 }
-async function desiredRecipients(query: typeof queryRows) {
+async function desiredRecipients(query: typeof queryRows, copyInstalled = true) {
   const rows = await query(
     "SELECT id,COALESCE(NULLIF(name_zh,''),NULLIF(name_en,''),'未命名同事') AS name,whatsapp FROM staff_users WHERE active AND show_on_website ORDER BY display_order,name_zh,id",
   );
@@ -147,19 +147,19 @@ async function desiredRecipients(query: typeof queryRows) {
         ]
       : [];
   });
-  return [ENQUIRY_COPY, ...Object.values(ENQUIRY_MANAGERS), ...sales];
+  const [staff] = copyInstalled
+    ? await query("SELECT phone FROM enquiry_forwarding_copy_contact()")
+    : [];
+  const copy = enquiryCopyRecipient(staff?.phone);
+  return [...(copy ? [copy] : []), ...Object.values(ENQUIRY_MANAGERS), ...sales];
 }
 /** Internal readiness input; callers must establish the job lease before reading the roster. */
-export async function getTrustedEnquiryForwardingRecipientPhones(
-  query = queryRows,
-): Promise<string[]> {
-  return [
-    ...new Set(
-      (await desiredRecipients(query))
-        .map(({ phone }) => notificationPhone(phone))
-        .filter((phone): phone is string => phone !== null),
-    ),
-  ];
+export async function getTrustedEnquiryForwardingRecipientPhones(query = queryRows) {
+  const recipients = await desiredRecipients(query);
+  return {
+    copyPhone: recipients.find((recipient) => recipient.kind === "copy")?.phone ?? null,
+    recipientPhones: [...new Set(recipients.map((recipient) => recipient.phone))],
+  };
 }
 /** This eligibility intentionally precedes arming. The send guard additionally requires armed. */
 function recipientStateCtes(roster: string, app: string, channel: string, permissionRef = "$5") {
@@ -238,6 +238,9 @@ export async function getEnquiryForwardingSettings(
   await authorize(actor, query);
   if (!(await forwardingSchemaAvailable(query)))
     return { available: false, recipients: [], routes: [], counts: {}, providerCheck: null };
+  const [schema] = await query(
+    "SELECT to_regprocedure('enquiry_forwarding_copy_contact()') IS NOT NULL AS copy_installed",
+  );
   const [registered, routes, desired, check, counts, infoAvailable] = await Promise.all([
     query(
       "SELECT recipient_key,phone,version,enabled,verified_at,retired_at FROM enquiry_notification_recipients",
@@ -245,7 +248,7 @@ export async function getEnquiryForwardingSettings(
     query(
       "SELECT scope_key,label,manager_recipient_key,version,enabled FROM enquiry_estate_routes ORDER BY district_scope,manager_recipient_key,label",
     ),
-    desiredRecipients(query),
+    desiredRecipients(query, schema?.copy_installed === true),
     providerCheck(query),
     query(
       "SELECT dispatch_state,count(*)::int AS n FROM staff_notification_attempts WHERE routing_snapshot->>'purpose'='enquiry_forward' AND created_at>now()-interval '7 days' GROUP BY dispatch_state UNION ALL SELECT 'needs_review',count(DISTINCT (routing_snapshot->>'source')||':'||COALESCE(lead_id,forwarding_inquiry_id)::text)::int FROM staff_notification_attempts WHERE routing_snapshot->>'purpose'='enquiry_forward' AND created_at>now()-interval '7 days' AND (routing_snapshot->>'routingKind'='review' OR routing_snapshot->>'reason'='property_sales_unavailable')",
@@ -267,6 +270,16 @@ export async function getEnquiryForwardingSettings(
         ]).catch(() => [])
       : [],
   ]);
+  // An enabled legacy or now-inactive contact still has a versioned pause button.
+  const previousCopy = registered.find((row) => row.recipient_key === "copy" && row.enabled);
+  if (previousCopy && !desired.some((row) => row.kind === "copy"))
+    desired.unshift({
+      key: "copy",
+      kind: "copy",
+      staffId: null,
+      phone: String(previousCopy.phone),
+      displayName: "已登記副本",
+    });
   const byKey = new Map(registered.map((row) => [String(row.recipient_key), row]));
   const recipients: EnquiryRecipientSetting[] = desired.map((recipient) => {
     const saved = byKey.get(recipient.key),
@@ -274,7 +287,7 @@ export async function getEnquiryForwardingSettings(
     return {
       key: recipient.key,
       kind: recipient.kind,
-      name: recipient.displayName ?? (recipient.kind === "copy" ? "固定副本" : recipient.key),
+      name: recipient.displayName ?? recipient.key,
       phone: recipient.phone,
       version: saved ? Number(saved.version) : null,
       enabled: saved?.enabled === true && saved.retired_at == null,
@@ -344,8 +357,8 @@ function enableStatement(): string {
       AND EXISTS(SELECT 1 FROM audit_logs release JOIN ops_jobs j ON j.id=release.subject_id WHERE release.id=$11::uuid AND release.actor_id IS NULL AND release.action='whatsapp.enquiry_forwarding.check_requested' AND release.subject_type='ops_job' AND release.metadata->>'source'='approved_deployment_verification' AND release.metadata->>'releaseSha'=$12 AND j.job_type='woztell.enquiry.forward.readiness' AND j.payload='{}'::jsonb
         AND NOT EXISTS(SELECT 1 FROM audit_logs newer JOIN ops_jobs nj ON nj.id=newer.subject_id WHERE newer.action=release.action AND newer.actor_id IS NULL AND newer.subject_type='ops_job' AND newer.metadata->>'source'='approved_deployment_verification' AND newer.metadata->>'releaseSha'=$12 AND nj.job_type='woztell.enquiry.forward.readiness' AND nj.payload='{}'::jsonb AND (newer.created_at,newer.id)>(release.created_at,release.id)))
     ) AS yes),
-    gate AS (UPDATE enquiry_notification_recipients c SET enabled=true,channel_id=$3,destination_type='recipient_id',destination_reference=c.phone,verification_ref=$4,verified_at=now(),permission_granted=true,permission_ref=(SELECT permission_ref FROM recipient_states WHERE key='copy')
-      WHERE c.recipient_key='copy' AND c.version=$1 AND $2::boolean AND ($14::jsonb IS NOT NULL OR ${actorAllowedSql})
+    gate AS (UPDATE enquiry_notification_recipients c SET staff_id=d.staff_id,phone=d.phone,enabled=true,channel_id=$3,destination_type='recipient_id',destination_reference=d.phone,verification_ref=$4,verified_at=now(),permission_granted=true,permission_ref=(SELECT permission_ref FROM recipient_states WHERE key='copy')
+      FROM recipient_states d JOIN enquiry_forwarding_copy_contact() contact ON contact.staff_id=d.staff_id AND contact.phone=d.phone WHERE d.key='copy' AND d.phone<>(SELECT metadata#>>'{channel,senderPhone}' FROM latest_check) AND c.recipient_key='copy' AND c.version=$1 AND $2::boolean AND ($14::jsonb IS NOT NULL OR ${actorAllowedSql})
         AND (SELECT yes FROM provider_current) AND (SELECT yes FROM roster_current) AND NOT EXISTS(SELECT 1 FROM recipient_states WHERE blocked IS NOT NULL)
         AND COALESCE((enquiry_info_head($9,$3,'policy','policy')).revision,0)=$13
       RETURNING c.id,c.version),

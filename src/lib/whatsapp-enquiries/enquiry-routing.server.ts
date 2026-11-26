@@ -53,6 +53,21 @@ export async function enquiryEstateRoutes(
     version: Number(r.version),
   }));
 }
+/** Resolve one standalone public listing number in a plain WhatsApp enquiry.
+ * A dual sale/rent offering needs an explicit deal label to identify one unit. */
+export function enquiryTextOfferingSql(message: "$1" | "w.text") {
+  return `WITH refs AS (
+    SELECT DISTINCT upper(m[1]) AS listing_no FROM regexp_matches(${message},'(?<![a-zA-Z0-9])([aA][0-9]{6})(?![a-zA-Z0-9])','g') m
+    WHERE ${message} !~* '(https?://|www[.]|EPWA[[:space:]]*:)'
+  ), current_offers AS (
+    SELECT DISTINCT ON(p.deal_type) p.id,p.deal_type,p.status,m.public_listing_no
+    FROM property_public_members m JOIN properties p ON p.id=m.property_id
+    WHERE (SELECT count(*) FROM refs)=1 AND m.public_listing_no=(SELECT min(listing_no) FROM refs)
+    ORDER BY p.deal_type,${CURRENT_PUBLIC_OFFERING_ORDER}
+  ) SELECT id,public_listing_no FROM current_offers WHERE status='active'
+    AND (position('（出售）' in ${message})=0 OR deal_type='sale')
+    AND (position('（出租）' in ${message})=0 OR deal_type='rent')`;
+}
 async function property(query: EnquiryRoutingQuery, propertyId: string) {
   const [p] = await query(
     `SELECT p.id,p.status,p.deal_type,p.agent_id,p.listing_no,p.canonical_property_no,m.public_listing_no,
@@ -228,6 +243,22 @@ export async function resolveEnquiryForwarding(
       else requestedPropertyId = snapshot.propertyId.toLowerCase();
       requestedDeal = string(snapshot.dealType) ?? requestedDeal;
     }
+    if (
+      !requestedPropertyId &&
+      !references.length &&
+      !review &&
+      !inquiry.link_open_id &&
+      mentionsSpecificProperty(message)
+    ) {
+      const offers = await query(enquiryTextOfferingSql("$1"), [message]);
+      if (
+        offers.length === 1 &&
+        (!requestedNo || requestedNo.toUpperCase() === offers[0].public_listing_no)
+      ) {
+        requestedPropertyId = string(offers[0].id);
+        requestedNo = string(offers[0].public_listing_no);
+      }
+    }
     specific ||= Boolean(requestedPropertyId || requestedNo);
   }
   specific ||= mentionsSpecificProperty(message);
@@ -241,7 +272,9 @@ export async function resolveEnquiryForwarding(
   )
     review = true;
   if (target && requestedDeal && requestedDeal !== target.value.dealType) review = true;
+  const [copy] = await query("SELECT phone FROM enquiry_forwarding_copy_contact()");
   const plan = planEnquiryRouting({
+    copyPhone: string(copy?.phone),
     specific,
     property: target?.value ?? null,
     selectedStaffId,

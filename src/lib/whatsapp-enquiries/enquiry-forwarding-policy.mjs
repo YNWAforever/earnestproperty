@@ -3,7 +3,6 @@ import { notificationPhone } from "./enquiry-routing.mjs";
 export const ENQUIRY_FORWARD_JOB = "woztell.enquiry.forward";
 export const ENQUIRY_FORWARD_RECONCILE_JOB = "woztell.enquiry.forward.reconcile";
 export const ENQUIRY_FORWARD_PURPOSE = "enquiry_forward";
-export const ENQUIRY_COPY_PHONE = "85297987774";
 
 /** Notifications use the explicitly registered Hong Kong WhatsApp destination. */
 export function forwardingPhone(value) {

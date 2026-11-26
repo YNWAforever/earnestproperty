@@ -1,3 +1,4 @@
+import { seedOwnedEnquiryCopy } from "../../../scripts/acceptance/owned-enquiry-copy.mjs";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import test, { mock } from "node:test";
@@ -56,6 +57,7 @@ test(
     try {
       await withOwnedPostgres(
         async ({ query, transaction, pool }) => {
+          await seedOwnedEnquiryCopy(query);
           await mockOwnedServerDb(mock, query, transaction);
           // This worker still drains website jobs created by the previous release. Its
           // intake rows had no notificationRoute. Reproduce that row shape before the
@@ -677,7 +679,7 @@ test(
             assert.equal(route.routingKind, "property");
             assert.deepEqual(
               route.recipients.map((r) => r.phone),
-              [s.staff[0].phone, "85297987774"],
+              [s.staff[0].phone, "85297987775"],
             );
             return { external };
           }
@@ -759,18 +761,18 @@ test(
               const [copy] = await query(
                 "SELECT staff_id,enabled,verified_at,permission_granted FROM enquiry_notification_recipients WHERE recipient_key='copy'",
               );
-              assert.equal(copy.staff_id, null);
+              assert.equal(copy.staff_id, "64d5a2d6-e602-4760-9709-63b0414f6a83");
               assert.equal(copy.enabled, true);
               assert.ok(copy.verified_at);
               assert.equal(copy.permission_granted, true);
               assert.equal(
                 (
                   await query(
-                    "SELECT count(*)::int n FROM staff_users WHERE enquiry_notification_phone(phone)='85297987774' OR enquiry_notification_phone(whatsapp)='85297987774'",
+                    "SELECT count(*)::int n FROM staff_users WHERE enquiry_notification_phone(phone)='85297987775' OR enquiry_notification_phone(whatsapp)='85297987775'",
                   )
                 )[0].n,
-                0,
-                "copy is a pure contact with no staff-profile fallback",
+                1,
+                "copy is bound to one staff profile",
               );
               const member = `owned-first-paused-copy-${randomUUID()}`;
               const now = new Date();
@@ -779,13 +781,13 @@ test(
                 app: "owned-paused-copy-app",
                 channel: s.channel,
                 member,
-                from: "85297987774",
+                from: "85297987775",
                 messageId: `owned-first-copy-${randomUUID()}`,
                 timestamp: Math.floor(now.getTime() / 1000),
                 data: { text: "收到，會跟進。" },
               });
               assert.equal(incoming.woztellMemberId, member);
-              assert.equal(incoming.fromPhone, "85297987774");
+              assert.equal(incoming.fromPhone, "85297987775");
               assert.equal(incoming.legacyExternalMessageId, null);
               assert.equal(incoming.payload.context, undefined);
               assert.deepEqual(
@@ -903,7 +905,7 @@ test(
                 );
                 assert.deepEqual(
                   p.sends.map((x) => x.phone).sort(),
-                  [s.staff[selected ? 1 : 0].phone, "85297987774"].sort(),
+                  [s.staff[selected ? 1 : 0].phone, "85297987775"].sort(),
                 );
                 const rows = await s.attempts(subject);
                 assert.deepEqual(
@@ -942,11 +944,11 @@ test(
             async () => {
               const s = await scenario();
               for (const [patch, expected] of [
-                [{ message: "想問春和海景花園兩房租盤" }, ["85291005322", "85297987774"]],
-                [{ message: "想問青山公路村屋" }, ["85297987774"]],
-                [{ message: "想問豪景花園", propertyId: randomUUID() }, ["85297987774"]],
-                [{ message: "想問豪景花園", propertyId: "not-a-property-id" }, ["85297987774"]],
-                [{ message: "想問豪景花園", listingNo: "A999999" }, ["85297987774"]],
+                [{ message: "想問春和海景花園兩房租盤" }, ["85291005322", "85297987775"]],
+                [{ message: "想問青山公路村屋" }, ["85297987775"]],
+                [{ message: "想問豪景花園", propertyId: randomUUID() }, ["85297987775"]],
+                [{ message: "想問豪景花園", propertyId: "not-a-property-id" }, ["85297987775"]],
+                [{ message: "想問豪景花園", listingNo: "A999999" }, ["85297987775"]],
               ]) {
                 const subject = await s.intake(patch),
                   p = s.provider();
@@ -980,7 +982,7 @@ test(
               );
               assert.deepEqual(
                 p.sends.map((x) => x.phone),
-                ["85297987774"],
+                ["85297987775"],
               );
             },
           );
@@ -988,7 +990,7 @@ test(
             "one normalized phone shared by Sales and copy receives one frozen send",
             async () => {
               const s = await scenario();
-              await query("UPDATE staff_users SET whatsapp='+852 9798 7774' WHERE id=$1", [
+              await query("UPDATE staff_users SET whatsapp='+852 9798 7775' WHERE id=$1", [
                 s.staff[0].id,
               ]);
               const subject = await s.intake({ propertyId: s.propertyId }),
@@ -996,7 +998,7 @@ test(
               assert.equal((await s.dispatch(subject, p)).summary.accepted, 1);
               assert.deepEqual(
                 p.sends.map((x) => x.phone),
-                ["85297987774"],
+                ["85297987775"],
               );
               assert.deepEqual(recipientKeys(await s.attempts(subject)), ["copy"]);
             },
@@ -1142,7 +1144,7 @@ test(
               assert.equal(result.summary.blocked, 1);
               assert.deepEqual(
                 p.sends.map((x) => x.phone),
-                ["85297987774"],
+                ["85297987775"],
               );
               assert.equal(
                 (await s.attempts(subject)).find(
@@ -1185,7 +1187,7 @@ test(
                 2,
                 JSON.stringify({ summary: result.summary, boundaryErrors: p.boundaryErrors }),
               );
-              assert.deepEqual(p.sends.map((x) => x.phone).sort(), ["85266442444", "85297987774"]);
+              assert.deepEqual(p.sends.map((x) => x.phone).sort(), ["85266442444", "85297987775"]);
               const rows = await s.attempts(subject);
               assert.deepEqual(recipientKeys(rows), ["copy", "manager:1"]);
               assert.ok(
@@ -1285,7 +1287,7 @@ test(
                 ...receipt,
                 externalMessageId: `owned-reply-${randomUUID()}`,
                 messageType: "TEXT",
-                fromPhone: "+852 9798 7774",
+                fromPhone: "+852 9798 7775",
                 text: "收到",
                 payload: { type: "TEXT", timestamp: Math.floor(Date.now() / 1000) },
               };
@@ -1421,7 +1423,7 @@ test(
               assert.equal(result.summary.blocked, 1);
               assert.deepEqual(
                 p.sends.map((send) => send.phone),
-                ["85297987774"],
+                ["85297987775"],
               );
               assert.equal(
                 (await s.attempts(subject)).find(
@@ -1520,7 +1522,7 @@ test(
               const current = await resolveEnquiryForwarding(query, subject);
               assert.deepEqual(
                 current.recipients.map((r) => r.phone),
-                ["85297987774"],
+                ["85297987775"],
               );
               assert.equal(
                 (
@@ -1713,7 +1715,7 @@ test(
               assert.equal(result.summary.unknown, 0);
               assert.deepEqual(
                 provider.sends.map((send) => send.phone),
-                ["85297987774"],
+                ["85297987775"],
               );
               assert.equal(
                 (await resolveEnquiryForwarding(query, subject)).recipients[0].phone,
@@ -1816,7 +1818,7 @@ test(
                 assert.equal(result.summary.blocked, 1);
                 assert.deepEqual(
                   p.sends.map((x) => x.phone),
-                  ["85297987774"],
+                  ["85297987775"],
                 );
                 assert.equal(
                   (await s.attempts(subject)).find(

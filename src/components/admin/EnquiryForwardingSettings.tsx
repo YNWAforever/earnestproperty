@@ -166,15 +166,15 @@ export function EnquiryForwardingSettings({
       <dl className="grid gap-2 text-sm sm:grid-cols-3">
         <div>
           <dt className="font-medium">指定樓盤／單位</dt>
-          <dd>負責 Sales ＋ 9798 7774</dd>
+          <dd>負責 Sales ＋ 張秋</dd>
         </div>
         <div>
           <dt className="font-medium">只講屋苑</dt>
-          <dd>屋苑主管 ＋ 9798 7774</dd>
+          <dd>屋苑主管 ＋ 張秋</dd>
         </div>
         <div>
           <dt className="font-medium">一般／待核對查詢</dt>
-          <dd>只發 9798 7774</dd>
+          <dd>只發 張秋</dd>
         </div>
       </dl>
       {error ? <p role="alert">{error}</p> : null}

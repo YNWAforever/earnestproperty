@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  ENQUIRY_COPY,
+  enquiryCopyRecipient,
   ENQUIRY_ESTATE_ROUTES,
   ENQUIRY_MANAGERS,
   matchEnquiryEstate,
   mentionsSpecificProperty,
   notificationPhone,
-  planEnquiryRouting,
+  planEnquiryRouting as plan,
 } from "./enquiry-routing.mjs";
+const copyPhone = "85297987775";
+const planEnquiryRouting = (input) => plan({ copyPhone, ...input });
 const id = (n) => `10000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const primary = {
   staffId: id(1),
@@ -55,8 +57,8 @@ test("all 54 photographed cells route to their approved manager and the one copy
       assert.ok(result.routeKey);
       assert.equal(result.routeRevision, 1);
     }
-  assert.equal(ENQUIRY_COPY.phone, "85297987774");
-  assert.equal(ENQUIRY_COPY.staffId, null);
+  assert.equal(enquiryCopyRecipient(copyPhone).staffId, "64d5a2d6-e602-4760-9709-63b0414f6a83");
+  assert.deepEqual(plan({ estateLabel: "海譽" }).recipients, []);
   assert.deepEqual(
     Object.values(ENQUIRY_MANAGERS).map((r) => r.phone),
     ["85266442444", "85291005322", "85266266608"],
@@ -232,7 +234,7 @@ test("one canonical phone is one recipient, while the copy remains present", () 
       planEnquiryRouting({
         specific: true,
         property,
-        agents: [{ ...primary, whatsapp: "9798 7774" }],
+        agents: [{ ...primary, whatsapp: copyPhone }],
       }),
     ),
     ["copy"],

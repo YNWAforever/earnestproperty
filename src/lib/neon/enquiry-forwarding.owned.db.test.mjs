@@ -1,3 +1,4 @@
+import { seedOwnedEnquiryCopy } from "../../../scripts/acceptance/owned-enquiry-copy.mjs";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import test, { mock } from "node:test";
@@ -7,11 +8,12 @@ import {
 } from "../../../scripts/acceptance/owned-postgres-test.mjs";
 import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
 import {
-  ENQUIRY_COPY,
+  enquiryCopyRecipient,
   ENQUIRY_MANAGERS,
   ENQUIRY_ROUTING_APPROVAL,
 } from "../whatsapp-enquiries/enquiry-routing.mjs";
 
+const ENQUIRY_COPY = enquiryCopyRecipient("85297987775");
 const channel = "owned-admin-forwarding-channel";
 const template = {
   name: "owned_admin_staff_alert",
@@ -43,6 +45,7 @@ test(
     });
     try {
       await withOwnedPostgres(async ({ query, transaction, pool }) => {
+        await seedOwnedEnquiryCopy(query);
         let trustedRosterReads = 0;
         await mockOwnedServerDb(
           mock,
@@ -189,6 +192,7 @@ test(
           wakeError = null;
         }
         const ready = await inspectEnquiryForwardingProvider({
+          copyPhone: "85297987775",
           informationalInstallation: installation,
           env: {
             ...baseEnv,
@@ -1411,7 +1415,7 @@ test(
               publicProfile: true,
               whatsapp: "00852 9555-1234",
             });
-            const duplicateCopy = await staff({ publicProfile: true, whatsapp: "+852 9798 7774" });
+            const duplicateCopy = await staff({ publicProfile: true, whatsapp: "+852 9798 7775" });
             const photographed = ENQUIRY_MANAGERS["manager:2"];
             await query("UPDATE staff_users SET whatsapp=$2 WHERE id=$1", [
               photographed.staffId,
@@ -1494,6 +1498,7 @@ test(
               assert.equal(trustedRosterReads, rosterReadsBefore + 1);
               assert.equal(inspectionInputs.length, 1);
               assert.deepEqual(Object.keys(inspectionInputs[0]).sort(), [
+                "copyPhone",
                 "informationalInstallation",
                 "recipientPhones",
               ]);

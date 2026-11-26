@@ -58,7 +58,6 @@ export function deriveEnquiryInfoReadiness(report, installation, sensitiveConten
       channel.senderDifferentFromFixedCopy === true &&
       typeof channel.senderPhone === "string" &&
       /^852[2-9]\d{7}$/.test(channel.senderPhone) &&
-      channel.senderPhone !== "85297987774" &&
       sha(channel.proofHash, 64),
     "INFO_SENDER_UNVERIFIED",
   );

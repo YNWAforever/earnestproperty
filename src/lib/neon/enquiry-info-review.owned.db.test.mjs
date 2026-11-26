@@ -1,3 +1,4 @@
+import { seedOwnedEnquiryCopy } from "../../../scripts/acceptance/owned-enquiry-copy.mjs";
 import assert from "node:assert/strict";
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import test, { mock } from "node:test";
@@ -38,6 +39,7 @@ test(
     try {
       await withOwnedPostgres(
         async ({ query, transaction }) => {
+          await seedOwnedEnquiryCopy(query);
           await mockOwnedServerDb(mock, query, transaction);
           const api = await import("./enquiry-info-review.server.ts"),
             decisions = await import("./enquiry-info-decisions.server.ts");
@@ -93,6 +95,7 @@ test(
           };
           async function providerReport() {
             return inspectEnquiryForwardingProvider({
+              copyPhone: "85297987775",
               informationalInstallation: installation,
               recipientPhones: [phone],
               env: {

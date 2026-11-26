@@ -19,7 +19,6 @@ import {
 
 const OPEN_API = "https://open.api.woztell.com/v3";
 const CLOUD_API = "https://api.whatsapp-cloud.woztell.sanuker.com/v1.2/api/";
-const COPY_PHONE = "85297987774";
 const MAX_PAGES = 3;
 const MAX_CANDIDATES = 20;
 const PARAMS = ["name", "source", "phone", "link"];
@@ -435,6 +434,7 @@ export async function inspectEnquiryForwardingProvider(
     fetch?: typeof globalThis.fetch;
     /** Optional approved registry phones; no customer/member creation or history reads. */
     recipientPhones?: readonly string[];
+    copyPhone?: string | null;
     /** Server-validated protected release/schema evidence, never request-body flags. */
     informationalInstallation?: EnquiryInfoInstallationEvidence | null;
   } = {},
@@ -1226,7 +1226,8 @@ export async function inspectEnquiryForwardingProvider(
   }
   report.channel.senderPhone = senderPhone;
   report.channel.companyPhoneMatches = !!companyPhone && senderPhone === companyPhone;
-  report.channel.senderDifferentFromFixedCopy = senderPhone !== COPY_PHONE;
+  const copyPhone = phone(options.copyPhone);
+  report.channel.senderDifferentFromFixedCopy = !!copyPhone && senderPhone !== copyPhone;
   report.channel.proofHash = digest({
     channelId,
     appId: channel.appId,

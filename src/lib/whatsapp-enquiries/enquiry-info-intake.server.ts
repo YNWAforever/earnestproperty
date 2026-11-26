@@ -221,7 +221,7 @@ export function buildEnquiryInfoIntakeGate(
       UNION SELECT enquiry_notification_phone(s.phone) FROM staff_users s WHERE s.active AND s.show_on_website
       UNION SELECT d.phone FROM enquiry_forwarding_decisions d JOIN info_receipt r ON d.app_id=r.app_id AND d.channel_id=r.channel_id
         WHERE d.subject_kind='recipient_phone' AND d.decision='approved' AND (enquiry_info_head(d.app_id,d.channel_id,'recipient_phone',d.phone)).id=d.id
-      UNION SELECT '85297987774'
+      UNION SELECT phone FROM enquiry_forwarding_copy_contact()
     ), info_facts AS MATERIALIZED (
       SELECT r.*,
         EXISTS(SELECT 1 FROM enquiry_forwarding_decisions d WHERE d.app_id=r.app_id AND d.channel_id=r.channel_id

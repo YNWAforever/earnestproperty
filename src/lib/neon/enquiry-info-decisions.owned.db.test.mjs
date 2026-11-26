@@ -1,3 +1,4 @@
+import { seedOwnedEnquiryCopy } from "../../../scripts/acceptance/owned-enquiry-copy.mjs";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
 import test, { mock } from "node:test";
@@ -8,6 +9,7 @@ import {
 import { migrationStatements } from "../../../scripts/acceptance/migrated-schema.mjs";
 import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
 import { staffDestinationNotACustomer } from "../whatsapp-enquiries/staff-recipient-guard.ts";
+const copyVersion = "20261126000000_staff_enquiry_copy.sql";
 const version = "20261116010000_enquiry_information_scope.sql";
 const scope = { appId: "owned_info_app", channelId: "owned_info_channel" };
 const sha = (value) => createHash("sha256").update(value).digest("hex");
@@ -112,6 +114,11 @@ test(
               );
               await transaction(migrationStatements(version).map((statement) => ({ statement })));
               await query("INSERT INTO app_migrations(version) VALUES($1)", [version]);
+              await transaction(
+                migrationStatements(copyVersion).map((statement) => ({ statement })),
+              );
+              await query("INSERT INTO app_migrations(version) VALUES($1)", [copyVersion]);
+              await seedOwnedEnquiryCopy(query);
               assert.equal(await api.enquiryInfoSchemaAvailable(query), true);
               assert.equal(
                 (await query("SELECT count(*)::int n FROM enquiry_forwarding_decisions"))[0].n,
@@ -364,13 +371,13 @@ test(
           await t.test(
             "snapshot enumeration has exact D11 parity for normalized, member and channel/suffix variants",
             async () => {
-              const number = "85297987774";
+              const number = "85297987775";
               for (const value of [
-                "97987774",
-                "85297987774",
-                "0085297987774",
-                "+852 9798 7774",
-                "861397987774",
+                "97987775",
+                "85297987775",
+                "0085297987775",
+                "+852 9798 7775",
+                "861397987775",
               ]) {
                 const [contact] = await query(
                   "INSERT INTO crm_contacts(name,normalized_phone) VALUES('Owned parity',$1) RETURNING id",
@@ -388,7 +395,7 @@ test(
                 "INSERT INTO crm_contacts(name,normalized_phone) VALUES('Owned channel parity','85298882222') RETURNING id",
               );
               const [conv] = await query(
-                "INSERT INTO whatsapp_conversations(contact_id,channel_id,woztell_member_id) VALUES($1,'other-channel','0085297987774') RETURNING id",
+                "INSERT INTO whatsapp_conversations(contact_id,channel_id,woztell_member_id) VALUES($1,'other-channel','0085297987775') RETURNING id",
                 [contact.id],
               );
               try {
@@ -937,7 +944,7 @@ test(
           await t.test(
             "concurrent CAS has one winner; reads after a policy-lock wait see the newly committed head",
             async () => {
-              const number = "85297987774",
+              const number = "85297987775",
                 s = await api.getEnquiryInfoPhoneSnapshot(scope, number, query);
               const input = {
                 scope,
@@ -1068,7 +1075,11 @@ test(
           );
           assert.equal(network.mock.callCount(), 0);
         },
-        { migrationVersions: MIGRATION_VERSIONS.filter((value) => value !== version) },
+        {
+          migrationVersions: MIGRATION_VERSIONS.filter(
+            (value) => value !== version && value !== copyVersion,
+          ),
+        },
       );
     } finally {
       mock.restoreAll();
