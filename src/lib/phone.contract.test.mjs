@@ -123,6 +123,9 @@ const INFO_REFUSAL_MIGRATION = "neon/migrations/20261116010000_enquiry_informati
 // Pin its body rather than exempting the migration: edits and additional matches still fail.
 const INFO_REFUSAL_STATEMENT_SHA256 =
   "d6da02e87d33cbd68e4f49017eb7fd893227dcb2ac9f5bd193cdeea915ce3e4d";
+const STAFF_COPY_MIGRATION = "neon/migrations/20261126000000_staff_enquiry_copy.sql";
+const STAFF_COPY_SNAPSHOT_SHA256 =
+  "18915648bb2e4d1fe9e1a14ab2a6bcefd191a40801197aae67d2fb85140a6ec4";
 const sourceHash = (source) =>
   createHash("sha256").update(source.replaceAll("\r\n", "\n")).digest("hex");
 
@@ -139,6 +142,8 @@ function hasInlinePhoneMatch(path, source) {
       scope.startsWith("CREATE FUNCTION enquiry_info_phone_snapshot(") &&
       sourceHash(scope) === INFO_REFUSAL_STATEMENT_SHA256
     )
+      return false;
+    if (path === STAFF_COPY_MIGRATION && sourceHash(scope) === STAFF_COPY_SNAPSHOT_SHA256)
       return false;
     const compact = scope.replace(/\s+/g, "");
     const twoFormat = compact.includes("left($") && compact.includes(",3)='852'");
@@ -221,6 +226,31 @@ test("only the exact applied D11 refusal statement is separate from customer ide
     assert.equal(splitSqlStatements(poisoned).length, statements.length);
     assert.equal(hasInlinePhoneMatch(INFO_REFUSAL_MIGRATION, poisoned), true);
   }
+});
+
+test("the staff copy migration keeps the reviewed customer refusal logic intact", () => {
+  const previous = splitSqlStatements(
+    readFileSync(join(ROOT, INFO_REFUSAL_MIGRATION), "utf8"),
+  ).find((sql) => sourceHash(sql) === INFO_REFUSAL_STATEMENT_SHA256);
+  assert.ok(previous);
+  const expected = previous
+    .replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")
+    .replace(
+      "'staffId',NULL,'phone','85297987774') AS value,'copy' AS key WHERE target='85297987774'",
+      "'staffId',c.staff_id,'phone',c.phone) AS value,'copy' AS key FROM enquiry_forwarding_copy_contact() c WHERE c.phone=target",
+    );
+  const migration = readFileSync(join(ROOT, STAFF_COPY_MIGRATION), "utf8");
+  assert.equal(sourceHash(expected), STAFF_COPY_SNAPSHOT_SHA256);
+  assert.ok(splitSqlStatements(migration).some((sql) => sourceHash(sql) === sourceHash(expected)));
+  const unsafe = "SELECT id FROM crm_contacts WHERE normalized_phone = right($1::text,8);";
+  assert.equal(hasInlinePhoneMatch(STAFF_COPY_MIGRATION, `${migration}\n${unsafe}`), true);
+  assert.equal(
+    hasInlinePhoneMatch(
+      STAFF_COPY_MIGRATION,
+      expected.replace("WITH public_staff", `${unsafe}\nWITH public_staff`),
+    ),
+    true,
+  );
 });
 
 test("no SQL copy of the phone match outside phone.js", () => {
