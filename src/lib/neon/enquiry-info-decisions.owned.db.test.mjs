@@ -9,7 +9,6 @@ import {
 import { migrationStatements } from "../../../scripts/acceptance/migrated-schema.mjs";
 import { MIGRATION_VERSIONS } from "../control-plane/migration-versions.js";
 import { staffDestinationNotACustomer } from "../whatsapp-enquiries/staff-recipient-guard.ts";
-const copyVersion = "20261126000000_staff_enquiry_copy.sql";
 const version = "20261116010000_enquiry_information_scope.sql";
 const scope = { appId: "owned_info_app", channelId: "owned_info_channel" };
 const sha = (value) => createHash("sha256").update(value).digest("hex");
@@ -112,12 +111,15 @@ test(
               await query(
                 "UPDATE enquiry_notification_recipients SET enabled_since=now()-interval '30 days' WHERE recipient_key='copy'",
               );
-              await transaction(migrationStatements(version).map((statement) => ({ statement })));
-              await query("INSERT INTO app_migrations(version) VALUES($1)", [version]);
-              await transaction(
-                migrationStatements(copyVersion).map((statement) => ({ statement })),
-              );
-              await query("INSERT INTO app_migrations(version) VALUES($1)", [copyVersion]);
+              for (const migration of MIGRATION_VERSIONS.filter((file) => file >= version)) {
+                await transaction([
+                  ...migrationStatements(migration).map((statement) => ({ statement })),
+                  {
+                    statement: "INSERT INTO app_migrations(version) VALUES($1)",
+                    params: [migration],
+                  },
+                ]);
+              }
               await seedOwnedEnquiryCopy(query);
               assert.equal(await api.enquiryInfoSchemaAvailable(query), true);
               assert.equal(
@@ -1076,9 +1078,7 @@ test(
           assert.equal(network.mock.callCount(), 0);
         },
         {
-          migrationVersions: MIGRATION_VERSIONS.filter(
-            (value) => value !== version && value !== copyVersion,
-          ),
+          migrationVersions: MIGRATION_VERSIONS.filter((file) => file < version),
         },
       );
     } finally {
