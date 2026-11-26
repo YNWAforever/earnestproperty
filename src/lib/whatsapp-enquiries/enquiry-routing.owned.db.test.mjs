@@ -577,7 +577,7 @@ test("owned forwarding schema is disabled by default and routes only approved ne
           const subject = await whatsapp({ member: "owned_listing_text" });
           for (const [body, expected] of [
             ["您好，我想查詢樓盤 A900001（出售）", [`sales:${id(1)}`, "copy"]],
-            ["A900001 A999999", ["copy"]],
+            ["A900001 b999999", ["copy"]],
             ["A900001（出租）", ["copy"]],
           ]) {
             await q("UPDATE whatsapp_messages SET text=$2 WHERE id=$1", [subject.message, body]);

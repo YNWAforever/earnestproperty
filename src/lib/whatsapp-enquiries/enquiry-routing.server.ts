@@ -57,7 +57,7 @@ export async function enquiryEstateRoutes(
  * A dual sale/rent offering needs an explicit deal label to identify one unit. */
 export function enquiryTextOfferingSql(message: "$1" | "w.text") {
   return `WITH refs AS (
-    SELECT DISTINCT upper(m[1]) AS listing_no FROM regexp_matches(${message},'(?<![a-zA-Z0-9])([aA][0-9]{6})(?![a-zA-Z0-9])','g') m
+    SELECT DISTINCT upper(m[1]) AS listing_no FROM regexp_matches(${message},'(?<![a-zA-Z0-9])([a-zA-Z][0-9]{6})(?![a-zA-Z0-9])','g') m
     WHERE ${message} !~* '(https?://|www[.]|EPWA[[:space:]]*:)'
   ), current_offers AS (
     SELECT DISTINCT ON(p.deal_type) p.id,p.deal_type,p.status,m.public_listing_no
