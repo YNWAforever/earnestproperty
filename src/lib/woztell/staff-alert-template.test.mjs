@@ -153,6 +153,35 @@ test("phone is sent in the approved order when the template carries it", () => {
   );
 });
 
+test("the follow-up excerpt preserves the original and marks missing or shortened text", () => {
+  const name = "staff_enquiry_followup_context";
+  const params = ["name", "source", "phone", "context", "link"];
+  const parse = (name, params) =>
+    parseStaffAlertTemplate(JSON.stringify({ name, language: "zh_HK", params }));
+  const template = parse(name, params);
+  const render = (context) =>
+    buildStaffTemplateResponse(template, {
+      name: "客人",
+      source: "網站",
+      phone: "電話",
+      context,
+      link: "https://example.invalid",
+    }).components[0].parameters.map((p) => p.text);
+  assert.deepEqual(render("  兩房\n星期六可以睇樓嗎？"), [
+    "客人",
+    "網站",
+    "電話",
+    "兩房 星期六可以睇樓嗎？",
+    "https://example.invalid",
+  ]);
+  assert.equal(render("\u200b \n")[3], "未有查詢文字");
+  assert.equal(render("🏠".repeat(500))[3], "🏠".repeat(500));
+  assert.equal(render("🏠".repeat(500) + " 更多內容")[3], "🏠".repeat(499) + "…");
+  assert.equal(parse("staff_enquiry_followup", params), null);
+  assert.equal(parse(name, ["name", "source", "phone", "link"]), null);
+  assert.equal(parse(name, ["name", "source", "phone", "link", "context"]), null);
+});
+
 test("a customer phone is grouped for calling and never invented", () => {
   assert.equal(formatCustomerPhone("85291234567"), "+852 9123 4567");
   assert.equal(formatCustomerPhone("+852 9123 4567"), "+852 9123 4567");

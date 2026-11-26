@@ -8,7 +8,7 @@ import { createStaffWhatsAppTransport } from "../../woztell/staff-whatsapp-trans
 import {
   buildStaffTemplateResponse,
   formatCustomerPhone,
-  type StaffAlertTemplate,
+  isStaffPhoneFollowup,
   type StaffTemplateResponse,
 } from "../../woztell/staff-alert-template.ts";
 import { staffWhatsappAlertRuntime } from "../../whatsapp-enquiries/staff-notifications.server.ts";
@@ -59,17 +59,6 @@ const dispatchInput = pairInput
     decisionNote: z.string().trim().max(200).optional(),
   })
   .strict();
-
-const PHONE_TEMPLATE_PARAMS = "name,source,phone,link";
-
-/** The approved staff alert template, phone route only. */
-function phoneTemplateReady(template: StaffAlertTemplate | null) {
-  return (
-    template?.name === "staff_enquiry_followup" &&
-    template.language === "zh_HK" &&
-    template.params.join(",") === PHONE_TEMPLATE_PARAMS
-  );
-}
 
 /** Auth is the only business-adjacent failure that throws by design. */
 async function authorize(actor: HistoricalResendActor, ports: HistoricalResendPorts) {
@@ -375,6 +364,7 @@ async function evaluate(
     template = buildStaffTemplateResponse(runtime.template, {
       name: String(lead.customerName ?? ""),
       source: String(lead.sourceLabel ?? ""),
+      context: lead.customerMessage,
       phone: formatCustomerPhone(lead.customerPhone ?? null),
       link: `${origin}/admin/leads?lead=${lead.leadId}`,
     });
@@ -382,7 +372,7 @@ async function evaluate(
     reasons.push(HISTORICAL_RESEND_REASONS.templateUnconfigured);
     return base;
   }
-  if (!phoneTemplateReady(runtime.template)) {
+  if (!isStaffPhoneFollowup(runtime.template)) {
     reasons.push(HISTORICAL_RESEND_REASONS.templateUnconfigured);
     return base;
   }
@@ -398,6 +388,7 @@ async function evaluate(
     endpointVersion: proof.endpointVersion,
     destinationReference: proof.destinationReference,
     message,
+    template,
   });
   let scan: HistoricalResendScan | null = null;
   let migrationPending = false;

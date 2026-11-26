@@ -1227,9 +1227,9 @@ test("staff WhatsApp dispatch guards on owned Postgres", { timeout: 300000 }, as
         [ids.staff],
       );
       const template = {
-        name: "staff_lead_alert",
+        name: "staff_enquiry_followup_context",
         language: "zh_HK",
-        params: ["name", "source", "phone", "link"],
+        params: ["name", "source", "phone", "context", "link"],
       };
       const runtime = (configured) => ({
         enabled: true,
@@ -1354,7 +1354,7 @@ test("staff WhatsApp dispatch guards on owned Postgres", { timeout: 300000 }, as
         assert.equal(sends[0].memberId, "staff-device");
         assert.deepEqual(sends[0].template, {
           type: "TEMPLATE",
-          elementName: "staff_lead_alert",
+          elementName: "staff_enquiry_followup_context",
           languageCode: "zh_HK",
           components: [
             {
@@ -1363,6 +1363,7 @@ test("staff WhatsApp dispatch guards on owned Postgres", { timeout: 300000 }, as
                 { type: "text", text: "WhatsApp 客戶" },
                 { type: "text", text: "WhatsApp 查詢" },
                 { type: "text", text: "+852 9100 5322" },
+                { type: "text", text: "未有查詢文字" },
                 { type: "text", text: workLink },
               ],
             },
@@ -1386,7 +1387,7 @@ test("staff WhatsApp dispatch guards on owned Postgres", { timeout: 300000 }, as
         await dispatch(n, options, true);
         assert.equal(sends.length, before + 1);
         assert.equal(sends.at(-1).template?.type, "TEMPLATE");
-        assert.equal(sends.at(-1).template.elementName, "staff_lead_alert");
+        assert.equal(sends.at(-1).template.elementName, "staff_enquiry_followup_context");
       });
 
       await t.test("no template and a window that closes at claim time sends nothing", async () => {

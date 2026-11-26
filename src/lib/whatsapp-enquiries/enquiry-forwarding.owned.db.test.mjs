@@ -97,7 +97,8 @@ test(
             );
           const rolesBefore = (await query("SELECT count(*)::int n FROM staff_roles"))[0].n;
           let serial = 0;
-          async function scenario({ withPrearmReceipt = false } = {}) {
+          async function scenario({ withPrearmReceipt = false, alertTemplate = template } = {}) {
+            const template = alertTemplate;
             const n = ++serial,
               channel = `owned-forward-${n}`;
             process.env.WOZTELL_CHANNEL_ID = channel;
@@ -229,7 +230,7 @@ test(
                     providerTemplateId: "owned-template",
                     name: template.name,
                     language: template.language,
-                    paramCount: 4,
+                    paramCount: template.params.length,
                     proofHash: "c".repeat(64),
                   },
                 ],
@@ -246,7 +247,7 @@ test(
               "informational permission does not fabricate legacy action capability",
             );
             const [providerProof] = await query(
-              "INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) VALUES(NULL,'whatsapp.enquiry_forwarding.provider_checked','ops_job',$1,$2::jsonb) RETURNING id",
+              "INSERT INTO audit_logs(actor_id,action,subject_type,subject_id,metadata) VALUES(NULL,'whatsapp.enquiry_forwarding.provider_checked','ops_job',$1,$2::jsonb) RETURNING id,created_at",
               [checkedJob.id, JSON.stringify(providerReport)],
             );
             const [beforeArmCopy] = await query(
@@ -256,7 +257,7 @@ test(
               goalId: "owned-enquiry-information-goal",
               sourceReference: "owned-fixture:approved-routing",
               sourceSha256: "d".repeat(64),
-              receivedAt: new Date().toISOString(),
+              receivedAt: new Date(providerProof.created_at).toISOString(),
               recorderReference: "owned-test-operator",
               statement: "Owned fixture owner approves genuine informational enquiry routing.",
               photoSha256: "e".repeat(64),
@@ -1178,10 +1179,21 @@ test(
           await t.test(
             "actual fresh observe WhatsApp intake sends manager plus copy while preserving locks, consent and customer effects",
             async () => {
-              const s = await scenario(),
+              const s = await scenario({
+                  alertTemplate: {
+                    name: "staff_enquiry_followup_context",
+                    language: "zh_HK",
+                    params: ["name", "source", "phone", "context", "link"],
+                  },
+                }),
                 subject = await s.intakeWhatsapp(),
                 p = s.provider();
               const result = await s.dispatch(subject, p);
+              for (const send of p.sends)
+                assert.equal(
+                  send.template.components[0].parameters[3].text,
+                  "想問豪景花園兩房租盤",
+                );
               assert.equal(
                 result.summary.accepted,
                 2,

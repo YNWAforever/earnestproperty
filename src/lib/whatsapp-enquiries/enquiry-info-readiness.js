@@ -1,3 +1,5 @@
+import { isForwardingTemplate } from "../woztell/staff-alert-template.ts";
+
 export const ENQUIRY_INFO_PURPOSE = "enq_forward_info";
 export const ENQUIRY_INFO_POLICY_VERSION = 1;
 export const ENQUIRY_INFO_SCHEMA_VERSION = "20261116010000_enquiry_information_scope";
@@ -11,7 +13,6 @@ const sha = (value, length) =>
 const uuid = (value) =>
   typeof value === "string" &&
   /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
-const parameters = ["name", "source", "phone", "link"];
 
 /**
  * Informational copies have their own evidence contract. This predicate does not
@@ -68,8 +69,8 @@ export function deriveEnquiryInfoReadiness(report, installation, sensitiveConten
     typeof configured.language === "string" &&
     /^[a-z]{2,3}(_[A-Z]{2})?$/.test(configured.language) &&
     Array.isArray(configured.params) &&
-    configured.params.length === 4 &&
-    parameters.every((param) => configured.params.includes(param));
+    configured.params.every((param) => typeof param === "string") &&
+    isForwardingTemplate(configured);
   const candidates = Array.isArray(template.candidates) ? template.candidates : [];
   const approved = candidates
     .map(record)
@@ -77,7 +78,8 @@ export function deriveEnquiryInfoReadiness(report, installation, sensitiveConten
       (candidate) =>
         candidate.name === configured.name &&
         candidate.language === configured.language &&
-        candidate.paramCount === 4 &&
+        mappingValid &&
+        candidate.paramCount === configured.params.length &&
         identifier(candidate.providerTemplateId) &&
         sha(candidate.proofHash, 64),
     );

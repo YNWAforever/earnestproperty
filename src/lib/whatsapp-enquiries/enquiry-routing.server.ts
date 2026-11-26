@@ -294,6 +294,9 @@ export async function resolveEnquiryForwarding(
     customerName: string(subject.customer_name),
     customerPhone: string(subject.customer_phone),
     summary: message,
+    customerMessage: text(
+      input.source === "website" ? subject.inquiry_message : subject.intake_text,
+    ),
     ...(channelId ? { channelId } : {}),
     ...(conversationId ? { conversationId } : {}),
     ...(sourceMessageId ? { sourceMessageId } : {}),

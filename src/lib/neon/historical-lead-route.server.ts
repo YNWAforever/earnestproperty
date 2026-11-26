@@ -87,13 +87,13 @@ export async function readHistoricalIntakeRoute(
   ), intake AS (
     SELECT l.id lead_id,i.id inquiry_id,l.created_at,l.source, l.name,l.customer_phone,
       i.public_listing_no,CASE WHEN l.enquiry_routing_context->>'selectedAgentId'=i.requested_staff_id::text THEN i.requested_staff_id END assigned_staff,
-      i.property_id IS NOT NULL AS specific, NULL::text AS intake_text, NULL::uuid AS message_id
+      i.property_id IS NOT NULL AS specific, NULL::text AS intake_text, NULL::uuid AS message_id, i.message AS customer_message
     FROM lead l JOIN inquiries i ON i.crm_lead_id=l.id AND i.crm_contact_id=l.contact_id
     WHERE l.source='website' AND i.source='website' AND i.status='new' AND i.created_at >= $3 AND i.created_at < $4
       AND (i.requested_staff_id IS NULL OR l.assigned_agent_id IS NULL OR i.requested_staff_id=l.assigned_agent_id)
     UNION ALL
     SELECT l.id,i.id,l.created_at,l.source,l.name,l.customer_phone,i.public_listing_no,
-      i.requested_staff_id,i.property_id IS NOT NULL,m.text,m.id
+      i.requested_staff_id,i.property_id IS NOT NULL,m.text,m.id,m.text
     FROM lead l JOIN whatsapp_conversations w ON w.contact_id=l.contact_id AND w.channel_id=$2
     JOIN inquiries i ON i.conversation_id=w.id AND i.crm_contact_id=l.contact_id AND i.source='whatsapp' AND i.status='new'
     JOIN whatsapp_messages m ON m.id=i.intake_message_id AND m.conversation_id=w.id AND m.contact_id=w.contact_id
@@ -152,6 +152,7 @@ export async function readHistoricalIntakeRoute(
     createdAt: new Date(String(row.created_at)).toISOString(),
     sourceLabel,
     customerName: String(row.name ?? ""),
+    customerMessage: String(row.customer_message ?? ""),
     customerPhone: String(row.customer_phone ?? ""),
     staffIds: [...staff].sort(),
   };

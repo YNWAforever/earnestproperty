@@ -484,6 +484,7 @@ export async function dispatchStaffTestNotification(
           : buildStaffTemplateResponse(template, {
               name: "測試",
               source: "測試通知",
+              context: "測試查詢：星期六下午可以睇樓嗎？",
               phone: "測試電話",
               link: new URL("/admin/whatsapp-settings", origin!).toString(),
             }),

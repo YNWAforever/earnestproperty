@@ -86,6 +86,7 @@ export function historicalResendFingerprint(parts) {
         parts.endpointVersion,
         parts.destinationReference,
         parts.message,
+        parts.template,
       ]),
     )
     .digest("hex");

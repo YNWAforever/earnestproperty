@@ -43,8 +43,11 @@ export type HistoricalResendFingerprintParts = {
   endpointVersion: number;
   destinationReference: string;
   message: string;
+  template: import("../../woztell/staff-alert-template.ts").StaffTemplateResponse;
 };
-export declare function historicalResendFingerprint(parts: HistoricalResendFingerprintParts): string;
+export declare function historicalResendFingerprint(
+  parts: HistoricalResendFingerprintParts,
+): string;
 export declare function historicalResendProofReasons(
   proof: {
     staffId?: unknown;
@@ -69,11 +72,13 @@ export type HistoricalResendLedgerKind =
   | "suppressed";
 export declare function historicalResendLedgerState(state: unknown): HistoricalResendLedgerKind;
 export declare function isHistoricalResendPermanent(state: unknown): boolean;
-export declare function historicalResendOutcome(result: {
-  state?: string;
-  evidenceKind?: string | null;
-  providerOperationId?: string | null;
-} | null): {
+export declare function historicalResendOutcome(
+  result: {
+    state?: string;
+    evidenceKind?: string | null;
+    providerOperationId?: string | null;
+  } | null,
+): {
   dispatchState: "accepted" | "failed" | "suppressed" | "unknown";
   ok: boolean;
   evidenceKind?: string | null;
