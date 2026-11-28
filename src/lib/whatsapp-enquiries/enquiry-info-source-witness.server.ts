@@ -86,6 +86,9 @@ function sourceHashSql(
         AND s.source=CASE WHEN r.source='28hse' THEN ${portalSource} ELSE 'propertyhk' END)
   ), witness_target_ids AS (
     SELECT property_id::text AS id FROM witness_website UNION SELECT property_id::text FROM witness_whatsapp
+    UNION SELECT offering.id::text FROM witness_website website CROSS JOIN LATERAL (
+      SELECT coalesce(nullif(website.enquiry_routing_context->>'requestedPublicListingNo',''),website.public_listing_no,website.message,website.note) AS text
+    ) w CROSS JOIN LATERAL (${enquiryTextOfferingSql("w.text")}) offering WHERE website.property_id IS NULL
     UNION SELECT lower(context_snapshot->>'propertyId') FROM witness_whatsapp
     UNION SELECT offering.id::text FROM witness_whatsapp w CROSS JOIN LATERAL (${enquiryTextOfferingSql("w.text")}) offering
       WHERE w.property_id IS NULL AND w.link_open_id IS NULL AND NOT EXISTS(SELECT 1 FROM witness_references)

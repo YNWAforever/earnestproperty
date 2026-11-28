@@ -179,7 +179,10 @@ test("website inquiry enqueues its lead alert in the same statement", async () =
     sql.indexOf("'lead-alert:'||id") > sql.indexOf("new_lead AS"),
     "the alert key is derived from the inserted lead",
   );
-  assert.match(sql, /FROM new_lead\s+ON CONFLICT \(idempotency_key\) DO NOTHING/);
+  assert.match(
+    sql,
+    /FROM new_lead WHERE notification_route IS DISTINCT FROM 'enquiry_forward'\s+ON CONFLICT \(idempotency_key\) DO NOTHING/,
+  );
   assert.match(sql, /\(SELECT count\(\*\) FROM lead_alert\) > 0 AS lead_alert_queued/);
 });
 
@@ -422,7 +425,7 @@ test("a flagged website inquiry still writes contact, lead, inquiry and alert jo
     const botNote = sql.slice(sql.indexOf("bot_note AS ("), sql.indexOf("bot_audit AS ("));
     assert.match(botNote, /SELECT new_lead\.id, new_lead\.contact_id, 'suspected_bot'/);
     assert.doesNotMatch(botNote, /\(SELECT/i);
-    assert.match(sql, /new_lead AS \([\s\S]*?RETURNING id, contact_id\n/);
+    assert.match(sql, /new_lead AS \([\s\S]*?RETURNING id, contact_id, enquiry_routing_context/);
     assert.match(sql, /\(SELECT count\(\*\) FROM lead_alert\) > 0 AS lead_alert_queued/);
   }
 });

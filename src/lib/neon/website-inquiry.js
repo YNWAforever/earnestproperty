@@ -48,7 +48,7 @@ export const SUSPECTED_BOT_NOTE =
   "表格的隱藏欄位有內容，可能是自動程式提交。查詢已照常保存及通知，請照常跟進。";
 
 /** Atomic intake; existing customer consent is never changed by phone-only requests. */
-export async function persistWebsiteInquiry(query, input) {
+export async function persistWebsiteInquiry(query, input, forwardingScope) {
   const { name, phone, normalizedPhone, email, message, listingNo, propertyId, consentWhatsapp } =
     input;
   const submissionId = input.submissionId;
@@ -233,9 +233,19 @@ export async function persistWebsiteInquiry(query, input) {
     input.propertyReferenceRequested === true
       ? "'property'::text"
       : "CASE WHEN $7::uuid IS NOT NULL OR $8::text IS NOT NULL THEN 'property' ELSE 'general' END";
-  const notificationRoute =
-    process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true" ? "staff_phone" : "staff_phone_paused";
-  const routingContext = `jsonb_build_object('kind',${contextKind},'scope','${scope}'::text,'requestedPropertyId',$7::text,'requestedPublicListingNo',$8::text,'requestedEstateSlug',${estateSlugParam},'selectedAgentId',${chosenAgentParam}::text,'notificationRoute','${notificationRoute}'::text)`;
+  const staffAlertsEnabled = process.env.EP_WA_STAFF_NOTIFICATIONS_ENABLED === "true";
+  const usePolicy = staffAlertsEnabled && forwardingScope?.appId && forwardingScope?.channelId;
+  let notificationRoute = staffAlertsEnabled ? "'staff_phone'" : "'staff_phone_paused'";
+  if (usePolicy) {
+    const app = `$${nextParam++}::text`;
+    const channel = `$${nextParam++}::text`;
+    // An installed policy owns new website notifications as well as WhatsApp ones.
+    // A paused policy must not fall back to a second sender.
+    notificationRoute = `COALESCE((SELECT CASE WHEN p.decision='armed' AND enquiry_forwarding_is_enabled(${channel})
+      THEN 'enquiry_forward' ELSE 'staff_phone_paused' END
+      FROM enquiry_info_head(${app},${channel},'policy','policy') p WHERE p.id IS NOT NULL),'staff_phone')`;
+  }
+  const routingContext = `jsonb_build_object('kind',${contextKind},'scope','${scope}'::text,'requestedPropertyId',$7::text,'requestedPublicListingNo',$8::text,'requestedEstateSlug',${estateSlugParam},'selectedAgentId',${chosenAgentParam}::text,'notificationRoute',${notificationRoute}::text)`;
   const rows = await query(
     `
     WITH resolved_listing AS (
@@ -284,7 +294,7 @@ export async function persistWebsiteInquiry(query, input) {
         'new', routing.intent, 'website', $5, ${routingContext}
       FROM contact
       CROSS JOIN routing
-      RETURNING id, contact_id
+      RETURNING id, contact_id, enquiry_routing_context->>'notificationRoute' AS notification_route
     ),
     bot_note AS (
       INSERT INTO crm_activities (lead_id, contact_id, activity_type, body)
@@ -310,7 +320,8 @@ ${submissionId ? "id, marketing_consent_requested, consent_copy_version," : ""}
       COALESCE($8::text, (SELECT listing_no FROM requested_listing))
     FROM contact
     CROSS JOIN routing
-    RETURNING id, (SELECT count(*) FROM lead_alert) > 0 AS lead_alert_queued
+    RETURNING id, (SELECT count(*) FROM lead_alert) > 0 AS lead_alert_queued,
+      (SELECT notification_route='enquiry_forward' FROM new_lead) AS forwarding_queued
     `,
     [
       name,
@@ -328,6 +339,7 @@ ${submissionId ? "id, marketing_consent_requested, consent_copy_version," : ""}
       ...(correspondentAgentId ? [correspondentAgentId] : []),
       ...(fallbackAssigneeId ? [fallbackAssigneeId] : []),
       ...(estateSlug ? [estateSlug] : []),
+      ...(usePolicy ? [forwardingScope.appId, forwardingScope.channelId] : []),
     ],
   );
 
@@ -357,5 +369,6 @@ ${submissionId ? "id, marketing_consent_requested, consent_copy_version," : ""}
   return {
     id: rows[0]?.id == null ? "" : String(rows[0].id),
     leadAlertQueued: rows[0]?.lead_alert_queued === true,
+    ...(rows[0]?.forwarding_queued === true ? { forwardingQueued: true } : {}),
   };
 }

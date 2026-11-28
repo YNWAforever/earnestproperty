@@ -113,6 +113,7 @@ import {
   campaignRetryStatusSql,
   retryableFailedRecipientSql,
 } from "./campaign-retry.ts";
+import { providerChannelId } from "../whatsapp-enquiries/wa-config.server";
 import { estateRegistry } from "@/content/estate-registry";
 import { estateManagerContact, managerRotationForEstate } from "@/content/estate-manager-rotation";
 import { isValidWebsiteListingNo, persistWebsiteInquiry } from "./website-inquiry.js";
@@ -4930,26 +4931,30 @@ export async function createWebsiteInquiry(input: {
       ? null
       : (estateManagerContact(managerRotationForEstate({ slug: requestedEstateSlug }))?.staffId ??
         null);
-  const result = await persistWebsiteInquiry(queryRows, {
-    submissionId: input.submissionId,
-    name: input.name,
-    phone: input.phone,
-    normalizedPhone,
-    email,
-    message,
-    listingNo: requestedListingNo,
-    propertyId: requestedPropertyId,
-    estateSlug: requestedEstateSlug,
-    propertyReferenceRequested: !!rawPropertyId || !!rawListingNo,
-    agentId: requestedAgentId,
-    estateManagerStaffId,
-    consentWhatsapp: optInWhatsapp,
-    suspectedBot: input.suspectedBot === true,
-  });
+  const result = await persistWebsiteInquiry(
+    queryRows,
+    {
+      submissionId: input.submissionId,
+      name: input.name,
+      phone: input.phone,
+      normalizedPhone,
+      email,
+      message,
+      listingNo: requestedListingNo,
+      propertyId: requestedPropertyId,
+      estateSlug: requestedEstateSlug,
+      propertyReferenceRequested: !!rawPropertyId || !!rawListingNo,
+      agentId: requestedAgentId,
+      estateManagerStaffId,
+      consentWhatsapp: optInWhatsapp,
+      suspectedBot: input.suspectedBot === true,
+    },
+    { appId: process.env.WOZTELL_APP_ID, channelId: providerChannelId() },
+  );
   // The alert job committed with the lead; wake only for a fresh insert, never a replay.
-  if (result.leadAlertQueued) {
+  if (result.forwardingQueued || result.leadAlertQueued) {
     try {
-      wakeAfterCommit("general");
+      wakeAfterCommit(result.forwardingQueued ? "service" : "general");
     } catch {
       // The enquiry and its alert job are committed; the cron lane will pick the job up.
       console.warn("[website-inquiry] lead_alert_wake_failed");

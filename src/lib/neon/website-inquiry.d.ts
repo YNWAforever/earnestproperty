@@ -58,4 +58,5 @@ export type WebsiteInquiryQuery = (
 export function persistWebsiteInquiry(
   query: WebsiteInquiryQuery,
   input: WebsiteInquiryPersistenceInput,
-): Promise<{ id: string; leadAlertQueued: boolean }>;
+  forwardingScope?: { appId?: string; channelId: string | null },
+): Promise<{ id: string; leadAlertQueued: boolean; forwardingQueued?: true }>;
