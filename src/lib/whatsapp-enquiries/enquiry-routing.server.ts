@@ -1,4 +1,5 @@
 import "@tanstack/react-start/server-only";
+import { estateRegistry } from "../../content/estate-registry.ts";
 import { CURRENT_PUBLIC_OFFERING_ORDER } from "../neon/public-listing-query.js";
 import { SOURCE_28HSE } from "../mls/source-contract.mjs";
 import {
@@ -139,6 +140,7 @@ export async function resolveEnquiryForwarding(
   let review = false;
   let estateLabel: string | null = null;
   let estateId: string | null = null;
+  let formEstateLabel: string | null = null;
   let conversationId: string | undefined;
   let sourceMessageId: string | undefined;
   let channelId: string | undefined;
@@ -169,6 +171,20 @@ export async function resolveEnquiryForwarding(
     )
       review = true;
     message = text(lead.inquiry_message ?? lead.note);
+    formEstateLabel =
+      estateRegistry.find((entry) => entry.slug === context.requestedEstateSlug)?.nameZh ?? null;
+    if (
+      !requestedPropertyId &&
+      !review &&
+      (requestedNo || (!specific && mentionsSpecificProperty(message)))
+    ) {
+      const offers = await query(enquiryTextOfferingSql("$1"), [requestedNo ?? message]);
+      if (offers.length === 1) {
+        requestedPropertyId = string(offers[0].id);
+        requestedNo = string(offers[0].public_listing_no);
+        specific = true;
+      }
+    }
     const preferred = Array.isArray(lead.preferred_estates)
       ? [
           ...new Set(
@@ -281,9 +297,9 @@ export async function resolveEnquiryForwarding(
     agents: target?.agents ?? [],
     legacyAgent: target?.legacyAgent ?? null,
     review,
-    estateLabel,
+    estateLabel: estateLabel ?? (estateId ? null : formEstateLabel),
     estateId,
-    text: message,
+    text: formEstateLabel ? `${formEstateLabel}\n${message}` : message,
     routes: await enquiryEstateRoutes(query),
   });
   return {

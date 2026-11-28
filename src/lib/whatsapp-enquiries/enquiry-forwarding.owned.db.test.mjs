@@ -59,17 +59,6 @@ test(
         async ({ query, transaction, pool }) => {
           await seedOwnedEnquiryCopy(query);
           await mockOwnedServerDb(mock, query, transaction);
-          // This worker still drains website jobs created by the previous release. Its
-          // intake rows had no notificationRoute. Reproduce that row shape before the
-          // real AFTER INSERT enqueue trigger runs, solely in this disposable schema.
-          // Current-release intake and its exclusive phone route run in lead-alert.owned.
-          await query(`CREATE FUNCTION owned_pre_phone_intake() RETURNS trigger LANGUAGE plpgsql AS $$
-            BEGIN
-              NEW.enquiry_routing_context := NEW.enquiry_routing_context - 'notificationRoute';
-              RETURN NEW;
-            END $$`);
-          await query(`CREATE TRIGGER owned_pre_phone_intake BEFORE INSERT ON crm_leads
-            FOR EACH ROW WHEN (NEW.source='website') EXECUTE FUNCTION owned_pre_phone_intake()`);
           mock.module(new URL("../control-plane/job-wake.server.ts", import.meta.url).href, {
             exports: { wakeAfterCommit: () => {}, laneForJob: () => "general" },
           });
@@ -317,6 +306,9 @@ test(
                 )
               )[0];
               assert.ok(lead, "actual intake retains a linked lead");
+              assert.equal(lead.enquiry_routing_context.notificationRoute, "enquiry_forward");
+              assert.equal(inquiry.forwardingQueued, true);
+              assert.equal(inquiry.leadAlertQueued, false);
               return { source: "website", subjectId: lead.id, input, inquiry, lead };
             };
             const intakeWhatsapp = async ({ pendingReceipt = false, fromPrearm = false } = {}) => {
@@ -925,6 +917,7 @@ test(
                 assert.equal(p.sends.length, 2);
                 const replay = await createWebsiteInquiry(subject.input);
                 assert.equal(replay.id, subject.inquiry.id);
+                assert.equal(replay.forwardingQueued, undefined);
                 assert.equal(
                   (
                     await query("SELECT count(*)::int n FROM ops_jobs WHERE idempotency_key=$1", [
@@ -945,6 +938,12 @@ test(
             async () => {
               const s = await scenario();
               for (const [patch, expected] of [
+                [
+                  { estateSlug: "bellagio", message: "想約睇樓" },
+                  [ENQUIRY_MANAGERS["manager:3"].phone, "85297987775"],
+                ],
+                [{ estateSlug: "bellagio", message: "亦想問豪景花園" }, ["85297987775"]],
+                [{ message: `請問 ${s.listingNo} 有冇得睇？` }, [s.staff[0].phone, "85297987775"]],
                 [{ message: "想問春和海景花園兩房租盤" }, ["85291005322", "85297987775"]],
                 [{ message: "想問青山公路村屋" }, ["85297987775"]],
                 [{ message: "想問豪景花園", propertyId: randomUUID() }, ["85297987775"]],

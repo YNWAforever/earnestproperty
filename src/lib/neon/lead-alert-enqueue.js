@@ -21,7 +21,7 @@ export function leadAlertEnqueueCte(leadCte) {
   return `lead_alert AS (
       INSERT INTO ops_jobs (job_type, payload_version, payload, status, max_attempts, run_after, idempotency_key)
       SELECT '${LEAD_ALERT_JOB_TYPE}', 1, jsonb_build_object('leadId', id::text), 'queued', 3, now(), 'lead-alert:'||id
-      FROM ${leadCte}
+      FROM ${leadCte} WHERE notification_route IS DISTINCT FROM 'enquiry_forward'
       ON CONFLICT (idempotency_key) DO NOTHING
       RETURNING id
     )`;
